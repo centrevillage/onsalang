@@ -1,0 +1,105 @@
+// onsa.toml
+// [package]
+// name = "par_in_branches_chain"
+// edition = "2026"
+//
+// [export]
+// prefix = "par_in_branches_chain_"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "poison"
+// provides = []
+//
+// [test]
+// spec = ["§11.5", "§13.4"]
+// conformance = true
+
+// Conformance (W7-06 U1/t, from the break of U0, S-1177; §11.5, §13.4): a `par` without state in the places that a
+// plain `if` / `match` takes only one side (the branches of an `else if` chain, nested branches, the right of `||`, the
+// condition, an argument of a delay, the value of a `let` that is read twice) and a `par` in the body of a `par~` that holds
+// an instance, give the same values in the interpreter and in C: the body is evaluated only when its branch is taken, and
+// its part of `block` is hoisted under the condition.
+
+pub rt fn pair_sum(xs: [F32; 2]) -> F32 {
+  xs[0] + xs[1]
+}
+
+pub rt fn make_w(n: U32) -> F32 {
+  F32.round_from(n) * 0.5
+}
+
+const TABLE: [F32; 4] = [1.0, 2.0, 3.0, 4.0]
+
+@export
+pub flow elseif_chain(x: F32 at sample, @param(min: 0, max: 7, default: 1) k: U32 at block) -> [F32; 2] at sample {
+  if x > 0.5 {
+    par i in 0 ..< 2 { x * F32.round_from(i + 1) }
+  } else if x > 0.25 {
+    par i in 0 ..< 2 { x + F32.round_from(i) }
+  } else {
+    par i in 0 ..< 2 { TABLE[k + i] }
+  }
+}
+
+@export
+pub flow nested_branches(x: F32 at sample, @param(min: 0, max: 1, default: 1) cc: U32 at block) -> F32 at sample {
+  let c = cc > 0
+  if c {
+    if x > 0.5 { pair_sum(par i in 0 ..< 2 { x * F32.round_from(i + 2) }) } else { 1.0 }
+  } else {
+    pair_sum(par j in 0 ..< 2 { x - F32.round_from(j) })
+  }
+}
+
+@export
+pub flow par_in_stateful_par(x: F32 at sample, @param(min: 0, max: 1, default: 1) cc: U32 at block) -> [F32; 2] at sample {
+  par~ i in 0 ..< 2 {
+    gated_acc~(x, cc, i)
+  }
+}
+
+flow acc(x: F32 at sample) -> F32 at sample {
+  let y = x + prev~(^y)
+  y
+}
+
+flow gated_acc(x: F32 at sample, @param(min: 0, max: 1, default: 1) cc: U32 at block, i: U32 at init) -> F32 at sample {
+  let c = cc > 0
+  acc~(if c { pair_sum(par j in 0 ..< 2 { x * F32.round_from(i + j) }) } else { x })
+}
+
+@export
+pub flow block_hoist(x: F32 at sample, @param(min: 0, max: 1, default: 1) cc: U32 at block, @param(min: 0, max: 7, default: 1) k: U32 at block) -> [F32; 2] at sample {
+  let c = cc > 0
+  if c && x > 0.0 {
+    par i in 0 ..< 2 { TABLE[(k + i) % 4] * x + make_w(k) }
+  } else {
+    [0.0, 0.0]
+  }
+}
+
+@export
+pub flow or_right(x: F32 at sample, @param(min: 0, max: 7, default: 1) k: U32 at block) -> F32 at sample {
+  if x < 0.0 || pair_sum(par i in 0 ..< 2 { TABLE[(k + i) % 4] }) > 4.0 { 1.0 } else { 0.0 }
+}
+
+@export
+pub flow in_delay_arg(x: F32 at sample, @param(min: 0, max: 1, default: 1) cc: U32 at block) -> F32 at sample {
+  let c = cc > 0
+  prev~(if c { pair_sum(par i in 0 ..< 2 { x + F32.round_from(i) }) } else { 0.0 }, 1.0)
+}
+
+@export
+pub flow in_condition(x: F32 at sample) -> F32 at sample {
+  if pair_sum(par i in 0 ..< 2 { x * F32.round_from(i) }) > 0.5 { 1.0 } else { 2.0 }
+}
+
+@export
+pub flow in_let_if(x: F32 at sample, @param(min: 0, max: 1, default: 1) cc: U32 at block) -> F32 at sample {
+  let c = cc > 0
+  let y = if c { pair_sum(par i in 0 ..< 2 { x + F32.round_from(i) }) } else { x }
+  y * 2.0 + prev~(y)
+}

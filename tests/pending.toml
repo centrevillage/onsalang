@@ -547,13 +547,6 @@ note = "使用の位置の E0200 は出る。`Buf` の型の E0200 が位置 1:1
 
 # --- W3-10: 新しい flow の構文を今の sema へ写した後も通らない事例（W3-10/t の新しい事例と、手順の組）。
 
-[[pending]]
-kind = "test-case"
-target = "tests/spec/negative/flow_state_branches.onsa"
-reasons = ["S-110", "R-14"]
-until = "W7-06"
-note = "普通の if / match の枝とガードの状態の E0811、&& / || の右辺の状態の E0806。W3-10 の写しでは E0200（K-08）"
-
 # --- W3-06/t2: 空白、改行の後の記号、並びの中の `,` の抜け（W3-06 の単位 1a・1b で外す）
 
 [[pending]]
@@ -660,27 +653,6 @@ until = "W8-04"
 note = "取り出し（S-85）の降下（取り出さなかった残りの破棄）は W8-04。それまで Core が取り出しのある本体を E0200 で止める（X-8、W4-09 U2）"
 
 # --- W4-20: `par~`（S-745）の事例のうち、後の作業を待つもの
-[[pending]]
-kind = "fix-contract"
-target = "tests/spec/fixes/e0811_par_in_a_plain_branch_leaves.onsa:39:5 E0811 fix1"
-reasons = ["S-745", "S-110"]
-until = "W7-06"
-note = "枝の中の par に ~ を足した後に残るのは仕様では flow の検査の段の枝の E0811（leaves）だが、今は枝の中の par~ が E0200（W7-06）"
-
-[[pending]]
-kind = "fix-contract"
-target = "tests/spec/fixes/e0811_par_in_a_plain_branch_leaves.onsa:49:5 E0811 fix1"
-reasons = ["S-745", "S-110"]
-until = "W7-06"
-note = "39:5 と同じ（枝の E0811 が今は E0200）"
-
-[[pending]]
-kind = "fix-contract"
-target = "tests/spec/fixes/e0811_par_in_a_plain_branch_leaves.onsa:55:10 E0811 fix1"
-reasons = ["S-745", "S-110"]
-until = "W7-06"
-note = "39:5 と同じ（枝の E0811 が今は E0200）"
-
 # --- W5-02 U4a/t: スカラーの関連定数と `from_bits` の事例のうち、後の作業を待つもの（2026-11-03、108 回目）
 
 [[pending]]
@@ -754,13 +726,6 @@ target = "tests/spec/values/unwrap_fn_values_run.onsa"
 reasons = ["S-785", "S-872"]
 until = "W8-09"
 note = "`unwrap` の前の `map_err` と関数値の呼び出しは降下が E0200（関数値、W8-09）。§9.1 の形そのものは型の検査まで通る"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/negative/flow_option_match_state_arm.onsa"
-reasons = ["S-110", "R-14"]
-until = "W7-06"
-note = "普通の `match` の腕の状態の E0811（§11.5）。今は K-08 の E0200（腕の検査は W7-06）"
 
 [[pending]]
 kind = "test-case"
@@ -992,3 +957,339 @@ target = "tests/spec/flow_semantics/par_in_a_match_guard.onsa"
 reasons = ["S-1177", "R-06"]
 until = "W8-06"
 note = "値の match のガード（と Bool のリテラルのパターン）が Core で E0200（W8-06）。ガードの中の状態の無い par（S-1177）の取られたときだけの評価。普通の枝・列挙子の match の腕・&&/|| の右辺の同じ形は par_in_plain_branches.onsa"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/negative/flow_state_branches_if_tilde.onsa"
+reasons = ["S-110"]
+until = "W7-06"
+note = "`if~` の枝の中の普通の `if` の状態の E0811 と、`if~` の条件の `&&` の右辺の E0806。`if~` は W7-06 U2 まで E0200"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/fixes/e0811_lift_branch_forms.onsa:34:10 E0811 fix1"
+reasons = ["S-110"]
+until = "W7-06"
+note = "枝の E0811 の `if~` の候補（S-394）を当てた後に `if~` の E0200 が残る（`if~` の検査は W7-06 U2）"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/fixes/e0811_lift_branch_forms.onsa:38:23 E0811 fix1"
+reasons = ["S-110"]
+until = "W7-06"
+note = "枝の E0811 の `if~` の候補（S-394）を当てた後に `if~` の E0200 が残る（`if~` の検査は W7-06 U2）"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/fixes/e0811_lift_branch_forms.onsa:42:40 E0811 fix1"
+reasons = ["S-110"]
+until = "W7-06"
+note = "枝の E0811 の `if~` の候補（S-394）を当てた後に `if~` の E0200 が残る（`if~` の検査は W7-06 U2）"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/fixes/e0811_lift_branch_forms.onsa:47:10 E0811 fix1"
+reasons = ["S-110"]
+until = "W7-06"
+note = "枝の E0811 の `match~` の候補（S-394）を当てた後に `match~` の E0200 が残る（`match~` の検査は W7-06 U3a）"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/fixes/e0811_lift_branch_forms.onsa:53:15 E0811 fix1"
+reasons = ["S-110"]
+until = "W7-06"
+note = "枝の E0811 の `if~` の候補（S-394）を当てた後に `if~` の E0200 が残る（`if~` の検査は W7-06 U2）"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/fixes/e0811_lift_branch_forms.onsa:57:18 E0811 fix1"
+reasons = ["S-110"]
+until = "W7-06"
+note = "枝の E0811 の `if~` の候補（S-394）を当てた後に `if~` の E0200 が残る（`if~` の検査は W7-06 U2）"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/fixes/e0811_lift_branch_forms.onsa:63:18 E0811 fix1"
+reasons = ["S-110"]
+until = "W7-06"
+note = "枝の E0811 の `if~` の候補（S-394）を当てた後に `if~` の E0200 が残る（`if~` の検査は W7-06 U2）"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/fixes/e0811_lift_branch_forms.onsa:68:10 E0811 fix1"
+reasons = ["S-110"]
+until = "W7-06"
+note = "枝の E0811 の `if~` の候補（S-394）を当てた後に `if~` の E0200 が残る（`if~` の検査は W7-06 U2）"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/fixes/e0811_lift_branch_forms.onsa:72:10 E0811 fix1"
+reasons = ["S-110"]
+until = "W7-06"
+note = "枝の E0811 の `if~` の候補（S-394）を当てた後に `if~` の E0200 が残る（`if~` の検査は W7-06 U2）"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/fixes/e0811_lift_branch_forms.onsa:76:19 E0811 fix1"
+reasons = ["S-110"]
+until = "W7-06"
+note = "枝の E0811 の `if~` の候補（S-394）を当てた後に `if~` の E0200 が残る（`if~` の検査は W7-06 U2）"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/fixes/e0811_lift_names_do_not_clash.onsa:29:18 E0811 fix1"
+reasons = ["S-110"]
+until = "W7-06"
+note = "枝の E0811 の `if~` の候補（S-394）を当てた後に `if~` の E0200 が残る（`if~` の検査は W7-06 U2）"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/fixes/e0811_lift_names_do_not_clash.onsa:41:18 E0811 fix1"
+reasons = ["S-110"]
+until = "W7-06"
+note = "枝の E0811 の `if~` の候補（S-394）を当てた後に `if~` の E0200 が残る（`if~` の検査は W7-06 U2）"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/fixes/e0811_lift_names_do_not_clash.onsa:46:16 E0811 fix1"
+reasons = ["S-110"]
+until = "W7-06"
+note = "枝の E0811 の `if~` の候補（S-394）を当てた後に `if~` の E0200 が残る（`if~` の検査は W7-06 U2）"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/fixes/e0811_lift_not_made.onsa:27:16 E0811 fix1"
+reasons = ["S-110"]
+until = "W7-06"
+note = "枝の E0811 の `match~` の候補（S-394）を当てた後に `match~` の E0200 が残る（`match~` の検査は W7-06 U3a）"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/fixes/e0811_lift_not_made.onsa:35:10 E0811 fix1"
+reasons = ["S-110"]
+until = "W7-06"
+note = "枝の E0811 の `match~` の候補（S-394）を当てた後に `match~` の E0200 が残る（`match~` の検査は W7-06 U3a）"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/fixes/e0811_lift_not_made.onsa:42:21 E0811 fix1"
+reasons = ["S-110"]
+until = "W7-06"
+note = "枝の E0811 の `match~` の候補（S-394）を当てた後に `match~` の E0200 が残る（`match~` の検査は W7-06 U3a）"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/fixes/e0811_lift_not_made.onsa:49:12 E0811 fix1"
+reasons = ["S-110"]
+until = "W7-06"
+note = "枝の E0811 の `if~` の候補（S-394）を当てた後に `if~` の E0200 が残る（`if~` の検査は W7-06 U2）"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/fixes/e0811_lift_not_made.onsa:56:12 E0811 fix1"
+reasons = ["S-110"]
+until = "W7-06"
+note = "枝の E0811 の `match~` の候補（S-394）を当てた後に `match~` の E0200 が残る（`match~` の検査は W7-06 U3a）"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/fixes/e0811_nested_branch_leaves.onsa:42:23 E0811 fix1"
+reasons = ["S-110"]
+until = "W7-06"
+note = "枝の E0811 の `if~` の候補（S-394）を当てた後に `if~` の E0200 が残る（`if~` の検査は W7-06 U2）"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/fixes/e0811_nested_branch_leaves.onsa:46:31 E0811 fix1"
+reasons = ["S-110"]
+until = "W7-06"
+note = "枝の E0811 の `match~` の候補（S-394）を当てた後に `match~` の E0200 が残る（`match~` の検査は W7-06 U3a）"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/fixes/e0811_nested_branch_leaves.onsa:50:31 E0811 fix1"
+reasons = ["S-110"]
+until = "W7-06"
+note = "枝の E0811 の `if~` の候補（S-394）を当てた後に `if~` の E0200 が残る（`if~` の検査は W7-06 U2）"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/flow_clock/order_nested_positions.onsa:62:18 E0811 fix1"
+reasons = ["S-110"]
+until = "W7-06"
+note = "枝の E0811 の `if~` の候補（S-394）を当てた後に `if~` の E0200 が残る（`if~` の検査は W7-06 U2）"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/flow_semantics/rules_negative.onsa:37:16 E0811 fix1"
+reasons = ["S-110"]
+until = "W7-06"
+note = "枝の E0811 の `if~` の候補（S-394）を当てた後に `if~` の E0200 が残る（`if~` の検査は W7-06 U2）"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/flow_semantics/rules_negative.onsa:41:16 E0811 fix1"
+reasons = ["S-110"]
+until = "W7-06"
+note = "枝の E0811 の `if~` の候補（S-394）を当てた後に `if~` の E0200 が残る（`if~` の検査は W7-06 U2）"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/flow_semantics/rules_negative.onsa:45:18 E0811 fix1"
+reasons = ["S-110"]
+until = "W7-06"
+note = "枝の E0811 の `match~` の候補（S-394）を当てた後に `match~` の E0200 が残る（`match~` の検査は W7-06 U3a）"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/flow_semantics/rules_negative.onsa:49:20 E0811 fix1"
+reasons = ["S-110"]
+until = "W7-06"
+note = "枝の E0811 の `if~` の候補（S-394）を当てた後に `if~` の E0200 が残る（`if~` の検査は W7-06 U2）"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/negative/e0811_instance_of_a_flow_without_state.onsa:32:10 E0811 fix1"
+reasons = ["S-110"]
+until = "W7-06"
+note = "枝の E0811 の `if~` の候補（S-394）を当てた後に `if~` の E0200 が残る（`if~` の検査は W7-06 U2）"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/negative/e0811_par_flow_stage.onsa:65:18 E0811 fix1"
+reasons = ["S-110"]
+until = "W7-06"
+note = "枝の E0811 の `if~` の候補（S-394）を当てた後に `if~` の E0200 が残る（`if~` の検査は W7-06 U2）"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/negative/flow_option_match_state_arm.onsa:22:13 E0811 fix1"
+reasons = ["S-110"]
+until = "W7-06"
+note = "枝の E0811 の `match~` の候補（S-394）を当てた後に `match~` の E0200 が残る（`match~` の検査は W7-06 U3a）"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/negative/flow_option_match_state_arm.onsa:30:13 E0811 fix1"
+reasons = ["S-110"]
+until = "W7-06"
+note = "枝の E0811 の `match~` の候補（S-394）を当てた後に `match~` の E0200 が残る（`match~` の検査は W7-06 U3a）"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/negative/flow_option_match_state_arm.onsa:38:14 E0811 fix1"
+reasons = ["S-110"]
+until = "W7-06"
+note = "枝の E0811 の `match~` の候補（S-394）を当てた後に `match~` の E0200 が残る（`match~` の検査は W7-06 U3a）"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/negative/flow_option_match_state_arm.onsa:45:16 E0811 fix1"
+reasons = ["S-110"]
+until = "W7-06"
+note = "枝の E0811 の `match~` の候補（S-394）を当てた後に `match~` の E0200 が残る（`match~` の検査は W7-06 U3a）"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/negative/flow_option_match_state_arm.onsa:52:35 E0811 fix1"
+reasons = ["S-110"]
+until = "W7-06"
+note = "枝の E0811 の `match~` の候補（S-394）を当てた後に `match~` の E0200 が残る（`match~` の検査は W7-06 U3a）"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/negative/flow_option_match_state_arm.onsa:59:15 E0811 fix1"
+reasons = ["S-110"]
+until = "W7-06"
+note = "枝の E0811 の `match~` の候補（S-394）を当てた後に `match~` の E0200 が残る（`match~` の検査は W7-06 U3a）"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/negative/flow_state_branches.onsa:27:29 E0811 fix1"
+reasons = ["S-110"]
+until = "W7-06"
+note = "枝の E0811 の `if~` の候補（S-394）を当てた後に `if~` の E0200 が残る（`if~` の検査は W7-06 U2）"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/negative/flow_state_branches.onsa:31:40 E0811 fix1"
+reasons = ["S-110"]
+until = "W7-06"
+note = "枝の E0811 の `if~` の候補（S-394）を当てた後に `if~` の E0200 が残る（`if~` の検査は W7-06 U2）"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/negative/flow_state_branches.onsa:35:13 E0811 fix1"
+reasons = ["S-110"]
+until = "W7-06"
+note = "枝の E0811 の `if~` の候補（S-394）を当てた後に `if~` の E0200 が残る（`if~` の検査は W7-06 U2）"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/negative/flow_state_branches.onsa:39:16 E0811 fix1"
+reasons = ["S-110"]
+until = "W7-06"
+note = "枝の E0811 の `if~` の候補（S-394）を当てた後に `if~` の E0200 が残る（`if~` の検査は W7-06 U2）"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/negative/flow_state_branches.onsa:43:16 E0811 fix1"
+reasons = ["S-110"]
+until = "W7-06"
+note = "枝の E0811 の `if~` の候補（S-394）を当てた後に `if~` の E0200 が残る（`if~` の検査は W7-06 U2）"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/negative/flow_state_branches.onsa:47:21 E0811 fix1"
+reasons = ["S-110"]
+until = "W7-06"
+note = "枝の E0811 の `if~` の候補（S-394）を当てた後に `if~` の E0200 が残る（`if~` の検査は W7-06 U2）"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/negative/flow_state_branches.onsa:51:17 E0811 fix1"
+reasons = ["S-110"]
+until = "W7-06"
+note = "枝の E0811 の `if~` の候補（S-394）を当てた後に `if~` の E0200 が残る（`if~` の検査は W7-06 U2）"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/negative/flow_state_branches.onsa:57:29 E0811 fix1"
+reasons = ["S-110"]
+until = "W7-06"
+note = "枝の E0811 の `if~` の候補（S-394）を当てた後に `if~` の E0200 が残る（`if~` の検査は W7-06 U2）"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/negative/flow_state_branches.onsa:61:31 E0811 fix1"
+reasons = ["S-110"]
+until = "W7-06"
+note = "枝の E0811 の `if~` の候補（S-394）を当てた後に `if~` の E0200 が残る（`if~` の検査は W7-06 U2）"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/negative/flow_state_branches.onsa:65:31 E0811 fix1"
+reasons = ["S-110"]
+until = "W7-06"
+note = "枝の E0811 の `match~` の候補（S-394）を当てた後に `match~` の E0200 が残る（`match~` の検査は W7-06 U3a）"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/negative/flow_state_branches.onsa:71:28 E0811 fix1"
+reasons = ["S-110"]
+until = "W7-06"
+note = "枝の E0811 の `match~` の候補（S-394）を当てた後に `match~` の E0200 が残る（`match~` の検査は W7-06 U3a）"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/negative/flow_state_branches.onsa:100:18 E0811 fix1"
+reasons = ["S-110"]
+until = "W7-06"
+note = "枝の E0811 の `if~` の候補（S-394）を当てた後に `if~` の E0200 が残る（`if~` の検査は W7-06 U2）"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/negative/flow_state_branches.onsa:107:20 E0811 fix1"
+reasons = ["S-110"]
+until = "W7-06"
+note = "枝の E0811 の `match~` の候補（S-394）を当てた後に `match~` の E0200 が残る（`match~` の検査は W7-06 U3a）"

@@ -233,7 +233,7 @@ fn block_like_errors(ast: &Ast, kind_of: &dyn Fn(ExprId) -> NodeKind, limit: Lim
             Stage::Syntax,
             Code::E0013,
             at,
-            "a block-like expression (`if`, `match`, a block, an anonymous function, `unsafe`, `handle`, `par~`) is written in parentheses when it is an operand (§3.1)",
+            "a block-like expression (`if`, `match`, a block, an anonymous function, `unsafe`, `handle`, `par`, `par~`) is written in parentheses when it is an operand (§3.1)",
         )
         .with_found(&text[at.start as usize..at.end as usize]);
         diagnostics.push(parenthesized(d, limit, span, "parenthesize it", parenthesizing(&found).collect()));

@@ -622,7 +622,7 @@ pub static ROWS: &[Row] = &[
         phase: Phase::Syntax,
         code: Code::E0020,
         message: "ranges cannot be patterns; compare in a guard",
-        rule: "a range is written only in the header of a `for` or a `par~`; in a pattern it is compared in a guard, `1..<3` is `k if 1 <= k && k < 3` (§7)",
+        rule: "a range is written only in the header of a `for`, a `par` or a `par~`; in a pattern it is compared in a guard, `1..<3` is `k if 1 <= k && k < 3` (§7)",
         detect: Detect::Syntax,
     },
     Row {
@@ -1080,7 +1080,7 @@ pub static ROWS: &[Row] = &[
         name: "range_header_one_sided",
         phase: Phase::Syntax,
         code: Code::E0002,
-        message: "a range in the head of a `for` or a `par~` has both ends",
+        message: "a range in the head of a `for`, a `par` or a `par~` has both ends",
         rule: "a loop over a range writes both of its ends, `0..<n` or `0..=n`; a range with one end is no head (§7)",
         detect: Detect::Syntax,
     },
@@ -1089,8 +1089,8 @@ pub static ROWS: &[Row] = &[
         name: "range_outside_header",
         phase: Phase::Syntax,
         code: Code::E0002,
-        message: "ranges are only written in `for` and `par~` heads",
-        rule: "a range is the whole head of a `for` or a `par~` and is not a value (§7); a part of a sequence is `xs.slice(from, to)` (§5.3)",
+        message: "ranges are only written in `for`, `par` and `par~` heads",
+        rule: "a range is the whole head of a `for`, a `par` or a `par~` and is not a value (§7); a part of a sequence is `xs.slice(from, to)` (§5.3)",
         detect: Detect::Syntax,
     },
     Row {
@@ -1180,7 +1180,7 @@ pub static ROWS: &[Row] = &[
         phase: Phase::Syntax,
         code: Code::E0020,
         message: "a clock is written on the value, not on the binding",
-        rule: "a clock is written on an expression (`let y = x at sample`) or after the type of an input or output of a flow, never on the binding side: after the name or the pattern of a `let` or `var`, after its type annotation, or after the index of `for` and `par~` (§11.3)",
+        rule: "a clock is written on an expression (`let y = x at sample`) or after the type of an input or output of a flow, never on the binding side: after the name or the pattern of a `let` or `var`, after its type annotation, or after the index of `for`, `par` and `par~` (§11.3)",
         detect: Detect::Tree,
     },
     Row {

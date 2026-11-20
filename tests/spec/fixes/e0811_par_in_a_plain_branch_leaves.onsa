@@ -27,8 +27,8 @@
 // position in the text after the candidate, the start of the `par~`). The candidate is shown although it leaves
 // the E0811 of the branch: the provisional reading (1) of S-1183 (the open detail), which this file follows
 // until it is decided. The candidates of the error of the branch (`if~` / `match~`, lifting the state out into
-// a `let`) are not asked for here. This version reports the branch as E0200 (W7-06), so this file is on the
-// list of what is waited for (until W7-06); the first file is not.
+// a `let`) are not asked for here. The branch is the E0811 of §11.5 (W7-06 U1), which the three entries of the header
+// name; the first file does not name what is left.
 
 pub flow lp(x: F32 at sample) -> F32 at sample {
   x * 0.5 + prev~(x) * 0.5

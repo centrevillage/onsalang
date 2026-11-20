@@ -1,0 +1,51 @@
+// onsa.toml
+// [package]
+// name = "par_in_branches_delays"
+// edition = "2026"
+//
+// [export]
+// prefix = "par_in_branches_delays_"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "poison"
+// provides = []
+//
+// [test]
+// spec = ["§11.5", "§13.4"]
+// conformance = true
+
+// Conformance (W7-06 U1/t, from the break of U0, S-1177; §11.5, §13.4): a `par` without state in the first argument
+// of a delay (`delay~`, `vdelay~`, `prev~` of the value of a `let` that is read after it), and a `par` in a `par` in a branch,
+// give the same values in the interpreter and in C: the argument is lowered twice (the value, and the store at the end of
+// the sample), and the inner replications are taken only with the branch.
+
+pub rt fn pair_sum(xs: [F32; 2]) -> F32 {
+  xs[0] + xs[1]
+}
+
+const TABLE: [F32; 4] = [1.0, 2.0, 3.0, 4.0]
+
+@export
+pub flow delay_arg(x: F32 at sample, @param(min: 0, max: 1, default: 1) cc: U32 at block) -> F32 at sample {
+  let c = cc > 0
+  delay~(if c { pair_sum(par i in 0 ..< 2 { x + F32.round_from(i) }) } else { x }, 3) + 1.0
+}
+
+@export
+pub flow vdelay_arg(x: F32 at sample) -> F32 at sample {
+  vdelay~(if x > 0.0 { pair_sum(par i in 0 ..< 2 { x * F32.round_from(i + 1) }) } else { 0.0 }, 1.5, 8)
+}
+
+@export
+pub flow feedback(x: F32 at sample, @param(min: 0, max: 7, default: 1) k: U32 at block) -> F32 at sample {
+  let y = if x > 0.0 { pair_sum(par i in 0 ..< 2 { TABLE[(k + i) % 4] * 0.5 + x * 0.1 }) } else { 0.5 }
+  y + prev~(y)
+}
+
+@export
+pub flow par_in_par_in_branch(x: F32 at sample) -> F32 at sample {
+  if x > 0.25 { pair_sum(par i in 0 ..< 2 { pair_sum(par j in 0 ..< 2 { x * F32.round_from(i * 2 + j) }) }) } else { -x }
+}

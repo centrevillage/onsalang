@@ -1,0 +1,33 @@
+// onsa.toml
+// [test]
+// spec = ["§2.6", "§11.5", "§18.1"]
+// fixes = 2
+
+// W7-06 U1/t (carried over from U0/b), S-1177 (§11.5: "本体に状態を持つもの（インスタンス、組込みの遅延、入れ子の `par~`）がある複製を
+// `par~` と書き … 状態を持つものがあるかは、書いた `~` でなく中身（呼び先の種類と入れ子）で決める"): the instance of a flow is a
+// thing with state by the kind of the callee, whether or not that flow holds a state of its own (`twice` below
+// holds none). A `par~` whose body is only such an instance is no error (no E0812); the same body in a `par` is E0811, and in
+// a branch of a plain `if` it is E0811 too. The `par` has one candidate (the `~`, `fixes = 2` is the most candidates that
+// any error of this file has); the branch has two (`if~` and the lift into a `let`). One error per flow (P-01); the marker
+// is on the line of the offending construct.
+
+pub flow twice(x: F32 at sample) -> F32 at sample {
+  x * 2.0
+}
+
+pub flow par_tilde_with_the_instance(x: F32 at sample) -> [F32; 2] at sample {
+  par~ i in 0 ..< 2 { twice~(x * F32.round_from(i)) }
+}
+
+pub flow par_with_the_instance(x: F32 at sample) -> [F32; 2] at sample {
+  par~ i in 0 ..< 2 { twice~(x * F32.round_from(i)) } //~ E0811
+}
+
+pub flow par_tilde_with_the_instance_in_a_let(x: F32 at sample) -> F32 at sample {
+  let ys = par~ i in 0 ..< 2 { twice~(x + F32.round_from(i)) }
+  ys[0] + ys[1]
+}
+
+pub flow in_a_branch(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  if~ c { twice~(x) } else { 0.0 } //~ E0811
+}

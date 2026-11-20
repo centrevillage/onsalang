@@ -311,8 +311,10 @@ impl<'a> Checker<'a> {
             // SPEC-GAP(S-1147): the code of a count past `U32` (E0808 or E0409); E0808 for now.
             format!("{n}, more than the size `N` of `[T; N]`, a `U32`, holds")
         };
-        let msg =
-            format!("`par~` replicates {count} instances; the bounds `{lo}{}{hi}` give {gives} (§11.5)", end.symbol());
+        let msg = format!(
+            "`par` / `par~` replicates {count} instances; the bounds `{lo}{}{hi}` give {gives} (§11.5)",
+            end.symbol()
+        );
         self.flow_hold_at(Code::E0808, span, msg);
         None
     }

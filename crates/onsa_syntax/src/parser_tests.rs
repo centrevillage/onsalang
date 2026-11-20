@@ -145,7 +145,7 @@ fn ranges_only_in_heads() {
         let p = parse(&format!("fn f() {{\n  {src}\n}}"));
         assert_eq!(codes_of(&p), [Code::E0002], "{src}");
         let d = &p.diagnostics[0];
-        assert!(d.fixes.is_empty() && d.message.contains("`for` and `par~` heads"), "{src}: {d:?}");
+        assert!(d.fixes.is_empty() && d.message.contains("`for`, `par` and `par~` heads"), "{src}: {d:?}");
         assert!(d.notes.iter().any(|n| n.message.contains("xs.slice(from, to)")), "{src}: {d:?}");
         d.found.clone().unwrap_or_default()
     };

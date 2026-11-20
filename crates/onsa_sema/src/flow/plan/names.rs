@@ -10,9 +10,9 @@ use onsa_syntax::ast::{Ast, ExprId, ExprKind};
 
 use super::super::PendingLet;
 use super::super::nodes::holds_state;
-use super::{Owner, Part, PlanKind, PlanNode};
+use super::{Owner, Part, PlanNode};
 use crate::body::{BodyInfo, LocalId};
-use crate::flow_names::{OUTPUT_SCOPE, PAR};
+use crate::flow_names::OUTPUT_SCOPE;
 
 /// `<kind>_<n>`: the name of the node `n` of a kind in a scope (`prev_0`,
 /// `lp_1`, `par_0`), and of the hoisted field `n` (`_hoist_0` of
@@ -134,12 +134,12 @@ impl Namer {
 }
 
 /// The kind of a node of a delay or an instance (§11.6): the name of the
-/// delay, or of the flow without its path.
-pub(in crate::flow) fn kind<'a>(a: &'a crate::Analysis, k: &PlanKind) -> &'a str {
-    match (k, k.delay()) {
-        (_, Some(d)) => d.name(),
-        (PlanKind::Instance { callee, .. }, None) => &a.def(*callee).name,
-        (_, None) => PAR,
+/// delay, or of the flow without its path (of a replication,
+/// [`crate::flow_names::PAR`]).
+pub(in crate::flow) fn kind<'a>(a: &'a crate::Analysis, k: &super::super::NodeKind) -> &'a str {
+    match *k {
+        super::super::NodeKind::Delay(d, _) => d.name(),
+        super::super::NodeKind::Instance(callee) => &a.def(callee).name,
     }
 }
 

@@ -1,0 +1,105 @@
+// onsa.toml
+// [test]
+// spec = ["§2.6", "§11.5", "§18.1"]
+// fixes = 1
+
+// W7-06 U1/t, S-110, S-1172, S-1173 (§11.5: "`&&` / `||` の右辺には、状態を持つものを書けない（E0806。修正候補は前の `let` に
+// 出すこと）"): the right operand of `&&` and `||` is evaluated only when the left one does not decide the result, so a thing
+// with state (an instance, a built-in delay, a `par~`) in it would advance on some samples only. The place does not
+// matter (the condition of an `if`, the scrutinee of a `match`, a `let`, an argument, a nest of operators); the left
+// operand and a `par` without state are no error (the last flows). The one candidate is the lift into a `let` before the
+// expression (`fixes = 1`: there is no `~` candidate for an operand). The flow check stage reports it (S-1173, the
+// provisional reading). One error per flow (P-01); the marker is on the line of the offending construct, and the spec
+// does not fix its column.
+
+pub flow acc(x: F32 at sample) -> F32 at sample {
+  let y = x + prev~(^y)
+  y
+}
+
+pub rt fn wrap(x: F32) -> F32 {
+  x
+}
+
+pub rt fn pair_sum(xs: [F32; 2]) -> F32 {
+  xs[0] + xs[1]
+}
+
+// ---- E0806: the right operand ----
+
+pub flow right_of_and_in_a_condition(x: F32 at sample) -> F32 at sample {
+  let acc_0 = acc~(x)
+  if x > 0.0 && acc_0 > 1.0 { 1.0 } else { 0.0 } //~ E0806
+}
+
+pub flow right_of_or_in_a_condition(x: F32 at sample) -> F32 at sample {
+  let prev_0 = prev~(x)
+  if x > 0.0 || prev_0 > 1.0 { 1.0 } else { 0.0 } //~ E0806
+}
+
+pub flow right_of_and_in_a_scrutinee(x: F32 at sample) -> F32 at sample {
+  let delay_0 = delay~(x, 2)
+  match x > 0.0 && delay_0 > 1.0 { //~ E0806
+    true => 1.0,
+    false => 0.0,
+  }
+}
+
+pub flow right_of_and_in_a_let(x: F32 at sample) -> Bool at sample {
+  let acc_0 = acc~(x)
+  let hit = x > 0.0 && acc_0 > 1.0 //~ E0806
+  hit
+}
+
+pub flow right_of_and_as_the_output(x: F32 at sample) -> Bool at sample {
+  let acc_0 = acc~(x)
+  x > 0.0 && acc_0 > 1.0 //~ E0806
+}
+
+pub flow right_of_or_in_a_let_of_a_call(x: F32 at sample) -> F32 at sample {
+  let acc_0 = acc~(x)
+  let w = wrap(if x < 0.0 || acc_0 > 1.0 { 1.0 } else { 0.0 }) //~ E0806
+  w
+}
+
+pub flow right_of_the_right(x: F32 at sample) -> Bool at sample {
+  let prev_0 = prev~(x)
+  x > 0.0 && (x < 4.0 || prev_0 > 1.0) //~ E0806
+}
+
+pub flow right_after_a_chain(x: F32 at sample) -> Bool at sample {
+  let acc_0 = acc~(x)
+  x > 0.0 && x < 4.0 && x != 1.0 && acc_0 > 1.0 //~ E0806
+}
+
+pub flow right_holds_a_par_tilde(x: F32 at sample) -> Bool at sample {
+  let par_0 = par~ i in 0 ..< 2 { prev~(x * F32.round_from(i)) }
+  x > 0.0 && pair_sum(par_0) > 1.0 //~ E0806
+}
+
+pub flow right_holds_state_inside_a_call(x: F32 at sample) -> Bool at sample {
+  let acc_0 = acc~(x)
+  x > 0.0 || wrap(acc_0) > 1.0 //~ E0806
+}
+
+// ---- Not errors ----
+
+// The left operand is always evaluated, and may hold state.
+pub flow left_with_state(x: F32 at sample) -> Bool at sample {
+  acc~(x) > 1.0 && x > 0.0
+}
+
+pub flow left_with_state_in_an_or_chain(x: F32 at sample) -> Bool at sample {
+  prev~(x) > 1.0 || x > 0.0 || x < -1.0
+}
+
+// A `par` without state is no state, so it may stand on the right (and is evaluated only when it is needed).
+pub flow right_holds_a_par_without_state(x: F32 at sample) -> Bool at sample {
+  x > 0.0 && pair_sum(par i in 0 ..< 2 { x * F32.round_from(i) }) > 1.0
+}
+
+// The state is made before the operator and read on the right.
+pub flow state_in_an_earlier_let(x: F32 at sample) -> Bool at sample {
+  let s = acc~(x)
+  x > 0.0 && s > 1.0
+}

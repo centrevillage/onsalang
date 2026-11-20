@@ -106,6 +106,7 @@ mod check;
 mod clocks;
 mod consts;
 mod hoist;
+mod lift;
 mod loops;
 mod nodes;
 mod plan;

@@ -1,0 +1,71 @@
+// onsa.toml
+// [test]
+// spec = ["§2.6", "§11.5", "§18.1"]
+// fixes = 0
+
+// W7-06 U1/t, S-394 (X1), S-1172 (§2.6: "flow の検査の段の E0811 … は、作れる候補（`~` を足す形、状態を持つものを前の `let` に出す形、
+// §11.5）だけを示し、一つも作れなければ候補を出さない（ガードの状態を持つものが腕の束縛を読む `Some(v) if smooth~(v) > 0.5` など）";
+// §11.5: "前の `let` に出す … 式が腕の束縛を読むときと、`par~` の本体の中にあるときは、この候補を作らない"): the E0811 of the
+// guard of a plain `match` and of the second condition of a plain `if` chain has no `~` candidate (the guard stays a
+// place that is not evaluated every sample, S-394), so when the lift into a `let` cannot be made either, the error
+// has no candidate at all. The lift cannot be made when the thing with state reads a binding of the arm (the `let`
+// before the `match` is before the binding) and when the thing is in the body of a `par~` (taken out of it, the
+// replication count would change). `fixes = 0` says that no error of this file has a candidate. The error is still
+// E0811 and is reported (the flow check stage is not a stage that must give a candidate, S-394). One error per flow
+// (P-01); the marker is on the line of the offending construct, and the spec does not fix its column.
+
+pub flow acc(x: F32 at sample) -> F32 at sample {
+  let y = x + prev~(^y)
+  y
+}
+
+pub rt fn wrap(x: F32) -> F32 {
+  x
+}
+
+// ---- the guard reads a binding of the arm ----
+
+pub flow guard_reads_an_option_binding(x: F32 at sample) -> F32 at sample {
+  let o: Option[F32] = if x > 2.0 { Some(x) } else { None }
+  match o {
+    Some(v) if acc~(v) > 0.5 => v, //~ E0811
+    _ => 0.0,
+  }
+}
+
+pub flow guard_reads_a_variable_pattern(k: U32 at sample, x: F32 at sample) -> F32 at sample {
+  match k {
+    n if prev~(F32.round_from(n)) > 0.5 => x, //~ E0811
+    _ => 0.0,
+  }
+}
+
+pub flow guard_reads_a_tuple_binding(a: F32 at sample, b: F32 at sample) -> F32 at sample {
+  match (a, b) {
+    (p, q) if wrap(acc~(p)) > q => 1.0, //~ E0811
+    _ => 0.0,
+  }
+}
+
+// ---- the thing is in the body of a `par~` ----
+
+pub flow guard_in_a_par_body(k: U32 at sample, x: F32 at sample) -> [F32; 2] at sample {
+  par~ i in 0 ..< 2 {
+    match k {
+      0 if acc~(x * F32.round_from(i)) > 1.0 => 1.0, //~ E0811
+      _ => 0.0,
+    }
+  }
+}
+
+pub flow chain_condition_in_a_par_body(x: F32 at sample) -> [F32; 2] at sample {
+  par~ i in 0 ..< 2 {
+    if x > 1.0 { 1.0 } else if prev~(x) > F32.round_from(i) { 2.0 } else { 0.0 } //~ E0811
+  }
+}
+
+pub flow right_side_in_a_par_body(x: F32 at sample) -> [F32; 2] at sample {
+  par~ i in 0 ..< 2 {
+    if x > 0.0 && acc~(x) > F32.round_from(i) { 1.0 } else { 0.0 } //~ E0806
+  }
+}

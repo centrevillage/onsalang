@@ -46,6 +46,7 @@ file in_out_field_receiver.tsv rows=7 tests=6 evaluated=0 unavailable=0 skipped=
 file infer_generic.tsv rows=10 tests=3 evaluated=3 unavailable=0 skipped=0 waiting=0
 file inplace_struct_output.tsv rows=9 tests=8 evaluated=0 unavailable=0 skipped=8 waiting=0
 file instances.tsv rows=19 tests=6 evaluated=6 unavailable=0 skipped=0 waiting=0
+file lifted_state_before_branches.tsv rows=10 tests=3 evaluated=3 unavailable=0 skipped=0 waiting=0
 file lookback_feedback.tsv rows=22 tests=7 evaluated=7 unavailable=0 skipped=0 waiting=0
 file lookback_instance_args.tsv rows=7 tests=2 evaluated=2 unavailable=0 skipped=0 waiting=0
 file lookback_instances.tsv rows=22 tests=7 evaluated=7 unavailable=0 skipped=0 waiting=0
@@ -96,4 +97,4 @@ file struct_pattern_rest_let.tsv rows=7 tests=2 evaluated=2 unavailable=0 skippe
 file struct_pattern_rest_match.tsv rows=4 tests=1 evaluated=1 unavailable=0 skipped=0 waiting=1
 file vdelay_edges.tsv rows=64 tests=15 evaluated=14 unavailable=0 skipped=1 waiting=0
 file vdelay_varying_d.tsv rows=2 tests=1 evaluated=0 unavailable=0 skipped=1 waiting=0
-total files=97 rows=2465 tests=629 evaluated=569 unavailable=6 skipped=54 waiting=9
+total files=98 rows=2475 tests=632 evaluated=572 unavailable=6 skipped=54 waiting=9

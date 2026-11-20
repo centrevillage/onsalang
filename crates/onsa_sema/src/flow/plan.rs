@@ -82,12 +82,16 @@ pub enum PlanKind {
     /// with no end past the last (S-257, a last of `U32`'s maximum);
     /// `children` are the nodes its body holds, in the order of the table,
     /// and `fields` the fields of its replica (none: it has no state).
+    /// `state`: its body holds state (a `par~`, §11.5, S-1177), the one
+    /// judgement of it; the replicas of a `par` have no node to set, reset
+    /// or run.
     Par {
         var: LocalId,
         from: u32,
         count: u32,
         end: RangeEnd,
         body: ExprId,
+        state: bool,
         children: Vec<NodeId>,
         fields: Vec<Field>,
     },
@@ -234,8 +238,8 @@ pub(super) fn build(
             (None, None) => onsa_diag::internal::bug(Some(r.span), "a node the walk gave no clock"),
         };
         let kind = match r.kind {
-            PlanKind::Par { var, from, count, end, body, fields, .. } => {
-                PlanKind::Par { var, from, count, end, body, children: ch, fields }
+            PlanKind::Par { var, from, count, end, body, state, fields, .. } => {
+                PlanKind::Par { var, from, count, end, body, state, children: ch, fields }
             }
             kind => kind,
         };

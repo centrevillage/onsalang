@@ -1,0 +1,60 @@
+// onsa.toml
+// [test]
+// spec = ["§2.6", "§11.5", "§18.1"]
+// fixes = 1
+
+// W7-06 U1/t, S-1172 (§11.5: "前の `let` に出す修正候補は … 式が腕の束縛を読むときと、`par~` の本体の中にあるときは、この候補を作らない
+// （他の候補は残す）"): the thing with state in a branch reads a binding of the arm (the `let` before the `match` would be
+// before the binding), or is in the body of a `par~` (taken out of it, the replication count would change). The lift into a
+// `let` is not offered; the other candidate, the `~` after the `if` / `match`, stays, so each error has one candidate
+// (`fixes = 1` is the most candidates that any error of this file has, and the runner's default says that the one is
+// clean). Each flow has one error. The `match~` and `if~` of the candidate are read after W7-06 U3a and U2. The
+// forms with no candidate at all (the guard reads a binding, S-394) are in negative/e0811_no_candidate.onsa. One error per
+// flow (P-01); the marker is on the line of the offending construct.
+
+pub flow acc(x: F32 at sample) -> F32 at sample {
+  let y = x + prev~(^y)
+  y
+}
+
+pub rt fn wrap(x: F32) -> F32 {
+  x
+}
+
+pub flow arm_reads_an_option_binding(x: F32 at sample) -> F32 at sample {
+  let o: Option[F32] = if x > 2.0 { Some(x) } else { None }
+  match~ o {
+    Some(v) => acc~(v), //~ E0811
+    None => 0.0,
+  }
+}
+
+pub flow arm_reads_a_variable_pattern(k: U32 at sample) -> F32 at sample {
+  match~ k {
+    0 => 0.0,
+    n => prev~(F32.round_from(n)), //~ E0811
+  }
+}
+
+pub flow arm_reads_a_binding_inside_a_call(x: F32 at sample) -> F32 at sample {
+  let o: Option[F32] = if x > 2.0 { Some(x) } else { None }
+  match~ o {
+    Some(v) => wrap(acc~(v)), //~ E0811
+    None => 0.0,
+  }
+}
+
+pub flow branch_in_a_par_body(x: F32 at sample, c: Bool at sample) -> [F32; 2] at sample {
+  par~ i in 0 ..< 2 {
+    if~ c { acc~(x * F32.round_from(i)) } else { 0.0 } //~ E0811
+  }
+}
+
+pub flow arm_in_a_par_body(x: F32 at sample, k: U32 at sample) -> [F32; 2] at sample {
+  par~ i in 0 ..< 2 {
+    match~ k {
+      0 => prev~(x * F32.round_from(i)), //~ E0811
+      _ => 0.0,
+    }
+  }
+}

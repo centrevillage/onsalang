@@ -4,7 +4,8 @@
 //! of a check (§18.1): the comparisons of [`crate::clock`] pass it. The
 //! checks on which the rule of the clock of their expression rests give it
 //! in error when they fail: the E0813 of a delay, the E0805 and the E0815 of
-//! a call of a function (§11.5), `if~` / `match~`, a node in a branch; the
+//! a call of a function (§11.5), `if~` / `match~`, a node in a branch
+//! (E0811, E0806); the
 //! others leave it as the rules give it (the `k` of `e at k`, the output of
 //! an instance, the clock of a delay by its first argument, a value whose
 //! type holds a function type, E0810). A value made with `Alloc` to drop
@@ -14,7 +15,7 @@ use onsa_syntax::ast::{Lit, OperandPlace};
 
 use super::*;
 use crate::binding::{aggregate, unit_variant};
-use crate::clock::{holds_state, promote, readable_at};
+use crate::clock::{keeps_delay_state, promote, readable_at};
 use crate::kind::kind_in_body;
 use crate::slot::{Form, Slot};
 
@@ -220,14 +221,49 @@ impl Walk<'_> {
         self.report(Diagnostic::new(Stage::Flow, code, head, msg).with_found(found).with_fix(fix));
     }
 
-    /// Whether a node or a `par~` at `e` may be here: not in a branch (K-08,
-    /// W7-06).
-    pub(super) fn stateful_here(&mut self, e: ExprId) -> bool {
-        if self.checking() && self.branch > 0 {
-            self.gate(Feature::StatefulInBranch, self.ast.expr(e).span, &[]);
+    /// Whether a node or a `par~` at `e`, of the kind `kind` (§11.6), may be
+    /// here: in no place that is not evaluated on every sample (§11.5).
+    /// Else, at `Check`, the E0811 of a branch, a guard or a later condition
+    /// of a chain, or the E0806 of the right of `&&` / `||`, of the innermost
+    /// place, at `e` (S-392), with the candidates that can be made (§2.6,
+    /// S-394): the `~` of a branch, which leaves the outer places in error
+    /// (S-1183), then the lift into a `let`.
+    // SPEC-GAP(S-1183): the `~` of the innermost branch, of a place in others
+    // (provisional).
+    // SPEC-GAP(S-1173): the E0806 at the flow check stage (provisional).
+    // SPEC-GAP(S-392): the main place of the E0811 / E0806 is the whole thing
+    // with state, `lp~(x)` (provisional).
+    // SPEC-GAP(S-1189): the thing in error has the error clock (its callers
+    // give `Clock::Error` on false), so an `at` around it reports nothing
+    // (provisional).
+    pub(super) fn stateful_here(&mut self, e: ExprId, kind: &str) -> bool {
+        let Some(&site) = self.sites.last().filter(|_| self.checking()) else { return true };
+        let span = self.ast.expr(e).span;
+        if self.diag.as_ref().is_some_and(|d| Diagnostic::place_before(d.span, span)) {
             return false;
         }
-        true
+        let (code, place) = match site {
+            Site::Branch { .. } => {
+                (Code::E0811, "in a branch of `if` / `match`, evaluated on the samples that take it only")
+            }
+            Site::Choose => {
+                (Code::E0811, "in a guard or a later condition of a chain, evaluated until one is taken only")
+            }
+            Site::Right => (Code::E0806, "on the right of `&&` / `||`, evaluated when the left does not decide only"),
+        };
+        let msg = format!("a flow instance, a delay or a `par~` cannot be {place} (§11.5)");
+        let mut d = Diagnostic::new(Stage::Flow, code, span, msg).with_found(self.src(span));
+        if let Site::Branch { head } = site {
+            let at = self.ast.expr(head).span;
+            let word = if matches!(self.ast.expr(head).kind, ExprKind::If { .. }) { "if" } else { "match" };
+            let title = format!("write `{word}~`, which evaluates every branch");
+            d = d.with_fix(Fix::insert(title, at.file, at.start + word.len() as u32, "~"));
+        }
+        if let Some(fix) = self.lift(e, kind) {
+            d = d.with_fix(fix);
+        }
+        self.report(d);
+        false
     }
 
     /// The signature of the function `def` has an error type: a call of it
@@ -310,7 +346,7 @@ impl Walk<'_> {
     /// unless the walk found an error in it, which the candidate would
     /// leave (§18.1), or it is a `^name`.
     pub(super) fn check_first(&mut self, delay: Delay, first: ExprId, c: Clock) -> bool {
-        if holds_state(c) {
+        if keeps_delay_state(c) {
             return true;
         }
         let span = self.ast.expr(first).span;

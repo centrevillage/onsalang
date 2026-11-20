@@ -3,29 +3,43 @@
 // spec = ["§11.3", "§11.4", "§11.5", "§18.1"]
 //
 // [[test.fix]]
-// at = "67:9"
+// at = "82:9"
 // code = "E0813"
 // candidate = 1
-// leaves = ["67:30 E0815"]
+// leaves = ["82:30 E0815"]
 //
 // [[test.fix]]
-// at = "71:9"
+// at = "86:9"
 // code = "E0813"
 // candidate = 1
-// leaves = ["71:22 E0815"]
+// leaves = ["86:22 E0815"]
 //
 // [[test.fix]]
-// at = "75:15"
+// at = "90:15"
 // code = "E0813"
 // candidate = 1
-// leaves = ["75:9 E0815"]
+// leaves = ["90:9 E0815"]
+//
+// [[test.fix]]
+// at = "62:18"
+// code = "E0811"
+// candidate = 1
+// leaves = ["63:11 E0815"]
+//
+// [[test.fix]]
+// at = "62:18"
+// code = "E0811"
+// candidate = 2
+// leaves = ["64:11 E0815"]
 
 // Two errors inside one `let` or one expression: the first by position is the one reported
 // (§18.1: one error per flow, the first of the order start position, end position, code). The
 // expression holds the other as a part (an argument, a condition, a branch) or follows it. E0200 is
-// a feature this version does not take: `if~` and `match~` (the `~`), and a delay, an instance or
-// `par~` in a branch, a guard or the right of `&&` / `||`, are found where they are written, and
-// come first when they start first. One error per flow, so each form is a flow of its own.
+// a feature this version does not take: `if~` and `match~` (the `~`), which are found where they are written and
+// come first when they start first. A delay, an instance or `par~` in a branch of a plain `if` is the E0811 of the
+// flow check stage (§11.5, W7-06 U1), the stage of the clock errors of the other lines, so of the two the first by
+// position is reported (`state_in_a_branch_then_e0815`: the branch, then the clock error of the next line).
+// One error per flow, so each form is a flow of its own.
 
 pub fn design(v: F32) -> F32 { v * 0.5 }
 pub flow pass(c: F32 at block) -> F32 at sample { c }
@@ -45,7 +59,8 @@ pub flow match_tilde_holds_a_delay(x: F32 at sample, k: U32 at block) -> F32 at 
 }
 
 pub flow state_in_a_branch_then_e0815(x: F32 at sample, c: Bool at sample) -> F32 at sample {
-  let a = if c { prev~(x) } else { x at block }                //~ E0200
+  let a = if c { prev~(x) } else { x }                         //~ E0811
+  let b = x at block
   a
 }
 

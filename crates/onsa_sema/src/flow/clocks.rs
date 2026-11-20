@@ -23,6 +23,7 @@
 use onsa_diag::hash::HashSet;
 use onsa_syntax::ast::{Ast, BinOp, MatchArm};
 
+use super::lift::{self, Stmt};
 use super::loops;
 use super::nodes::{NodeBuilder, Recorded};
 use super::plan::{Edge, Owner};
@@ -152,8 +153,27 @@ pub(super) struct Walked {
     pub(super) edges: Vec<Edge>,
 }
 
+/// A place that is not evaluated on every sample (§11.5), around a part of
+/// the walk; the innermost decides the error of a thing with state in it
+/// (S-1188).
+// SPEC-GAP(S-1188): the innermost place, of a right of `&&` / `||` and a
+// branch one in the other (provisional).
+#[derive(Debug, Clone, Copy)]
+enum Site {
+    /// A branch of `if` / `match` (E0811); `head` the `if` that starts its
+    /// chain or the `match`, which the `~` makes evaluate every branch.
+    Branch { head: ExprId },
+    /// A guard of a `match` or a condition of a chain after the first, which
+    /// chooses (E0811, S-1094, S-394: no `~` makes it evaluated every sample).
+    Choose,
+    /// The right of `&&` / `||` (E0806).
+    Right,
+}
+
 pub(super) struct Walk<'a> {
     a: &'a Analysis,
+    /// The flow.
+    def: DefId,
     ast: &'a Ast,
     /// The text of the module, for the `found` of a diagnostic.
     text: &'a str,
@@ -180,9 +200,13 @@ pub(super) struct Walk<'a> {
     out: ClockInfo,
     node_clocks: Vec<NodeClock>,
     node_of: HashMap<ExprId, usize>,
-    /// Nonzero inside a branch of `if` and `match`, a guard and the right
-    /// side of `&&` / `||` (K-08, `StatefulInBranch`).
-    branch: u32,
+    /// The places around the expression walked that are not evaluated on
+    /// every sample, the innermost last.
+    sites: Vec<Site>,
+    /// The head of the chain of the `if` walked next, a later `if` of it.
+    chain: Option<ExprId>,
+    /// At `Check`: the statement walked.
+    stmt: Option<Stmt>,
     diag: Option<Diagnostic>,
     inout_call: Option<Diagnostic>,
     non_rt: HashMap<ExprId, bool>,
@@ -213,6 +237,7 @@ pub(super) fn walk(
     let n = cx.pending.len();
     let mut w = Walk {
         a,
+        def: id,
         ast,
         text,
         error,
@@ -232,7 +257,9 @@ pub(super) fn walk(
         out: ClockInfo::default(),
         node_clocks: Vec::new(),
         node_of: HashMap::default(),
-        branch: 0,
+        sites: Vec::new(),
+        chain: None,
+        stmt: None,
         diag: None,
         inout_call: None,
         non_rt: HashMap::default(),
@@ -293,6 +320,7 @@ impl Walk<'_> {
         let cx = self.cx;
         for (k, p) in cx.pending.iter().enumerate() {
             self.recorder.owner(Owner::Let(k as u32));
+            self.stmt = Some(Stmt { root: p.init, start: p.span.start });
             self.in_loop = self.looped[k];
             let c = self.expr(p.init).unwrap_or(Clock::Const);
             self.checked[k] = Some(c);
@@ -303,6 +331,7 @@ impl Walk<'_> {
         }
         if let Some(out) = self.cx.output {
             self.recorder.owner(Owner::Output);
+            self.stmt = Some(Stmt { root: out, start: self.ast.expr(out).span.start });
             self.in_loop = false;
             self.expr(out);
         }
@@ -340,12 +369,19 @@ impl Walk<'_> {
         if self.mode == Mode::Check { self.expr(e) } else { None }
     }
 
-    /// `f` walking a branch (K-08).
-    fn in_branch<T>(&mut self, f: impl FnOnce(&mut Self) -> T) -> T {
-        self.branch += 1;
+    /// `f` walking in the place `site` (§11.5).
+    fn at<T>(&mut self, site: Site, f: impl FnOnce(&mut Self) -> T) -> T {
+        self.sites.push(site);
         let r = f(self);
-        self.branch -= 1;
+        self.sites.pop();
         r
+    }
+
+    /// The candidate that lifts the thing with state `e` of the kind `kind`
+    /// out of its place into a `let` before its statement ([`lift::lift`]).
+    fn lift(&self, e: ExprId, kind: &str) -> Option<Fix> {
+        let body = lift::Body { a: self.a, def: self.def, ast: self.ast, text: self.text, names: self.names };
+        lift::lift(&body, e, kind, self.stmt?)
     }
 
     /// The join of the clocks of operands of `e` (a constant of none). A
@@ -405,16 +441,28 @@ impl Walk<'_> {
             // E0200 of W7-06: the walk stops at them.
             ExprKind::If { tilde: Some(t), .. } => self.tilde(*t, "if~"),
             ExprKind::Match { tilde: Some(t), .. } => self.tilde(*t, "match~"),
+            // A later `if` of a chain: its condition chooses (S-1094), its
+            // branches are of the head of the chain.
             ExprKind::If { cond, then, else_, .. } => {
-                let mut ops = vec![self.expr(*cond)];
-                self.in_branch(|w| ops.extend([Some(*then), *else_].into_iter().flatten().map(|x| w.expr(x))));
+                let (head, c) = match self.chain.take() {
+                    Some(head) => (head, self.at(Site::Choose, |w| w.expr(*cond))),
+                    None => (e, self.expr(*cond)),
+                };
+                let mut ops = vec![c];
+                self.at(Site::Branch { head }, |w| {
+                    ops.push(w.expr(*then));
+                    if let Some(x) = *else_ {
+                        w.chain = matches!(ast.expr(x).kind, ExprKind::If { tilde: None, .. }).then_some(head);
+                        ops.push(w.expr(x));
+                    }
+                });
                 self.join(e, &ops)
             }
             ExprKind::Match { scrutinee, arms, .. } => self.match_arms(e, *scrutinee, arms),
             ExprKind::Binary { op, lhs, rhs, .. } => {
                 let l = self.expr(*lhs);
                 let r = match op {
-                    BinOp::And | BinOp::Or => self.in_branch(|w| w.expr(*rhs)),
+                    BinOp::And | BinOp::Or => self.at(Site::Right, |w| w.expr(*rhs)),
                     _ => self.expr(*rhs),
                 };
                 self.join(e, &[l, r])
@@ -470,18 +518,16 @@ impl Walk<'_> {
         }
     }
 
-    /// `match` (§11.3): the scrutinee, the guards and the bodies, these two
-    /// in a branch; the bindings of a pattern have the clock of the
+    /// `match` (§11.3): the scrutinee, the guards, which choose, and the
+    /// bodies, branches; the bindings of a pattern have the clock of the
     /// scrutinee.
     fn match_arms(&mut self, e: ExprId, scrutinee: ExprId, arms: &[MatchArm]) -> Option<Clock> {
         let s = self.expr(scrutinee);
         let mut ops = vec![s];
         for arm in arms {
             self.bind_pat(arm.pat, s);
-            self.in_branch(|w| {
-                ops.extend(arm.guard.map(|g| w.expr(g)));
-                ops.push(w.expr(arm.body));
-            });
+            ops.extend(arm.guard.map(|g| self.at(Site::Choose, |w| w.expr(g))));
+            ops.push(self.at(Site::Branch { head: e }, |w| w.expr(arm.body)));
         }
         self.join(e, &ops)
     }
@@ -493,17 +539,17 @@ impl Walk<'_> {
         let Some(&(var, from, count, end)) = self.cx.pars.get(&e) else {
             onsa_diag::internal::bug(self.span(e), "a `par~` the check did not record")
         };
-        if self.checking() {
-            let holds = super::nodes::holds_state(self.ast, body);
+        let (check, span) = (self.checking(), self.ast.expr(e).span);
+        let holds = check && super::nodes::holds_state(self.ast, body);
+        if check {
             self.par_mark(e, tilde, holds);
-            if holds && !self.stateful_here(e) {
+            if holds && !self.stateful_here(e, crate::flow_names::PAR) {
                 return Some(Clock::Error);
             }
         }
         self.bind_local(var, Some(Clock::Init));
-        let (check, span) = (self.mode == Mode::Check, self.ast.expr(e).span);
         if check {
-            self.recorder.enter_par(e, span, var, (from, count, end), body);
+            self.recorder.enter_par(e, span, var, (from, count, end), (body, holds));
         }
         let b = self.expr(body);
         if check {
@@ -562,7 +608,7 @@ impl Walk<'_> {
     /// read at, in the order of the text (its slot and its node before its
     /// arguments', §11.6; the error of its node after theirs, §18.1).
     fn node(&mut self, e: ExprId, call: &NodeCall) -> Option<Clock> {
-        if !self.stateful_here(e) {
+        if !self.stateful_here(e, super::plan::names::kind(self.a, &call.kind)) {
             return Some(Clock::Error);
         }
         let span = self.ast.expr(e).span;

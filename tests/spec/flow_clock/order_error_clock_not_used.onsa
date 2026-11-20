@@ -33,26 +33,26 @@
 // leaves = ["111:12 E0815"]
 //
 // [[test.fix]]
-// at = "138:9"
+// at = "133:9"
 // code = "E0813"
 // candidate = 1
-// leaves = ["138:30 E0813"]
+// leaves = ["133:30 E0813"]
 //
 // [[test.fix]]
-// at = "142:9"
+// at = "137:9"
 // code = "E0813"
 // candidate = 1
-// leaves = ["142:30 E0813"]
+// leaves = ["137:30 E0813"]
 //
 // [[test.fix]]
-// at = "150:9"
+// at = "145:9"
 // code = "E0813"
 // candidate = 1
-// leaves = ["150:24 E0805"]
+// leaves = ["145:24 E0805"]
 
 // A part that could not be read is an error and the part that uses it gets no diagnostic of its own
 // (§18.1): the result of a delay whose first argument is not at a clock of ticks (E0813), of an
-// `if~` or `match~` and of a stateful part in a branch (E0200) has the clock of an error. The check
+// `if~` or `match~` (E0200) has the clock of an error (the clock of a stateful part in a branch, E0811 since W7-06 U1, is a gap that the spec does not close, and is not in this file). The check
 // that would read that clock (an `at` that makes it slower, a delay that needs its first argument at
 // `sample`, an input of an instance that is at `block`) does not report even where it starts before
 // the error; only the error is reported, though by its position the outer one is first. The other
@@ -111,7 +111,7 @@ pub flow result_as_a_block_argument(x: F32 at sample, p: F32 at block) -> F32 at
   gate~(x, prev~(p))                                             //~ E0813 @18
 }
 
-// ---------------------------------------------------------------- the result of `if~`, `match~`, a stateful branch
+// ---------------------------------------------------------------- the result of `if~`, `match~`
 
 pub flow at_slower_of_if_tilde(x: F32 at sample, c: Bool at sample) -> F32 at sample {
   let a = (if~ c { x } else { 0.0 }) at block                    //~ E0200 @14
@@ -120,11 +120,6 @@ pub flow at_slower_of_if_tilde(x: F32 at sample, c: Bool at sample) -> F32 at sa
 
 pub flow at_slower_of_match_tilde(x: F32 at sample, c: Bool at sample) -> F32 at sample {
   let a = (match~ c { true => x, false => 0.0 }) at block        //~ E0200 @17
-  x
-}
-
-pub flow at_slower_of_a_stateful_branch(x: F32 at sample, c: Bool at sample) -> F32 at sample {
-  let a = (if c { prev~(x) } else { 0.0 }) at block              //~ E0200 @19
   x
 }
 

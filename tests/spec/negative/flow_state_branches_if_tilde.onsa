@@ -1,0 +1,32 @@
+// onsa.toml
+// [test]
+// spec = ["§2.6", "§11.5", "§18.1"]
+
+// The forms of flow_state_branches.onsa that hold an `if~` (W7-06 U1/t moved them out: they read after the check of
+// `if~` is implemented, W7-06 U2; the plain branches of that file read after W7-06 U1).
+// `if~` evaluates every branch, so a branch of it may hold state (§11.5), but a plain `if` inside a branch of it takes
+// only one of its branches, so state in that plain `if` is E0811, and the right of `&&` / `||` in the condition of an
+// `if~` is E0806 (the condition is evaluated every sample, the right operand is not). A plain `if` without state inside
+// an `if~` branch is fine, and it takes only the branch it needs (the division by `d` is evaluated only when `d` is not
+// 0: the example of §11.5). One error per flow; the marker is on the line of the offending construct.
+
+pub flow acc(x: F32 at sample) -> F32 at sample {
+  let y = x + prev~(^y)
+  y
+}
+
+pub flow plain_if_with_state_inside_an_if_tilde(x: F32 at sample) -> F32 at sample {
+  if~ x > 0.0 { if x > 1.0 { acc~(x) } else { 0.0 } } else { acc~(x) } //~ E0811
+}
+
+pub flow right_side_state_in_an_if_tilde_condition(x: F32 at sample) -> F32 at sample {
+  if~ x > 0.0 && acc~(x) > 1.0 { 1.0 } else { acc~(x) } //~ E0806
+}
+
+
+// An `if~` branch may hold state (every branch is evaluated); the plain `if` inside it holds none,
+// and takes only the branch it needs, so the division by `d` happens only when `d` is not 0
+// (the example of §11.5).
+pub flow if_tilde_with_a_plain_if(c: Bool at sample, d: I32 at sample, x: F32 at sample) -> F32 at sample {
+  if~ c { acc~(x) } else { if d != 0 { F32.round_from(100 / d) } else { 0.0 } }
+}

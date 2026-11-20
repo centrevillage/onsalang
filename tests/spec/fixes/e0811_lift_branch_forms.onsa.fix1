@@ -1,0 +1,77 @@
+// onsa.toml
+// [test]
+// spec = ["§2.6", "§11.5", "§18.1"]
+// fixes = 2
+
+// W7-06 U1/t, S-1172, S-110 (§11.5: "枝と … には、状態を持つもの … を書けない（E0811。修正候補は `if~` / `match~` にすることと、
+// 状態を持つものを前の `let` に出すこと …）。前の `let` に出す修正候補は、条件の位置（枝、ガード、右辺）の中で最も外の状態を持つものの
+// 式（修飾子の連鎖を含む呼び出しか `par~` の全体）を、それを含む本体の直下の `let`（か出力の式）の直前の新しい `let` に移し、元の位置を
+// その名前に置き換える"): the E0811 of a thing with state in a branch of a plain `if` or `match` has two candidates, the
+// `~` after the `if` / `match` (the first) and the lift into a `let` (the second; `fixes = 2` is the most candidates
+// that any error of this file has). Each flow has one error and no other error that the candidate leaves behind, so the
+// runner's default (S-314: after a candidate the unit has no error of this stage or an earlier one) says that the lift
+// is clean: the thing is made before the branch (so it is evaluated on every sample, §11.5), the place of the thing
+// reads the new name, and the name collides with no name of the body. The text after the candidate is not in this file
+// (the name of the `let` is not in the spec; the shape is read by hand and by the test `the_lift_into_a_let_...` of
+// crates/onsa_cli/tests/cli/lift_candidates.rs). The outermost thing with state is lifted: `wrap(prev~(x))` lifts the
+// `prev~(x)`, a `par~` is lifted as a whole. The `if~` and `match~` that the first candidate makes are read after W7-06 U2
+// and U3a. One error per flow (P-01); the marker is on the line of the offending construct.
+
+pub flow acc(x: F32 at sample) -> F32 at sample {
+  let y = x + prev~(^y)
+  y
+}
+
+pub rt fn wrap(x: F32) -> F32 {
+  x
+}
+
+pub rt fn pair_sum(xs: [F32; 2]) -> F32 {
+  xs[0] + xs[1]
+}
+
+pub flow in_the_then_branch(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  if~ c { acc~(x) } else { 0.0 } //~ E0811
+}
+
+pub flow in_the_else_branch(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  if~ c { 0.0 } else { acc~(x) } //~ E0811
+}
+
+pub flow in_the_body_of_an_else_if(x: F32 at sample) -> F32 at sample {
+  if~ x > 1.0 { 1.0 } else if x > 0.0 { acc~(x) } else { 0.0 } //~ E0811
+}
+
+pub flow in_an_arm(x: F32 at sample, k: U32 at sample) -> F32 at sample {
+  match~ k {
+    0 => acc~(x), //~ E0811
+    _ => 0.0,
+  }
+}
+
+pub flow inside_a_call_in_a_branch(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  if~ c { wrap(prev~(x)) } else { 0.0 } //~ E0811
+}
+
+pub flow in_the_value_of_a_let(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  let a = if~ c { prev~(x) } else { 0.0 } //~ E0811
+  a * 2.0
+}
+
+pub flow in_the_second_let(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  let b = x * 2.0
+  let a = if~ c { prev~(x) } else { b } //~ E0811
+  a + b
+}
+
+pub flow a_delay_with_an_init(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  if~ c { prev~(x, 1.0) } else { 0.0 } //~ E0811
+}
+
+pub flow a_variable_delay(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  if~ c { vdelay~(x, 2.0, 4) } else { 0.0 } //~ E0811
+}
+
+pub flow a_par_tilde_is_lifted_as_a_whole(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  if~ c { pair_sum(par~ i in 0 ..< 2 { prev~(x * F32.round_from(i)) }) } else { 0.0 } //~ E0811
+}

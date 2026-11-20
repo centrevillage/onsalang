@@ -7,7 +7,8 @@
 // ガードには、状態を持つもの … を書けない（E0811）。条件と `match` の対象は常に評価されるので書ける"),
 // and on the right of `&&` / `||` it is E0806 ("`&&` / `||` の右辺には、状態を持つものを書けない
 // （E0806。修正候補は前の `let` に出すこと）"). `if~` / `match~` evaluate every branch, so a branch of
-// those may hold state, and a plain `if` without state inside an `if~` branch is fine (the last flow).
+// those may hold state; the forms that put an `if~` in this file are in flow_state_branches_if_tilde.onsa
+// (they are read after the `if~` check, W7-06 U2), so this file is read by the check of this unit alone.
 // One error per flow; the marker is on the line of the offending construct. The spec does not fix the
 // column of the primary position, so the markers carry no column.
 
@@ -54,10 +55,6 @@ pub flow state_inside_an_array_in_a_branch(x: F32 at sample) -> F32 at sample {
 
 pub flow nested_if_with_state(x: F32 at sample) -> F32 at sample {
   if x > 0.0 { if x > 1.0 { acc~(x) } else { 0.0 } } else { 0.0 } //~ E0811
-}
-
-pub flow plain_if_with_state_inside_an_if_tilde(x: F32 at sample) -> F32 at sample {
-  if~ x > 0.0 { if x > 1.0 { acc~(x) } else { 0.0 } } else { acc~(x) } //~ E0811
 }
 
 pub flow if_inside_a_match_arm(k: U32 at sample, x: F32 at sample) -> F32 at sample {
@@ -134,10 +131,6 @@ pub flow right_side_state_inside_a_call(x: F32 at sample) -> F32 at sample {
   if hit { 1.0 } else { 0.0 }
 }
 
-pub flow right_side_state_in_an_if_tilde_condition(x: F32 at sample) -> F32 at sample {
-  if~ x > 0.0 && acc~(x) > 1.0 { 1.0 } else { acc~(x) } //~ E0806
-}
-
 pub flow right_side_state_in_a_par_body(x: F32 at sample) -> F32 at sample {
   let flags = par~ i in 0 ..< 2 {
     x > 0.0 && acc~(x) > F32.round_from(i) //~ E0806
@@ -146,13 +139,6 @@ pub flow right_side_state_in_a_par_body(x: F32 at sample) -> F32 at sample {
 }
 
 // ---- Not errors ----
-
-// An `if~` branch may hold state (every branch is evaluated); the plain `if` inside it holds none,
-// and takes only the branch it needs, so the division by `d` happens only when `d` is not 0
-// (the example of §11.5).
-pub flow if_tilde_with_a_plain_if(c: Bool at sample, d: I32 at sample, x: F32 at sample) -> F32 at sample {
-  if~ c { acc~(x) } else { if d != 0 { F32.round_from(100 / d) } else { 0.0 } }
-}
 
 // The condition, the scrutinee and the left operand are always evaluated and may hold state.
 pub flow state_where_it_is_always_evaluated(x: F32 at sample, k: U32 at sample) -> F32 at sample {

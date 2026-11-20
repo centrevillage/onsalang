@@ -1,0 +1,47 @@
+// onsa.toml
+// [test]
+// spec = ["§11.5", "§18.1"]
+// fixes = 2
+
+// W7-06 U1/t, S-1172 (§11.5: "名前は本体のどの名前とも重ねない（どの名前にするかは決めない）"): the new `let` of the lift
+// into a `let` takes a name that no name of the body has, whatever the compiler chooses (the spec does not say which, so
+// this file holds the names that a name made from the callee and a number could be (`acc_0`, `lp_0`, `prev_0`, and a later number)
+// and the names of a fixed word and a number: `state_0`, `hoist_0`, `tmp_0`, `let_0`, `lifted_0`, `n_0`, `v_0`.
+// The runner's default says that the unit has no error of the earlier stages after the
+// candidate (a name defined twice is one), and that the candidate of each error is clean in the one flow. The
+// parameters of a flow are names of its body too. One error per flow (P-01); the marker is on the line of the offending
+// construct.
+
+pub flow acc(x: F32 at sample) -> F32 at sample {
+  let y = x + prev~(^y)
+  y
+}
+
+pub flow lp(x: F32 at sample) -> F32 at sample {
+  x * 0.5 + prev~(x) * 0.5
+}
+
+pub flow the_names_of_the_callee_and_a_number(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  let acc_0 = x * 2.0
+  let lp_0 = x * 3.0
+  let prev_0 = x * 4.0
+  let acc_1 = x * 5.0
+  let a = if c { acc~(x) } else { 0.0 } //~ E0811
+  a + acc_0 + lp_0 + prev_0 + acc_1
+}
+
+pub flow the_names_of_a_fixed_word_and_a_number(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  let state_0 = x * 2.0
+  let hoist_0 = x * 3.0
+  let tmp_0 = x * 4.0
+  let let_0 = x * 5.0
+  let lifted_0 = x * 6.0
+  let n_0 = x * 7.0
+  let v_0 = x * 8.0
+  let a = if c { lp~(x) } else { 0.0 } //~ E0811
+  a + state_0 + hoist_0 + tmp_0 + let_0 + lifted_0 + n_0 + v_0
+}
+
+pub flow the_names_of_the_parameters(acc_0: F32 at sample, lp_0: F32 at sample, state_0: Bool at sample) -> F32 at sample {
+  if state_0 { prev~(acc_0) + lp_0 } else { 0.0 } //~ E0811
+}

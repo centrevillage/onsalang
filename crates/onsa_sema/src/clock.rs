@@ -9,7 +9,7 @@
 //!   Its stage of evaluation is a [`ClockStage`] ([`Clock::stage`]).
 //!
 //! The comparisons of clocks ([`join`], [`readable_at`], [`promote`],
-//! [`holds_state`], [`delay_out`], [`rebase`], [`loop_clock`], W7-02 U2a)
+//! [`keeps_delay_state`], [`delay_out`], [`rebase`], [`loop_clock`], W7-02 U2a)
 //! are the one table of the rules (D-15). The walk of the clocks
 //! (`flow::clocks`) and its checks read them. Each passes a clock in error with
 //! no clash and gives a clock in error. The rows of an event clock are
@@ -283,7 +283,7 @@ pub fn promote(value: Clock, to: Clock) -> Result<Clock, Clash> {
 /// (§11.4, E0813): a tick of the body (`sample`, `sample / N`) and
 /// `sample_tick()` (S-567 K6), not a parameter kind nor the `sample * N` of
 /// the caller. A clock in error holds (no second diagnostic).
-pub fn holds_state(c: Clock) -> bool {
+pub fn keeps_delay_state(c: Clock) -> bool {
     match c {
         Clock::Tick(k) => !k.faster_than_body(),
         Clock::Ambient | Clock::Error => true,

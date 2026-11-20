@@ -7,25 +7,25 @@
 // at = "50:5"
 // code = "E0811"
 // candidate = 1
-// leaves = ["50:5 E0200"]
+// leaves = ["50:5 E0811"]
 //
 // [[test.fix]]
 // at = "60:5"
 // code = "E0811"
 // candidate = 1
-// leaves = ["60:5 E0200"]
+// leaves = ["60:5 E0811"]
 //
 // [[test.fix]]
 // at = "66:10"
 // code = "E0811"
 // candidate = 1
-// leaves = ["66:10 E0200"]
+// leaves = ["66:10 E0811"]
 //
 // [[test.fix]]
 // at = "73:5"
 // code = "E0811"
 // candidate = 1
-// leaves = ["73:5 E0200"]
+// leaves = ["73:5 E0811"]
 
 // W4-20 U1/t, S-745; W7-06 U0/t, S-1177: a `par` without the `~` that holds state in a branch of a plain `if`
 // or `match` is judged twice by the flow check stage (§18.1: "`if` / `match` の枝の状態を持つものの E0811 と、
@@ -35,9 +35,9 @@
 // insertion of the `~` (§11.5; `fixes = 1`: the candidates of the error of the branch, the `if~` / `match~`
 // and the lift into a `let`, are not asked for here). What stays after the candidate is in
 // e0811_par_in_a_plain_branch_leaves.onsa. After the candidate the `par~` holds state in the branch, which this
-// version reports as the E0200 of a thing with state in a branch (`leaves` in the header, at the start of the
-// `par~`; S-1183 (1), the provisional reading: the candidate is shown although the branch stays an error). The
-// E0200 is the E0811 of the branch (§11.5) when the branch is implemented (W7-06 U1), and `leaves` change then.
+// version reports as the E0811 of a thing with state in a branch (`leaves` in the header, at the start of the
+// `par~`; S-1183 (1), the provisional reading: the candidate is shown although the branch stays an error). Which
+// candidates the one error has when the `par` and the branch are both E0811 at the same place is a gap (W7-06 U1/t).
 // A `par` without state in a branch is no error: it is a thing
 // without state that is taken only when the branch is (par_in_plain_branches.onsa).
 

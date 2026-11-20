@@ -67,6 +67,7 @@ mod interface_state_size;
 mod interface_visibility;
 mod kind_heading_notes;
 mod lexical_syntax;
+mod lift_candidates;
 mod manifest_diagnostics;
 mod manifest_host;
 mod manifest_platform;

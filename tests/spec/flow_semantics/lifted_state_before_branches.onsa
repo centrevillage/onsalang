@@ -1,0 +1,67 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.5", "§3.5"]
+
+// W7-06 U1/t, S-1172 (§11.5: "前の `let` に出す修正候補は、条件の位置 … の中で最も外の状態を持つものの式を … 直前の新しい `let` に
+// 移し、元の位置をその名前に置き換える"; "条件の位置の中の式を前の `let` に出すと、その `let` の段で、枝が取られるかによらず評価する"):
+// the program that the lift into a `let` makes out of an E0811 (a thing with state in a branch, in the second condition of a chain) and of an E0806 (on the
+// right of `&&`), written out by hand with the names of the author. The value is the value of the branch that is taken, and the thing
+// with state advances on every sample, also on the samples where its branch is not taken (it is evaluated before the
+// branch). `acc~(1.0)` is the count of the samples since the start (1, 2, 3, ...), and `prev~(x, 0.0)` is the sample before.
+// The values are worked out by hand.
+
+pub flow acc(x: F32 at sample) -> F32 at sample {
+  let y = x + prev~(^y)
+  y
+}
+
+// `if c { acc~(1.0) } else { 0.0 }` with the instance lifted: the count goes on while `c` is false.
+pub flow lifted_from_a_branch(c: Bool at sample) -> F32 at sample {
+  let n = acc~(1.0)
+  if c { n } else { 0.0 }
+}
+
+// `if x > 1.0 { 1.0 } else if prev~(x, 0.0) > 0.0 { 2.0 } else { 0.0 }` with the delay lifted out of the second condition.
+pub flow lifted_from_a_condition(x: F32 at sample) -> F32 at sample {
+  let p = prev~(x, 0.0)
+  if x > 1.0 { 1.0 } else if p > 0.0 { 2.0 } else { 0.0 }
+}
+
+// `x > 0.0 && acc~(1.0) > 1.5` with the instance lifted out of the right operand.
+pub flow lifted_from_the_right(x: F32 at sample) -> F32 at sample {
+  let n = acc~(1.0)
+  let hit = x > 0.0 && n > 1.5
+  if hit { 1.0 } else { 0.0 }
+}
+
+test "an instance lifted out of a branch advances on the samples where the branch is not taken" {
+  // n = 1, 2, 3, 4 and c = false, true, false, true: the branch gives n where it is taken.
+  let cs: [Bool; 4] = [false, true, false, true]
+  let o = lifted_from_a_branch.render(cs, 8.0)
+  assert o.out[0] == 0.0
+  assert o.out[1] == 2.0
+  assert o.out[2] == 0.0
+  assert o.out[3] == 4.0
+}
+
+test "a delay lifted out of the second condition of a chain is the sample before on every sample" {
+  // x = 0.5, 2.0, 0.5, 0.0 and p = 0.0, 0.5, 2.0, 0.5: the first condition holds on the second sample;
+  // the second condition (p > 0.0) holds on the third and the fourth.
+  let xs: [F32; 4] = [0.5, 2.0, 0.5, 0.0]
+  let o = lifted_from_a_condition.render(xs, 8.0)
+  assert o.out[0] == 0.0
+  assert o.out[1] == 1.0
+  assert o.out[2] == 2.0
+  assert o.out[3] == 2.0
+}
+
+test "an instance lifted out of the right operand counts the samples where the left operand decides" {
+  // x = 1.0, -1.0, 1.0, 1.0 and n = 1, 2, 3, 4: hit is false, false (x <= 0), true, true.
+  let xs: [F32; 4] = [1.0, -1.0, 1.0, 1.0]
+  let o = lifted_from_the_right.render(xs, 8.0)
+  assert o.out[0] == 0.0
+  assert o.out[1] == 0.0
+  assert o.out[2] == 1.0
+  assert o.out[3] == 1.0
+}

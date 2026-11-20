@@ -82,8 +82,8 @@ fn init_nodes(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, ids: &[NodeI
                 let c = call(sub.init, Ty::Struct(sub.state), span, vec![borrow(cfg), borrow(sr.clone())]);
                 assign(out, &sfield(lw, info, state, at(Part::Own), span)?, c)?;
             }
-            PlanKind::Par { children, .. } => {
-                if !holds_nodes(info, children) {
+            PlanKind::Par { children, state: holds, .. } => {
+                if !holds {
                     continue;
                 }
                 let r = replica_loop(cx, &n.kind, span)?;
@@ -97,16 +97,6 @@ fn init_nodes(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, ids: &[NodeI
         }
     }
     Ok(())
-}
-
-/// Whether the nodes `ids` hold a delay or an instance: the replicas of a
-/// `par~` of none (with no state, or with hoisted fields only, S-1140)
-/// have nothing to set, reset or run, and get no loop.
-fn holds_nodes(info: &FlowInfo, ids: &[NodeId]) -> bool {
-    ids.iter().any(|&id| match &info.node(id).kind {
-        PlanKind::Par { children, .. } => holds_nodes(info, children),
-        _ => true,
-    })
 }
 
 /// `reset(inout s)`.
@@ -151,8 +141,8 @@ fn reset_nodes(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, ids: &[Node
                 let st = sfield(lw, info, state, at(Part::Own), span)?;
                 expr_stmt(out, call(sub.reset, Ty::Unit, span, vec![inout(st)]));
             }
-            PlanKind::Par { children, .. } => {
-                if !holds_nodes(info, children) {
+            PlanKind::Par { children, state: holds, .. } => {
+                if !holds {
                     continue;
                 }
                 let r = replica_loop(cx, &n.kind, span)?;
@@ -196,8 +186,8 @@ fn ctl_nodes(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, ids: &[NodeId
                 let st = sfield(lw, info, state, own, span)?;
                 expr_stmt(out, call(sub.ctl, Ty::Unit, span, vec![inout(st), borrow(params)]));
             }
-            PlanKind::Par { children, .. } => {
-                if !holds_nodes(info, children) {
+            PlanKind::Par { children, state: holds, .. } => {
+                if !holds {
                     continue;
                 }
                 let r = replica_loop(cx, &n.kind, span)?;

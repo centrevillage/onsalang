@@ -1,0 +1,10 @@
+# flow_ref 1 source=tests/spec/flow_semantics/lifted_state_before_branches.onsa tests=3 evaluated=3 unavailable=0 skipped=0 waiting=0
+@ an instance lifted out of a branch advances on the samples where the branch is not taken
+render lifted_state_before_branches.lifted_from_a_branch sr=0x41000000 in c=[false true false true]
+out=[0x00000000 0x40000000 0x00000000 0x40800000]
+@ a delay lifted out of the second condition of a chain is the sample before on every sample
+render lifted_state_before_branches.lifted_from_a_condition sr=0x41000000 in x=[0x3f000000 0x40000000 0x3f000000 0x00000000]
+out=[0x00000000 0x3f800000 0x40000000 0x40000000]
+@ an instance lifted out of the right operand counts the samples where the left operand decides
+render lifted_state_before_branches.lifted_from_the_right sr=0x41000000 in x=[0x3f800000 0xbf800000 0x3f800000 0x3f800000]
+out=[0x00000000 0x00000000 0x3f800000 0x3f800000]

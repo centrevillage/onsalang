@@ -404,20 +404,20 @@ codes! {
         "name used before its definition in a flow (a later `let` is read as `^name` in the first argument of a delay)";
     E0805 = 805, Flow, [Flow], Optional, Optional,
         "a function with effects cannot be called from a flow, nor a value made whose drop needs `Alloc` (an implicit `Alloc`)";
-    E0806 = 806, Flow, [Names], Optional, Optional,
+    E0806 = 806, Flow, [Names, Flow], Optional, Optional,
         "this form is not allowed in a flow body";
     E0807 = 807, Flow, [Flow], Optional, Optional,
         "`delay~` with length 1; write `prev~` instead";
     E0808 = 808, Flow, [Flow], Optional, Optional,
-        "delay length or `par~` range out of its allowed values (a non-constant one is E0417)";
+        "delay length or `par` / `par~` range out of its allowed values (a non-constant one is E0417)";
     E0809 = 809, Flow, [Flow, Build], Optional, Optional,
         "`@param` is missing, misplaced, or malformed";
     E0810 = 810, Flow, [Names, Flow], Optional, Optional,
         "a flow input or output without `at` or at a clock it may not have, a signal value type that is not Copy, a type that holds a function type (inputs, outputs, the body), or a value type that cannot cross (a struct `sample` input)";
     E0811 = 811, Flow, [Names, Flow], Names, Optional,
-        "calling a flow creates a stateful instance and needs `~`";
+        "a flow call or a `par` that holds state needs `~`, and nothing with state stands where it is not evaluated every sample";
     E0812 = 812, Flow, [Names, Flow], Optional, Optional,
-        "`~` used on something that is not a flow";
+        "`~` used on something that is not a flow, or on an `if` / `match` / `par` with no state in it";
     E0813 = 813, Flow, [Flow], Optional, Optional,
         "first argument of `prev~` / `delay~` / `vdelay~` must be at the clock `sample`";
     E0815 = 815, Flow, [Flow], Optional, Optional,

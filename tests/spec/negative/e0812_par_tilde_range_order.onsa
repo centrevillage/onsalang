@@ -1,0 +1,23 @@
+// onsa.toml
+// [test]
+// spec = ["§11.5", "§18.1"]
+//
+// [[test.fix]]
+// at = "21:12"
+// code = "E0812"
+// candidate = 1
+// leaves = ["21:12 E0808"]
+
+// W7-06 U1/t (carried over from U0/b), S-1177, S-392 (the supplement, provisional) (§11.5: "含まない `par~` は E0812 で `~` を外す
+// 修正候補を示す"; "範囲は空であってはならない（空の範囲は E0808）"): a `par~` whose body holds nothing with state and whose range is empty
+// is two errors of the flow check stage in one expression. Of the errors of one stage the first by position is reported
+// (§18.1), and the position of the E0812 of a `par~` without state is, provisionally, the head of the `par~` (the
+// supplement of S-392; the E0808 of an empty range is at the `par` too, flow_clock/flow_fn_value_clock_model.onsa), so
+// the E0812 is reported and the E0808 is not. The candidate (the removal of the `~`) does not touch the empty range,
+// so `leaves` of the header names the E0808 that is left, at the same start of the `par` in the text after the
+// candidate. One error per flow (P-01); the marker is on the line of the offending construct.
+
+pub flow empty_range_without_state(x: F32 at sample) -> F32 at sample {
+  let v = (par~ i in 2 ..< 2 { x })[0] //~ E0812
+  v
+}

@@ -520,7 +520,7 @@ impl<'a> Parser<'a> {
                     "a `{` at the start of an expression in a header starts the body",
                 )
                 .with_found("{")
-                .with_rule("in the header of `if`, `while`, `match`, `for` and `par~`, a `{` at the start of an expression outside parentheses starts the body: a block expression there is written in parentheses, `({ … })`, and a range has both ends, `0..<n` (§3.1, §4.4, §7)");
+                .with_rule("in the header of `if`, `while`, `match`, `for`, `par` and `par~`, a `{` at the start of an expression outside parentheses starts the body: a block expression there is written in parentheses, `({ … })`, and a range has both ends, `0..<n` (§3.1, §4.4, §7)");
                 self.report(d);
                 return Err(ParseError);
             }
@@ -646,7 +646,11 @@ impl<'a> Parser<'a> {
                     return Err(self.unexpected("`{`"));
                 }
                 if range.kind != NodeKind::RangeExpr {
-                    return Err(self.error(Code::E0002, range.span, "`par~` needs a range `a..<b` or `a..=b`"));
+                    return Err(self.error(
+                        Code::E0002,
+                        range.span,
+                        "`par` and `par~` need a range `a..<b` or `a..=b`",
+                    ));
                 }
                 self.parse_body()?;
                 return Ok(self.complete(m, NodeKind::ParExpr));

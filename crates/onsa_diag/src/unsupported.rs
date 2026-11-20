@@ -111,10 +111,6 @@ features! {
         Some("give the constant a literal value, or write the length as a literal");
     /// `{}`: `if~` or `match~` (S-110, W7-06; K-02).
     TildeBranches: Language, "`{}`, which evaluates every branch", None;
-    /// K-08, S-110: what the branch does not evaluate holds state (W7-06).
-    StatefulInBranch: Language,
-        "a flow instance, a delay or a `par~` where it is evaluated on some samples only (a branch of `if` or `match`, a guard, the right of `&&` / `||`)",
-        Some("bind it with a `let` before the expression that holds it");
     /// `{}`: the clock. R-17, S-33: hoisting computes it at `init`, but not
     /// with constant arguments only (W9-03) or of a type that is not Copy
     /// (S-1160); under a condition decided after `init` it is E0815.
@@ -159,7 +155,7 @@ features! {
         Some("write `a..<b + 1` when `b + 1` fits in the type");
     /// R-195: the values of the constant expressions of §4.5 other than an
     /// integer literal and a `const` with a literal value (W9-03).
-    FlowConstExprs: Language, "computing the value of a constant expression in a flow (a `par~` bound, a delay length, the maximum of a `vdelay~`)",
+    FlowConstExprs: Language, "computing the value of a constant expression in a flow (a bound of a `par` or `par~`, a delay length, the maximum of a `vdelay~`)",
         Some("write it as an integer literal, or as a `const` whose value is an integer literal");
     /// R-501, §11.4: the ring of `MAX + 1` elements, until the check of the
     /// size of a state (E0409, S-88 (3), W9-04).

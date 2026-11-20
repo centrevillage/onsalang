@@ -5,7 +5,7 @@ use onsa_diag::internal::InternalBug;
 use onsa_diag::{FileId, Span};
 
 use crate::clock::{
-    Clash, Clock, ClockFrame, ClockName, ClockStage, Ratio, delay_out, holds_state, join, loop_clock, promote,
+    Clash, Clock, ClockFrame, ClockName, ClockStage, Ratio, delay_out, join, keeps_delay_state, loop_clock, promote,
     readable_at, rebase,
 };
 
@@ -199,10 +199,10 @@ fn sample_tick_goes_to_a_tick_and_at_passes_a_clock_in_error() {
 #[test]
 fn a_delay_holds_its_state_at_a_tick_of_the_body() {
     for c in [S, tick(-4), Clock::Ambient, Clock::Error] {
-        assert!(holds_state(c), "{c:?}");
+        assert!(keeps_delay_state(c), "{c:?}");
     }
     for c in [Clock::Const, Clock::Init, Clock::Block, tick(1)] {
-        assert!(!holds_state(c), "{c:?}");
+        assert!(!keeps_delay_state(c), "{c:?}");
     }
 }
 

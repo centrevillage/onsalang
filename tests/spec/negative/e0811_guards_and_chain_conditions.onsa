@@ -1,0 +1,134 @@
+// onsa.toml
+// [test]
+// spec = ["§2.6", "§11.5", "§11.3", "§18.1"]
+// fixes = 1
+
+// W7-06 U1/t, S-394, S-1094 (§11.5: "枝と、`match` / `match~` のガードと `if~` の連鎖の二つ目からの条件（選ぶ側で、取られる腕か
+// 真になる条件までしか評価しない）には、状態を持つものを書けない（E0811 … ガードと `if` / `if~` の連鎖の二つ目からの条件の中の状態を持つ
+// ものには、当てても誤りが残る `~` の候補を出さない）。`if` の条件と `if~` の連鎖の最初の条件、`match` の対象は常に評価されるので書ける"):
+// the guard of a plain `match` and the second and later conditions of a plain `if` chain hold something with state
+// (an instance, a built-in delay, a `par~`). Those are E0811 although they are not a branch: a guard is evaluated only
+// until an arm is taken, and a condition of the chain only until one holds, so the thing would advance on some samples
+// only. The one candidate is the lift into a `let` before the expression (S-1172, §11.5); the candidate that makes the
+// `match` a `match~` (or the `if` an `if~`) is not offered, as the guard (the condition) stays a place that is not
+// evaluated every sample after it (`fixes = 1` is the most candidates that any error of this file has). The first
+// condition of the chain, the scrutinee of the `match` and a guard that holds nothing with state are no error (the last
+// flows). The `if~` and `match~` that hold the same forms are in the cases of W7-06 U2 and U3a. The candidates that cannot
+// be made are in e0811_no_candidate.onsa. One error per flow (P-01); the marker is on the line of the offending
+// construct, and the spec does not fix its column.
+
+pub flow acc(x: F32 at sample) -> F32 at sample {
+  let y = x + prev~(^y)
+  y
+}
+
+pub rt fn wrap(x: F32) -> F32 {
+  x
+}
+
+pub rt fn pair_sum(xs: [F32; 2]) -> F32 {
+  xs[0] + xs[1]
+}
+
+// ---- E0811: the guard of a plain `match` ----
+
+pub flow guard_with_an_instance_after_a_plain_arm(k: U32 at sample, x: F32 at sample) -> F32 at sample {
+  match k {
+    0 => 2.0,
+    1 if acc~(x) > 1.0 => 1.0, //~ E0811
+    _ => 0.0,
+  }
+}
+
+pub flow guard_with_a_delay_after_a_guard_without_state(k: U32 at sample, x: F32 at sample) -> F32 at sample {
+  match k {
+    0 if x > 0.5 => 2.0,
+    1 if prev~(x) > 0.5 => 1.0, //~ E0811
+    _ => 0.0,
+  }
+}
+
+pub flow guard_with_state_inside_a_call(k: U32 at sample, x: F32 at sample) -> F32 at sample {
+  match k {
+    0 if wrap(prev~(x)) > 0.5 => 1.0, //~ E0811
+    _ => 0.0,
+  }
+}
+
+pub flow guard_with_a_par_tilde(k: U32 at sample, x: F32 at sample) -> F32 at sample {
+  match k {
+    0 if pair_sum(par~ i in 0 ..< 2 { prev~(x * F32.round_from(i)) }) > 0.5 => 1.0, //~ E0811
+    _ => 0.0,
+  }
+}
+
+pub flow guard_in_the_value_of_a_let(k: U32 at sample, x: F32 at sample) -> F32 at sample {
+  let m = match k {
+    0 if acc~(x) > 1.0 => 1.0, //~ E0811
+    _ => 0.0,
+  }
+  m + x
+}
+
+pub flow guard_of_the_last_arm_but_one(k: U32 at sample, x: F32 at sample) -> F32 at sample {
+  match k {
+    0 => 1.0,
+    1 => 2.0,
+    2 if delay~(x, 2) > 0.5 => 3.0, //~ E0811
+    _ => 0.0,
+  }
+}
+
+// ---- E0811: the second and later conditions of a plain `if` chain ----
+
+pub flow second_condition_with_a_delay(x: F32 at sample) -> F32 at sample {
+  if x > 1.0 { 1.0 } else if prev~(x) > 0.0 { 2.0 } else { 0.0 } //~ E0811
+}
+
+pub flow third_condition_with_an_instance(x: F32 at sample) -> F32 at sample {
+  if x > 2.0 { 1.0 } else if x > 1.0 { 2.0 } else if acc~(x) > 3.0 { 3.0 } else { 0.0 } //~ E0811
+}
+
+pub flow second_condition_with_state_inside_a_call(x: F32 at sample) -> F32 at sample {
+  if x > 1.0 { 1.0 } else if wrap(acc~(x)) > 1.0 { 2.0 } else { 0.0 } //~ E0811
+}
+
+pub flow chain_in_the_value_of_a_let(x: F32 at sample) -> F32 at sample {
+  let a = if x > 1.0 { 1.0 } else if prev~(x) > 0.0 { 2.0 } else { 0.0 } //~ E0811
+  a * 0.5
+}
+
+pub flow chain_on_several_lines(x: F32 at sample) -> F32 at sample {
+  if x > 1.0 {
+    1.0
+  } else if delay~(x, 3) > 0.0 { //~ E0811
+    2.0
+  } else {
+    0.0
+  }
+}
+
+// ---- Not errors: where it is evaluated every sample, or where there is no state ----
+
+// The first condition of the chain and the scrutinee are always evaluated.
+pub flow first_condition_with_state(x: F32 at sample) -> F32 at sample {
+  if prev~(x) > 0.0 { 1.0 } else if x > 1.0 { 2.0 } else { 0.0 }
+}
+
+pub flow scrutinee_with_state_and_a_guard_without(k: U32 at sample, x: F32 at sample) -> F32 at sample {
+  match prev~(k) {
+    0 if x > 0.5 => 1.0,
+    _ => 0.0,
+  }
+}
+
+// A chain whose later conditions hold no state, and a guard that holds a call without state.
+pub flow no_state_in_the_later_conditions(k: U32 at sample, x: F32 at sample) -> F32 at sample {
+  let s = acc~(x)
+  let a = if x > 1.0 { 1.0 } else if wrap(x) > 0.5 { 2.0 } else { s }
+  let b = match k {
+    0 if wrap(x) > 0.5 => 1.0,
+    _ => 0.0,
+  }
+  a + b
+}
