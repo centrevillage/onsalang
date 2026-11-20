@@ -3,8 +3,10 @@
 //! panic in one is a panic) and take the value of one; the arm of a `match~` that is not taken has the locals of its
 //! pattern at `T.default()`. The values are worked out by hand from the spec, in the comment of each test.
 //!
-//! The check of this version gives `if~` and `match~` E0200 (W7-06, the tables of the body are whole), so the sources
-//! with them are run unclean (`run_with(false, ..)`); a `par~` with `..<` is clean.
+//! A source with a state in its branches or arms (an instance, a delay) is clean (`run_with(true, ..)`). A source that
+//! the check does not take is run unclean (`run_with(false, ..)`, `with_checked(.., false, ..)`): an `if~` or a `match~`
+//! with no state in its branches is E0812 (§11.5: it is written `if` or `match`; what these tests look at is the order of
+//! the evaluation and the panics, which need no state), and an arm that binds a name and does not read it is E0309.
 
 use super::expr::Stop;
 use super::expr_tests::{i32v, with_checked};
@@ -194,7 +196,7 @@ fn if_tilde_evaluates_every_branch_and_takes_the_value_of_one() {
         "{ACC}flow sel(x: F64 at sample, c: Bool at sample) -> F64 at sample {{ if~ c {{ acc~(x) }} else {{ 0.0 - x }} }}"
     );
     let c = [false, true, false, true].map(Value::Bool).to_vec();
-    let outs = run_with(false, &src, "sel", vec![], vec![], vec![("x", doubles(&[1.0; 4])), ("c", c)], vec![4]);
+    let outs = run_with(true, &src, "sel", vec![], vec![], vec![("x", doubles(&[1.0; 4])), ("c", c)], vec![4]);
     same64(&f64s(&outs), &[-1.0, 2.0, -1.0, 4.0]);
 }
 
@@ -212,7 +214,7 @@ fn an_else_if_chain_of_if_tilde_evaluates_all_its_branches_and_takes_the_first_t
     let c1 = [false, false, true, true, false].map(Value::Bool).to_vec();
     let c2 = [false, true, false, true, true].map(Value::Bool).to_vec();
     let cols = vec![("x", doubles(&[1.0; 5])), ("c1", c1), ("c2", c2)];
-    same64(&f64s(&run_with(false, &src, "chain", vec![], vec![], cols, vec![5])), &[100.0, 20.0, 3.0, 4.0, 50.0]);
+    same64(&f64s(&run_with(true, &src, "chain", vec![], vec![], cols, vec![5])), &[100.0, 20.0, 3.0, 4.0, 50.0]);
 }
 
 #[test]
@@ -264,12 +266,9 @@ flow guarded(x: F64 at sample, k: I32 at sample) -> F64 at sample {{
 }}"
     );
     let cols = |ks: [i128; 4]| vec![("x", doubles(&[1.0; 4])), ("k", ks.map(i32v).to_vec())];
+    same64(&f64s(&run_with(true, &src, "arms", vec![], vec![], cols([0, 1, 2, 0]), vec![4])), &[1.0, 20.0, 300.0, 4.0]);
     same64(
-        &f64s(&run_with(false, &src, "arms", vec![], vec![], cols([0, 1, 2, 0]), vec![4])),
-        &[1.0, 20.0, 300.0, 4.0],
-    );
-    same64(
-        &f64s(&run_with(false, &src, "guarded", vec![], vec![], cols([7, 1, 9, 2]), vec![4])),
+        &f64s(&run_with(true, &src, "guarded", vec![], vec![], cols([7, 1, 9, 2]), vec![4])),
         &[8.0, 21.0, 12.0, 42.0],
     );
 }
@@ -286,7 +285,7 @@ fn the_binding_of_an_arm_not_taken_is_the_default_of_its_type() {
   match~ m { Some(v) => prev~(v), None => 0.0 }
 }";
     let cols = vec![("x", doubles(&[3.0, 0.0, 5.0, 7.0])), ("k", [1, 0, 1, 1].map(i32v).to_vec())];
-    same64(&f64s(&run_with(false, src, "opt", vec![], vec![], cols, vec![4])), &[0.0, 0.0, 0.0, 5.0]);
+    same64(&f64s(&run_with(true, src, "opt", vec![], vec![], cols, vec![4])), &[0.0, 0.0, 0.0, 5.0]);
 }
 
 #[test]
@@ -315,14 +314,14 @@ flow g(k: U32 at sample) -> [F64; 2] at sample {
 }";
     let ks = || vec![("k", [3, 5].map(|k| Value::int(IntKind::U32, k)).to_vec())];
     let rows = |name: &'static str| {
-        run_with(false, src, name, vec![], vec![], ks(), vec![2]).iter().map(row).collect::<Vec<_>>()
+        run_with(true, src, name, vec![], vec![], ks(), vec![2]).iter().map(row).collect::<Vec<_>>()
     };
     assert_eq!(rows("f"), [vec![0.0, 0.0], vec![3.0, 4.0]]);
     assert_eq!(rows("g"), [vec![0.0, 0.0], vec![3.0, 5.0]]);
 }
 
-/// `init` of the flow `name` with `config`, then one `process` of the frames `xs` (a source that has the E0200 of `match~`
-/// runs: the evaluator has the form and its tables are whole).
+/// `init` of the flow `name` with `config`, then one `process` of the frames `xs` (unclean: the sources have an arm that binds `n` and
+/// reads `k`, E0309, §5.1).
 fn open_run(
     src: &str,
     name: &'static str,
@@ -398,8 +397,8 @@ flow ini_k(k: U32 at init, x: F64 at sample) -> F64 at sample { match~ k { n => 
 
 // ---------------------------------------------------------------------------------------------------------------------------------
 // W7-06 U2/t, S-1094 (1), S-110 (§11.5): the side of an `if~` that selects (the conditions of the chain) is evaluated first, from the top,
-// up to the first condition that is true, and then every branch in the order written. The sources are run unclean while the check gives
-// `if~` E0200 (W7-06 U2 makes them clean).
+// up to the first condition that is true, and then every branch in the order written. The sources are run unclean: no branch has a state,
+// so the check gives the `if~` E0812 (§11.5), and a panic in the order of the evaluation needs none.
 
 /// The text of the expression that panicked in one frame of the flow `name` of `src` (`cols` the inputs of the frame), or "" for none.
 fn panic_text(src: &'static str, name: &'static str, cols: Vec<(&'static str, Value)>) -> String {
@@ -465,7 +464,7 @@ fn an_if_tilde_in_an_else_has_its_condition_evaluated_whatever_the_outer_conditi
 #[test]
 fn the_values_of_the_cases_of_if_tilde_all_branches_onsa() {
     // The expected values of tests/spec/flow_semantics/if_tilde_all_branches.onsa and if_tilde_select_order.onsa, on this evaluator
-    // (the check of this version gives `if~` E0200: unclean). The counters of the three branches of `nest` run on each sample.
+    // (clean: each flow has an instance in a branch). The counters of the three branches of `nest` run on each sample.
     let src = format!(
         "{ACC}flow nest(x: I32 at sample) -> F64 at sample {{
   let a = x >= 2
@@ -481,7 +480,7 @@ flow second(x: I32 at sample) -> F64 at sample {{
     );
     let run = |name: &'static str, xs: &[i128]| {
         let col = xs.iter().map(|x| i32v(*x)).collect::<Vec<_>>();
-        f64s(&run_with(false, &src, name, vec![], vec![], vec![("x", col)], vec![xs.len()]))
+        f64s(&run_with(true, &src, name, vec![], vec![], vec![("x", col)], vec![xs.len()]))
     };
     assert_eq!(run("nest", &[0, 1, 2, 3]), [100.0, 200.0, 3.0, 4.0]);
     assert_eq!(run("nest", &[3, 3, 0]), [1.0, 2.0, 300.0]);
@@ -492,12 +491,12 @@ flow second(x: I32 at sample) -> F64 at sample {{
 // ---------------------------------------------------------------------------------------------------------------------------------
 // W7-06 U3b/t, S-1131, S-1094 (1), §11.5, §6.4: the stage of the binding of an arm, the default of an arm that is not taken whatever type the
 // binding has (a struct with a `Default` written by hand, a field with a declared value whose type has no `Default`), and the values of the
-// cases tests/spec/flow_semantics/match_tilde_*.onsa, which the checks of this version stop with E0200 (so unclean).
+// cases tests/spec/flow_semantics/match_tilde_*.onsa.
 
 /// The `F64`s that the calls (the value of `k`, the number of frames of x = 1, and whether a `reset` goes before it) of `name` give in turn.
 fn calls_of(src: &'static str, name: &'static str, calls: &[(u32, usize, bool)]) -> Vec<f64> {
     let calls = calls.to_vec();
-    with_checked(src, false, move |a| {
+    with_checked(src, true, move |a| {
         let (view, def) = (super::sema_view::View::new(a), super::expr_tests::def_named(a, name));
         let mut me = Instance::init(view, def, 48000.0, &[], None).expect("init");
         let mut out = Vec::new();
@@ -564,7 +563,7 @@ flow div(x: F64 at sample, k: U32 at block) -> F64 at sample {{
     let src: &'static str = Box::leak(src.into_boxed_str());
     same64(&calls_of(src, "top", &[(3, 2, false), (0, 2, false), (2, 2, false)]), &[3.0, 6.0, 0.0, 0.0, 8.0, 10.0]);
     let zero_frames = |k: u32| {
-        with_checked(src, false, move |a| {
+        with_checked(src, true, move |a| {
             let (view, def) = (super::sema_view::View::new(a), super::expr_tests::def_named(a, "div"));
             let mut me = Instance::init(view, def, 48000.0, &[], None).expect("init");
             let params = [("k", Value::int(IntKind::U32, i128::from(k)))];
@@ -598,7 +597,7 @@ impl Default for Pt {{
 }}"
     );
     let cols = vec![("x", doubles(&[3.0, 1.0, 4.0]))];
-    same64(&f64s(&run_with(false, &src, "hand", vec![], vec![], cols, vec![3])), &[33.0, 0.0, 86.0]);
+    same64(&f64s(&run_with(true, &src, "hand", vec![], vec![], cols, vec![3])), &[33.0, 0.0, 86.0]);
 }
 
 #[test]
@@ -619,7 +618,7 @@ fn a_field_that_declares_a_value_does_not_ask_for_the_default_of_its_type() {
 }}"
     );
     let cols = vec![("x", doubles(&[3.0, 1.0, 4.0]))];
-    same64(&f64s(&run_with(false, &src, "tagged", vec![], vec![], cols, vec![3])), &[3.0, 0.0, 7.0]);
+    same64(&f64s(&run_with(true, &src, "tagged", vec![], vec![], cols, vec![3])), &[3.0, 0.0, 7.0]);
 }
 
 #[test]
@@ -647,7 +646,7 @@ flow tuples(a: U32 at sample, b: U32 at sample) -> F64 at sample {{
     );
     let u32s = |xs: &[i128]| xs.iter().map(|x| Value::int(IntKind::U32, *x)).collect::<Vec<_>>();
     let run = |name: &'static str, a: &[i128], b: &[i128]| {
-        f64s(&run_with(false, &src, name, vec![], vec![], vec![("a", u32s(a)), ("b", u32s(b))], vec![a.len()]))
+        f64s(&run_with(true, &src, name, vec![], vec![], vec![("a", u32s(a)), ("b", u32s(b))], vec![a.len()]))
     };
     assert_eq!(run("nested", &[0, 0, 1, 0], &[0, 1, 0, 1]), [1.0, 20.0, 300.0, 40.0]);
     assert_eq!(run("tuples", &[0, 0, 3, 3, 0], &[0, 5, 2, 1, 0]), [1.0, 20.0, 300.0, 4000.0, 5.0]);
