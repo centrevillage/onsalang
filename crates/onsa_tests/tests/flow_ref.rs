@@ -29,6 +29,8 @@ mod print;
 mod print_tests;
 #[path = "flow_ref/twin.rs"]
 mod twin;
+#[path = "flow_ref/twin_match.rs"]
+mod twin_match;
 #[path = "flow_ref/twin_tests.rs"]
 mod twin_tests;
 

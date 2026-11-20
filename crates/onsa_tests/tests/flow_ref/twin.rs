@@ -29,20 +29,20 @@ impl Rng {
         z ^ (z >> 31)
     }
 
-    fn below(&mut self, n: usize) -> usize {
+    pub fn below(&mut self, n: usize) -> usize {
         (self.next() % n as u64) as usize
     }
 
-    fn chance(&mut self, percent: usize) -> bool {
+    pub fn chance(&mut self, percent: usize) -> bool {
         self.below(100) < percent
     }
 
-    fn pick<T: Copy>(&mut self, xs: &[T]) -> T {
+    pub fn pick<T: Copy>(&mut self, xs: &[T]) -> T {
         xs[self.below(xs.len())]
     }
 }
 
-const HEADER: &str = "pub flow acc(x: F32 at sample) -> F32 at sample {
+pub const HEADER: &str = "pub flow acc(x: F32 at sample) -> F32 at sample {
   let y = x + prev~(^y)
   y
 }
@@ -54,7 +54,7 @@ pub flow ifnest(x: F32 at sample) -> F32 at sample {
 }
 pub rt fn sum2(a: [F32; 2]) -> F32 { a[0] + a[1] }
 ";
-const SIGNATURE: &str = "(x: F32 at sample, k: U32 at block, ki: I32 at block, n: U32 at init)";
+pub const SIGNATURE: &str = "(x: F32 at sample, k: U32 at block, ki: I32 at block, n: U32 at init)";
 
 // The forms of the plan, by their tag (the gate asserts its seeds hold the tags of `COVER`). `{s}` is a stateless expression
 // of the sample, `{l}` a literal, `{i}` a small number, `{j}` a small signed one, `{c}` a float to compare with; `IDX` is the
@@ -94,7 +94,7 @@ const CONDS: &[(&str, &str)] = &[
 const STATE_CONDS: &[&str] = &["prev~(x) > 0.0", "acc~(x) > 2.0", "prev~(x * 2.0) < 0.5"];
 /// How the program is wrapped around the chain (`{}`); the last wraps it in a `par~`.
 #[rustfmt::skip]
-const WRAPS: &[(&str, &str)] = &[
+pub const WRAPS: &[(&str, &str)] = &[
     ("wrap_direct", "{}"), ("wrap_let", "let r = ({})\n  r"), ("wrap_twice", "twice~({})"), ("wrap_half", "0.5 * ({})"),
     ("wrap_prev", "prev~({})"), ("wrap_delay", "delay~({}, 2)"), ("wrap_par", ""),
 ];
@@ -249,7 +249,7 @@ pub fn make(seed: u64, rot: bool) -> (String, BTreeSet<&'static str>) {
 /// `block` and `init` inputs; and `process` of `flows` (`fa` and `fb`, or for a `par~` the flows that add up its array, which
 /// the evaluator does not take as a planar buffer) over three parts of the input (a part may be empty, each into a buffer of
 /// its own) with the inputs changing, and a `reset` before the last.
-fn tests(rng: &mut Rng, channels: Option<usize>, flows: (&str, &str)) -> String {
+pub fn tests(rng: &mut Rng, channels: Option<usize>, flows: (&str, &str)) -> String {
     let xs = |rng: &mut Rng| (0..6).map(|_| rng.pick(XS)).collect::<Vec<_>>().join(", ");
     let (chans, at) = (channels.unwrap_or(1), |c: usize| channels.map_or(String::new(), |_| format!("[{c}]")));
     let mut t = format!("test \"render\" {{\n  let xs: [F32; 6] = [{}]\n", xs(rng));
@@ -287,6 +287,11 @@ fn tests(rng: &mut Rng, channels: Option<usize>, flows: (&str, &str)) -> String 
     t + "}\n"
 }
 
+/// How a seed makes a program (with the mutant of `fb` when `rot`), and the forms that the program holds.
+pub type Maker = fn(u64, bool) -> (String, BTreeSet<&'static str>);
+/// A family of twins: its name (the failure says how to run it again) and how its seeds make programs.
+pub type Family = (&'static str, Maker);
+
 /// What a run of seeds came to, summed.
 #[derive(Debug, Default)]
 pub struct Stats {
@@ -301,7 +306,7 @@ pub struct Stats {
 /// The seeds run on the evaluator and, unless `rot`, through the interpreter: the numbers, and a message (the program, how to
 /// run it again) for each seed with anything wrong. What the generator makes has to be read, evaluated and printed: a form that
 /// the checker, the evaluator or the printer does not take is the generator's failure, never dropped.
-pub fn run(seeds: Vec<u64>, family: &str, rot: bool) -> (Stats, Vec<String>) {
+pub fn run(seeds: Vec<u64>, (family, make): Family, rot: bool) -> (Stats, Vec<String>) {
     stack::run(move || {
         let (pending, wrappers) =
             (Pending::load(&repo_root()).expect("the list of things pending"), Wrappers::default());
