@@ -11,6 +11,7 @@ use onsa_tests::case::repo_root;
 use onsa_tests::flow_ref::interp_host::Wrappers;
 use onsa_tests::pending::Pending;
 
+use super::shrink::{LIMITS, MISSING_PANIC, OUT_OF_STAGES, UNEXPECTED_PANIC, class_of, shrink, without_a_line};
 use super::twin_match::{self, EXTRA};
 use super::{Compared, Tally, compare_one, failures, tally_case};
 
@@ -392,43 +393,82 @@ pub struct Stats {
     pub compared_asserts: usize,
 }
 
-/// The seeds run on the evaluator and, unless `rot`, through the interpreter: the numbers, and a message (the program, how to
-/// run it again) for each seed with anything wrong. What the generator makes has to be read, evaluated and printed: a form that
-/// the checker, the evaluator or the printer does not take is the generator's failure, never dropped.
+/// A program run on the evaluator and, unless `rot`, through the interpreter: what was counted, and what is wrong with it.
+fn one(pending: &Pending, wrappers: &Wrappers, path: &str, src: &str, rot: bool) -> (Tally, Compared, Vec<String>) {
+    let input = PackageInput::single_file(path, src);
+    let (mut t, mut c) = (Tally::default(), Compared::default());
+    tally_case(&mut t, pending, wrappers, (path, path), input.clone());
+    let mut why = failures(&t);
+    let left = t.waiting + t.unavailable.values().sum::<usize>() + t.skipped.values().sum::<usize>();
+    why.extend((left > 0).then(|| format!("{left} tests were not evaluated: {:?} {:?}", t.unavailable, t.skipped)));
+    if !rot && why.is_empty() {
+        compare_one(&mut c, wrappers, path, input);
+        why.append(&mut c.failures);
+        why.extend(
+            (!c.unprintable.is_empty() || c.panicked > 0)
+                .then(|| format!("not printed {:?}, panicked {}", c.unprintable, c.panicked)),
+        );
+    }
+    (t, c, why)
+}
+
+/// The seeds run on the evaluator and, unless `rot`, through the interpreter: the numbers, and a message (the family, the seed,
+/// the forms the program holds, the kind of failure, the program shrunk, how to run it again) for each seed with anything wrong. What
+/// the generator makes has to be read, evaluated and printed: a form that the checker, the evaluator or the printer does not
+/// take is the generator's failure, never dropped. Only the first three failures are shrunk.
 pub fn run(seeds: Vec<u64>, (family, make): Family, rot: bool) -> (Stats, Vec<String>) {
     stack::run(move || {
         let (pending, wrappers) =
             (Pending::load(&repo_root()).expect("the list of things pending"), Wrappers::default());
         let (mut s, mut bad) = (Stats::default(), Vec::new());
         for seed in seeds {
-            let (src, path) = (make(seed, rot).0, format!("seed_{seed}.onsa"));
-            let input = PackageInput::single_file(&path, &src);
-            let (mut t, mut c) = (Tally::default(), Compared::default());
-            tally_case(&mut t, &pending, &wrappers, (&path, &path), input.clone());
-            let mut why = failures(&t);
-            let left = t.waiting + t.unavailable.values().sum::<usize>() + t.skipped.values().sum::<usize>();
-            why.extend(
-                (left > 0).then(|| format!("{left} tests were not evaluated: {:?} {:?}", t.unavailable, t.skipped)),
-            );
-            if !rot && why.is_empty() {
-                compare_one(&mut c, &wrappers, &path, input);
-                why.append(&mut c.failures);
-                why.extend(
-                    (!c.unprintable.is_empty() || c.panicked > 0)
-                        .then(|| format!("not printed {:?}, panicked {}", c.unprintable, c.panicked)),
-                );
-            }
+            let (src, tags) = make(seed, rot);
+            let path = format!("seed_{seed}.onsa");
+            let (t, c, why) = one(&pending, &wrappers, &path, &src, rot);
             (s.programs, s.tests, s.evaluated, s.asserts) =
                 (s.programs + 1, s.tests + t.tests, s.evaluated + t.evaluated, s.asserts + t.asserts);
             (s.compared, s.compared_asserts) = (s.compared + c.ran, s.compared_asserts + c.asserts);
             if !why.is_empty() {
-                let again = format!(
-                    "ONSA_FLOW_GEN={seed}..{} cargo test -p onsa_tests --test flow_ref -- --ignored heavy_{family} --nocapture",
-                    seed + 1
-                );
-                bad.push(format!("seed {seed} ({family}): {}\n{src}\nrun it again: {again}", why.join("\n")));
+                let class = class_of(&why[0]);
+                let kind = |m: &String| one(&pending, &wrappers, &path, m, rot).2.first().map(|w| class_of(w));
+                let small =
+                    (!rot && bad.len() < 3).then(|| shrink(src, class, LIMITS, |s: &String| without_a_line(s), kind));
+                bad.push(report(family, Some(seed), &tags, class, &why, small.as_ref().map(|(s, n)| (s.as_str(), *n))));
             }
         }
         (s, bad)
     })
+}
+
+/// The message of a failing seed (`None` is a form written by hand): its family and forms, the kind of failure and its text,
+/// the program (shrunk, after `tries` candidates), and the command that runs the seed again.
+pub fn report(
+    family: &str,
+    seed: Option<u64>,
+    tags: &BTreeSet<&str>,
+    class: &str,
+    why: &[String],
+    shown: Option<(&str, usize)>,
+) -> String {
+    let (head, again) = match seed {
+        Some(s) => (
+            format!("seed {s}"),
+            format!(
+                "ONSA_FLOW_GEN={s}..{} cargo test -p onsa_tests --test flow_ref -- --ignored heavy_{family} --nocapture",
+                s + 1
+            ),
+        ),
+        None => ("a form written by hand".to_string(), "cargo test -p onsa_tests --test flow_ref".to_string()),
+    };
+    // What the plan finds wrong (`twin_pan.rs`) is not what `onsa test` shows of the program: a scene that panics is a test that failed.
+    let plan = [UNEXPECTED_PANIC, MISSING_PANIC, OUT_OF_STAGES].contains(&class).then_some(
+        "(a failure by the plan does not come again in `onsa test`: it shows a test that panicked as failed, not what the plan says of it)\n",
+    );
+    let program = shown.map_or("(shown for the first three failures only)".to_string(), |(src, tries)| {
+        format!("{}the program, shrunk in {tries} tries:\n{src}", plan.unwrap_or_default())
+    });
+    format!(
+        "{head} ({family}), forms {tags:?}, failure `{class}`: {}\n{program}\nrun it again: {again}",
+        why.join("\n")
+    )
 }

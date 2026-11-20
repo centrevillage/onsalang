@@ -4,8 +4,12 @@
 
 use std::collections::BTreeSet;
 
+use super::shrink::{
+    DIVISION, INTERNAL, LIMITS, MISSING_PANIC, OUT_OF_STAGES, UNEXPECTED_PANIC, class_of, shrink, without_a_line,
+};
 use super::twin::{Family, Stats, make, run};
 use super::twin_match;
+use super::twin_pan;
 
 /// The seeds of the gate: chosen again when a change of the generator moves what they make and `COVER` breaks. A tag is of
 /// what the program holds (a condition that a guard replaces gives none).
@@ -60,8 +64,8 @@ fn a_twin_that_selects_the_next_branch_is_caught_in_every_seed_of_the_gate() {
 }
 
 /// The seeds of `heavy_`: `ONSA_FLOW_GEN=<lo>..<hi>` runs a range again (what a failure tells how to).
-fn heavy_seeds() -> Vec<u64> {
-    let Ok(range) = std::env::var("ONSA_FLOW_GEN") else { return (0..200).collect() };
+fn heavy_seeds(count: u64) -> Vec<u64> {
+    let Ok(range) = std::env::var("ONSA_FLOW_GEN") else { return (0..count).collect() };
     let (lo, hi) = range.split_once("..").expect("ONSA_FLOW_GEN is <lo>..<hi>");
     (lo.parse().expect("a number")..hi.parse().expect("a number")).collect()
 }
@@ -69,7 +73,7 @@ fn heavy_seeds() -> Vec<u64> {
 #[test]
 #[ignore = "heavy: the gate item `heavy` runs it"]
 fn heavy_if_twins() {
-    let s = check(heavy_seeds(), IF);
+    let s = check(heavy_seeds(200), IF);
     println!("{s:?}");
 }
 
@@ -117,5 +121,126 @@ fn a_twin_whose_unselected_bindings_are_not_the_defaults_is_caught_by_the_seeds_
 #[test]
 #[ignore = "heavy: the gate item `heavy` runs it"]
 fn heavy_match_twins() {
-    println!("{:?}", check(heavy_seeds(), MATCH));
+    println!("{:?}", check(heavy_seeds(200), MATCH));
+}
+
+// The panics by stage (U3, the family P): the forms written by hand, whose panics are derived from the spec, and the programs of
+// the seeds, whose panics are held to what the plan allows. Both are run in the evaluator and the interpreter.
+
+/// The seeds of the gate for the panics: chosen again when a change of the generator moves what they make and `PAN_COVER` or
+/// `PAN_TWICE` break.
+const PAN_GATE: [u64; 10] = [180, 271, 554, 559, 680, 903, 1000, 1080, 1117, 1168];
+/// The forms the seeds hold: chains and `match~`es, nested, on each kind of scrutinee; the divisions (by an input of each clock
+/// and by a binding), in a body, in an argument of `block`, in a condition after the first and in a guard after another (a guard
+/// of `sample` before it too), a guarded chain, a short circuit (`&&`, `||`) whose right side divides, by the clock of its left
+/// side (`x`) or by another, a plain `if` that guards its division and one that does not, a division of an outer binding in a
+/// guard, and an argument of `block` that divides by a binding in a `match~` whose scrutinee is a binding.
+const PAN_COVER: &str = "if match nested_if nested_match scr_k scr_n scr_ku scr_b body_div state_div block_div d_k d_n d_b c_x c_eq0 \
+    c_lt2 c_ne c_div c_gdiv c_and_x c_or_x c_and_clk c_or_clk plain_guarded plain_bad late_cond_div late_guard_div sample_then_div \
+    guard_chain outer_guard if_cond_b block_arg_b";
+/// The forms that the mutants need, which two seeds of the gate hold at least: a division in a body (also of a state, and of an
+/// argument of `block`) that is evaluated whether its arm is taken or not, in a condition after the first and in a guard after
+/// another (one of `sample` before it too), a plain `if` that does not guard its division, a division of an outer binding, a
+/// scrutinee that is one, the nest of the arms chosen from the outside in, each short circuit.
+const PAN_TWICE: &str = "late_cond_div late_guard_div sample_then_div plain_bad outer_guard body_div state_div block_div scr_b \
+    block_arg_b c_and_x c_or_x c_and_clk c_or_clk";
+
+/// The programs run: no failure, and what was counted is not nothing (scenes that panic and scenes that do not, a panic at each
+/// stage, and scenes where a division that is surely evaluated divides by zero, which have to panic), all compared.
+fn pan_check(progs: Vec<(Option<u64>, twin_pan::Prog, BTreeSet<&'static str>)>) -> twin_pan::Stats {
+    // A form written by hand (it has no seed) has no plan to say which division is sure, and no `init` panic.
+    let (n, by_plan) = (progs.len(), progs.iter().all(|p| p.0.is_some()));
+    let (s, bad) = twin_pan::run(progs);
+    assert!(bad.is_empty(), "{}", bad.join("\n\n"));
+    let stages = &s.by_stage[usize::from(!by_plan)..];
+    let counted =
+        s.programs == n && s.panicked > 0 && s.quiet > 0 && (s.surely > 0 || !by_plan) && stages.iter().all(|&c| c > 0);
+    assert!(counted && s.compared == s.scenes, "something was not run: {s:?}");
+    s
+}
+
+fn pan_progs(seeds: Vec<u64>) -> Vec<(Option<u64>, twin_pan::Prog, BTreeSet<&'static str>)> {
+    seeds
+        .into_iter()
+        .map(|s| {
+            let (p, t) = twin_pan::make(s);
+            (Some(s), p, t)
+        })
+        .collect()
+}
+
+#[test]
+fn the_panics_of_the_forms_written_by_hand_are_where_the_spec_derives_them() {
+    let s = pan_check(twin_pan::fixed());
+    println!("{s:?}");
+}
+
+#[test]
+fn the_panics_of_the_gate_seeds_are_by_their_plans_and_the_same_in_the_interpreter() {
+    println!("{:?}", pan_check(pan_progs(PAN_GATE.to_vec())));
+}
+
+#[test]
+fn the_panic_seeds_of_the_gate_hold_every_form_of_the_table_of_what_is_covered() {
+    let held: Vec<_> = PAN_GATE.iter().map(|s| twin_pan::make(*s).1).collect();
+    let count = |t: &str| held.iter().filter(|h| h.contains(t)).count();
+    let missing: Vec<_> = PAN_COVER.split_whitespace().filter(|t| count(t) == 0).collect();
+    assert!(missing.is_empty(), "the seeds of the gate do not hold {missing:?}: choose them again");
+    let once: Vec<_> = PAN_TWICE.split_whitespace().filter(|t| count(t) < 2).collect();
+    assert!(once.is_empty(), "two seeds of the gate have to hold {once:?}: choose them again");
+}
+
+#[test]
+#[ignore = "heavy: the gate item `heavy` runs it"]
+fn heavy_panic_stages() {
+    println!("{:?}", pan_check(pan_progs(heavy_seeds(150))));
+}
+
+#[test]
+fn a_shrink_keeps_the_kind_of_the_failure_and_stops_at_its_limit() {
+    // A fake failure of a text: it fails in the class `bad` while it holds the line BAD, and in another class with fewer than 5 lines.
+    let src: String =
+        (0..30).map(|i| if i == 17 { "BAD".to_string() } else { format!("line {i}") }).collect::<Vec<_>>().join("\n");
+    let fails = |s: &String| s.contains("BAD").then_some(if s.lines().count() < 5 { "other" } else { "bad" });
+    let (small, tries) = shrink(src.clone(), "bad", LIMITS, |s: &String| without_a_line(s), fails);
+    assert_eq!((small.lines().count(), small.contains("BAD"), tries < LIMITS.0), (5, true, true), "{small}");
+    let (cut, tries) = shrink(src, "bad", (4, LIMITS.1), |s: &String| without_a_line(s), fails);
+    assert_eq!((tries, cut.lines().count()), (4, 26), "four candidates were tried and taken");
+}
+
+#[test]
+fn a_failure_is_of_the_kind_its_message_says_and_a_broken_core_is_not_a_division() {
+    let kinds = [
+        (format!("scene n1_k0_ki0_f2: {UNEXPECTED_PANIC}: no division"), UNEXPECTED_PANIC),
+        (format!("scene n1_k0_ki0_f2: {MISSING_PANIC}: a division"), MISSING_PANIC),
+        (format!("scene n1_k0_ki0_f2: {OUT_OF_STAGES}: at Block"), OUT_OF_STAGES),
+        ("p.onsa: internal error: internal lowering error: a field".to_string(), INTERNAL),
+        ("p.onsa: \"n0_init\": fa.process(..) (line 9): division by zero".to_string(), DIVISION),
+        ("something else".to_string(), "other"),
+    ];
+    for (msg, kind) in kinds {
+        assert_eq!(class_of(&msg), kind, "{msg}");
+    }
+}
+
+#[test]
+fn the_smaller_plans_of_a_panic_program_are_smaller_and_a_failing_one_is_shrunk() {
+    // What ends a shrink: every smaller plan is less (`size`), for the plans of 300 seeds.
+    for seed in 0..300 {
+        let plan = twin_pan::make(seed).0.plan;
+        let more: Vec<_> =
+            twin_pan::smaller_plans(&plan).iter().filter(|p| p.size() >= plan.size()).map(|p| p.size()).collect();
+        assert!(more.is_empty(), "seed {seed}: a plan of {} has smaller plans of {more:?}", plan.size());
+    }
+    // A program that is held to a lie (no panic at all) fails in a scene; it is shrunk to that scene and a smaller plan.
+    let (seed, tags, mut prog) = (0, twin_pan::make(0).1, twin_pan::make(0).0);
+    prog.hand = Some(|_| None);
+    let full = prog.src().lines().count();
+    let (stats, bad) = twin_pan::run(vec![(Some(seed), prog, tags)]);
+    assert!(stats.panicked > 0 && bad.len() == 1, "{stats:?} {bad:?}");
+    let (kind, shrunk) = (
+        bad[0].contains(&format!("failure `{UNEXPECTED_PANIC}`")),
+        bad[0].split_once("tries:\n").map(|(_, p)| p.lines().count()),
+    );
+    assert!(kind && shrunk.is_some_and(|n| n < full / 2), "{kind} {shrunk:?} of {full}: {}", bad[0]);
 }

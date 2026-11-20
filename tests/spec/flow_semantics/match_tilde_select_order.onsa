@@ -91,6 +91,17 @@ pub flow the_target_of_a_nested_match_tilde(a: I32 at sample) -> F32 at sample {
   }
 }
 
+// The guard `100 / ki > 3` of the second arm is under the guard `x > 0.0` of the first, which the samples decide (§11.3: a position under a condition that a
+// sample decides is not hoisted, "評価が届いたときに評価する"), so it is not made at `block`, not in a call of 0 frames: it is evaluated at the samples that reach it,
+// where the first guard is false. `ki` of `block` is 0 for the panic. The binding `m` is the clock of the guards up to its arm: `sample`.
+pub flow a_guard_after_a_guard_of_the_sample(x: F32 at sample, k: U32 at block, ki: I32 at block) -> F32 at sample {
+  match~ k {
+    _ if x > 0.0 => acc~(x),
+    m if 100 / ki > 3 => 2.0 + F32.round_from(m),
+    _ => 3.0,
+  }
+}
+
 test "the guard after the arm that is taken is not evaluated" {
   // k = 0 -2 1 50: the first guard is true for 0 and -2 (the counter: 1, 2) and the second is not evaluated for them; 100 / 1 = 100 > 5
   // takes the second arm (2.0); 100 / 50 = 2 > 5 is false and the `_` arm gives 3.0.
@@ -200,4 +211,44 @@ test "the match~ in an arm gives its value when its target does not divide by ze
   let o = the_target_of_a_nested_match_tilde.render(as_, 8.0)
   assert o.out[0] == 3.0
   assert o.out[1] == 6.0
+}
+
+test "a guard that a sample decides before it is not made in a call of 0 frames" {
+  let xs: [F32; 2] = [1.0, -1.0]
+  var out: [F32; 2] = [7.0; 2]
+  var st = a_guard_after_a_guard_of_the_sample.init(8.0)
+  a_guard_after_a_guard_of_the_sample.process(inout st, a_guard_after_a_guard_of_the_sample.Params { k: 3, ki: 0 }, xs.slice(0, 0), inout out.slice(0, 0))
+  assert out[0] == 7.0
+}
+
+test "a guard that the first sample does not reach does not divide by zero" {
+  // x = 1.0 is positive: the first arm is taken (the counter: 1.0), and the second guard is not evaluated although ki is 0.
+  let xs: [F32; 2] = [1.0, -1.0]
+  var out: [F32; 2] = [7.0; 2]
+  var st = a_guard_after_a_guard_of_the_sample.init(8.0)
+  a_guard_after_a_guard_of_the_sample.process(inout st, a_guard_after_a_guard_of_the_sample.Params { k: 3, ki: 0 }, xs.slice(0, 1), inout out.slice(0, 1))
+  assert out[0] == 1.0
+  assert out[1] == 7.0
+}
+
+test "a guard that the second sample reaches divides by zero" {
+  // x = -1.0 is not positive: the second guard is evaluated, and 100 / 0 panics.
+  let xs: [F32; 2] = [1.0, -1.0]
+  var out: [F32; 2] = [7.0; 2]
+  var st = a_guard_after_a_guard_of_the_sample.init(8.0)
+  a_guard_after_a_guard_of_the_sample.process(inout st, a_guard_after_a_guard_of_the_sample.Params { k: 3, ki: 0 }, xs.slice(0, 2), inout out.slice(0, 2)) //~ PANIC "a guard that the second sample reaches divides by zero"
+}
+
+test "a guard that the second sample reaches gives its arm or the last one" {
+  // ki = 2: 100 / 2 = 50 > 3 takes the second arm: 2.0 + 3.0 (the binding m is k = 3); ki = 50: 100 / 50 = 2 > 3 is false, the arm `_` gives 3.0.
+  let xs: [F32; 2] = [1.0, -1.0]
+  var out: [F32; 2] = [7.0; 2]
+  var near = a_guard_after_a_guard_of_the_sample.init(8.0)
+  a_guard_after_a_guard_of_the_sample.process(inout near, a_guard_after_a_guard_of_the_sample.Params { k: 3, ki: 2 }, xs.slice(0, 2), inout out.slice(0, 2))
+  assert out[0] == 1.0
+  assert out[1] == 5.0
+  var far = a_guard_after_a_guard_of_the_sample.init(8.0)
+  a_guard_after_a_guard_of_the_sample.process(inout far, a_guard_after_a_guard_of_the_sample.Params { k: 3, ki: 50 }, xs.slice(0, 2), inout out.slice(0, 2))
+  assert out[0] == 1.0
+  assert out[1] == 3.0
 }

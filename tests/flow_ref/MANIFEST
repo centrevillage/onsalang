@@ -66,7 +66,7 @@ file match_tilde_binding_stage.tsv rows=66 tests=13 evaluated=13 unavailable=0 s
 file match_tilde_default_bindings.tsv rows=35 tests=12 evaluated=11 unavailable=0 skipped=1 waiting=0
 file match_tilde_guard_reads_binding.tsv rows=7 tests=6 evaluated=0 unavailable=0 skipped=6 waiting=0
 file match_tilde_par_store.tsv rows=24 tests=5 evaluated=5 unavailable=0 skipped=0 waiting=0
-file match_tilde_select_order.tsv rows=43 tests=14 evaluated=14 unavailable=0 skipped=0 waiting=0
+file match_tilde_select_order.tsv rows=62 tests=18 evaluated=18 unavailable=0 skipped=0 waiting=0
 file nan_and_inf.tsv rows=7 tests=2 evaluated=2 unavailable=0 skipped=0 waiting=0
 file par_branch.tsv rows=5 tests=1 evaluated=1 unavailable=0 skipped=0 waiting=0
 file par_closed_continuation.tsv rows=11 tests=2 evaluated=2 unavailable=0 skipped=0 waiting=0
@@ -106,4 +106,4 @@ file struct_pattern_rest_let.tsv rows=7 tests=2 evaluated=2 unavailable=0 skippe
 file struct_pattern_rest_match.tsv rows=4 tests=1 evaluated=1 unavailable=0 skipped=0 waiting=0
 file vdelay_edges.tsv rows=64 tests=15 evaluated=14 unavailable=0 skipped=1 waiting=0
 file vdelay_varying_d.tsv rows=2 tests=1 evaluated=0 unavailable=0 skipped=1 waiting=0
-total files=107 rows=2805 tests=729 evaluated=663 unavailable=1 skipped=65 waiting=5
+total files=107 rows=2824 tests=733 evaluated=667 unavailable=1 skipped=65 waiting=5

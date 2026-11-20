@@ -27,10 +27,14 @@ mod compare_tests;
 mod print;
 #[path = "flow_ref/print_tests.rs"]
 mod print_tests;
+#[path = "flow_ref/shrink.rs"]
+mod shrink;
 #[path = "flow_ref/twin.rs"]
 mod twin;
 #[path = "flow_ref/twin_match.rs"]
 mod twin_match;
+#[path = "flow_ref/twin_pan.rs"]
+mod twin_pan;
 #[path = "flow_ref/twin_tests.rs"]
 mod twin_tests;
 

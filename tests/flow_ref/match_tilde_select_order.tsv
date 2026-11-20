@@ -1,4 +1,4 @@
-# flow_ref 1 source=tests/spec/flow_semantics/match_tilde_select_order.onsa tests=14 evaluated=14 unavailable=0 skipped=0 waiting=0
+# flow_ref 1 source=tests/spec/flow_semantics/match_tilde_select_order.onsa tests=18 evaluated=18 unavailable=0 skipped=0 waiting=0
 @ the guard after the arm that is taken is not evaluated
 render match_tilde_select_order.the_guard_after_a_taken_arm sr=0x41000000 in k=[0 -2 1 50]
 out=[0x3f800000 0x40000000 0x40000000 0x40400000]
@@ -41,3 +41,22 @@ panic sample 1
 @ the match~ in an arm gives its value when its target does not divide by zero
 render match_tilde_select_order.the_target_of_a_nested_match_tilde sr=0x41000000 in a=[5 20]
 out=[0x40400000 0x40c00000]
+@ a guard that a sample decides before it is not made in a call of 0 frames
+init 0 match_tilde_select_order.a_guard_after_a_guard_of_the_sample sr=0x41000000
+process 0 params k=3 ki=0 frames=0 in x=[]
+out=[]
+@ a guard that the first sample does not reach does not divide by zero
+init 0 match_tilde_select_order.a_guard_after_a_guard_of_the_sample sr=0x41000000
+process 0 params k=3 ki=0 frames=1 in x=[0x3f800000]
+out=[0x3f800000]
+@ a guard that the second sample reaches divides by zero
+init 0 match_tilde_select_order.a_guard_after_a_guard_of_the_sample sr=0x41000000
+process 0 params k=3 ki=0 frames=2 in x=[0x3f800000 0xbf800000]
+panic sample 1
+@ a guard that the second sample reaches gives its arm or the last one
+init 0 match_tilde_select_order.a_guard_after_a_guard_of_the_sample sr=0x41000000
+process 0 params k=3 ki=2 frames=2 in x=[0x3f800000 0xbf800000]
+out=[0x3f800000 0x40a00000]
+init 1 match_tilde_select_order.a_guard_after_a_guard_of_the_sample sr=0x41000000
+process 1 params k=3 ki=50 frames=2 in x=[0x3f800000 0xbf800000]
+out=[0x3f800000 0x40400000]
