@@ -900,23 +900,25 @@ def gap_places(text):
     token in place of its key."""
     toks = tokenize(text)
     code = [t for t in toks if t.kind == "code"]
-    # The gap before each code token: line breaks, blank lines, comments.
-    gaps, nl, run, blank, comment, line, line_of = [], 0, 0, False, False, 1, []
+    # The gap before each code token, and the one after the last: line breaks, blank lines, comments, and a
+    # comment before the first line break (at the end of the line of the token before).
+    gaps, nl, run, blank, comment, trail, line, line_of = [], 0, 0, False, False, False, 1, []
     for t in toks:
         if t.kind == "nl":
             nl, run, line = nl + 1, run + 1, line + 1
             blank = blank or run >= 2
         elif t.kind == "comment":
-            comment, run = True, 0
+            comment, trail, run = True, trail or nl == 0, 0
         else:
-            gaps.append((nl > 0, blank, comment))
+            gaps.append((nl > 0, blank, comment, trail))
             line_of.append(line)
-            nl, run, blank, comment = 0, 0, False, False
+            nl, run, blank, comment, trail = 0, 0, False, False, False
+    gaps.append((nl > 0, blank, comment, trail))
     ends, lists, dropped = attribute_ends(code), brace_lists(code), use_list_braces(code, gaps)
     out, stack, merged, a = [], [], None, None
     for j, t in enumerate(code):
         g = gaps[j]
-        merged = g if merged is None else (merged[0] or g[0], merged[1] or g[1], merged[2] or g[2])
+        merged = g[:3] if merged is None else (merged[0] or g[0], merged[1] or g[1], merged[2] or g[2])
         comma = a is not None and any(code[k].text == "," for k in range(a + 1, j))
         if j in dropped:
             continue
@@ -959,7 +961,9 @@ def use_list_braces(code, gaps):
     """The indices of the `{` and the `}` that fmt drops from a `use` list of
     one bare name (`spec/tools.md` §3.3, S-598: `use a.{b}`, `use a.{b,}` is
     `use a.b`): after `use` and a path, a name that is no keyword, and no
-    comment from the `{` to the `}` (§3.4: a comment keeps the list)."""
+    comment from the `{` to the `}` nor at the end of the line of the `}`
+    (§3.4: a comment keeps the list; one at the end of a line is in it when
+    the last code of the line is a token fmt drops)."""
     out = set()
     for j, t in enumerate(code[:-2]):
         if t.text != "{" or j < 3 or code[j - 1].text != ".":
@@ -971,7 +975,8 @@ def use_list_braces(code, gaps):
             continue
         name, close = code[j + 1].text, j + 2 + (code[j + 2].text == ",")
         bare = IDENT.fullmatch(name) is not None and name not in keywords()
-        if bare and close < len(code) and code[close].text == "}" and not any(gaps[i][2] for i in range(j + 1, close + 1)):
+        if (bare and close < len(code) and code[close].text == "}"
+                and not any(gaps[i][2] for i in range(j + 1, close + 1)) and not gaps[close + 1][3]):
             out.update((j, close))
     return out
 

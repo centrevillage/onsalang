@@ -588,6 +588,11 @@ class FmtProps(TempRepo):
              ["line 4, before `fn` (line): the line break of the writer is gone"]),
             ("use a.{\n  b\n}\nfn f() {}\n", "use a.b\nfn f() {}\n", []),
             ("use a.{b}\n", "use a.\n  b\n", ["line 1, before `b` (removable): the line break inside an element stays"]),
+            ("use a.{\n  b\n}\n", "use a.{\n  b,\n}\n", ["line 2, before `b` (removable): the line break inside "
+                                                         "an element stays"]),
+            # A comment at the end of the line of the `}` is in the list (§3.4): fmt keeps it; one on its own line is not.
+            ("use a.{\n  b\n}  // c\n", "use a.{\n  b,\n} // c\n", []),
+            ("use a.{\n  b\n}\n// c\n", "use a.b\n// c\n", []),
             # Another token changed: said, and the gaps round it are not judged.
             (body("g(x", "    as F64)"), body("g(y", "    as F64)"), ["token (but `,`, `return` and the braces of a "
                                                                       "`use` list of one name) #7: 'x' became 'y'"]),
