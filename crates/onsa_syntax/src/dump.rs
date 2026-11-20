@@ -393,7 +393,20 @@ impl<'a> Dumper<'a> {
     /// ` at name`, the clock of an input or output (§11.3).
     fn clock(&mut self, c: &Option<Clock>) {
         if let Some(c) = c {
-            let _ = write!(self.out, " at {}", c.name.name);
+            self.out.push_str(" at ");
+            self.clock_of(c);
+        }
+    }
+
+    /// The name of a clock, or `(name / N)`, `(name * N)` (S-1078).
+    fn clock_of(&mut self, c: &Clock) {
+        match &c.ratio {
+            None => self.out.push_str(&c.name.name),
+            Some(r) => {
+                let _ = write!(self.out, "({} {} ", c.name.name, r.op.symbol());
+                self.expr(r.n);
+                self.out.push(')');
+            }
         }
     }
 
@@ -782,7 +795,9 @@ impl<'a> Dumper<'a> {
             ExprKind::At { expr, clock } => {
                 self.out.push_str("(at ");
                 self.expr(*expr);
-                let _ = write!(self.out, " {})", clock.name.name);
+                self.out.push(' ');
+                self.clock_of(clock);
+                self.out.push(')');
             }
             ExprKind::Feedback(name) => {
                 let _ = write!(self.out, "^{}", name.name);

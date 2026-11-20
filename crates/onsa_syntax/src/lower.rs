@@ -159,10 +159,20 @@ impl<'a> Lower<'a> {
     /// The clock written after the type of `n` (a parameter, a function, a
     /// flow, an anonymous function, §11.3), when it was read whole. A clock
     /// anywhere else is not in the AST: it is an E0020 of its unit (S-356).
-    fn clock(&self, n: NodeId) -> Option<Clock> {
+    fn clock(&mut self, n: NodeId) -> Option<Clock> {
         let c = self.child(n, NodeKind::Clock).filter(|&c| self.cst.is_complete(c))?;
         let t = self.tok(c, TokenKind::Ident)?;
-        Some(Clock { name: self.ident(t), span: self.span(c) })
+        // A derived clock (S-1078): its parenthesis, its operator and its N.
+        let ratio = match (self.tok(c, TokenKind::LParen), self.tok(c, TokenKind::RParen)) {
+            (Some(open), Some(close)) => {
+                let op = if self.has(c, TokenKind::Slash) { RatioOp::Div } else { RatioOp::Mul };
+                let n = self.need_expr(c);
+                let span = self.cst.token(open).span.to(self.cst.token(close).span);
+                Some(ClockRatio { op, n, span })
+            }
+            _ => None,
+        };
+        Some(Clock { name: self.ident(t), ratio, span: self.span(c) })
     }
 
     fn first_type(&mut self, n: NodeId) -> Option<TypeId> {

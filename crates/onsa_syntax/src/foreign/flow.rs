@@ -163,7 +163,7 @@ pub(crate) fn clocks(cst: &Cst, limit: crate::nesting::Limit, out: &mut Vec<Diag
         let mut side = Side::Flow;
         let second = second_clock(cst, clock, &failed);
         let found = match cst.kind(parent) {
-            NodeKind::AtExpr | NodeKind::Param | NodeKind::Fn | NodeKind::Flow | NodeKind::ClosureExpr => None,
+            k if k.takes_clock() => None,
             NodeKind::LetStmt | NodeKind::VarStmt => to_value(cst, text, clock, parent, (marks, &mut side, second))
                 .map(|fixes| (RowId::ClockOnBinding, fixes)),
             // The index of `for` and `par~` has no value to take the clock:
@@ -249,12 +249,13 @@ const OUTSIDE: (&str, &str) = (
      E0821 (§11.1, §11.3)",
 );
 
-/// The text a clock is written with after a value or a type: ` at name`,
-/// from its name token.
+/// The text a clock is written with after a value or a type: ` at name` or
+/// ` at (name / N)` (S-1078), from the token after its `at`.
 fn clock_text(cst: &Cst, text: &str, clock: NodeId) -> String {
-    let name = cst.child_tokens(clock).map(|t| cst.token(t)).find(|t| t.kind == TokenKind::Ident);
-    let name = name.map_or("", |t| &text[t.span.start as usize..t.span.end as usize]);
-    format!(" at {name}")
+    let code = |t: &crate::token::Token| t.kind != TokenKind::KwAt && !t.kind.is_trivia() && !t.kind.is_comment();
+    let start = cst.token_range(clock).map(|k| cst.tokens()[k]).find(code);
+    let start = start.map_or(cst.span(clock).end, |t| t.span.start);
+    format!(" at {}", &text[start as usize..cst.span(clock).end as usize])
 }
 
 /// How a clock is taken out of the text ([`take_out`]).

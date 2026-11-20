@@ -1,0 +1,26 @@
+// onsa.toml
+// [test]
+// spec = ["§3.1", "§11.3", "§18.1"]
+// fixes = 1
+
+// E0011 for an `at` expression that is an operand, where the second candidate of a ratio is not offered (S-1078: only for
+// `/` with an integer literal or a constant name on the right): the right side is a name that is no constant (`x`, an
+// input), a float literal, or the operator is `*` (an expression `e at (sample * N)` is E0815 later, so it is no
+// candidate) or another one. Each has the one candidate the syntax offers today, the `at` expression in a parenthesis.
+// One error per declaration unit (§18.1). The same form with `x` is in negative/syntax_clock_operands.onsa.
+
+pub flow right_is_an_input(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  (p at sample) / x   //~ E0011
+}
+
+pub flow right_is_a_float(p: F32 at block) -> F32 at sample {
+  (p at sample) / 2.0   //~ E0011
+}
+
+pub flow operator_is_a_product(p: F32 at block) -> F32 at sample {
+  (p at sample) * 2   //~ E0011
+}
+
+pub flow operator_is_a_sum(p: F32 at block) -> F32 at sample {
+  (p at sample) + 2.0   //~ E0011
+}

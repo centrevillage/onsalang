@@ -355,6 +355,16 @@ impl NodeKind {
         self.class() == Class::Type || matches!(self, NodeKind::TypeArgs | NodeKind::FnTypeParams)
     }
 
+    /// Whether a clock whose node is a child of a node of this kind stands
+    /// where a clock goes (§11.3): on a value, and after the type of an input
+    /// or an output (of a flow, a function, an anonymous function). The one
+    /// judgment, for the table of the clocks out of their place
+    /// (`foreign::clocks`) and the candidate of a ratio without its
+    /// parenthesis (`Parser::bare_ratio`).
+    pub(crate) fn takes_clock(self) -> bool {
+        matches!(self, NodeKind::AtExpr | NodeKind::Param | NodeKind::Fn | NodeKind::Flow | NodeKind::ClosureExpr)
+    }
+
     /// Whether an expression of this kind is block-like (§3.1, S-537): `if`
     /// and `if~`, `match` and `match~`, a block, an anonymous function,
     /// `unsafe`, `handle` and `par`. One is parenthesized as an operand of

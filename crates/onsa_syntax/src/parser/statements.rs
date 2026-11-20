@@ -247,7 +247,7 @@ impl<'a> Parser<'a> {
     /// for one: the table reports it on the tree (`clock_on_binding`).
     pub(super) fn parse_binding_clock(&mut self) -> PResult<()> {
         if self.at(TokenKind::KwAt) {
-            self.parse_clock()?;
+            self.parse_clock(false)?;
         }
         Ok(())
     }

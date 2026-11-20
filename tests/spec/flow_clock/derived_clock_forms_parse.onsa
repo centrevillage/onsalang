@@ -1,0 +1,91 @@
+// onsa.toml
+// [test]
+// mode = "parse"
+// spec = ["§4.5", "§11.3", "§11.9", "§18.1"]
+
+// The derived clock (§11.3, S-1078): after `at`, a parenthesis that holds the name of the base, `/` or `*`, and one
+// operand N (a unary form of the constant expression of §4.5: a literal, a name, a path, a parenthesis, a prefix `-`).
+// The syntax stage reads the form and nothing of its meaning: the base is not looked up, N is not evaluated and the ratio
+// is not checked (the later stages and their errors are in flow_clock/derived_clock_*.onsa), so the file has to be read
+// with no diagnostic (`mode = "parse"`). The clock stands after the type of an input and of an output, and in an
+// expression, in a flow and in a `fn` (the E0821 of the `fn` is of the names stage,
+// negative/names_clock_ratio_outside_flow.onsa). The text is the canonical form (one space round `/` and `*`, none
+// inside the parenthesis). The file is in flow_clock/ and not in flow_syntax/, whose CLI test asks every file of the
+// directory to be read now.
+
+const K: U32 = 4
+
+pub flow input_div(x: F32 at (sample / 4)) -> F32 at sample {
+  x at sample
+}
+
+pub flow input_mul(x: F32 at (sample * 2)) -> F32 at sample {
+  x[0]
+}
+
+pub flow output_div(x: F32 at sample) -> F32 at (sample / 8) {
+  x
+}
+
+pub flow output_mul(x: F32 at sample) -> F32 at (sample * 2) {
+  [x, x]
+}
+
+pub flow both_sides(x: F32 at (sample * 4), y: F32 at (sample / 2)) -> F32 at (sample / 16) {
+  y
+}
+
+pub flow n_is_a_name(x: F32 at (sample / K)) -> F32 at (sample * K) {
+  [x; K]
+}
+
+pub flow n_is_a_path(x: F32 at (sample / U32.BITS)) -> F32 at (sample / cfg.N) {
+  x
+}
+
+pub flow n_is_a_parenthesis(x: F32 at (sample / (K * 2))) -> F32 at (sample / (4)) {
+  x
+}
+
+pub flow n_is_a_prefix_minus(x: F32 at (sample / -4)) -> F32 at sample {
+  x at sample
+}
+
+pub flow in_a_let(p: F32 at block) -> F32 at sample {
+  let a = p at (sample / 4)
+  a at sample
+}
+
+pub flow in_an_argument(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  mix(x, p at (sample / 2))
+}
+
+pub flow in_a_delay(p: F32 at block) -> F32 at sample {
+  prev~(p at (sample / 32)) at sample
+}
+
+pub flow in_parentheses_and_with_names(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  ((p at (sample / K)) at sample) + x * (p at (sample / (K * 2))) + [p at (sample / 2), x][0]
+}
+
+pub flow in_a_branch(p: F32 at block, c: Bool at sample, x: F32 at sample) -> F32 at sample {
+  if~ c {
+    lp~(x) * (p at (sample / 4))
+  } else {
+    p at (sample / 8)
+  }
+}
+
+pub flow in_a_par_and_a_match(p: F32 at block, k: U32 at sample) -> F32 at sample {
+  let ys = par i in 0 ..< 2 {
+    p at (sample / 4)
+  }
+  match~ k {
+    0 => ys[0],
+    _ => ys[1] at (sample / 2),
+  }
+}
+
+pub fn in_a_fn(x: F32) -> F32 {
+  x at (sample / 2)
+}

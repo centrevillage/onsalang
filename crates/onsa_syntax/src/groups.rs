@@ -12,9 +12,9 @@ use std::collections::{BTreeMap, HashSet};
 
 use onsa_diag::{Code, Diagnostic, Edit, Fix, Span, Stage};
 
-use crate::ast::{Ast, BinOp, Chain, ExprId, ExprKind, Lit, OpGroup, Side, StrSeg};
+use crate::ast::{Ast, BinOp, Chain, ExprId, ExprKind, Lit, OpGroup, Side, StrSeg, TypeKind};
 use crate::cst::NodeKind;
-use crate::nesting::{Limit, TOO_DEEP_RULE, parenthesized};
+use crate::nesting::{Limit, TOO_DEEP_RULE, parenthesized, too_deep};
 
 /// The checks of this module on the AST of one file. `kind_of` is the kind
 /// of the CST node of an expression; `limit` the file and its units, for the
@@ -50,6 +50,7 @@ pub(crate) fn check(ast: &Ast, kind_of: &dyn Fn(ExprId) -> NodeKind, limit: Limi
             inner.insert(operand);
         }
     }
+    let in_a_type = const_args(ast);
     for (i, expr) in ast.exprs.iter().enumerate() {
         let id = ExprId(i as u32);
         match expr.kind {
@@ -80,7 +81,13 @@ pub(crate) fn check(ast: &Ast, kind_of: &dyn Fn(ExprId) -> NodeKind, limit: Limi
                     )
                     .with_found(src(first));
                     let span = ast.expr(id).span;
-                    diagnostics.push(parenthesized(d, limit, span, "parenthesize it", edits));
+                    let mut d = parenthesized(d, limit, span, "parenthesize it", edits);
+                    if let Some(fix) = derived_clock_reading(ast, id, &in_a_type)
+                        && !too_deep(limit, span, std::slice::from_ref(&fix), 0)
+                    {
+                        d = d.with_fix(fix);
+                    }
+                    diagnostics.push(d);
                 }
                 let parts = clashes(ast, &ops);
                 if !parts.is_empty() {
@@ -238,6 +245,55 @@ fn block_like_errors(ast: &Ast, kind_of: &dyn Fn(ExprId) -> NodeKind, limit: Lim
         .with_found(&text[at.start as usize..at.end as usize]);
         diagnostics.push(parenthesized(d, limit, span, "parenthesize it", parenthesizing(&found).collect()));
     }
+}
+
+/// The second candidate of the E0011 of `x at sample / N` (S-1078): the
+/// reading of the writer who meant a derived clock, `x at (sample / N)`, when
+/// the chain `e` is that one `/` and N an integer literal or the name of a
+/// constant, as S-1078 names the N of this candidate (a ratio without its
+/// parenthesis after a type takes any N of the parenthesis: the parser's
+/// `bare_ratio`). The syntax stage reads no names, so a constant is told by
+/// its spelling (`UPPER_SNAKE`, one name). In a constant argument of a type
+/// (`in_a_type`, [`const_args`]) the candidate's text reads as a type with a
+/// clock, which is no part of a type (E0020, S-356): none there (§18.1).
+// SPEC-GAP(S-1193): a constant name is told by its spelling, a path and a parenthesis take no candidate.
+fn derived_clock_reading(ast: &Ast, e: ExprId, in_a_type: &impl Fn(Span) -> bool) -> Option<Fix> {
+    if in_a_type(ast.expr(e).span) {
+        return None;
+    }
+    let ExprKind::Binary { op: BinOp::Div, lhs, rhs, .. } = &ast.expr(e).kind else { return None };
+    let ExprKind::At { clock, .. } = &ast.expr(*lhs).kind else { return None };
+    let n = match &ast.expr(*rhs).kind {
+        ExprKind::Lit(Lit::Int { .. }) => true,
+        ExprKind::Path(p) => p.segments.len() == 1 && crate::naming::reads_constant(&p.segments[0].name),
+        _ => false,
+    };
+    if !n || clock.ratio.is_some() {
+        return None;
+    }
+    let (start, end) = (clock.name.span, ast.expr(*rhs).span);
+    let edits = vec![Edit::insert(start.file, start.start, "("), Edit::insert(end.file, end.end, ")")];
+    Some(Fix::new("write the derived clock in parentheses", edits))
+}
+
+/// Whether a span is inside a constant argument of a type (`Ring[F32, N * 2]`,
+/// `TypeKind::ConstArg`): the arguments by their starts, with the greatest
+/// end so far (they nest or are apart).
+fn const_args(ast: &Ast) -> impl Fn(Span) -> bool {
+    let mut args: Vec<Span> = (ast.types.iter())
+        .filter_map(|t| match t.kind {
+            TypeKind::ConstArg(e) => Some(ast.expr(e).span),
+            _ => None,
+        })
+        .collect();
+    args.sort_by_key(|s| s.start);
+    let ends: Vec<u32> = (args.iter())
+        .scan(0, |end, s| {
+            *end = s.end.max(*end);
+            Some(*end)
+        })
+        .collect();
+    move |s: Span| args.partition_point(|a| a.start <= s.start).checked_sub(1).is_some_and(|k| ends[k] >= s.end)
 }
 
 /// The operators of the chain whose root is `root` (its `Binary` nodes) and

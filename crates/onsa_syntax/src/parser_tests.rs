@@ -1122,3 +1122,83 @@ fn the_type_arguments_of_a_chain_are_read_once() {
         }
     });
 }
+
+/// The nodes of `kind` under `n`, in source order.
+fn nodes_of(
+    cst: &crate::cst::Cst,
+    n: crate::cst::NodeId,
+    kind: crate::cst::NodeKind,
+    out: &mut Vec<crate::cst::NodeId>,
+) {
+    if cst.kind(n) == kind {
+        out.push(n);
+    }
+    for c in cst.child_nodes(n) {
+        nodes_of(cst, c, kind, out);
+    }
+}
+
+/// A derived clock (§11.3, S-1078) is one `Clock` node that holds the `at`, the parenthesis, the base, the operator and N,
+/// after the type of an input and of an output and in an expression, as `at sample` is one node of two tokens (the
+/// candidate of E0020 moves or removes the node, so the parenthesis goes with it).
+#[test]
+fn a_derived_clock_is_one_clock_node_with_its_parenthesis() {
+    let src = "pub flow f(x: F32 at (sample / 4), p: F32 at block) -> F32 at (sample * 2) {\n  let a = p at (sample / K)\n  a at sample\n}\n";
+    let p = parse(src);
+    assert!(p.diagnostics.is_empty(), "{:?}", p.diagnostics);
+    let mut clocks = Vec::new();
+    nodes_of(&p.cst, p.cst.root(), crate::cst::NodeKind::Clock, &mut clocks);
+    let texts: Vec<&str> = clocks
+        .iter()
+        .map(|&n| {
+            let s = p.cst.span(n);
+            &src[s.start as usize..s.end as usize]
+        })
+        .collect();
+    assert_eq!(texts, ["at (sample / 4)", "at block", "at (sample * 2)", "at (sample / K)", "at sample"]);
+}
+
+/// The tree keeps what the ratio is made of: the operator and N tell two clocks apart (the later stages compare the
+/// ratios by value, S-1077, so the tree has to hold both), and the clock without a ratio is another tree.
+#[test]
+fn the_tree_of_a_derived_clock_tells_the_operator_and_n_apart() {
+    let forms = ["(sample / 4)", "(sample * 4)", "(sample / 8)", "(sample / K)", "(sample / (K * 2))", "sample"];
+    let dumps: Vec<String> = forms
+        .iter()
+        .map(|c| {
+            let p = parse(&format!("fn f() {{\n  x at {c}\n}}\n"));
+            assert!(p.diagnostics.is_empty(), "{c}: {:?}", p.diagnostics);
+            dump(&p.ast)
+        })
+        .collect();
+    for i in 0..dumps.len() {
+        for j in i + 1..dumps.len() {
+            assert_ne!(dumps[i], dumps[j], "`{}` and `{}` are one tree", forms[i], forms[j]);
+        }
+    }
+}
+
+/// The AST of a derived clock (§11.3, S-1078): the base is the name of the clock, the operator and N are its ratio, and
+/// the ratio spans the parenthesis; a clock written as a name has none.
+#[test]
+fn a_derived_clock_holds_its_base_operator_n_and_parenthesis() {
+    use crate::ast::{ExprKind, ItemKind, Lit, RatioOp};
+    let src = "flow f(x: F32 at (sample / 4)) -> F32 at (sample * K) {\n  x at sample\n}\n";
+    let p = parse(src);
+    assert!(p.diagnostics.is_empty(), "{:?}", p.diagnostics);
+    let ItemKind::Flow(f) = &p.ast.item(p.ast.root[0]).kind else { panic!("a flow") };
+    let text = |s: onsa_diag::Span| &src[s.start as usize..s.end as usize];
+    let input = f.params[0].clock.as_ref().expect("the clock of the input");
+    let ratio = input.ratio.as_ref().expect("a ratio");
+    assert_eq!((input.name.name.as_str(), ratio.op, text(ratio.span)), ("sample", RatioOp::Div, "(sample / 4)"));
+    assert!(matches!(p.ast.expr(ratio.n).kind, ExprKind::Lit(Lit::Int { value: 4, .. })));
+    let output = f.ret_clock.as_ref().expect("the clock of the output");
+    let ratio = output.ratio.as_ref().expect("a ratio");
+    assert_eq!((ratio.op, text(p.ast.expr(ratio.n).span), text(output.span)), (RatioOp::Mul, "K", "at (sample * K)"));
+    let body = p.ast.expr(f.body);
+    let at = p.ast.sub_exprs(f.body).into_iter().chain([f.body]).find_map(|e| match &p.ast.expr(e).kind {
+        ExprKind::At { clock, .. } => Some(clock.clone()),
+        _ => None,
+    });
+    assert!(at.is_some_and(|c| c.ratio.is_none() && c.name.name == "sample"), "{body:?}");
+}

@@ -1,0 +1,28 @@
+// onsa.toml
+// [test]
+// spec = ["§3.1", "§11.3", "§18.1"]
+// fixes = 2
+
+// E0011 for `x at sample / 2` (§11.3, S-1078: "式の括弧の無い `x at sample / 2` は E0011 のまま、今の候補 `(x at sample) / 2` に
+// `x at (sample / 2)` を並べる（`/` で、右が整数のリテラルか定数の名前のときだけ）"). The right side is an integer
+// literal here, so the diagnostic has two candidates: the `at` expression in a parenthesis (the reading the syntax has
+// today) and the derived clock in a parenthesis (the reading of the writer who meant a ratio). The right side that is a
+// constant name is in e0011_clock_ratio_const_name.onsa, and the forms with one candidate in
+// e0011_clock_ratio_one_candidate.onsa. One error per declaration unit (§18.1).
+
+pub flow literal_in_the_tail(p: F32 at block) -> F32 at sample {
+  p at (sample / 2)   //~ E0011
+}
+
+pub flow literal_in_a_let(p: F32 at block) -> F32 at sample {
+  let a = p at (sample / 8)   //~ E0011
+  a
+}
+
+pub flow literal_in_an_argument(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  mix(x, p at (sample / 4))   //~ E0011
+}
+
+pub flow literal_in_a_delay(p: F32 at block) -> F32 at sample {
+  prev~(p at (sample / 32))   //~ E0011
+}

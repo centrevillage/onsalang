@@ -124,12 +124,17 @@ impl<'a> Parser<'a> {
         let noted = noted.or(value_bang.then_some((t, super::expressions::MARK_RULE)));
         // A `{` after a named handler, no part of the `handle` (§8.3, S-480).
         let noted = noted.or((self.named_handler == Some(at)).then_some((t, super::expressions::NAMED_HANDLER_RULE)));
+        // `lp~(x) when c` (§2.2, S-1082): a postfix clause after an instance
+        // is a syntax error, with the chain of the modifiers.
+        // SPEC-GAP(S-1082): the code of a postfix clause is that of a syntax error (the provisional reading (2)).
+        let postfix = noted.is_none() && self.postfix_clause(at);
+        let noted = noted.or(postfix.then_some((t, POSTFIX_RULE)));
         // A reserved word, where nothing of this version takes it: its E0200
         // where it is read, instead of the general E0002 (§2.2, S-169, S-371).
         // `static` at the head of an item is read before (S-620,
         // `Parser::static_head`): here it is out of that place.
         let shown = noted.map_or(t, |(found, _)| found);
-        if let Some(feature) = shown.kind.reserved() {
+        if let Some(feature) = shown.kind.reserved().filter(|_| !postfix) {
             let word = self.token_text(shown);
             let mut d = feature.diagnostic(Stage::Syntax, shown.span, &[]).with_found(word.to_string());
             // A path of a body that starts with it, where an operand is read
@@ -187,6 +192,15 @@ impl<'a> Parser<'a> {
             self.report(d);
         }
         resume
+    }
+
+    /// The `when` or `reset_if` at token `at` right after the arguments of
+    /// an instance `f~(…)`: a postfix clause (§2.2), no name.
+    fn postfix_clause(&self, at: usize) -> bool {
+        let args = self.closed.iter().find(|c| c.0 == NodeKind::ArgList);
+        let open = args.map(|&(_, start)| self.tokens.partition_point(|t| t.span.start < start));
+        matches!(self.tokens[at].kind, TokenKind::KwWhen | TokenKind::KwResetIf)
+            && open.is_some_and(|k| k > 0 && self.tokens[k - 1].kind == TokenKind::Tilde)
     }
 
     /// The candidate of the keyword at token `at` written as a name (§2.3,
@@ -354,6 +368,9 @@ impl<'a> Parser<'a> {
         self.diagnostics.extend(held);
     }
 }
+
+/// The note of a postfix `when` or `reset_if` (§2.2, §11.10).
+const POSTFIX_RULE: &str = "an instance runs on a condition and is reset through the modifiers of its call, written as a chain: `lp~(x).when~(c)`, `lp~(x).reset_if~(r)` (§2.2, §11.10)";
 
 /// The general E0002 of a failure in the head of a declaration whose form
 /// the parser knows ([`Parser::fail_at`]): its range, message, rule and

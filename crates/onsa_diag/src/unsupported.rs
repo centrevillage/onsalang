@@ -114,6 +114,9 @@ features! {
     /// (S-1160); under a condition decided after `init` it is E0815.
     NonRtCallAtClock: Language, "a call of a function that is not `rt` in an expression at the clock `{}`",
         Some("bind the call with a `let` of its own, which is computed at `init`");
+    /// §11.3, S-1078: `at (sample / N)` and `at (sample * N)` in a flow
+    /// (W7-09: the expressions in U2r, the inputs and the output in U4a).
+    DerivedClockRatios: Language, "the derived clocks `at (sample / N)` and `at (sample * N)`", None;
     /// §11.4, S-565: the time since `reset` in ticks (W7-09, R-288).
     SampleTick: Language, "the builtin `sample_tick()` of a flow", None;
     Iteration: Language, "iteration over types other than arrays, `Span`, `Buf` and `Array`", None;

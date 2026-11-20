@@ -258,13 +258,44 @@ impl Path {
     }
 }
 
-/// `at name`: the clock of an input or output of a flow or a function, or of
-/// an expression (§11.3). `span` runs from `at` to the end of the name; the
-/// name is not resolved here (clocks are a namespace of their own, §11.3).
+/// `at name` or the derived clock `at (name / N)`, `at (name * N)`: the clock
+/// of an input or output of a flow or a function, or of an expression
+/// (§11.3). `span` runs from `at` to the end of the clock; the name (the
+/// base of a derived clock) is not resolved here (clocks are a namespace of
+/// their own, §11.3, S-1078).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Clock {
     pub name: Ident,
+    /// The `/ N` or `* N` of a derived clock (S-1078).
+    pub ratio: Option<ClockRatio>,
     pub span: Span,
+}
+
+/// The ratio of a derived clock `(sample / N)`, `(sample * N)` (§11.3): its
+/// operator, its N (one operand of the unary forms of the constant
+/// expressions of §4.5, S-1077, not evaluated here) and its parenthesis.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ClockRatio {
+    pub op: RatioOp,
+    pub n: ExprId,
+    /// From `(` to `)`.
+    pub span: Span,
+}
+
+/// The operator of a derived clock: `/` (slower) or `*` (faster).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum RatioOp {
+    Div,
+    Mul,
+}
+
+impl RatioOp {
+    pub fn symbol(self) -> &'static str {
+        match self {
+            RatioOp::Div => "/",
+            RatioOp::Mul => "*",
+        }
+    }
 }
 
 /// `"..."` with interpolation split out (§2.4).

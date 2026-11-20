@@ -1,0 +1,49 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§18.1"]
+// fixes = 1
+
+// E0020 for a derived clock where no clock goes (§11.3, S-356, S-1078): the candidate moves the clock with its parenthesis,
+// `at (sample / 4)` as a whole, to the place that can have it, or removes it where there is none (the same places as
+// e0020_clock_in_types.onsa and clock_on_binding_*.onsa, with the clock of the new form). The text after each candidate is
+// pinned by the CLI test derived_clock_syntax.rs (the clock moves or goes with its parenthesis, and the value that needs
+// one gets a parenthesis of its own). One error per declaration unit (§18.1).
+
+pub struct Field {
+  a: F32,   //~ E0020
+}
+
+pub enum Variant {
+  Gain(F32),   //~ E0020
+  Off,
+}
+
+pub fn type_argument(x: Option[F32]) -> F32 {   //~ E0020
+  0.5
+}
+
+pub flow input_type_argument(x: Option[F32] at (sample / 4)) -> F32 at sample {   //~ E0020
+  0.5
+}
+
+pub flow let_annotation(p: F32 at block) -> F32 at sample {
+  let y: F32 = p at (sample / 4)   //~ E0020
+  y at sample
+}
+
+pub flow let_binding_side(p: F32 at block) -> F32 at sample {
+  let y = p at (sample / 4)   //~ E0020
+  y at sample
+}
+
+pub flow let_value_needs_a_parenthesis(x: F32 at sample) -> F32 at sample {
+  let y = (x + x) at (sample / 4)   //~ E0020
+  y at sample
+}
+
+pub flow par_index(x: F32 at sample) -> [F32; 2] at sample {
+  let ys = par i in 0 ..< 2 {   //~ E0020
+    x
+  }
+  ys
+}

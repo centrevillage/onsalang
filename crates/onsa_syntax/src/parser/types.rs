@@ -1,6 +1,28 @@
 //! The types, their clocks and type arguments.
 
+use onsa_diag::Edit;
+
 use super::*;
+
+/// The note of a derived clock that is not one of its two forms (§11.3, S-1078).
+pub(super) const RATIO_RULE: &str = "a derived clock is written in parentheses after `at`, the base, `/` or `*` and one operand N: `at (sample / 4)`, `at (sample * 2)`; an N that is computed is put in parentheses of its own (`at (sample / (K * 2))`) (§11.3)";
+
+/// The tokens after a type and its clock in a declaration, past the line
+/// breaks: where the N of a ratio without its parenthesis ends the clock
+/// ([`Parser::bare_ratio`]).
+const CLOCK_ENDS: &[TokenKind] = &[
+    TokenKind::Comma,
+    TokenKind::RParen,
+    TokenKind::RBracket,
+    TokenKind::RBrace,
+    TokenKind::LBrace,
+    TokenKind::Eq,
+    TokenKind::Arrow,
+    TokenKind::Semi,
+    TokenKind::Eof,
+    TokenKind::KwUses,
+    TokenKind::KwElse,
+];
 
 /// Whether the clock written after a type is read with it
 /// ([`Parser::parse_type_with`]).
@@ -34,20 +56,119 @@ impl<'a> Parser<'a> {
     pub(super) fn parse_type_with(&mut self, clock: ClockAfter) -> PResult<(Completed, usize)> {
         let read = self.parse_type_and_args()?;
         if clock == ClockAfter::Read && self.at(TokenKind::KwAt) {
-            self.parse_clock()?;
+            self.parse_clock(true)?;
         }
         Ok(read)
     }
 
-    /// `at name`: a clock (§11.3). The name is read as it is; which names
-    /// are clocks the names stage looks up (S-359: an unknown one is its
-    /// E0302).
-    pub(super) fn parse_clock(&mut self) -> PResult<()> {
+    /// `at name` or `at (name / N)`, `at (name * N)`: a clock (§11.3). The
+    /// name is read as it is; which names are clocks the names stage looks up
+    /// (S-359: an unknown one is its E0302). Inside the parenthesis of a
+    /// derived clock are the base, `/` or `*`, and one operand N of the unary
+    /// forms of §4.5 (a literal, a path, a parenthesis, a prefix `-`; S-1078),
+    /// and any other form is E0002 with the note of the two forms ([`RATIO_RULE`]).
+    /// `bare`: after a type, where a ratio without its parenthesis is read
+    /// ([`Parser::bare_ratio`]); after a value it is the operator `/` or `*`.
+    pub(super) fn parse_clock(&mut self, bare: bool) -> PResult<()> {
         let m = self.start(NodeKind::Clock)?;
         self.bump();
-        self.parse_ident("the name of a clock")?;
+        if self.at(TokenKind::LParen) {
+            self.with_nl(false, |p| p.parse_ratio())?;
+        } else {
+            let name = self.parse_ident("the name of a clock")?;
+            // A ratio without its parenthesis: an error of the clock read
+            // whole, or of a clock left unfinished ([`Parser::bare_ratio`]).
+            if bare && self.bare_ratio(name)? {
+                self.complete(m, NodeKind::Clock);
+                return Err(ParseError);
+            }
+        }
         self.complete(m, NodeKind::Clock);
         Ok(())
+    }
+
+    /// The parenthesis of a derived clock ([`Parser::parse_clock`]).
+    fn parse_ratio(&mut self) -> PResult<()> {
+        self.bump();
+        let wrong = |p: &mut Self, want, expected: &str| Err(p.fail_noting(want, expected, p.peek(), RATIO_RULE));
+        if !self.at(TokenKind::Ident) {
+            return wrong(self, Want::Other, "the name of a clock");
+        }
+        self.bump();
+        // An operator at the head of a line is the form of the table
+        // (`leading_operator`): a line ends at its end, in brackets too (§2.5).
+        if !matches!(self.peek_kind(), TokenKind::Slash | TokenKind::Star) || self.lines.at_line_head(self.peek_index())
+        {
+            return wrong(self, Want::Other, "`/` or `*`");
+        }
+        self.bump();
+        self.ratio_operand()?;
+        if !self.at(TokenKind::RParen) {
+            return wrong(self, Want::Other, TokenKind::RParen.describe());
+        }
+        self.bump();
+        Ok(())
+    }
+
+    /// The operand N of a ratio, after its operator: the one reading of N, for
+    /// [`Parser::parse_ratio`] and the candidate of [`Parser::bare_ratio`].
+    /// Where an expression goes, a form of another language (`4u32`, `&x`) is
+    /// the table's, as anywhere else (§18.1); another token is E0002 with the
+    /// note of the two forms.
+    fn ratio_operand(&mut self) -> PResult<Completed> {
+        if !crate::starts::starts_operand(self.peek_kind()) {
+            return Err(self.fail_noting(Want::Expr, "the ratio N", self.peek(), RATIO_RULE));
+        }
+        self.parse_prefix()
+    }
+
+    /// E0002 for a ratio written after the clock `name` of a type without its
+    /// parenthesis (`x: F32 at sample / 4`, S-1078), and whether one is there.
+    /// When N reads as one operand of a ratio ([`Parser::ratio_operand`]) and
+    /// the clock ends after it ([`CLOCK_ENDS`]), the operator and N are read
+    /// into the clock, so the candidate of the E0020 of a clock out of its
+    /// place removes them with it (`foreign::clocks`); else the failure leaves
+    /// the clock unfinished, which has no E0020. The candidate of the E0002
+    /// wraps the base, the operator and N, where a clock goes
+    /// ([`NodeKind::takes_clock`]) and the operator is not at the head of a
+    /// line (§2.5): elsewhere what it writes is an error of this stage still
+    /// (§18.1). Any other N is E0002 alone. This N is any that the
+    /// parenthesis reads, by the tokens; that of the second candidate of the
+    /// E0011 of `x at sample / N` is S-1078's, on the tree (`crate::groups`).
+    fn bare_ratio(&mut self, name: Token) -> PResult<bool> {
+        let op = self.peek_index();
+        if !matches!(self.tokens[op].kind, TokenKind::Slash | TokenKind::Star) {
+            return Ok(false);
+        }
+        let mut d = Diagnostic::new(
+            Stage::Syntax,
+            Code::E0002,
+            self.tokens[op].span,
+            "a derived clock is written in parentheses after `at` (§11.3)",
+        )
+        .with_found(self.token_text(self.tokens[op]).to_string())
+        .with_rule(RATIO_RULE);
+        let (s, wanted) = (self.snapshot(), self.wanted.clone());
+        self.bump();
+        // As in the parenthesis: a `{` after N is no struct literal (the body).
+        let no_struct_lit = std::mem::replace(&mut self.no_struct_lit, true);
+        let n = self.with_nl(false, |p| p.ratio_operand().is_ok() && CLOCK_ENDS.contains(&p.peek_kind()));
+        self.no_struct_lit = no_struct_lit;
+        if !(n && self.diagnostics.len() == s.diagnostics) {
+            self.restore(s);
+            self.wanted = wanted;
+            self.report(d);
+            return Err(ParseError);
+        }
+        let parent = self.open.iter().rev().nth(1).map(|o| self.events[o.event as usize]);
+        let goes = matches!(parent, Some(Event::Start { kind: Some(k), .. }) if k.takes_clock());
+        if goes && !self.lines.at_line_head(op) {
+            let edits =
+                vec![Edit::insert(self.file, name.span.start, "("), Edit::insert(self.file, self.last_end, ")")];
+            d = d.with_fix(Fix::new("write the derived clock in parentheses", edits));
+        }
+        self.report(d);
+        Ok(true)
     }
 
     /// A type, and the number of its type arguments when it is a path type.

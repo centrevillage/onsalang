@@ -1,0 +1,28 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§18.1"]
+// fixes = 1
+
+// E0002 for a derived clock written without its parenthesis after the type of an input or an output (§11.3, S-1078:
+// "宣言の括弧の無い `at sample / 4` も E0002 で、修正候補は括弧で包むこと"). `at sample` ends the clock and the `/` or `*`
+// after it is no part of a declaration. The one candidate wraps the base, the operator and N in a parenthesis. The case
+// has no `.fix1` of its own yet and no `[[test.fix]]`: the main position of this E0002 is not fixed by the spec. One error
+// per declaration unit (§18.1).
+
+const K: U32 = 4
+
+pub flow bare_div_in_an_input(x: F32 at (sample / 4)) -> F32 at sample {   //~ E0002
+  x
+}
+
+pub flow bare_mul_in_an_output(x: F32 at sample) -> F32 at (sample * 2) {   //~ E0002
+  [x, x]
+}
+
+pub flow bare_with_a_constant(x: F32 at (sample / K)) -> F32 at sample {   //~ E0002
+  x
+}
+
+pub flow bare_in_a_second_input(p: F32 at block, x: F32 at (sample / 2)) -> F32 at sample {   //~ E0002
+  x
+}

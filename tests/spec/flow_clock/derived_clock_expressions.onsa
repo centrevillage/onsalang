@@ -1,0 +1,74 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§11.3", "§11.4", "§18.1"]
+
+// `e at (sample / N)` in the body of a flow (§11.3, S-1078, S-1077): a value of a slower kind (`block`, `init`) takes the
+// clock `sample / N`, which is a promotion (the value does not change, and `p at (sample / 4)` makes no field of its own).
+// A value of that clock is read at `sample` through `at sample` (§11.3: "遅い→速い"). N is a literal, the name of a constant
+// or a path (a constant of a type, `U32.BITS`, §4.5); the same ratio written two ways is one clock. The first argument of
+// a delay takes its clock from its own `at` (§11.4: `prev~(p at (sample / 32))`, `p` is `block`). The clock stands in a
+// branch, in a `par` and in a `match~` as well. No diagnostic. A ratio that is not a power of two, a base that is not
+// `sample`, a clock that is slower than the value, and an N that needs arithmetic (W9-03) are in
+// negative/*clock_ratio*.onsa and the later work, not here.
+
+const K: U32 = 8
+
+pub flow lp(x: F32 at sample) -> F32 at sample {
+  0.5 * (x + prev~(x))
+}
+
+pub flow n_is_a_literal(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  let s = p at (sample / 4)
+  x * (s at sample)
+}
+
+pub flow n_is_a_constant(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  let s = p at (sample / K)
+  x * (s at sample)
+}
+
+pub flow n_is_an_associated_constant(p: F32 at init, x: F32 at sample) -> F32 at sample {
+  let s = p at (sample / U32.BITS)
+  x * (s at sample)
+}
+
+pub flow two_ratios_in_one_flow(p: F32 at block, q: F32 at init, x: F32 at sample) -> F32 at sample {
+  let a = p at (sample / 2)
+  let b = q at (sample / 16)
+  x * (a at sample) + (b at sample)
+}
+
+pub flow the_same_ratio_written_two_ways(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  let a = p at (sample / 8)
+  let b = p at (sample / K)
+  x * ((a + b) at sample)
+}
+
+pub flow a_delay_of_a_slow_value(p: F32 at block) -> F32 at sample {
+  prev~(p at (sample / 32)) at sample
+}
+
+pub flow in_a_branch(p: F32 at block, c: Bool at sample, x: F32 at sample) -> F32 at sample {
+  let s = p at (sample / 4)
+  if~ c {
+    lp~(x) * (s at sample)
+  } else {
+    x
+  }
+}
+
+pub flow in_a_par(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  let s = p at (sample / 4)
+  let ys = par i in 0 ..< 3 {
+    x * (s at sample) * F32.round_from(i)
+  }
+  ys[0] + ys[1] + ys[2]
+}
+
+pub flow in_a_match(p: F32 at block, x: F32 at sample, k: U32 at sample) -> F32 at sample {
+  let s = p at (sample / 4)
+  match~ k {
+    0 => lp~(x) * (s at sample),
+    _ => x,
+  }
+}

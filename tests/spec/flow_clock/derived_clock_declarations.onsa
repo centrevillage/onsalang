@@ -1,0 +1,45 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§11.3", "§11.9", "§18.1"]
+
+// The derived clock after the type of an input and of an output (§11.3, §11.9, S-1078): a conversion flow declares
+// `at (sample / N)` and `at (sample * N)` against the `sample` of its own body. A `sample / N` input is a slow value in
+// the body (`lf at sample` reads it at `sample`), a `sample * N` input is an array of N elements (`x[N - 1]` is the
+// newest, a stereo `[F32; 2]` is `[[F32; 2]; 2]`), a `sample * N` output is the array the body returns, and a
+// `sample / N` output is read at its own clock. N may be the name of a constant. No diagnostic: a flow with such a
+// declaration is an error only where its `process` is used or it is exported (E0810 and the E0200 until W10-01, §11.9), and
+// nothing here does.
+
+const K: U32 = 4
+
+pub flow slow_passes_through(lf: F32 at (sample / 4)) -> F32 at (sample / 4) {
+  lf
+}
+
+pub flow slow_is_read_at_sample(lf: F32 at (sample / 4), x: F32 at sample) -> F32 at sample {
+  x * (lf at sample)
+}
+
+pub flow two_of_a_tick_are_added(x: F32 at (sample * 2)) -> F32 at sample {
+  x[0] + x[1]
+}
+
+pub flow one_is_spread_into_two(x: F32 at sample) -> F32 at (sample * 2) {
+  [x, x]
+}
+
+pub flow the_array_passes_through(x: F32 at (sample * 2)) -> F32 at (sample * 2) {
+  x
+}
+
+pub flow a_stereo_pair_is_spread(x: [F32; 2] at sample) -> [F32; 2] at (sample * 2) {
+  [x, x]
+}
+
+pub flow n_is_a_constant(x: F32 at sample) -> F32 at (sample * K) {
+  [x; K]
+}
+
+pub flow slow_n_is_a_constant(lf: F32 at (sample / K)) -> F32 at (sample / K) {
+  lf
+}

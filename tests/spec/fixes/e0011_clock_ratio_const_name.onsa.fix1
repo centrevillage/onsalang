@@ -1,0 +1,20 @@
+// onsa.toml
+// [test]
+// spec = ["§3.1", "§11.3", "§18.1"]
+// fixes = 2
+
+// E0011 for `x at sample / K` where `K` is a constant (§11.3, S-1078: the candidate `x at (sample / K)` is offered when
+// the right side is "整数のリテラルか定数の名前"), so two candidates, as for a literal
+// (e0011_clock_ratio_two_candidates.onsa). It is a case of its own because the syntax stage that reports E0011 reads no
+// names (§18.1): what the spec calls a constant name there is open (see the report of W7-09 U1/t).
+
+const K: U32 = 4
+
+pub flow constant_in_the_tail(p: F32 at block) -> F32 at sample {
+  (p at sample) / K   //~ E0011
+}
+
+pub flow constant_in_a_let(p: F32 at block) -> F32 at sample {
+  let a = (p at sample) / K   //~ E0011
+  a
+}

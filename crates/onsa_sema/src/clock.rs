@@ -67,6 +67,11 @@ impl ClockName {
 /// The clock after `at` (§11.3, S-359): a name of the clock namespace, or
 /// E0302 at the name, whatever value or type has that name.
 pub(crate) fn resolve_name(c: &ast::Clock) -> Result<ClockName, Diagnostic> {
+    // The derived clocks of a flow (S-1078) come in W7-09: the gate of the
+    // expressions goes in U2r, of the inputs and the output in U4a.
+    if c.ratio.is_some() {
+        return Err(onsa_diag::unsupported::Feature::DerivedClockRatios.diagnostic(Stage::Names, c.span, &[]));
+    }
     if let Some(r) = ClockName::of_name(&c.name.name) {
         return Ok(r);
     }

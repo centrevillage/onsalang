@@ -97,6 +97,9 @@ pub(super) fn clock_of(body: &Body, known: &HashMap<LocalId, Clock>, root: ExprI
         }
         ExprKind::At { expr, clock } => {
             clock_of(body, known, root, *expr)?;
+            if clock.ratio.is_some() {
+                return Err(Fault::Unavailable("a derived clock"));
+            }
             clock_stage(&clock.name.name).map(Clock::from).ok_or(Fault::Unavailable("a clock the evaluator has not"))
         }
         ExprKind::Path(_) | ExprKind::Field { .. } if body.names(e) => match body.target(e)? {

@@ -1,0 +1,97 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§11.3", "§18.1"]
+
+// E0002 for a derived clock that is not one of the two forms (§11.3, S-1078): inside the parenthesis the base, `/` or
+// `*`, and one operand N, and nothing else. Another operator, the reverse order, a chain, the base alone, a second
+// parenthesis, a missing operand and a path as the base are all syntax errors of the unit, in a declaration (an input and
+// an output) and in an expression, with a note that shows the two forms (the CLI test derived_clock_syntax.rs reads
+// the notes; `(sample)` has no candidate). One error per declaration unit, so each unit has one marker (§18.1).
+
+const K: U32 = 4
+
+pub flow input_other_operator(x: F32 at (sample + 4)) -> F32 at sample {   //~ E0002
+  x
+}
+
+pub flow input_other_operator_minus(x: F32 at (sample - K)) -> F32 at sample {   //~ E0002
+  x
+}
+
+pub flow input_reverse(x: F32 at (4 / sample)) -> F32 at sample {   //~ E0002
+  x
+}
+
+pub flow input_chain(x: F32 at (sample / K * 2)) -> F32 at sample {   //~ E0002
+  x
+}
+
+pub flow input_chain_of_two_divisions(x: F32 at (sample / 4 / 2)) -> F32 at sample {   //~ E0002
+  x
+}
+
+pub flow input_double_parentheses(x: F32 at ((sample / 4))) -> F32 at sample {   //~ E0002
+  x
+}
+
+pub flow input_without_n(x: F32 at (sample /)) -> F32 at sample {   //~ E0002
+  x
+}
+
+pub flow input_without_a_base(x: F32 at (/ 4)) -> F32 at sample {   //~ E0002
+  x
+}
+
+pub flow input_path_as_the_base(x: F32 at (a.b / 4)) -> F32 at sample {   //~ E0002
+  x
+}
+
+pub flow output_other_operator(x: F32 at sample) -> F32 at (sample + 2) {   //~ E0002
+  x
+}
+
+pub flow output_reverse(x: F32 at sample) -> F32 at (2 * sample) {   //~ E0002
+  x
+}
+
+pub flow output_chain(x: F32 at sample) -> F32 at (sample * 2 * 2) {   //~ E0002
+  x
+}
+
+pub flow output_double_parentheses(x: F32 at sample) -> F32 at ((sample * 2)) {   //~ E0002
+  x
+}
+
+pub flow expression_other_operator(p: F32 at block) -> F32 at sample {
+  let a = p at (sample + 4)   //~ E0002
+  a
+}
+
+pub flow expression_reverse(p: F32 at block) -> F32 at sample {
+  let a = p at (4 / sample)   //~ E0002
+  a
+}
+
+pub flow expression_chain(p: F32 at block) -> F32 at sample {
+  let a = p at (sample / K * 2)   //~ E0002
+  a
+}
+
+pub flow expression_base_alone(p: F32 at block) -> F32 at sample {
+  let a = p at (sample)   //~ E0002
+  a
+}
+
+pub flow expression_double_parentheses(p: F32 at block) -> F32 at sample {
+  let a = p at ((sample / 4))   //~ E0002
+  a
+}
+
+pub flow expression_in_an_argument(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  mix(x, p at (sample % 4))   //~ E0002
+}
+
+// The syntax stage comes first (§18.1): in a `fn` the form is E0002, not the E0821 of the names stage.
+pub fn expression_in_a_fn(x: F32) -> F32 {
+  x at (sample + 2)   //~ E0002
+}

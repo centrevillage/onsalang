@@ -143,6 +143,8 @@ pub(crate) const TABLE: &[Brackets] = &[
     enclosure(N::ArrayType, T::LBracket, T::RBracket),
     enclosure(N::IndexExpr, T::LBracket, T::RBracket),
     Brackets { pairs: Pairs::Nested, ..enclosure(N::NegLitPat, T::LParen, T::RParen) }, // `-(1)`
+    // `at sample`, `at (sample / 4)` (S-1078): none or one pair.
+    Brackets { pairs: Pairs::Nested, ..enclosure(N::Clock, T::LParen, T::RParen) },
 ];
 
 /// The row of [`TABLE`] of a kind of node; `None` for a node without brackets.

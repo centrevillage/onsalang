@@ -1,0 +1,3 @@
+[package]
+name = "derived_clock_names_modules"
+edition = "2026"

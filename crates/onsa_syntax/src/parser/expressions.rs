@@ -141,7 +141,7 @@ impl<'a> Parser<'a> {
                 }
                 TokenKind::KwAt => {
                     let m = self.precede(expr, NodeKind::AtExpr)?;
-                    self.parse_clock()?;
+                    self.parse_clock(false)?;
                     expr = self.complete(m, NodeKind::AtExpr);
                 }
                 _ => return Ok(expr),
