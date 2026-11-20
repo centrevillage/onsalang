@@ -5,7 +5,7 @@
 
 // S-903 (§7) in the body of a flow (§11.2): the last `_` of a struct pattern in the destructuring `let` of a flow, whose
 // value is a struct that a delay (`prev~`, with its `init`) gives or that the body makes. A field that `_` leaves out
-// is not read. The `match~` is in struct_pattern_rest_match.onsa (it waits for W7-06). The values are worked out by hand.
+// is not read. The `match~` is in struct_pattern_rest_match.onsa. The values are worked out by hand.
 
 pub struct Pair: Default {
   l: F32,

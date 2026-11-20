@@ -5,8 +5,7 @@
 
 // S-903 (§7) in the arms of a `match~` (§11.5): the last `_` of a struct pattern. A field that `_` leaves out is not read. An arm that
 // is not chosen binds the default value of the type (§11.5), so the instance `acc~(a)` in the first arm goes on with
-// `a = 0.0` on the samples where `open` is false. `match~` runs after W7-06 (branches_tilde.onsa waits for the same
-// work), so this file is on the list until then. The values are worked out by hand.
+// `a = 0.0` on the samples where `open` is false. The values are worked out by hand.
 
 pub struct Gate: Default {
   open: Bool,
