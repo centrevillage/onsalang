@@ -985,3 +985,10 @@ target = "tests/spec/flow_semantics/hoist_cond_match_forms.onsa"
 reasons = ["R-06", "S-1157"]
 until = "W8-06"
 note = "守り付きの欄の match の形（ガード、リテラルの腕、struct パターン）。値の match の一般の道の降下が E0200（W8-06）なので、段の期待を確かめられない"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/flow_semantics/par_in_a_match_guard.onsa"
+reasons = ["S-1177", "R-06"]
+until = "W8-06"
+note = "値の match のガード（と Bool のリテラルのパターン）が Core で E0200（W8-06）。ガードの中の状態の無い par（S-1177）の取られたときだけの評価。普通の枝・列挙子の match の腕・&&/|| の右辺の同じ形は par_in_plain_branches.onsa"

@@ -3,7 +3,7 @@
 // spec = ["§11.5", "§18.1"]
 
 // E0200 while the flow syntax is written in the terms of this version's checks (W3-10, K-02, K-08):
-// `if~` / `match~` evaluate every branch (§11.5), and a stateful call (an instance, a delay, `par`)
+// `if~` / `match~` evaluate every branch (§11.5), and a stateful call (an instance, a delay, `par~`; a `par` without state is no error, S-1177)
 // in a branch of `if` / `match`, in a guard or on the right of `&&` / `||` is E0811 / E0806 of the
 // flow plan (S-110). This version advances an instance only where its branch is taken (R-14), so
 // it says E0200 rather than read the program in another meaning. One error per flow (P-01).
@@ -54,7 +54,7 @@ pub flow right_of_or(x: F32 at sample) -> F32 at sample {
 }
 
 pub flow par_in_branch(x: F32 at sample, c: Bool at sample) -> [F32; 2] at sample {
-  if c { par~ i in 0..<2 { x } } else { [x, x] } //~ E0200
+  if c { par~ i in 0..<2 { prev~(x) } } else { [x, x] } //~ E0200
 }
 
 // The condition, the scrutinee and the left of `&&` are always evaluated, and may hold state.

@@ -50,7 +50,7 @@ pub flow field_of_a_function_value_in_the_arm_of_an_if(x: F32 at sample) -> F32 
 }
 
 pub flow field_of_a_function_value_in_a_par_body(x: F32 at sample) -> F32 at sample {
-  let ys = par~ i in 0 ..< 2 {
+  let ys = par i in 0 ..< 2 {
     id::[F32].y                                     //~ E0806 @5
   }
   ys[0]

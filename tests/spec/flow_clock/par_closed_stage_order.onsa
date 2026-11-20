@@ -44,81 +44,81 @@ pub flow pass(c: F32 at block) -> F32 at sample { c }
 
 pub flow block_then_closed_empty(x: F32 at sample, p: F32 at block) -> F32 at sample {
   let a = prev~(p)                                          //~ E0813
-  let b = par~ i in 2 ..= 1 { x }
+  let b = par i in 2 ..= 1 { x }
   x
 }
 
 pub flow const_then_closed_empty(x: F32 at sample, p: F32 at block) -> F32 at sample {
   let a = prev~(K)                                          //~ E0813
-  let b = par~ i in 2 ..= 1 { x }
+  let b = par i in 2 ..= 1 { x }
   x
 }
 
 pub flow pass_then_closed_empty(x: F32 at sample, p: F32 at block) -> F32 at sample {
   let a = pass~(x)                                          //~ E0815
-  let b = par~ i in 2 ..= 1 { x }
+  let b = par i in 2 ..= 1 { x }
   x
 }
 
 pub flow at_then_closed_empty(x: F32 at sample, p: F32 at block) -> F32 at sample {
   let a = x at block                                        //~ E0815
-  let b = par~ i in 2 ..= 1 { x }
+  let b = par i in 2 ..= 1 { x }
   x
 }
 
 pub flow block_in_a_par_body_then_closed_empty(x: F32 at sample, p: F32 at block) -> F32 at sample {
   let a = par~ i in 0 ..< 2 { prev~(p) }                    //~ E0813
-  let b = par~ j in 2 ..= 1 { x }
+  let b = par j in 2 ..= 1 { x }
   x
 }
 
 pub flow block_then_closed_empty_in_one_line(x: F32 at sample, p: F32 at block) -> F32 at sample {
-  prev~(p) + sum(par~ j in 2 ..= 1 { x })                   //~ E0813
+  prev~(p) + sum(par j in 2 ..= 1 { x })                   //~ E0813
 }
 
 pub flow closed_empty_then_block(x: F32 at sample, p: F32 at block) -> F32 at sample {
-  let a = par~ i in 2 ..= 1 { x }                           //~ E0808
+  let a = par i in 2 ..= 1 { x }                           //~ E0808
   let b = prev~(p)
   x
 }
 
 pub flow closed_empty_then_pass(x: F32 at sample, p: F32 at block) -> F32 at sample {
-  let a = par~ i in 2 ..= 1 { x }                           //~ E0808
+  let a = par i in 2 ..= 1 { x }                           //~ E0808
   let b = pass~(x)
   x
 }
 
 pub flow closed_empty_then_at(x: F32 at sample, p: F32 at block) -> F32 at sample {
-  let a = par~ i in 2 ..= 1 { x }                           //~ E0808
+  let a = par i in 2 ..= 1 { x }                           //~ E0808
   let b = x at block
   x
 }
 
 pub flow closed_empty_then_type_error(x: F32 at sample) -> F32 at sample {
-  let a = par~ i in 2 ..= 1 { x }
+  let a = par i in 2 ..= 1 { x }
   let b: Bool = 1.0                                         //~ E0401
   x
 }
 
 pub flow closed_empty_then_type_error_in_the_output(x: F32 at sample) -> F32 at sample {
-  let a = par~ i in 2 ..= 1 { x }
+  let a = par i in 2 ..= 1 { x }
   x + true                                                  //~ E0401
 }
 
 pub flow closed_empty_then_argument_count(x: F32 at sample) -> F32 at sample {
-  let a = par~ i in 2 ..= 1 { x }
+  let a = par i in 2 ..= 1 { x }
   let b = id1(1.0, 2.0)                                     //~ E0412
   x
 }
 
 pub flow closed_empty_in_a_par_body_then_type_error(x: F32 at sample) -> F32 at sample {
-  let a = par~ i in 0 ..< 2 { par~ j in 2 ..= 1 { x } }
+  let a = par i in 0 ..< 2 { par j in 2 ..= 1 { x } }
   let b: Bool = 1.0                                         //~ E0401
   x
 }
 
 pub flow type_error_then_closed_empty(x: F32 at sample) -> F32 at sample {
   let a: Bool = 1.0                                         //~ E0401
-  let b = par~ i in 2 ..= 1 { x }
+  let b = par i in 2 ..= 1 { x }
   x
 }

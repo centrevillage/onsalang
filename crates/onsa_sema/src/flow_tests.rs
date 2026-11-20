@@ -306,7 +306,7 @@ fn read_at_a_constant_let_read_only_by_an_underscore_is_init() {
 #[test]
 fn read_at_par_variables() {
     let a = ok(
-        "use std.math.{sum}\npub flow g(k: F32 at block) -> F32 at sample { k }\npub flow f(x: F32 at sample, c: F32 at block) -> F32 at sample {\n  let p = par~ i in 0..<2 { g~(c + F32.round_from(i)) }\n  let q = par~ j in 0..<2 { x * F32.round_from(if x > 0.0 { j } else { 0 }) }\n  sum(p) + sum(q)\n}\n",
+        "use std.math.{sum}\npub flow g(k: F32 at block) -> F32 at sample { k }\npub flow f(x: F32 at sample, c: F32 at block) -> F32 at sample {\n  let p = par~ i in 0..<2 { g~(c + F32.round_from(i)) }\n  let q = par j in 0..<2 { x * F32.round_from(if x > 0.0 { j } else { 0 }) }\n  sum(p) + sum(q)\n}\n",
     );
     let f = flow(&a, "f");
     // `i` in an argument of an instance whose input is at `block`, in the
@@ -333,7 +333,7 @@ fn read_at_match_bindings() {
 fn locals_have_the_kinds_of_the_table() {
     use crate::body::LocalKind;
     let a = ok(
-        "pub flow f(x: F32 at sample, c: F32 at block) -> F32 at sample {\n  let p = par~ i in 0..<2 { x }\n  let m = match Some(c) {\n    Some(v) => v,\n    None => 0.0,\n  }\n  p[0] + m\n}\n",
+        "pub flow f(x: F32 at sample, c: F32 at block) -> F32 at sample {\n  let p = par i in 0..<2 { x }\n  let m = match Some(c) {\n    Some(v) => v,\n    None => 0.0,\n  }\n  p[0] + m\n}\n",
     );
     let f = flow(&a, "f");
     let kinds: Vec<(&str, LocalKind)> = f.body.locals.iter().map(|l| (l.name.as_str(), l.kind)).collect();
@@ -406,7 +406,7 @@ fn e0807_e0808_delay_lengths() {
     assert_eq!(codes("pub flow f(x: F32 at sample) -> F32 at sample {\n  vdelay~(x, 2.0, 0)\n}\n"), vec![Code::E0808]);
     // The `[F32; 0]` output is its own E0810 at the heading (S-1110, S-407).
     assert_eq!(
-        codes("pub flow f(x: F32 at sample) -> [F32; 0] at sample {\n  par~ i in 2..<2 { x }\n}\n"),
+        codes("pub flow f(x: F32 at sample) -> [F32; 0] at sample {\n  par i in 2..<2 { x }\n}\n"),
         vec![Code::E0808, Code::E0810]
     );
     // An `init` written as the default value is accepted too (S-539 (c3a)).
@@ -419,7 +419,7 @@ fn e0807_e0808_delay_lengths() {
 fn par_ranges() {
     let par = |ret: &str, head: &str| {
         codes(&format!(
-            "pub flow f(x: F32 at sample, n: U32 at init) -> {ret} at sample {{\n  par~ i in {head} {{ x }}\n}}\n"
+            "pub flow f(x: F32 at sample, n: U32 at init) -> {ret} at sample {{\n  par i in {head} {{ x }}\n}}\n"
         ))
     };
     // The bounds: integer constants (§7 E0401, §11.5 E0417), not empty (E0808).
@@ -442,13 +442,13 @@ fn par_ranges() {
     assert_eq!(par("[F32; 4]", "(0)..<(4)"), vec![]);
     assert_eq!(par("[F32; 3]", "-1..<2"), vec![Code::E0401]);
     assert_eq!(par("[F32; 2]", "0..<n + 1"), vec![Code::E0417]);
-    let computed = "const N: U32 = 2\nconst M: U32 = N * 2\npub flow f(x: F32 at sample) -> [F32; 4] at sample {\n  par~ i in 0..<M { x }\n}\n";
+    let computed = "const N: U32 = 2\nconst M: U32 = N * 2\npub flow f(x: F32 at sample) -> [F32; 4] at sample {\n  par i in 0..<M { x }\n}\n";
     assert_eq!(codes(computed), vec![Code::E0200]);
     let delay = "const N: U32 = 4\npub flow f(x: F32 at sample) -> F32 at sample {\n  delay~(x, N + 1)\n}\n";
     assert_eq!(codes(delay), vec![Code::E0200]);
     // The names of the leaves are resolved first (§18.1): a name that is not
     // declared is E0302, a function is no constant (E0417).
-    let g = "pub fn g() -> U32 { 3 }\npub flow f(x: F32 at sample) -> [F32; 2] at sample {\n  par~ i in 0..<g + 1 { x }\n}\n";
+    let g = "pub fn g() -> U32 { 3 }\npub flow f(x: F32 at sample) -> [F32; 2] at sample {\n  par i in 0..<g + 1 { x }\n}\n";
     assert_eq!(codes(g), vec![Code::E0417]);
     assert_eq!(par("[F32; 2]", "0..<zzz + 1"), vec![Code::E0302]);
     assert_eq!(par("[F32; 2]", "0..<1 + zzz"), vec![Code::E0302]);
@@ -465,7 +465,7 @@ fn par_ranges() {
     // A literal that no `U32` holds is E0408 in a computed expression too.
     assert_eq!(par("[F32; 2]", "0..<4294967296"), vec![Code::E0408]);
     assert_eq!(par("[F32; 2]", "0..<4294967296 + 1"), vec![Code::E0408]);
-    let big = "const N: U32 = 2\npub flow f(x: F32 at sample) -> [F32; 2] at sample {\n  par~ i in 0..<N + 4294967296 { x }\n}\n";
+    let big = "const N: U32 = 2\npub flow f(x: F32 at sample) -> [F32; 2] at sample {\n  par i in 0..<N + 4294967296 { x }\n}\n";
     assert_eq!(codes(big), vec![Code::E0408]);
 }
 

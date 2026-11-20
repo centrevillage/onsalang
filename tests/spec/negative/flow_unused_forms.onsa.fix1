@@ -75,7 +75,7 @@ pub flow unused_replicas(x: F32 at sample) -> F32 at sample {
 }
 
 pub flow unused_replicas_without_state(x: F32 at sample) -> F32 at sample {
-  let _ = par~ i in 0 ..< 4 { //~ E0309 @7
+  let _ = par i in 0 ..< 4 { //~ E0309 @7
     x
   }
   x
@@ -211,7 +211,7 @@ pub flow unused_arm_binding_in_the_else_branch(x: F32 at sample, c: Bool at samp
 
 pub flow unused_arm_binding_in_a_replica(x: F32 at sample) -> F32 at sample {
   let o: Option[F32] = if x > 0.0 { Some(x) } else { None }
-  let ys = par~ i in 0 ..< 2 {
+  let ys = par i in 0 ..< 2 {
     match o {
       Some(_) => x, //~ E0309 @12
       None => 0.0,

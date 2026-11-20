@@ -102,7 +102,7 @@ pub(super) fn evaluates(body: &Body, e: ExprId) -> bool {
             );
             call || body.time_call(e)
         }
-        K::Par { tilde, .. } => tilde.is_some(),
+        K::Par { .. } => true,
         K::If { .. } | K::Match { .. } => true,
         K::Paren(_) | K::At { .. } | K::Binary { .. } | K::Unary { .. } | K::Cast { .. } | K::Index { .. } => true,
         K::TupleIndex { .. } | K::Struct { .. } | K::Tuple(_) | K::Array(_) | K::Repeat { .. } => true,

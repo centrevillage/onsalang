@@ -39,102 +39,102 @@ pub fn two(a: I32, b: I32) -> I32 {
 }
 
 pub fn in_an_argument(s: Sf) -> I32 {
-  two(s                                             //~ E0020
+  two(s                                            //~ E0020
     .f, 1)
 }
 
 pub fn a_tuple_index(t: (I32, I32)) -> I32 {
-  two(t                                             //~ E0020
+  two(t                                            //~ E0020
     .0, 1)
 }
 
 pub fn a_value_call(g: fn(I32) -> I32) -> I32 {
-  two(g                                             //~ E0020
+  two(g                                            //~ E0020
     .(1), 2)
 }
 
 pub fn a_chain(l: Line) -> I32 {
-  two(l.a                                           //~ E0020
+  two(l.a                                          //~ E0020
     .x, 1)
 }
 
 pub fn a_method_call(p: Pt) -> I32 {
-  two(p                                             //~ E0020
+  two(p                                            //~ E0020
     .scale(2), 1)
 }
 
 pub fn in_an_array(p: Pt) -> I32 {
-  let v = [p                                        //~ E0020
+  let v = [p                                       //~ E0020
     .x, 1]
   v[0]
 }
 
 pub fn in_an_arm(o: Option[Pt]) -> I32 {
   match o {
-    Some(q) => q                                    //~ E0020
+    Some(q) => q                                   //~ E0020
       .x,
     None => 0,
   }
 }
 
 pub fn in_a_closure_body(p: Pt) -> I32 {
-  let f = fn(q: Pt) -> I32 { q                      //~ E0020
+  let f = fn(q: Pt) -> I32 { q                     //~ E0020
     .x }
   f.(p)
 }
 
 pub flow in_a_par(x: F32 at sample) -> F32 at sample {
-  let ys = par~ i in 0..<4 {
-    [x]                                             //~ E0020
+  let ys = par i in 0..<4 {
+    [x]                                            //~ E0020
       .len()
   }
   x
 }
 
 pub fn in_a_let(s: Sf) -> I32 {
-  let a = s                                         //~ E0020
+  let a = s                                        //~ E0020
     .f
   a
 }
 
 pub fn at_the_start_of_a_line(s: Sf) -> I32 {
-  s                                                 //~ E0020
+  s                                                //~ E0020
   .f
 }
 
 pub fn a_value_call_in_a_let(g: fn(I32) -> I32) -> I32 {
-  let a = g                                         //~ E0020
+  let a = g                                        //~ E0020
     .(1)
   a
 }
 
 pub fn a_space_before_the_dot(s: Sf) -> I32 {
-  let a = s                                         //~ E0020
+  let a = s                                       //~ E0020
     .f
   a
 }
 
 pub fn a_space_before_the_dot_in_parentheses(s: Sf) -> I32 {
-  two(s                                             //~ E0020
+  two(s                                           //~ E0020
     .f, 1)
 }
 
 pub fn a_comment_line_between(s: Sf) -> I32 {
-  let a = s                                         //~ E0020
+  let a = s                                        //~ E0020
     // the field
     .f
   a
 }
 
 pub fn a_blank_line_between(s: Sf) -> I32 {
-  let a = s                                         //~ E0020
+  let a = s                                        //~ E0020
 
     .f
   a
 }
 
 pub fn a_comment_line_between_in_parentheses(s: Sf) -> I32 {
-  two(s                                             //~ E0020
+  two(s                                            //~ E0020
     // the field
     .f, 1)
 }

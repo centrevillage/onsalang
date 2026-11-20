@@ -241,7 +241,7 @@ pub flow at_in_a_match_arm_then_name_not_found(x: F32 at sample, p: F32 at block
 }
 
 pub flow at_in_a_par_body_then_forward(x: F32 at sample, p: F32 at block) -> F32 at sample {
-  let xs = par~ i in 0 ..< 2 {
+  let xs = par i in 0 ..< 2 {
     p at nope                                       //~ E0302 @10
   }
   let b = c
@@ -269,6 +269,6 @@ pub flow init_block_and_sample_then_name_not_found(x: F32 at sample, i: F32 at i
 pub flow init_block_and_sample_in_places(x: F32 at sample, i: F32 at init, p: F32 at block, c: Bool at block) -> F32 at sample {
   let a = prev~(p at sample)
   let b = if c { i at block } else { p at block }
-  let ys = par~ k in 0 ..< 2 { p at sample }
+  let ys = par k in 0 ..< 2 { p at sample }
   x + a + b + ys[0]
 }

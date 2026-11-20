@@ -34,7 +34,7 @@ pub flow offset(x: F32 at sample) -> F32 at sample {
 
 // The call is inside each replica: 2 * (x + 0.25).
 pub flow replicated(x: F32 at sample) -> F32 at sample {
-  let rows = par~ i in 0 ..< 2 { x + ident::[F32](0.25) }
+  let rows = par i in 0 ..< 2 { x + ident::[F32](0.25) }
   rows[0] + rows[1]
 }
 

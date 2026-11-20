@@ -18,7 +18,7 @@ pub flow cast_in_vdelay(x: F32 at sample, d: F32 at sample) -> F32 at sample {
 }
 
 pub flow cast_in_par_end(x: F32 at sample) -> F32 at sample {
-  let ys = par~ i in 0..<(1 as Nope) { x * F32.round_from(i) }   //~ E0417
+  let ys = par i in 0..<(1 as Nope) { x * F32.round_from(i) }   //~ E0417
   ys[0]
 }
 

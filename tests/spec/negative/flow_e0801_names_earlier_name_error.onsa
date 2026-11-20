@@ -27,13 +27,13 @@
 // leaves = ["186:20 E0801"]
 //
 // [[test.fix]]
-// at = "192:12"
+// at = "192:31"
 // code = "E0811"
 // candidate = 1
 // leaves = ["193:11 E0801"]
 //
 // [[test.fix]]
-// at = "199:12"
+// at = "199:31"
 // code = "E0811"
 // candidate = 1
 // leaves = ["200:15 E0801"]
@@ -53,7 +53,7 @@
 // W7-04 U2/t, S-116, S-267, S-740, R-286: an error of the names stage at an earlier position of the unit than an E0801 (a name used before its `let`,
 // a `^name` outside the first argument of a delay, a `^name` in the init of a delay, a name in its own definition; §11.2): a name that is not found
 // (E0302), a name defined twice (E0304), a type used as a value (E0308), a `let` name written as a type, whatever the order (E0308, §11.2: "型の位置に書いた
-// 本体の `let` の名前は、順によらず値を型の位置に書いた E0308"), a flow called without `~` (E0811), a `~` on a function (E0812), a `par` without `~` (E0811), a
+// 本体の `let` の名前は、順によらず値を型の位置に書いた E0308"), a flow called without `~` (E0811), a `~` on a function (E0812), a flow called without `~` in the body of a `par` (E0811; W7-06 U0/t, S-1177: a `par` without `~` is judged by the content of its body, in the flow check stage, so it is no error of the names stage), a
 // clock that is missing in the heading (E0810, §11.3) and a `^name` of a name that is not defined at all (E0302). The first diagnostic by position is
 // reported (§18.1), so the earlier error is reported and the E0801 after it is not. The forms with the E0801 first are in
 // flow_e0801_names_later_name_error.onsa. One error per unit.
@@ -188,15 +188,15 @@ pub flow tilde_on_a_function_then_caret_in_the_init(x: F32 at sample) -> F32 at 
   a + z
 }
 
-pub flow par_without_tilde_then_forward(x: F32 at sample) -> F32 at sample {
-  let ys = par i in 0 ..< 2 { x }                   //~ E0811
+pub flow call_without_tilde_in_a_par_body_then_forward(x: F32 at sample) -> F32 at sample {
+  let ys = par i in 0 ..< 2 { lp(x) }              //~ E0811
   let a = b
   let b = x
   a
 }
 
-pub flow par_without_tilde_then_itself(x: F32 at sample) -> F32 at sample {
-  let ys = par i in 0 ..< 2 { x }                   //~ E0811
+pub flow call_without_tilde_in_a_par_body_then_itself(x: F32 at sample) -> F32 at sample {
+  let ys = par i in 0 ..< 2 { lp(x) }              //~ E0811
   let y = x + y
   y
 }
@@ -250,7 +250,7 @@ pub flow name_not_found_before_caret_in_the_same_let(x: F32 at sample) -> F32 at
 // ---- Places: a `par` body, a branch, a match arm
 
 pub flow name_not_found_in_a_par_body_then_forward(x: F32 at sample) -> F32 at sample {
-  let xs = par~ i in 0 ..< 2 {
+  let xs = par i in 0 ..< 2 {
     nope * F32.round_from(i)                        //~ E0302
   }
   let a = b

@@ -63,6 +63,8 @@ file par_closed_continuation.tsv rows=11 tests=2 evaluated=2 unavailable=0 skipp
 file par_closed_edges.tsv rows=29 tests=6 evaluated=6 unavailable=0 skipped=0 waiting=0
 file par_closed_forms.tsv rows=17 tests=4 evaluated=4 unavailable=0 skipped=0 waiting=0
 file par_closed_module.tsv rows=15 tests=3 evaluated=3 unavailable=0 skipped=0 waiting=0
+file par_in_a_match_guard.tsv rows=9 tests=2 evaluated=2 unavailable=0 skipped=0 waiting=1
+file par_in_plain_branches.tsv rows=43 tests=7 evaluated=7 unavailable=0 skipped=0 waiting=0
 file par_lookback.tsv rows=7 tests=2 evaluated=2 unavailable=0 skipped=0 waiting=0
 file par_lookback_forms.tsv rows=36 tests=10 evaluated=10 unavailable=0 skipped=0 waiting=0
 file par_replication.tsv rows=21 tests=5 evaluated=5 unavailable=0 skipped=0 waiting=0
@@ -94,4 +96,4 @@ file struct_pattern_rest_let.tsv rows=7 tests=2 evaluated=2 unavailable=0 skippe
 file struct_pattern_rest_match.tsv rows=4 tests=1 evaluated=1 unavailable=0 skipped=0 waiting=1
 file vdelay_edges.tsv rows=64 tests=15 evaluated=14 unavailable=0 skipped=1 waiting=0
 file vdelay_varying_d.tsv rows=2 tests=1 evaluated=0 unavailable=0 skipped=1 waiting=0
-total files=95 rows=2413 tests=620 evaluated=560 unavailable=6 skipped=54 waiting=8
+total files=97 rows=2465 tests=629 evaluated=569 unavailable=6 skipped=54 waiting=9

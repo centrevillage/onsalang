@@ -175,7 +175,7 @@ impl Graph<'_> {
         self.local_node.insert(*var, name.clone());
         let clock = self.clock_of(*var, local.span);
         let label = format!("{}: {}", local.name, typed(&self.a.display_type(local.ty), clock, local.span));
-        let heading = format!("par~ {} in {}（×{count}）", local.name, range(node));
+        let heading = format!("{} {} in {}（×{count}）", spelling(self.ast, node.expr), local.name, range(node));
         let mut items = vec![self.push(name, label, "shape=ellipse ", (clock, local.span))];
         for &child in children {
             items.extend(self.node(child));
@@ -191,8 +191,9 @@ impl Graph<'_> {
             // SPEC-GAP(S-397): a delay is its kind, with no length.
             (_, Some(d)) => format!("{}~", d.name()),
             (PlanKind::Instance { callee, .. }, None) => format!("{}~", self.a.def(*callee).name),
-            // SPEC-GAP(S-1170): with its range, the one of the heading of its frame.
-            (PlanKind::Par { .. }, None) => format!("par~ {}", range(node)),
+            // SPEC-GAP(S-1170): as written and with its range, as the heading
+            // of its frame.
+            (PlanKind::Par { .. }, None) => format!("{} {}", spelling(self.ast, node.expr), range(node)),
             // `PlanKind::delay` names every delay.
             (PlanKind::Prev { .. } | PlanKind::Delay { .. } | PlanKind::Vdelay { .. }, None) => {
                 onsa_diag::internal::bug(None, "a delay node without its delay")
@@ -213,6 +214,14 @@ fn index_name(info: &FlowInfo, id: NodeId, var: &str) -> String {
     match children.iter().any(|&c| info.node(c).path == name) {
         true => format!("{}._{var}", node.path),
         false => name,
+    }
+}
+
+/// The replication `e` as written (spec/tools.md §1.3): `par` or `par~`.
+fn spelling(ast: &Ast, e: ExprId) -> &'static str {
+    match ast.expr(e).kind {
+        onsa_syntax::ast::ExprKind::Par { tilde: Some(_), .. } => "par~",
+        _ => "par",
     }
 }
 

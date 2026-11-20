@@ -3,13 +3,13 @@
 // mode = "test"
 // spec = ["§11.4", "§11.5"]
 
-// W7-14 U3/t, S-257, S-151: the closed range of `par~` in the places a body and a call are written (§11.5:
-// `par~ i in a ..= b { e }` is `N = b - a + 1` replicas, the index goes from `a` to `b`, "the body that
-// has no stateful part makes no state field and is not an error"). The index picks a branch of a plain
+// W7-14 U3/t, S-257, S-151; W7-06 U0/t, S-1177: the closed range of `par~` and `par` in the places a body and a call are written (§11.5:
+// `par~ i in a ..= b { e }` is `N = b - a + 1` replicas, the index goes from `a` to `b`, and a body that
+// has no stateful part is written `par` and makes no state field, §11.5). The index picks a branch of a plain
 // `if` in the body (a branch without a stateful part), goes through a generic `rt fn`, gives a delay
 // length to a `vdelay~` of each replica (the index is a value of the `init` clock, so it is the delay
 // time `d`, not the maximum), and the replication is the argument of a call. The bodies of the first
-// three have no state, and the replication is accepted all the same. The values are worked out by hand.
+// three have no state, so they are written `par`. The values are worked out by hand.
 
 use std.math.sum
 
@@ -19,12 +19,12 @@ pub rt fn twice[T: Num](a: T) -> T {
 
 // Three replicas, the index 0, 1, 2: x only where the index is 1.
 pub flow only_the_middle(x: F32 at sample) -> [F32; 3] at sample {
-  par~ i in 0 ..= 2 { if i == 1 { x } else { 0.0 } }
+  par i in 0 ..= 2 { if i == 1 { x } else { 0.0 } }
 }
 
 // Two replicas, the index 1, 2: twice (x * i).
 pub flow doubled(x: F32 at sample) -> [F32; 2] at sample {
-  par~ i in 1 ..= 2 { twice(x * F32.round_from(i)) }
+  par i in 1 ..= 2 { twice(x * F32.round_from(i)) }
 }
 
 // Two replicas, each with its own delay line of the length i (the maximum is 4).
@@ -34,7 +34,7 @@ pub flow own_delays(x: F32 at sample) -> [F32; 2] at sample {
 
 // Four replicas, the index 1, 2, 3, 4, summed: x * 10.
 pub flow total(x: F32 at sample) -> F32 at sample {
-  sum(par~ i in 1 ..= 4 { x * F32.round_from(i) })
+  sum(par i in 1 ..= 4 { x * F32.round_from(i) })
 }
 
 test "the index picks a branch inside the body" {

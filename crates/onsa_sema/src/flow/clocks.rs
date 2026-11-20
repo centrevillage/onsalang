@@ -420,7 +420,7 @@ impl Walk<'_> {
                 self.join(e, &[l, r])
             }
             ExprKind::Index { base, index } => self.join_of(e, [*base, *index]),
-            ExprKind::Par { body, .. } => self.par(e, *body),
+            ExprKind::Par { tilde, body, .. } => self.par(e, *tilde, *body),
             ExprKind::Call { callee, args, .. } => self.call(e, *callee, args),
         }
     }
@@ -486,13 +486,19 @@ impl Walk<'_> {
         self.join(e, &ops)
     }
 
-    /// `par~` (§11.5): its index at `init`, its body, and its node.
-    fn par(&mut self, e: ExprId, body: ExprId) -> Option<Clock> {
+    /// `par` / `par~` (§11.5), `tilde` its `~`: the `~` its body asks for
+    /// ([`Self::par_mark`]), its index at `init`, its body, and its node; one
+    /// whose body holds state is a thing with state, in no branch.
+    fn par(&mut self, e: ExprId, tilde: Option<Span>, body: ExprId) -> Option<Clock> {
         let Some(&(var, from, count, end)) = self.cx.pars.get(&e) else {
             onsa_diag::internal::bug(self.span(e), "a `par~` the check did not record")
         };
-        if !self.stateful_here(e) {
-            return Some(Clock::Error);
+        if self.checking() {
+            let holds = super::nodes::holds_state(self.ast, body);
+            self.par_mark(e, tilde, holds);
+            if holds && !self.stateful_here(e) {
+                return Some(Clock::Error);
+            }
         }
         self.bind_local(var, Some(Clock::Init));
         let (check, span) = (self.mode == Mode::Check, self.ast.expr(e).span);

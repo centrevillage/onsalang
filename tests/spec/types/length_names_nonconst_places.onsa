@@ -82,12 +82,12 @@ pub flow variant_in_a_flow_repeat(x: F32 at sample) -> F32 at sample {
 }
 
 pub flow function_as_the_start_of_a_par(x: F32 at sample) -> F32 at sample {
-  let ys = par~ i in g..<4 { x * F32.round_from(i) }        //~ E0417
+  let ys = par i in g..<4 { x * F32.round_from(i) }        //~ E0417
   ys[0]
 }
 
 pub flow variant_as_the_end_of_an_inclusive_par(x: F32 at sample) -> F32 at sample {
-  let ys = par~ i in 0..=E.A { x * F32.round_from(i) }      //~ E0417
+  let ys = par i in 0..=E.A { x * F32.round_from(i) }      //~ E0417
   ys[0]
 }
 
@@ -133,7 +133,7 @@ pub flow associated_function_in_a_flow_repeat(x: F32 at sample) -> F32 at sample
 }
 
 pub flow associated_function_as_the_end_of_a_par(x: F32 at sample) -> F32 at sample {
-  let ys = par~ i in 0..<P.mk { x * F32.round_from(i) }     //~ E0417
+  let ys = par i in 0..<P.mk { x * F32.round_from(i) }     //~ E0417
   ys[0]
 }
 
@@ -147,7 +147,7 @@ pub flow method_in_a_delay(x: F32 at sample) -> F32 at sample {
 }
 
 pub flow method_as_the_end_of_a_par(x: F32 at sample) -> F32 at sample {
-  let ys = par~ i in 0..<P.get { x * F32.round_from(i) }    //~ E0308
+  let ys = par i in 0..<P.get { x * F32.round_from(i) }    //~ E0308
   ys[0]
 }
 
@@ -165,13 +165,13 @@ pub flow local_in_a_vdelay(x: F32 at sample, d: F32 at sample) -> F32 at sample 
 
 pub flow local_as_the_end_of_a_par(x: F32 at sample) -> F32 at sample {
   let n: U32 = 4
-  let ys = par~ i in 0..<n { x * F32.round_from(i) }        //~ E0417
+  let ys = par i in 0..<n { x * F32.round_from(i) }        //~ E0417
   ys[0]
 }
 
 pub flow local_as_the_start_of_a_par(x: F32 at sample) -> F32 at sample {
   let n: U32 = 1
-  let ys = par~ i in n..<4 { x * F32.round_from(i) }        //~ E0417
+  let ys = par i in n..<4 { x * F32.round_from(i) }        //~ E0417
   ys[0]
 }
 
@@ -191,7 +191,7 @@ pub flow input_in_a_vdelay(x: F32 at sample, d: F32 at sample, n: U32 at init) -
 }
 
 pub flow input_as_the_end_of_a_par(x: F32 at sample, n: U32 at init) -> F32 at sample {
-  let ys = par~ i in 0..<n { x * F32.round_from(i) }        //~ E0417
+  let ys = par i in 0..<n { x * F32.round_from(i) }        //~ E0417
   ys[0]
 }
 

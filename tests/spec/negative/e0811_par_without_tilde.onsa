@@ -3,21 +3,23 @@
 // spec = ["§2.6", "§11.5", "§18.1"]
 //
 // [[test.fix]]
-// at = "91:14"
+// at = "80:14"
 // code = "E0811"
 // candidate = 1
-// leaves = ["92:15 E0811"]
+// leaves = ["81:15 E0811"]
 
-// W4-20 U1/t, S-745: a `par` without the `~` in the body of a flow is E0811 (§11.5: "flow の本体の `~` の
-// 無い `par i in …` は E0811"; §2.6). It is an error of the names stage (§18.1: "`par~` の `~` の有無（E0811、
-// §11.5）" is judged by the name and the spelling), so the type errors of the same flow are not reached.
-// The body does not matter: with state (`saw~(f0)`) or without (`x * F32.round_from(i)`) it is the same E0811
-// and never the E0812 of a `~` that has nothing to hold (§2.6: a `par~` without state is no error, so the
-// error of the `par` is not "the `~` is not needed"). The place of the `par` does not matter either: the
-// right side of a `let`, the tail (the output), an argument, one of two in a flow. One error per flow
-// (P-01): the second `par` of a flow is not reported. The candidate (insert the `~`) is in
-// fixes/e0811_par_*, the nested forms in e0811_par_nested.onsa, the same spelling outside a flow (E0821)
-// in e0821_par_plain_outside_flow.onsa.
+// W4-20 U1/t, S-745; W7-06 U0/t, S-1177: a `par` without the `~` that holds state in its body (an instance, a
+// delay, or a `par~` that holds state, §11.5) is E0811 in the body of a flow (§11.5: "状態を持つものを本体に
+// 含む `par` は E0811"; §2.6). The error is decided by the content of the body, not by the spelling (§11.5), so
+// it is an error of the flow check stage (§18.1: "本体の中身で決まる `par` / `par~` の `~` の有無（E0811、
+// E0812、§11.5）は flow の検査の段である"), the stage of the `if` / `match` branch error of §11.5: the type
+// errors of the same flow come first (e0811_par_stage_order.onsa). The place of the `par` does not matter:
+// the right side of a `let`, the tail (the output), an argument, one of two in a flow. One error per flow
+// (P-01, §18.1): the second `par` of a flow is not reported. A `par` without state is no error at all (§11.5:
+// it is written without `~` and holds no state), so the forms of the section "Not errors" at the end of the
+// file are accepted and their errors are not the error of "the `~` is missing". The candidate (insert the `~`)
+// is in fixes/e0811_par_*, the nested forms in e0811_par_nested.onsa, the same spelling outside a flow (E0821
+// until W8-12) in e0821_par_plain_outside_flow.onsa.
 
 use std.math.floor
 
@@ -47,19 +49,6 @@ pub flow as_the_tail(f0: F32 at block) -> [F32; 4] at sample {
 
 pub flow as_an_argument(f0: F32 at block) -> F32 at sample {
   total(par i in 0 ..< 4 { saw~(f0) }) //~ E0811
-}
-
-pub flow without_state_in_a_let(x: F32 at sample) -> [F32; 4] at sample {
-  let ys = par i in 0 ..< 4 { x * F32.round_from(i) } //~ E0811
-  ys
-}
-
-pub flow without_state_as_the_tail(x: F32 at sample) -> [F32; 4] at sample {
-  par i in 0 ..< 4 { x * F32.round_from(i) } //~ E0811
-}
-
-pub flow without_state_as_an_argument(x: F32 at sample) -> F32 at sample {
-  total(par i in 0 ..< 4 { x * F32.round_from(i) }) //~ E0811
 }
 
 pub flow with_a_delay_in_the_body(x: F32 at sample) -> [F32; 4] at sample {
@@ -97,6 +86,19 @@ pub flow two_without_the_tilde_in_one_flow(f0: F32 at block) -> F32 at sample {
 
 pub flow fine(f0: F32 at block, x: F32 at sample) -> F32 at sample {
   let lows = par~ i in 0 ..< 4 { saw~(f0 * (1.0 + F32.round_from(i))) }
-  let highs = par~ i in 0 ..< 4 { x * F32.round_from(i) }
+  let highs = par i in 0 ..< 4 { x * F32.round_from(i) }
   total(lows) + total(highs)
+}
+
+pub flow without_state_in_a_let(x: F32 at sample) -> [F32; 4] at sample {
+  let ys = par i in 0 ..< 4 { x * F32.round_from(i) }
+  ys
+}
+
+pub flow without_state_as_the_tail(x: F32 at sample) -> [F32; 4] at sample {
+  par i in 0 ..< 4 { x * F32.round_from(i) }
+}
+
+pub flow without_state_as_an_argument(x: F32 at sample) -> F32 at sample {
+  total(par i in 0 ..< 4 { x * F32.round_from(i) })
 }

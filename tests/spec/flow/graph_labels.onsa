@@ -11,7 +11,7 @@
 //   shadow:        a `par~` whose index has the name of a node of its body (S-1168)
 //   inclusive:     `a ..= b` (S-1171)
 //   destructure:   a `let` of more than one name, and `let _` (S-1169)
-//   stateless:     a `par~` with no state, the value of a `let` (S-1175)
+//   (the `par` with no state, the value of a `let`, is in graph_labels_stateless_par.onsa: it is a case of its own, W7-06 U0)
 
 pub flow lp(x: F32 at sample) -> F32 at sample {
   let y = (0.5 * x) + (0.5 * prev~(^y))
@@ -68,9 +68,4 @@ pub flow destructure(x: F32 at sample) -> F32 at sample {
   let _ = lp~(x)
   let _ = lp~(p)
   a + b
-}
-
-pub flow stateless(x: F32 at sample) -> F32 at sample {
-  let ys = par~ i in 0 ..< 2 { x * F32.round_from(i) }
-  ys[0] + ys[1]
 }

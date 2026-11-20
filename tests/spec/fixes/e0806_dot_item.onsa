@@ -148,7 +148,7 @@ pub flow in_the_right_operand_of_a_logical_and(x: F32 at sample) -> F32 at sampl
 }
 
 pub flow in_a_par_body(x: F32 at sample) -> F32 at sample {
-  let ys = par~ i in 0 ..< 2 {
+  let ys = par i in 0 ..< 2 {
     g.(x) * F32.round_from(i)                       //~ E0806
   }
   ys[0] + ys[1]

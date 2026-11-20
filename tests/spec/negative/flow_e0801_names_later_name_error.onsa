@@ -34,7 +34,7 @@
 
 // W7-04 U2/t, S-116, S-267, R-286: E0801 (a name used before its `let` without `^`, a `^name` outside the first argument of a delay, a name in its own definition; §11.2)
 // before another error of the names stage at a later position of the same unit: a name that is not found (E0302), a name defined twice (E0304), a type used as a value (E0308), a
-// flow called without `~` (E0811), a `~` on a function (E0812), a `par` without `~` (E0811). The E0801 is an error of the names stage (§18.1: "flow の本体の名前の順（E0801 と、見えている名前への
+// flow called without `~` (E0811), a `~` on a function (E0812), a flow called without `~` in the body of a `par` (E0811; W7-06 U0/t, S-1177: a `par` without `~` is judged by the content of its body, in the flow check stage, so it is no error of the names stage). The E0801 is an error of the names stage (§18.1: "flow の本体の名前の順（E0801 と、見えている名前への
 // `^` の E0020、§11.2）"), and of the remaining diagnostics the first by position is reported, so the E0801 is reported and not the later name error (R-286: the later error does not win). The name error
 // is also in the same `let`, after the E0801. One error per unit. The candidates that the E0801 has (`prev~(^name)` for a `^name` outside a delay, `^` for a use inside the first argument of
 // a delay, §11.2) leave the later error, which is said by `leaves` (the position of the E0801 on a `^name` is that of the `^`, the position of a use of a name is that of the name; S-392 keeps
@@ -99,10 +99,10 @@ pub flow forward_then_tilde_on_a_function(x: F32 at sample) -> F32 at sample {
   a + z
 }
 
-pub flow forward_then_par_without_tilde(x: F32 at sample) -> F32 at sample {
+pub flow forward_then_call_without_tilde_in_a_par_body(x: F32 at sample) -> F32 at sample {
   let a = b                                         //~ E0801
   let b = x
-  let ys = par i in 0 ..< 2 { x }
+  let ys = par i in 0 ..< 2 { lp(x) }
   a
 }
 
@@ -180,7 +180,7 @@ pub flow caret_before_a_name_not_found_in_the_same_let(x: F32 at sample) -> F32 
 // ---- Places: a `par` body, a branch, a condition, a match arm, an argument of a generic function
 
 pub flow forward_in_a_par_body_then_name_not_found(x: F32 at sample) -> F32 at sample {
-  let xs = par~ i in 0 ..< 2 {
+  let xs = par i in 0 ..< 2 {
     y * F32.round_from(i)                           //~ E0801
   }
   let y = x

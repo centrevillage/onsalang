@@ -82,7 +82,6 @@ impl Walker<'_> {
             ExprKind::Par { tilde, .. } if !self.flow => {
                 Err(self.outside(Outside::Par, par_head(ast.expr(e).span, *tilde)))
             }
-            ExprKind::Par { tilde: None, .. } => Err(self.par_without_tilde(e)),
             ExprKind::Feedback(name) => self.feedback(e, name),
             ExprKind::At { expr, clock } => {
                 self.expr(*expr)?;

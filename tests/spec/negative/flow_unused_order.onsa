@@ -74,12 +74,12 @@ pub flow vdelay_of_no_room_after(x: F32 at sample, d: F32 at sample) -> F32 at s
 
 pub flow empty_replicas_after(x: F32 at sample) -> F32 at sample {
   let u = x * 2.0
-  let ys = par~ i in 2 ..< 2 { x } //~ E0808
+  let ys = par i in 2 ..< 2 { x } //~ E0808
   x
 }
 
 pub flow empty_replicas_before(x: F32 at sample) -> F32 at sample {
-  let ys = par~ i in 2 ..< 2 { x } //~ E0808
+  let ys = par i in 2 ..< 2 { x } //~ E0808
   let u = x * 2.0
   x
 }
@@ -92,7 +92,7 @@ pub flow str_value_after(x: F32 at sample) -> F32 at sample {
 
 pub flow let_in_a_replica_body_after(x: F32 at sample) -> F32 at sample {
   let u = x * 2.0
-  let ys = par~ i in 0 ..< 2 {
+  let ys = par i in 0 ..< 2 {
     let t = x //~ E0806
     t
   }
@@ -172,7 +172,7 @@ pub flow held_clock_error_then_a_type_error(x: F32 at sample, p: F32 at block) -
 }
 
 pub flow held_empty_replicas_then_a_type_error(x: F32 at sample) -> F32 at sample {
-  let ys = par~ i in 2 ..< 2 { x }
+  let ys = par i in 2 ..< 2 { x }
   let t: Bool = 1.0 //~ E0401
   x
 }

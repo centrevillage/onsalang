@@ -68,7 +68,7 @@ fn a_let_that_binds_no_name_is_a_root() {
 
 #[test]
 fn a_read_in_the_body_of_a_par_is_a_read_of_its_let() {
-    let par = "  let a = x * 2.0\n  let ys = par~ i in 0 ..< 2 {\n    a\n  }\n";
+    let par = "  let a = x * 2.0\n  let ys = par i in 0 ..< 2 {\n    a\n  }\n";
     assert_eq!(names(&format!("{par}  ys[0]")), Vec::<String>::new());
     assert_eq!(names(&format!("{par}  x")), ["a", "ys"]);
 }
@@ -92,10 +92,10 @@ pub flow f(x: F32 at sample, a: F32 at init, b: F32 at init, n: I32 at block, i:
         ("if b > 0.0 { x * make(a) } else { x }", None),
         ("if n != 0 { x * make(2.0) } else { x }", Some(Code::E0200)),
         ("pick(name_of(i), x)", Some(Code::E0200)),
-        ("(par~ k in 0 ..< 2 { x * make(a) })[0]", None),
-        ("(par~ k in 0 ..< 2 { x * make(F32.round_from(k)) })[0]", None),
-        ("(par~ k in 0 ..< 2 { if n != 0 { x * make(a) } else { x } })[0]", Some(Code::E0815)),
-        ("(par~ k in 0 ..< 2 { if b > 0.0 { x * make(F32.round_from(k)) } else { x } })[0]", None),
+        ("(par k in 0 ..< 2 { x * make(a) })[0]", None),
+        ("(par k in 0 ..< 2 { x * make(F32.round_from(k)) })[0]", None),
+        ("(par k in 0 ..< 2 { if n != 0 { x * make(a) } else { x } })[0]", Some(Code::E0815)),
+        ("(par k in 0 ..< 2 { if b > 0.0 { x * make(F32.round_from(k)) } else { x } })[0]", None),
     ];
     for (body, code) in cases {
         let a = crate::tests::check(&format!("{head}  {body}\n}}\n"));

@@ -29,7 +29,7 @@ pub flow as_a_condition(x: F32 at sample) -> F32 at sample {
 }
 
 pub flow in_a_par(xs: [F32; 2] at sample) -> [F32; 2] at sample {
-  par~ i in 0 ..< 2 { xs[i].abs() }                 //~ E0413
+  par i in 0 ..< 2 { xs[i].abs() }                 //~ E0413
 }
 
 pub flow fine(x: F32 at sample) -> F32 at sample {

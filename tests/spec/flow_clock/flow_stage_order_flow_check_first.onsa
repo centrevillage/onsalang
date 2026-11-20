@@ -30,7 +30,7 @@ pub flow delay_zero_then_pass(x: F32 at sample, p: F32 at block, d: F32 at sampl
 }
 
 pub flow par_empty_then_at(x: F32 at sample, p: F32 at block, d: F32 at sample) -> F32 at sample {
-  let a = par~ i in 2 ..< 2 { x }                           //~ E0808
+  let a = par i in 2 ..< 2 { x }                           //~ E0808
   let b = x at block
   x
 }

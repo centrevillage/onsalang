@@ -1,0 +1,44 @@
+// onsa.toml
+// [test]
+// spec = ["§11.5", "§11.6"]
+// golden = ["interface"]
+// golden_graph = ["par_then_par_tilde", "named"]
+
+// W7-06 U0/t, S-1177, S-1175 (§11.6: "種類は、…`par`（`par` と `par~` の複製。番号は二つの綴りで一つの列）である。番号は `let`
+// ごと・種類ごとに、呼び出しの名前が字面に現れる順に 0 から振る"; spec/tools.md §1.3: "見出しは書いた形の `par~ i in 0..<N（×N）`
+// （`par` は `par i in 0..<N（×N）`）"): the kind `par` is one series for the two spellings, so a `par` and a `par~` in one `let`
+// are `a.par_0` and `a.par_1` in the order of the text, whichever is first. The `par` has no node with state; it has a field
+// only for the parts of its body that are hoisted (`f0 * ratio(i)` of `block` and `ratio(i)` of `init`, one field of each
+// replica, §11.3, §11.6), and `onsa interface` shows the replication as one field of the size of its replicas (§11.6). The
+// fields of the flows (size of the field in bytes), in the order of the text (§12.4):
+//   par_then_par_tilde:  a.par_0 (the `par`, 16 = 2 replicas of 2 `F32`), a.par_1 (the `par~`, 8 = 2 replicas of one `prev~`)
+//   par_tilde_then_par:  b.par_0 (the `par~`, 8), b.par_1 (the `par`, 16)
+//   named:               ys.par_0 (16: a `par` is no node with state, so the `let` `ys` does not name it even when it is the
+//                        value of the `let`, S-1175 (1′)), zs (8: the `par~` that is the value of the `let` `zs` is named by the `let`)
+// The graph of `par_then_par_tilde` draws two frames, headed `par i in 0..<2（×2）` and `par~ j in 0..<2（×2）` (the spelling as
+// it is written); the graph of `named` draws the frame of `ys.par_0` headed `par i in 0..<2（×2）` and the frame of `zs` headed
+// `par~ j in 0..<2（×2）`. The golden files are made by the implementation of W7-06 U0 and read by hand against this list.
+
+pub rt fn ratio(i: U32) -> F32 {
+  F32.round_from(i) + 1.0
+}
+
+pub rt fn pair_sum(xs: [F32; 2]) -> F32 {
+  xs[0] + xs[1]
+}
+
+pub flow par_then_par_tilde(x: F32 at sample, f0: F32 at block) -> F32 at sample {
+  let a = pair_sum(par i in 0 ..< 2 { x * (f0 * ratio(i)) }) + pair_sum(par~ j in 0 ..< 2 { prev~(x) })
+  a
+}
+
+pub flow par_tilde_then_par(x: F32 at sample, f0: F32 at block) -> F32 at sample {
+  let b = pair_sum(par~ j in 0 ..< 2 { prev~(x) }) + pair_sum(par i in 0 ..< 2 { x * (f0 * ratio(i)) })
+  b
+}
+
+pub flow named(x: F32 at sample, f0: F32 at block) -> F32 at sample {
+  let ys = par i in 0 ..< 2 { x * (f0 * ratio(i)) }
+  let zs = par~ j in 0 ..< 2 { prev~(x) }
+  pair_sum(ys) + pair_sum(zs)
+}

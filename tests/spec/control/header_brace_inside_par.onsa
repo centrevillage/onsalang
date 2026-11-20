@@ -11,31 +11,31 @@
 // of the header (`par~ i in 0 ..< { 4 } {`) is E0002, in negative/header_block_expression_par.onsa.
 
 pub flow par_index(x: F32 at sample, xs: [U32; 3]) -> [F32; 4] at sample {
-  par~ i in 0 ..< xs[{ 1 }] {
+  par i in 0 ..< xs[{ 1 }] {
     x
   }
 }
 
 pub flow par_match_arm(x: F32 at sample, n: U32) -> [F32; 4] at sample {
-  par~ i in 0 ..< match n { _ => { 4 } } {
+  par i in 0 ..< match n { _ => { 4 } } {
     x
   }
 }
 
 pub flow par_struct_in_index(x: F32 at sample, xs: [U32; 3]) -> [F32; 4] at sample {
-  par~ i in 0 ..< xs[S { a: 1 }.a] {
+  par i in 0 ..< xs[S { a: 1 }.a] {
     x
   }
 }
 
 pub flow par_nested_index(x: F32 at sample, xs: [U32; 3], ys: [U32; 3]) -> [F32; 4] at sample {
-  par~ i in 0 ..< xs[{ ys[{ 0 }] }] {
+  par i in 0 ..< xs[{ ys[{ 0 }] }] {
     x
   }
 }
 
 pub flow par_index_in_the_start(x: F32 at sample, xs: [U32; 3]) -> [F32; 4] at sample {
-  par~ i in xs[{ 0 }] ..< 4 {
+  par i in xs[{ 0 }] ..< 4 {
     x
   }
 }

@@ -33,7 +33,7 @@ pub fn for_without_a_name(xs: [I32; 2]) -> I32 {
 }
 
 pub flow par_without_a_name(x: F32 at sample) -> F32 at sample {
-  par~ in 0..<2 {                                   //~ E0002
+  par in 0..<2 {                                   //~ E0002
     x
   }
   x

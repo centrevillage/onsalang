@@ -120,7 +120,7 @@ pub flow name_then_nested_let(x: F32 at sample) -> F32 at sample {
 
 pub flow name_then_nested_let_in_a_par_body(x: F32 at sample) -> F32 at sample {
   let z = nope                                      //~ E0302
-  let ys = par~ i in 0 ..< 2 {
+  let ys = par i in 0 ..< 2 {
     let q = x
     q
   }

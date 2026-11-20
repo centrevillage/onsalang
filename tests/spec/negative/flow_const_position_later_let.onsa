@@ -30,7 +30,7 @@ pub flow variable_delay_length(x: F32 at sample) -> F32 at sample {
 }
 
 pub flow par_end(x: F32 at sample) -> F32 at sample {
-  let a = par~ i in 0..<b { x }                     //~ E0417 @25
+  let a = par i in 0..<b { x }                     //~ E0417 @24
   let b = 2
   x
 }

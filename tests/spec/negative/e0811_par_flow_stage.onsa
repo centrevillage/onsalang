@@ -1,0 +1,73 @@
+// onsa.toml
+// [test]
+// spec = ["§2.6", "§11.5", "§18.1"]
+//
+// [[test.fix]]
+// at = "45:12"
+// code = "E0811"
+// candidate = 1
+// leaves = ["46:11 E0815"]
+//
+// [[test.fix]]
+// at = "57:12"
+// code = "E0811"
+// candidate = 1
+// leaves = ["58:18 E0200"]
+
+// W7-06 U0/t, S-1177: the E0811 of a `par` without the `~` that holds state in its body is an error of the flow
+// check stage (§18.1: "本体の中身で決まる `par` / `par~` の `~` の有無（E0811、E0812、§11.5）は flow の検査の段で
+// ある"), the stage of the E0811 of a branch and of the clock errors of §11.3. Of the errors of one stage the first
+// by position is reported (§18.1: "残った診断のうち … 最初のもの"), so a clock error (E0815) on an earlier line is
+// reported and the `par` after it is not, and the `par` on an earlier line is reported and the clock error after
+// it is not; the same for the E0811 of a thing with state in a branch. (When the E0811 of the `par` was an error of
+// the names stage, it was reported before the clock error of the later line whatever the order.) The errors of the
+// stages after the flow check (an unused binding, E0309) are not reported with it (§18.1: "他のどの段の誤りも
+// 無い単位にだけ報告する"), and the units of a file are independent (a names error in one flow does not hide the
+// `par` of another). One error per flow (P-01).
+//
+// The candidate of the `par` of `par_then_clock_error` and of `par_then_branch_state` is the insertion of the `~`
+// (§11.5). The unit holds a second error of the flow check stage after it (the clock error of the next line, and the
+// thing with state in a branch of the next line), which the candidate does not touch, so `leaves` of the header
+// names it. A thing with state in a branch of a plain `if` is the E0200 of this version until the branch is
+// implemented (W7-06 U1), and then the E0811 of §11.5: the marker of `branch_state_then_par` and the `leaves` of the
+// second entry of the header change with it.
+
+pub flow lp(x: F32 at sample) -> F32 at sample {
+  x * 0.5 + prev~(x) * 0.5
+}
+
+pub flow clock_error_then_par(x: F32 at sample) -> [F32; 2] at sample {
+  let c = x at block                                        //~ E0815
+  par i in 0 ..< 2 { lp~(x * F32.round_from(i)) }
+}
+
+pub flow par_then_clock_error(x: F32 at sample) -> [F32; 2] at sample {
+  let ys = par i in 0 ..< 2 { lp~(x * F32.round_from(i)) }  //~ E0811
+  let c = x at block
+  ys
+}
+
+pub flow branch_state_then_par(x: F32 at sample, c: Bool at sample) -> [F32; 2] at sample {
+  let a = if c { lp~(x) } else { 0.0 }                      //~ E0200
+  let ys = par i in 0 ..< 2 { lp~(x * F32.round_from(i)) }
+  [a, ys[0]]
+}
+
+pub flow par_then_branch_state(x: F32 at sample, c: Bool at sample) -> [F32; 2] at sample {
+  let ys = par i in 0 ..< 2 { lp~(x * F32.round_from(i)) }  //~ E0811
+  let a = if c { lp~(x) } else { 0.0 }
+  [a, ys[0]]
+}
+
+pub flow par_and_an_unused_binding(x: F32 at sample) -> [F32; 2] at sample {
+  let unused = x * 2.0
+  par i in 0 ..< 2 { lp~(x * F32.round_from(i)) }           //~ E0811
+}
+
+pub flow a_names_error_in_another_flow(x: F32 at sample) -> F32 at sample {
+  nope                                                      //~ E0302
+}
+
+pub flow par_beside_a_names_error_in_another_flow(x: F32 at sample) -> [F32; 2] at sample {
+  par i in 0 ..< 2 { lp~(x * F32.round_from(i)) }           //~ E0811
+}

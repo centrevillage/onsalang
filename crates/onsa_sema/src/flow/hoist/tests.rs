@@ -117,7 +117,7 @@ fn conditions_decided_at_init_or_block_guard_the_fields_under_them() {
   let r = match n { 0 => x * (level * 3.0), _ => x }
   let s = if a > 0.0 { x * (level + a) + x * (a * 2.0) } else { x }
   let t = if level > 0.5 { x * (a * 3.0) } else { x }
-  let u = par~ i in 0 ..< 2 { x * (level * 4.0) }
+  let u = par i in 0 ..< 2 { x * (level * 4.0) }
   if q { p + r + s + t + u[0] } else { x }
 }";
     assert_eq!(
@@ -253,9 +253,9 @@ pub rt fn pair(xs: [F32; 2]) -> F32 { xs[0] + xs[1] }
 pub flow f(x: F32 at sample, a: F32 at init, level: F32 at block, n: I32 at block) -> F32 at sample {
   let saws = par~ i in 0 ..< 2 { lp~(x, level * make(F32.round_from(i))) + x * (a * 2.0) }
   let m = x * (level + 1.0)
-  let w = par~ i in 0 ..< 2 { pair(par~ j in 0 ..< 2 { x * make(F32.round_from(i + j)) }) }
-  let c = par~ i in 0 ..< 2 { if n != 0 { x * F32.round_from(100 / n) } else { x } }
-  saws[0] + m + w[1] + c[0] + pair(par~ k in 0 ..< 2 { x * (level * 3.0) })
+  let w = par i in 0 ..< 2 { pair(par j in 0 ..< 2 { x * make(F32.round_from(i + j)) }) }
+  let c = par i in 0 ..< 2 { if n != 0 { x * F32.round_from(100 / n) } else { x } }
+  saws[0] + m + w[1] + c[0] + pair(par k in 0 ..< 2 { x * (level * 3.0) })
 }";
     assert_eq!(
         guarded(src),

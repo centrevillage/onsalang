@@ -53,9 +53,9 @@ fn a_par_makes_an_array_of_the_values_of_its_body_for_each_index() {
     // §11.5: `par~ i in a ..< b { e }` is `e` for i = a, a + 1, .., b - 1, as an array of `b - a`. `i` is a `U32`.
     // `x * ((i) as F64)` for x = 2.0 and 0.5 over i = 0 ..< 4 is [0, 2, 4, 6] and [0, 0.5, 1, 1.5]; the range
     // 3 ..< 6 is [3, 4, 5] (the index starts at `a`), and a range of one is an array of one.
-    let src = "flow ramp(x: F64 at sample) -> [F64; 4] at sample { par~ i in 0 ..< 4 { x * ((i) as F64) } }
-flow from3(x: F64 at sample) -> [F64; 3] at sample { par~ i in 3 ..< 6 { ((i) as F64) + x } }
-flow one(x: F64 at sample) -> [F64; 1] at sample { par~ i in 7 ..< 8 { ((i) as F64) * x } }";
+    let src = "flow ramp(x: F64 at sample) -> [F64; 4] at sample { par i in 0 ..< 4 { x * ((i) as F64) } }
+flow from3(x: F64 at sample) -> [F64; 3] at sample { par i in 3 ..< 6 { ((i) as F64) + x } }
+flow one(x: F64 at sample) -> [F64; 1] at sample { par i in 7 ..< 8 { ((i) as F64) * x } }";
     assert_eq!(rows(true, src, "ramp", &[2.0, 0.5]), [vec![0.0, 2.0, 4.0, 6.0], vec![0.0, 0.5, 1.0, 1.5]]);
     assert_eq!(rows(true, src, "from3", &[0.0, 10.0]), [vec![3.0, 4.0, 5.0], vec![13.0, 14.0, 15.0]]);
     assert_eq!(rows(true, src, "one", &[1.0]), [vec![7.0]]);
@@ -154,21 +154,21 @@ fn reset_puts_the_state_of_every_replica_back_and_the_calls_in_a_call_of_each_re
 #[test]
 fn a_par_of_a_constant_clock_is_made_at_init_and_one_of_more_replicas_than_the_evaluator_holds_stops() {
     // §11.5, §11.3: `w` has no input in it, so it is made once (a value of `init`): [0, 0.25, 0.5, 0.75], and `w[2] * x` is
-    // x / 2. A `par~` of 2 000 000 replicas is more than the evaluator holds (`Limits::most`, 2^20): `Unavailable`, whatever
+    // x / 2. A `par` of 2 000 000 replicas is more than the evaluator holds (`Limits::most`, 2^20): `Unavailable`, whatever
     // the body, before it makes one.
     let src = "flow table(x: F64 at sample) -> F64 at sample {
-  let w = par~ i in 0 ..< 4 { ((i) as F64) * 0.25 }
+  let w = par i in 0 ..< 4 { ((i) as F64) * 0.25 }
   w[2] * x
 }
 flow wide(x: F64 at sample) -> F64 at sample {
-  let w = par~ i in 0 ..< 2000000 { x }
+  let w = par i in 0 ..< 2000000 { x }
   w[0]
 }";
     same64(
         &f64s(&run_with(true, src, "table", vec![], vec![], vec![("x", doubles(&[2.0, 4.0]))], vec![2])),
         &[1.0, 2.0],
     );
-    // `wide` has no state in its `par~` (it makes no node at `init`) and reads `x`, so it stops in the first frame.
+    // `wide` has no state in its `par` (it makes no node at `init`) and reads `x`, so it stops in the first frame.
     let r = with_flow(src, "wide", |view, def| {
         let mut me = Instance::init(view, def, 48000.0, &[], None).expect("init");
         me.process(&[], &[("x", &doubles(&[1.0])[..])], 1, None)
@@ -179,8 +179,8 @@ flow wide(x: F64 at sample) -> F64 at sample {
 #[test]
 fn a_closed_range_has_one_replica_more_and_ends_at_b() {
     // §11.5: `par~ i in a ..= b { e }` is `b - a + 1` replicas, the last with i = b: `0 ..= 2` is [0, 1, 2] and `5 ..= 5` one.
-    let src = "flow closed(x: F64 at sample) -> [F64; 3] at sample { par~ i in 0 ..= 2 { ((i) as F64) + x } }
-flow single(x: F64 at sample) -> [F64; 1] at sample { par~ i in 5 ..= 5 { ((i) as F64) + x } }";
+    let src = "flow closed(x: F64 at sample) -> [F64; 3] at sample { par i in 0 ..= 2 { ((i) as F64) + x } }
+flow single(x: F64 at sample) -> [F64; 1] at sample { par i in 5 ..= 5 { ((i) as F64) + x } }";
     assert_eq!(rows(false, src, "closed", &[0.0]), [vec![0.0, 1.0, 2.0]]);
     assert_eq!(rows(false, src, "single", &[0.5]), [vec![5.5]]);
 }
@@ -347,11 +347,11 @@ fn the_results_of_nested_pars_are_held_to_the_limit_before_they_are_all_made() {
     // `wide` is 2000 rows of `[x; 1000]`, 2 000 000: over too. `small` is 32 * 32 * 32 = 32 768, under: its last value
     // is x + 31 = 36 for x = 5.
     let src = "flow cube(x: I64 at sample) -> I64 at sample {
-  (par~ i in 0 ..< 128 { par~ j in 0 ..< 128 { par~ k in 0 ..< 128 { x + ((k) as I64) } } })[0][0][0]
+  (par i in 0 ..< 128 { par j in 0 ..< 128 { par k in 0 ..< 128 { x + ((k) as I64) } } })[0][0][0]
 }
-flow wide(x: I64 at sample) -> I64 at sample { (par~ i in 0 ..< 2000 { [x; 1000] })[0][0] }
+flow wide(x: I64 at sample) -> I64 at sample { (par i in 0 ..< 2000 { [x; 1000] })[0][0] }
 flow small(x: I64 at sample) -> I64 at sample {
-  (par~ i in 0 ..< 32 { par~ j in 0 ..< 32 { par~ k in 0 ..< 32 { x + ((k) as I64) } } })[31][31][31]
+  (par i in 0 ..< 32 { par j in 0 ..< 32 { par k in 0 ..< 32 { x + ((k) as I64) } } })[31][31][31]
 }";
     let run = |name: &'static str| {
         with_flow(src, name, |view, def| {

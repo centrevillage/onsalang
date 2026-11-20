@@ -4,7 +4,7 @@
 // fixes = 1
 //
 // [[test.fix]]
-// at = "16:21"
+// at = "16:20"
 // code = "E0020"
 // candidate = 1
 // clean = true
@@ -13,7 +13,7 @@
 // the candidate removes the clock (`par~ i in 0 ..< 2`) and leaves nothing (`clean`). This file has this one error.
 
 pub flow clock_of_a_par_index(x: F32 at sample) -> [F32; 2] at sample {
-  let saws = par~ i at sample in 0 ..< 2 {          //~ E0020
+  let saws = par i at sample in 0 ..< 2 {          //~ E0020
     x
   }
   saws

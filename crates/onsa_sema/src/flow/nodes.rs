@@ -194,6 +194,22 @@ impl NodeBuilder {
     }
 }
 
+/// Whether `e` holds state in its text (§11.5, S-1177): a call with `~`, an
+/// instance (a modifier too) or a built-in delay, in a replication in it
+/// too, whatever the `~` written on it. The one predicate of whether a
+/// replication is a `par~` or a `par`, and of its name ([`names::Namer`]).
+/// Linear in `e`.
+pub(in crate::flow) fn holds_state(ast: &Ast, e: ExprId) -> bool {
+    let mut todo = vec![e];
+    while let Some(x) = todo.pop() {
+        if let ExprKind::Call { kind: CallKind::Flow, .. } = ast.expr(x).kind {
+            return true;
+        }
+        todo.extend(ast.sub_exprs(x));
+    }
+    false
+}
+
 /// The omitted `init` of the delay `of` (§11.4, S-29): `T.default()`, a
 /// literal for a number (`0`, `+0.0`), else made of the type in Core, and
 /// the E0816 of a type that does not satisfy `Default`

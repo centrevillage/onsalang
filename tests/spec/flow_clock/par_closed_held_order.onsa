@@ -11,19 +11,19 @@
 
 pub flow delay_one_before(x: F32 at sample) -> F32 at sample {
   let a = delay~(x, 1)                                       //~ E0807
-  let b = (par~ k in 0 ..= 2 { x })[0]
+  let b = (par k in 0 ..= 2 { x })[0]
   x
 }
 
 pub flow block_before(x: F32 at sample, p: F32 at block) -> F32 at sample {
   let a = prev~(p)                                           //~ E0813
-  let b = (par~ k in 0 ..= 2 { x })[0]
+  let b = (par k in 0 ..= 2 { x })[0]
   x
 }
 
 pub flow delay_one_before_then_a_type_error(x: F32 at sample) -> F32 at sample {
   let a = delay~(x, 1)
-  let b = (par~ k in 0 ..= 2 { x })[0]
+  let b = (par k in 0 ..= 2 { x })[0]
   let c: Bool = 1.0                                          //~ E0401
   x
 }

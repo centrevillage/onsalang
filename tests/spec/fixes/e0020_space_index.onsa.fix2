@@ -20,45 +20,45 @@ pub fn add(a: I32, b: I32) -> I32 {
 }
 
 pub fn in_a_let(xs: [I32; 4]) -> I32 {
-  let a = xs([0])                                   //~ E0020
+  let a = xs([0])                                    //~ E0020
   a
 }
 
-pub fn one_line(xs: [I32; 2]) -> I32 { xs([0]) }    //~ E0020
+pub fn one_line(xs: [I32; 2]) -> I32 { xs([0]) }     //~ E0020
 
 pub fn as_an_operand(a: I32, xs: [I32; 4], i: U32) -> I32 {
-  a + xs([i])                                       //~ E0020
+  a + xs([i])                                        //~ E0020
 }
 
 pub fn as_an_argument(xs: [I32; 4]) -> I32 {
-  add(xs([0]), 1)                                   //~ E0020
+  add(xs([0]), 1)                                    //~ E0020
 }
 
 pub fn as_an_element(xs: [I32; 4]) -> I32 {
-  let v = [xs([0]), 1]                              //~ E0020
+  let v = [xs([0]), 1]                               //~ E0020
   v[1]
 }
 
 pub fn as_a_tuple_element(xs: [I32; 4]) -> I32 {
-  let t = (xs([0]), 1)                              //~ E0020
+  let t = (xs([0]), 1)                               //~ E0020
   t.1
 }
 
 pub fn a_field(h: Holder) -> I32 {
-  h.data([0])                                       //~ E0020
+  h.data([0])                                        //~ E0020
 }
 
 pub fn inside_an_index(xs: [I32; 4], k: [U32; 2]) -> I32 {
-  xs[k([0])]                                        //~ E0020
+  xs[k([0])]                                         //~ E0020
 }
 
 pub fn a_wide_gap(xs: [I32; 4]) -> I32 {
-  xs([0])                                           //~ E0020
+  xs([0])                                        //~ E0020
 }
 
 pub fn in_an_arm(o: Option[U32], xs: [I32; 4]) -> I32 {
   match o {
-    Some(i) => xs([i]),                             //~ E0020
+    Some(i) => xs([i]),                              //~ E0020
     None => 0,
   }
 }
@@ -69,10 +69,10 @@ pub fn in_a_closure_body(xs: [I32; 4]) -> I32 {
 }
 
 pub flow in_a_par(x: F32 at sample) -> F32 at sample {
-  let ys = par~ i in 0..<4 {
+  let ys = par i in 0..<4 {
     x
   }
-  ys([0])                                           //~ E0020
+  ys([0])                                            //~ E0020
 }
 
 pub fn fine(xs: [I32; 4], h: Holder, i: U32) -> I32 {

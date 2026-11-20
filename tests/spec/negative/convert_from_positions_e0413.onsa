@@ -18,7 +18,7 @@ pub flow in_flow(y: F32 at sample) -> F64 at sample {
 }
 
 pub flow in_par(y: F32 at sample) -> F64 at sample {
-  let ws = par~ i in 0 ..< 2 {
+  let ws = par i in 0 ..< 2 {
     F64.round_from(y) //~ E0413
   }
   ws[0] + ws[1]

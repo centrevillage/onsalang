@@ -40,7 +40,7 @@ pub flow f1_lp(x: F32 at sample, p: F32 at block) -> F32 at sample {
 }
 
 pub flow f1_par(x: F32 at sample, p: F32 at block) -> F32 at sample {
-  let v = (par~ i in 0 ..< 2 { applyf(FF, x) })[0]  //~ E0810
+  let v = (par i in 0 ..< 2 { applyf(FF, x) })[0]  //~ E0810
   x
 }
 
@@ -85,7 +85,7 @@ pub flow f1_pinit(x: F32 at sample, p: F32 at block) -> F32 at sample {
 }
 
 pub flow f1_par0(x: F32 at sample, p: F32 at block) -> F32 at sample {
-  let v = (par~ i in 3 ..< 3 { applyf(FF, x) })[0]  //~ E0808
+  let v = (par i in 3 ..< 3 { applyf(FF, x) })[0]  //~ E0808
   x
 }
 
@@ -105,7 +105,7 @@ pub flow f2_lp(x: F32 at sample, p: F32 at block) -> F32 at sample {
 }
 
 pub flow f2_par(x: F32 at sample, p: F32 at block) -> F32 at sample {
-  let v = (par~ i in 0 ..< 2 { KS.gain })[0]  //~ E0810
+  let v = (par i in 0 ..< 2 { KS.gain })[0]  //~ E0810
   x
 }
 
@@ -150,7 +150,7 @@ pub flow f2_pinit(x: F32 at sample, p: F32 at block) -> F32 at sample {
 }
 
 pub flow f2_par0(x: F32 at sample, p: F32 at block) -> F32 at sample {
-  let v = (par~ i in 3 ..< 3 { KS.gain })[0]  //~ E0808
+  let v = (par i in 3 ..< 3 { KS.gain })[0]  //~ E0808
   x
 }
 
@@ -170,7 +170,7 @@ pub flow f3_lp(x: F32 at sample, p: F32 at block) -> F32 at sample {
 }
 
 pub flow f3_par(x: F32 at sample, p: F32 at block) -> F32 at sample {
-  let v = (par~ i in 0 ..< 2 { mks(x).gain })[0]  //~ E0810
+  let v = (par i in 0 ..< 2 { mks(x).gain })[0]  //~ E0810
   x
 }
 
@@ -215,7 +215,7 @@ pub flow f3_pinit(x: F32 at sample, p: F32 at block) -> F32 at sample {
 }
 
 pub flow f3_par0(x: F32 at sample, p: F32 at block) -> F32 at sample {
-  let v = (par~ i in 3 ..< 3 { mks(x).gain })[0]  //~ E0808
+  let v = (par i in 3 ..< 3 { mks(x).gain })[0]  //~ E0808
   x
 }
 
@@ -300,7 +300,7 @@ pub flow f5_lp(x: F32 at sample, p: F32 at block) -> F32 at sample {
 }
 
 pub flow f5_par(x: F32 at sample, p: F32 at block) -> F32 at sample {
-  let v = (par~ i in 0 ..< 2 { applyf(FF, slow(x)) })[0]  //~ E0810
+  let v = (par i in 0 ..< 2 { applyf(FF, slow(x)) })[0]  //~ E0810
   x
 }
 
@@ -345,7 +345,7 @@ pub flow f5_pinit(x: F32 at sample, p: F32 at block) -> F32 at sample {
 }
 
 pub flow f5_par0(x: F32 at sample, p: F32 at block) -> F32 at sample {
-  let v = (par~ i in 3 ..< 3 { applyf(FF, slow(x)) })[0]  //~ E0808
+  let v = (par i in 3 ..< 3 { applyf(FF, slow(x)) })[0]  //~ E0808
   x
 }
 
@@ -430,7 +430,7 @@ pub flow f7_lp(x: F32 at sample, p: F32 at block) -> F32 at sample {
 }
 
 pub flow f7_par(x: F32 at sample, p: F32 at block) -> F32 at sample {
-  let v = (par~ i in 0 ..< 2 { first((x, FF)) })[0]  //~ E0810
+  let v = (par i in 0 ..< 2 { first((x, FF)) })[0]  //~ E0810
   x
 }
 
@@ -475,7 +475,7 @@ pub flow f7_pinit(x: F32 at sample, p: F32 at block) -> F32 at sample {
 }
 
 pub flow f7_par0(x: F32 at sample, p: F32 at block) -> F32 at sample {
-  let v = (par~ i in 3 ..< 3 { first((x, FF)) })[0]  //~ E0808
+  let v = (par i in 3 ..< 3 { first((x, FF)) })[0]  //~ E0808
   x
 }
 
@@ -495,7 +495,7 @@ pub flow f8_lp(x: F32 at sample, p: F32 at block) -> F32 at sample {
 }
 
 pub flow f8_par(x: F32 at sample, p: F32 at block) -> F32 at sample {
-  let v = (par~ i in 0 ..< 2 { Sh { gain: x, cb: FF }.gain })[0]  //~ E0810
+  let v = (par i in 0 ..< 2 { Sh { gain: x, cb: FF }.gain })[0]  //~ E0810
   x
 }
 
@@ -540,7 +540,7 @@ pub flow f8_pinit(x: F32 at sample, p: F32 at block) -> F32 at sample {
 }
 
 pub flow f8_par0(x: F32 at sample, p: F32 at block) -> F32 at sample {
-  let v = (par~ i in 3 ..< 3 { Sh { gain: x, cb: FF }.gain })[0]  //~ E0808
+  let v = (par i in 3 ..< 3 { Sh { gain: x, cb: FF }.gain })[0]  //~ E0808
   x
 }
 
@@ -560,7 +560,7 @@ pub flow f9_lp(x: F32 at sample, p: F32 at block) -> F32 at sample {
 }
 
 pub flow f9_par(x: F32 at sample, p: F32 at block) -> F32 at sample {
-  let v = (par~ i in 0 ..< 2 { applyf(FF, p) })[0]  //~ E0810
+  let v = (par i in 0 ..< 2 { applyf(FF, p) })[0]  //~ E0810
   x
 }
 
@@ -605,7 +605,7 @@ pub flow f9_pinit(x: F32 at sample, p: F32 at block) -> F32 at sample {
 }
 
 pub flow f9_par0(x: F32 at sample, p: F32 at block) -> F32 at sample {
-  let v = (par~ i in 3 ..< 3 { applyf(FF, p) })[0]  //~ E0808
+  let v = (par i in 3 ..< 3 { applyf(FF, p) })[0]  //~ E0808
   x
 }
 
@@ -625,7 +625,7 @@ pub flow f10_lp(x: F32 at sample, p: F32 at block) -> F32 at sample {
 }
 
 pub flow f10_par(x: F32 at sample, p: F32 at block) -> F32 at sample {
-  let v = (par~ i in 0 ..< 2 { applyf(FF, 1.0) })[0]  //~ E0810
+  let v = (par i in 0 ..< 2 { applyf(FF, 1.0) })[0]  //~ E0810
   x
 }
 
@@ -665,7 +665,7 @@ pub flow f10_pinit(x: F32 at sample, p: F32 at block) -> F32 at sample {
 }
 
 pub flow f10_par0(x: F32 at sample, p: F32 at block) -> F32 at sample {
-  let v = (par~ i in 3 ..< 3 { applyf(FF, 1.0) })[0]  //~ E0808
+  let v = (par i in 3 ..< 3 { applyf(FF, 1.0) })[0]  //~ E0808
   x
 }
 

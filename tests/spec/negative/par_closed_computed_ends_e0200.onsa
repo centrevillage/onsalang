@@ -13,25 +13,25 @@
 const N: U32 = 3
 
 pub flow sums_in_both_ends(x: F32 at sample) -> [F32; 4] at sample {
-  par~ i in N - 2 ..= N + 1 {                          //~ E0200
+  par i in N - 2 ..= N + 1 {                          //~ E0200
     x * F32.round_from(i)
   }
 }
 
 pub flow computed_upper_end(x: F32 at sample) -> [F32; 4] at sample {
-  par~ i in 0 ..= N + 1 {                              //~ E0200
+  par i in 0 ..= N + 1 {                              //~ E0200
     x * F32.round_from(i)
   }
 }
 
 pub flow computed_lower_end(x: F32 at sample) -> [F32; 3] at sample {
-  par~ i in N - 1 ..= 4 {                              //~ E0200
+  par i in N - 1 ..= 4 {                              //~ E0200
     x * F32.round_from(i)
   }
 }
 
 pub flow computed_end_bound_by_let(x: F32 at sample) -> [F32; 2] at sample {
-  let rows = par~ i in 2 ..= N * 1 {                   //~ E0200
+  let rows = par i in 2 ..= N * 1 {                   //~ E0200
     x + F32.round_from(i)
   }
   rows

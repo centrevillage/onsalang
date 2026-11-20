@@ -150,7 +150,7 @@ pub flow in_an_instance_argument_in_a_let(x: F32 at sample) -> F32 at sample {
 }
 
 pub flow in_a_par_body(x: F32 at sample) -> F32 at sample {
-  let ys = par~ i in 0 ..< 2 {
+  let ys = par i in 0 ..< 2 {
     apply(F, x) * F32.round_from(i)                 //~ E0810
   }
   ys[0] + ys[1]
@@ -276,7 +276,7 @@ pub flow delay_of_a_number(x: F32 at sample) -> F32 at sample {
 }
 
 pub flow par_of_numbers(x: F32 at sample) -> F32 at sample {
-  let ys = par~ i in 0 ..< 2 {
+  let ys = par i in 0 ..< 2 {
     dbl(x) * F32.round_from(i)
   }
   ys[0] + ys[1]

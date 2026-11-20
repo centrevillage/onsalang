@@ -33,19 +33,19 @@
 // leaves = ["96:11 E0806"]
 //
 // [[test.fix]]
-// at = "101:12"
+// at = "101:31"
 // code = "E0811"
 // candidate = 1
 // leaves = ["102:3 E0806"]
 //
 // [[test.fix]]
-// at = "107:12"
+// at = "107:31"
 // code = "E0811"
 // candidate = 1
 // leaves = ["108:11 E0806"]
 
 // W7-04 U1a/t, S-267, R-286: the restrictions of a flow body (E0806, §11.2) with the other errors of the names stage of a flow (§18.1): the `~` of a call
-// (E0811 of a flow without it, E0812 of a function with it, E0811 of a `par` without it, §2.6, §11.5), the clock of the heading (E0810, §11.3), the
+// (E0811 of a flow without it, E0812 of a function with it, E0811 of a flow called without it in the body of a `par`, §2.6, §11.5; W7-06 U0/t, S-1177: a `par` itself is judged by the content of its body in the flow check stage, not here), the clock of the heading (E0810, §11.3), the
 // mode of an input (E0806, §11.2) and E0801 (§11.2). The first by position is reported. The errors of the flow stage (E0815 of an `at` to a slower
 // clock, E0813 of a `block` value in a delay, §11.3, §11.4) are not reported with an E0806 of the same unit, whatever the position: the names stage is
 // before the flow stage. A call without `~` inside a closure is after the start of the closure, so the E0806 of the closure is reported.
@@ -97,21 +97,21 @@ pub flow tilde_on_a_function_then_function_value(x: F32 at sample) -> F32 at sam
   b
 }
 
-pub flow par_without_tilde_then_var(x: F32 at sample) -> F32 at sample {
-  let ys = par i in 0 ..< 2 { x }                   //~ E0811
+pub flow call_without_tilde_in_a_par_body_then_var(x: F32 at sample) -> F32 at sample {
+  let ys = par i in 0 ..< 2 { lp(x) }                   //~ E0811
   var a = x
   a
 }
 
-pub flow par_without_tilde_then_function_value(x: F32 at sample) -> F32 at sample {
-  let ys = par i in 0 ..< 2 { x }                   //~ E0811
+pub flow call_without_tilde_in_a_par_body_then_function_value(x: F32 at sample) -> F32 at sample {
+  let ys = par i in 0 ..< 2 { lp(x) }                   //~ E0811
   let k = g
   x
 }
 
-pub flow var_then_par_without_tilde(x: F32 at sample) -> F32 at sample {
+pub flow var_then_call_without_tilde_in_a_par_body(x: F32 at sample) -> F32 at sample {
   var a = x                                         //~ E0806
-  let ys = par i in 0 ..< 2 { x }
+  let ys = par i in 0 ..< 2 { lp(x) }
   a
 }
 
@@ -214,9 +214,9 @@ pub flow function_value_then_tilde_on_a_function(x: F32 at sample) -> F32 at sam
   b
 }
 
-pub flow function_value_then_par_without_tilde(x: F32 at sample) -> F32 at sample {
+pub flow function_value_then_call_without_tilde_in_a_par_body(x: F32 at sample) -> F32 at sample {
   let k = g                                         //~ E0806
-  let ys = par i in 0 ..< 2 { x }
+  let ys = par i in 0 ..< 2 { lp(x) }
   x
 }
 

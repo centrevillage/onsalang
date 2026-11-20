@@ -28,7 +28,7 @@
 pub fn half_open(n: U32) -> U32 {
   var t: U32 = 0
   for i in 0 ..<
-    n {                                            //~ E0020
+    n {                                          //~ E0020
     t = t + i
   }
   t
@@ -37,7 +37,7 @@ pub fn half_open(n: U32) -> U32 {
 pub fn closed(n: U32) -> U32 {
   var t: U32 = 0
   for i in 0 ..=
-    n {                                            //~ E0020
+    n {                                          //~ E0020
     t = t + i
   }
   t
@@ -46,7 +46,7 @@ pub fn closed(n: U32) -> U32 {
 pub fn two_dots(n: U32) -> U32 {
   var t: U32 = 0
   for i in 0 ..<
-    n {                                             //~ E0020
+    n {                                           //~ E0020
     t = t + i
   }
   t
@@ -55,7 +55,7 @@ pub fn two_dots(n: U32) -> U32 {
 pub fn three_dots(n: U32) -> U32 {
   var t: U32 = 0
   for i in 0 ..<
-    n {                                            //~ E0020
+    n {                                          //~ E0020
     t = t + i
   }
   t
@@ -64,7 +64,7 @@ pub fn three_dots(n: U32) -> U32 {
 pub fn named_ends(lo: U32, hi: U32) -> U32 {
   var t: U32 = 0
   for i in lo ..<
-    hi {                                           //~ E0020
+    hi {                                         //~ E0020
     t = t + i
   }
   t
@@ -73,7 +73,7 @@ pub fn named_ends(lo: U32, hi: U32) -> U32 {
 pub fn ends_with_operators(lo: U32, hi: U32) -> U32 {
   var t: U32 = 0
   for i in lo + 1 ..<
-    hi - 1 {                                       //~ E0020
+    hi - 1 {                                     //~ E0020
     t = t + i
   }
   t
@@ -82,7 +82,7 @@ pub fn ends_with_operators(lo: U32, hi: U32) -> U32 {
 pub fn symbol_with_a_space(n: U32) -> U32 {
   var t: U32 = 0
   for i in 0 ..<
-    n {                                           //~ E0020
+    n {                                         //~ E0020
     t = t + i
   }
   t
@@ -92,7 +92,7 @@ pub fn nested(n: U32) -> U32 {
   var t: U32 = 0
   for i in 0..<n {
     for j in 0 ..<
-      i {                                          //~ E0020
+      i {                                        //~ E0020
       t = t + j
     }
   }
@@ -103,7 +103,7 @@ pub fn in_a_branch(n: U32, c: Bool) -> U32 {
   var t: U32 = 0
   if c {
     for i in 0 ..<
-      n {                                          //~ E0020
+      n {                                        //~ E0020
       t = t + i
     }
   }
@@ -111,22 +111,22 @@ pub fn in_a_branch(n: U32, c: Bool) -> U32 {
 }
 
 pub flow par_half_open(x: F32 at sample) -> [F32; 4] at sample {
-  par~ i in 0 ..<
-    4 {                                            //~ E0020
+  par i in 0 ..<
+    4 {                                          //~ E0020
     x * F32.round_from(i)
   }
 }
 
 pub flow par_closed(x: F32 at sample) -> [F32; 4] at sample {
-  par~ i in 0 ..=
-    3 {                                            //~ E0020
+  par i in 0 ..=
+    3 {                                          //~ E0020
     x * F32.round_from(i)
   }
 }
 
 pub flow par_two_dots(x: F32 at sample) -> [F32; 4] at sample {
-  par~ i in 0 ..<
-    4 {                                             //~ E0020
+  par i in 0 ..<
+    4 {                                           //~ E0020
     x * F32.round_from(i)
   }
 }
@@ -134,8 +134,8 @@ pub flow par_two_dots(x: F32 at sample) -> [F32; 4] at sample {
 // The comments of the line before it, and the lines between.
 pub fn comment_at_the_end_of_the_line(n: U32) -> U32 {
   var t: U32 = 0
-  for i in 0 ..<  // the start of the range
-    n {                                            //~ E0020
+  for i in 0 ..< // the start of the range
+    n {                                          //~ E0020
     t = t + i
   }
   t
@@ -145,7 +145,7 @@ pub fn comment_line_between(n: U32) -> U32 {
   var t: U32 = 0
   for i in 0 ..<
     // the end of the range
-    n {                                            //~ E0020
+    n {                                          //~ E0020
     t = t + i
   }
   t
@@ -153,8 +153,8 @@ pub fn comment_line_between(n: U32) -> U32 {
 
 pub fn two_dots_with_a_comment(n: U32) -> U32 {
   var t: U32 = 0
-  for i in 0 ..<  // the start of the range
-    n {                                             //~ E0020
+  for i in 0 ..< // the start of the range
+    n {                                           //~ E0020
     t = t + i
   }
   t
@@ -165,7 +165,7 @@ pub fn two_dots_with_a_comment(n: U32) -> U32 {
 pub fn range_and_brace(n: U32) -> U32 {
   var t: U32 = 0
   for i in 0 ..<
-    n                                              //~ E0020
+    n                                            //~ E0020
   {
     t = t + i
   }

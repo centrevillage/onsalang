@@ -44,7 +44,7 @@ fn a_held_flow_error_is_reported_by_position_with_the_walk_and_a_type_error_wins
     let src = format!("{HEAD}  let b = prev~(p)\n  let a = delay~(x, 0)\n  x\n}}\n");
     assert_eq!(held(&src, "f"), (vec![(Code::E0813, Stage::Flow)], false));
     // R-329: a type error after it is reported, and the held one is not.
-    let src = format!("{HEAD}  let a = par~ i in 2 ..< 2 {{ x }}\n  let b: Bool = 1.0\n  x\n}}\n");
+    let src = format!("{HEAD}  let a = par i in 2 ..< 2 {{ x }}\n  let b: Bool = 1.0\n  x\n}}\n");
     assert_eq!(held(&src, "f"), (vec![(Code::E0401, Stage::Types)], false));
 }
 

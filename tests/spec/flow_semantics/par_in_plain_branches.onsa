@@ -1,0 +1,158 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.3", "§11.5"]
+
+// W7-06 U0/t, S-1177 (§11.5: "`par` は状態を持つものでないので、普通の `if` / `match` の枝とガード、`&&` / `||` の右辺に
+// も書け、取られたときだけ評価する"; §11.3: "サンプルごとに決まる条件の枝の中の式は、取られたときだけ panic する"と、
+// "`init`・`block` の段で決まる条件に守られた式は、条件が成り立たなければ panic しない"): a `par` without state in a
+// branch of a plain `if`, in an arm of a `match` on an enum, on the right of `&&` / `||`, and nested in another `par`.
+// The guard of a `match` is in par_in_a_match_guard.onsa (the value of a `match` with a guard is E0200 in the lowering
+// of this version, W8-06). The body reads the constant table at an index that is out of the table for the `block` value 3 (`TABLE[k + i]` with `i` = 1), so
+// a body that is evaluated when its branch is not taken would panic: the tests that do not take the branch have to
+// finish, the tests that take it read the values worked out by hand. The body that holds a part of `block` (`TABLE[k + i]`
+// is a value of each replica, hoisted when the condition is decided at `block`, and then written only when it holds) is
+// in `in_a_branch_of_block`. `in_a_delay` holds the `par` in the first argument of a delay, which is lowered twice
+// (the value and the store at the end of the sample). The `render` of each is over the samples of the input; the output
+// of an array is one buffer for each element (`o.out[j][t]`).
+
+const TABLE: [F32; 4] = [1.0, 2.0, 3.0, 4.0]
+
+pub enum Side {
+  Hi,
+  Lo,
+}
+
+pub rt fn pair_sum(xs: [F32; 2]) -> F32 {
+  xs[0] + xs[1]
+}
+
+// The condition is decided per sample, so nothing is hoisted: the body is evaluated on the samples where `x > 0.5`.
+pub flow in_a_branch(x: F32 at sample, k: U32 at block) -> [F32; 2] at sample {
+  if x > 0.5 { par i in 0 ..< 2 { TABLE[k + i] } } else { [0.0, 0.0] }
+}
+
+// The condition is decided at `block`: the part `TABLE[k + i]` of each replica is hoisted and evaluated at `block`, only when `c`.
+pub flow in_a_branch_of_block(x: F32 at sample, c: Bool at block, k: U32 at block) -> [F32; 2] at sample {
+  if c { par i in 0 ..< 2 { TABLE[k + i] * x } } else { [0.0, 0.0] }
+}
+
+pub flow in_an_arm(x: F32 at sample, k: U32 at block) -> [F32; 2] at sample {
+  let side = if x > 0.5 { Side.Hi } else { Side.Lo }
+  match side {
+    Side.Hi => par i in 0 ..< 2 { TABLE[k + i] },
+    Side.Lo => [0.0, 0.0],
+  }
+}
+
+pub flow on_the_right_of_and(x: F32 at sample, k: U32 at block) -> F32 at sample {
+  if x > 0.5 && pair_sum(par i in 0 ..< 2 { TABLE[k + i] }) > 4.0 { 1.0 } else { 0.0 }
+}
+
+pub flow on_the_right_of_or(x: F32 at sample, k: U32 at block) -> F32 at sample {
+  if x <= 0.5 || pair_sum(par i in 0 ..< 2 { TABLE[k + i] }) > 4.0 { 1.0 } else { 0.0 }
+}
+
+pub flow nested_in_a_branch(x: F32 at sample) -> [F32; 2] at sample {
+  if x > 0.5 {
+    par i in 0 ..< 2 { pair_sum(par j in 0 ..< 2 { x * F32.round_from(i + j) }) }
+  } else {
+    [0.0, 0.0]
+  }
+}
+
+// The argument of the delay is `x` summed over the index 0 and 1 (`x * 0 + x * 1`) when `x > 0.5`, and 0.0 when not.
+pub flow in_a_delay(x: F32 at sample) -> F32 at sample {
+  prev~(if x > 0.5 { pair_sum(par i in 0 ..< 2 { x * F32.round_from(i) }) } else { 0.0 })
+}
+
+test "a par in a branch that is not taken is not evaluated: the index is out of the table for k = 3" {
+  let xs: [F32; 2] = [0.25, 0.5]
+  let a = in_a_branch.render(in_a_branch.Params { k: 3 }, xs, 8.0)
+  assert a.out[0][0] == 0.0
+  assert a.out[0][1] == 0.0
+  assert a.out[1][0] == 0.0
+  assert a.out[1][1] == 0.0
+  let b = in_a_branch_of_block.render(in_a_branch_of_block.Params { c: false, k: 3 }, xs, 8.0)
+  assert b.out[0][0] == 0.0
+  assert b.out[0][1] == 0.0
+  assert b.out[1][0] == 0.0
+  assert b.out[1][1] == 0.0
+  let c = in_an_arm.render(in_an_arm.Params { k: 3 }, xs, 8.0)
+  assert c.out[0][0] == 0.0
+  assert c.out[1][1] == 0.0
+}
+
+test "a par in a branch is evaluated on the samples where the branch is taken" {
+  // x = 0.25, 0.75 and k = 1: the second sample takes the branch and reads TABLE[1], TABLE[2].
+  let xs: [F32; 2] = [0.25, 0.75]
+  let a = in_a_branch.render(in_a_branch.Params { k: 1 }, xs, 8.0)
+  assert a.out[0][0] == 0.0
+  assert a.out[0][1] == 2.0
+  assert a.out[1][0] == 0.0
+  assert a.out[1][1] == 3.0
+  let c = in_an_arm.render(in_an_arm.Params { k: 1 }, xs, 8.0)
+  assert c.out[0][0] == 0.0
+  assert c.out[0][1] == 2.0
+  assert c.out[1][0] == 0.0
+  assert c.out[1][1] == 3.0
+}
+
+test "a part of block in a par of a branch decided at block is written when the condition holds" {
+  // c = true, k = 1, x = 1.0, 2.0: the replica 0 is TABLE[1] * x = 2x and the replica 1 is TABLE[2] * x = 3x.
+  let xs: [F32; 2] = [1.0, 2.0]
+  let b = in_a_branch_of_block.render(in_a_branch_of_block.Params { c: true, k: 1 }, xs, 8.0)
+  assert b.out[0][0] == 2.0
+  assert b.out[0][1] == 4.0
+  assert b.out[1][0] == 3.0
+  assert b.out[1][1] == 6.0
+}
+
+test "a par on the right of && or || is evaluated only when it is reached" {
+  // k = 3 reads out of the table, so the samples that do not reach it have to finish: x = 0.25, 0.5 do not take `x > 0.5`.
+  let low: [F32; 2] = [0.25, 0.5]
+  let a = on_the_right_of_and.render(on_the_right_of_and.Params { k: 3 }, low, 8.0)
+  assert a.out[0] == 0.0
+  assert a.out[1] == 0.0
+  // `x <= 0.5` holds for both, so the right of `||` is not reached and the result is 1.0.
+  let o = on_the_right_of_or.render(on_the_right_of_or.Params { k: 3 }, low, 8.0)
+  assert o.out[0] == 1.0
+  assert o.out[1] == 1.0
+}
+
+test "a par on the right of && or || gives the value when it is reached" {
+  // x = 0.25, 0.75. k = 0: the sum is 1 + 2 = 3, not above 4. k = 1: the sum is 2 + 3 = 5, above 4.
+  let xs: [F32; 2] = [0.25, 0.75]
+  let a0 = on_the_right_of_and.render(on_the_right_of_and.Params { k: 0 }, xs, 8.0)
+  assert a0.out[0] == 0.0
+  assert a0.out[1] == 0.0
+  let a1 = on_the_right_of_and.render(on_the_right_of_and.Params { k: 1 }, xs, 8.0)
+  assert a1.out[0] == 0.0
+  assert a1.out[1] == 1.0
+  // `x <= 0.5 || sum > 4.0`: the first sample is true by the left, the second by the right only when k = 1.
+  let o0 = on_the_right_of_or.render(on_the_right_of_or.Params { k: 0 }, xs, 8.0)
+  assert o0.out[0] == 1.0
+  assert o0.out[1] == 0.0
+  let o1 = on_the_right_of_or.render(on_the_right_of_or.Params { k: 1 }, xs, 8.0)
+  assert o1.out[0] == 1.0
+  assert o1.out[1] == 1.0
+}
+
+test "a par nested in a par in a branch" {
+  // x = 1.0, 0.25. Taken only at the first sample: the replica i sums x * (i + 0) and x * (i + 1), so 1x and 3x.
+  let xs: [F32; 2] = [1.0, 0.25]
+  let o = nested_in_a_branch.render(xs, 8.0)
+  assert o.out[0][0] == 1.0
+  assert o.out[0][1] == 0.0
+  assert o.out[1][0] == 3.0
+  assert o.out[1][1] == 0.0
+}
+
+test "a par in the first argument of a delay in a branch" {
+  // The argument is 1.0, 0.0, 2.0 (x when x > 0.5, else 0.0), and the output is the argument of the sample before, 0.0 at the first.
+  let xs: [F32; 3] = [1.0, 0.25, 2.0]
+  let o = in_a_delay.render(xs, 8.0)
+  assert o.out[0] == 0.0
+  assert o.out[1] == 1.0
+  assert o.out[2] == 0.0
+}

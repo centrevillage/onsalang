@@ -6,9 +6,9 @@
 //! else is the E0812 of §2.6, whose candidate
 //! takes the `~` off only when the callee is called so (S-590, S-817). An
 //! instance of a flow is recorded here, the one place that decides it
-//! ([`super::BodyNames::instances`], D-15). A `par` without `~` is E0811
-//! too (S-745). The `~` of the branches and of `if~` / `match~` is the flow
-//! stage's (§18.1).
+//! ([`super::BodyNames::instances`], D-15). The `~` of `par` / `par~`, of
+//! the branches and of `if~` / `match~`, which their bodies decide, is the
+//! flow stage's (§18.1, S-1177).
 //!
 //! Outside a flow body, what only a flow body holds is the E0821 of §11.1
 //! ([`outside_flow`], the one diagnostic of the walk, the signatures and
@@ -89,8 +89,9 @@ pub(crate) fn outside_flow(form: Outside, span: Span, text: &str) -> Diagnostic 
     }
 }
 
-/// The `par` of the `par` expression at `span`, with its `~` if any (S-745).
-pub(super) fn par_head(span: Span, tilde: Option<Span>) -> Span {
+/// The `par` of the `par` expression at `span`, with its `~` if any (S-745):
+/// the main place of its E0821 and of its E0811 or E0812 (S-392).
+pub(crate) fn par_head(span: Span, tilde: Option<Span>) -> Span {
     Span { end: tilde.map_or(span.start + "par".len() as u32, |t| t.end), ..span }
 }
 
@@ -113,16 +114,6 @@ impl Walker<'_> {
     /// E0821 for the form `form` at `span` outside a flow body.
     pub(super) fn outside(&mut self, form: Outside, span: Span) -> super::Stop {
         self.fail(Fail::Report(outside_flow(form, span, self.text)))
-    }
-
-    /// E0811 at the `par` of the flow body `e` written without `~` (§11.5,
-    /// S-745), with the candidate that adds it. Nothing of it is read before.
-    pub(super) fn par_without_tilde(&mut self, e: ExprId) -> super::Stop {
-        let span = self.ast.expr(e).span;
-        let kw = par_head(span, None);
-        let msg = "`par~` replicates the structure of a flow and is written with `~` (§2.6, §11.5)";
-        let fix = Fix::insert("add `~`", span.file, kw.end, "~");
-        self.fail(Fail::Report(Diagnostic::new(Stage::Names, Code::E0811, kw, msg).with_found("par").with_fix(fix)))
     }
 
     /// Outside a flow body, the call `e` of a flow: `f~(…)` before the names

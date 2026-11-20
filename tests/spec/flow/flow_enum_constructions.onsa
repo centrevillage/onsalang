@@ -91,7 +91,7 @@ pub flow variant_in_an_arm(x: F32 at sample, g: F32 at block) -> F32 at sample {
 }
 
 pub flow variant_in_a_par_body(x: F32 at sample, g: F32 at block) -> F32 at sample {
-  let ms = par~ i in 0 ..< 2 { Mode.Gain(g) }
+  let ms = par i in 0 ..< 2 { Mode.Gain(g) }
   amount(ms[0], x)
 }
 

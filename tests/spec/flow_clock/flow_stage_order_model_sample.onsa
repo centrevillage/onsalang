@@ -26,7 +26,7 @@ pub flow m0(x: F32 at sample, p: F32 at block, k: I32 at sample, n: U32 at sampl
 
 pub flow m1(x: F32 at sample, p: F32 at block, k: I32 at sample, n: U32 at sample, c: Bool at sample) -> F32 at sample {
   let v0 = vdelay~(k, 1, 5000000000)  //~ E0408
-  let v1 = (par~ i000 in 3 ..< 3 { slow(x) })[0]
+  let v1 = (par i000 in 3 ..< 3 { slow(x) })[0]
   x
 
 }
@@ -95,8 +95,8 @@ pub flow m10(x: F32 at sample, p: F32 at block, k: I32 at sample, n: U32 at samp
 }
 
 pub flow m11(x: F32 at sample, p: F32 at block, k: I32 at sample, n: U32 at sample, c: Bool at sample) -> F32 at sample {
-  let v0 = (par~ i000 in 3 ..< 3 { (par~ w001 in 0 ..< n { x })[0] })[0]  //~ E0417
-  let v1 = (par~ w002 in 0 ..< 5000000000 { x })[0]
+  let v0 = (par i000 in 3 ..< 3 { (par w001 in 0 ..< n { x })[0] })[0]  //~ E0417
+  let v1 = (par w002 in 0 ..< 5000000000 { x })[0]
   let v2 = delay~(sample_tick(), 0)
   x
 
@@ -110,7 +110,7 @@ pub flow m12(x: F32 at sample, p: F32 at block, k: I32 at sample, n: U32 at samp
 }
 
 pub flow m13(x: F32 at sample, p: F32 at block, k: I32 at sample, n: U32 at sample, c: Bool at sample) -> F32 at sample {
-  let v0 = (par~ i000 in 0 ..< 2 { ((par~ i001 in 0 ..< 2 { noisy(x) })[0] + x) })[0]  //~ E0805
+  let v0 = (par i000 in 0 ..< 2 { ((par i001 in 0 ..< 2 { noisy(x) })[0] + x) })[0]  //~ E0805
   let v1 = prev~(p)
   vdelay~(prev~((prev~(prev~(x)) + delay~(x, 1 + 1))), x, 8)
 
@@ -146,14 +146,14 @@ pub flow m17(x: F32 at sample, p: F32 at block, k: I32 at sample, n: U32 at samp
 }
 
 pub flow m18(x: F32 at sample, p: F32 at block, k: I32 at sample, n: U32 at sample, c: Bool at sample) -> F32 at sample {
-  let v0 = ((par~ j000 in 2 ..< 2 { x })[0] + x)  //~ E0808
+  let v0 = ((par j000 in 2 ..< 2 { x })[0] + x)  //~ E0808
   (par~ i001 in 3 ..< 3 { (par~ i002 in 0 ..< 2 { (par~ i003 in 3 ..< 3 { delay~(x, 1 + 1) })[0] })[0] })[0]
 
 }
 
 pub flow m19(x: F32 at sample, p: F32 at block, k: I32 at sample, n: U32 at sample, c: Bool at sample) -> F32 at sample {
   let (q000, r001) = x  //~ E0401
-  delay~(prev~(((par~ w002 in 0 ..< 5000000000 { x })[0] + id1(x, x))), 0)
+  delay~(prev~(((par w002 in 0 ..< 5000000000 { x })[0] + id1(x, x))), 0)
 
 }
 
@@ -165,7 +165,7 @@ pub flow m20(x: F32 at sample, p: F32 at block, k: I32 at sample, n: U32 at samp
 
 pub flow m21(x: F32 at sample, p: F32 at block, k: I32 at sample, n: U32 at sample, c: Bool at sample) -> F32 at sample {
   let (q000, r001) = x  //~ E0401
-  let v1 = ((par~ w002 in 0 ..< 5000000000 { x })[0] + delay~(x, 1))
+  let v1 = ((par w002 in 0 ..< 5000000000 { x })[0] + delay~(x, 1))
   x
 
 }
@@ -209,19 +209,19 @@ pub flow m26(x: F32 at sample, p: F32 at block, k: I32 at sample, n: U32 at samp
 pub flow m27(x: F32 at sample, p: F32 at block, k: I32 at sample, n: U32 at sample, c: Bool at sample) -> F32 at sample {
   let v0 = ((x at block) + noisy(x))
   let v1 = prev~(delay~(vdelay~(x, x, 0), 4))
-  (par~ i000 in 0 ..< 2 { id1(x, x) })[0]  //~ E0412
+  (par i000 in 0 ..< 2 { id1(x, x) })[0]  //~ E0412
 
 }
 
 pub flow m28(x: F32 at sample, p: F32 at block, k: I32 at sample, n: U32 at sample, c: Bool at sample) -> F32 at sample {
-  let v0 = (par~ i000 in 0 ..< 2 { ((par~ i001 in 0 ..< 2 { (undef_name + x) })[0] + x) })[0]  //~ E0302
+  let v0 = (par i000 in 0 ..< 2 { ((par i001 in 0 ..< 2 { (undef_name + x) })[0] + x) })[0]  //~ E0302
   ((if c { lp~(x) } else { x }) + x)
 
 }
 
 pub flow m29(x: F32 at sample, p: F32 at block, k: I32 at sample, n: U32 at sample, c: Bool at sample) -> F32 at sample {
   let v0 = lp~(prev~(id1(x, x)))  //~ E0412
-  vdelay~((par~ w000 in 0 ..< 5000000000 { x })[0], x, 8)
+  vdelay~((par w000 in 0 ..< 5000000000 { x })[0], x, 8)
 
 }
 
@@ -234,7 +234,7 @@ pub flow m30(x: F32 at sample, p: F32 at block, k: I32 at sample, n: U32 at samp
 
 pub flow m31(x: F32 at sample, p: F32 at block, k: I32 at sample, n: U32 at sample, c: Bool at sample) -> F32 at sample {
   let v0 = (delay~(x, n) + lp~(x, x))  //~ E0417
-  (par~ i000 in 0 ..< 2 { (((if c { prev~(x) } else { x }) + (par~ j001 in 2 ..< 2 { x })[0]) + x) })[0]
+  (par~ i000 in 0 ..< 2 { (((if c { prev~(x) } else { x }) + (par j001 in 2 ..< 2 { x })[0]) + x) })[0]
 
 }
 

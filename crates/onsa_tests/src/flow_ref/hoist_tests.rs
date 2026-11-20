@@ -367,7 +367,7 @@ fn zero_frames_u32(src: &'static str, init: U32Inputs, block: U32Inputs) -> Opti
 }
 
 const PAR_BLOCK: &str = "flow f(x: U32 at sample, d: U32 at block) -> U32 at sample {
-  let ys = par~ i in 0 ..< 2 { x * (100 / (d - i)) }
+  let ys = par i in 0 ..< 2 { x * (100 / (d - i)) }
   ys[0] + ys[1]
 }";
 
@@ -391,7 +391,7 @@ fn a_part_of_block_of_a_par_body_is_made_at_block_for_each_replica() {
 fn a_part_of_init_of_a_par_body_is_made_at_init_for_each_replica() {
     // `100 / (k - i)`: k = 1 divides by zero for i = 1 at `init`, before any call; k = 2 gives 50 and 100, 150 * x (x = 2: 300), kept by the next call.
     let src = "flow f(x: U32 at sample, k: U32 at init) -> U32 at sample {
-  let ys = par~ i in 0 ..< 2 { x * (100 / (k - i)) }
+  let ys = par i in 0 ..< 2 { x * (100 / (k - i)) }
   ys[0] + ys[1]
 }";
     assert_eq!(zero_frames_u32(src, &[("k", 1)], &[]), Some((PanicAt::Init, PanicKind::DivZero)));
@@ -406,13 +406,13 @@ fn a_part_of_init_of_a_par_body_is_made_at_init_for_each_replica() {
 
 #[test]
 fn a_part_of_block_that_does_not_read_the_index_and_the_output_of_block_are_made_at_block() {
-    // `100 / d` in the body is the same in each replica and panics at `block` with d = 0; the same for the `par~` of the output expression.
+    // `100 / d` in the body is the same in each replica and panics at `block` with d = 0; the same for the `par` of the output expression.
     let in_a_let = "flow f(x: U32 at sample, d: U32 at block) -> U32 at sample {
-  let ys = par~ i in 0 ..< 2 { x * (100 / d) + i }
+  let ys = par i in 0 ..< 2 { x * (100 / d) + i }
   ys[0] + ys[1]
 }";
     let in_the_output = "flow f(x: U32 at sample, d: U32 at block) -> U32 at sample {
-  sum2(par~ i in 0 ..< 2 { x * (100 / (d - i)) })
+  sum2(par i in 0 ..< 2 { x * (100 / (d - i)) })
 }
 rt fn sum2(xs: [U32; 2]) -> U32 { xs[0] + xs[1] }";
     assert_eq!(zero_frames_u32(in_a_let, &[], &[("d", 0)]), Some((PanicAt::Block, PanicKind::DivZero)));
@@ -425,7 +425,7 @@ rt fn sum2(xs: [U32; 2]) -> U32 { xs[0] + xs[1] }";
 fn a_par_in_a_par_has_a_part_for_each_pair() {
     // `100 / (d - (i + j))`: the pair (1, 1) divides by zero for d = 2; d = 3 gives 33 + 50 + 50 + 100 = 233 (x = 1).
     let src = "flow f(x: U32 at sample, d: U32 at block) -> U32 at sample {
-  let m = par~ i in 0 ..< 2 { sum2(par~ j in 0 ..< 2 { x * (100 / (d - (i + j))) }) }
+  let m = par i in 0 ..< 2 { sum2(par j in 0 ..< 2 { x * (100 / (d - (i + j))) }) }
   m[0] + m[1]
 }
 rt fn sum2(xs: [U32; 2]) -> U32 { xs[0] + xs[1] }";
@@ -444,14 +444,14 @@ fn a_condition_in_a_par_body_guards_the_part_of_each_replica() {
     // makes nothing (n = 0 does not panic, though `n - i` would be below 0). A condition of `sample` leaves the part where it is reached: a call of
     // 0 frames does not panic, a frame that does not take the branch does not (x = 0), the one that takes it does (x = 1, n = 1, the frame 0).
     let block = "flow f(x: U32 at sample, n: U32 at block) -> U32 at sample {
-  let ys = par~ i in 0 ..< 2 { if n != 0 { x * (100 / (n - i)) } else { x } }
+  let ys = par i in 0 ..< 2 { if n != 0 { x * (100 / (n - i)) } else { x } }
   ys[0] + ys[1]
 }";
     assert_eq!(zero_frames_u32(block, &[], &[("n", 1)]), Some((PanicAt::Block, PanicKind::DivZero)));
     assert_eq!(zero_frames_u32(block, &[], &[("n", 2)]), None);
     assert_eq!(zero_frames_u32(block, &[], &[("n", 0)]), None);
     let sample = "flow f(x: U32 at sample, n: U32 at block) -> U32 at sample {
-  let ys = par~ i in 0 ..< 2 { if x > 0 { x * (100 / (n - i)) } else { x } }
+  let ys = par i in 0 ..< 2 { if x > 0 { x * (100 / (n - i)) } else { x } }
   ys[0] + ys[1]
 }";
     assert_eq!(zero_frames_u32(sample, &[], &[("n", 1)]), None);
@@ -466,9 +466,9 @@ fn a_condition_in_a_par_body_guards_the_part_of_each_replica() {
 
 #[test]
 fn the_index_of_a_par_is_of_init_not_a_constant() {
-    // The `par~` of `c` reads the index only: its clock is `init` (§11.5: a value of `init`, not a compile-time constant).
+    // The `par` of `c` reads the index only: its clock is `init` (§11.5: a value of `init`, not a compile-time constant).
     let src = "flow f(x: U32 at sample) -> U32 at sample {
-  let c = par~ i in 0 ..< 2 { i * 2 }
+  let c = par i in 0 ..< 2 { i * 2 }
   x + c[0] + c[1]
 }";
     with_flow(src, "f", |view, def| {
@@ -479,10 +479,10 @@ fn the_index_of_a_par_is_of_init_not_a_constant() {
 
 #[test]
 fn a_whole_par_of_init_is_one_part_made_at_init_and_kept_by_reset() {
-    // `x * sum3(par~ i in 0 ..< 3 { 100 / (k - i) })` is of `init` as a whole: k = 2 divides by zero for i = 2 at `init`; k = 4 gives
+    // `x * sum3(par i in 0 ..< 3 { 100 / (k - i) })` is of `init` as a whole: k = 2 divides by zero for i = 2 at `init`; k = 4 gives
     // 25 + 33 + 50 = 108 (x = 1; x = 2 after `reset`: 216), the value kept.
     let src = "flow f(x: U32 at sample, k: U32 at init) -> U32 at sample {
-  x * sum3(par~ i in 0 ..< 3 { 100 / (k - i) })
+  x * sum3(par i in 0 ..< 3 { 100 / (k - i) })
 }
 rt fn sum3(xs: [U32; 3]) -> U32 { xs[0] + xs[1] + xs[2] }";
     assert_eq!(zero_frames_u32(src, &[("k", 2)], &[]), Some((PanicAt::Init, PanicKind::DivZero)));

@@ -200,12 +200,13 @@ impl Gen<'_> {
                 let reads = e1.1.union(&e2.1).cloned().collect();
                 Let { line: format!("  let (_, _): (F32, F32) = ({}, {})", e1.0, e2.0), names: vec![], reads }
             }
-            // a `par~` (an array of three)
+            // a `par~` (an array of three), written `par` when the body holds nothing with state (§11.5, S-1177)
             11 | 12 => {
                 let e = self.expr(1, true, &[]);
                 let text = if self.rng.chance(50) { format!("({} + F32.round_from(i))", e.0) } else { e.0 };
+                let tilde = if text.contains("~(") { "~" } else { "" };
                 Let {
-                    line: format!("  let {nm}: [F32; 3] = par~ i in 0 ..< 3 {{ {text} }}"),
+                    line: format!("  let {nm}: [F32; 3] = par{tilde} i in 0 ..< 3 {{ {text} }}"),
                     names: vec![nm],
                     reads: e.1,
                 }

@@ -25,32 +25,32 @@ pub flow gain(x: F32 at sample, g: F32 at block) -> F32 at sample {
 
 // A part of `block` that reads the index: one value for each replica, so 1 + 2 + 3 = 6 times f0 * x.
 pub flow block_reads_i(x: F32 at sample, f0: F32 at block) -> F32 at sample {
-  let ys = par~ i in 0 ..< 3 { x * (f0 * ratio(i)) }
+  let ys = par i in 0 ..< 3 { x * (f0 * ratio(i)) }
   ys[0] + ys[1] + ys[2]
 }
 
 // A part of `block` that does not read the index: the same value in each replica (3 replicas, 2 * f0 * x each), and the index added by the replica: 0 + 1 + 2 = 3.
 pub flow block_ignores_i(x: F32 at sample, f0: F32 at block) -> F32 at sample {
-  let ys = par~ i in 0 ..< 3 { x * (f0 * 2.0) + F32.round_from(i) }
+  let ys = par i in 0 ..< 3 { x * (f0 * 2.0) + F32.round_from(i) }
   ys[0] + ys[1] + ys[2]
 }
 
 // A part of `init` that reads the index: k * (0 + 1 + 2) * x.
 pub flow init_reads_i(x: F32 at sample, k: F32 at init) -> F32 at sample {
-  let ys = par~ i in 0 ..< 3 { x * (k * F32.round_from(i)) }
+  let ys = par i in 0 ..< 3 { x * (k * F32.round_from(i)) }
   ys[0] + ys[1] + ys[2]
 }
 
 // A part of `block` that holds a part of `init`: g * (k * (i + 1)), 1 + 2 + 3 = 6 times g * k * x.
 pub flow init_in_block(x: F32 at sample, g: F32 at block, k: F32 at init) -> F32 at sample {
-  let ys = par~ i in 0 ..< 3 { x * (g * (k * F32.round_from(i + 1))) }
+  let ys = par i in 0 ..< 3 { x * (g * (k * F32.round_from(i + 1))) }
   ys[0] + ys[1] + ys[2]
 }
 
 // A part of `block` that reads a `let` of `block` outside the `par~`: g = 2 * f0, so g * (1 + 2) = 6 * f0.
 pub flow reads_a_let_of_block(x: F32 at sample, f0: F32 at block) -> F32 at sample {
   let g = f0 * 2.0
-  let ys = par~ i in 0 ..< 2 { x * (g * ratio(i)) }
+  let ys = par i in 0 ..< 2 { x * (g * ratio(i)) }
   ys[0] + ys[1]
 }
 
@@ -68,45 +68,45 @@ pub flow with_a_delay(x: F32 at sample, f0: F32 at block) -> F32 at sample {
 
 // A `par~` in a `par~`: the part of the inner body is of each pair (i, j): f0 * (i + j + 1) is 1, 2, 2, 3 for (0, 0), (0, 1), (1, 0), (1, 1): 8 * f0 * x.
 pub flow nested(x: F32 at sample, f0: F32 at block) -> F32 at sample {
-  let m = par~ i in 0 ..< 2 {
-    pair_sum(par~ j in 0 ..< 2 { x * (f0 * F32.round_from(i + j + 1)) })
+  let m = par i in 0 ..< 2 {
+    pair_sum(par j in 0 ..< 2 { x * (f0 * F32.round_from(i + j + 1)) })
   }
   m[0] + m[1]
 }
 
 // The range of `..=`: i is 2, 3, 4, 9 * f0 * x.
 pub flow closed_range(x: F32 at sample, f0: F32 at block) -> F32 at sample {
-  let ys = par~ i in 2 ..= 4 { x * (f0 * F32.round_from(i)) }
+  let ys = par i in 2 ..= 4 { x * (f0 * F32.round_from(i)) }
   ys[0] + ys[1] + ys[2]
 }
 
 // A condition of `block` in the body, with the part of `block` that it guards: n != 0 gives (100 / n + i) * x, n = 0 gives x in each replica.
 pub flow block_guard(x: F32 at sample, n: I32 at block) -> F32 at sample {
-  let ys = par~ i in 0 ..< 2 { if n != 0 { x * (F32.round_from(100 / n) + F32.round_from(i)) } else { x } }
+  let ys = par i in 0 ..< 2 { if n != 0 { x * (F32.round_from(100 / n) + F32.round_from(i)) } else { x } }
   ys[0] + ys[1]
 }
 
 // A condition of `init` guarding a part of `block` in the body.
 pub flow init_guard(x: F32 at sample, a: I32 at init, d: I32 at block) -> F32 at sample {
-  let ys = par~ i in 0 ..< 2 { if a != 0 { x * (F32.round_from(100 / d) + F32.round_from(i)) } else { x } }
+  let ys = par i in 0 ..< 2 { if a != 0 { x * (F32.round_from(100 / d) + F32.round_from(i)) } else { x } }
   ys[0] + ys[1]
 }
 
 // A condition of `sample` in the body: it is decided by the frame, and the part under it is made where it is reached.
 pub flow sample_guard(x: F32 at sample, n: I32 at block) -> F32 at sample {
-  let ys = par~ i in 0 ..< 2 { if x > 0.0 { x * (F32.round_from(100 / n) + F32.round_from(i)) } else { x } }
+  let ys = par i in 0 ..< 2 { if x > 0.0 { x * (F32.round_from(100 / n) + F32.round_from(i)) } else { x } }
   ys[0] + ys[1]
 }
 
 // The whole `par~` is a part of `block` (it reads `f0` and the index only): one value in the expression, 3 * f0 * x.
 pub flow whole_par_of_block(x: F32 at sample, f0: F32 at block) -> F32 at sample {
-  x * pair_sum(par~ i in 0 ..< 2 { f0 * ratio(i) })
+  x * pair_sum(par i in 0 ..< 2 { f0 * ratio(i) })
 }
 
 // The whole `par~` is a part of `init` (it reads no input of `sample` or `block`): one value in the `let` and one in the expression.
 pub flow slow_only(x: F32 at sample) -> F32 at sample {
-  let total = sum(par~ i in 0 ..< 5 { F32.round_from(i * i) })
-  x * sum(par~ i in 0 ..< 5 { F32.round_from(i * i) }) + total
+  let total = sum(par i in 0 ..< 5 { F32.round_from(i * i) })
+  x * sum(par i in 0 ..< 5 { F32.round_from(i * i) }) + total
 }
 
 test "a part of block that reads the index is one value for each replica: 6 * f0 * x" {

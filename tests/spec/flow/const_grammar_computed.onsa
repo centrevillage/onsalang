@@ -34,7 +34,7 @@ pub flow product_in_a_delay(x: F32 at sample) -> F32 at sample {
 }
 
 pub flow product_as_the_end_of_a_par(x: F32 at sample) -> F32 at sample {
-  let ys = par~ i in 0..<(K * 2) { x * F32.round_from(i) }   //~ E0200
+  let ys = par i in 0..<(K * 2) { x * F32.round_from(i) }   //~ E0200
   ys[0]
 }
 
@@ -65,6 +65,6 @@ pub flow nested_in_a_delay(x: F32 at sample) -> F32 at sample {
 }
 
 pub flow nested_as_the_start_of_a_par(x: F32 at sample) -> F32 at sample {
-  let ys = par~ i in ((K + 1) * 2)..<8 { x * F32.round_from(i) }   //~ E0200
+  let ys = par i in ((K + 1) * 2)..<8 { x * F32.round_from(i) }   //~ E0200
   ys[0]
 }

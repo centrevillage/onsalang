@@ -49,13 +49,13 @@ pub flow vdelay_zero_then_type_error(x: F32 at sample, d: F32 at sample) -> F32 
 }
 
 pub flow par_empty_then_type_error(x: F32 at sample) -> F32 at sample {
-  let a = par~ i in 2 ..< 2 { x }
+  let a = par i in 2 ..< 2 { x }
   let b: Bool = 1.0                                              //~ E0401
   x
 }
 
 pub flow par_reversed_then_type_error(x: F32 at sample) -> F32 at sample {
-  let a = par~ i in 3 ..< 1 { x }
+  let a = par i in 3 ..< 1 { x }
   let b: Bool = 1.0                                              //~ E0401
   x
 }
@@ -90,7 +90,7 @@ pub flow delay_zero_then_instance_argument_count(x: F32 at sample) -> F32 at sam
 }
 
 pub flow par_empty_in_a_nested_par_then_type_error(x: F32 at sample) -> F32 at sample {
-  let a = par~ i in 0 ..< 2 { par~ j in 1 ..< 1 { x } }
+  let a = par i in 0 ..< 2 { par j in 1 ..< 1 { x } }
   let b: Bool = 1.0                                              //~ E0401
   x
 }
@@ -132,7 +132,7 @@ pub flow delay_one_then_delay_with_four_arguments(x: F32 at sample) -> F32 at sa
 }
 
 pub flow par_empty_then_sample_rate_with_an_argument(x: F32 at sample) -> F32 at sample {
-  let a = par~ i in 2 ..< 2 { x }
+  let a = par i in 2 ..< 2 { x }
   let r = sample_rate(1.0)                                       //~ E0412
   x
 }

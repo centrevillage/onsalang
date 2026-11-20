@@ -201,7 +201,7 @@ pub flow output_clock_static(x: F32 at sample) -> F32 at static {  //~ E0200 @58
 }
 
 pub flow par_body_static(x: F32 at sample) -> F32 at sample {
-  let xs = par~ i in 0..<2 {
+  let xs = par i in 0..<2 {
     static  //~ E0200 @5
   }
   xs[0]

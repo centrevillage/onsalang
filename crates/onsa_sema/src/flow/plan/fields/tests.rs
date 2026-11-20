@@ -159,7 +159,7 @@ pub flow f(x: F32 at sample, t: F32 at init) -> F32 at sample {
 #[test]
 fn a_par_has_the_fields_of_its_body_and_none_with_no_state() {
     let src = "pub flow f(x: F32 at sample) -> F32 at sample {
-  let v = (par~ i in 0..<2 { x * 2.0 })[0]
+  let v = (par i in 0..<2 { x * 2.0 })[0]
   let s = (par~ i in 0..<2 { prev~(x) + (par~ j in 0..<2 { delay~(x, 2) })[0] })[1]
   v + s
 }
@@ -234,7 +234,7 @@ fn two_fields_of_one_name_are_an_internal_error() {
 fn the_value_of_a_let_of_a_par_with_no_node_is_apart_from_its_replicas() {
     let src = "pub rt fn pick(xs: [F32; 2]) -> F32 { xs[0] }
 pub flow f(x: F32 at sample, p: F32 at block) -> F32 at sample {
-  let v0: [F32; 3] = par~ i in 0 ..< 3 { p * F32.round_from(i) }
+  let v0: [F32; 3] = par i in 0 ..< 3 { p * F32.round_from(i) }
   let m = par~ i in 0 ..< 2 { pick(par~ j in 0 ..< 2 { prev~(x) }) }
   let a = if x > 0.5 { x } else { v0[1] }
   a + m[0]

@@ -27,32 +27,32 @@ pub flow gain(x: F32 at sample, g: F32 at block) -> F32 at sample {
 
 // The argument reads the index only: design(2.0) + design(3.0) = 1.0 + 1.5.
 pub flow index_argument(x: F32 at sample) -> F32 at sample {
-  let ys = par~ i in 0 ..< 2 { x * design(F32.round_from(i) + 2.0) }
+  let ys = par i in 0 ..< 2 { x * design(F32.round_from(i) + 2.0) }
   ys[0] + ys[1]
 }
 
 // The argument reads an input of `init` and the index: design(f * 1) + design(f * 2).
 pub flow input_argument(x: F32 at sample, f: F32 at init) -> F32 at sample {
-  let ys = par~ i in 0 ..< 2 { x * design(f * F32.round_from(i + 1)) }
+  let ys = par i in 0 ..< 2 { x * design(f * F32.round_from(i + 1)) }
   ys[0] + ys[1]
 }
 
 // The call is a part of `init` in a part of `block`: g * design(f + i).
 pub flow in_a_block_part(x: F32 at sample, g: F32 at block, f: F32 at init) -> F32 at sample {
-  let ys = par~ i in 0 ..< 2 { x * (g * design(f + F32.round_from(i))) }
+  let ys = par i in 0 ..< 2 { x * (g * design(f + F32.round_from(i))) }
   ys[0] + ys[1]
 }
 
 // A condition of `init` decides the place of the call: made where it holds, in each replica.
 pub flow init_condition(x: F32 at sample, a: F32 at init) -> F32 at sample {
-  let ys = par~ i in 0 ..< 2 { if a > 0.0 { x * design(F32.round_from(i) + a) } else { x } }
+  let ys = par i in 0 ..< 2 { if a > 0.0 { x * design(F32.round_from(i) + a) } else { x } }
   ys[0] + ys[1]
 }
 
 // A `par~` in a `par~`: design(i + j) for the pairs.
 pub flow nested(x: F32 at sample) -> F32 at sample {
-  let m = par~ i in 0 ..< 2 {
-    pair_sum(par~ j in 0 ..< 2 { x * design(F32.round_from(i + j)) })
+  let m = par i in 0 ..< 2 {
+    pair_sum(par j in 0 ..< 2 { x * design(F32.round_from(i + j)) })
   }
   m[0] + m[1]
 }
@@ -65,13 +65,13 @@ pub flow instance_argument(x: F32 at sample) -> F32 at sample {
 
 // The call that panics: inv(k - i) divides by zero for k = 1 at i = 1, at `init`.
 pub flow panics_at_init(x: F32 at sample, k: U32 at init) -> F32 at sample {
-  let ys = par~ i in 0 ..< 2 { x * F32.round_from(inv(k - i)) }
+  let ys = par i in 0 ..< 2 { x * F32.round_from(inv(k - i)) }
   ys[0] + ys[1]
 }
 
 // The same call under a condition of `init`: not made where the condition does not hold.
 pub flow guarded_panic(x: F32 at sample, a: U32 at init, k: U32 at init) -> F32 at sample {
-  let ys = par~ i in 0 ..< 2 { if a != 0 { x * F32.round_from(inv(k - i)) } else { x } }
+  let ys = par i in 0 ..< 2 { if a != 0 { x * F32.round_from(inv(k - i)) } else { x } }
   ys[0] + ys[1]
 }
 

@@ -113,7 +113,7 @@ pub flow in_a_branch(m: U32 at sample, c: Bool at sample) -> U32 at sample {
 }
 
 pub flow in_a_par(m: U32 at sample) -> U32 at sample {
-  let ns = par~ i in 0..<2 {
+  let ns = par i in 0..<2 {
    //~ E0020 @5
     !m
   }

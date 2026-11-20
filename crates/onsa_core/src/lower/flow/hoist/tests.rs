@@ -102,8 +102,8 @@ fn the_fields_of_the_body_of_a_par_are_written_and_read_in_each_replica() {
     let src = "pub fn make(v: F32) -> F32 { v * 2.0 }
 pub rt fn pair(xs: [F32; 2]) -> F32 { xs[0] + xs[1] }
 pub flow f(x: F32 at sample, level: F32 at block) -> F32 at sample {
-  let a = par~ i in 0 ..< 2 { pair(par~ j in 0 ..< 2 { x * make(F32.round_from(i + j)) }) }
-  let b = par~ i in 0 ..< 2 { x * (level * F32.round_from(i)) }
+  let a = par i in 0 ..< 2 { pair(par j in 0 ..< 2 { x * make(F32.round_from(i + j)) }) }
+  let b = par i in 0 ..< 2 { x * (level * F32.round_from(i)) }
   a[0] + b[1]
 }";
     let d = crate::dump::dump(&crate::tests::core(src));

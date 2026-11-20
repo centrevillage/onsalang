@@ -65,6 +65,6 @@ pub flow outer_par(x: F32 at sample) -> [[F32; 2]; 2] at sample {
 
 pub flow fine(x: F32 at sample) -> [F32; 3] at sample {
   par~ i in 0..<N {
-    x * F32.round_from(i)
+    prev~(x * F32.round_from(i))
   }
 }

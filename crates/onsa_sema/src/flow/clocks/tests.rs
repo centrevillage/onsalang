@@ -147,7 +147,7 @@ fn a_call_of_a_flow_has_the_clock_of_its_output_not_of_its_arguments() {
 #[test]
 fn the_bindings_of_a_match_and_the_index_of_a_par() {
     let f = walk_of(
-        "pub flow f(x: F32 at sample, c: F32 at block) -> F32 at sample {\n  let p = par~ i in 0..<2 { x }\n  let m = match Some(c) {\n    Some(v) => v,\n    None => 0.0,\n  }\n  p[0] + m\n}\n",
+        "pub flow f(x: F32 at sample, c: F32 at block) -> F32 at sample {\n  let p = par i in 0..<2 { x }\n  let m = match Some(c) {\n    Some(v) => v,\n    None => 0.0,\n  }\n  p[0] + m\n}\n",
         "f",
     );
     assert!(f.complete);
@@ -276,4 +276,59 @@ fn a_value_made_with_alloc_to_drop_is_in_error() {
     let f = walk_of(&format!("{head}{body}"), "f");
     assert!(f.complete && f.code().is_none());
     assert_eq!((f.expr("pick(None)"), f.expr("pair(x)")), (Clock::Init, S));
+}
+
+/// The `~` of `par` / `par~` by the content of its body (§11.5, S-1177), in
+/// the flow stage at the head of the replication (S-392): E0811 of a `par`
+/// whose body holds state, with the candidate that adds the `~`, nested and
+/// in a branch too (S-1183); E0812 of a `par~` whose body holds none, with the
+/// one that takes it off, a space when it touches the index.
+#[test]
+fn the_tilde_of_a_par_is_judged_by_its_body_in_the_flow_stage() {
+    use onsa_diag::Code::{E0811, E0812};
+    let pre = "pub flow lp(x: F32 at sample) -> F32 at sample {\n  x\n}\n";
+    // The body, the code, where its head starts, and the body after the candidate.
+    for (body, code, from, fixed) in [
+        ("par i in 0 ..< 2 { lp~(x) }", E0811, "par i", "par~ i in 0 ..< 2 { lp~(x) }"),
+        (
+            "par~ i in 0 ..< 2 { (par j in 0 ..< 2 { lp~(x) })[0] }",
+            E0811,
+            "par j",
+            "par~ i in 0 ..< 2 { (par~ j in 0 ..< 2 { lp~(x) })[0] }",
+        ),
+        (
+            "if x > 0.0 { par i in 0 ..< 2 { lp~(x) } } else { [x, x] }",
+            E0811,
+            "par i",
+            "if x > 0.0 { par~ i in 0 ..< 2 { lp~(x) } } else { [x, x] }",
+        ),
+        ("par~ i in 0 ..< 2 { x }", E0812, "par~ i", "par i in 0 ..< 2 { x }"),
+        ("par~i in 0 ..< 2 { x }", E0812, "par~i", "par i in 0 ..< 2 { x }"),
+        (
+            "par~ i in 0 ..< 2 { (par~ j in 0 ..< 2 { x })[0] }",
+            E0812,
+            "par~ i",
+            "par i in 0 ..< 2 { (par~ j in 0 ..< 2 { x })[0] }",
+        ),
+    ] {
+        let src = format!("{pre}pub flow u(x: F32 at sample) -> [F32; 2] at sample {{\n  {body}\n}}\n");
+        let a = check(&src);
+        let [d] = &a.diagnostics[..] else { panic!("{body}: {:?}", a.diagnostics) };
+        assert_eq!((d.code, d.stage), (code, onsa_diag::Stage::Flow), "{body}");
+        let at = src.find(body).expect("the body") + body.find(from).expect("the head");
+        let head = if code == E0811 { "par" } else { "par~" };
+        assert_eq!((d.span.start as usize, &src[d.span.start as usize..d.span.end as usize]), (at, head), "{body}");
+        let [fix] = &d.fixes[..] else { panic!("{body}: {d:?}") };
+        let after = onsa_diag::apply_text(&src, &fix.edits().iter().collect::<Vec<_>>()).unwrap();
+        assert_eq!(after, src.replace(body, fixed), "{body}");
+    }
+    for body in [
+        "par i in 0 ..< 2 { x }",
+        "par~ i in 0 ..< 2 { lp~(x) }",
+        "par~ i in 0 ..< 2 { (par j in 0 ..< 2 { x })[0] + lp~(x) }",
+    ] {
+        let src = format!("{pre}pub flow u(x: F32 at sample) -> [F32; 2] at sample {{\n  {body}\n}}\n");
+        let a = check(&src);
+        assert!(a.diagnostics.is_empty(), "{body}: {:?}", a.diagnostics);
+    }
 }

@@ -104,12 +104,12 @@ pub flow member_in_a_vdelay(x: F32 at sample, d: F32 at sample) -> F32 at sample
 }
 
 pub flow member_as_the_end_of_a_par(x: F32 at sample) -> F32 at sample {
-  let ys = par~ i in 0..<U.x { x * F32.round_from(i) }      //~ E0417
+  let ys = par i in 0..<U.x { x * F32.round_from(i) }      //~ E0417
   ys[0]
 }
 
 pub flow member_as_the_start_of_a_par(x: F32 at sample) -> F32 at sample {
-  let ys = par~ i in U.x..<8 { x * F32.round_from(i) }      //~ E0417
+  let ys = par i in U.x..<8 { x * F32.round_from(i) }      //~ E0417
   ys[0]
 }
 
@@ -138,7 +138,7 @@ pub flow associated_member_in_a_vdelay(x: F32 at sample, d: F32 at sample) -> F3
 }
 
 pub flow associated_member_as_the_end_of_a_par(x: F32 at sample) -> F32 at sample {
-  let ys = par~ i in 0..<P.N.x { x * F32.round_from(i) }    //~ E0417
+  let ys = par i in 0..<P.N.x { x * F32.round_from(i) }    //~ E0417
   ys[0]
 }
 
@@ -160,7 +160,7 @@ pub flow builtin_member_in_a_vdelay(x: F32 at sample, d: F32 at sample) -> F32 a
 }
 
 pub flow builtin_member_as_the_end_of_a_par(x: F32 at sample) -> F32 at sample {
-  let ys = par~ i in 0..<I32.BITS.x { x * F32.round_from(i) }   //~ E0417
+  let ys = par i in 0..<I32.BITS.x { x * F32.round_from(i) }   //~ E0417
   ys[0]
 }
 

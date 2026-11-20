@@ -113,7 +113,7 @@ pub flow a_variable_in_a_branch(x: F32 at sample, c: Bool at sample, k: U32 at i
 }
 
 pub flow a_variable_in_a_par_body(x: F32 at sample, k: U32 at init) -> F32 at sample {
-  let ys = par~ i in 0..<2 {
+  let ys = par i in 0..<2 {
     x@k                                             //~ E0002 @6
   }
   ys[0]

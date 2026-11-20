@@ -19,8 +19,8 @@
 //   two_parts:    saws (the `par~`), saws.saw_0, saws._hoist_0 (`f0 * ratio(i)`), saws._hoist_1 (`ratio(i)`), saws._hoist_2 (`g * 2.0`): the numbers go by the start of the part in the text
 //   own_and_par:  s.par_0 (the `par~` in the value of the `let` `s`), s.par_0.saw_0, s.par_0._hoist_0 (`f0 * ratio(i)`), s.par_0._hoist_1 (`ratio(i)`), then s._hoist_0 (`g * 3.0`, outside the `par~`): the
 //                 node comes before the hoisted values of the `let` (§12.4), and the numbers inside the body of the `par~` count again from 0 (the body of each `par~` has its own numbers)
-//   no_node:      ys.par_0 (the `par~`: a `par~` with no node in its body is not named by the `let`, S-1175 provisional, R-507), ys.par_0._hoist_0 (`f0 * ratio(i)`),
-//                 ys.par_0._hoist_1 (`ratio(i)`): a body with no node has the fields of its parts all the same (a field of the replica for each, so the `par~` is a structure of
+//   no_node:      ys.par_0 (the `par`: a `par` is no node with state, so it is not named by the `let` even when it is the value of the `let`, S-1175 (1′) decided with S-1177, R-507; §11.6), ys.par_0._hoist_0 (`f0 * ratio(i)`),
+//                 ys.par_0._hoist_1 (`ratio(i)`): a body with no node has the fields of its parts all the same (a field of the replica for each, so the `par` is a structure of
 //                 replicas that hold them)
 //   init_only:    saws (the `par~`), saws.saw_0, saws._hoist_0 (`k * ratio(i)`, of init; it holds `ratio(i)`, of init as well, the same stage: one field, the largest)
 //
@@ -78,7 +78,7 @@ pub flow own_and_par(x: F32 at sample, f0: F32 at block, g: F32 at block) -> F32
 }
 
 pub flow no_node(x: F32 at sample, f0: F32 at block) -> F32 at sample {
-  let ys = par~ i in 0 ..< 2 { x * (f0 * ratio(i)) }
+  let ys = par i in 0 ..< 2 { x * (f0 * ratio(i)) }
   ys[0] + ys[1]
 }
 
@@ -88,6 +88,6 @@ pub flow init_only(x: F32 at sample, k: F32 at init) -> F32 at sample {
 }
 
 pub flow stateless_plain(x: F32 at sample) -> F32 at sample {
-  let ys = par~ i in 0 ..< 2 { x * 2.0 }
+  let ys = par i in 0 ..< 2 { x * 2.0 }
   ys[0] + ys[1]
 }

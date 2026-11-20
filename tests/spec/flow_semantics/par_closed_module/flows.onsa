@@ -6,15 +6,15 @@ use consts.{FIRST, LAST}
 
 /// The ends taken in by `use`: N = 3, the index is 3, 4, 5.
 pub flow by_use(x: F32 at sample) -> [F32; 3] at sample {
-  par~ i in FIRST ..= LAST { x * F32.round_from(i) }
+  par i in FIRST ..= LAST { x * F32.round_from(i) }
 }
 
 /// The ends as module-qualified names: the same replication.
 pub flow by_path(x: F32 at sample) -> [F32; 3] at sample {
-  par~ i in consts.FIRST ..= consts.LAST { x + F32.round_from(i) }
+  par i in consts.FIRST ..= consts.LAST { x + F32.round_from(i) }
 }
 
 /// The largest `U32` as the upper end: N = 2, `i - consts.TOP_LOW + 1` is 1 and 2.
 pub flow at_the_top(x: F32 at sample) -> [F32; 2] at sample {
-  par~ i in consts.TOP_LOW ..= consts.TOP { x * F32.round_from(i - consts.TOP_LOW + 1) }
+  par i in consts.TOP_LOW ..= consts.TOP { x * F32.round_from(i - consts.TOP_LOW + 1) }
 }

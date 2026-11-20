@@ -35,7 +35,7 @@ pub flow par_in_the_none_arm(x: F32 at sample) -> F32 at sample {
   let o: Option[F32] = if x > 2.0 { Some(x) } else { None }
   match o {
     Some(v) => v,
-    None => (par~ i in 0..<2 { x })[0],               //~ E0811
+    None => (par~ i in 0..<2 { prev~(x) })[0],    //~ E0811
   }
 }
 

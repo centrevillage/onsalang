@@ -29,7 +29,7 @@ pub flow type_error_then_vdelay_zero(x: F32 at sample, d: F32 at sample) -> F32 
 
 pub flow type_error_then_par_empty(x: F32 at sample) -> F32 at sample {
   let b: Bool = 1.0                                              //~ E0401
-  let a = par~ i in 2 ..< 2 { x }
+  let a = par i in 2 ..< 2 { x }
   x
 }
 
@@ -40,7 +40,7 @@ pub flow delay_one_then_name_not_found(x: F32 at sample) -> F32 at sample {
 }
 
 pub flow par_empty_then_name_not_found(x: F32 at sample) -> F32 at sample {
-  let a = par~ i in 2 ..< 2 { x }
+  let a = par i in 2 ..< 2 { x }
   let b = nope                                                   //~ E0302
   x
 }

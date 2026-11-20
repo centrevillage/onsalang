@@ -41,110 +41,110 @@ pub flow lp(y: F32 at sample) -> F32 at sample {
 // ---------------------------------------------------------------- the element is a text, or holds one
 
 pub flow text_element(x: F32 at sample) -> F32 at sample {
-  x * F32.round_from((par~ i in 0 ..< 2 { "a" })[0].len())  //~ E0810 @23
+  x * F32.round_from((par i in 0 ..< 2 { "a" })[0].len())  //~ E0810 @23
 }
 
 pub flow text_element_of_an_inclusive_range(x: F32 at sample) -> F32 at sample {
-  x * F32.round_from((par~ i in 0 ..= 1 { "a" })[0].len())  //~ E0810 @23
+  x * F32.round_from((par i in 0 ..= 1 { "a" })[0].len())  //~ E0810 @23
 }
 
 pub flow text_element_read_by_a_let_that_is_a_number(x: F32 at sample) -> F32 at sample {
-  let n = (par~ i in 0 ..< 2 { "a" })[0].len()  //~ E0810 @12
+  let n = (par i in 0 ..< 2 { "a" })[0].len()  //~ E0810 @12
   x * F32.round_from(n)
 }
 
 pub flow text_element_read_by_an_underscore(x: F32 at sample) -> F32 at sample {
-  let _ = (par~ i in 0 ..< 2 { "a" })[0].len()  //~ E0810 @12
+  let _ = (par i in 0 ..< 2 { "a" })[0].len()  //~ E0810 @12
   x
 }
 
 pub flow text_element_in_a_condition(x: F32 at sample) -> F32 at sample {
-  if (par~ i in 0 ..< 2 { "a" })[0].len() > 0 { 1.0 } else { 0.0 }  //~ E0810 @7
+  if (par i in 0 ..< 2 { "a" })[0].len() > 0 { 1.0 } else { 0.0 }  //~ E0810 @7
 }
 
 pub flow text_element_as_an_argument(x: F32 at sample) -> F32 at sample {
-  x * count(par~ i in 0 ..< 2 { "a" })  //~ E0810 @13
+  x * count(par i in 0 ..< 2 { "a" })  //~ E0810 @13
 }
 
 pub flow text_element_in_an_instance_argument(x: F32 at sample) -> F32 at sample {
-  lp~(F32.round_from((par~ i in 0 ..< 2 { "a" })[0].len()))  //~ E0810 @23
+  lp~(F32.round_from((par i in 0 ..< 2 { "a" })[0].len()))  //~ E0810 @23
 }
 
 pub flow struct_with_a_text_field(x: F32 at sample) -> F32 at sample {
-  x * F32.round_from((par~ i in 0 ..< 2 { Named { s: "a" } })[1].s.len())  //~ E0810 @23
+  x * F32.round_from((par i in 0 ..< 2 { Named { s: "a" } })[1].s.len())  //~ E0810 @23
 }
 
 pub flow array_of_texts(x: F32 at sample) -> F32 at sample {
-  x * F32.round_from((par~ i in 0 ..< 2 { ["a", "b"] })[0].len())  //~ E0810 @23
+  x * F32.round_from((par i in 0 ..< 2 { ["a", "b"] })[0].len())  //~ E0810 @23
 }
 
 pub flow option_of_a_text(x: F32 at sample) -> F32 at sample {
-  match (par~ i in 0 ..< 2 { Some("a") })[0] {  //~ E0810 @10
+  match (par i in 0 ..< 2 { Some("a") })[0] {  //~ E0810 @10
     Some(s) => F32.round_from(s.len()),
     None => 0.0,
   }
 }
 
 pub flow tuple_with_a_text(x: F32 at sample) -> F32 at sample {
-  (par~ i in 0 ..< 2 { ("a", x) })[0].1  //~ E0810 @4
+  (par i in 0 ..< 2 { ("a", x) })[0].1  //~ E0810 @4
 }
 
 // ---------------------------------------------------------------- the element is a `Buf`
 
 // The `Buf` is made by a call with an effect (`zeroed`, E0805 of the call), which starts after the `par~`, so the E0810 of the `par~` is the error of the flow (§18.1).
 pub flow buf_element(x: F32 at sample) -> F32 at sample {
-  x * F32.round_from((par~ i in 0 ..< 2 { Buf::[F32].zeroed(2) })[0].len())  //~ E0810 @23
+  x * F32.round_from((par i in 0 ..< 2 { Buf::[F32].zeroed(2) })[0].len())  //~ E0810 @23
 }
 
 // ---------------------------------------------------------------- a `par~` in a `par~`
 
 pub flow nested_with_a_text_element_is_the_outer(x: F32 at sample) -> F32 at sample {
-  x * F32.round_from((par~ i in 0 ..< 2 { (par~ j in 0 ..< 2 { "a" })[0] })[0].len())  //~ E0810 @23
+  x * F32.round_from((par i in 0 ..< 2 { (par j in 0 ..< 2 { "a" })[0] })[0].len())  //~ E0810 @23
 }
 
 pub flow nested_with_an_array_of_texts_is_the_outer(x: F32 at sample) -> F32 at sample {
-  x * F32.round_from((par~ i in 0 ..< 2 { par~ j in 0 ..< 2 { "a" } })[0][0].len())  //~ E0810 @23
+  x * F32.round_from((par i in 0 ..< 2 { par j in 0 ..< 2 { "a" } })[0][0].len())  //~ E0810 @23
 }
 
 pub flow nested_with_a_number_element_is_the_inner(x: F32 at sample) -> F32 at sample {
-  (par~ i in 0 ..< 2 { F32.round_from((par~ j in 0 ..< 2 { "a" })[0].len()) })[0]  //~ E0810 @40
+  (par i in 0 ..< 2 { F32.round_from((par j in 0 ..< 2 { "a" })[0].len()) })[0]  //~ E0810 @39
 }
 
 // ---------------------------------------------------------------- not errors: the element is Copy, or the text is not the element of a `par~`
 
 pub flow number_element(x: F32 at sample) -> F32 at sample {
-  (par~ i in 0 ..< 2 { x * F32.round_from(i) })[1]
+  (par i in 0 ..< 2 { x * F32.round_from(i) })[1]
 }
 
 pub flow struct_element(x: F32 at sample) -> F32 at sample {
-  (par~ i in 0 ..< 2 { Pair { a: x, b: 1.0 } })[1].a
+  (par i in 0 ..< 2 { Pair { a: x, b: 1.0 } })[1].a
 }
 
 pub flow struct_of_a_struct_and_an_array_element(x: F32 at sample) -> F32 at sample {
-  (par~ i in 0 ..< 2 { Wide { p: Pair { a: x, b: 1.0 }, v: [x, 2.0] } })[1].v[0]
+  (par i in 0 ..< 2 { Wide { p: Pair { a: x, b: 1.0 }, v: [x, 2.0] } })[1].v[0]
 }
 
 pub flow array_element(x: F32 at sample) -> F32 at sample {
-  (par~ i in 0 ..< 2 { [x, 2.0] })[1][0]
+  (par i in 0 ..< 2 { [x, 2.0] })[1][0]
 }
 
 pub flow tuple_element(x: F32 at sample) -> F32 at sample {
-  (par~ i in 0 ..< 2 { (x, true) })[1].0
+  (par i in 0 ..< 2 { (x, true) })[1].0
 }
 
 pub flow option_of_a_number_element(x: F32 at sample) -> F32 at sample {
-  match (par~ i in 0 ..< 2 { Some(x) })[0] {
+  match (par i in 0 ..< 2 { Some(x) })[0] {
     Some(s) => s,
     None => 0.0,
   }
 }
 
 pub flow call_of_a_copy_element(x: F32 at sample) -> F32 at sample {
-  (par~ i in 0 ..< 2 { pair_of(i) })[1].a * x
+  (par i in 0 ..< 2 { pair_of(i) })[1].a * x
 }
 
 pub flow nested_with_copy_elements(x: F32 at sample) -> F32 at sample {
-  (par~ i in 0 ..< 2 { par~ j in 0 ..< 2 { x } })[1][0]
+  (par i in 0 ..< 2 { par j in 0 ..< 2 { x } })[1][0]
 }
 
 pub flow element_that_holds_a_state(x: F32 at sample) -> F32 at sample {
@@ -152,7 +152,7 @@ pub flow element_that_holds_a_state(x: F32 at sample) -> F32 at sample {
 }
 
 pub flow result_that_is_the_output(x: F32 at sample) -> [F32; 2] at sample {
-  par~ i in 0 ..< 2 { x }
+  par i in 0 ..< 2 { x }
 }
 
 pub flow text_outside_a_par(x: F32 at sample) -> F32 at sample {

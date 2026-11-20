@@ -103,5 +103,5 @@ pub rt fn total(xs: [F32; 4]) -> F32 {
 }
 
 pub flow right_form(x: F32 at sample) -> [F32; 2] at sample {
-  par~ i in 0 ..< 2 { x * F32.round_from(i) }
+  par i in 0 ..< 2 { x * F32.round_from(i) }
 }

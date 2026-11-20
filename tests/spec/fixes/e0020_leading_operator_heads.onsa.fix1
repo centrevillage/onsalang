@@ -19,14 +19,14 @@ pub fn two(x: I32, y: I32) -> I32 {
 
 pub fn match_head(a: I32, b: I32) -> I32 {
   match a +
-  b {                                               //~ E0020
+  b {                                             //~ E0020
     _ => 1,
   }
 }
 
 pub fn match_head_with_a_comparison(a: I32, b: I32) -> I32 {
   match a ==
-  b {                                               //~ E0020
+  b {                                            //~ E0020
     true => 1,
     false => 0,
   }
@@ -34,7 +34,7 @@ pub fn match_head_with_a_comparison(a: I32, b: I32) -> I32 {
 
 pub fn match_head_as_a_value(a: I32, b: I32) -> I32 {
   let r = match a *
-    b {                                             //~ E0020
+    b {                                           //~ E0020
     _ => 1,
   }
   r
@@ -42,14 +42,14 @@ pub fn match_head_as_a_value(a: I32, b: I32) -> I32 {
 
 pub fn if_as_the_value_of_a_let(a: Bool, b: Bool) -> I32 {
   let r = if a &&
-    b { 1 } else { 2 }                              //~ E0020
+    b { 1 } else { 2 }                           //~ E0020
   r
 }
 
 pub fn if_with_a_comment_line(a: Bool, b: Bool) -> I32 {
   if a || // the condition
   // goes on
-  b {                                               //~ E0020
+  b {                                            //~ E0020
     1
   } else {
     2
@@ -58,7 +58,7 @@ pub fn if_with_a_comment_line(a: Bool, b: Bool) -> I32 {
 
 pub flow if_tilde_head(c: Bool at block, x: F32 at sample) -> F32 at sample {
   if~ c &&
-  c {                                               //~ E0020
+  c {                                            //~ E0020
     x
   } else {
     x
@@ -67,7 +67,7 @@ pub flow if_tilde_head(c: Bool at block, x: F32 at sample) -> F32 at sample {
 
 pub flow match_tilde_head(c: Bool at block, x: F32 at sample) -> F32 at sample {
   match~ c ||
-  c {                                               //~ E0020
+  c {                                            //~ E0020
     true => x,
     false => x,
   }
@@ -76,7 +76,7 @@ pub flow match_tilde_head(c: Bool at block, x: F32 at sample) -> F32 at sample {
 pub fn for_head_start(n: U32) -> U32 {
   var t: U32 = 0
   for i in 0 +
-    1..<n {                                         //~ E0020
+    1..<n {                                       //~ E0020
     t = t + i
   }
   t
@@ -85,44 +85,44 @@ pub fn for_head_start(n: U32) -> U32 {
 pub fn for_head_end(n: U32) -> U32 {
   var t: U32 = 0
   for i in 0..<n +
-    1 {                                             //~ E0020
+    1 {                                           //~ E0020
     t = t + i
   }
   t
 }
 
 pub flow par_head_end(x: F32 at sample) -> [F32; 4] at sample {
-  par~ i in 0..<4 +
-    0 {                                             //~ E0020
+  par i in 0..<4 +
+    0 {                                           //~ E0020
     x
   }
 }
 
 test "assert goes on" {
   assert 1 == 1 &&
-  2 == 2                                            //~ E0020
+  2 == 2                                         //~ E0020
 }
 
 pub fn return_goes_on(a: I32, b: I32) -> I32 {
   return a +
-  b                                                 //~ E0020
+  b                                               //~ E0020
 }
 
 const LIMIT: U32 = 1 +
-  2                                                 //~ E0020
+  2                                               //~ E0020
 
 pub fn handler_argument(x: I32) -> I32 {
   handle {
     x
   } with h(x +
-    1)                                              //~ E0020
+    1)                                            //~ E0020
 }
 
 pub fn second_condition_of_an_else_if(a: Bool, b: Bool, c: Bool) -> I32 {
   if a {
     1
   } else if b &&
-  c {                                               //~ E0020
+  c {                                            //~ E0020
     2
   } else {
     3

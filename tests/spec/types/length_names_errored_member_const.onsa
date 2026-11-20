@@ -107,12 +107,12 @@ pub flow in_a_vdelay(x: F32 at sample, d: F32 at sample) -> F32 at sample {
 }
 
 pub flow as_the_end_of_a_par(x: F32 at sample) -> F32 at sample {
-  let ys = par~ i in 0..<S.N { x * F32.round_from(i) }
+  let ys = par i in 0..<S.N { x * F32.round_from(i) }
   ys[0]
 }
 
 pub flow as_the_start_of_a_par(x: F32 at sample) -> F32 at sample {
-  let ys = par~ i in S.N..<8 { x * F32.round_from(i) }
+  let ys = par i in S.N..<8 { x * F32.round_from(i) }
   ys[0]
 }
 
@@ -130,6 +130,6 @@ pub flow in_an_operation_in_a_vdelay(x: F32 at sample, d: F32 at sample) -> F32 
 }
 
 pub flow in_an_operation_as_the_end_of_a_par(x: F32 at sample) -> F32 at sample {
-  let ys = par~ i in 0..<S.N + 1 { x * F32.round_from(i) }
+  let ys = par i in 0..<S.N + 1 { x * F32.round_from(i) }
   ys[0]
 }

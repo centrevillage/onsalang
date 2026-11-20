@@ -22,44 +22,44 @@ pub flow twice(a: F32 at sample) -> F32 at sample {
 }
 
 pub flow in_a_sum_and_a_product(x: F32 at sample, a: F32 at block, b: F32 at block) -> F32 at sample {
-  let y = a * delay~(x, 2) + b                      //~ E0020 @16
+  let y = a * delay~(x, 2) + b                               //~ E0020 @16
   y
 }
 
 pub flow one_in_a_sum(x: F32 at sample) -> F32 at sample {
-  let y = prev~(x) + x                              //~ E0020 @12
+  let y = prev~(x) + x                                   //~ E0020 @12
   y
 }
 
 pub flow one_in_a_product(x: F32 at sample, a: F32 at block) -> F32 at sample {
-  let y = a * prev~(x)                              //~ E0020 @16
+  let y = a * prev~(x)                                   //~ E0020 @16
   y
 }
 
 pub flow in_the_last_expression(x: F32 at sample) -> F32 at sample {
-  delay~(x, 3)                                      //~ E0020 @4
+  delay~(x, 3)                                               //~ E0020 @4
 }
 
 pub flow one_in_the_last_expression(x: F32 at sample) -> F32 at sample {
-  prev~(x)                                          //~ E0020 @4
+  prev~(x)                                               //~ E0020 @4
 }
 
 pub flow in_an_argument(x: F32 at sample) -> F32 at sample {
-  twice~(delay~(x, 2))                              //~ E0020 @11
+  twice~(delay~(x, 2))                                       //~ E0020 @11
 }
 
 pub flow in_parentheses(x: F32 at sample) -> F32 at sample {
-  let y = (delay~(x, 2)) * 0.5                      //~ E0020 @13
+  let y = (delay~(x, 2)) * 0.5                               //~ E0020 @13
   y
 }
 
 pub flow in_a_branch(x: F32 at sample, c: Bool at sample) -> F32 at sample {
-  let y = if~ c { delay~(x, 2) } else { x }         //~ E0020 @20
+  let y = if~ c { delay~(x, 2) } else { x }                  //~ E0020 @20
   y
 }
 
 pub flow in_the_else_branch(x: F32 at sample, c: Bool at sample) -> F32 at sample {
-  let y = if~ c { x } else { delay~(x, 10) }        //~ E0020 @31
+  let y = if~ c { x } else { delay~(x, 10) }                 //~ E0020 @31
   y
 }
 
@@ -69,36 +69,36 @@ pub flow in_a_nested_branch(x: F32 at sample, c: Bool at sample, d: Bool at samp
 }
 
 pub flow in_a_match_arm(x: F32 at sample, k: U32 at sample) -> F32 at sample {
-  let y = match~ k { 0 => delay~(x, 2), _ => x }    //~ E0020 @28
+  let y = match~ k { 0 => delay~(x, 2), _ => x }             //~ E0020 @28
   y
 }
 
 pub flow in_a_par_body(x: F32 at sample) -> F32 at sample {
   let ys = par~ i in 0..<2 {
-    delay~(x, 3)                                    //~ E0020 @6
+    delay~(x, 3)                                             //~ E0020 @6
   }
   ys[0]
 }
 
 pub flow one_in_a_par_body(x: F32 at sample) -> F32 at sample {
   let ys = par~ i in 0..<2 {
-    prev~(x)                                        //~ E0020 @6
+    prev~(x)                                             //~ E0020 @6
   }
   ys[0]
 }
 
 pub flow a_constant_in_a_sum(x: F32 at sample) -> F32 at sample {
-  let y = x + delay~(x, MAX_DELAY)                  //~ E0020 @16
+  let y = x + delay~(x, MAX_DELAY)                           //~ E0020 @16
   y
 }
 
 pub flow a_constant_in_a_branch(x: F32 at sample, c: Bool at sample) -> F32 at sample {
-  let y = if~ c { delay~(x, N) } else { x }         //~ E0020 @20
+  let y = if~ c { delay~(x, N) } else { x }                  //~ E0020 @20
   y
 }
 
 pub flow a_constant_with_the_value_1(x: F32 at sample) -> F32 at sample {
-  let y = delay~(x, ONE)                            //~ E0020 @12
+  let y = delay~(x, ONE)                                     //~ E0020 @12
   y
 }
 
@@ -113,7 +113,7 @@ pub flow a_variable_in_a_branch(x: F32 at sample, c: Bool at sample, k: U32 at i
 }
 
 pub flow a_variable_in_a_par_body(x: F32 at sample, k: U32 at init) -> F32 at sample {
-  let ys = par~ i in 0..<2 {
+  let ys = par i in 0..<2 {
     x@k                                             //~ E0002 @6
   }
   ys[0]

@@ -11,20 +11,20 @@
 use std.math.sum
 
 pub flow inner_empty(x: F32 at sample) -> F32 at sample {
-  let _ = par~ i in 0 ..= 1 { par~ j in 3 ..= 2 { x } }            //~ E0808
+  let _ = par i in 0 ..= 1 { par j in 3 ..= 2 { x } }            //~ E0808
   x
 }
 
 pub flow inner_empty_at_the_largest_ends(x: F32 at sample) -> F32 at sample {
-  let _ = par~ i in 4294967294 ..= 4294967295 { par~ j in 1 ..= 0 { x } }   //~ E0808
+  let _ = par i in 4294967294 ..= 4294967295 { par j in 1 ..= 0 { x } }   //~ E0808
   x
 }
 
 pub flow inner_empty_in_a_call(x: F32 at sample) -> F32 at sample {
-  sum(par~ i in 0 ..= 2 { sum(par~ j in 2 ..= 1 { x }) })           //~ E0808
+  sum(par i in 0 ..= 2 { sum(par j in 2 ..= 1 { x }) })           //~ E0808
 }
 
 pub flow inner_empty_half_open(x: F32 at sample) -> F32 at sample {
-  let _ = par~ i in 0 ..= 1 { par~ j in 2 ..< 2 { x } }            //~ E0808
+  let _ = par i in 0 ..= 1 { par j in 2 ..< 2 { x } }            //~ E0808
   x
 }

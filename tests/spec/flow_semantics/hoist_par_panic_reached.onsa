@@ -18,7 +18,7 @@ pub flow gain(x: F32 at sample, g: F32 at block) -> F32 at sample {
 }
 
 pub flow block_reads_i(x: F32 at sample, d: U32 at block) -> F32 at sample {
-  let ys = par~ i in 0 ..< 2 { x * F32.round_from(100 / (d - i)) }
+  let ys = par i in 0 ..< 2 { x * F32.round_from(100 / (d - i)) }
   ys[0] + ys[1]
 }
 
@@ -28,17 +28,17 @@ pub flow instance_argument(x: F32 at sample, d: U32 at block) -> F32 at sample {
 }
 
 pub flow block_guard(x: F32 at sample, n: U32 at block) -> F32 at sample {
-  let ys = par~ i in 0 ..< 2 { if n != 0 { x * F32.round_from(100 / (n - i)) } else { x } }
+  let ys = par i in 0 ..< 2 { if n != 0 { x * F32.round_from(100 / (n - i)) } else { x } }
   ys[0] + ys[1]
 }
 
 pub flow sample_guard(x: F32 at sample, d: U32 at block) -> F32 at sample {
-  let ys = par~ i in 0 ..< 2 { if x > 0.0 { x * F32.round_from(100 / (d - i)) } else { x } }
+  let ys = par i in 0 ..< 2 { if x > 0.0 { x * F32.round_from(100 / (d - i)) } else { x } }
   ys[0] + ys[1]
 }
 
 pub flow whole_par_of_block(x: F32 at sample, d: U32 at block) -> F32 at sample {
-  x * pair_sum(par~ i in 0 ..< 2 { F32.round_from(100 / (d - i)) })
+  x * pair_sum(par i in 0 ..< 2 { F32.round_from(100 / (d - i)) })
 }
 
 test "the same part with d = 3: 33 + 50, and with d = 2: 50 + 100" {

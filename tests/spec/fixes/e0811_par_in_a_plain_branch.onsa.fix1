@@ -2,15 +2,44 @@
 // [test]
 // spec = ["§2.6", "§11.5", "§18.1"]
 // fixes = 1
+//
+// [[test.fix]]
+// at = "50:5"
+// code = "E0811"
+// candidate = 1
+// leaves = ["50:5 E0200"]
+//
+// [[test.fix]]
+// at = "60:5"
+// code = "E0811"
+// candidate = 1
+// leaves = ["60:5 E0200"]
+//
+// [[test.fix]]
+// at = "66:10"
+// code = "E0811"
+// candidate = 1
+// leaves = ["66:10 E0200"]
+//
+// [[test.fix]]
+// at = "73:5"
+// code = "E0811"
+// candidate = 1
+// leaves = ["73:5 E0200"]
 
-// W4-20 U1/t, S-745: a `par` without the `~` in a branch of a plain `if` or `match` is judged by two
-// stages (§18.1), and the names stage comes first: "`par~` の `~` の有無（E0811、§11.5）" is an error of
-// the names stage, so the first (and only) error of the unit is the `par` without the `~`, whatever the
-// body is, and its one candidate is the insertion of the `~` (§11.5; `fixes = 1`: not the candidates of
-// the error of the branch). The error of the branch, "`if` / `match` の枝の状態を持つものの E0811", is of the
-// flow stage, which a unit with an error of the names stage does not reach ("後の段の診断が既に出ていて
-// も報告しない"), so it is not marked here. What stays after the candidate is in
-// e0811_par_in_a_plain_branch_leaves.onsa.
+// W4-20 U1/t, S-745; W7-06 U0/t, S-1177: a `par` without the `~` that holds state in a branch of a plain `if`
+// or `match` is judged twice by the flow check stage (§18.1: "`if` / `match` の枝の状態を持つものの E0811 と、
+// … 本体の中身で決まる `par` / `par~` の `~` の有無（E0811、E0812、§11.5）は flow の検査の段である"): as a thing
+// with state in a branch (§11.5) and as a `par` without the `~` (§11.5). Both are E0811 at the same place, so
+// the unit reports the one error of the `par` (the first by position, §18.1), and its one candidate is the
+// insertion of the `~` (§11.5; `fixes = 1`: the candidates of the error of the branch, the `if~` / `match~`
+// and the lift into a `let`, are not asked for here). What stays after the candidate is in
+// e0811_par_in_a_plain_branch_leaves.onsa. After the candidate the `par~` holds state in the branch, which this
+// version reports as the E0200 of a thing with state in a branch (`leaves` in the header, at the start of the
+// `par~`; S-1183 (1), the provisional reading: the candidate is shown although the branch stays an error). The
+// E0200 is the E0811 of the branch (§11.5) when the branch is implemented (W7-06 U1), and `leaves` change then.
+// A `par` without state in a branch is no error: it is a thing
+// without state that is taken only when the branch is (par_in_plain_branches.onsa).
 
 pub flow lp(x: F32 at sample) -> F32 at sample {
   x * 0.5 + prev~(x) * 0.5
@@ -46,12 +75,4 @@ pub flow in_a_let_of_a_branch(x: F32 at sample, c: Bool at sample) -> [F32; 2] a
     [x, x]
   }
   ys
-}
-
-pub flow without_state_in_a_branch(x: F32 at sample, c: Bool at sample) -> [F32; 2] at sample {
-  if c {
-    par~ i in 0 ..< 2 { x * F32.round_from(i) }      //~ E0811
-  } else {
-    [x, x]
-  }
 }

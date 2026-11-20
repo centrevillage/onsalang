@@ -185,7 +185,7 @@ pub flow move_argument_in_a_match_arm(x: F32 at sample) -> F32 at sample {
 }
 
 pub flow inout_argument_in_a_par_body(x: F32 at sample) -> F32 at sample {
-  let ys = par~ i in 0 ..< 2 { h(inout x) }         //~ E0806
+  let ys = par i in 0 ..< 2 { h(inout x) }         //~ E0806
   ys[0]
 }
 

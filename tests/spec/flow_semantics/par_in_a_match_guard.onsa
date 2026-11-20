@@ -1,0 +1,44 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.3", "§11.5"]
+
+// W7-06 U0/t2, S-1177 (§11.5: "`par` は状態を持つものでないので、普通の `if` / `match` の枝とガード、`&&` / `||` の右辺に
+// も書け、取られたときだけ評価する"; §11.3: "サンプルごとに決まる条件の枝の中の式は、取られたときだけ panic する"): a `par`
+// without state in the guard of a `match`, which is evaluated only when the pattern before the guard has matched. The
+// body reads the constant table at an index that is out of the table for the `block` value 3 (`TABLE[k + i]` with
+// `i` = 1), so a guard evaluated for the sample that does not match the pattern would panic. Apart from
+// par_in_plain_branches.onsa because the value of a `match` with a guard is E0200 in the lowering of this version
+// (W8-06, the same wait as enum_construct_match.onsa), and one file with it would not lower at all.
+
+const TABLE: [F32; 4] = [1.0, 2.0, 3.0, 4.0]
+
+pub rt fn pair_sum(xs: [F32; 2]) -> F32 {
+  xs[0] + xs[1]
+}
+
+pub flow in_a_guard(x: F32 at sample, k: U32 at block) -> F32 at sample {
+  match x > 0.5 {
+    true if pair_sum(par i in 0 ..< 2 { TABLE[k + i] }) > 4.0 => 1.0,
+    _ => 0.0,
+  }
+}
+
+test "a par in a guard is not evaluated when the pattern before the guard has not matched: the index is out of the table for k = 3" {
+  // x = 0.25, 0.5 do not take `x > 0.5`, so the guard is not reached.
+  let low: [F32; 2] = [0.25, 0.5]
+  let g = in_a_guard.render(in_a_guard.Params { k: 3 }, low, 8.0)
+  assert g.out[0] == 0.0
+  assert g.out[1] == 0.0
+}
+
+test "a par in a guard gives the value when it is reached" {
+  // x = 0.25, 0.75. k = 0: the sum is 1 + 2 = 3, not above 4. k = 1: the sum is 2 + 3 = 5, above 4.
+  let xs: [F32; 2] = [0.25, 0.75]
+  let g0 = in_a_guard.render(in_a_guard.Params { k: 0 }, xs, 8.0)
+  assert g0.out[0] == 0.0
+  assert g0.out[1] == 0.0
+  let g1 = in_a_guard.render(in_a_guard.Params { k: 1 }, xs, 8.0)
+  assert g1.out[0] == 0.0
+  assert g1.out[1] == 1.0
+}

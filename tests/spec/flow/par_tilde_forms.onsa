@@ -9,7 +9,7 @@
 // the lower bound need not be 0, and the index `i` is read in the body or not read at all (an index that
 // is not read is no error). Every replica has its own instance of `saw~`. The closed range `a ..= b` is
 // in par_tilde_closed_range.onsa, the nesting in par_tilde_nested.onsa and the body without state in
-// par_tilde_stateless.onsa. The old spelling without the `~` is E0811 (negative/e0811_par_*).
+// par_stateless.onsa. A `par` without the `~` that holds state is E0811 (negative/e0811_par_*).
 
 use std.math.floor
 

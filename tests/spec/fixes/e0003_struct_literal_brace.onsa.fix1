@@ -80,52 +80,52 @@ pub rt fn fx(p: Fp) -> F32 {
 
 pub fn in_a_call(a: I32) -> I32 {
   px(Pt { x: a, y: 2 }, 3)
-                                                    //~ E0003
+     //~ E0003
 }
 
 pub fn in_a_call_second_argument(a: I32) -> I32 {
   kx(1, Pt { x: a, y: 2 })
-                                                    //~ E0003
+        //~ E0003
 }
 
 pub fn in_a_nested_call(a: I32) -> I32 {
   two(px(Pt { x: a, y: 2 }, 3), 4)
-                                                    //~ E0003
+         //~ E0003
 }
 
 pub fn in_an_array(a: I32) -> U32 {
   let v = [Pt { x: a, y: 2 }]
-                                                    //~ E0003
+           //~ E0003
   v.len()
 }
 
 pub fn in_an_array_last(a: I32) -> U32 {
   let v = [Pt { x: 1, y: 2 }, Pt { x: a, y: 2 }]
-                                                    //~ E0003
+                              //~ E0003
   v.len()
 }
 
 pub fn in_a_tuple(a: I32) -> I32 {
   let t = (Pt { x: a, y: 2 }, 3)
-                                                    //~ E0003
+           //~ E0003
   t.1
 }
 
 pub fn in_a_field_value(a: I32) -> I32 {
   let w = Wrap { inner: Pt { x: a, y: 2 }, k: 3 }
-                                                    //~ E0003
+                        //~ E0003
   w.k
 }
 
 pub fn in_a_group(a: I32) -> I32 {
   let k = (Pt { x: a, y: 2 }).x
-                                                    //~ E0003
+           //~ E0003
   k
 }
 
 pub fn in_a_group_in_a_head(a: I32) -> I32 {
   if (Pt { x: 1, y: 2 }).x > a {
-                                                    //~ E0003
+      //~ E0003
     1
   } else {
     0
@@ -135,7 +135,7 @@ pub fn in_a_group_in_a_head(a: I32) -> I32 {
 pub fn in_an_arm_body(n: I32) -> Pt {
   match n {
     0 => Pt { x: 0, y: 0 },
-                                                    //~ E0003
+      //~ E0003
     _ => Pt { x: 1, y: 1 },
   }
 }
@@ -145,35 +145,35 @@ pub fn in_a_value_call(a: I32) -> I32 {
     p.x + k
   }
   f.(Pt { x: a, y: 2 }, 3)
-                                                    //~ E0003
+      //~ E0003
 }
 
 pub fn in_a_generic_head[T: Num](x: T, y: T) -> T {
   first_of(Pair { a: x, b: y })
-                                                    //~ E0003
+           //~ E0003
 }
 
 pub flow in_a_par(x: F32 at sample) -> [F32; 4] at sample {
-  par~ i in 0..<4 {
+  par i in 0..<4 {
     fx(Fp { x: x * F32.round_from(i) })
-                                                    //~ E0003
+       //~ E0003
   }
 }
 
 pub fn a_comment_on_the_line_of_the_name(a: I32) -> I32 {
   px(Pt { x: a, y: 2 }, 3) // the point
-                                                    //~ E0003
+     //~ E0003
 }
 
 pub fn a_comment_line_between(a: I32) -> I32 {
   px(Pt { x: a, y: 2 }, 3)
      // the fields
-                                                    //~ E0003
+     //~ E0003
 }
 
 pub fn only_the_brace_is_moved(a: I32) -> I32 {
   px(Pt {
-                                                    //~ E0003
+     //~ E0003
        x: a,
        y: 2,
      }, 3)
@@ -181,7 +181,7 @@ pub fn only_the_brace_is_moved(a: I32) -> I32 {
 
 pub fn after_a_constant_name() -> I32 {
   two(N { 1 })
-                                                    //~ E0003
+      //~ E0003
 }
 
 // The right forms: the `{` on the line of the name (or of the `]` of its type arguments) in and out of brackets.

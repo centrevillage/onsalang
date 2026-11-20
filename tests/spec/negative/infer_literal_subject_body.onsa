@@ -120,7 +120,7 @@ pub flow index_in_a_flow(x: F32 at sample) -> F32 at sample {
 }
 
 pub flow field_in_a_flow_replication(x: F32 at sample) -> F32 at sample {
-  let a = par~ i in 0 ..< 2 { 17.x }                //~ E0413
+  let a = par i in 0 ..< 2 { 17.x }                //~ E0413
   x
 }
 

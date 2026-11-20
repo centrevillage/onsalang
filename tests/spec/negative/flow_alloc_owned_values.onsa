@@ -223,15 +223,15 @@ pub flow in_an_init_call_of_a_function_that_is_not_rt(x: F32 at sample, k: U32 a
 }
 
 pub flow in_a_par_body(x: F32 at sample) -> F32 at sample {
-  let ys = par~ i in 0 ..< 2 {
+  let ys = par i in 0 ..< 2 {
     x * F32.round_from(mk(i).len())                             //~ E0805 @24
   }
   ys[0]
 }
 
 pub flow in_a_nested_par_body(x: F32 at sample) -> F32 at sample {
-  let ys = par~ i in 0 ..< 2 {
-    par~ j in 0 ..< 2 {
+  let ys = par i in 0 ..< 2 {
+    par j in 0 ..< 2 {
       x * pick(wrap("a"))                                       //~ E0805 @16
     }
   }

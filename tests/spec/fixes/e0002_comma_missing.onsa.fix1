@@ -165,7 +165,7 @@ pub fn in_a_closure_body(a: I32) -> I32 {
 }
 
 pub flow in_a_par(x: F32 at sample) -> F32 at sample {
-  let ys = par~ i in 0..<4 {
+  let ys = par i in 0..<4 {
     two_u(i,
       i)                                            //~ E0002
   }
@@ -178,28 +178,28 @@ pub fn a_prefix_not_starts_the_element(a: Bool, b: Bool) -> I32 {
 }
 
 pub fn a_space(a: I32, b: I32) -> I32 {
-  two(a, b)                                         //~ E0002
+  two(a, b)                                          //~ E0002
 }
 
 pub fn a_wide_space(a: I32, b: I32) -> I32 {
-  two(a, b)                                         //~ E0002
+  two(a,     b)                                      //~ E0002
 }
 
 pub fn a_tab(a: I32, b: I32) -> I32 {
-  two(a, b)                                         //~ E0002
+  two(a,	b)                                          //~ E0002
 }
 
 pub fn an_array_of_floats() -> F32 {
-  let v = [0.1, 0.2, 0.3]                           //~ E0002
+  let v = [0.1, 0.2, 0.3]                            //~ E0002
   v[0]
 }
 
 pub fn a_struct_literal_on_a_line() -> Pt {
-  Pt { x: 1, y: 2 }                                 //~ E0002
+  Pt { x: 1, y: 2 }                                  //~ E0002
 }
 
 pub fn arms_on_a_line(o: Option[I32]) -> I32 {
-  match o { Some(x) => { x }, None => { 0 } }       //~ E0002
+  match o { Some(x) => { x }, None => { 0 } }        //~ E0002
 }
 
 pub fn a_call_after_a_line_break(x: I32) -> I32 {
@@ -236,21 +236,21 @@ pub fn type_arguments_after_a_line_break(o: Option[I32]) -> I32 {
 }
 
 pub fn a_tuple_after_a_tuple() -> I32 {
-  let v = [(1, 2), (3, 4)]                          //~ E0002
+  let v = [(1, 2), (3, 4)]                           //~ E0002
   v[0].0
 }
 
 pub fn a_group_after_a_call(a: I32) -> I32 {
-  two(arr(a)[0], (a), 1)                            //~ E0002
+  two(arr(a)[0], (a), 1)                             //~ E0002
 }
 
 pub fn an_array_after_a_call(a: I32) -> I32 {
-  let v = [arr(a), [0]]                             //~ E0002
+  let v = [arr(a), [0]]                              //~ E0002
   v[0][0]
 }
 
 pub fn an_array_after_an_array() -> I32 {
-  let v = [[1, 2], [3, 4]]                          //~ E0002
+  let v = [[1, 2], [3, 4]]                           //~ E0002
   v[0][0]
 }
 

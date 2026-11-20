@@ -40,17 +40,17 @@ pub flow unknown_in_the_body_of_a_par(x: F32 at sample) -> F32 at sample {
 }
 
 pub flow comparison_as_the_end_of_a_nested_par(x: F32 at sample) -> F32 at sample {
-  let ys = par~ i in 0..<2 { par~ j in 0..<(K < 2) { x } }   //~ E0417
+  let ys = par i in 0..<2 { par j in 0..<(K < 2) { x } }   //~ E0417
   ys[0][0]
 }
 
 pub flow cast_as_the_start_of_a_nested_par(x: F32 at sample) -> F32 at sample {
-  let ys = par~ i in 0..<2 { par~ j in (K as U32)..<4 { x } }   //~ E0417
+  let ys = par i in 0..<2 { par j in (K as U32)..<4 { x } }   //~ E0417
   ys[0][0]
 }
 
 pub flow float_as_the_end_of_a_nested_par(x: F32 at sample) -> F32 at sample {
-  let ys = par~ i in 0..<2 { par~ j in 0..<1.5 { x } }   //~ E0401
+  let ys = par i in 0..<2 { par j in 0..<1.5 { x } }   //~ E0401
   ys[0][0]
 }
 
@@ -86,6 +86,6 @@ pub flow constant_in_the_body_of_a_par(x: F32 at sample) -> F32 at sample {
 }
 
 pub flow constant_in_a_nested_par(x: F32 at sample) -> F32 at sample {
-  let ys = par~ i in 0..<2 { par~ j in 0..<K { x } }
+  let ys = par i in 0..<2 { par j in 0..<K { x } }
   ys[0][0]
 }

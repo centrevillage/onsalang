@@ -42,12 +42,12 @@ pub flow literal_in_a_vdelay(x: F32 at sample, d: F32 at sample) -> F32 at sampl
 }
 
 pub flow as_the_end_of_a_par(x: F32 at sample) -> F32 at sample {
-  let ys = par~ i in 0..<Rg.CAP { x * F32.round_from(i) }   //~ E0406
+  let ys = par i in 0..<Rg.CAP { x * F32.round_from(i) }   //~ E0406
   ys[0]
 }
 
 pub flow as_the_start_of_a_par(x: F32 at sample) -> F32 at sample {
-  let ys = par~ i in Rg.LIT..<8 { x * F32.round_from(i) }   //~ E0406
+  let ys = par i in Rg.LIT..<8 { x * F32.round_from(i) }   //~ E0406
   ys[0]
 }
 

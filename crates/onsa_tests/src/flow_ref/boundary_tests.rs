@@ -302,7 +302,7 @@ fn a_panic_in_a_flow_it_calls_or_in_a_replica_is_the_panic_of_the_call() {
     // 2 - 2 = 0: the outputs are two arrays [0, 0, 0]. The status is 1 for both and the next `process` is zeros.
     let src = "flow child(x: I32 at sample) -> I32 at sample { 100 / x }
 flow top(x: I32 at sample) -> I32 at sample { child~(x) + 1 }
-flow fan(x: U32 at sample) -> [U32; 3] at sample { par~ i in 0 ..< 3 { 100 / (x - i) } }";
+flow fan(x: U32 at sample) -> [U32; 3] at sample { par i in 0 ..< 3 { 100 / (x - i) } }";
     let text = src.to_string();
     let (top, fan) = with_checked(src, true, move |a| {
         let view = View::new(a);

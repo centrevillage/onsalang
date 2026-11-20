@@ -24,7 +24,7 @@
 
 @export
 pub flow stateless(x: F32 at sample) -> [F32; 3] at sample {
-  par~ i in 1 ..= 3 { x * F32.round_from(i) }
+  par i in 1 ..= 3 { x * F32.round_from(i) }
 }
 
 @export
@@ -45,10 +45,10 @@ pub flow delay_by_the_index(x: F32 at sample) -> [F32; 2] at sample {
 
 @export
 pub flow at_the_top(x: F32 at sample) -> [F32; 2] at sample {
-  par~ i in 4294967294 ..= 4294967295 { x + F32.round_from(i - 4294967294) }
+  par i in 4294967294 ..= 4294967295 { x + F32.round_from(i - 4294967294) }
 }
 
 @export
 pub flow one_at_the_top(x: F32 at sample) -> [F32; 1] at sample {
-  par~ i in 4294967295 ..= 4294967295 { x * 2.0 + F32.round_from(i - 4294967294) }
+  par i in 4294967295 ..= 4294967295 { x * 2.0 + F32.round_from(i - 4294967294) }
 }

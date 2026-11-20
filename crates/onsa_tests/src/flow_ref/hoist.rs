@@ -233,7 +233,7 @@ fn kids(body: &Body, known: &Known, root: ExprId, e: ExprId, guard: Clock) -> Re
             });
             own(inits.chain(b.tail).collect())
         }
-        K::Par { var, body: inner, tilde: Some(_), .. } => vec![(*inner, with_index(body, known, var.span)?, guard)],
+        K::Par { var, body: inner, .. } => vec![(*inner, with_index(body, known, var.span)?, guard)],
         _ => own(operands(body, e)),
     })
 }
@@ -362,7 +362,7 @@ fn descend(f: &mut Frame, known: &Known, root: ExprId, e: ExprId, here: Clock, g
             }
             Ok(())
         }
-        K::Par { var, body: inner, tilde: Some(_), .. } => {
+        K::Par { var, body: inner, .. } => {
             // The replicas in the order of the index, each with its index bound (as the evaluation of the `par~` does).
             // A body that has no part for this stage is not walked (a `par~` of a million replicas that only reads `x`).
             let inside = with_index(&body, known, var.span).map_err(stop)?;

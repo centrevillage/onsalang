@@ -16,49 +16,49 @@ pub flow twice(a: F32 at sample) -> F32 at sample {
 }
 
 pub flow in_parentheses(x: F32 at sample) -> F32 at sample {
-  let y = (x + prev~(^y)) * 0.5                     //~ E0020 @16
+  let y = (x + prev~(^y)) * 0.5                           //~ E0020 @16
   y
 }
 
 pub flow after_a_minus(x: F32 at sample) -> F32 at sample {
-  let y = x - prev~(^y)                             //~ E0020 @15
+  let y = x - prev~(^y)                                   //~ E0020 @15
   y
 }
 
 pub flow in_a_product(x: F32 at sample, g: F32 at block) -> F32 at sample {
-  let y = g * prev~(^y) + x                         //~ E0020 @15
+  let y = g * prev~(^y) + x                               //~ E0020 @15
   y
 }
 
 pub flow the_nearest_let_name(x: F32 at sample) -> F32 at sample {
   let a = x * 0.5
-  let b = a + prev~(^b)                             //~ E0020 @15
+  let b = a + prev~(^b)                                   //~ E0020 @15
   b
 }
 
 pub flow with_a_type(x: F32 at sample) -> F32 at sample {
-  let y: F32 = x + prev~(^y)                        //~ E0020 @20
+  let y: F32 = x + prev~(^y)                              //~ E0020 @20
   y
 }
 
 pub flow on_a_continued_line(x: F32 at sample) -> F32 at sample {
   let y = x +
-    prev~(^y)                                       //~ E0020 @5
+    prev~(^y)                                             //~ E0020 @5
   y
 }
 
 pub flow in_an_argument(x: F32 at sample) -> F32 at sample {
-  let y = twice~(x + prev~(^y))                     //~ E0020 @22
+  let y = twice~(x + prev~(^y))                           //~ E0020 @22
   y
 }
 
 pub flow in_a_branch(x: F32 at sample, c: Bool at sample) -> F32 at sample {
-  let y = if~ c { x + prev~(^y) } else { x }        //~ E0020 @23
+  let y = if~ c { x + prev~(^y) } else { x }              //~ E0020 @23
   y
 }
 
 pub flow in_a_match_arm(x: F32 at sample, k: U32 at sample) -> F32 at sample {
-  let y = match~ k { 0 => x + prev~(^y), _ => x }   //~ E0020 @31
+  let y = match~ k { 0 => x + prev~(^y), _ => x }         //~ E0020 @31
   y
 }
 
@@ -80,7 +80,7 @@ pub flow in_a_last_branch(x: F32 at sample, c: Bool at sample) -> F32 at sample 
 }
 
 pub flow in_a_last_par_body(x: F32 at sample) -> [F32; 2] at sample {
-  par~ i in 0..<2 {
+  par i in 0..<2 {
     x + ~ _                                         //~ E0002 @9
   }
 }

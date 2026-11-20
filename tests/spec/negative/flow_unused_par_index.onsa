@@ -9,24 +9,24 @@
 // another one.
 
 pub flow underscore_index(x: F32 at sample) -> F32 at sample {
-  let ys = par~ _ in 0 ..< 4 { x } //~ E0002 @17
+  let ys = par _ in 0 ..< 4 { x } //~ E0002 @16
   ys[0]
 }
 
 pub flow underscore_index_of_an_inclusive_range(x: F32 at sample) -> F32 at sample {
-  let ys = par~ _ in 0 ..= 3 { x } //~ E0002 @17
+  let ys = par _ in 0 ..= 3 { x } //~ E0002 @16
   ys[0]
 }
 
 pub flow underscore_index_of_the_inner_replica(x: F32 at sample) -> F32 at sample {
-  let ys = par~ i in 0 ..< 2 {
-    par~ _ in 0 ..< 2 { x } //~ E0002 @10
+  let ys = par i in 0 ..< 2 {
+    par _ in 0 ..< 2 { x } //~ E0002 @9
   }
   ys[0][0]
 }
 
 pub flow underscore_index_with_an_unused_let_before(x: F32 at sample) -> F32 at sample {
   let u = x * 2.0
-  let ys = par~ _ in 0 ..< 4 { x } //~ E0002 @17
+  let ys = par _ in 0 ..< 4 { x } //~ E0002 @16
   ys[0]
 }

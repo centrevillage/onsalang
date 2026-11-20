@@ -102,7 +102,7 @@ pub flow in_a_match_tilde(k: U32 at sample, x: F32 at sample) -> F32 at sample {
 }
 
 pub flow in_a_par(x: F32 at sample) -> F32 at sample {
-  let ys = par~ i in 0 ..< 2 {
+  let ys = par i in 0 ..< 2 {
     match~ i {
       
       0 => x * 2.0,

@@ -24,37 +24,37 @@ pub rt fn pair_sum(xs: [F32; 2]) -> F32 {
 // ---------------------------------------------------------------- a condition of block or sample on the way
 
 pub flow sample_condition(x: F32 at sample) -> F32 at sample {
-  let ys = par~ i in 0 ..< 2 { if x > 0.0 { x * design(F32.round_from(i)) } else { x } }  //~ E0815
+  let ys = par i in 0 ..< 2 { if x > 0.0 { x * design(F32.round_from(i)) } else { x } }  //~ E0815
   ys[0] + ys[1]
 }
 
 pub flow block_condition(x: F32 at sample, n: I32 at block) -> F32 at sample {
-  let ys = par~ i in 0 ..< 2 { if n != 0 { x * design(F32.round_from(i)) } else { x } }  //~ E0815
+  let ys = par i in 0 ..< 2 { if n != 0 { x * design(F32.round_from(i)) } else { x } }  //~ E0815
   ys[0] + ys[1]
 }
 
 pub flow else_of_a_block_condition(x: F32 at sample, n: I32 at block) -> F32 at sample {
-  let ys = par~ i in 0 ..< 2 { if n == 0 { x } else { x * design(F32.round_from(i)) } }  //~ E0815
+  let ys = par i in 0 ..< 2 { if n == 0 { x } else { x * design(F32.round_from(i)) } }  //~ E0815
   ys[0] + ys[1]
 }
 
 pub flow else_if_with_a_sample_condition(x: F32 at sample, a: F32 at init) -> F32 at sample {
-  let ys = par~ i in 0 ..< 2 { if a > 1.0 { x } else if x > 0.0 { x * design(F32.round_from(i)) } else { x + 1.0 } }  //~ E0815
+  let ys = par i in 0 ..< 2 { if a > 1.0 { x } else if x > 0.0 { x * design(F32.round_from(i)) } else { x + 1.0 } }  //~ E0815
   ys[0] + ys[1]
 }
 
 pub flow right_of_and_with_a_sample_left(x: F32 at sample) -> F32 at sample {
-  let ys = par~ i in 0 ..< 2 { if x > 0.0 && design(F32.round_from(i)) > x { 1.0 } else { 0.0 } }  //~ E0815
+  let ys = par i in 0 ..< 2 { if x > 0.0 && design(F32.round_from(i)) > x { 1.0 } else { 0.0 } }  //~ E0815
   ys[0] + ys[1]
 }
 
 pub flow right_of_or_with_a_block_left(x: F32 at sample, n: I32 at block) -> F32 at sample {
-  let ys = par~ i in 0 ..< 2 { if n != 0 || design(F32.round_from(i)) > x { 1.0 } else { 0.0 } }  //~ E0815
+  let ys = par i in 0 ..< 2 { if n != 0 || design(F32.round_from(i)) > x { 1.0 } else { 0.0 } }  //~ E0815
   ys[0] + ys[1]
 }
 
 pub flow arm_of_a_block_object(x: F32 at sample, o: Option[F32] at block) -> F32 at sample {
-  let ys = par~ i in 0 ..< 2 {
+  let ys = par i in 0 ..< 2 {
     match o {
       Some(v) => x * design(F32.round_from(i)) + v,  //~ E0815
       None => x,
@@ -64,14 +64,14 @@ pub flow arm_of_a_block_object(x: F32 at sample, o: Option[F32] at block) -> F32
 }
 
 pub flow in_the_inner_par(x: F32 at sample, n: I32 at block) -> F32 at sample {
-  let m = par~ i in 0 ..< 2 {
-    pair_sum(par~ j in 0 ..< 2 { if n != 0 { x * design(F32.round_from(i + j)) } else { x } })  //~ E0815
+  let m = par i in 0 ..< 2 {
+    pair_sum(par j in 0 ..< 2 { if n != 0 { x * design(F32.round_from(i + j)) } else { x } })  //~ E0815
   }
   m[0] + m[1]
 }
 
 pub flow init_outside_sample_inside(x: F32 at sample, a: F32 at init) -> F32 at sample {
-  let ys = par~ i in 0 ..< 2 {
+  let ys = par i in 0 ..< 2 {
     if a > 0.0 {
       if x > 0.0 { x * design(F32.round_from(i)) } else { x }  //~ E0815
     } else {
@@ -82,37 +82,37 @@ pub flow init_outside_sample_inside(x: F32 at sample, a: F32 at init) -> F32 at 
 }
 
 pub flow in_the_output(x: F32 at sample, n: I32 at block) -> F32 at sample {
-  pair_sum(par~ i in 0 ..< 2 { if n != 0 { x * design(F32.round_from(i)) } else { x } })  //~ E0815
+  pair_sum(par i in 0 ..< 2 { if n != 0 { x * design(F32.round_from(i)) } else { x } })  //~ E0815
 }
 
 // ---------------------------------------------------------------- no error: init decides the place, or the call is not in a condition, or it is rt
 
 pub flow condition_of_init(x: F32 at sample, a: F32 at init) -> F32 at sample {
-  let ys = par~ i in 0 ..< 2 { if a > 0.0 { x * design(F32.round_from(i)) } else { x } }
+  let ys = par i in 0 ..< 2 { if a > 0.0 { x * design(F32.round_from(i)) } else { x } }
   ys[0] + ys[1]
 }
 
 pub flow condition_of_the_index(x: F32 at sample) -> F32 at sample {
-  let ys = par~ i in 0 ..< 2 { if i == 0 { x * design(F32.round_from(i) + 1.0) } else { x } }
+  let ys = par i in 0 ..< 2 { if i == 0 { x * design(F32.round_from(i) + 1.0) } else { x } }
   ys[0] + ys[1]
 }
 
 pub flow no_condition(x: F32 at sample) -> F32 at sample {
-  let ys = par~ i in 0 ..< 2 { x * design(F32.round_from(i)) }
+  let ys = par i in 0 ..< 2 { x * design(F32.round_from(i)) }
   ys[0] + ys[1]
 }
 
 pub flow in_the_condition_itself(x: F32 at sample, a: F32 at init) -> F32 at sample {
-  let ys = par~ i in 0 ..< 2 { if design(a + F32.round_from(i)) > 1.0 { x } else { 0.0 } }
+  let ys = par i in 0 ..< 2 { if design(a + F32.round_from(i)) > 1.0 { x } else { 0.0 } }
   ys[0] + ys[1]
 }
 
 pub flow left_of_and(x: F32 at sample, a: F32 at init) -> F32 at sample {
-  let ys = par~ i in 0 ..< 2 { if design(a + F32.round_from(i)) > 1.0 && x > 0.0 { 1.0 } else { 0.0 } }
+  let ys = par i in 0 ..< 2 { if design(a + F32.round_from(i)) > 1.0 && x > 0.0 { 1.0 } else { 0.0 } }
   ys[0] + ys[1]
 }
 
 pub flow rt_call_under_a_sample_condition(x: F32 at sample) -> F32 at sample {
-  let ys = par~ i in 0 ..< 2 { if x > 0.0 { x * keep(F32.round_from(i)) } else { x } }
+  let ys = par i in 0 ..< 2 { if x > 0.0 { x * keep(F32.round_from(i)) } else { x } }
   ys[0] + ys[1]
 }

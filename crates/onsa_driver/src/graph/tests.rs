@@ -51,10 +51,10 @@ fn resonator_graph() {
 /// whose body holds no node is named as one with no name (S-1175).
 #[test]
 fn a_par_node_is_labelled_with_its_tilde() {
-    let src = "pub flow f(x: F32 at sample) -> [F32; 2] at sample {\n  let xs = par~ i in 0 ..< 2 { x }\n  xs\n}\n";
+    let src = "pub flow f(x: F32 at sample) -> [F32; 2] at sample {\n  let xs = par i in 0 ..< 2 { x }\n  xs\n}\n";
     let analyzed = analyzed(PackageInput::single_file("p.onsa", src));
     let dot = super::graph(&analyzed, "f", None).unwrap();
-    assert!(dot.contains("\"xs.par_0\" [label=\"par_0 = par~ 0..<2: [F32; 2] at sample\""), "{dot}");
+    assert!(dot.contains("\"xs.par_0\" [label=\"par_0 = par 0..<2: [F32; 2] at sample\""), "{dot}");
 }
 
 /// Only a `let` of a single name is its node (S-148, through

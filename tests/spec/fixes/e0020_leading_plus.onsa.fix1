@@ -29,69 +29,69 @@ pub rt fn mix(x: F32, y: F32) -> F32 {
 
 pub fn in_a_block(a: I32, b: I32) -> I32 {
   let c = a +
-  b                                                 //~ E0020
+  b                                                //~ E0020
   c
 }
 
 pub fn in_a_block_after_a_comment(a: I32, b: I32) -> I32 {
   let c = a + // the first operand
-  b                                                 //~ E0020
+  b                                                //~ E0020
   c
 }
 
 pub fn as_a_statement_value(a: I32, b: I32) -> I32 {
   a +
-  b                                                 //~ E0020
+  b                                                //~ E0020
 }
 
 pub fn in_a_call(a: I32, b: I32) -> I32 {
   two(a +
-      b, 1)                                         //~ E0020
+      b, 1)                                        //~ E0020
 }
 
 pub fn in_a_call_second_argument(a: I32, b: I32) -> I32 {
   three(1, a +
-          b, 2)                                     //~ E0020
+          b, 2)                                    //~ E0020
 }
 
 pub fn in_a_nested_call(a: I32, b: I32) -> I32 {
   two(two(a +
-          b, 1), 2)                                 //~ E0020
+          b, 1), 2)                                //~ E0020
 }
 
 pub fn in_an_array(a: I32, b: I32) -> U32 {
   let v = [a +
-           b, 1]                                    //~ E0020
+           b, 1]                                   //~ E0020
   v.len()
 }
 
 pub fn in_an_array_last(a: I32, b: I32) -> U32 {
   let v = [1, a +
-              b]                                    //~ E0020
+              b]                                   //~ E0020
   v.len()
 }
 
 pub fn with_numbers() -> U32 {
   let v = [1 +
-           2]                                       //~ E0020
+           2]                                      //~ E0020
   v.len()
 }
 
 pub fn in_a_tuple(a: I32, b: I32) -> I32 {
   let t = (a +
-           b, 1)                                    //~ E0020
+           b, 1)                                   //~ E0020
   t.0
 }
 
 pub fn after_a_comment_on_the_line(a: I32, b: I32) -> I32 {
   two(a + // the first operand
-      b, 1)                                         //~ E0020
+      b, 1)                                        //~ E0020
 }
 
 pub fn with_a_comment_line_between(a: I32, b: I32) -> I32 {
   two(a +
       // the second operand
-      b, 1)                                         //~ E0020
+      b, 1)                                        //~ E0020
 }
 
 pub fn with_blank_and_comment_lines_between(a: I32, b: I32) -> I32 {
@@ -99,13 +99,13 @@ pub fn with_blank_and_comment_lines_between(a: I32, b: I32) -> I32 {
 
       // the second operand
 
-      b, 1)                                         //~ E0020
+      b, 1)                                        //~ E0020
 }
 
 pub fn in_an_arm_body(n: I32, a: I32, b: I32) -> I32 {
   match n {
     0 => two(a +
-          b, 1),                                    //~ E0020
+          b, 1),                                   //~ E0020
     _ => 0,
   }
 }
@@ -113,7 +113,7 @@ pub fn in_an_arm_body(n: I32, a: I32, b: I32) -> I32 {
 pub fn in_a_closure_body(a: I32, b: I32) -> U32 {
   let f = fn(x: I32, y: I32) -> U32 {
     let v = [x +
-             y, 1]                                  //~ E0020
+             y, 1]                                 //~ E0020
     v.len()
   }
   f.(a, b)
@@ -121,19 +121,19 @@ pub fn in_a_closure_body(a: I32, b: I32) -> U32 {
 
 pub fn in_a_generic_head[T: Num](a: T, b: T) -> U32 {
   let v = [a +
-           b, a]                                    //~ E0020
+           b, a]                                   //~ E0020
   v.len()
 }
 
 pub flow in_a_flow(x: F32 at sample, y: F32 at sample) -> F32 at sample {
   mix(x +
-      y, 0.5)                                       //~ E0020
+      y, 0.5)                                      //~ E0020
 }
 
 pub flow in_a_par(x: F32 at sample, y: F32 at sample) -> [F32; 4] at sample {
-  par~ i in 0..<4 {
+  par i in 0..<4 {
     mix(x +
-        y, F32.round_from(i))                       //~ E0020
+        y, F32.round_from(i))                      //~ E0020
   }
 }
 

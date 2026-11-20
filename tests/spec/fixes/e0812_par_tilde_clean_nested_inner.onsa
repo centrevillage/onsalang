@@ -1,0 +1,25 @@
+// onsa.toml
+// [test]
+// spec = ["§2.6", "§11.5", "§18.1"]
+//
+// [[test.fix]]
+// at = "23:14"
+// code = "E0812"
+// candidate = 1
+// clean = true
+
+// W7-06 U0/t, S-1177: the inner `par~` of a nest without state, the outer one is a `par` without state. The one error of the file has the one candidate, the removal of the `~` of the
+// `par~` (§11.5: "含まない `par~` は E0812 で `~` を外す修正候補を示す"), and the file with it checks clean
+// (`clean` is about the whole file, so the file has this one error and no other unit with a candidate; §18.1: "当てた後に
+// 同じ段か前の段の誤りが残らないとき"). The main position (`at`) is the start of the `par~`, the head of the
+// replication (the provisional place of the E0812 of a `par~`, S-392). One error per flow (P-01).
+
+pub rt fn pair_sum(xs: [F32; 2]) -> F32 {
+  xs[0] + xs[1]
+}
+
+pub flow replicas(x: F32 at sample) -> [F32; 3] at sample {
+  par i in 0 ..< 3 {
+    pair_sum(par~ j in 0 ..< 2 { x * F32.round_from(i + j) })  //~ E0812
+  }
+}

@@ -191,6 +191,35 @@ impl Walk<'_> {
         Some(Clock::Error)
     }
 
+    /// The `~` of the replication `e` written with `tilde`, whose body holds
+    /// state if `holds` (§11.5, S-1177), at its head (S-392): E0811 of a
+    /// `par` that holds it, with the candidate that adds the `~`; E0812 of a
+    /// `par~` that holds none, with the one that takes it off (a space
+    /// between `par` and its index, which it touches).
+    // SPEC-GAP(S-1183): in a branch too, where the E0811 of the branch is
+    // left (provisional): the `par`'s, at the same place, comes first.
+    pub(super) fn par_mark(&mut self, e: ExprId, tilde: Option<Span>, holds: bool) {
+        let span = self.ast.expr(e).span;
+        let head = crate::names::body::par_head(span, tilde);
+        let (code, msg, fix) = match (tilde, holds) {
+            (None, true) => {
+                let msg = "this `par` holds state in its body and is written `par~` (§2.6, §11.5)";
+                (Code::E0811, msg, Fix::insert("add `~`", span.file, head.end, "~"))
+            }
+            (Some(t), false) => {
+                let ExprKind::Par { var, .. } = &self.ast.expr(e).kind else {
+                    onsa_diag::internal::bug(Some(span), "the `~` of no replication")
+                };
+                let msg = "this `par~` holds no state in its body and is written `par` (§2.6, §11.5)";
+                let gap = if var.span.start == t.end { " " } else { "" };
+                (Code::E0812, msg, Fix::replace("remove `~`", t, gap))
+            }
+            _ => return,
+        };
+        let found = self.src(head);
+        self.report(Diagnostic::new(Stage::Flow, code, head, msg).with_found(found).with_fix(fix));
+    }
+
     /// Whether a node or a `par~` at `e` may be here: not in a branch (K-08,
     /// W7-06).
     pub(super) fn stateful_here(&mut self, e: ExprId) -> bool {

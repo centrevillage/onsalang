@@ -16,43 +16,43 @@ pub rt fn pair_sum(xs: [F32; 2]) -> F32 {
 }
 
 pub flow block_reads_i(x: F32 at sample, d: U32 at block) -> F32 at sample {
-  let ys = par~ i in 0 ..< 2 { x * F32.round_from(100 / (d - i)) }
+  let ys = par i in 0 ..< 2 { x * F32.round_from(100 / (d - i)) }
   ys[0] + ys[1]
 }
 
 pub flow block_ignores_i(x: F32 at sample, d: U32 at block) -> F32 at sample {
-  let ys = par~ i in 0 ..< 2 { x * F32.round_from(100 / d) + F32.round_from(i) }
+  let ys = par i in 0 ..< 2 { x * F32.round_from(100 / d) + F32.round_from(i) }
   ys[0] + ys[1]
 }
 
 pub flow in_output(x: F32 at sample, d: U32 at block) -> F32 at sample {
-  pair_sum(par~ i in 0 ..< 2 { x * F32.round_from(100 / (d - i)) })
+  pair_sum(par i in 0 ..< 2 { x * F32.round_from(100 / (d - i)) })
 }
 
 pub flow init_part(x: F32 at sample, k: U32 at init) -> F32 at sample {
-  let ys = par~ i in 0 ..< 2 { x * F32.round_from(100 / (k - i)) }
+  let ys = par i in 0 ..< 2 { x * F32.round_from(100 / (k - i)) }
   ys[0] + ys[1]
 }
 
 pub flow init_in_block_part(x: F32 at sample, k: U32 at init, d: U32 at block) -> F32 at sample {
-  let ys = par~ i in 0 ..< 2 { x * F32.round_from((100 / (k - i)) + d) }
+  let ys = par i in 0 ..< 2 { x * F32.round_from((100 / (k - i)) + d) }
   ys[0] + ys[1]
 }
 
 pub flow nested(x: F32 at sample, d: U32 at block) -> F32 at sample {
-  let m = par~ i in 0 ..< 2 {
-    pair_sum(par~ j in 0 ..< 2 { x * F32.round_from(100 / (d - (i + j))) })
+  let m = par i in 0 ..< 2 {
+    pair_sum(par j in 0 ..< 2 { x * F32.round_from(100 / (d - (i + j))) })
   }
   m[0] + m[1]
 }
 
 pub flow block_guard(x: F32 at sample, n: U32 at block) -> F32 at sample {
-  let ys = par~ i in 0 ..< 2 { if n != 0 { x * F32.round_from(100 / (n - i)) } else { x } }
+  let ys = par i in 0 ..< 2 { if n != 0 { x * F32.round_from(100 / (n - i)) } else { x } }
   ys[0] + ys[1]
 }
 
 pub flow init_guard(x: F32 at sample, a: U32 at init, d: U32 at block) -> F32 at sample {
-  let ys = par~ i in 0 ..< 2 { if a != 0 { x * F32.round_from(100 / (d - i)) } else { x } }
+  let ys = par i in 0 ..< 2 { if a != 0 { x * F32.round_from(100 / (d - i)) } else { x } }
   ys[0] + ys[1]
 }
 

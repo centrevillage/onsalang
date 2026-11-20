@@ -6,9 +6,10 @@
 //! user writes (`_` first or a `.` in it, §2.3), so none is reserved.
 
 use onsa_diag::hash::HashMap;
-use onsa_syntax::ast::{Ast, CallKind, ExprId, ExprKind};
+use onsa_syntax::ast::{Ast, ExprId, ExprKind};
 
 use super::super::PendingLet;
+use super::super::nodes::holds_state;
 use super::{Owner, Part, PlanKind, PlanNode};
 use crate::body::{BodyInfo, LocalId};
 use crate::flow_names::{OUTPUT_SCOPE, PAR};
@@ -75,27 +76,25 @@ pub(in crate::flow) fn scopes<'a>(locals: impl Iterator<Item = &'a [LocalId]>, b
 /// first): numbered by part of the body and kind (§11.6).
 // SPEC-GAP(S-1141): the body of each `par~` counts by itself from 0, apart
 // from the `let` or the output that holds the `par~`.
-// SPEC-GAP(S-1142): a `par~` with no state, which has no field, takes a
-// number of the kind `par` too.
+// SPEC-GAP(S-1142): a `par`, which has no field, takes a number of the kind
+// `par` too, in one series with the `par~`s.
 pub(in crate::flow) struct Namer {
     numbers: HashMap<(Owner, String), u32>,
     /// The scope of the nodes of each `let`.
     scopes: Vec<String>,
     /// The initializer of each `let` of a single name, through its
-    /// parentheses, and that name (S-148), but a `par~` whose body holds no
-    /// node ([`holds_node`]).
+    /// parentheses, and that name (S-148), but a replication whose body
+    /// holds no state ([`holds_state`]): a `par`, no node of state, is
+    /// named `<let>.par_N`, the whole value of its `let` or not (§11.6).
     // SPEC-GAP(S-1143): a value in parentheses is the call itself (`let a =
     // (prev~(x))` is `a`); one under `at` is not (`let b = prev~(x) at
     // sample` is `b.prev_0`).
-    // SPEC-GAP(S-1175): a `par~` whose body holds no node is named as one
-    // with no name (`v0.par_0`), the whole value of its `let` or not: the
-    // `let` may have a field of its value beside the replicas (R-507).
     whole: HashMap<ExprId, String>,
 }
 
 impl Namer {
     pub(in crate::flow) fn new(pending: &[PendingLet], ast: &Ast, body: &BodyInfo) -> Namer {
-        let named = |e: ExprId| !matches!(ast.expr(e).kind, ExprKind::Par { body, .. } if !holds_node(ast, body));
+        let named = |e: ExprId| !matches!(ast.expr(e).kind, ExprKind::Par { body, .. } if !holds_state(ast, body));
         let lets = pending.iter().map(|p| (ast.without_parens(p.init), p.name.clone()));
         let whole = lets.filter_map(|(e, n)| Some((e, n?))).filter(|&(e, _)| named(e)).collect();
         let scopes = scopes(pending.iter().map(|p| p.locals.as_slice()), body);
@@ -132,19 +131,6 @@ impl Namer {
         let path = qualify(scope, &name);
         Some((name, path))
     }
-}
-
-/// Whether `e` holds a node in its text (§11.5): a call with `~`, an
-/// instance or a built-in delay, in a `par~` in it too.
-fn holds_node(ast: &Ast, e: ExprId) -> bool {
-    let mut todo = vec![e];
-    while let Some(x) = todo.pop() {
-        if let ExprKind::Call { kind: CallKind::Flow, .. } = ast.expr(x).kind {
-            return true;
-        }
-        todo.extend(ast.sub_exprs(x));
-    }
-    false
 }
 
 /// The kind of a node of a delay or an instance (§11.6): the name of the

@@ -163,14 +163,14 @@ pub flow delimiter_in_a_flow(x: F32 at sample) -> F32 at sample {
 }
 
 pub flow name_in_a_par_body(x: F32 at sample) -> [F32; 2] at sample {
-  par~ i in 0..<2 {
+  par i in 0..<2 {
     let s = x"a""b"                                  //~ E0002 @13
     x
   }
 }
 
 pub flow delimiter_in_a_par_body(x: F32 at sample) -> [F32; 2] at sample {
-  par~ i in 0..<2 {
+  par i in 0..<2 {
     let s = "a"$"b"                                  //~ E0002 @13
     x
   }

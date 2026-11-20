@@ -1,0 +1,64 @@
+package state_names_par_one_series
+
+module state_names_par_one_series
+
+pub rt fn ratio(i: U32) -> F32
+
+pub rt fn pair_sum(xs: [F32; 2]) -> F32
+
+pub flow par_then_par_tilde(
+  x: F32 at sample,
+  f0: F32 at block,
+) -> F32 at sample
+  pub struct par_then_par_tilde.State  // Affine; size 28, bulk 0, align 4
+    a.par_0: 16 bytes, align 4, fast  // offset 0
+    a.par_1: 8 bytes, align 4, fast  // offset 16
+    _poisoned: 1 bytes, align 1, fast  // offset 24
+    _initialized: 1 bytes, align 1, fast  // offset 25
+  pub struct par_then_par_tilde.Params  // Copy; size 4, align 4
+    f0: F32  // offset 0
+  pub struct par_then_par_tilde.Rendered  // Affine
+    out: Buf[F32]
+  pub fn par_then_par_tilde.init(sample_rate: F32) -> par_then_par_tilde.State
+  pub rt fn par_then_par_tilde.reset(inout s: par_then_par_tilde.State)
+  pub rt fn par_then_par_tilde.process(inout s: par_then_par_tilde.State, params: par_then_par_tilde.Params, input: Span[F32], inout output: Span[F32])
+  pub rt fn par_then_par_tilde.process_inplace(inout s: par_then_par_tilde.State, params: par_then_par_tilde.Params, inout output: Span[F32])
+  pub fn par_then_par_tilde.render(params: par_then_par_tilde.Params, input: Span[F32], sample_rate: F32) -> par_then_par_tilde.Rendered uses {Alloc}
+
+pub flow par_tilde_then_par(
+  x: F32 at sample,
+  f0: F32 at block,
+) -> F32 at sample
+  pub struct par_tilde_then_par.State  // Affine; size 28, bulk 0, align 4
+    b.par_0: 8 bytes, align 4, fast  // offset 0
+    b.par_1: 16 bytes, align 4, fast  // offset 8
+    _poisoned: 1 bytes, align 1, fast  // offset 24
+    _initialized: 1 bytes, align 1, fast  // offset 25
+  pub struct par_tilde_then_par.Params  // Copy; size 4, align 4
+    f0: F32  // offset 0
+  pub struct par_tilde_then_par.Rendered  // Affine
+    out: Buf[F32]
+  pub fn par_tilde_then_par.init(sample_rate: F32) -> par_tilde_then_par.State
+  pub rt fn par_tilde_then_par.reset(inout s: par_tilde_then_par.State)
+  pub rt fn par_tilde_then_par.process(inout s: par_tilde_then_par.State, params: par_tilde_then_par.Params, input: Span[F32], inout output: Span[F32])
+  pub rt fn par_tilde_then_par.process_inplace(inout s: par_tilde_then_par.State, params: par_tilde_then_par.Params, inout output: Span[F32])
+  pub fn par_tilde_then_par.render(params: par_tilde_then_par.Params, input: Span[F32], sample_rate: F32) -> par_tilde_then_par.Rendered uses {Alloc}
+
+pub flow named(
+  x: F32 at sample,
+  f0: F32 at block,
+) -> F32 at sample
+  pub struct named.State  // Affine; size 28, bulk 0, align 4
+    ys.par_0: 16 bytes, align 4, fast  // offset 0
+    zs: 8 bytes, align 4, fast  // offset 16
+    _poisoned: 1 bytes, align 1, fast  // offset 24
+    _initialized: 1 bytes, align 1, fast  // offset 25
+  pub struct named.Params  // Copy; size 4, align 4
+    f0: F32  // offset 0
+  pub struct named.Rendered  // Affine
+    out: Buf[F32]
+  pub fn named.init(sample_rate: F32) -> named.State
+  pub rt fn named.reset(inout s: named.State)
+  pub rt fn named.process(inout s: named.State, params: named.Params, input: Span[F32], inout output: Span[F32])
+  pub rt fn named.process_inplace(inout s: named.State, params: named.Params, inout output: Span[F32])
+  pub fn named.render(params: named.Params, input: Span[F32], sample_rate: F32) -> named.Rendered uses {Alloc}

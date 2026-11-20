@@ -1,0 +1,27 @@
+digraph "named" {
+  rankdir=LR
+  node [shape=box fontname="monospace"]
+  "x" [label="x: F32 at sample" shape=ellipse color="black" fontcolor="black"]
+  "f0" [label="f0: F32 at block" shape=ellipse color="blue" fontcolor="blue"]
+  "ys" [label="ys: [F32; 2] at sample" color="black" fontcolor="black"]
+  "zs" [label="zs = par~ 0..<2: [F32; 2] at sample" color="black" fontcolor="black"]
+  "_out" [label="out: F32 at sample" shape=doubleoctagon color="black" fontcolor="black"]
+  "ys.par_0" [label="par_0 = par 0..<2: [F32; 2] at sample" style=rounded color="black" fontcolor="black"]
+  subgraph "cluster_ys.par_0" {
+    label="par i in 0..<2（×2）"
+    "ys.par_0.i" [label="i: U32 at init" shape=ellipse color="gray40" fontcolor="gray40"]
+  }
+  subgraph "cluster_zs" {
+    label="par~ j in 0..<2（×2）"
+    "zs.j" [label="j: U32 at init" shape=ellipse color="gray40" fontcolor="gray40"]
+    "zs.prev_0" [label="prev_0 = prev~: F32 at sample" style=rounded color="black" fontcolor="black"]
+  }
+  "ys.par_0" -> "ys"
+  "x" -> "ys.par_0"
+  "f0" -> "ys.par_0"
+  "ys.par_0.i" -> "ys.par_0"
+  "zs.prev_0" -> "zs"
+  "x" -> "zs.prev_0" [style=dashed]
+  "ys" -> "_out"
+  "zs" -> "_out"
+}

@@ -30,7 +30,7 @@ mod kinds;
 mod paths;
 pub(crate) use consts::{ConstScope, const_names, const_path_names};
 pub(crate) use exprs::heads;
-pub(crate) use flow::clock_after;
+pub(crate) use flow::{clock_after, par_head};
 pub(crate) use flow_forms::{NoFlowForm, no_flow_form};
 pub(crate) use kinds::METHOD_IS_CALLED;
 pub(crate) use paths::{is_value, not_a_struct};

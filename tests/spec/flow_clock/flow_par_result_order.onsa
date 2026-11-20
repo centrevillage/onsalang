@@ -30,52 +30,52 @@ pub rt fn make(i: U32) -> Named {
 // ---------------------------------------------------------------- the stages
 
 pub flow type_error_after_the_par(x: F32 at sample) -> F32 at sample {
-  let n = (par~ i in 0 ..< 2 { "a" })[0].len()
+  let n = (par i in 0 ..< 2 { "a" })[0].len()
   let t: Bool = 1.0                                          //~ E0401
   x * F32.round_from(n)
 }
 
 pub flow type_error_before_the_par(x: F32 at sample) -> F32 at sample {
   let t: Bool = 1.0                                          //~ E0401
-  let n = (par~ i in 0 ..< 2 { "a" })[0].len()
+  let n = (par i in 0 ..< 2 { "a" })[0].len()
   x * F32.round_from(n)
 }
 
 pub flow unknown_name_after_the_par(x: F32 at sample) -> F32 at sample {
-  let n = (par~ i in 0 ..< 2 { "a" })[0].len()
+  let n = (par i in 0 ..< 2 { "a" })[0].len()
   x * F32.round_from(n) + nope                               //~ E0302
 }
 
 pub flow unknown_name_before_the_par(x: F32 at sample) -> F32 at sample {
   let a = x + nope                                           //~ E0302
-  a * F32.round_from((par~ i in 0 ..< 2 { "a" })[0].len())
+  a * F32.round_from((par i in 0 ..< 2 { "a" })[0].len())
 }
 
 // The unused `q` is bound and never read (E0309) in a flow that has no other error; here the `par~` is one, and it is the only error.
 pub flow unused_let_and_a_par(x: F32 at sample) -> F32 at sample {
   let q = x * 2.0
-  x * F32.round_from((par~ i in 0 ..< 2 { "a" })[0].len())  //~ E0810 @23
+  x * F32.round_from((par i in 0 ..< 2 { "a" })[0].len())  //~ E0810 @23
 }
 
 // ---------------------------------------------------------------- the flow check, by position
 
 pub flow par_then_a_delay_error(x: F32 at sample, p: F32 at block) -> F32 at sample {
-  x * F32.round_from((par~ i in 0 ..< 2 { "a" })[0].len()) + prev~(p)  //~ E0810 @23
+  x * F32.round_from((par i in 0 ..< 2 { "a" })[0].len()) + prev~(p)  //~ E0810 @23
 }
 
 pub flow delay_error_then_a_par(x: F32 at sample, p: F32 at block) -> F32 at sample {
-  prev~(p) + x * F32.round_from((par~ i in 0 ..< 2 { "a" })[0].len())   //~ E0813 @9
+  prev~(p) + x * F32.round_from((par i in 0 ..< 2 { "a" })[0].len())   //~ E0813 @9
 }
 
 pub flow par_then_a_slower_at(x: F32 at sample) -> F32 at sample {
-  let n = (par~ i in 0 ..< 2 { "a" })[0].len()  //~ E0810 @12
+  let n = (par i in 0 ..< 2 { "a" })[0].len()  //~ E0810 @12
   let a = x at block
   x * F32.round_from(n)
 }
 
 pub flow slower_at_then_a_par(x: F32 at sample) -> F32 at sample {
   let a = x at block                                         //~ E0815
-  x * F32.round_from((par~ i in 0 ..< 2 { "a" })[0].len())
+  x * F32.round_from((par i in 0 ..< 2 { "a" })[0].len())
 }
 
 // ---------------------------------------------------------------- the `par~` is no failed clock rule
@@ -83,28 +83,28 @@ pub flow slower_at_then_a_par(x: F32 at sample) -> F32 at sample {
 // The clock of the `par~` is the clock of its body (a constant here, the text is one), so the delay of it is E0813 and the `par~`, which starts later, is not the error. The first argument is
 // a call that holds the E0810 of the element in its first argument, so it has no candidate (a candidate of a computed first argument is for one that has no error of its own, W7-05 U2/t).
 pub flow delay_of_a_par(x: F32 at sample) -> F32 at sample {
-  prev~(F32.round_from((par~ i in 0 ..< 2 { "a" })[0].len())) + x   //~ E0813
+  prev~(F32.round_from((par i in 0 ..< 2 { "a" })[0].len())) + x   //~ E0813
 }
 
 pub flow at_slower_over_a_par(x: F32 at sample) -> F32 at sample {
-  (x * F32.round_from((par~ i in 0 ..< 2 { "a" })[0].len())) at block   //~ E0815
+  (x * F32.round_from((par i in 0 ..< 2 { "a" })[0].len())) at block   //~ E0815
 }
 
 pub flow at_slower_over_a_par_in_a_let(x: F32 at sample) -> F32 at sample {
-  let a = (x * F32.round_from((par~ i in 0 ..< 2 { "a" })[0].len())) at block   //~ E0815
+  let a = (x * F32.round_from((par i in 0 ..< 2 { "a" })[0].len())) at block   //~ E0815
   a
 }
 
 // ---------------------------------------------------------------- the body, the other `par~`, the heading
 
 pub flow call_in_the_body(x: F32 at sample) -> F32 at sample {
-  x * F32.round_from((par~ i in 0 ..< 2 { make(i) })[0].s.len())  //~ E0810 @23
+  x * F32.round_from((par i in 0 ..< 2 { make(i) })[0].s.len())  //~ E0810 @23
 }
 
 pub flow two_pars_the_first_is_the_error(x: F32 at sample) -> F32 at sample {
-  F32.round_from((par~ i in 0 ..< 2 { "a" })[0].len()) + F32.round_from((par~ j in 0 ..< 2 { "b" })[0].len())  //~ E0810 @19
+  F32.round_from((par i in 0 ..< 2 { "a" })[0].len()) + F32.round_from((par j in 0 ..< 2 { "b" })[0].len())  //~ E0810 @19
 }
 
 pub flow input_that_is_not_copy_and_a_par(s: Str at block, x: F32 at sample) -> F32 at sample {   //~ E0810
-  x * F32.round_from((par~ i in 0 ..< 2 { "a" })[0].len())
+  x * F32.round_from((par i in 0 ..< 2 { "a" })[0].len())
 }

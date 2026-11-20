@@ -46,7 +46,7 @@ pub fn closed(n: U32) -> U32 {
 pub fn two_dots(n: U32) -> U32 {
   var t: U32 = 0
   for i in 0 ..=
-    n {                                             //~ E0020
+    n {                                           //~ E0020
     t = t + i
   }
   t
@@ -55,7 +55,7 @@ pub fn two_dots(n: U32) -> U32 {
 pub fn three_dots(n: U32) -> U32 {
   var t: U32 = 0
   for i in 0 ..=
-    n {                                            //~ E0020
+    n {                                          //~ E0020
     t = t + i
   }
   t
@@ -111,22 +111,22 @@ pub fn in_a_branch(n: U32, c: Bool) -> U32 {
 }
 
 pub flow par_half_open(x: F32 at sample) -> [F32; 4] at sample {
-  par~ i in 0
+  par i in 0
     ..<4 {                                          //~ E0020
     x * F32.round_from(i)
   }
 }
 
 pub flow par_closed(x: F32 at sample) -> [F32; 4] at sample {
-  par~ i in 0
+  par i in 0
     ..=3 {                                          //~ E0020
     x * F32.round_from(i)
   }
 }
 
 pub flow par_two_dots(x: F32 at sample) -> [F32; 4] at sample {
-  par~ i in 0 ..=
-    4 {                                             //~ E0020
+  par i in 0 ..=
+    4 {                                           //~ E0020
     x * F32.round_from(i)
   }
 }
@@ -153,8 +153,8 @@ pub fn comment_line_between(n: U32) -> U32 {
 
 pub fn two_dots_with_a_comment(n: U32) -> U32 {
   var t: U32 = 0
-  for i in 0 ..=  // the start of the range
-    n {                                             //~ E0020
+  for i in 0 ..= // the start of the range
+    n {                                           //~ E0020
     t = t + i
   }
   t

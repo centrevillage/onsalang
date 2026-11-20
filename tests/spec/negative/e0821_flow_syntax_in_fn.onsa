@@ -289,6 +289,6 @@ pub flow right_forms(x: F32 at sample) -> F32 at sample {
   let a = lp~(x)
   let d = prev~(^b)
   let b = a + d
-  let ps = par~ i in 0 ..< 2 { x }
+  let ps = par i in 0 ..< 2 { x }
   b + ps[0] + ps[1]
 }

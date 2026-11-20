@@ -13,19 +13,19 @@
 use std.math.sum
 
 pub flow weighted(x: F32 at sample) -> F32 at sample {
-  let ks = par~ i in 0 ..< 4 {
+  let ks = par i in 0 ..< 4 {
     x * F32.round_from(i)
   }
   sum(ks)
 }
 
 pub flow single_replica(x: F32 at sample) -> F32 at sample {
-  sum(par~ i in 0 ..< 1 { x * 0.0 })
+  sum(par i in 0 ..< 1 { x * 0.0 })
 }
 
 pub flow nested_stateless(x: F32 at sample) -> F32 at sample {
-  let rows = par~ i in 0 ..< 2 {
-    sum(par~ j in 0 ..< 3 { x * F32.round_from(3 * i + j + 1) })
+  let rows = par i in 0 ..< 2 {
+    sum(par j in 0 ..< 3 { x * F32.round_from(3 * i + j + 1) })
   }
   sum(rows)
 }
@@ -37,7 +37,7 @@ pub flow nested_delays(x: F32 at sample) -> F32 at sample {
 }
 
 pub flow of_integers(x: F32 at sample) -> U32 at sample {
-  sum(par~ i in 0 ..< 5 { i * i })
+  sum(par i in 0 ..< 5 { i * i })
 }
 
 rt fn total4(a: F32, b: F32, c: F32, d: F32) -> F32 {

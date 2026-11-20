@@ -6,26 +6,26 @@
 // level of a flow body; a nested block holds one expression), for the body of a closed `par~` as for the
 // half-open one (negative/flow_e0806_names_*.onsa and flow_semantics/rules_negative.onsa have the `..<`
 // forms). The error is of the names stage (§18.1), so it is reported whatever the range is. One error per
-// flow, each form a flow of its own. A `par~` whose body has no stateful part is accepted, with `..=` as
+// flow, each form a flow of its own. A `par` whose body has no stateful part is accepted (S-1177), with `..=` as
 // with `..<` (flow_semantics/par_closed_forms.onsa, `only_the_middle` and `doubled`).
 
 pub flow let_in_a_body(x: F32 at sample) -> [F32; 2] at sample {
-  par~ i in 0 ..= 1 {
+  par i in 0 ..= 1 {
     let t = x * F32.round_from(i)                                   //~ E0806
     t
   }
 }
 
 pub flow let_in_a_body_at_the_largest_ends(x: F32 at sample) -> [F32; 2] at sample {
-  par~ i in 4294967294 ..= 4294967295 {
+  par i in 4294967294 ..= 4294967295 {
     let t = x + F32.round_from(i - 4294967294)                      //~ E0806
     t
   }
 }
 
 pub flow let_in_a_nested_body(x: F32 at sample) -> [F32; 2] at sample {
-  let rows = par~ i in 0 ..= 1 {
-    par~ j in 0 ..= 1 {
+  let rows = par i in 0 ..= 1 {
+    par j in 0 ..= 1 {
       let t = x * F32.round_from(j)                                 //~ E0806
       t
     }
@@ -34,7 +34,7 @@ pub flow let_in_a_nested_body(x: F32 at sample) -> [F32; 2] at sample {
 }
 
 pub flow let_in_an_arm_of_a_body(x: F32 at sample) -> [F32; 2] at sample {
-  par~ i in 0 ..= 1 {
+  par i in 0 ..= 1 {
     if i == 0 {
       let t = x                                                     //~ E0806
       t
@@ -45,7 +45,7 @@ pub flow let_in_an_arm_of_a_body(x: F32 at sample) -> [F32; 2] at sample {
 }
 
 pub flow let_in_an_else_arm_of_a_body(x: F32 at sample) -> [F32; 2] at sample {
-  par~ i in 0 ..= 1 {
+  par i in 0 ..= 1 {
     if i == 0 {
       x
     } else {

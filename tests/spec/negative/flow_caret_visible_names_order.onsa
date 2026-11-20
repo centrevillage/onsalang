@@ -75,7 +75,7 @@
 // leaves = ["233:17 E0020"]
 //
 // [[test.fix]]
-// at = "238:12"
+// at = "238:31"
 // code = "E0811"
 // candidate = 1
 // leaves = ["239:17 E0020"]
@@ -234,8 +234,8 @@ pub flow tilde_on_a_function_then_caret_on_a_constant(x: F32 at sample) -> F32 a
   a + z
 }
 
-pub flow par_without_tilde_then_caret_on_an_input(x: F32 at sample) -> F32 at sample {
-  let ys = par i in 0 ..< 2 { x }                   //~ E0811
+pub flow call_without_tilde_in_a_par_body_then_caret_on_an_input(x: F32 at sample) -> F32 at sample {
+  let ys = par i in 0 ..< 2 { lp(x) }               //~ E0811
   let a = prev~(^x)
   a
 }

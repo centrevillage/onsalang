@@ -3,14 +3,14 @@
 // spec = ["§2.6", "§11.5", "§18.1"]
 // fixes = 1
 
-// W4-20 U1/t, S-745: the E0811 of a `par` without the `~` in a flow body has one candidate, the insertion
-// of the `~` right after `par` (§11.5: "`~` を足す修正候補を示す"; §2.6). It is the one candidate whatever
-// the body is (with state, without state), whatever the place is (a `let`, the tail, an argument) and
-// whatever the nest is (the one that lacks the `~`): `fixes = 1` is the number of the candidates of every
-// error of this file. The candidate of a `par` without state is the insertion, not the removal of the
-// `par`: the form with the `~` is no error (§11.5), so no E0812 follows. What the candidates leave
-// behind is in the files that are named e0811_par_clean_*. The errors are in e0811_par_without_tilde.onsa
-// and e0811_par_nested.onsa without the candidates. One error per flow (P-01).
+// W4-20 U1/t, S-745; W7-06 U0/t, S-1177: the E0811 of a `par` without the `~` that holds state in its body
+// (a flow-check-stage error, §18.1) has one candidate, the insertion of the `~` right after `par` (§11.5:
+// "`~` を足す修正候補を示す"; §2.6). It is the one candidate whatever the body holds (an instance, a delay),
+// whatever the place is (a `let`, the tail, an argument) and whatever the nest is (the one that lacks the
+// `~`): `fixes = 1` is the number of the candidates of every error of this file. A `par` without state is no
+// error (§11.5), so it has no candidate and is not in this file. What the candidates leave behind is in the
+// files that are named e0811_par_clean_*. The errors are in e0811_par_without_tilde.onsa and
+// e0811_par_nested.onsa without the candidates. One error per flow (P-01).
 
 use std.math.floor
 
@@ -42,15 +42,6 @@ pub flow with_state_as_the_tail(f0: F32 at block) -> [F32; 4] at sample {
 
 pub flow with_state_as_an_argument(f0: F32 at block) -> F32 at sample {
   total(par i in 0 ..< 4 { saw~(f0) })              //~ E0811
-}
-
-pub flow without_state_in_a_let(x: F32 at sample) -> [F32; 4] at sample {
-  let ys = par i in 0 ..< 4 { x * F32.round_from(i) }   //~ E0811
-  ys
-}
-
-pub flow without_state_as_the_tail(x: F32 at sample) -> [F32; 4] at sample {
-  par i in 0 ..< 4 { x * F32.round_from(i) }        //~ E0811
 }
 
 pub flow the_inner_of_a_nest(x: F32 at sample) -> [F32; 3] at sample {

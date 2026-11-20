@@ -1,9 +1,10 @@
-//! `onsa graph` of a `par~`: the frame, the vertex of the index, the edges, and no cycle of the solid edges (spec
+//! `onsa graph` of a `par~` and a `par`: the frame, the vertex of the index, the edges, and no cycle of the solid edges (spec
 //! `spec/tools.md` §1.1, §1.2, §1.3; §11.5, §11.6; R-76; W7-15 U3/t).
 //!
 //! What the spec fixes, and so what is checked (the text of the DOT is read by a small reader of this file, `Dot`, that
 //! knows the clusters, the vertices with their attributes and the edges; no whole text of an output is compared):
 //! - §1.3: every `par~` is a Graphviz cluster (`subgraph cluster_…`) whose heading is `par~ <index> in <a>..<<b>（×<N>）`
+//!   (a `par` is a cluster too, headed `par <index> in …`: the spelling as it is written, S-1177)
 //!   (`N` is the number of replicas, §11.5) and a `par~` inside a `par~` is a cluster inside the cluster; the cluster of
 //!   `let saws = par~ …` is `cluster_saws` (the text of the example of the spec); a flow with no `par~` has no cluster;
 //! - §1.3: the index is a vertex inside the frame, named by the name of the `par~` and the index (`saws.i`, for the inner `par~` of
@@ -18,7 +19,7 @@
 //!   `_out`); the colour is of the clock (gray `init`, blue `block`, black `sample`).
 //!
 //! The details that the spec leaves open are checked in the form the work ticket gives them provisionally, each with a mark of the
-//! gap (the form of `tools/gap_marks.py`) at the assertion (S-397, S-1084, S-1168, S-1169, S-1170, S-1171, S-1175).
+//! gap (the form of `tools/gap_marks.py`) at the assertion (S-397, S-1084, S-1168, S-1169, S-1170, S-1171).
 //!
 //! Not asked: the order of the statements, the attributes other than `label`, `shape`, `style` and `color` (the font, the rank
 //! direction), which vertices of the frame the vertex of the result is in, the name of the cluster of an inner `par~`, the exact
@@ -35,6 +36,8 @@ use test_support::*;
 const FRAMES: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../tests/spec/flow/graph_par_frames.onsa");
 /// The other flows of these tests (each is for one test; the file is checked as a program).
 const LABELS: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../tests/spec/flow/graph_labels.onsa");
+/// The `par` with no state that is the value of a `let` (W7-06 U0: a file of its own, as it reads after that unit).
+const LABELS_PAR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../tests/spec/flow/graph_labels_stateless_par.onsa");
 
 // ---------------------------------------------------------------------------------------------------------------------
 // A small reader of the DOT of `onsa graph`.
@@ -784,7 +787,7 @@ fn an_index_named_like_a_node_of_its_body_is_not_that_node() {
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-// The forms the work ticket gives provisionally (S-1171, S-1169, S-1175), and a `par~` of a package module.
+// The forms the work ticket gives provisionally (S-1171, S-1169), the `par` of S-1175 and S-1177, and a `par~` of a package module.
 
 #[test]
 fn the_heading_of_an_inclusive_range_is_the_written_form_with_the_number_of_replicas() {
@@ -831,17 +834,18 @@ fn a_let_with_more_than_one_name_and_a_let_of_the_wildcard_are_named_as_the_qual
 
 #[test]
 fn a_par_with_no_state_that_is_the_value_of_a_let_is_a_node_named_after_the_let() {
-    let dot = graph_of(LABELS, "stateless");
-    // SPEC-GAP(S-1175): §11.6 names the node of the `par~` that is the whole value of a `let` by the name of the `let`; the `par~` with no
-    // instance and no delay in its body makes no field of the state, and the provisional form calls its node `<let>.par_<number>` (as a
-    // `par~` inside a larger value), so the vertex of the `let` and the node of the `par~` are two vertices; the frame and the index
-    // follow the name of the `par~` (§1.3).
+    let dot = graph_of(LABELS_PAR, "stateless");
+    // S-1175 (1′), S-1177 (§11.6): a `par` has no state, so it is no node with state and the `let` does not name it, even when it is the
+    // whole value of the `let`: its node is `<let>.par_<number>` (as a `par` inside a larger value), so the vertex of the `let` and the
+    // node of the `par` are two vertices; the frame and the index follow the name of the `par` (§1.3), and the heading is the spelling as
+    // it is written (`par i in …`, spec/tools.md §1.3). The label of the vertex of the node starts with the name and the kind, which is
+    // `par` (the form after `par_0 = par` is the provisional one of S-1170, and the test does not read it).
     let par = dot.node("ys.par_0");
     assert!(attr(par, "style").is_some_and(|s| s.contains("rounded")), "{par:?}");
-    assert!(dot.label("ys.par_0").starts_with("par_0 = par~"), "{}", dot.label("ys.par_0"));
+    assert!(dot.label("ys.par_0").starts_with("par_0 = par"), "{}", dot.label("ys.par_0"));
     assert!(dot.find("ys").is_some(), "the vertex of the `let`: {:?}", dot.ids());
     assert_eq!(dot.frames.len(), 1, "{:?}", dot.frames);
-    assert_eq!(dot.frames[0].label.as_deref(), Some("par~ i in 0..<2（×2）"));
+    assert_eq!(dot.frames[0].label.as_deref(), Some("par i in 0..<2（×2）"));
     assert_eq!(dot.label("ys.par_0.i"), "i: U32 at init");
     assert_eq!(dot.frame_index_of("ys.par_0.i"), 0);
     dot.solid("ys.par_0", "ys");
