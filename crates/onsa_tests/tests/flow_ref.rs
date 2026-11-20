@@ -27,6 +27,10 @@ mod compare_tests;
 mod print;
 #[path = "flow_ref/print_tests.rs"]
 mod print_tests;
+#[path = "flow_ref/twin.rs"]
+mod twin;
+#[path = "flow_ref/twin_tests.rs"]
+mod twin_tests;
 
 /// The roots of the cases that are run on the evaluator, from the repository root (one place; a root is added here).
 const ROOTS: &[&str] = &["tests/spec/flow_semantics/"];

@@ -35,6 +35,21 @@ pub use super::walk_model::{CaseRun, Event, Named, Panic, Run, Shape, Skip, Test
 /// large stack. `Err` is a case that is not read (no check or a diagnostic that is not of a feature this version does not
 /// support: the checker found it a mistake, and the evaluator does not take a program that is not whole).
 pub fn run_case(input: PackageInput, wrappers: &Wrappers) -> Result<CaseRun, String> {
+    run_case_with(input, wrappers, Expect::Marks)
+}
+
+/// What decides whether a test panics, for [`run_case_with`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Expect {
+    /// The marks of the case (`PANIC`, `TESTFAIL`): a marked test panics, an unmarked one does not.
+    Marks,
+    /// What the evaluator gave, for a program made by a generator, which has no marks: a panic is kept as the test's
+    /// ([`Verdict::Ok`] with `panic`), and only the asserts before it have to hold.
+    Evaluator,
+}
+
+/// [`run_case`] with the panics of the tests judged by `expect`.
+pub fn run_case_with(input: PackageInput, wrappers: &Wrappers, expect: Expect) -> Result<CaseRun, String> {
     let marks: Vec<Markers> = input.files.iter().map(|f| parse_markers(&f.text)).collect::<Result<_, _>>()?;
     let mut loaded = Loaded::from_input(input)?;
     let analyzed = analyze_loaded(&mut loaded).map_err(|e| e.render(&loaded.sources))?;
@@ -61,7 +76,7 @@ pub fn run_case(input: PackageInput, wrappers: &Wrappers) -> Result<CaseRun, Str
         };
         let r = view.body(def).map_err(Halt::from).and_then(|body| run.steps(body, root));
         let file = loaded.sources.file(view.name_span(def).file).name().to_string();
-        tests.push(run.finish((name.clone(), file), r, marked(&name)));
+        tests.push(run.finish((name.clone(), file), r, (expect == Expect::Marks).then(|| marked(&name))));
     }
     Ok(CaseRun { tests, lowered: core.is_some(), e0200 })
 }
@@ -122,7 +137,7 @@ pub(super) struct Walk<'h, 'a> {
 }
 
 impl<'a> Walk<'_, 'a> {
-    fn finish(self, (name, file): (String, String), r: Result<(), Halt>, marked: bool) -> TestRun {
+    fn finish(self, (name, file): (String, String), r: Result<(), Halt>, marked: Option<bool>) -> TestRun {
         let (asserts, generated, events) = (self.asserts, self.generated, self.events);
         let (panic, verdict) = match r {
             Ok(()) => (None, Verdict::Ok),
@@ -134,7 +149,8 @@ impl<'a> Walk<'_, 'a> {
         };
         // A marked test panics and an unmarked one does not (the asserts before the panic have held, or it had failed).
         let verdict = match verdict {
-            Verdict::Ok if panic.is_some() != marked => {
+            Verdict::Ok if marked.is_some_and(|m| panic.is_some() != m) => {
+                let marked = marked == Some(true);
                 Verdict::Failed(if marked { "no panic".into() } else { format!("a panic: {panic:?}") })
             }
             Verdict::Ok if generated == 0 => Verdict::Skipped(Skip::NoCall),

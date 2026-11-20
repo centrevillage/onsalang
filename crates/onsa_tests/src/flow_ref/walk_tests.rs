@@ -3,7 +3,7 @@
 
 use super::flow::PanicAt;
 use super::interp_host::Wrappers;
-use super::walk::{CaseRun, Event, Panic, Skip, TestRun, Verdict, run_case};
+use super::walk::{CaseRun, Event, Expect, Panic, Skip, TestRun, Verdict, run_case, run_case_with};
 use onsa_driver::PackageInput;
 
 const FLOWS: &str = "use std.math.is_nan
@@ -292,4 +292,26 @@ fn a_call_bound_to_no_name_is_run_and_kept_like_one_bound_to_a_name() {
     );
     let r = one("test \"unmarked\" {\n  let xs: [I32; 2] = [5, 0]\n  let _ = inv.render(xs, 8.0)\n}");
     assert!(matches!(&r.verdict, Verdict::Failed(m) if m.contains("panic")), "{r:?}");
+}
+
+#[test]
+fn a_generated_program_has_no_marks_and_the_panic_of_the_evaluator_is_its_expectation() {
+    // `inv` is 10 / x: 0 panics at the frame 1 of 5 0, with no mark that says so. `dbl` doubles 2 to 4 and does not panic.
+    let src = format!(
+        "{FLOWS}test \"a\" {{\n  let xs: [I32; 2] = [5, 0]\n  let _ = inv.render(xs, 8.0)\n}}\n\
+         test \"b\" {{ //~ PANIC \"b\"\n  let xs: [F32; 1] = [2.0]\n  let o = dbl.render(xs, 8.0)\n  assert o.out[0] == 4.0\n}}"
+    );
+    let go = |expect| {
+        let src = src.clone();
+        let run = move || run_case_with(PackageInput::single_file("t.onsa", &src), &Wrappers::default(), expect);
+        onsa_diag::stack::run(run).expect("read").tests.into_iter().map(|t| (t.verdict, t.panic)).collect::<Vec<_>>()
+    };
+    // The marks are not read: the panic is the test's, and a mark of a test that does not panic is not read either.
+    let a = (Verdict::Ok, Some(Panic::Call(PanicAt::Sample(1))));
+    assert_eq!(go(Expect::Evaluator), [a, (Verdict::Ok, None)]);
+    let failed = |(v, _): &(Verdict, Option<Panic>)| matches!(v, Verdict::Failed(_));
+    assert!(
+        go(Expect::Marks).iter().all(failed),
+        "with the marks, the unmarked panic and the marked test without one fail"
+    );
 }
