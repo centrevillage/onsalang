@@ -4,12 +4,12 @@
 
 // A `^name` in the first argument of a delay reads the clock of its `let` (§11.3), even when an
 // error of the flow check comes after it in the body: the delay below reads `sample` and is no
-// error, so the first error is the later `if~` / `match~` (E0200, §18.1). A `let` in error reads as
+// error, so the first error is the later `if~` without state (E0812, §11.5) or `match~` (E0200 until W7-06 U3a, §18.1). A `let` in error reads as
 // the error type and makes no diagnostic where it is used (§18.1). R-494.
 
 pub flow forward_caret_then_if_tilde(x: F32 at sample, y: F32 at sample) -> F32 at sample {
   let a = prev~(^b)
-  let t = if~ y > 0.0 { x } else { y }                         //~ E0200
+  let t = if~ y > 0.0 { x } else { y }                         //~ E0812
   let b = x
   a
 }
@@ -23,13 +23,13 @@ pub flow forward_caret_then_match_tilde(x: F32 at sample, y: F32 at sample) -> F
 
 pub flow loop_then_if_tilde(x: F32 at sample, y: F32 at sample) -> F32 at sample {
   let a = prev~(^b + 1.0)
-  let t = if~ y > 0.0 { x } else { y }                         //~ E0200
+  let t = if~ y > 0.0 { x } else { y }                         //~ E0812
   let b = a
   b
 }
 
 pub flow caret_to_the_let_in_error(x: F32 at sample, y: F32 at sample) -> F32 at sample {
   let a = prev~(^b)
-  let b = if~ y > 0.0 { x } else { y }                         //~ E0200
+  let b = if~ y > 0.0 { x } else { y }                         //~ E0812
   a
 }

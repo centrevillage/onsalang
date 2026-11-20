@@ -1,0 +1,18 @@
+// onsa.toml
+// [test]
+// spec = ["§2.6", "§11.5", "§18.1"]
+//
+// [[test.fix]]
+// at = "17:5"
+// code = "E0812"
+// candidate = 1
+// clean = true
+
+// W7-06 U2/t, S-110, S-1177 (§11.5: "状態を持つものを枝に含まなければ E0812（修正候補は `~` を外すこと）"; §2.6: "状態を持つものを枝に含まない `if~` / `match~` の
+// E0812 は、`~` を外す修正候補を示す"): an `if~` whose branches hold only a `par` (no state: a `par` is not a thing with state, §11.5, S-1177). The removal of the
+// `~` leaves a plain `if` with the `par` in its branches, which is no error (a `par` without state may stand in a branch, and it is evaluated when the branch
+// is taken). The main position (`at`) is the `~` (S-392, provisional). One error per flow (P-01).
+
+pub flow par_only(x: F32 at sample, c: Bool at sample) -> [F32; 2] at sample {
+  if~ c { par i in 0 ..< 2 { x * F32.round_from(i) } } else { [x, x] }  //~ E0812
+}

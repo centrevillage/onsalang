@@ -1,0 +1,34 @@
+# flow_ref 1 source=tests/spec/flow_semantics/if_tilde_all_branches.onsa tests=11 evaluated=11 unavailable=0 skipped=0 waiting=0
+@ the counter of the then branch runs on the samples where it is not chosen
+render if_tilde_all_branches.state_in_the_then_branch sr=0x41000000 in x=[0x3f800000 0x40400000 0x3f800000 0x40400000 0x40400000]
+out=[0x00000000 0x40000000 0x00000000 0x40800000 0x40a00000]
+@ the counter of the else branch runs on the samples where it is not chosen
+render if_tilde_all_branches.state_in_the_else_branch sr=0x41000000 in x=[0x40400000 0x3f800000 0x40400000 0x3f800000 0x3f800000]
+out=[0x00000000 0x40000000 0x00000000 0x40800000 0x40a00000]
+@ a counter in each branch runs both
+render if_tilde_all_branches.a_counter_in_each_branch sr=0x41000000 in x=[0x3f800000 0x40400000 0x3f800000 0x40400000 0x40400000]
+out=[0x41200000 0x40000000 0x41f00000 0x40800000 0x40a00000]
+@ the tilde of an else if chain covers every branch
+render if_tilde_all_branches.a_chain_of_three sr=0x41000000 in x=[0x3f800000 0x40000000 0x40400000 0x40000000]
+out=[0x447a0000 0x43480000 0x40400000 0x43c80000]
+@ the counters of the later branches of a chain run on the samples where they are not chosen
+render if_tilde_all_branches.state_in_the_later_branches sr=0x41000000 in x=[0x40400000 0x40000000 0x3f800000 0x40000000]
+out=[0x00000000 0x40000000 0x41f00000 0x40800000]
+@ an if tilde in the else of an if tilde runs all three counters
+render if_tilde_all_branches.an_if_tilde_in_the_else sr=0x41000000 in x=[0 1 2 3]
+out=[0x42c80000 0x43480000 0x40400000 0x40800000]
+@ the else of an if tilde that is an if tilde is chosen by its own condition
+render if_tilde_all_branches.an_if_tilde_in_the_else sr=0x41000000 in x=[3 3 0]
+out=[0x3f800000 0x40000000 0x43960000]
+@ a delay in a branch that is not chosen still moves
+render if_tilde_all_branches.a_delay_in_the_untaken_branch sr=0x41000000 in x=[0x3f800000 0x40000000 0x40400000 0x40800000]
+out=[0x3f800000 0x40000000 0x40000000 0x40400000]
+@ an if tilde as the value of a let
+render if_tilde_all_branches.the_value_of_a_let sr=0x41000000 in x=[0x3f800000 0x40400000 0x40400000]
+out=[0x00000000 0x40800000 0x40c00000]
+@ an instance of a flow without state is a branch with state
+render if_tilde_all_branches.an_instance_of_a_flow_without_state sr=0x41000000 in x=[0x3fc00000 0xbf800000]
+out=[0x40400000 0x00000000]
+@ a plain if in a branch evaluates only the branch it takes
+render if_tilde_all_branches.a_plain_if_in_a_branch sr=0x41000000 in d=[0 5 -4 20]
+out=[0x00000000 0x40000000 0xc1c80000 0x40800000]

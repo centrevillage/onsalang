@@ -332,3 +332,28 @@ fn the_tilde_of_a_par_is_judged_by_its_body_in_the_flow_stage() {
         assert!(a.diagnostics.is_empty(), "{body}: {:?}", a.diagnostics);
     }
 }
+
+/// §11.3: an `if` chain is the join of its links, and a later `if` of it
+/// that of its own links; an `if~` too, whose branches hold state (§11.5).
+#[test]
+fn the_later_ifs_of_a_chain_have_the_clocks_of_their_links() {
+    let f = walk_of(
+        "pub flow f(x: F32 at sample, p: F32 at block) -> F32 at sample {\n  let a = if x > 0.0 { x } else if p > 0.0 { p } else { 1.0 }\n  let b = if~ p > 1.0 { prev~(x) } else if p > 0.0 { p } else { prev~(p at sample) }\n  a + b\n}\n",
+        "f",
+    );
+    assert!(f.complete);
+    assert_eq!((f.let_("a"), f.expr("if p > 0.0 { p } else { 1.0 }")), (S, Clock::Block));
+    assert_eq!((f.let_("b"), f.expr("if p > 0.0 { p } else { prev~(p at sample) }")), (S, S));
+}
+
+/// §11.5, S-1177: an `if~` none of whose branches holds state is E0812 at
+/// its `~`, a later condition with state not counted (S-1191).
+#[test]
+fn an_if_tilde_with_no_state_in_its_branches_is_e0812() {
+    let f = walk_of(
+        "pub flow f(x: F32 at sample) -> F32 at sample {\n  if~ x > 0.0 { 1.0 } else if prev~(x) > 0.0 { 2.0 } else { x }\n}\n",
+        "f",
+    );
+    let d = f.walked.diag.as_ref().expect("a diagnostic");
+    assert_eq!((d.code, &f.src[d.span.start as usize..d.span.end as usize]), (onsa_diag::Code::E0812, "~"));
+}

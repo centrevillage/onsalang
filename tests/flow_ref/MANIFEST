@@ -14,7 +14,7 @@ file feedback_annotated.tsv rows=10 tests=1 evaluated=1 unavailable=0 skipped=0 
 file flow_const_alias_derived_init_calls.tsv rows=22 tests=7 evaluated=7 unavailable=0 skipped=0 waiting=0
 file flow_const_alias_derived_kinds.tsv rows=55 tests=17 evaluated=17 unavailable=0 skipped=0 waiting=0
 file flow_const_alias_derived_stages.tsv rows=49 tests=16 evaluated=16 unavailable=0 skipped=0 waiting=0
-file flow_const_alias_if_tilde.tsv rows=7 tests=2 evaluated=2 unavailable=0 skipped=0 waiting=1
+file flow_const_alias_if_tilde.tsv rows=7 tests=2 evaluated=2 unavailable=0 skipped=0 waiting=0
 file flow_const_alias_kinds.tsv rows=55 tests=18 evaluated=18 unavailable=0 skipped=0 waiting=0
 file flow_const_alias_module.tsv rows=16 tests=5 evaluated=5 unavailable=0 skipped=0 waiting=0
 file flow_const_alias_module_derived.tsv rows=16 tests=5 evaluated=5 unavailable=0 skipped=0 waiting=0
@@ -42,6 +42,9 @@ file hoist_par_panic_stage.tsv rows=62 tests=9 evaluated=9 unavailable=0 skipped
 file hoist_par_values.tsv rows=82 tests=20 evaluated=20 unavailable=0 skipped=0 waiting=0
 file hoist_values.tsv rows=28 tests=8 evaluated=8 unavailable=0 skipped=0 waiting=0
 file hoisting.tsv rows=13 tests=4 evaluated=4 unavailable=0 skipped=0 waiting=0
+file if_tilde_all_branches.tsv rows=34 tests=11 evaluated=11 unavailable=0 skipped=0 waiting=0
+file if_tilde_hoist.tsv rows=46 tests=13 evaluated=13 unavailable=0 skipped=0 waiting=0
+file if_tilde_select_order.tsv rows=34 tests=11 evaluated=11 unavailable=0 skipped=0 waiting=0
 file in_out_field_receiver.tsv rows=7 tests=6 evaluated=0 unavailable=0 skipped=6 waiting=0
 file infer_generic.tsv rows=10 tests=3 evaluated=3 unavailable=0 skipped=0 waiting=0
 file inplace_struct_output.tsv rows=9 tests=8 evaluated=0 unavailable=0 skipped=8 waiting=0
@@ -59,7 +62,7 @@ file lookback_state.tsv rows=46 tests=7 evaluated=7 unavailable=0 skipped=0 wait
 file lookback_types.tsv rows=30 tests=9 evaluated=9 unavailable=0 skipped=0 waiting=0
 file lookback_vdelay.tsv rows=19 tests=6 evaluated=6 unavailable=0 skipped=0 waiting=0
 file nan_and_inf.tsv rows=7 tests=2 evaluated=2 unavailable=0 skipped=0 waiting=0
-file par_branch.tsv rows=5 tests=1 evaluated=1 unavailable=0 skipped=0 waiting=1
+file par_branch.tsv rows=5 tests=1 evaluated=1 unavailable=0 skipped=0 waiting=0
 file par_closed_continuation.tsv rows=11 tests=2 evaluated=2 unavailable=0 skipped=0 waiting=0
 file par_closed_edges.tsv rows=29 tests=6 evaluated=6 unavailable=0 skipped=0 waiting=0
 file par_closed_forms.tsv rows=17 tests=4 evaluated=4 unavailable=0 skipped=0 waiting=0
@@ -97,4 +100,4 @@ file struct_pattern_rest_let.tsv rows=7 tests=2 evaluated=2 unavailable=0 skippe
 file struct_pattern_rest_match.tsv rows=4 tests=1 evaluated=1 unavailable=0 skipped=0 waiting=1
 file vdelay_edges.tsv rows=64 tests=15 evaluated=14 unavailable=0 skipped=1 waiting=0
 file vdelay_varying_d.tsv rows=2 tests=1 evaluated=0 unavailable=0 skipped=1 waiting=0
-total files=98 rows=2475 tests=632 evaluated=572 unavailable=6 skipped=54 waiting=9
+total files=101 rows=2589 tests=667 evaluated=607 unavailable=6 skipped=54 waiting=7

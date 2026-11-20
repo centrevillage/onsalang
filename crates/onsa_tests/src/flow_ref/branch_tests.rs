@@ -399,3 +399,96 @@ flow ini_k(k: U32 at init, x: F64 at sample) -> F64 at sample { match~ k { n => 
     same64(&by_block("blk_sample").expect("a sample argument that reads the arm binding"), &[6.0]);
     same64(&by_init("ini_k").expect("an init argument that reads k"), &[3.0]);
 }
+
+// ---------------------------------------------------------------------------------------------------------------------------------
+// W7-06 U2/t, S-1094 (1), S-110 (§11.5): the side of an `if~` that selects (the conditions of the chain) is evaluated first, from the top,
+// up to the first condition that is true, and then every branch in the order written. The sources are run unclean while the check gives
+// `if~` E0200 (W7-06 U2 makes them clean).
+
+/// The text of the expression that panicked in one frame of the flow `name` of `src` (`cols` the inputs of the frame), or "" for none.
+fn panic_text(src: &'static str, name: &'static str, cols: Vec<(&'static str, Value)>) -> String {
+    with_checked(src, false, move |a| {
+        let (view, def) = (super::sema_view::View::new(a), super::expr_tests::def_named(a, name));
+        let mut me = Instance::init(view, def, 48000.0, &[], None).expect("init");
+        let ins: Vec<(&str, Vec<Value>)> = cols.into_iter().map(|(n, v)| (n, vec![v])).collect();
+        let ins: Vec<(&str, &[Value])> = ins.iter().map(|(n, v)| (*n, &v[..])).collect();
+        match me.process_outcome(&[], &ins, 1, None).expect("an outcome") {
+            Outcome::Ok(_) => String::new(),
+            Outcome::Panic { stop, .. } => src[stop.at.start as usize..stop.at.end as usize].to_string(),
+        }
+    })
+}
+
+#[test]
+fn the_conditions_of_an_if_tilde_chain_stop_at_the_first_true_one() {
+    // §11.5: "`c1` が真なら `c2` を評価しない". `if~ c { 1 } else if 100 / d > 5 { 2 } else { 3 }` with d = 0: the second condition
+    // divides by zero, and it is evaluated only when `c` is false. The branches are plain here: the panic is the one of the condition.
+    let src = "flow chain(c: Bool at sample, d: I32 at sample) -> I32 at sample { if~ c { 1 } else if 100 / d > 5 { 2 } else { 3 } }";
+    assert_eq!(panic_text(src, "chain", vec![("c", Value::Bool(true)), ("d", i32v(0))]), "");
+    assert_eq!(panic_text(src, "chain", vec![("c", Value::Bool(false)), ("d", i32v(0))]), "100 / d");
+    // The third condition is not evaluated when the second is true.
+    let src = "flow chain3(c: Bool at sample, e: Bool at sample, d: I32 at sample) -> I32 at sample {
+  if~ c { 1 } else if e { 2 } else if 100 / d > 5 { 3 } else { 4 }
+}";
+    let at = |c, e| panic_text(src, "chain3", vec![("c", Value::Bool(c)), ("e", Value::Bool(e)), ("d", i32v(0))]);
+    assert_eq!(
+        (at(true, false), at(false, true), at(false, false)),
+        (String::new(), String::new(), "100 / d".to_string())
+    );
+}
+
+#[test]
+fn the_condition_is_evaluated_before_the_branches_and_the_branches_in_the_order_written() {
+    // §11.5: "評価の順は、選ぶ側を先に、次に全ての枝と腕の本体を書いた順である". With d = 0 every division panics, so the first that is
+    // evaluated is the panic of the call: the condition of the chain before its branches, and the first branch before the second.
+    let one = "flow f(d: I32 at sample) -> I32 at sample { if~ 100 / d > 5 { 200 / d } else { 300 / d } }";
+    assert_eq!(panic_text(one, "f", vec![("d", i32v(0))]), "100 / d");
+    let two = "flow g(c: Bool at sample, d: I32 at sample) -> I32 at sample { if~ c { 200 / d } else { 300 / d } }";
+    assert_eq!(panic_text(two, "g", vec![("c", Value::Bool(false)), ("d", i32v(0))]), "200 / d");
+    // The second condition (evaluated, `c` is false) comes before the first branch: written in the order c1, a, c2, b, e the
+    // old reading would report `200 / d`.
+    let three = "flow h(c: Bool at sample, d: I32 at sample) -> I32 at sample {
+  if~ c { 200 / d } else if 100 / d > 5 { 300 / d } else { 400 / d }
+}";
+    assert_eq!(panic_text(three, "h", vec![("c", Value::Bool(false)), ("d", i32v(0))]), "100 / d");
+    // With `c` true the second condition is not evaluated, and the first branch is the first panic.
+    assert_eq!(panic_text(three, "h", vec![("c", Value::Bool(true)), ("d", i32v(0))]), "200 / d");
+}
+
+#[test]
+fn an_if_tilde_in_an_else_has_its_condition_evaluated_whatever_the_outer_condition_is() {
+    // §11.5: "`else { if~ c2 { b } else { e } }` と入れ子に書いた `if~` は else の枝の本体なので、その条件は常に評価する". The outer
+    // condition is true and the condition of the inner `if~` divides by zero: panics; the same written as an `else if` does not.
+    let nested = "flow n(c: Bool at sample, d: I32 at sample) -> I32 at sample { if~ c { 1 } else { if~ 100 / d > 5 { 2 } else { 3 } } }";
+    let chain = "flow k(c: Bool at sample, d: I32 at sample) -> I32 at sample { if~ c { 1 } else if 100 / d > 5 { 2 } else { 3 } }";
+    let cols = || vec![("c", Value::Bool(true)), ("d", i32v(0))];
+    assert_eq!(panic_text(nested, "n", cols()), "100 / d");
+    assert_eq!(panic_text(chain, "k", cols()), "");
+}
+
+#[test]
+fn the_values_of_the_cases_of_if_tilde_all_branches_onsa() {
+    // The expected values of tests/spec/flow_semantics/if_tilde_all_branches.onsa and if_tilde_select_order.onsa, on this evaluator
+    // (the check of this version gives `if~` E0200: unclean). The counters of the three branches of `nest` run on each sample.
+    let src = format!(
+        "{ACC}flow nest(x: I32 at sample) -> F64 at sample {{
+  let a = x >= 2
+  let b = x >= 3
+  if~ a {{ acc~(1.0) }} else {{ if~ b {{ acc~(10.0) }} else {{ acc~(100.0) }} }}
+}}
+flow later(x: I32 at sample) -> F64 at sample {{
+  if~ x >= 3 {{ 0.0 }} else if x >= 2 {{ acc~(1.0) }} else {{ acc~(10.0) }}
+}}
+flow second(x: I32 at sample) -> F64 at sample {{
+  if~ x <= 0 {{ acc~(1.0) }} else if 100 / x > 5 {{ 2.0 }} else {{ 3.0 }}
+}}"
+    );
+    let run = |name: &'static str, xs: &[i128]| {
+        let col = xs.iter().map(|x| i32v(*x)).collect::<Vec<_>>();
+        f64s(&run_with(false, &src, name, vec![], vec![], vec![("x", col)], vec![xs.len()]))
+    };
+    assert_eq!(run("nest", &[0, 1, 2, 3]), [100.0, 200.0, 3.0, 4.0]);
+    assert_eq!(run("nest", &[3, 3, 0]), [1.0, 2.0, 300.0]);
+    assert_eq!(run("later", &[3, 2, 1, 2]), [0.0, 2.0, 30.0, 4.0]);
+    assert_eq!(run("second", &[0, -2, 1, 50]), [1.0, 2.0, 2.0, 3.0]);
+}

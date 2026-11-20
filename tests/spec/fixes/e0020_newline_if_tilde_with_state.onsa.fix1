@@ -1,0 +1,47 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§2.6", "§11.5", "§18.1"]
+// fixes = 1
+
+// W7-06 U2/t, S-1187, S-385 (§2.6: 括弧の中では改行も空白と同じで、`if` と `~` の間の改行は E0020、修正候補の一つ目は `~` をキーワードの直後へ移す形である): the
+// `if` of `e0020_newline_if_tilde.onsa` with a thing with state in a branch, so that the `if~` that the candidate writes is no E0812 (S-110: without state in a
+// branch, the candidate leads to the E0812, whose candidate takes the `~` away again; that loop is in the CLI test `a_newline_before_the_tilde_leads_to_the_e0812_and_stops`
+// of crates/onsa_cli/tests/cli/if_tilde_candidates.rs). The `~` is followed by a space, so it touches nothing and the candidate is the one (`fixes = 1`: no prefix reading
+// `!c`, whose plain `if` would hold the state in a branch, E0811). After the candidate the flow checks clean (the runner's default). The main position of the E0020
+// is the `~`, so the marker is on the line of the `~` the candidate moves. One error per declaration unit (P-01).
+
+pub rt fn two(a: F32, b: F32) -> F32 {
+  a + b
+}
+
+pub flow acc(x: F32 at sample) -> F32 at sample {
+  let y = x + prev~(^y)
+  y
+}
+
+pub flow in_an_argument(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  two(if~
+    c { acc~(x) } else { 2.0 }, 1.0)               //~ E0020
+}
+
+pub flow in_a_group(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  let a = (if~
+    c { 1.0 } else { prev~(x) })                   //~ E0020
+  a
+}
+
+pub flow in_an_array(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  let v = [if~
+    c { prev~(x) } else { 2.0 }, 3.0]              //~ E0020
+  v[0]
+}
+
+pub flow with_an_operator(x: F32 at sample, a: Bool at sample, b: Bool at sample) -> F32 at sample {
+  two(if~
+    a && b { acc~(x) } else { 2.0 }, 1.0)          //~ E0020
+}
+
+pub flow a_chain(x: F32 at sample, c: Bool at sample, d: Bool at sample) -> F32 at sample {
+  two(if~
+    c { acc~(x) } else if d { 2.0 } else { 3.0 }, 1.0)   //~ E0020
+}

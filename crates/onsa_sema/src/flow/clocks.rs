@@ -203,8 +203,6 @@ pub(super) struct Walk<'a> {
     /// The places around the expression walked that are not evaluated on
     /// every sample, the innermost last.
     sites: Vec<Site>,
-    /// The head of the chain of the `if` walked next, a later `if` of it.
-    chain: Option<ExprId>,
     /// At `Check`: the statement walked.
     stmt: Option<Stmt>,
     diag: Option<Diagnostic>,
@@ -258,7 +256,6 @@ pub(super) fn walk(
         node_clocks: Vec::new(),
         node_of: HashMap::default(),
         sites: Vec::new(),
-        chain: None,
         stmt: None,
         diag: None,
         inout_call: None,
@@ -438,26 +435,9 @@ impl Walk<'_> {
                 Some(t) => self.expr(t),
                 None => Some(Clock::Const),
             },
-            // E0200 of W7-06: the walk stops at them.
-            ExprKind::If { tilde: Some(t), .. } => self.tilde(*t, "if~"),
+            // E0200 of W7-06 U3a: the walk stops at it.
             ExprKind::Match { tilde: Some(t), .. } => self.tilde(*t, "match~"),
-            // A later `if` of a chain: its condition chooses (S-1094), its
-            // branches are of the head of the chain.
-            ExprKind::If { cond, then, else_, .. } => {
-                let (head, c) = match self.chain.take() {
-                    Some(head) => (head, self.at(Site::Choose, |w| w.expr(*cond))),
-                    None => (e, self.expr(*cond)),
-                };
-                let mut ops = vec![c];
-                self.at(Site::Branch { head }, |w| {
-                    ops.push(w.expr(*then));
-                    if let Some(x) = *else_ {
-                        w.chain = matches!(ast.expr(x).kind, ExprKind::If { tilde: None, .. }).then_some(head);
-                        ops.push(w.expr(x));
-                    }
-                });
-                self.join(e, &ops)
-            }
+            ExprKind::If { tilde, .. } => self.if_chain(e, *tilde),
             ExprKind::Match { scrutinee, arms, .. } => self.match_arms(e, *scrutinee, arms),
             ExprKind::Binary { op, lhs, rhs, .. } => {
                 let l = self.expr(*lhs);
@@ -516,6 +496,38 @@ impl Walk<'_> {
         if self.mode == Mode::Check {
             self.out.locals.insert(l, c.unwrap_or(Clock::Const));
         }
+    }
+
+    /// The `if` chain `e` (§11.3, §11.5), `tilde` the `~` of its head, in
+    /// the order of the text: its first condition, evaluated every sample;
+    /// the later ones, which choose (S-1094, S-394); its branches, of a chain
+    /// with no `~` the places of the `if` at its head, of an `if~` evaluated
+    /// every sample, which holds state in one ([`Self::check_tilde`]). The
+    /// later `if`s of the chain have the clocks of their links, joined from
+    /// the last. One loop over the chain.
+    fn if_chain(&mut self, e: ExprId, tilde: Option<Span>) -> Option<Clock> {
+        let chain = super::branching::chain(self.ast, e);
+        if let Some(t) = tilde.filter(|_| self.checking()) {
+            self.check_tilde(t, &chain);
+        }
+        let branch = |w: &mut Self, x| match tilde {
+            None => w.at(Site::Branch { head: e }, |w| w.expr(x)),
+            Some(_) => w.expr(x),
+        };
+        let mut ops = Vec::with_capacity(2 * chain.links.len() + 1);
+        for (k, l) in chain.links.iter().enumerate() {
+            ops.push(if k == 0 { self.expr(l.cond) } else { self.at(Site::Choose, |w| w.expr(l.cond)) });
+            ops.push(branch(self, l.then));
+        }
+        let last = chain.last.map(|x| branch(self, x));
+        let mut c = last.flatten();
+        let later = if self.checking() { chain.links.len() } else { 1 };
+        for (k, l) in chain.links.iter().enumerate().take(later).skip(1).rev() {
+            c = self.join(l.at, &[c, ops[2 * k], ops[2 * k + 1]]);
+            self.out.exprs.insert(l.at, c.unwrap_or(Clock::Const));
+        }
+        ops.extend(last);
+        self.join(e, &ops)
     }
 
     /// `match` (§11.3): the scrutinee, the guards, which choose, and the

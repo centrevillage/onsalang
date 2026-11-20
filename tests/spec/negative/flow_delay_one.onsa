@@ -3,12 +3,12 @@
 // spec = ["§11.4", "§4.5"]
 
 // E0807: `delay~(e, N)` needs `N >= 2`; one sample of delay is `prev~` (§11.4).
-// The length is a constant expression, so a named constant and an
-// arithmetic expression whose value is 1 are the same error as the literal
-// (§11.4, §18.1: "if the value is 1, E0807"). One error per flow (P-01). The
-// shapes: the literal with and without `init`, a constant, a constant
-// expression, a delay bound to a `let`, one inside `par`, and one inside an
-// `if~`.
+// The length is a constant expression, so a named constant is the same error as the literal
+// (§11.4, §18.1: "if the value is 1, E0807"). One error per flow (P-01). The shapes: the
+// literal with and without `init`, a constant, a delay bound to a `let`, one inside `par`,
+// and one inside an `if~` (its branch holds a thing with state, so the `if~` is no E0812). The length
+// that is an arithmetic expression (`TWO - 1`, `TWO + 1`) is a constant expression that this version
+// does not compute in a flow (E0200, R-195, W9-03): its cases are in flow_delay_const_expression_w9_03.onsa.
 const ONE: U32 = 1
 const TWO: U32 = 2
 
@@ -22,10 +22,6 @@ pub flow literal_one_with_init(x: F32 at sample) -> F32 at sample {
 
 pub flow named_constant(x: F32 at sample) -> F32 at sample {
   delay~(x, ONE)                //~ E0807
-}
-
-pub flow constant_expression(x: F32 at sample) -> F32 at sample {
-  delay~(x, TWO - 1)            //~ E0807
 }
 
 pub flow bound_to_a_let(x: F32 at sample) -> F32 at sample {
@@ -51,7 +47,7 @@ pub flow inside_if_tilde(x: F32 at sample, c: Bool at sample) -> F32 at sample {
 // Two samples or more is a delay line, and one sample of delay is `prev~`.
 pub flow fine(x: F32 at sample) -> F32 at sample {
   let a = delay~(x, 2)
-  let b = delay~(x, TWO + 1, 0.5)
+  let b = delay~(x, TWO, 0.5)
   let c = prev~(x)
   a + b + c
 }

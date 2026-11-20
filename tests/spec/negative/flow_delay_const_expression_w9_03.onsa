@@ -1,0 +1,24 @@
+// onsa.toml
+// [test]
+// spec = ["§11.4", "§4.5"]
+
+// E0807 for a length that is a constant expression (R-195, W9-03; split from flow_delay_one.onsa at W7-06 U2): `delay~(e, N)` needs `N >= 2`, and the length is a
+// constant expression (§4.5: a named constant, arithmetic), so `TWO - 1` is 1 and the same error as the literal (§11.4, §18.1: "if the value is 1, E0807"). This
+// version does not compute the value of a constant expression in a flow (E0200, W9-03), so the cases wait for it. A length of 2 or more that is an arithmetic expression is
+// no error (`fine`). One error per flow (P-01).
+
+const TWO: U32 = 2
+
+pub flow constant_expression(x: F32 at sample) -> F32 at sample {
+  delay~(x, TWO - 1)            //~ E0807
+}
+
+pub flow constant_expression_with_init(x: F32 at sample) -> F32 at sample {
+  delay~(x, TWO - 1, 0.5)       //~ E0807
+}
+
+pub flow fine(x: F32 at sample) -> F32 at sample {
+  let a = delay~(x, TWO + 1)
+  let b = delay~(x, TWO * 2, 0.5)
+  a + b
+}

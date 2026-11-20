@@ -52,6 +52,9 @@ fn lower_expr_at(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId) -> R<Expr> {
         return Ok(v);
     }
     let ty = lw.core_ty(cx.value_ty(e)?, &cx.args, span)?;
+    if let AK::If { tilde: Some(_), .. } = cx.expr(e).kind {
+        return super::flow::tilde_if(lw, cx, e, ty);
+    }
     // Resolved names first (locals, consts, variants, builtin constants).
     if let Some(t) = cx.info.targets.get(&e).cloned()
         && !matches!(cx.expr(e).kind, AK::Call { .. })

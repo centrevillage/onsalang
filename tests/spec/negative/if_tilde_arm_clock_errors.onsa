@@ -1,0 +1,65 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§11.4", "§11.5", "§18.1"]
+
+// W7-06 U2/t, S-110, S-1094 (1) (§11.5: "`~` が全て評価するのは枝と腕の本体である"): the branches of an `if~` are not a place that the check of the flow body leaves
+// (the `if~` was E0200 before W7-06 and hid them), so the errors of the flow check stage that are found in a branch are reported: a clock that goes the wrong way
+// (E0815: `at block` over a value of `sample`), the first argument of a delay at a clock that has no ticks (E0813: a value of `block`), and a signal value that is
+// not Copy (E0810: the value of a delay is a `Str`, §11.3). Every `if~` here holds a thing with state in a branch (it is no E0812; the delay of the E0813 and
+// the E0810 is that thing, and `acc~` is it for the E0815). One error per flow (P-01); the marker is on the line of the offending construct, and the spec
+// does not fix its column.
+
+pub flow acc(x: F32 at sample) -> F32 at sample {
+  let y = x + prev~(^y)
+  y
+}
+
+pub rt fn str_len(s: Str) -> F32 { F32.round_from(s.len()) }
+
+// ---- E0815 ----
+
+pub flow e0815_in_the_then_branch(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  if~ c { acc~(x) + (x at block) } else { 0.0 } //~ E0815
+}
+
+pub flow e0815_in_the_else_branch(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  if~ c { acc~(x) } else { x at block } //~ E0815
+}
+
+pub flow e0815_in_a_later_branch_of_a_chain(x: F32 at sample) -> F32 at sample {
+  if~ x > 1.0 { acc~(x) } else if x > 0.0 { x at block } else { 0.0 } //~ E0815
+}
+
+// ---- E0813 ----
+
+pub flow e0813_in_the_then_branch(x: F32 at sample, p: F32 at block, c: Bool at sample) -> F32 at sample {
+  if~ c { prev~(p) } else { x } //~ E0813
+}
+
+pub flow e0813_in_the_else_branch(x: F32 at sample, p: F32 at block, c: Bool at sample) -> F32 at sample {
+  if~ c { x } else { prev~(p) } //~ E0813
+}
+
+pub flow e0813_in_a_branch_of_a_chain(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  if~ x > 1.0 { 1.0 } else if x > 0.0 { prev~(p) } else { 0.0 } //~ E0813
+}
+
+// ---- E0810 ----
+
+pub flow e0810_in_the_then_branch(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  if~ c { x * str_len(prev~(if x > 0.0 { "a" } else { "bb" }, "z")) } else { 0.0 } //~ E0810
+}
+
+pub flow e0810_in_the_else_branch(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  if~ c { 0.0 } else { x * str_len(prev~(if x > 0.0 { "a" } else { "bb" }, "z")) } //~ E0810
+}
+
+pub flow e0810_in_a_branch_of_a_chain(x: F32 at sample) -> F32 at sample {
+  if~ x > 1.0 { 1.0 } else if x > 0.0 { x * str_len(prev~(if x > 0.0 { "a" } else { "bb" }, "z")) } else { 0.0 } //~ E0810
+}
+
+// ---- Not errors: the same forms with the clocks the right way ----
+
+pub flow fine(x: F32 at sample, p: F32 at block, c: Bool at sample) -> F32 at sample {
+  if~ c { acc~(x) + (p at sample) } else { prev~(x) }
+}

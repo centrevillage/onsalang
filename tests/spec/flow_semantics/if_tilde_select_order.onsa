@@ -1,0 +1,142 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.5", "§9.2", "§3.5"]
+
+// W7-06 U2/t, S-1094 (1), S-110, R-14 (spec §11.5: "選ぶ側（`if~` の連鎖の条件 …）は普通の `if` / `match` と同じく上から評価し、最初に真に
+// なった条件 … で止める（後ろの条件 … は評価しない）。`~` が全て評価するのは枝と腕の本体である"; "`if~ c1 { a } else if c2 { b } else { e }` は
+// `c1` が真なら `c2` を評価しない。`else { if~ c2 { b } else { e } }` と入れ子に書いた `if~` は else の枝の本体なので、その条件は常に評価する"):
+// which parts of an `if~` are evaluated, seen by whether a division by zero panics. The conditions of the chain are evaluated from the top
+// until the first that is true (a later one is not evaluated), and every branch is evaluated, the one that is not chosen too, and an `if~`
+// that is the `else` of another is a branch, so its condition is evaluated whatever the outer condition is. Which panic is reported when
+// there are two on one sample (the condition or the branch, the first branch or the later one) is in the CLI test
+// crates/onsa_cli/tests/cli/if_tilde_order.rs, which reads the position of the panic. `acc~(1.0)` counts the samples: 1, 2, 3, ...
+// (the branches of an `if~` hold state so that it is no E0812).
+
+pub flow acc(x: F32 at sample) -> F32 at sample {
+  let y = x + prev~(^y)
+  y
+}
+
+// `x <= 0` is true for x = 0, so the second condition `100 / x > 5` is not evaluated there.
+pub flow the_second_condition_after_a_true_one(x: I32 at sample) -> F32 at sample {
+  if~ x <= 0 { acc~(1.0) } else if 100 / x > 5 { 2.0 } else { 3.0 }
+}
+
+// `x < 0` is false for x = 0, so the second condition is evaluated there and divides by zero.
+pub flow the_second_condition_after_a_false_one(x: I32 at sample) -> F32 at sample {
+  if~ x < 0 { acc~(1.0) } else if 100 / x > 5 { 2.0 } else { 3.0 }
+}
+
+// The third condition is not evaluated when the second is true, and the second not when the first is.
+pub flow the_third_condition(x: I32 at sample) -> F32 at sample {
+  if~ x == 1 { acc~(1.0) } else if x == 2 { 2.0 } else if 100 / (x - 3) > 5 { 3.0 } else { 4.0 }
+}
+
+// The `if~` of the `else` is a branch: its condition is evaluated for x = 0 although the outer condition is true there.
+pub flow an_if_tilde_in_the_else(x: I32 at sample) -> F32 at sample {
+  if~ x == 0 { acc~(1.0) } else { if~ 100 / x > 5 { acc~(10.0) } else { 0.0 } }
+}
+
+// The branch that is not chosen is evaluated: `100 / x` for x = 0, where the condition is false.
+pub flow the_untaken_then_branch(x: I32 at sample) -> F32 at sample {
+  if~ x > 0 { acc~(F32.round_from(100 / x)) } else { 0.0 }
+}
+
+// The same for the `else`: `100 / x` for x = 0, where the condition `x >= 0` is true.
+pub flow the_untaken_else_branch(x: I32 at sample) -> F32 at sample {
+  if~ x >= 0 { acc~(1.0) } else { F32.round_from(100 / x) }
+}
+
+// A branch in the middle of a chain that is not chosen.
+pub flow the_untaken_middle_branch(x: I32 at sample) -> F32 at sample {
+  if~ x > 5 { acc~(1.0) } else if x > 0 { F32.round_from(100 / x) } else { 0.0 }
+}
+
+test "the condition after a true one is not evaluated" {
+  // x = 0 -2 1 50.  x <= 0 is true for the first two: the counter 1, 2 (100 / 0 is not evaluated).  Then 100 / 1 = 100 > 5: 2.0;
+  // 100 / 50 = 2 > 5 is false: 3.0.  The counter runs on every sample.
+  let xs: [I32; 4] = [0, -2, 1, 50]
+  let o = the_second_condition_after_a_true_one.render(xs, 8.0)
+  assert o.out[0] == 1.0
+  assert o.out[1] == 2.0
+  assert o.out[2] == 2.0
+  assert o.out[3] == 3.0
+}
+
+test "the condition after a false one is evaluated and divides by zero" {
+  let xs: [I32; 3] = [-1, 5, 0]
+  let o = the_second_condition_after_a_false_one.render(xs, 8.0) //~ PANIC "the condition after a false one is evaluated and divides by zero"
+  assert o.out[0] == 1.0
+}
+
+test "the second condition after a false one is no panic when it does not divide by zero" {
+  // x = -1 5 20: the counter 1; 100 / 5 = 20 > 5: 2.0; 100 / 20 = 5 > 5 is false: 3.0.
+  let xs: [I32; 3] = [-1, 5, 20]
+  let o = the_second_condition_after_a_false_one.render(xs, 8.0)
+  assert o.out[0] == 1.0
+  assert o.out[1] == 2.0
+  assert o.out[2] == 3.0
+}
+
+test "the third condition is evaluated only when the first two are false" {
+  // x = 1 2 3 4: x == 1 takes the counter (1), x == 2 takes 2.0 (the third condition `100 / (x - 3)` would divide by zero for x = 3,
+  // but it is not evaluated for x = 1 and x = 2); for x = 4: 100 / 1 = 100 > 5: 3.0.  x = 3 itself divides by zero: it is in the next test.
+  let xs: [I32; 3] = [1, 2, 4]
+  let o = the_third_condition.render(xs, 8.0)
+  assert o.out[0] == 1.0
+  assert o.out[1] == 2.0
+  assert o.out[2] == 3.0
+}
+
+test "the third condition divides by zero when the first two are false" {
+  let xs: [I32; 2] = [1, 3]
+  let o = the_third_condition.render(xs, 8.0) //~ PANIC "the third condition divides by zero when the first two are false"
+  assert o.out[0] == 1.0
+}
+
+test "the condition of an if tilde in the else is evaluated although the outer condition is true" {
+  // x = 0: the outer `x == 0` is true, and the inner condition `100 / x` of the `else` is evaluated all the same.
+  let xs: [I32; 2] = [1, 0]
+  let o = an_if_tilde_in_the_else.render(xs, 8.0) //~ PANIC "the condition of an if tilde in the else is evaluated although the outer condition is true"
+  assert o.out[0] == 0.0
+}
+
+test "the condition of an if tilde in the else gives the value when it does not divide by zero" {
+  // x = 1 20 7: outer false; inner: 100 / 1 = 100 > 5: the counter of 10s: 10; 100 / 20 = 5 > 5 is false: 0.0; 100 / 7 = 14 > 5: 30.
+  let xs: [I32; 3] = [1, 20, 7]
+  let o = an_if_tilde_in_the_else.render(xs, 8.0)
+  assert o.out[0] == 10.0
+  assert o.out[1] == 0.0
+  assert o.out[2] == 30.0
+}
+
+test "a division by zero in the branch that is not chosen panics" {
+  // x = 5 0: for x = 0 the condition `x > 0` is false and the then branch is not chosen, but it is evaluated: 100 / 0.
+  let xs: [I32; 2] = [5, 0]
+  let o = the_untaken_then_branch.render(xs, 8.0) //~ PANIC "a division by zero in the branch that is not chosen panics"
+  assert o.out[0] == 20.0
+}
+
+test "a division by zero in the else that is not chosen panics" {
+  // x = 3 0: for x = 0 the condition `x >= 0` is true, and the else is evaluated all the same.
+  let xs: [I32; 2] = [3, 0]
+  let o = the_untaken_else_branch.render(xs, 8.0) //~ PANIC "a division by zero in the else that is not chosen panics"
+  assert o.out[0] == 1.0
+}
+
+test "a division by zero in a middle branch that is not chosen panics" {
+  // x = 0 is not > 5 and not > 0, so the middle branch is not chosen, but `100 / x` in it is evaluated.
+  let xs: [I32; 1] = [0]
+  let o = the_untaken_middle_branch.render(xs, 8.0) //~ PANIC "a division by zero in a middle branch that is not chosen panics"
+  assert o.out[0] == 0.0
+}
+
+test "the branches that are not chosen give no panic when they do not divide by zero" {
+  // x = 7 3 -1: 7 > 5 takes the counter (1); 3 takes 100 / 3 = 33 (the counter 2 is not chosen); -1 takes 0.0 (100 / -1 = -100 is evaluated).
+  let xs: [I32; 3] = [7, 3, -1]
+  let o = the_untaken_middle_branch.render(xs, 8.0)
+  assert o.out[0] == 1.0
+  assert o.out[1] == 33.0
+  assert o.out[2] == 0.0
+}

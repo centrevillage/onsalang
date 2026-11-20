@@ -1,0 +1,20 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§2.6", "§11.5"]
+
+// The `match~` of tests/spec/lex/if_tilde_newline_ok.onsa (split from it at W7-06 U2, which checks `if~`; `match~` is checked at W7-06 U3a): the `~` of
+// `match~` is written right after the keyword inside parentheses too (§2.5, §2.6, S-385), and the syntax stage reports nothing. The `match~` holds a
+// thing with state in an arm, so it is no E0812 either (§11.5).
+
+pub rt fn two(a: F32, b: F32) -> F32 {
+  a + b
+}
+
+pub flow acc(x: F32 at sample) -> F32 at sample {
+  let y = x + prev~(^y)
+  y
+}
+
+pub flow fine(x: F32 at sample, k: U32 at sample) -> F32 at sample {
+  two(match~ k { 0 => acc~(x), _ => 2.0 }, 1.0)
+}

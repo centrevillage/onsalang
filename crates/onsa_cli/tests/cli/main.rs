@@ -57,6 +57,8 @@ mod generated_view_notes;
 mod graph_par_frames;
 mod heading_names;
 mod heading_reach_grid;
+mod if_tilde_candidates;
+mod if_tilde_order;
 mod inplace_absent_notes;
 mod instance_limits;
 mod interface_const_floats;

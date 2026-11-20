@@ -58,32 +58,47 @@ impl<'a> Frame<'a> {
         Ok(Value::Array(self.replicate(e, Value::places, |f| f.eval(*body))?))
     }
 
-    /// `if~` (§11.5): each condition and each branch is evaluated, in the order written (the nested `if`s of an `else if`
-    /// are part of the chain), and the value is that of the first branch whose condition is true, else the `else`.
-    // The condition of an `else if` is evaluated even when an earlier branch is taken: the `~` is on the whole chain, and
-    // the parts with no state are all evaluated too (§11.5).
+    /// `if~` (§11.5): the side that selects goes first: the conditions of the chain from the top, up to the first that is true (the
+    /// nested `if`s of an `else if` are part of the chain, and the conditions after it are not evaluated), then every branch in the
+    /// order written, and the value is that of the branch whose condition was the first true, else the `else` (S-1094 (1)).
+    // The condition of an `else { if~ … }` is in a branch, so it is evaluated whatever the conditions before it are; the `~` is on
+    // the whole chain, and the parts with no state of every branch are all evaluated too (§11.5).
     #[inline(never)]
     pub(super) fn all_branches(&mut self, e: ExprId, at: Span) -> Eval {
-        let (ast, mut taken, mut chain) = (self.body.ast, None, e);
-        loop {
+        let (ast, mut chain, mut links) = (self.body.ast, e, Vec::new());
+        let last = loop {
             let ExprKind::If { cond, then, else_, .. } = &ast.expr(chain).kind else {
                 return Err(Stop { fault: Internal("not an `if~`"), at });
             };
-            let (hit, value) = (self.truth(*cond, at)?, self.eval(*then)?);
-            taken = taken.or(hit.then_some(value));
+            links.push((*cond, *then));
             let Some(rest) = *else_ else { return Err(Stop { fault: Internal("an `if~` with no `else`"), at }) };
             if !matches!(ast.expr(rest).kind, ExprKind::If { .. }) {
-                let last = self.eval(rest)?;
-                return Ok(taken.unwrap_or(last));
+                break rest;
             }
             chain = rest;
+        };
+        let mut chosen = links.len();
+        for (n, (cond, _)) in links.iter().enumerate() {
+            if self.truth(*cond, at)? {
+                chosen = n;
+                break;
+            }
         }
+        let mut taken = None;
+        for (n, (_, then)) in links.iter().enumerate() {
+            let value = self.eval(*then)?;
+            if n == chosen {
+                taken = Some(value);
+            }
+        }
+        let rest = self.eval(last)?;
+        Ok(taken.unwrap_or(rest))
     }
 
     /// `match~` (§11.5): the arm taken is chosen as `match` does (the pattern and the guard, from the top), then the body of
     /// every arm is evaluated in the order written, an arm not taken with the locals of its pattern at `T.default()`.
-    // SPEC-GAP(S-1094): the guards of the arms after the one taken are not evaluated, as in a `match`; the other reading
-    // evaluates all of them, which shows when a guard panics (`d if 100 / d > 1`).
+    // The guards of the arms after the one taken are not evaluated, as in a `match` (S-1094 (1): the side that selects stops
+    // at the first arm that matches); the bodies of all the arms come after it.
     #[inline(never)]
     pub(super) fn select_all(&mut self, e: ExprId, at: Span) -> Eval {
         let (ast, here) = (self.body.ast, |fault| Stop { fault, at });

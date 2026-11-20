@@ -1,0 +1,95 @@
+// onsa.toml
+// [test]
+// spec = ["§2.6", "§11.5", "§18.1"]
+// fixes = 1
+
+// W7-06 U2/t, S-110, S-1177 (§11.5: "状態を持つものを枝に含まなければ E0812（修正候補は `~` を外すこと）"; §2.6: "状態を持つものを枝に含まない `if~` /
+// `match~` の E0812 は、`~` を外す修正候補を示す"; "状態を持つものを含むかは、書いた `~` でなく中身（呼び先の種類と入れ子）で決める"). An `if~` that has no thing with state in a branch is E0812: the branches are values, calls
+// without state (an `rt fn`), a `par` without state (it is not a thing with state, §11.5), or a thing with state that is only in the first condition
+// (the condition is always evaluated, it is no branch). The one candidate is the removal of the `~` (`fixes = 1`), and the runner's default says
+// that the flow checks clean after it (the `if` that is left holds no state in a branch, and the thing with state in its first condition is where
+// it may be). The main position of the error is the `~` of the `if~` (S-392, provisional): the marker has no column. One error per flow (P-01); the
+// marker is on the line of the `~`.
+
+pub rt fn wrap(x: F32) -> F32 {
+  x
+}
+
+pub flow values_only(x: F32 at sample) -> F32 at sample {
+  if~ x > 0.0 { 1.0 } else { 0.0 } //~ E0812
+}
+
+pub flow a_chain_of_values(x: F32 at sample) -> F32 at sample {
+  if~ x > 1.0 { 1.0 } else if x > 0.0 { 2.0 } else { 3.0 } //~ E0812
+}
+
+pub flow a_call_without_state(x: F32 at sample) -> F32 at sample {
+  if~ x > 0.0 { wrap(x) } else { 0.0 } //~ E0812
+}
+
+pub flow a_par_without_state_in_a_branch(x: F32 at sample, c: Bool at sample) -> [F32; 2] at sample {
+  if~ c { par i in 0 ..< 2 { x * F32.round_from(i) } } else { [x, x] } //~ E0812
+}
+
+pub flow a_par_without_state_in_each_branch(x: F32 at sample, c: Bool at sample) -> [F32; 2] at sample {
+  if~ c { par i in 0 ..< 2 { x * F32.round_from(i) } } else { par j in 0 ..< 2 { x + F32.round_from(j) } } //~ E0812
+}
+
+pub flow a_chain_with_a_par_only(x: F32 at sample, c: Bool at sample, d: Bool at sample) -> [F32; 2] at sample {
+  if~ c { //~ E0812
+    par i in 0 ..< 2 { x * F32.round_from(i) }
+  } else if d {
+    [x, x]
+  } else {
+    [0.0, x]
+  }
+}
+
+pub flow in_the_value_of_a_let(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  let a = if~ c { x } else { 0.0 } //~ E0812
+  a * 2.0
+}
+
+pub flow in_an_operand(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  x + (if~ c { 1.0 } else { 2.0 }) //~ E0812
+}
+
+pub flow state_only_in_the_first_condition(x: F32 at sample) -> F32 at sample {
+  if~ prev~(x) > 0.0 { 1.0 } else { 0.0 } //~ E0812
+}
+
+pub flow in_a_par_body_without_state(x: F32 at sample, c: Bool at sample) -> [F32; 2] at sample {
+  par i in 0 ..< 2 {
+    x + (if~ c { 1.0 } else { 2.0 }) //~ E0812
+  }
+}
+
+// ---- Not errors: a thing with state in a branch (an instance of a flow without state of its own is one, by the kind of the callee) ----
+
+pub flow twice(x: F32 at sample) -> F32 at sample {
+  x * 2.0
+}
+
+pub flow state_in_the_then_branch(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  if~ c { prev~(x) } else { 0.0 }
+}
+
+pub flow state_in_the_else_branch(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  if~ c { 0.0 } else { prev~(x) }
+}
+
+pub flow state_in_a_later_branch_of_a_chain(x: F32 at sample) -> F32 at sample {
+  if~ x > 1.0 { 1.0 } else if x > 0.0 { 2.0 } else { prev~(x) }
+}
+
+pub flow an_instance_of_a_flow_without_state(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  if~ c { twice~(x) } else { 0.0 }
+}
+
+pub flow a_par_tilde_in_a_branch(x: F32 at sample, c: Bool at sample) -> [F32; 2] at sample {
+  if~ c { par~ i in 0 ..< 2 { prev~(x * F32.round_from(i)) } } else { [x, x] }
+}
+
+pub flow state_in_a_branch_of_an_if_tilde_in_the_else(x: F32 at sample, c: Bool at sample, d: Bool at sample) -> F32 at sample {
+  if~ c { 1.0 } else { if~ d { prev~(x) } else { 0.0 } }
+}

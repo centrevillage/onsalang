@@ -43,7 +43,7 @@ struct Marker<'a> {
     clocks: &'a Walked,
     choose: Choose<'a>,
     /// The walk had a diagnostic: it did not record the nodes it did not
-    /// reach (in a branch, in `if~` / `match~`).
+    /// reach (in a branch, in `match~`).
     partial: bool,
     non_rt: &'a HashMap<ExprId, bool>,
     /// The number of the `let`s, the `consumer` of the output.
@@ -333,8 +333,22 @@ impl Marker<'_> {
                 None if self.partial => self.mark(*body, at, g),
                 None => onsa_diag::internal::bug(Some(expr.span), "a `par~` the walk of the clocks did not reach"),
             },
+            // `if~` (§11.3, S-1094): a later condition of its chain under
+            // the ones before it, its branches under no more than it.
+            ExprKind::If { tilde: Some(_), .. } => {
+                let chain = super::branching::chain(ast, e);
+                let (depth, mut inner) = (self.conds.len(), g);
+                for l in &chain.links {
+                    self.mark(l.cond, at, inner);
+                    inner = self.enter(l.cond, at, inner);
+                }
+                self.conds.truncate(depth);
+                for x in chain.links.iter().map(|l| l.then).chain(chain.last) {
+                    self.mark(x, at, g);
+                }
+            }
             // The conditional positions (§11.3) under the conditions that
-            // select them, not the arms of `if~` / `match~` (W7-06).
+            // select them, not the arms of `match~` (W7-06 U3a).
             ExprKind::If { cond, then, else_, tilde: None } => {
                 self.mark(*cond, at, g);
                 let inner = self.enter(*cond, at, g);

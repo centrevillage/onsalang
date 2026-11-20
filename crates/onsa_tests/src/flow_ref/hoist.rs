@@ -143,7 +143,7 @@ fn makes(body: &Body, known: &Known, root: ExprId, e: ExprId, here: Clock, guard
 }
 
 /// The operands that are in a position that is not a condition: the parts `walk` goes on into (the conditional forms and the block
-/// expression are walked by themselves; `if~` and `match~` give their condition and object only).
+/// expression are walked by themselves; `if` and `if~` are not here, and `match~` gives its object only, until W7-06 U3).
 fn operands(body: &Body, e: ExprId) -> Vec<ExprId> {
     use ExprKind as K;
     let ast = body.ast;
@@ -157,7 +157,6 @@ fn operands(body: &Body, e: ExprId) -> Vec<ExprId> {
         K::Tuple(xs) | K::Array(xs) => xs.clone(),
         K::Repeat { elem, len } => vec![*elem, *len],
         K::Struct { fields, .. } => fields.iter().map(|(_, x)| *x).collect(),
-        K::If { cond, .. } => vec![*cond],
         K::Match { scrutinee, .. } => vec![*scrutinee],
         K::Call { callee, args, .. } => {
             let mut out = Vec::new();
@@ -187,6 +186,24 @@ fn with_index(body: &Body, known: &Known, at: Span) -> Result<Known, Fault> {
     Ok(inside)
 }
 
+/// The chain of an `if~` (`tilde` is on the head only; the later `if`s of `else if` are in it): the `(condition, branch)` of each link
+/// in the order written and the `else`. The condition of a link is of the select side (the later ones only until a true one, S-1094
+/// (1)); the branches are all evaluated, so they are not under a condition (§11.3).
+fn tilde_chain(body: &Body, head: ExprId) -> Result<(Vec<(ExprId, ExprId)>, ExprId), Fault> {
+    let (ast, mut at, mut links) = (body.ast, head, Vec::new());
+    loop {
+        let ExprKind::If { cond, then, else_, .. } = &ast.expr(at).kind else {
+            return Err(Fault::Internal("not an `if~`"));
+        };
+        links.push((*cond, *then));
+        let Some(rest) = *else_ else { return Err(Fault::Internal("an `if~` with no `else`")) };
+        if !matches!(ast.expr(rest).kind, ExprKind::If { .. }) {
+            return Ok((links, rest));
+        }
+        at = rest;
+    }
+}
+
 /// A child of an expression with the clocks of the names in scope there and the guard on the way to it.
 type Kid = (ExprId, Known, Clock);
 
@@ -201,6 +218,18 @@ fn kids(body: &Body, known: &Known, root: ExprId, e: ExprId, guard: Clock) -> Re
             let g = after(guard, cond_clock(body, known, root, *cond)?);
             let mut out = own(vec![*cond]);
             out.extend([*then].into_iter().chain(*else_).map(|x| (x, known.clone(), g)));
+            out
+        }
+        K::If { tilde: Some(_), .. } => {
+            // The first condition and every branch are not under a condition; each later condition is under those before it.
+            let (links, last) = tilde_chain(body, e)?;
+            let (mut out, mut g) = (Vec::new(), guard);
+            for (c, then) in links {
+                out.push((c, known.clone(), g));
+                out.push((then, known.clone(), guard));
+                g = after(g, cond_clock(body, known, root, c)?);
+            }
+            out.push((last, known.clone(), guard));
             out
         }
         K::Binary { op: BinOp::And | BinOp::Or, lhs, rhs, .. } => {
@@ -316,6 +345,30 @@ fn descend(f: &mut Frame, known: &Known, root: ExprId, e: ExprId, here: Clock, g
                 }
             }
             Ok(())
+        }
+        K::If { tilde: Some(_), .. } => {
+            // The side that selects goes first, from the top: a condition is walked under those before it, and the walk of the
+            // conditions ends at the first true one or at one that a later stage decides (what is under it is evaluated where
+            // it is reached, as for a plain `if`). Then every branch, in the order written, not under any condition.
+            let (links, last) = tilde_chain(&body, e).map_err(stop)?;
+            let mut g = guard;
+            for (n, (c, _)) in links.iter().enumerate() {
+                walk(f, known, root, *c, here, g)?;
+                let cc = cond_clock(&body, known, root, *c).map_err(stop)?;
+                g = after(g, cc);
+                let mut under = false;
+                // A constant condition is decided at this stage only when a part that the stage makes is under it: a later condition.
+                for (x, k, kg) in links[n + 1..].iter().map(|(x, _)| (*x, known.clone(), g)) {
+                    under = under || makes(&body, &k, root, x, here, kg).map_err(stop)?;
+                }
+                if g > here || (cc == Clock::Const && !under) || f.truth(*c, span)? {
+                    break;
+                }
+            }
+            for (_, then) in &links {
+                walk(f, known, root, *then, here, guard)?;
+            }
+            walk(f, known, root, last, here, guard)
         }
         K::Binary { op: op @ (BinOp::And | BinOp::Or), lhs, rhs, .. } => {
             walk(f, known, root, *lhs, here, guard)?;

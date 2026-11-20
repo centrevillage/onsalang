@@ -1,0 +1,49 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§11.5", "§18.1"]
+//
+// [[test.fix]]
+// at = "29:17"
+// code = "E0813"
+// candidate = 1
+// leaves = ["30:13 E0812"]
+//
+// [[test.fix]]
+// at = "35:13"
+// code = "E0812"
+// candidate = 1
+// leaves = ["36:17 E0813"]
+//
+// [[test.fix]]
+// at = "41:13"
+// code = "E0812"
+// candidate = 1
+// leaves = ["41:18 E0815"]
+
+// W7-06 U2/t, S-110, S-392 (provisional) (§11.5, §18.1: "`if` / `match` の枝 … と、状態を持つものの無い `if~` / `match~` の E0812 … は flow の検査の段である"; "残った診断のうち … 最初のもの"):
+// the E0812 of an `if~` without state is an error of the flow check stage, the stage of the clock errors, so of two errors in one flow the first by position is the one
+// reported: the `~` of the `if~` (its main position, provisional) before or after the clock error of another `let`, or of a branch that follows it (the `~` comes before the branch).
+// The candidate of each leaves the other error, so the entries in the head name it (`leaves`, the position in the text after the candidate). One error per flow (P-01).
+
+pub flow e0813_then_e0812(x: F32 at sample, p: F32 at block, c: Bool at sample) -> F32 at sample {
+  let b = prev~(p)                                             //~ E0813
+  let a = if~ c { x } else { 0.0 }
+  a
+}
+
+pub flow e0812_then_e0813(x: F32 at sample, p: F32 at block, c: Bool at sample) -> F32 at sample {
+  let a = if~ c { x } else { 0.0 }                             //~ E0812
+  let b = prev~(p)
+  a
+}
+
+pub flow e0812_then_e0815_in_a_branch(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  let a = if~ c { x at block } else { 0.0 }                    //~ E0812
+  a
+}
+
+pub flow e0815_then_e0812(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  let b = x at block                                           //~ E0815
+  let a = if~ c { x } else { 0.0 }
+  a
+}

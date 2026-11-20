@@ -3,33 +3,39 @@
 // spec = ["§11.3", "§11.4", "§11.5", "§18.1"]
 //
 // [[test.fix]]
-// at = "43:17"
+// at = "49:17"
 // code = "E0813"
 // candidate = 1
-// leaves = ["44:3 E0810"]
+// leaves = ["50:3 E0810"]
 //
 // [[test.fix]]
-// at = "55:17"
+// at = "61:17"
 // code = "E0813"
 // candidate = 1
-// leaves = ["56:11 E0805"]
+// leaves = ["62:11 E0805"]
 //
 // [[test.fix]]
-// at = "67:17"
+// at = "73:17"
 // code = "E0813"
 // candidate = 1
-// leaves = ["68:11 E0815"]
+// leaves = ["74:11 E0815"]
 //
 // [[test.fix]]
-// at = "103:17"
+// at = "109:17"
 // code = "E0813"
 // candidate = 1
-// leaves = ["104:13 E0200"]
+// leaves = ["110:13 E0812"]
+//
+// [[test.fix]]
+// at = "103:13"
+// code = "E0812"
+// candidate = 1
+// leaves = ["104:17 E0813"]
 
 // A flow is one unit of the flow check: the first error by position is the one reported (§18.1,
 // "the first by the order of the diagnostics: start position, ..."). Each flow below has two errors
 // of the clock rules and the other checks of the flow body, in the two orders; the marker is on the
-// line of the first. E0200 is a feature this version does not take (§18.1) and goes by its position.
+// line of the first. E0812 (an `if~` that holds no thing with state, §11.5) is an error of the same stage and goes by its position, at the `~` (S-392, provisional).
 
 pub fn noisy(v: F32) -> F32 uses {Alloc} { v }
 
@@ -93,13 +99,13 @@ pub flow e0810_then_e0815(x: F32 at sample) -> F32 at sample {
   x
 }
 
-pub flow e0200_if_tilde_then_e0813(x: F32 at sample, p: F32 at block, c: Bool at block) -> F32 at sample {
-  let a = if~ c { x } else { 0.0 }                             //~ E0200
+pub flow e0812_if_tilde_then_e0813(x: F32 at sample, p: F32 at block, c: Bool at block) -> F32 at sample {
+  let a = if~ c { x } else { 0.0 }                             //~ E0812
   let b = prev~(p)
   a
 }
 
-pub flow e0813_then_e0200_if_tilde(x: F32 at sample, p: F32 at block, c: Bool at block) -> F32 at sample {
+pub flow e0813_then_e0812_if_tilde(x: F32 at sample, p: F32 at block, c: Bool at block) -> F32 at sample {
   let b = prev~(p)                                             //~ E0813
   let a = if~ c { x } else { 0.0 }
   a

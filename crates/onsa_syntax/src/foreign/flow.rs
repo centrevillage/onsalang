@@ -126,7 +126,9 @@ pub(super) fn else_if_tilde(c: &Cursor) -> Option<Hit> {
     let fix = if head_tilde {
         Fix::new("remove the `~`", vec![out])
     } else {
-        Fix::new("write the `~` on the first `if`", vec![Edit::insert(c.file, c.span(head).end, "~"), out])
+        // The writer's `~` moved (S-1187): a later candidate that takes it out undoes no step.
+        let moved = Edit::insert(c.file, c.span(head).end, "~").with_writers(&[(0, 1)]);
+        Fix::new("write the `~` on the first `if`", vec![moved, out])
     };
     let mut fixes = vec![fix];
     fixes.extend(bit_not(c).unwrap_or_default());

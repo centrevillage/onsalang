@@ -35,7 +35,7 @@
 // Two errors inside one `let` or one expression: the first by position is the one reported
 // (§18.1: one error per flow, the first of the order start position, end position, code). The
 // expression holds the other as a part (an argument, a condition, a branch) or follows it. E0200 is
-// a feature this version does not take: `if~` and `match~` (the `~`), which are found where they are written and
+// a feature this version does not take: `match~` (the `~`, W7-06 U3a), which is found where it is written and
 // come first when they start first. A delay, an instance or `par~` in a branch of a plain `if` is the E0811 of the
 // flow check stage (§11.5, W7-06 U1), the stage of the clock errors of the other lines, so of the two the first by
 // position is reported (`state_in_a_branch_then_e0815`: the branch, then the clock error of the next line).
@@ -45,12 +45,12 @@ pub fn design(v: F32) -> F32 { v * 0.5 }
 pub flow pass(c: F32 at block) -> F32 at sample { c }
 
 pub flow if_tilde_holds_e0813(x: F32 at sample, p: F32 at block, c: Bool at block) -> F32 at sample {
-  let a = if~ c { prev~(p) } else { x }                        //~ E0200
+  let a = if~ c { prev~(p) } else { x }                        //~ E0813
   a
 }
 
-pub flow if_tilde_holds_e0813_in_the_condition(x: F32 at sample, p: F32 at block) -> F32 at sample {
-  let a = if~ prev~(p) > 0.0 { x } else { 0.0 }                //~ E0200
+pub flow if_tilde_holds_e0813_in_a_later_branch(x: F32 at sample, p: F32 at block, c: Bool at block) -> F32 at sample {
+  let a = if~ c { x } else if c { prev~(p) } else { 0.0 }      //~ E0813
   a
 }
 

@@ -1,0 +1,17 @@
+// onsa.toml
+// [test]
+// spec = ["§2.6", "§11.5", "§18.1"]
+//
+// [[test.fix]]
+// at = "16:5"
+// code = "E0812"
+// candidate = 1
+// clean = true
+
+// W7-06 U2/t, S-110, S-1177 (§11.5: "状態を持つものを枝に含まなければ E0812（修正候補は `~` を外すこと）"; §2.6: "状態を持つものを枝に含まない `if~` / `match~` の
+// E0812 は、`~` を外す修正候補を示す"): an `if~` chain of values: "`~` は連鎖の全体に掛かる", so the chain has one `~` and one error, and the removal of it
+// leaves the plain `else if` chain, which checks clean. The main position (`at`) is the `~` of the head (S-392, provisional). One error per flow (P-01).
+
+pub flow chain_of_values(x: F32 at sample) -> F32 at sample {
+  if~ x > 1.0 { 1.0 } else if x > 0.0 { 2.0 } else { 3.0 }  //~ E0812
+}

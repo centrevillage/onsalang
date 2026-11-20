@@ -1,0 +1,87 @@
+// onsa.toml
+// [package]
+// name = "if_tilde_branches"
+// edition = "2026"
+//
+// [export]
+// prefix = "if_tilde_branches_"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "poison"
+// provides = []
+//
+// [test]
+// spec = ["§11.5", "§11.3", "§13.4"]
+// conformance = true
+
+// Conformance (W7-06 U2/t, S-110, S-1094 (1), R-14; §11.5, §11.3, §13.4): an `if~` evaluates every branch, so the state of each branch moves on every
+// sample, and chooses one by the conditions of the chain, taken from the top up to the first that is true. The interpreter and C give the same values for
+// a chain with a thing with state in each branch, for an `if~` that is the `else` of another, for a delay in a branch that is not chosen, for a
+// part of `block` and of `init` in the arm (evaluated at its stage whatever the condition is), and for a later condition that holds a part of `block`
+// (evaluated only where the conditions before it are false).
+
+pub rt fn make_w(n: U32) -> F32 {
+  F32.round_from(n) * 0.5
+}
+
+flow acc(x: F32 at sample) -> F32 at sample {
+  let y = x + prev~(^y)
+  y
+}
+
+flow scale(x: F32 at sample, k: F32 at block) -> F32 at sample {
+  x * k
+}
+
+flow shift(x: F32 at sample, n: U32 at init) -> F32 at sample {
+  x + F32.round_from(n)
+}
+
+@export
+pub flow chain_of_counters(x: F32 at sample) -> F32 at sample {
+  if~ x >= 0.5 { acc~(1.0) } else if x >= 0.0 { acc~(10.0) } else { acc~(100.0) }
+}
+
+@export
+pub flow if_tilde_in_the_else(x: F32 at sample, @param(min: 0, max: 1, default: 1) cc: U32 at block) -> F32 at sample {
+  let c = cc > 0
+  if~ c { acc~(x) } else { if~ x > 0.0 { acc~(2.0 * x) } else { prev~(x) } }
+}
+
+@export
+pub flow delay_in_the_untaken_branch(x: F32 at sample) -> F32 at sample {
+  let late = x > 0.25
+  if~ late { prev~(x) } else { x }
+}
+
+@export
+pub flow a_plain_if_in_a_branch(x: F32 at sample, @param(min: 0, max: 7, default: 1) k: U32 at block) -> F32 at sample {
+  let positive = x > 0.0
+  if~ positive { acc~(1.0) } else { if k != 0 { x / F32.round_from(k) } else { 0.0 } }
+}
+
+@export
+pub flow block_input_in_an_arm(x: F32 at sample, @param(min: 0, max: 7, default: 2) k: U32 at block) -> F32 at sample {
+  let c = x > 0.0
+  if~ c { scale~(x, make_w(k)) } else { acc~(x) }
+}
+
+@export
+pub flow init_input_in_an_arm(x: F32 at sample, n: U32 at init) -> F32 at sample {
+  let c = x > 0.0
+  if~ c { shift~(x, n + 1) } else { acc~(x) }
+}
+
+@export
+pub flow block_in_a_later_condition(x: F32 at sample, @param(min: 0, max: 1, default: 1) cc: U32 at block, @param(min: 0, max: 7, default: 1) k: U32 at block) -> F32 at sample {
+  let b = cc > 0
+  if~ b { acc~(x) } else if make_w(k) > 1.0 { 2.0 } else { 3.0 }
+}
+
+@export
+pub flow par_tilde_with_an_if_tilde(x: F32 at sample) -> [F32; 2] at sample {
+  par~ i in 0 ..< 2 { if~ x > F32.round_from(i) * 0.25 { acc~(1.0) } else { 0.0 } }
+}

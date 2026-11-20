@@ -1,0 +1,46 @@
+# flow_ref 1 source=tests/spec/flow_semantics/if_tilde_hoist.onsa tests=13 evaluated=13 unavailable=0 skipped=0 waiting=0
+@ the argument of a delay in an arm is evaluated at block
+render if_tilde_hoist.delay_argument_in_an_arm sr=0x41000000 params g=0x40800000 in x=[0x3f800000 0x40000000 0x40400000]
+out=[0x3f800000 0x40000000 0x40800000]
+@ the block input of an instance in an arm is evaluated at block
+render if_tilde_hoist.block_input_in_an_arm sr=0x41000000 params g=0x40800000 in x=[0x3f800000 0x40000000 0x40400000]
+out=[0x00000000 0x40800000 0x40c00000]
+@ the init input of an instance in an arm is evaluated at init
+render if_tilde_hoist.init_input_in_an_arm sr=0x41000000 cfg k=1 in x=[0x3f800000 0x40000000 0x40400000]
+out=[0x00000000 0x40800000 0x40a00000]
+@ the block input of an instance in the else is evaluated at block
+render if_tilde_hoist.block_input_in_the_else sr=0x41000000 params g=0x40800000 in x=[0x3f800000 0x40000000 0x40400000]
+out=[0x40000000 0x00000000 0x00000000]
+@ the block input of an instance in the arm of a chain is evaluated at block
+render if_tilde_hoist.block_input_in_a_chain_arm sr=0x41000000 params g=0x40c00000 in x=[0x40400000 0x40000000 0x3f800000]
+out=[0x00000000 0x40c00000 0x40400000]
+@ the block input of an instance in a nested arm is evaluated at block
+render if_tilde_hoist.block_input_in_a_nested_arm sr=0x41000000 params g=0x40800000 in x=[0x3f800000 0x40000000 0x40400000]
+out=[0x3f800000 0x40800000 0x40c00000]
+@ the second condition of a chain is not evaluated when the first condition of block is true
+render if_tilde_hoist.second_condition_of_block sr=0x41000000 params b=true d=0 in x=[0x3f800000 0x3f800000]
+out=[0x3f800000 0x40000000]
+@ the second condition of a chain is evaluated at block when the first condition of block is false
+render if_tilde_hoist.second_condition_of_block sr=0x41000000 params b=false d=0 in x=[0x3f800000 0x3f800000]
+panic block
+@ the second condition of a chain gives its value
+render if_tilde_hoist.second_condition_of_block sr=0x41000000 params b=false d=10 in x=[0x3f800000 0x3f800000]
+out=[0x40000000 0x40000000]
+render if_tilde_hoist.second_condition_of_block sr=0x41000000 params b=false d=50 in x=[0x3f800000 0x3f800000]
+out=[0x40400000 0x40400000]
+@ a part of block in an arm panics at block in a call of 0 frames
+init 0 if_tilde_hoist.block_part_in_an_arm_panics sr=0x41000000
+process 0 params d=0 frames=0 in x=[]
+panic block
+@ a part of block in an arm gives no panic for d = 4
+render if_tilde_hoist.block_part_in_an_arm_panics sr=0x41000000 params d=4 in x=[0x3f800000 0x40000000]
+out=[0x00000000 0x00000000]
+@ a part of init in an arm panics at init
+init 0 if_tilde_hoist.init_part_in_an_arm_panics sr=0x41000000 cfg n=0
+panic init
+@ a part of block in a branch of a plain if is not evaluated in a call of 0 frames
+init 0 if_tilde_hoist.block_part_in_a_plain_branch sr=0x41000000
+process 0 params d=0 frames=0 in x=[]
+out=[]
+render if_tilde_hoist.block_part_in_a_plain_branch sr=0x41000000 params d=0 in x=[0x3f800000]
+out=[0x00000000]

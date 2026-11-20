@@ -102,6 +102,7 @@ use crate::ty::{FloatKind, Len, Ty, TyId};
 use crate::{Analysis, DefId, Module};
 
 use crate::flow_names::{Delay, SAMPLE_RATE};
+mod branching;
 mod check;
 mod clocks;
 mod consts;
@@ -114,6 +115,7 @@ mod reads;
 #[cfg(test)]
 mod tests;
 
+pub use branching::{Chain, Link, chain};
 pub use hoist::{Cond, Hoist, HoistId, strip};
 pub use plan::{Edge, Field, FieldOf, Kept, NodeId, Owner, Part, PlanKind, PlanNode, Vertex};
 

@@ -1,0 +1,34 @@
+// onsa.toml
+// [test]
+// spec = ["§2.6", "§11.5", "§18.1"]
+// fixes = 0
+
+// W7-06 U2/t, S-394 (X1), S-1172 (§2.6: "flow の検査の段の E0811 … は、作れる候補 … だけを示し、一つも作れなければ候補を出さない"; §11.5: "前の `let` に
+// 出す … 式が腕の束縛を読むときと、`par~` の本体の中にあるときは、この候補を作らない"): the E0811 of a second or later condition of an `if~` chain
+// has no `~` candidate (the `if~` is there, and the condition stays a place that is not evaluated every sample), so when the lift into a `let` cannot
+// be made (the thing with state is in the body of a `par~`), the error has no candidate at all. `fixes = 0` says that no error of this file has a
+// candidate. The error is still E0811 and is reported. One error per flow (P-01); the marker is on the line of the offending construct, and the spec
+// does not fix its column.
+
+pub flow acc(x: F32 at sample) -> F32 at sample {
+  let y = x + prev~(^y)
+  y
+}
+
+pub flow second_condition_in_a_par_body(x: F32 at sample) -> [F32; 2] at sample {
+  par~ i in 0 ..< 2 {
+    if~ x > 1.0 { acc~(x) } else if prev~(x) > F32.round_from(i) { 2.0 } else { 0.0 } //~ E0811
+  }
+}
+
+pub flow third_condition_in_a_par_body(x: F32 at sample) -> [F32; 2] at sample {
+  par~ i in 0 ..< 2 {
+    if~ x > 2.0 { acc~(x) } else if x > 1.0 { 2.0 } else if acc~(x * F32.round_from(i)) > 3.0 { 3.0 } else { 0.0 } //~ E0811
+  }
+}
+
+pub flow second_condition_in_an_operand_in_a_par_body(x: F32 at sample) -> [F32; 2] at sample {
+  par~ i in 0 ..< 2 {
+    0.5 * (if~ x > 1.0 { acc~(x) } else if delay~(x * F32.round_from(i), 2) > 0.0 { 2.0 } else { 0.0 }) //~ E0811
+  }
+}

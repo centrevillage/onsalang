@@ -405,7 +405,7 @@ codes! {
     E0805 = 805, Flow, [Flow], Optional, Optional,
         "a function with effects cannot be called from a flow, nor a value made whose drop needs `Alloc` (an implicit `Alloc`)";
     E0806 = 806, Flow, [Names, Flow], Optional, Optional,
-        "this form is not allowed in a flow body";
+        "this form is not allowed in a flow body, nor a thing with state on the right of `&&` / `||`";
     E0807 = 807, Flow, [Flow], Optional, Optional,
         "`delay~` with length 1; write `prev~` instead";
     E0808 = 808, Flow, [Flow], Optional, Optional,
@@ -463,6 +463,7 @@ fn explain_text(code: &str) -> Option<String> {
     match code {
         "E0010" => Some(include_str!("../explain/E0010.md").to_string()),
         "E0200" => Some(crate::unsupported::explain()),
+        "E0806" => Some(include_str!("../explain/E0806.md").to_string()),
         "E0811" => Some(include_str!("../explain/E0811.md").to_string()),
         _ => None,
     }

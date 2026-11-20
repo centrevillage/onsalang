@@ -94,3 +94,22 @@ fn heavy_the_lowering_of_a_flow_is_linear_in_its_state() {
     println!("1000: {small:?}, 4000: {large:?}, ratio {ratio:.2}");
     assert!(ratio < 8.0, "1000: {small:?}, 4000: {large:?}, ratio {ratio:.2}");
 }
+
+/// §11.5, S-1094: an `if~` evaluates its conditions to the one that holds,
+/// then every branch in the order of the text (each instance goes on), then
+/// chooses; in `ctl`, the field of a later condition is written while the
+/// one before it is false, that of a branch with no condition (§11.3).
+#[test]
+fn an_if_tilde_evaluates_its_conditions_then_every_branch() {
+    let src = "pub flow acc(x: F32 at sample) -> F32 at sample { x + prev~(x) }
+pub flow f(x: F32 at sample, p: F32 at block, q: F32 at block) -> F32 at sample {
+  if~ p > 1.0 { acc~(x) } else if q * 2.0 > 1.0 { acc~(x * (q + 1.0)) } else { x }
+}";
+    let t = tick(src, "f");
+    let (taken, first, second, choice) =
+        (at(&t, "let __taken"), at(&t, "acc.tick(inout s.0"), at(&t, "acc.tick(inout s.1"), at(&t, "(__taken == 0"));
+    assert!(taken < first && first < second && second < choice, "{t}");
+    let ctl = crate::dump::dump_item(&crate::tests::core(src), "t.f.ctl");
+    let (c1, guard, c2, body) = (at(&ctl, "p@4.0 > 1.0"), at(&ctl, "if (!s."), at(&ctl, "* 2.0"), at(&ctl, "+ 1.0"));
+    assert!(c1 < guard && guard < c2 && c2 < body, "{ctl}");
+}

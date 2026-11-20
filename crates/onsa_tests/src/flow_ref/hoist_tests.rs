@@ -4,7 +4,7 @@
 //! (the guarded fields are of U2). Every value and every stage is worked out by hand in the comment of the test.
 
 use super::expr::Stop;
-use super::expr_tests::{i32v, is};
+use super::expr_tests::{i32v, is, with_checked};
 use super::flow::{Instance, Outcome, PanicAt};
 use super::flow_tests::with_flow;
 use super::scalar::{Fault, PanicKind};
@@ -494,4 +494,108 @@ rt fn sum3(xs: [U32; 3]) -> U32 { xs[0] + xs[1] + xs[2] }";
         let outs = me.process(&[], &[("x", &[u32v(2)])], 1, None).expect("process");
         assert!(is(&Ok(outs[0].clone()), &u32v(2 * (25 + 33 + 50))), "{outs:?}");
     });
+}
+
+// ---------------------------------------------------------------------------------------------------------------------------------
+// W7-06 U2/t, S-1094 (1), S-110 (§11.3): the arms of an `if~` are no position of a condition, so a part of `init` or `block` in one is made
+// by its stage whatever the condition is; the second and later conditions of the chain are, guarded by the conditions before them. The sources
+// are run unclean while the check gives `if~` E0200 (W7-06 U2 makes them clean).
+
+/// `zero_frames` for a source that the check does not take yet.
+fn zero_frames_unclean(src: &'static str, init: Inputs, block: Inputs) -> Option<(PanicAt, PanicKind)> {
+    with_checked(src, false, move |a| {
+        let (view, def) = (super::sema_view::View::new(a), super::expr_tests::def_named(a, "f"));
+        let cfg: Vec<(&str, Value)> = init.iter().map(|(n, v)| (*n, i32v(i128::from(*v)))).collect();
+        match Instance::init(view, def, 8.0, &cfg, None) {
+            Err(Stop { fault: Fault::Panic(k), .. }) => Some((PanicAt::Init, k)),
+            Err(e) => panic!("init: {e:?}"),
+            Ok(mut me) => {
+                let params: Vec<(&str, Value)> = block.iter().map(|(n, v)| (*n, i32v(i128::from(*v)))).collect();
+                panics(me.process_outcome(&params, &[("x", &[])], 0, None))
+            }
+        }
+    })
+}
+
+#[test]
+fn a_part_of_block_or_init_in_an_arm_of_an_if_tilde_is_made_at_its_stage_whatever_the_condition_is() {
+    // `x > 100` is a condition of `sample`, and the arm of an `if~` is no position of a condition: `100 / d` of `block` is made at
+    // `block` (a call of 0 frames panics for d = 0, and not for d = 4), and so is `100 / n` of `init` (panics in `init`). In a plain `if`
+    // the same part is under the condition of `sample` and is left where it is reached: no panic in a call of 0 frames.
+    let tilde = "flow f(x: I32 at sample, d: I32 at block) -> I32 at sample { if~ x > 100 { prev~(x * (100 / d)) } else { 0 } }";
+    assert_eq!(zero_frames_unclean(tilde, &[], &[("d", 0)]), Some((PanicAt::Block, PanicKind::DivZero)));
+    assert_eq!(zero_frames_unclean(tilde, &[], &[("d", 4)]), None);
+    let else_ = "flow f(x: I32 at sample, d: I32 at block) -> I32 at sample { if~ x > 100 { 0 } else { prev~(x * (100 / d)) } }";
+    assert_eq!(zero_frames_unclean(else_, &[], &[("d", 0)]), Some((PanicAt::Block, PanicKind::DivZero)));
+    let init =
+        "flow f(x: I32 at sample, n: I32 at init) -> I32 at sample { if~ x > 100 { prev~(x * (100 / n)) } else { 0 } }";
+    assert_eq!(zero_frames_unclean(init, &[("n", 0)], &[]), Some((PanicAt::Init, PanicKind::DivZero)));
+    assert_eq!(zero_frames_unclean(init, &[("n", 5)], &[]), None);
+    let plain =
+        "flow f(x: I32 at sample, d: I32 at block) -> I32 at sample { if x > 100 { x * (100 / d) } else { 0 } }";
+    assert_eq!(zero_frames_unclean(plain, &[], &[("d", 0)]), None);
+}
+
+#[test]
+fn a_later_condition_of_an_if_tilde_chain_is_guarded_by_the_conditions_before_it() {
+    // `b != 0` is a condition of `block`, so the second condition `100 / d > 5` (of `block`, a position of a condition) is made at `block`
+    // only where `b != 0` is false: b = 1 with d = 0 is no panic, b = 0 with d = 0 panics at `block` in a call of 0 frames.
+    let src = "flow f(x: I32 at sample, b: I32 at block, d: I32 at block) -> I32 at sample {
+  if~ b != 0 { prev~(x) } else if 100 / d > 5 { 1 } else { 2 }
+}";
+    assert_eq!(zero_frames_unclean(src, &[], &[("b", 1), ("d", 0)]), None);
+    assert_eq!(zero_frames_unclean(src, &[], &[("b", 0), ("d", 0)]), Some((PanicAt::Block, PanicKind::DivZero)));
+    assert_eq!(zero_frames_unclean(src, &[], &[("b", 0), ("d", 10)]), None);
+    // The first condition decided by `sample`: the part of the second is left where it is reached (nothing is made in a call of 0 frames).
+    let by_sample = "flow f(x: I32 at sample, d: I32 at block) -> I32 at sample {
+  if~ x > 0 { prev~(x) } else if 100 / d > 5 { 1 } else { 2 }
+}";
+    assert_eq!(zero_frames_unclean(by_sample, &[], &[("d", 0)]), None);
+    // The third condition is under the first two: a first that holds guards it and the second after it.
+    let third = "flow f(x: I32 at sample, b: I32 at block, c: I32 at block, d: I32 at block) -> I32 at sample {
+  if~ b != 0 { prev~(x) } else if c != 0 { 1 } else if 100 / d > 5 { 2 } else { 3 }
+}";
+    assert_eq!(zero_frames_unclean(third, &[], &[("b", 1), ("c", 0), ("d", 0)]), None);
+    assert_eq!(zero_frames_unclean(third, &[], &[("b", 0), ("c", 1), ("d", 0)]), None);
+    assert_eq!(
+        zero_frames_unclean(third, &[], &[("b", 0), ("c", 0), ("d", 0)]),
+        Some((PanicAt::Block, PanicKind::DivZero))
+    );
+}
+
+#[test]
+fn the_part_of_an_arm_of_an_if_tilde_gives_its_value_where_the_arm_is_chosen() {
+    // The values of tests/spec/flow_semantics/if_tilde_hoist.onsa (the check of this version gives `if~` E0200: unclean), with integers.
+    // `g` of `block` is 4 and `k` of `init` is 1; x = 1 2 3 and c = x > 1 = F T T.
+    // - the delay stores `x * (g * 2)` = 8 16 24 and gives 0 8 16: the output is x, prev, prev = [1, 8, 16];
+    // - the `block` input of an instance is `g * 2` = 8: scale gives 0 (not chosen), 16, 24;
+    // - the `init` input of an instance is `k + 1` = 2: shift gives 0, 2 + 2, 3 + 2.
+    let src = "flow scale(x: I32 at sample, k: I32 at block) -> I32 at sample { x * k }
+flow shift(x: I32 at sample, n: I32 at init) -> I32 at sample { x + n }
+flow delay_arg(x: I32 at sample, g: I32 at block) -> I32 at sample {
+  let c = x > 1
+  if~ c { prev~(x * (g * 2)) } else { x }
+}
+flow block_in(x: I32 at sample, g: I32 at block) -> I32 at sample {
+  let c = x > 1
+  if~ c { scale~(x, g * 2) } else { 0 }
+}
+flow init_in(x: I32 at sample, k: I32 at init) -> I32 at sample {
+  let c = x > 1
+  if~ c { shift~(x, k + 1) } else { 0 }
+}";
+    let run = |name: &'static str, init: Inputs, block: Inputs| {
+        with_checked(src, false, move |a| {
+            let (view, def) = (super::sema_view::View::new(a), super::expr_tests::def_named(a, name));
+            let cfg: Vec<(&str, Value)> = init.iter().map(|(n, v)| (*n, i32v(i128::from(*v)))).collect();
+            let mut me = Instance::init(view, def, 8.0, &cfg, None).expect("init");
+            let params: Vec<(&str, Value)> = block.iter().map(|(n, v)| (*n, i32v(i128::from(*v)))).collect();
+            let xs = [i32v(1), i32v(2), i32v(3)];
+            let outs = me.process(&params, &[("x", &xs[..])], 3, None).expect("process");
+            outs.iter().map(|o| if let Value::Int(_, n, _) = o { *n } else { panic!("{o:?}") }).collect::<Vec<i128>>()
+        })
+    };
+    assert_eq!(run("delay_arg", &[], &[("g", 4)]), [1, 8, 16]);
+    assert_eq!(run("block_in", &[], &[("g", 4)]), [0, 16, 24]);
+    assert_eq!(run("init_in", &[("k", 1)], &[]), [0, 4, 5]);
 }

@@ -1,0 +1,201 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.3", "§11.5", "§11.6", "§9.2"]
+
+// W7-06 U2/t, S-110, S-1094 (1), S-1131 (spec §11.3: "条件の位置の外の式は、そのクロックの段で無条件に評価する"; the condition positions are
+// "`if` / `match` の枝、… `if~` の連鎖の二つ目からの条件、…" and "`if~` / `match~` の腕は含めない"): the arm of an `if~` is no condition position,
+// so a part of `init` or `block` in an arm is evaluated at its stage, once, whether the arm is chosen or not, and a call of 0 frames
+// evaluates the `block` part too; the second and later conditions of the chain are condition positions, guarded by the conditions before
+// them: a part of `block` in them is evaluated at `block` only when the conditions before it, which `block` decides, are false.
+// The first group checks the values (a part of an arm that is not written to its field reads 0, the silent error that a lowering that
+// walks only the condition of an `if~` would give: the delay of `x * 0` would store 0 and the instance would multiply by 0).
+// The second checks the stage of a panic. Every value is worked out by hand.
+
+pub flow acc(x: F32 at sample) -> F32 at sample {
+  let y = x + prev~(^y)
+  y
+}
+
+pub flow scale(x: F32 at sample, k: F32 at block) -> F32 at sample {
+  x * k
+}
+
+pub flow shift(x: F32 at sample, n: I32 at init) -> F32 at sample {
+  x + F32.round_from(n)
+}
+
+// ---- values: a part of `block` or `init` in an arm ----
+
+// The argument of a delay: the part `g * 0.5` of `block` is in the arm that is chosen on the samples with `x > 1.5`.
+pub flow delay_argument_in_an_arm(x: F32 at sample, g: F32 at block) -> F32 at sample {
+  let c = x > 1.5
+  if~ c { prev~(x * (g * 0.5)) } else { x }
+}
+
+// The `block` input of an instance in the arm.
+pub flow block_input_in_an_arm(x: F32 at sample, g: F32 at block) -> F32 at sample {
+  let c = x > 1.5
+  if~ c { scale~(x, g * 0.5) } else { 0.0 }
+}
+
+// The `init` input of an instance in the arm.
+pub flow init_input_in_an_arm(x: F32 at sample, k: I32 at init) -> F32 at sample {
+  let c = x > 1.5
+  if~ c { shift~(x, k + 1) } else { 0.0 }
+}
+
+// The same in the `else`, and in the branch of the second condition of a chain.
+pub flow block_input_in_the_else(x: F32 at sample, g: F32 at block) -> F32 at sample {
+  let c = x > 1.5
+  if~ c { 0.0 } else { scale~(x, g * 0.5) }
+}
+
+pub flow block_input_in_a_chain_arm(x: F32 at sample, g: F32 at block) -> F32 at sample {
+  if~ x > 2.5 { 0.0 } else if x > 1.5 { scale~(x, g * 0.5) } else { acc~(1.0) }
+}
+
+// A part of `block` in the arm of an `if~` that is in the arm of another.
+pub flow block_input_in_a_nested_arm(x: F32 at sample, g: F32 at block) -> F32 at sample {
+  let c = x > 0.5
+  let d = x > 1.5
+  if~ c { if~ d { scale~(x, g * 0.5) } else { acc~(1.0) } } else { 0.0 }
+}
+
+// ---- values: a part of `block` in the second condition of a chain ----
+
+// The second condition `100 / d > 5` is a condition position: when the first condition `b` (of `block`) is true it is not evaluated.
+pub flow second_condition_of_block(x: F32 at sample, b: Bool at block, d: I32 at block) -> F32 at sample {
+  if~ b { acc~(x) } else if 100 / d > 5 { 2.0 } else { 3.0 }
+}
+
+// ---- the stage of a panic ----
+
+// A part of `block` in an arm: no condition of `block` is on the way to it, so it is evaluated at `block` (a call of 0 frames too),
+// although the `if~` is decided by `sample` and the arm may never be chosen.
+pub flow block_part_in_an_arm_panics(x: F32 at sample, d: I32 at block) -> F32 at sample {
+  let c = x > 100.0
+  if~ c { scale~(x, F32.round_from(100 / d)) } else { 0.0 }
+}
+
+pub flow init_part_in_an_arm_panics(x: F32 at sample, n: I32 at init) -> F32 at sample {
+  let c = x > 100.0
+  if~ c { shift~(x, 100 / n) } else { 0.0 }
+}
+
+// The contrast: in a plain `if` the same part is under a condition of `sample` and is evaluated only when the branch is reached.
+pub flow block_part_in_a_plain_branch(x: F32 at sample, d: I32 at block) -> F32 at sample {
+  let c = x > 100.0
+  let y = if c { x * F32.round_from(100 / d) } else { 0.0 }
+  y
+}
+
+test "the argument of a delay in an arm is evaluated at block" {
+  // g = 4.0: the delay stores x * 2.0 = 2 4 6 and outputs 0 2 4; c = F T T: the output is x, prev, prev = 1 2 4.
+  let xs: [F32; 3] = [1.0, 2.0, 3.0]
+  let o = delay_argument_in_an_arm.render(delay_argument_in_an_arm.Params { g: 4.0 }, xs, 8.0)
+  assert o.out[0] == 1.0
+  assert o.out[1] == 2.0
+  assert o.out[2] == 4.0
+}
+
+test "the block input of an instance in an arm is evaluated at block" {
+  // g = 4.0: k = 2.0; c = F T T: 0.0, 2 * 2, 3 * 2.
+  let xs: [F32; 3] = [1.0, 2.0, 3.0]
+  let o = block_input_in_an_arm.render(block_input_in_an_arm.Params { g: 4.0 }, xs, 8.0)
+  assert o.out[0] == 0.0
+  assert o.out[1] == 4.0
+  assert o.out[2] == 6.0
+}
+
+test "the init input of an instance in an arm is evaluated at init" {
+  // k = 1: n = 2; c = F T T: 0.0, 2 + 2, 3 + 2.
+  let xs: [F32; 3] = [1.0, 2.0, 3.0]
+  let o = init_input_in_an_arm.render(init_input_in_an_arm.Config { k: 1 }, xs, 8.0)
+  assert o.out[0] == 0.0
+  assert o.out[1] == 4.0
+  assert o.out[2] == 5.0
+}
+
+test "the block input of an instance in the else is evaluated at block" {
+  // g = 4.0: k = 2.0; c = F T T: the else is taken on the first sample only: 1 * 2.
+  let xs: [F32; 3] = [1.0, 2.0, 3.0]
+  let o = block_input_in_the_else.render(block_input_in_the_else.Params { g: 4.0 }, xs, 8.0)
+  assert o.out[0] == 2.0
+  assert o.out[1] == 0.0
+  assert o.out[2] == 0.0
+}
+
+test "the block input of an instance in the arm of a chain is evaluated at block" {
+  // g = 6.0: k = 3.0.  x = 3 2 1: 3 takes 0.0, 2 takes scale (2 * 3), 1 takes the counter of the else (its third sample: 3).
+  let xs: [F32; 3] = [3.0, 2.0, 1.0]
+  let o = block_input_in_a_chain_arm.render(block_input_in_a_chain_arm.Params { g: 6.0 }, xs, 8.0)
+  assert o.out[0] == 0.0
+  assert o.out[1] == 6.0
+  assert o.out[2] == 3.0
+}
+
+test "the block input of an instance in a nested arm is evaluated at block" {
+  // g = 4.0: k = 2.0.  x = 1 2 3: c = T T T; d = F T T; the counter 1 2 3 on the first; scale (x * 2) on the others.
+  let xs: [F32; 3] = [1.0, 2.0, 3.0]
+  let o = block_input_in_a_nested_arm.render(block_input_in_a_nested_arm.Params { g: 4.0 }, xs, 8.0)
+  assert o.out[0] == 1.0
+  assert o.out[1] == 4.0
+  assert o.out[2] == 6.0
+}
+
+test "the second condition of a chain is not evaluated when the first condition of block is true" {
+  // b = true, d = 0: `100 / d` is under the condition `b` of block, which holds, so no part of block divides by zero.  The counter: 1 2.
+  let xs: [F32; 2] = [1.0, 1.0]
+  let o = second_condition_of_block.render(second_condition_of_block.Params { b: true, d: 0 }, xs, 8.0)
+  assert o.out[0] == 1.0
+  assert o.out[1] == 2.0
+}
+
+test "the second condition of a chain is evaluated at block when the first condition of block is false" {
+  let xs: [F32; 2] = [1.0, 1.0]
+  let o = second_condition_of_block.render(second_condition_of_block.Params { b: false, d: 0 }, xs, 8.0) //~ PANIC "the second condition of a chain is evaluated at block when the first condition of block is false"
+  assert o.out[0] == 3.0
+}
+
+test "the second condition of a chain gives its value" {
+  // b = false: d = 10: 100 / 10 = 10 > 5: 2.0; d = 50: 2 > 5 is false: 3.0.
+  let xs: [F32; 2] = [1.0, 1.0]
+  let near = second_condition_of_block.render(second_condition_of_block.Params { b: false, d: 10 }, xs, 8.0)
+  assert near.out[0] == 2.0
+  assert near.out[1] == 2.0
+  let far = second_condition_of_block.render(second_condition_of_block.Params { b: false, d: 50 }, xs, 8.0)
+  assert far.out[0] == 3.0
+  assert far.out[1] == 3.0
+}
+
+test "a part of block in an arm panics at block in a call of 0 frames" {
+  let xs: [F32; 1] = [1.0]
+  var out: [F32; 1] = [7.0]
+  var st = block_part_in_an_arm_panics.init(8.0)
+  block_part_in_an_arm_panics.process(inout st, block_part_in_an_arm_panics.Params { d: 0 }, xs.slice(0, 0), inout out.slice(0, 0)) //~ PANIC "a part of block in an arm panics at block in a call of 0 frames"
+  assert out[0] == 7.0
+}
+
+test "a part of block in an arm gives no panic for d = 4" {
+  // 100 / 4 = 25; the arm is never chosen (x > 100 is false): 0.0.
+  let xs: [F32; 2] = [1.0, 2.0]
+  let o = block_part_in_an_arm_panics.render(block_part_in_an_arm_panics.Params { d: 4 }, xs, 8.0)
+  assert o.out[0] == 0.0
+  assert o.out[1] == 0.0
+}
+
+test "a part of init in an arm panics at init" {
+  let _ = init_part_in_an_arm_panics.init(init_part_in_an_arm_panics.Config { n: 0 }, 8.0) //~ PANIC "a part of init in an arm panics at init"
+}
+
+test "a part of block in a branch of a plain if is not evaluated in a call of 0 frames" {
+  // The contrast: the branch is under a condition of `sample`, so the call of 0 frames, and the frames that do not take the branch, evaluate nothing.
+  let xs: [F32; 1] = [1.0]
+  var out: [F32; 1] = [7.0]
+  var st = block_part_in_a_plain_branch.init(8.0)
+  block_part_in_a_plain_branch.process(inout st, block_part_in_a_plain_branch.Params { d: 0 }, xs.slice(0, 0), inout out.slice(0, 0))
+  assert out[0] == 7.0
+  let o = block_part_in_a_plain_branch.render(block_part_in_a_plain_branch.Params { d: 0 }, xs, 8.0)
+  assert o.out[0] == 0.0
+}

@@ -93,7 +93,8 @@ pub(super) fn writes(
             let m = lower_match_with(lw, cx, e, v, arms, Ty::Unit, &mut |lw, cx, i| under(lw, cx, arms[i].body))?;
             push_expr_stmt(m, out);
         }
-        AK::If { cond: x, .. } | AK::Match { scrutinee: x, .. } => writes(lw, cx, info, *x, s, state, out)?,
+        AK::If { tilde: Some(_), .. } => tilde_if_writes(lw, cx, info, e, s, state, out)?,
+        AK::Match { scrutinee: x, .. } => writes(lw, cx, info, *x, s, state, out)?,
         AK::Par { body, .. } if has_writes(info, ast, *body, s) => {
             let Some(&id) = info.node_of.get(&e) else { return Err(internal(span, "a `par~` of no node")) };
             let r = replica_loop(cx, &info.node(id).kind, span)?;
@@ -111,6 +112,43 @@ pub(super) fn writes(
                 writes(lw, cx, info, x, s, state, out)?;
             }
         }
+    }
+    Ok(())
+}
+
+/// The fields of `s` of the `if~` chain `e` ([`writes`]), as it evaluates
+/// them (S-1094): of its conditions, of a later one while the ones before
+/// it are false (§11.3); then of every branch, under no more condition
+/// (R-14). Nested from the last condition, in a loop.
+fn tilde_if_writes(
+    lw: &mut Lowerer,
+    cx: &mut FnCx,
+    info: &FlowInfo,
+    e: ExprId,
+    s: ClockStage,
+    state: &Expr,
+    out: &mut Vec<Stmt>,
+) -> R<()> {
+    let chain = onsa_sema::flow::chain(cx.ast, e);
+    let mut conds = Vec::with_capacity(chain.links.len());
+    for l in &chain.links {
+        let mut b = Vec::new();
+        writes(lw, cx, info, l.cond, s, state, &mut b)?;
+        conds.push((l.cond, b));
+    }
+    let mut later = Vec::new();
+    for (c, mut b) in conds.into_iter().rev() {
+        if !later.is_empty() {
+            let v = cond_value(lw, cx, info, c, s, state)?;
+            let not = Expr::new(Ty::Bool, v.span, ExprKind::Unary(UnOp::Not, Box::new(v)));
+            let then = Block { stmts: std::mem::take(&mut later), value: None };
+            b.push(stmt(cx.ast.expr(c).span, StmtKind::If(not, then, Block::default())));
+        }
+        later = b;
+    }
+    out.extend(later);
+    for x in chain.links.iter().map(|l| l.then).chain(chain.last) {
+        writes(lw, cx, info, x, s, state, out)?;
     }
     Ok(())
 }

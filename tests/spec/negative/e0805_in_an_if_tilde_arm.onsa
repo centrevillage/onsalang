@@ -1,0 +1,47 @@
+// onsa.toml
+// [test]
+// spec = ["§11.5", "§12.2", "§5.4", "§18.1"]
+// fixes = 0
+
+// W7-06 U2/t, W7-14 U4 (carried over from the break of 2026-11-19), S-1043 (b), S-110 (§11.5: "flow の本体は効果を使わない。… 破棄に `Alloc` の要る所有の値を作る式
+// （呼び出しの結果、所有の行のリテラル、§5.4）は、式のクロックによらず E0805 である。位置はその式で、修正候補は無い"): the branch of an `if~` is evaluated
+// like the rest of the body, so an expression that makes a value whose drop needs `Alloc` in it is E0805 at that expression (the `if~` was E0200 before W7-06 and
+// hid it: the walk of the check did not go into its branches). `mk` is a function that returns a `Str`, so the temporary `mk(1)` of `mk(1).len()` is dropped with
+// `Alloc`. Every `if~` holds a thing with state in a branch (it is no E0812), the error has no candidate (`fixes = 0`), and one error per flow (P-01); the marker
+// is on the line of the offending expression.
+
+pub rt fn mk(n: U32) -> Str {
+  "x"
+}
+
+pub flow acc(x: F32 at sample) -> F32 at sample {
+  let y = x + prev~(^y)
+  y
+}
+
+pub flow in_the_then_branch(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  if~ c { acc~(F32.round_from(mk(1).len()) * x) } else { 0.0 } //~ E0805
+}
+
+pub flow in_the_else_branch(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  if~ c { acc~(x) } else { F32.round_from(mk(1).len()) * x } //~ E0805
+}
+
+pub flow in_a_later_branch_of_a_chain(x: F32 at sample) -> F32 at sample {
+  if~ x > 1.0 { acc~(x) } else if x > 0.0 { F32.round_from(mk(1).len()) * x } else { 0.0 } //~ E0805
+}
+
+pub flow in_the_value_of_a_let(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  let a = if~ c { acc~(x) } else { F32.round_from(mk(1).len()) } //~ E0805
+  a
+}
+
+pub flow in_an_if_tilde_in_a_branch(x: F32 at sample, c: Bool at sample, d: Bool at sample) -> F32 at sample {
+  if~ c { if~ d { acc~(x) } else { F32.round_from(mk(1).len()) } } else { 0.0 } //~ E0805
+}
+
+// ---- Not an error: a value that needs no `Alloc` in a branch ----
+
+pub flow a_call_that_returns_a_number(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  if~ c { acc~(x) } else { F32.round_from(7) * x }
+}

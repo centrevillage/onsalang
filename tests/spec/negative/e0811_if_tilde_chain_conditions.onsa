@@ -1,0 +1,83 @@
+// onsa.toml
+// [test]
+// spec = ["§2.6", "§11.5", "§11.3", "§18.1"]
+// fixes = 1
+
+// W7-06 U2/t, S-394 (a)+X1, S-1094 (1), S-1172 (§11.5: "枝と、`match` / `match~` のガードと `if~` の連鎖の二つ目からの条件（選ぶ側で、取られる腕か
+// 真になる条件までしか評価しない）には、状態を持つもの … を書けない（E0811 … ）。`if` の条件と `if~` の連鎖の最初の条件、`match` の対象は
+// 常に評価されるので書ける"): the second and later conditions of an `if~` chain are the side that selects, evaluated only until one is true
+// (`if~ c1 { a } else if c2 { b } else { e }` does not evaluate `c2` when `c1` is true), so a thing with state in them (an instance, a built-in
+// delay, a `par~`) is E0811 although the branches of the `if~` are evaluated every sample. The one candidate is the lift into a `let` before
+// the statement (S-1172, §11.5): the candidate that would write `~` is not offered, as the `if~` is there already and the condition stays a
+// place that is not evaluated every sample (`fixes = 1` is the most candidates that any error of this file has; the runner's default says
+// that the lift is clean). The first condition of the chain is evaluated every sample and the `if~` that is written as the `else` of another is
+// a branch, so their conditions may hold state (the last flows). Every `if~` here holds a thing with state in a branch (it is no E0812).
+// The forms that have no candidate are in e0811_if_tilde_no_candidate.onsa. One error per flow (P-01); the marker is on the line of the offending
+// construct, and the spec does not fix its column.
+
+pub flow acc(x: F32 at sample) -> F32 at sample {
+  let y = x + prev~(^y)
+  y
+}
+
+pub rt fn wrap(x: F32) -> F32 {
+  x
+}
+
+pub rt fn pair_sum(xs: [F32; 2]) -> F32 {
+  xs[0] + xs[1]
+}
+
+// ---- E0811: the second and later conditions of an `if~` chain ----
+
+pub flow second_condition_with_a_delay(x: F32 at sample) -> F32 at sample {
+  if~ x > 1.0 { acc~(x) } else if prev~(x) > 0.0 { 2.0 } else { 0.0 } //~ E0811
+}
+
+pub flow third_condition_with_an_instance(x: F32 at sample) -> F32 at sample {
+  if~ x > 2.0 { acc~(x) } else if x > 1.0 { 2.0 } else if acc~(x) > 3.0 { 3.0 } else { 0.0 } //~ E0811
+}
+
+pub flow second_condition_with_state_inside_a_call(x: F32 at sample) -> F32 at sample {
+  if~ x > 1.0 { acc~(x) } else if wrap(acc~(x)) > 1.0 { 2.0 } else { 0.0 } //~ E0811
+}
+
+pub flow second_condition_with_a_par_tilde(x: F32 at sample) -> F32 at sample {
+  if~ x > 1.0 { acc~(x) } else if pair_sum(par~ i in 0 ..< 2 { prev~(x * F32.round_from(i)) }) > 0.5 { 2.0 } else { 0.0 } //~ E0811
+}
+
+pub flow chain_in_the_value_of_a_let(x: F32 at sample) -> F32 at sample {
+  let a = if~ x > 1.0 { acc~(x) } else if prev~(x) > 0.0 { 2.0 } else { 0.0 } //~ E0811
+  a * 0.5
+}
+
+pub flow chain_on_several_lines(x: F32 at sample) -> F32 at sample {
+  if~ x > 1.0 {
+    acc~(x)
+  } else if delay~(x, 3) > 0.0 { //~ E0811
+    2.0
+  } else {
+    0.0
+  }
+}
+
+pub flow state_in_the_condition_and_in_the_branch_after_it(x: F32 at sample) -> F32 at sample {
+  if~ x > 1.0 { 1.0 } else if prev~(x) > 0.0 { acc~(x) } else { 0.0 } //~ E0811
+}
+
+// ---- Not errors: a condition that is evaluated every sample ----
+
+// The first condition of the chain is evaluated every sample.
+pub flow first_condition_with_state(x: F32 at sample) -> F32 at sample {
+  if~ prev~(x) > 0.0 { acc~(x) } else if x > 1.0 { 2.0 } else { 0.0 }
+}
+
+// An `if~` that is the `else` of another is a branch, evaluated every sample: its condition, the first of its own chain, may hold state.
+pub flow an_if_tilde_in_the_else(x: F32 at sample) -> F32 at sample {
+  if~ x > 1.0 { acc~(x) } else { if~ prev~(x) > 0.0 { 2.0 } else { acc~(1.0) } }
+}
+
+// A later condition that holds no state (a call without state).
+pub flow later_conditions_without_state(x: F32 at sample) -> F32 at sample {
+  if~ x > 1.0 { acc~(x) } else if wrap(x) > 0.5 { 2.0 } else if x > 0.25 { 3.0 } else { 0.0 }
+}

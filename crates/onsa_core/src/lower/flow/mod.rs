@@ -90,6 +90,7 @@ use crate::layout::{FlowLayout, flow_layout_for};
 use crate::prim::Prim;
 
 mod boundary;
+mod branches;
 mod generated;
 mod hoist;
 mod nodes;
@@ -99,6 +100,7 @@ mod state;
 mod tests;
 
 use boundary::{gen_params_default, gen_process, gen_process_inplace, gen_render};
+pub(crate) use branches::tilde_if;
 use generated::{Gen, init_value, instance_args, replica_loop, ring_len, sfield};
 pub(crate) use nodes::lower_flow_expr;
 use phases::{gen_ctl, gen_init, gen_reset, gen_tick};

@@ -357,11 +357,12 @@ fn lower_stmt(lw: &mut Lowerer, cx: &mut FnCx, s: StmtId, out: &mut Vec<Stmt>) -
     }
 }
 
-/// An expression in statement position: `if` / blocks become statements.
+/// An expression in statement position: `if` / blocks become statements
+/// (an `if~` is lowered as a value, [`super::flow::tilde_if`]).
 fn lower_expr_stmt(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId, out: &mut Vec<Stmt>) -> R<()> {
     let span = cx.expr(e).span;
     match &cx.expr(e).kind {
-        AK::If { cond, then, else_, .. } => {
+        AK::If { cond, then, else_, tilde: None } => {
             let c = lower_expr(lw, cx, *cond)?;
             let t = lower_block_expr(lw, cx, *then)?;
             let el = match else_ {

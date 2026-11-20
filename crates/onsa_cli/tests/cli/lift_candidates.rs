@@ -346,25 +346,25 @@ fn the_lift_applied_to_a_nested_branch_stops_in_one_round() {
 }
 
 /// S-1183, the provisional reading (1): the `~` candidate of the innermost branch is shown although the outer branch stays an error; the
-/// first candidate applied again and again ends, with one error each round and no more rounds than the branches are deep. It is
-/// read after the check of `if~` and `match~` (W7-06 U2, U3a).
-#[test]
-#[ignore = "W7-06 U2: S-1183"]
-fn the_tilde_applied_to_a_nested_branch_stops() {
-    let nested = [
-        (
-            "if_in_if",
-            "pub flow f(x: F32 at sample, c: Bool at sample) -> F32 at sample {\n  if c { if x > 1.0 { acc~(x) } else { 0.0 } } else { 0.0 }\n}\n",
-        ),
-        (
-            "match_in_if",
-            "pub flow f(x: F32 at sample, k: U32 at sample) -> F32 at sample {\n  if x > 0.0 { match k { 0 => prev~(x), _ => 0.0 } } else { 0.0 }\n}\n",
-        ),
-        (
-            "if_in_arm",
-            "pub flow f(x: F32 at sample, k: U32 at sample) -> F32 at sample {\n  match k { 0 => if x > 0.0 { acc~(x) } else { 0.0 }, _ => 0.0 }\n}\n",
-        ),
-    ];
+/// first candidate applied again and again ends, with one error each round and no more rounds than the branches are deep. The `if~` of the
+/// candidate is read after the check of `if~` (W7-06 U2), the `match~` of the next test after that of `match~` (W7-06 U3a).
+const NESTED_IF: [(&str, &str); 1] = [(
+    "if_in_if",
+    "pub flow f(x: F32 at sample, c: Bool at sample) -> F32 at sample {\n  if c { if x > 1.0 { acc~(x) } else { 0.0 } } else { 0.0 }\n}\n",
+)];
+
+const NESTED_MATCH: [(&str, &str); 2] = [
+    (
+        "match_in_if",
+        "pub flow f(x: F32 at sample, k: U32 at sample) -> F32 at sample {\n  if x > 0.0 { match k { 0 => prev~(x), _ => 0.0 } } else { 0.0 }\n}\n",
+    ),
+    (
+        "if_in_arm",
+        "pub flow f(x: F32 at sample, k: U32 at sample) -> F32 at sample {\n  match k { 0 => if x > 0.0 { acc~(x) } else { 0.0 }, _ => 0.0 }\n}\n",
+    ),
+];
+
+fn the_first_candidate_stops(nested: &[(&str, &str)]) {
     for (tag, flow) in nested {
         let source = program(flow);
         let counts = applied_until_clean(tag, &source, &|_: &[Value]| 0, 4);
@@ -373,4 +373,15 @@ fn the_tilde_applied_to_a_nested_branch_stops() {
             "{tag}: {counts:?}"
         );
     }
+}
+
+#[test]
+fn the_tilde_applied_to_a_nested_if_stops() {
+    the_first_candidate_stops(&NESTED_IF);
+}
+
+#[test]
+#[ignore = "W7-06 U3a: S-1183"]
+fn the_tilde_applied_to_a_nested_match_stops() {
+    the_first_candidate_stops(&NESTED_MATCH);
 }

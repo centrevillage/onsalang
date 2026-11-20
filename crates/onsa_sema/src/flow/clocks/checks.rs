@@ -4,7 +4,7 @@
 //! of a check (§18.1): the comparisons of [`crate::clock`] pass it. The
 //! checks on which the rule of the clock of their expression rests give it
 //! in error when they fail: the E0813 of a delay, the E0805 and the E0815 of
-//! a call of a function (§11.5), `if~` / `match~`, a node in a branch
+//! a call of a function (§11.5), `match~`, a node in a branch
 //! (E0811, E0806); the
 //! others leave it as the rules give it (the `k` of `e at k`, the output of
 //! an instance, the clock of a delay by its first argument, a value whose
@@ -184,12 +184,33 @@ impl Walk<'_> {
         }
     }
 
-    /// `if~` / `match~` (`form`) at its `~`: W7-06, in error.
+    /// `match~` (`form`) at its `~`: W7-06 U3a, in error.
     pub(super) fn tilde(&mut self, tilde: Span, form: &str) -> Option<Clock> {
         if self.checking() {
             self.gate(Feature::TildeBranches, tilde, &[form]);
         }
         Some(Clock::Error)
+    }
+
+    /// The `if~` of the `~` `tilde` and the chain `chain` (§11.5, S-1177):
+    /// E0812 at its `~` (S-392) when no branch holds state, with the
+    /// candidate that takes the `~` off (a space before a condition it
+    /// touches). Its clock stays the join of its parts.
+    // SPEC-GAP(S-392): the main place of the E0812 is the `~` (provisional).
+    // SPEC-GAP(S-1191): a later condition with state is no branch, so not
+    // counted: E0812 too (provisional).
+    // SPEC-GAP(S-1192): the `if~` of the E0812 keeps its clock, as a `par~`
+    // that holds none (provisional).
+    pub(super) fn check_tilde(&mut self, tilde: Span, chain: &crate::flow::Chain) {
+        let mut branches = chain.links.iter().map(|l| l.then).chain(chain.last);
+        if branches.any(|x| super::super::nodes::holds_state(self.ast, x)) {
+            return;
+        }
+        let msg = "this `if~` holds no state in its branches and is written `if` (§2.6, §11.5)";
+        let touches = chain.links.first().is_some_and(|l| self.ast.expr(l.cond).span.start == tilde.end);
+        let fix = Fix::replace("remove `~`", tilde, if touches { " " } else { "" });
+        let d = Diagnostic::new(Stage::Flow, Code::E0812, tilde, msg).with_found(self.src(tilde));
+        self.report(d.with_fix(fix));
     }
 
     /// The `~` of the replication `e` written with `tilde`, whose body holds
