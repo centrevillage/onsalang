@@ -9,12 +9,13 @@ use super::twin_match;
 
 /// The seeds of the gate: chosen again when a change of the generator moves what they make and `COVER` breaks. A tag is of
 /// what the program holds (a condition that a guard replaces gives none).
-const GATE: [u64; 8] = [1, 4, 8, 9, 12, 84, 142, 149];
+const GATE: [u64; 8] = [327, 380, 409, 3621, 4009, 4975, 5372, 5904];
 /// The forms the seeds of the gate hold: chains of each length, a chain in a chain, a guarded division, a state in the first
-/// condition, every wrap, and the kinds of branch and condition (`par~`, a delay with a start, `block` and `init`, a `par~` index).
+/// condition, every wrap, and the kinds of branch and condition (`par~`, a delay with a start, `block` and `init`, a `par~` index,
+/// a `match~`, also in a `par~`).
 const COVER: &str = "chain2 chain3 chain4 nested guard state_cond wrap_direct wrap_let wrap_twice wrap_half wrap_prev \
     wrap_delay wrap_par delay_init prev_init scale shift ifnest par inst guarded init_in block_div ki_gt n_gt or idx_div \
-    shift_idx acc_idx idx_k";
+    shift_idx acc_idx idx_k match_in_if par_match_in_if";
 const IF: Family = ("if_twins", make);
 const MATCH: Family = ("match_twins", twin_match::make);
 
@@ -72,17 +73,21 @@ fn heavy_if_twins() {
     println!("{s:?}");
 }
 
-const MATCH_GATE: [u64; 14] = [22, 49, 89, 99, 100, 117, 145, 168, 175, 199, 224, 256, 260, 266];
+const MATCH_GATE: [u64; 13] = [63, 101, 303, 426, 657, 1078, 1678, 1680, 2390, 2429, 2448, 2896, 2944];
 /// The forms of the `match~` the seeds hold: the kinds of scrutinee and their clocks, the patterns, the guards (what they read,
-/// and a clock for each arm), the kinds of body, and every wrap.
+/// and a clock for each arm), the kinds of body (an `if~`, a `match~` and a `par~` of them in an arm), and every wrap (also the
+/// `par~`, whose index the scrutinee, the guards and the bodies read).
 const MATCH_COVER: &str = "int i32 arr gt bool wide opt mode tup pt state scr_init scr_block scr_sample or_pat bind_pat lit_pat \
     wild_pat g_init g_block g_sample g_bind g_mixed acc_b prev_b delay_b par_b mulx ifp ifk ifh prev_init delay_init gsum shift \
-    wrap_direct wrap_let wrap_twice wrap_half wrap_prev wrap_delay hd bind_state struct_bind_state staged_guard_false late_clock";
+    wrap_direct wrap_let wrap_twice wrap_half wrap_prev wrap_delay hd bind_state struct_bind_state staged_guard_false late_clock \
+    nif nmatch parm wrap_par idx g_idx acc_i bind_arg cond_bind par_nif par_nmatch par_prev_b par_delay_b par_struct_bind_state parm_state par_parm";
 /// The forms that the mutants of the compiler need, which two seeds of the gate hold at least (so that choosing the seeds again
 /// for another form does not drop the only seed that catches one): a state that reads a binding of an arm that may not be
 /// taken (and one of a struct with a default, derived or written), a staged body after an arm whose guard may be false, a
-/// binding after a guard faster than the scrutinee.
-const MATCH_TWICE: &str = "bind_state struct_bind_state staged_guard_false late_clock";
+/// binding after a guard faster than the scrutinee, a binding read by a delay in a `par~` (the places of the bindings are of a
+/// copy each; also a `par~` in an arm, and one in a `par~`).
+const MATCH_TWICE: &str =
+    "bind_state struct_bind_state staged_guard_false late_clock par_prev_b par_delay_b parm_state";
 
 #[test]
 fn the_twins_of_match_agree_on_the_evaluator_and_in_the_interpreter() {
@@ -103,10 +108,10 @@ fn the_match_seeds_of_the_gate_hold_every_form_of_the_table_of_what_is_covered()
 fn a_twin_whose_unselected_bindings_are_not_the_defaults_is_caught_by_the_seeds_of_the_gate() {
     // The mutant of `fb` gives a binding that is not taken 1 and not 0: only a state that reads it shows the difference, and
     // an assert fails there (and nothing else fails: the program is still read and evaluated). That is about one program in
-    // four (49 of the first 200), so a quarter of the seeds of the gate at least have to be caught.
+    // five (321 of the first 1500), so of the seeds of the gate (not chosen for it) four at least have to be caught.
     let (s, bad) = run(MATCH_GATE.to_vec(), MATCH, true);
     let all_asserts = bad.iter().all(|m| m.contains("does not hold"));
-    assert!(all_asserts && bad.len() * 4 >= s.programs, "{} of {} caught: {bad:?}", bad.len(), s.programs);
+    assert!(all_asserts && bad.len() >= 4, "{} of {} caught: {bad:?}", bad.len(), s.programs);
 }
 
 #[test]

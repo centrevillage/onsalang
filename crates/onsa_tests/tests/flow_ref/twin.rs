@@ -11,6 +11,7 @@ use onsa_tests::case::repo_root;
 use onsa_tests::flow_ref::interp_host::Wrappers;
 use onsa_tests::pending::Pending;
 
+use super::twin_match::{self, EXTRA};
 use super::{Compared, Tally, compare_one, failures, tally_case};
 
 /// splitmix64, as `sweep.rs` of the CLI tests writes it (a seed means a program).
@@ -38,7 +39,11 @@ impl Rng {
     }
 
     pub fn pick<T: Copy>(&mut self, xs: &[T]) -> T {
-        xs[self.below(xs.len())]
+        *self.pick_in(xs)
+    }
+
+    pub fn pick_in<'a, T>(&mut self, xs: &'a [T]) -> &'a T {
+        &xs[self.below(xs.len())]
     }
 }
 
@@ -100,20 +105,22 @@ pub const WRAPS: &[(&str, &str)] = &[
 ];
 /// The ranges of a `par~`, with the numbers its index takes.
 #[rustfmt::skip]
-const RANGES: &[(&str, &[usize])] = &[("0 ..< 2", &[0, 1]), ("0 ..< 3", &[0, 1, 2]), ("1 ..= 3", &[1, 2, 3]), ("2 ..< 5", &[2, 3, 4])];
+pub const RANGES: &[(&str, &[usize])] = &[("0 ..< 2", &[0, 1]), ("0 ..< 3", &[0, 1, 2]), ("1 ..= 3", &[1, 2, 3]), ("2 ..< 5", &[2, 3, 4])];
 const XS: &[&str] = &["-1.0", "-0.5", "0.0", "0.25", "0.5", "1.0", "2.0"];
 
 /// The plan of a branch: an expression of a text, or a chain of `if~` (a condition for each branch but the last).
 enum Body {
     Leaf(String),
     If(Vec<String>, Vec<Body>),
+    /// A `match~` (as `fa` writes it), the `let`s of its twin and the value they end in.
+    Match(String, Vec<String>, String),
 }
 
 impl Body {
     /// As `fa` writes it.
     fn fa(&self) -> String {
         match self {
-            Body::Leaf(t) => t.clone(),
+            Body::Leaf(t) | Body::Match(t, ..) => t.clone(),
             Body::If(conds, arms) => {
                 let chain: String = (conds.iter().zip(arms).enumerate())
                     .map(|(n, (c, a))| format!("if{} {c} {{ {} }} else ", if n == 0 { "~" } else { "" }, a.fa()))
@@ -126,7 +133,15 @@ impl Body {
     /// As `fb` writes it: the `let`s of the branches go to `lets`, the value is the plain `if` that selects. A branch is
     /// bound to `v<n><suffix>`. With `rot` the chain selects the next branch (the mutant that the gate has to catch).
     fn fb(&self, (suffix, n): (&str, &mut usize), lets: &mut Vec<String>, rot: bool) -> String {
-        let Body::If(conds, arms) = self else { return self.fa() };
+        let (conds, arms) = match self {
+            Body::If(conds, arms) => (conds, arms),
+            Body::Match(_, ls, v) => {
+                let (ls, v) = rename(ls, v, suffix);
+                lets.extend(ls);
+                return v;
+            }
+            Body::Leaf(t) => return t.clone(),
+        };
         let names: Vec<String> = (arms.iter())
             .map(|a| {
                 let e = a.fb((suffix, &mut *n), lets, rot);
@@ -146,6 +161,10 @@ struct Gen {
     /// Whether the chain is in a `par~`, and may read its index.
     idx: bool,
     tags: BTreeSet<&'static str>,
+    /// What the bindings of the arm of a `match~` around the chain are, as floats (a form may read them).
+    env: Vec<String>,
+    /// The `match~` that a branch may be (none in an arm of a `match~`, which is as deep as the plan goes).
+    m: Option<twin_match::Gen>,
 }
 
 impl Gen {
@@ -154,6 +173,10 @@ impl Gen {
     fn form(&mut self, table: &[(&'static str, &str)]) -> (&'static str, String) {
         let usable: Vec<_> = table.iter().filter(|(_, t)| self.idx || !t.contains("IDX")).collect();
         let &(tag, t) = self.rng.pick(&usable);
+        let bound =
+            (!self.env.is_empty() && self.rng.chance(25)).then(|| format!("x + {}", self.rng.pick_in(&self.env)));
+        self.tags.extend((bound.is_some() && t.contains("{s}")).then_some("bind_arg"));
+        let t = &t.replace("{s}", bound.as_deref().unwrap_or("{s}"));
         let sexprs: Vec<_> = SEXPRS.iter().filter(|t| self.idx || !t.contains("IDX")).copied().collect();
         let sets: [(&str, &[&str]); 5] = [
             ("{s}", &sexprs),
@@ -166,6 +189,9 @@ impl Gen {
     }
 
     fn cond(&mut self, first: bool) -> (&'static str, String) {
+        if !self.env.is_empty() && self.rng.chance(30) {
+            return ("cond_bind", format!("{} > 0.5", self.rng.pick_in(&self.env)));
+        }
         if !(first && self.rng.chance(30)) {
             return self.form(CONDS);
         }
@@ -174,6 +200,11 @@ impl Gen {
 
     /// A branch: a chain of its own (the plan is three chains deep at most) or a leaf, with a state when `need`.
     fn body(&mut self, depth: usize, need: bool) -> Body {
+        if let Some(m) = self.m.as_mut().filter(|_| self.rng.chance(6)) {
+            let (fa, lets, value) = m.nested();
+            self.tags.insert("match_in_if");
+            return Body::Match(fa, lets, value);
+        }
         if depth < 2 && self.rng.chance(25) {
             self.tags.insert("nested");
             return self.chain(depth + 1);
@@ -204,10 +235,10 @@ impl Gen {
 
 /// The program of a seed (with `rot`, the mutant of `fb`).
 pub fn make(seed: u64, rot: bool) -> (String, BTreeSet<&'static str>) {
-    let mut g = Gen { rng: Rng::new(seed), idx: false, tags: BTreeSet::new() };
+    let mut g = Gen { rng: Rng::new(seed), idx: false, tags: BTreeSet::new(), env: Vec::new(), m: None };
     let w = g.rng.below(WRAPS.len());
-    let par = w == WRAPS.len() - 1;
-    g.idx = par;
+    let par = WRAPS[w].0 == "wrap_par";
+    (g.idx, g.m) = (par, Some(twin_match::Gen::new(seed ^ 0x5EED, false, par)));
     let chain = g.chain(0);
     g.tags.insert(WRAPS[w].0);
     let (mut lets, (range, elems)) = (Vec::new(), g.rng.pick(RANGES));
@@ -229,20 +260,78 @@ pub fn make(seed: u64, rot: bool) -> (String, BTreeSet<&'static str>) {
         (WRAPS[w].1.replace("{}", &chain.fa()), WRAPS[w].1.replace("{}", &b), "F32".to_string())
     };
     let fb = format!("{}\n  {fb}", lets.join("\n  "));
+    let (helpers, held) = g.m.take().map(twin_match::Gen::done).unwrap_or_default();
+    g.tags.extend(held);
+    in_par(par, &mut g.tags);
+    let head = format!("{HEADER}{EXTRA}{helpers}");
+    (program(&mut g.rng, &head, (&fa, &fb, &out), par.then_some(elems.len())), g.tags)
+}
+
+/// A chain of `if~` for an arm of a `match~` that reads the floats `env` (what its bindings are): as `fa` writes it, the `let`s
+/// of its twin (the names they bind end in `sfx`) and the value they end in, and the forms it holds.
+pub fn chain_in(
+    seed: u64,
+    idx: bool,
+    env: Vec<String>,
+    sfx: &str,
+) -> (String, Vec<String>, String, BTreeSet<&'static str>) {
+    let mut g = Gen { rng: Rng::new(seed), idx, tags: BTreeSet::new(), env, m: None };
+    let (chain, mut lets) = (g.chain(1), Vec::new());
+    let value = chain.fb((sfx, &mut 0), &mut lets, false);
+    (chain.fa(), lets, value, g.tags)
+}
+
+/// The forms of a program that is a `par~` are in the `par~`: the tags of the forms that matter there are tagged again.
+pub fn in_par(par: bool, tags: &mut BTreeSet<&'static str>) {
+    const IN: [(&str, &str); 7] = [
+        ("nif", "par_nif"),
+        ("parm", "par_parm"),
+        ("nmatch", "par_nmatch"),
+        ("match_in_if", "par_match_in_if"),
+        ("prev_b", "par_prev_b"),
+        ("delay_b", "par_delay_b"),
+        ("struct_bind_state", "par_struct_bind_state"),
+    ];
+    let held: Vec<_> = IN.iter().filter(|(t, _)| par && tags.contains(t)).map(|(_, p)| *p).collect();
+    tags.extend(held);
+}
+
+fn is_word(c: char) -> bool {
+    c.is_alphanumeric() || c == '_'
+}
+
+/// The `lets` and the `value` of a copy (of a `par~`, or of a form that is written more than once): every name that the `lets`
+/// bind ends in `sfx`, so that the copies bind a name each.
+pub fn rename(lets: &[String], value: &str, sfx: &str) -> (Vec<String>, String) {
+    let bound: Vec<&str> =
+        (lets.iter()).filter_map(|l| l.strip_prefix("let ")?.split(|c| !is_word(c)).next()).collect();
+    let one = |t: &str| -> String {
+        t.split_inclusive(|c| !is_word(c))
+            .map(|p| {
+                let (w, sep) = p.split_at(p.find(|c| !is_word(c)).unwrap_or(p.len()));
+                format!("{w}{}{sep}", if bound.contains(&w) { sfx } else { "" })
+            })
+            .collect()
+    };
+    (lets.iter().map(|l| one(l)).collect(), one(value))
+}
+
+/// The program of the flows `fa` and `fb` (their bodies and their type; with `elems`, the type is the array of the copies of a
+/// `par~`, which two flows `ga` and `gb` add up), after `head`, and its tests.
+pub fn program(rng: &mut Rng, head: &str, (fa, fb, out): (&str, &str, &str), elems: Option<usize>) -> String {
     let flows = format!(
         "pub flow fa{SIGNATURE} -> {out} at sample {{\n  {fa}\n}}\npub flow fb{SIGNATURE} -> {out} at sample {{\n  {fb}\n}}\n"
     );
     let sum = |f: &str| {
-        let terms: Vec<_> = (0..elems.len()).map(|c| format!("r[{c}] * {}.0", 2 * c + 1)).collect();
+        let terms: Vec<_> = (0..elems.unwrap_or(0)).map(|c| format!("r[{c}] * {}.0", 2 * c + 1)).collect();
         format!(
             "pub flow g{f}{SIGNATURE} -> F32 at sample {{\n  let r = f{f}~(x, k, ki, n)\n  {}\n}}\n",
             terms.join(" + ")
         )
     };
-    let adds = if par { sum("a") + &sum("b") } else { String::new() };
-    let named = if par { ("ga", "gb") } else { ("fa", "fb") };
-    let tests = tests(&mut g.rng, par.then_some(elems.len()), named);
-    (format!("{HEADER}{flows}{adds}{tests}"), g.tags)
+    let adds = if elems.is_some() { sum("a") + &sum("b") } else { String::new() };
+    let named = if elems.is_some() { ("ga", "gb") } else { ("fa", "fb") };
+    format!("{head}{flows}{adds}{}", tests(rng, elems, named))
 }
 
 /// The tests of a program (`channels` is the length of the array of a `par~`): `render` of `fa` and `fb` on a grid of the
