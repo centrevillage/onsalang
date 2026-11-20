@@ -109,14 +109,20 @@ pub(super) fn replica_loop(cx: &mut FnCx, kind: &PlanKind, span: Span) -> R<Repl
     Ok(Replicas { var, from, count, k })
 }
 
+/// The index of the replica of the variable `var` of a `par~` from `from`
+/// (`var - from`): in a loop over them ([`Replicas::each`]).
+fn var_index(cx: &FnCx, var: onsa_sema::LocalId, from: u32, span: Span) -> Expr {
+    let v = local_expr(cx, LocalId(var.0), span);
+    if from == 0 { v } else { checked_binary(BinOp::Sub, v, u32_lit(span, from)) }
+}
+
 impl Replicas {
     /// The index of the replica of the iteration (`var - from`, or `k`).
     pub(super) fn index(&self, cx: &FnCx, span: Span) -> Expr {
-        if let Some(k) = self.k {
-            return local_expr(cx, k, span);
+        match self.k {
+            Some(k) => local_expr(cx, k, span),
+            None => var_index(cx, self.var, self.from, span),
         }
-        let v = local_expr(cx, LocalId(self.var.0), span);
-        if self.from == 0 { v } else { checked_binary(BinOp::Sub, v, u32_lit(span, self.from)) }
     }
 
     /// The loop over them, of the variable of the `par~`, with the body `stmts`.
@@ -237,6 +243,36 @@ impl<'b> Gen<'b> {
         if info.from_state(Kept::SampleRate, stage) {
             let f = sfield(lw, info, state, FieldOf::SampleRate, self.span)?;
             self.flow().sample_rate = f;
+        }
+        Ok(())
+    }
+
+    /// The place of each binding of an arm of `match~` this phase reads
+    /// (§11.5, S-1131), a local of the function, which a read of the
+    /// binding reads and [`super::branches::choose`] writes: of one the end
+    /// of `tick` reads (`FlowInfo::store_bindings`), an element for each
+    /// replica of the `par~`s around it.
+    pub(super) fn slots(&mut self, info: &FlowInfo) -> R<()> {
+        let (stage, span) = (self.flow().phase.stage(), self.span);
+        for t in info.tilde_matches.values() {
+            for &b in t.arms.iter().flatten().filter(|b| info.bound_at.get(b).is_some_and(|r| r.contains(&stage))) {
+                let pars = if info.store_bindings.contains(&b) { &t.pars[..] } else { &[] };
+                let mut each = Vec::with_capacity(pars.len());
+                for &p in pars {
+                    let PlanKind::Par { var, from, count, .. } = info.node(p).kind else {
+                        return Err(internal(span, "a `match~` in no `par~`"));
+                    };
+                    each.push((var, from, count));
+                }
+                let local = &self.cx.locals[b.0 as usize];
+                let name = format!("__bind.{}", local.name);
+                let ty = each.iter().rev().fold(local.ty.clone(), |t, &(_, _, n)| Ty::Array(Box::new(t), n));
+                let mut place = self.let_(&name, Expr::new(ty, span, ExprKind::Zeroed));
+                for (var, from, _) in each {
+                    place = index(place, var_index(&self.cx, var, from, span))?;
+                }
+                self.flow().local_override.insert(b.0, place);
+            }
         }
         Ok(())
     }

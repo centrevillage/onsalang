@@ -28,11 +28,14 @@ use super::loops;
 use super::nodes::{NodeBuilder, Recorded};
 use super::plan::{Edge, Owner};
 use super::*;
+use crate::body::LocalKind;
 use crate::clock::{self, ClockFrame, Ratio, delay_out, loop_clock, rebase};
 use crate::flow_names::FlowBuiltin;
 use crate::names::body::{BodyNames, PathRes, named};
 
 mod checks;
+
+use checks::Branching;
 
 /// After type checking: the walk of the clocks, the state marking and the
 /// tables of the flow `id` (§11.2–§11.5). The diagnostic is the first in
@@ -83,7 +86,7 @@ pub(crate) fn finish_flow(a: &mut Analysis, module: &Module, id: DefId, body: Bo
     });
     info.lets = lets.collect();
     let mut m = super::reads::mark_all(a, ast, text, &body, &fcx, &w, &info.lets);
-    (info.read_at, info.sample_rate_at) = (m.read_at, m.sample_rate_at);
+    (info.read_at, info.bound_at, info.sample_rate_at) = (m.read_at, m.bound_at, m.sample_rate_at);
     info.complete = w.diag.is_none() && m.diag.is_none() && w.inout_call.is_none() && fcx.held.is_none() && !fcx.unread;
     #[cfg(test)]
     WALKED.with(|x| x.borrow_mut().push((id, w.clone(), info.complete)));
@@ -94,6 +97,7 @@ pub(crate) fn finish_flow(a: &mut Analysis, module: &Module, id: DefId, body: Bo
     if info.complete {
         let recorded = std::mem::take(&mut w.recorded);
         info.edges = std::mem::take(&mut w.edges);
+        (info.tilde_matches, info.store_bindings) = (std::mem::take(&mut w.tilde), std::mem::take(&mut w.store));
         super::plan::build(&mut info, recorded, &w, ast, std::mem::take(&mut m.hoisted));
         (info.checks, info.const_conds) = (std::mem::take(&mut m.checks), std::mem::take(&mut m.const_conds));
         let unused = super::reads::unused(a, id, ast, &info, &fcx);
@@ -151,6 +155,9 @@ pub(super) struct Walked {
     pub(super) recorded: Vec<Recorded>,
     /// Stage 2: the edges of the plan ([`FlowInfo::edges`]).
     pub(super) edges: Vec<Edge>,
+    /// Stage 2: [`FlowInfo::tilde_matches`] and [`FlowInfo::store_bindings`].
+    pub(super) tilde: BTreeMap<ExprId, TildeMatch>,
+    pub(super) store: HashSet<LocalId>,
 }
 
 /// A place that is not evaluated on every sample (§11.5), around a part of
@@ -212,6 +219,11 @@ pub(super) struct Walk<'a> {
     /// A type → whether it is Dup and whether its drop needs `Alloc`
     /// ([`Walk::fault`]).
     dup_drops: HashMap<TyId, (bool, bool)>,
+    /// At `Check`: the `match~`s, and the bindings of the arms read in the
+    /// first argument of a delay, the depth of which is `first`.
+    tilde: BTreeMap<ExprId, TildeMatch>,
+    store: HashSet<LocalId>,
+    first: u32,
 }
 
 /// Runs the two stages over the body of the flow `id` of the module of
@@ -262,6 +274,9 @@ pub(super) fn walk(
         non_rt: HashMap::default(),
         recorder: NodeBuilder::new(&cx.pending, ast, body),
         dup_drops: HashMap::default(),
+        tilde: BTreeMap::new(),
+        store: HashSet::default(),
+        first: 0,
     };
     for (l, input) in cx.inputs.iter().zip(&decl.inputs) {
         w.out.locals.insert(*l, input.api_clock());
@@ -281,6 +296,8 @@ pub(super) fn walk(
         node_of: w.node_of,
         recorded,
         edges,
+        tilde: w.tilde,
+        store: w.store,
     }
 }
 
@@ -467,6 +484,9 @@ impl Walk<'_> {
     fn local(&mut self, e: ExprId, id: LocalId) -> Option<Clock> {
         if self.mode == Mode::Check {
             self.recorder.read(id, self.ast.expr(e).span);
+            if self.first > 0 && self.body.locals[id.0 as usize].kind == LocalKind::MatchBind {
+                self.store.insert(id);
+            }
         }
         if let Some(&k) = self.cx.let_of_local.get(&id) {
             let feedback = matches!(self.ast.expr(e).kind, ExprKind::Feedback(_));
@@ -506,7 +526,7 @@ impl Walk<'_> {
     fn if_chain(&mut self, e: ExprId, tilde: Option<Span>) -> Option<Clock> {
         let chain = super::branching::chain(self.ast, e);
         if let (Some(t), Some(first)) = (tilde.filter(|_| self.checking()), chain.links.first()) {
-            self.check_tilde(t, "if", chain.links.iter().map(|l| l.then).chain(chain.last), first.cond);
+            self.check_tilde(t, Branching::If, chain.links.iter().map(|l| l.then).chain(chain.last), first.cond);
         }
         let branch = |w: &mut Self, x| match tilde {
             None => w.at(Site::Branch { head: e }, |w| w.expr(x)),
@@ -535,13 +555,15 @@ impl Walk<'_> {
     /// the clock of the scrutinee in the guard; in the body of a `match~`, the
     /// join of it and the guards of the arms to this one (S-1131), the
     /// default of their type on a sample that does not take it (E0816).
+    /// At `Check`, the record of a `match~` and of the arms around its nodes.
     fn match_arms(&mut self, e: ExprId, scrutinee: ExprId, arms: &[MatchArm], tilde: Option<Span>) -> Option<Clock> {
+        let record = tilde.is_some() && self.checking();
         if let Some(t) = tilde.filter(|_| self.checking()) {
-            self.check_tilde(t, "match", arms.iter().map(|a| a.body), scrutinee);
+            self.check_tilde(t, Branching::Match, arms.iter().map(|a| a.body), scrutinee);
         }
         let s = self.expr(scrutinee);
-        let (mut ops, mut chosen) = (vec![s], s);
-        for arm in arms {
+        let (mut ops, mut chosen, mut bound) = (vec![s], s, Vec::new());
+        for (k, arm) in arms.iter().enumerate() {
             self.bind_pat(arm.pat, s);
             if let Some(g) = arm.guard {
                 let g = self.at(Site::Choose, |w| w.expr(g));
@@ -552,11 +574,21 @@ impl Walk<'_> {
                 None => self.at(Site::Branch { head: e }, |w| w.expr(arm.body)),
                 Some(_) => {
                     self.bind_pat(arm.pat, chosen);
-                    self.check_arm_bindings(arm.pat);
-                    self.expr(arm.body)
+                    bound.push(self.check_arm_bindings(arm.pat));
+                    if record {
+                        self.recorder.enter_arm(e, k as u32);
+                    }
+                    let c = self.expr(arm.body);
+                    if record {
+                        self.recorder.leave_arm();
+                    }
+                    c
                 }
             };
             ops.push(body);
+        }
+        if record {
+            self.tilde.insert(e, TildeMatch { arms: bound, pars: self.recorder.pars() });
         }
         self.join(e, &ops)
     }
@@ -699,7 +731,9 @@ impl Walk<'_> {
         if own {
             self.recorder.lookback(true);
         }
+        self.first += 1;
         let c = self.expr(first);
+        self.first -= 1;
         if own {
             self.recorder.lookback(false);
         }

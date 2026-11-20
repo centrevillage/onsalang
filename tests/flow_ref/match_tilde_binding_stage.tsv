@@ -1,0 +1,66 @@
+# flow_ref 1 source=tests/spec/flow_semantics/match_tilde_binding_stage.onsa tests=13 evaluated=13 unavailable=0 skipped=0 waiting=0
+@ a binding read by a block input is the part of the target
+render match_tilde_binding_stage.a_binding_in_a_block_input sr=0x41000000 params k=3 in x=[0x40000000 0x40a00000]
+out=[0x40c00000 0x41700000]
+@ an arm that is not taken is fed the default of its binding at block
+init 0 match_tilde_binding_stage.an_untaken_arm_is_fed_the_default sr=0x41000000
+process 0 params k=3 frames=2 in x=[0x3f800000 0x3f800000]
+out=[0x40400000 0x40c00000]
+process 0 params k=0 frames=2 in x=[0x3f800000 0x3f800000]
+out=[0x00000000 0x00000000]
+process 0 params k=2 frames=2 in x=[0x3f800000 0x3f800000]
+out=[0x41000000 0x41200000]
+@ the binding of an arm after a guard of block is read by a block input in both arms
+init 0 match_tilde_binding_stage.guards_at_block sr=0x41000000
+process 0 params k=5 frames=2 in x=[0x3f800000 0x3f800000]
+out=[0x40a00000 0x41200000]
+process 0 params k=1 frames=2 in x=[0x3f800000 0x3f800000]
+out=[0x41200000 0x41a00000]
+process 0 params k=5 frames=2 in x=[0x3f800000 0x3f800000]
+out=[0x41700000 0x41a00000]
+reset 0
+process 0 params k=1 frames=2 in x=[0x3f800000 0x3f800000]
+out=[0x41200000 0x41a00000]
+@ a binding read by an init input is the part of the target
+render match_tilde_binding_stage.a_binding_in_an_init_input sr=0x41000000 cfg k=3 in x=[0x3f800000 0x40000000]
+out=[0x40800000 0x40a00000]
+@ a binding read by the initial value of a delay is the part of the target
+render match_tilde_binding_stage.a_binding_in_the_init_of_a_delay sr=0x41000000 cfg k=3 in x=[0x40a00000 0x40c00000]
+out=[0x40400000 0x40a00000]
+@ an arm that is not taken divides by its default binding at init
+init 0 match_tilde_binding_stage.an_untaken_arm_divides_at_init sr=0x41000000 cfg k=0
+panic init
+@ the same arm gives no panic at init when it is taken
+render match_tilde_binding_stage.an_untaken_arm_divides_at_init sr=0x41000000 cfg k=4 in x=[0x3f800000]
+out=[0x41d00000]
+@ an arm that is not taken divides by its default binding at block in a call of 0 frames
+init 0 match_tilde_binding_stage.an_untaken_arm_divides_at_block sr=0x41000000
+process 0 params k=0 frames=0 in x=[]
+panic block
+@ the same arm gives no panic at block when it is taken
+init 0 match_tilde_binding_stage.an_untaken_arm_divides_at_block sr=0x41000000
+process 0 params k=4 frames=0 in x=[]
+out=[]
+process 0 params k=4 frames=1 in x=[0x40000000]
+out=[0x42480000]
+@ the part in the arm of a plain match is not evaluated where the arm is not taken
+init 0 match_tilde_binding_stage.the_same_in_a_plain_match sr=0x41000000
+process 0 params k=0 frames=0 in x=[]
+out=[]
+render match_tilde_binding_stage.the_same_in_a_plain_match sr=0x41000000 params k=0 in x=[0x3f800000]
+out=[0x00000000]
+@ the guard of a later arm is not evaluated at block where an arm before it is taken
+init 0 match_tilde_binding_stage.the_guard_of_a_later_arm_at_block sr=0x41000000
+process 0 params k=0 frames=0 in x=[]
+out=[]
+render match_tilde_binding_stage.the_guard_of_a_later_arm_at_block sr=0x41000000 params k=0 in x=[0x3f800000 0x3f800000]
+out=[0x3f800000 0x40000000]
+@ the guard of a later arm gives its value at block
+render match_tilde_binding_stage.the_guard_of_a_later_arm_at_block sr=0x41000000 params k=10 in x=[0x3f800000]
+out=[0x40000000]
+render match_tilde_binding_stage.the_guard_of_a_later_arm_at_block sr=0x41000000 params k=50 in x=[0x3f800000]
+out=[0x40400000]
+@ the guard after a guard that fails is evaluated at block, in a call of 0 frames too
+init 0 match_tilde_binding_stage.the_guard_after_a_guard_that_fails_at_block sr=0x41000000
+process 0 params k=0 frames=0 in x=[]
+panic block

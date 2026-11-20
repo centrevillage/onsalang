@@ -1,0 +1,253 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.5", "§6.4", "§3.5", "§9.2"]
+
+// W7-06 U3b/t, S-110, R-14 (spec §11.5: "`match~` の取られない腕の束縛は、値型の既定値 `T.default()` になり、`T` が `Default` を満たさなければ E0816。
+// 腕は `match` と同じく、パターンとガードで選ぶ"; §6.4: "struct の `Default` は、各フィールドの既定値を並べたものである（宣言に既定値を書いたフィールドは
+// その値で、…）"): the binding of an arm that is not taken is the default of its type, whatever the target held: an arm whose pattern matched and whose guard
+// failed is not taken either, and its binding is the default and not the part of the target the pattern matched. Seen by a counter that adds a value made
+// of the binding on every sample (the arm is evaluated on every sample): the sum after a sample where the arm is not taken shows what the binding was.
+// The types: a number, a float, the payload of an `Option`, a tuple, a struct with `Default` derived (a field with a declared value takes it), a struct with a `Default`
+// written by hand (its `default()` is called), the payloads of the variants of an enum, and a `Bool`. A body that divides by a binding panics for an arm that is
+// not taken (the body is evaluated all the same, with the default 0). Every value is worked out by hand.
+
+pub flow acc(x: F32 at sample) -> F32 at sample {
+  let y = x + prev~(^y)
+  y
+}
+
+// ---- a number: the binding of an arm whose guard failed is 0, not the value that the pattern matched
+
+pub flow a_number(k: I32 at sample) -> F32 at sample {
+  match~ k {
+    n if n > 2 => acc~(F32.round_from(n)),
+    _ => 0.0,
+  }
+}
+
+// ---- a float
+
+pub flow a_float(x: F32 at sample) -> F32 at sample {
+  match~ x {
+    v if v > 2.0 => acc~(v),
+    _ => 0.0,
+  }
+}
+
+// ---- an Option: the payload of `Some(v)` (`Option[T]` has no `Default` itself, so a binding of the whole `Option` is E0816: negative/ of U3a)
+
+pub flow an_option_payload(x: F32 at sample) -> F32 at sample {
+  let o: Option[F32] = if x > 0.0 { Some(x) } else { None }
+  match~ o {
+    Some(v) => acc~(v + 1.0),
+    None => 0.0,
+  }
+}
+
+// ---- a tuple: the default is element by element
+
+pub flow a_tuple(a: F32 at sample, b: F32 at sample) -> F32 at sample {
+  match~ (a, b) {
+    t if t.0 > 2.0 => acc~(t.0 + t.1 + 1.0),
+    _ => 0.0,
+  }
+}
+
+// ---- a struct with `Default` derived: the field with a declared value takes it
+
+pub struct Gate: Default {
+  open: Bool,
+  level: F32 = 0.5,
+  tag: U32,
+}
+
+pub flow a_derived_struct(x: F32 at sample) -> F32 at sample {
+  let t = Gate { open: x > 0.0, level: x, tag: 2 }
+  match~ t {
+    g if g.open => acc~(g.level + F32.round_from(g.tag)),
+    _ => 0.0,
+  }
+}
+
+// ---- a struct with a `Default` written by hand: its `default()` is called
+
+pub struct Pt {
+  x: F32,
+  y: F32,
+}
+
+impl Default for Pt {
+  rt fn default() -> Pt {
+    Pt { x: 1.0, y: -1.0 }
+  }
+}
+
+pub flow a_hand_written_default(x: F32 at sample) -> F32 at sample {
+  let t = Pt { x: x, y: x }
+  match~ t {
+    p if p.x > 2.0 => acc~(p.x * 10.0 + p.y),
+    _ => 0.0,
+  }
+}
+
+// ---- the payloads of an enum: each is 0.0 where its variant is not the one of the target
+
+pub enum Mode {
+  Off,
+  Gain(F32),
+  Mix(F32, F32),
+}
+
+pub flow enum_payloads(x: F32 at sample) -> F32 at sample {
+  let m = if x > 2.0 { Mode.Gain(x) } else if x > 1.0 { Mode.Mix(x, 1.0) } else { Mode.Off }
+  match~ m {
+    Mode.Gain(g) => acc~(g + 1.0),
+    Mode.Mix(a, b) => acc~(a * 10.0 + b),
+    Mode.Off => 0.0,
+  }
+}
+
+// ---- a Bool binding
+
+pub flow a_bool_binding(x: F32 at sample) -> F32 at sample {
+  match~ x > 2.0 {
+    true => 0.0,
+    b => acc~(if b { 1000.0 } else { 1.0 }),
+  }
+}
+
+// ---- a division by the binding
+
+// The arm `n if n > 0` is not taken for a negative `k`, and its binding is 0 and not `k`: the division panics for -3 as for 0.
+pub flow divide_by_a_number_binding(k: I32 at sample) -> F32 at sample {
+  match~ k {
+    n if n > 0 => acc~(F32.round_from(100 / n)),
+    _ => 0.0,
+  }
+}
+
+// The arm `Some(n)` is not taken for `None`, its binding is 0, and `100 / n` is evaluated.
+pub flow divide_by_a_payload(k: I32 at sample) -> F32 at sample {
+  let o: Option[I32] = if k >= 0 { Some(k) } else { None }
+  match~ o {
+    Some(n) => acc~(F32.round_from(100 / n)),
+    None => 0.0,
+  }
+}
+
+test "the binding of an arm whose guard failed is 0" {
+  // k = 5 1 4 1 9.  The arm `n if n > 2` is taken for 5, 4, 9; for 1 the pattern matches but the guard fails, and n is 0: the counter adds 5, 0, 4, 0, 9.
+  // The sums are 5 5 9 9 18, and the arm gives its sum only where it is taken: 5, 0, 9, 0, 18 (a binding that held 1 would give 10 and 14 after it).
+  let ks: [I32; 5] = [5, 1, 4, 1, 9]
+  let o = a_number.render(ks, 8.0)
+  assert o.out[0] == 5.0
+  assert o.out[1] == 0.0
+  assert o.out[2] == 9.0
+  assert o.out[3] == 0.0
+  assert o.out[4] == 18.0
+}
+
+test "the binding of a float arm that is not taken is 0.0" {
+  // x = 3 1 4: the counter adds 3, 0.0, 4: the sums 3, 3, 7; the arm is taken for 3 and 4.
+  let xs: [F32; 3] = [3.0, 1.0, 4.0]
+  let o = a_float.render(xs, 8.0)
+  assert o.out[0] == 3.0
+  assert o.out[1] == 0.0
+  assert o.out[2] == 7.0
+}
+
+test "the payload of an Option arm that is not taken is 0.0" {
+  // x = 1 -1 2 -1 4: the Option is Some, None, Some, None, Some.  The counter adds v + 1.0 with v = 1, 0 (the arm is not taken), 2, 0, 4:
+  // the sums 2 3 6 7 12.  The arm gives its sum where it is taken and `None` gives 0.0.
+  let xs: [F32; 5] = [1.0, -1.0, 2.0, -1.0, 4.0]
+  let o = an_option_payload.render(xs, 8.0)
+  assert o.out[0] == 2.0
+  assert o.out[1] == 0.0
+  assert o.out[2] == 6.0
+  assert o.out[3] == 0.0
+  assert o.out[4] == 12.0
+}
+
+test "the binding of a tuple in an arm that is not taken is the tuple of the defaults" {
+  // (a, b) = (3, 10) (1, 20) (4, 30).  The arm adds t.0 + t.1 + 1.0: 14 where it is taken; where it is not taken t = (0.0, 0.0) and it adds 1.0; 35.
+  // The sums: 14, 15, 50.  Output: 14, 0.0, 50.
+  let a: [F32; 3] = [3.0, 1.0, 4.0]
+  let b: [F32; 3] = [10.0, 20.0, 30.0]
+  let o = a_tuple.render(a_tuple.In { a: a, b: b }, 8.0)
+  assert o.out[0] == 14.0
+  assert o.out[1] == 0.0
+  assert o.out[2] == 50.0
+}
+
+test "the binding of a derived struct in an arm that is not taken has the declared value of its field" {
+  // x = 2 -1 3: Gate { open, level: x, tag: 2 }.  Taken (open) for 2 and 3: adds 2 + 2 = 4 and 3 + 2 = 5.  For -1 the arm is not taken and g is
+  // Gate.default() = { open: false, level: 0.5, tag: 0 }: adds 0.5.  The sums: 4, 4.5, 9.5.  Output: 4, 0.0, 9.5.
+  let xs: [F32; 3] = [2.0, -1.0, 3.0]
+  let o = a_derived_struct.render(xs, 8.0)
+  assert o.out[0] == 4.0
+  assert o.out[1] == 0.0
+  assert o.out[2] == 9.5
+}
+
+test "the binding of a struct with a Default written by hand is what its default gives" {
+  // x = 3 1 4: Pt { x, y: x }.  Taken for 3 and 4: adds 3 * 10 + 3 = 33 and 4 * 10 + 4 = 44.  For 1 the arm is not taken and p is Pt.default() = { x: 1.0, y: -1.0 }:
+  // adds 1 * 10 - 1 = 9.  The sums: 33, 42, 86.  Output: 33, 0.0, 86.
+  let xs: [F32; 3] = [3.0, 1.0, 4.0]
+  let o = a_hand_written_default.render(xs, 8.0)
+  assert o.out[0] == 33.0
+  assert o.out[1] == 0.0
+  assert o.out[2] == 86.0
+}
+
+test "the payloads of the variants that are not the target are 0.0" {
+  // x = 3 1.5 0.5 4: Gain(3), Mix(1.5, 1.0), Off, Gain(4).  The counter of Gain adds g + 1.0 (g = 0.0 where it is not taken): 4, 1, 1, 5: the sums
+  // 4 5 6 11.  The counter of Mix adds a * 10 + b: 0, 16, 0, 0: the sums 0 16 16 16.  Output: 4 (Gain), 16 (Mix), 0.0 (Off), 11 (Gain).
+  let xs: [F32; 4] = [3.0, 1.5, 0.5, 4.0]
+  let o = enum_payloads.render(xs, 8.0)
+  assert o.out[0] == 4.0
+  assert o.out[1] == 16.0
+  assert o.out[2] == 0.0
+  assert o.out[3] == 11.0
+}
+
+test "the binding of a Bool in an arm that is not taken is false" {
+  // x = 3 1 4 1: x > 2 is T F T F.  The arm `true` gives 0.0.  The arm `b` is taken for false: it adds 1.0 (b is false); where it is not taken b is
+  // `false` as well (the default of Bool), and it adds 1.0.  The sums 1 2 3 4: the output is the sum on the samples 1 and 3 (b = false is taken there).
+  let xs: [F32; 4] = [3.0, 1.0, 4.0, 1.0]
+  let o = a_bool_binding.render(xs, 8.0)
+  assert o.out[0] == 0.0
+  assert o.out[1] == 2.0
+  assert o.out[2] == 0.0
+  assert o.out[3] == 4.0
+}
+
+test "a division by the binding of a number arm that is taken gives no panic" {
+  // k = 5 20 -3 would divide by zero at -3; k = 5 20: the counter adds 100 / 5 = 20 and 100 / 20 = 5: 20, 25.
+  let ks: [I32; 2] = [5, 20]
+  let o = divide_by_a_number_binding.render(ks, 8.0)
+  assert o.out[0] == 20.0
+  assert o.out[1] == 25.0
+}
+
+test "a division by the binding of a number arm that is not taken panics" {
+  // k = -3: the guard `n > 0` fails, the arm `_` is taken; the binding of the first arm is 0 (not -3, which would give -34) and `100 / 0` panics.
+  let ks: [I32; 2] = [5, -3]
+  let o = divide_by_a_number_binding.render(ks, 8.0) //~ PANIC "a division by the binding of a number arm that is not taken panics"
+  assert o.out[0] == 20.0
+}
+
+test "a division by the payload of an Option arm that is taken gives no panic" {
+  // k = 5 20: Some(5), Some(20): 100 / 5 = 20, 100 / 20 = 5.
+  let ks: [I32; 2] = [5, 20]
+  let o = divide_by_a_payload.render(ks, 8.0)
+  assert o.out[0] == 20.0
+  assert o.out[1] == 25.0
+}
+
+test "a division by the payload of an Option arm that is not taken panics" {
+  // k = -1: None; the arm Some(n) is not taken, its n is 0 and its body is evaluated: 100 / 0.
+  let ks: [I32; 2] = [5, -1]
+  let o = divide_by_a_payload.render(ks, 8.0) //~ PANIC "a division by the payload of an Option arm that is not taken panics"
+  assert o.out[0] == 20.0
+}

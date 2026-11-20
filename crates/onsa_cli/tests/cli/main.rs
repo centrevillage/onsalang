@@ -79,6 +79,7 @@ mod manifest_required;
 mod manifest_targets;
 mod manifest_values;
 mod match_tilde_candidates;
+mod match_tilde_order;
 mod mode_only_notes;
 mod name_overlaps;
 mod naming_shapes;

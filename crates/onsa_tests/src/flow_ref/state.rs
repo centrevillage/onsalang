@@ -298,10 +298,7 @@ impl<'a> Frame<'a> {
     fn make_cell(&mut self, e: ExprId, d: Delay, args: &[Arg]) -> Result<(), Stop> {
         let at = self.body.ast.expr(e).span;
         let here = |fault| Stop { fault, at };
-        if let Some(a) = args.get(d.init_index()) {
-            self.no_arm_binding(a.expr, Stage::Init)?;
-        }
-        let given = args.get(d.init_index()).map(|a| self.eval(a.expr)).transpose()?;
+        let given = args.get(d.init_index()).map(|a| self.eval_staged(e, a.expr, Stage::Init)).transpose()?;
         let shape = match given {
             Some(_) => None,
             None => Some(self.shape(self.body.ty(e).map_err(here)?, at)?),
@@ -343,22 +340,6 @@ impl<'a> Frame<'a> {
         self.in_child(&key, |f, inst, decl| enter(f, inst, decl, Stage::Init, &config))
     }
 
-    /// An argument of the clock `init` or `block` is not evaluated if it reads a binding of an arm of a `match~` (`n` of
-    /// `match~ k { n => lp~(x, (n as F64)) }`): the arm is evaluated in the `sample` stage, and the spec does not say which
-    /// stage makes the value of the binding that a faster-stage reader is given.
-    // SPEC-GAP(S-1131): the stage of the value of the binding of an arm that an argument of the clock `init` or `block` reads,
-    // and the clock of the binding (the readings: the stage of the argument chooses the arm, the argument is evaluated in the
-    // arm, or it is an error): it is not evaluated here (`Unavailable`).
-    pub(super) fn no_arm_binding(&self, arg: ExprId, stage: Stage) -> Result<(), Stop> {
-        match stage != Stage::Sample && self.body.reads_arm_binding(arg, arg) {
-            true => Err(Stop {
-                fault: Fault::Unavailable("a `match~` arm binding read by an argument of `init` or `block` (S-1131)"),
-                at: self.body.ast.expr(arg).span,
-            }),
-            false => Ok(()),
-        }
-    }
-
     /// The arguments of the call `call` that are inputs of `decl` at `stage`, by input name, evaluated here from the left.
     fn inputs_of(&mut self, call: ExprId, decl: &'a FlowDef, stage: Stage) -> Result<Vec<(&'a str, Value)>, Stop> {
         let (ast, at) = (self.body.ast, self.body.ast.expr(call).span);
@@ -368,8 +349,7 @@ impl<'a> Frame<'a> {
         let mut mine = Vec::new();
         for (i, a) in decl.inputs.iter().zip(args) {
             if input_stage(i).map_err(|fault| Stop { fault, at })? == stage {
-                self.no_arm_binding(a.expr, stage)?;
-                mine.push((i.name.as_str(), self.eval(a.expr)?));
+                mine.push((i.name.as_str(), self.eval_staged(call, a.expr, stage)?));
             }
         }
         Ok(mine)
@@ -442,15 +422,18 @@ impl<'a> Frame<'a> {
             Ty::Array(t, Len::Const(n)) if *n as usize <= self.limits.most => {
                 Shape::Array(Box::new(self.shape(view.ty(*t), at)?), *n as usize)
             }
-            // The evaluator does not call a function of the program for a default.
-            Ty::Named(def, _) if view.default_by_hand(*def) => {
-                return Err(here(Fault::Unavailable("a hand-written Default")));
-            }
+            // A `Default` written by hand: its `default()` is called (§6.4).
+            Ty::Named(def, _) if view.default_by_hand(*def) => Shape::Given(self.hand_default(*def, at)?),
             Ty::Named(def, _) => {
                 let mut fields = Vec::new();
                 for f in view.struct_fields(*def).map_err(here)? {
                     let declared = f.default.map(|c| self.const_def(c, view.ty(f.ty), at)).transpose()?;
-                    fields.push((declared, self.shape(view.ty(f.ty), at)?));
+                    // A field that declares a value has it, and the shape of its type is not asked for (the type may have no `Default`).
+                    let shape = match &declared {
+                        Some(v) => Shape::Given(v.clone()),
+                        None => self.shape(view.ty(f.ty), at)?,
+                    };
+                    fields.push((declared, shape));
                 }
                 Shape::Struct(fields)
             }

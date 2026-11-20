@@ -98,6 +98,8 @@ pub enum Shape {
     Array(Box<Shape>, usize),
     /// Per field: the value its declaration gives (`y: F32 = 0.5`), and its type.
     Struct(Vec<(Option<Value>, Shape)>),
+    /// The default is a value already made: the one a `default()` written by hand gives (§6.4), or the value a field declares.
+    Given(Value),
 }
 
 impl Shape {
@@ -106,6 +108,7 @@ impl Shape {
         let sum = |ps: &mut dyn Iterator<Item = usize>| ps.fold(0usize, usize::saturating_add).max(1);
         match self {
             Shape::Scalar(_) => 1,
+            Shape::Given(v) => v.places(),
             Shape::Tuple(fs) => sum(&mut fs.iter().map(Shape::places)),
             Shape::Array(e, n) => e.places().saturating_mul(*n).max(1),
             Shape::Struct(fs) => sum(&mut fs.iter().map(|(d, t)| d.as_ref().map_or_else(|| t.places(), Value::places))),
@@ -118,6 +121,7 @@ impl Shape {
     pub fn default_value(&self) -> Option<Value> {
         match self {
             Shape::Scalar(s) => s.default_value(),
+            Shape::Given(v) => Some(v.clone()),
             Shape::Tuple(fs) => fs.iter().map(Shape::default_value).collect::<Option<_>>().map(Value::tuple),
             Shape::Array(e, n) => Some(Value::Array(vec![e.default_value()?; *n])),
             Shape::Struct(fs) => fs

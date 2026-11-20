@@ -1,0 +1,271 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.5", "§3.5", "§11.4", "§7"]
+
+// W7-06 U3b/t, S-110, S-1094 (1), R-14 (spec §11.5: "`if~ c { a } else { b }` と `match~ x { ... }` は、全ての枝を評価してから一つを選ぶ。全ての枝の
+// 状態を持つものが進み、状態を持たない部分も全て評価される"; "評価の順は、選ぶ側を先に、次に全ての枝と腕の本体を書いた順である"): a `match~` advances the
+// state of every arm on every sample, whether the arm is taken or not, and takes the value of the first arm that the pattern and the guard choose. A plain
+// `if` that is written in an arm takes only one of its own branches. The forms nest: a `match~` in an arm of a `match~`, an `if~` in an arm and a
+// `match~` in a branch of an `if~`, and a `match~` in the body of a `par~` (a state for each replica). Every value is worked out by hand. The `if~` forms
+// are in if_tilde_all_branches.onsa; the panic of an arm that is not taken is in match_tilde_select_order.onsa; the binding of an arm that is not
+// taken is in match_tilde_default_bindings.onsa.
+//
+// `acc~(1.0)` counts the samples since the start: 1, 2, 3, ... (`acc` is a running sum).
+
+pub flow acc(x: F32 at sample) -> F32 at sample {
+  let y = x + prev~(^y)
+  y
+}
+
+pub flow twice(x: F32 at sample) -> F32 at sample {
+  x * 2.0
+}
+
+// Three counters, one in each arm: all of them run on every sample.
+pub flow an_integer_target(k: U32 at sample) -> F32 at sample {
+  match~ k {
+    0 => acc~(1.0),
+    1 => acc~(10.0),
+    _ => acc~(100.0),
+  }
+}
+
+// The target is a `Bool` made by a comparison.
+pub flow a_bool_target(x: F32 at sample) -> F32 at sample {
+  match~ x > 2.0 {
+    true => acc~(1.0),
+    false => acc~(10.0),
+  }
+}
+
+// The state is in one arm only; the others hold none.
+pub flow a_state_in_one_arm_only(k: U32 at sample) -> F32 at sample {
+  match~ k {
+    1 => acc~(1.0),
+    _ => 0.0,
+  }
+}
+
+// A plain `if` in an arm takes one of its branches: `100 / d` is not evaluated when `d` is 0, although the arm `_` is evaluated.
+pub flow a_plain_if_in_an_arm(d: I32 at sample) -> F32 at sample {
+  match~ d {
+    0 => acc~(1.0),
+    _ => if d != 0 { F32.round_from(100 / d) } else { 0.0 },
+  }
+}
+
+// The `match~` as the value of a `let`.
+pub flow the_value_of_a_let(k: U32 at sample) -> F32 at sample {
+  let v = match~ k {
+    0 => acc~(1.0),
+    _ => 0.0,
+  }
+  v * 2.0
+}
+
+// The instance of a flow is a thing with state by the kind of its callee, so it is an arm with state although `twice` holds none.
+pub flow an_instance_of_a_flow_without_state(k: U32 at sample) -> F32 at sample {
+  match~ k {
+    0 => twice~(1.5),
+    _ => 0.0,
+  }
+}
+
+// An arm with a pattern of a struct and a tuple: the first one that the patterns choose.
+pub flow tuple_patterns(a: U32 at sample, b: U32 at sample) -> F32 at sample {
+  match~ (a, b) {
+    (0, 0) => acc~(1.0),
+    (0, _) => acc~(10.0),
+    (_, n) if n > 1 => acc~(100.0),
+    _ => acc~(1000.0),
+  }
+}
+
+// A `match~` in an arm of a `match~`: the three counters of the inner one run on every sample, taken in the outer arm or not.
+pub flow a_nested_match_tilde(a: U32 at sample, b: U32 at sample) -> F32 at sample {
+  match~ a {
+    0 => match~ b {
+      0 => acc~(1.0),
+      _ => acc~(10.0),
+    },
+    _ => acc~(100.0),
+  }
+}
+
+// An `if~` in an arm of a `match~`.
+pub flow an_if_tilde_in_an_arm(k: U32 at sample, x: F32 at sample) -> F32 at sample {
+  match~ k {
+    0 => if~ x > 0.5 { acc~(1.0) } else { acc~(10.0) },
+    _ => acc~(100.0),
+  }
+}
+
+// A `match~` in a branch of an `if~`.
+pub flow a_match_tilde_in_an_if_tilde(x: F32 at sample, k: U32 at sample) -> F32 at sample {
+  if~ x > 0.5 {
+    match~ k {
+      0 => acc~(1.0),
+      _ => acc~(10.0),
+    }
+  } else {
+    acc~(100.0)
+  }
+}
+
+// A `match~` in the body of a `par~`: each replica has the three counters of its own, and its own target (`k + i`).
+pub flow a_match_tilde_in_a_par(k: U32 at sample) -> [F32; 2] at sample {
+  par~ i in 0 ..< 2 {
+    match~ k + i {
+      0 => acc~(1.0),
+      1 => acc~(10.0),
+      _ => acc~(100.0),
+    }
+  }
+}
+
+// The counter of the arm counts by the index of the replica.
+pub flow the_arm_reads_the_index_of_the_replica(k: U32 at sample) -> [F32; 2] at sample {
+  par~ i in 0 ..< 2 {
+    match~ k {
+      0 => acc~(F32.round_from(i) + 1.0),
+      _ => 0.0,
+    }
+  }
+}
+
+test "a counter in every arm of a match~ runs on every sample" {
+  // k = 2 0 1 2.  1s: 1 2 3 4.  10s: 10 20 30 40.  100s: 100 200 300 400.  Taken: the third arm, the first, the second, the third.
+  let ks: [U32; 4] = [2, 0, 1, 2]
+  let o = an_integer_target.render(ks, 8.0)
+  assert o.out[0] == 100.0
+  assert o.out[1] == 2.0
+  assert o.out[2] == 30.0
+  assert o.out[3] == 400.0
+}
+
+test "a match~ on a Bool target runs both arms" {
+  // x > 2 is F T F T T.  1s: 1 2 3 4 5 (true).  10s: 10 20 30 40 50 (false).
+  let xs: [F32; 5] = [1.0, 3.0, 1.0, 3.0, 3.0]
+  let o = a_bool_target.render(xs, 8.0)
+  assert o.out[0] == 10.0
+  assert o.out[1] == 2.0
+  assert o.out[2] == 30.0
+  assert o.out[3] == 4.0
+  assert o.out[4] == 5.0
+}
+
+test "the counter of the only arm with state runs on the samples where it is not taken" {
+  // k = 0 1 0 1 1: the counter runs 1 2 3 4 5 and is taken on the samples 1, 3 and 4.
+  let ks: [U32; 5] = [0, 1, 0, 1, 1]
+  let o = a_state_in_one_arm_only.render(ks, 8.0)
+  assert o.out[0] == 0.0
+  assert o.out[1] == 2.0
+  assert o.out[2] == 0.0
+  assert o.out[3] == 4.0
+  assert o.out[4] == 5.0
+}
+
+test "a plain if in an arm evaluates only the branch it takes" {
+  // d = 0 5 -4 20: the counter runs 1 2 3 4 and is taken for d = 0.  The arm `_` is evaluated on every sample: for d = 0 its
+  // plain `if` takes `0.0` (no division); 100 / 5 = 20, 100 / -4 = -25, 100 / 20 = 5 are the values of the arm that is taken.
+  let ds: [I32; 4] = [0, 5, -4, 20]
+  let o = a_plain_if_in_an_arm.render(ds, 8.0)
+  assert o.out[0] == 1.0
+  assert o.out[1] == 20.0
+  assert o.out[2] == -25.0
+  assert o.out[3] == 5.0
+}
+
+test "a match~ as the value of a let" {
+  // k = 1 0 0 1: the counter runs 1 2 3 4; v = 0 2 3 0; v * 2 = 0 4 6 0.
+  let ks: [U32; 4] = [1, 0, 0, 1]
+  let o = the_value_of_a_let.render(ks, 8.0)
+  assert o.out[0] == 0.0
+  assert o.out[1] == 4.0
+  assert o.out[2] == 6.0
+  assert o.out[3] == 0.0
+}
+
+test "an instance of a flow without state is an arm with state" {
+  let ks: [U32; 2] = [0, 1]
+  let o = an_instance_of_a_flow_without_state.render(ks, 8.0)
+  assert o.out[0] == 3.0
+  assert o.out[1] == 0.0
+}
+
+test "the arms of a tuple pattern are chosen from the top" {
+  // (a, b) = (0, 0) (0, 5) (3, 2) (3, 1) (0, 0): the arms are 1 (the counter of 1s), 2 (10s), 3 (100s: `n > 1`), 4 (1000s), 1.
+  // 1s: 1 2 3 4 5.  10s: 10 20 30 40 50.  100s: 100 200 300 400 500.  1000s: 1000 2000 3000 4000 5000.  Taken: 1, 20, 300, 4000, 5.
+  let a: [U32; 5] = [0, 0, 3, 3, 0]
+  let b: [U32; 5] = [0, 5, 2, 1, 0]
+  let o = tuple_patterns.render(tuple_patterns.In { a: a, b: b }, 8.0)
+  assert o.out[0] == 1.0
+  assert o.out[1] == 20.0
+  assert o.out[2] == 300.0
+  assert o.out[3] == 4000.0
+  assert o.out[4] == 5.0
+}
+
+test "a match~ in an arm of a match~ runs all three counters" {
+  // a = 0 0 1 0, b = 0 1 0 1.  1s: 1 2 3 4 (inner first arm).  10s: 10 20 30 40 (inner `_`).  100s: 100 200 300 400 (outer `_`).
+  // Taken: the 1s, the 10s, the 100s, the 10s.
+  let a: [U32; 4] = [0, 0, 1, 0]
+  let b: [U32; 4] = [0, 1, 0, 1]
+  let o = a_nested_match_tilde.render(a_nested_match_tilde.In { a: a, b: b }, 8.0)
+  assert o.out[0] == 1.0
+  assert o.out[1] == 20.0
+  assert o.out[2] == 300.0
+  assert o.out[3] == 40.0
+}
+
+test "an if~ in an arm of a match~ runs both of its branches" {
+  // k = 0 0 1 0, x = 1 0 0 1: x > 0.5 is T F F T.  1s: 1 2 3 4.  10s: 10 20 30 40.  100s: 100 200 300 400.  Taken: the 1s (k = 0,
+  // the then branch), the 10s, the 100s (the arm `_`), the 1s.
+  let ks: [U32; 4] = [0, 0, 1, 0]
+  let xs: [F32; 4] = [1.0, 0.0, 0.0, 1.0]
+  let o = an_if_tilde_in_an_arm.render(an_if_tilde_in_an_arm.In { k: ks, x: xs }, 8.0)
+  assert o.out[0] == 1.0
+  assert o.out[1] == 20.0
+  assert o.out[2] == 300.0
+  assert o.out[3] == 4.0
+}
+
+test "a match~ in a branch of an if~ runs when the branch is not taken" {
+  // x = 1 0 1 0, k = 0 0 1 1: x > 0.5 is T F T F.  1s: 1 2 3 4 (k = 0).  10s: 10 20 30 40 (`_`).  100s: 100 200 300 400 (the else).
+  // Taken: the 1s, the 100s, the 10s, the 100s.
+  let xs: [F32; 4] = [1.0, 0.0, 1.0, 0.0]
+  let ks: [U32; 4] = [0, 0, 1, 1]
+  let o = a_match_tilde_in_an_if_tilde.render(a_match_tilde_in_an_if_tilde.In { x: xs, k: ks }, 8.0)
+  assert o.out[0] == 1.0
+  assert o.out[1] == 200.0
+  assert o.out[2] == 30.0
+  assert o.out[3] == 400.0
+}
+
+test "a match~ in a par~ has its own state and target in each replica" {
+  // k = 0 1 2.  The replica 0 has the target k = 0 1 2 and the replica 1 has k + 1 = 1 2 3; each has its own counters
+  // (1s: 1 2 3, 10s: 10 20 30, 100s: 100 200 300).  Replica 0 takes: the 1s, the 10s, the 100s: 1, 20, 300.
+  // Replica 1 takes: the 10s, the 100s, the 100s: 10, 200, 300.
+  let ks: [U32; 3] = [0, 1, 2]
+  let o = a_match_tilde_in_a_par.render(ks, 8.0)
+  assert o.out[0][0] == 1.0
+  assert o.out[0][1] == 20.0
+  assert o.out[0][2] == 300.0
+  assert o.out[1][0] == 10.0
+  assert o.out[1][1] == 200.0
+  assert o.out[1][2] == 300.0
+}
+
+test "the arm of a match~ in a par~ reads the index of its replica" {
+  // The counter of the replica 0 adds 1 and that of the replica 1 adds 2: 1 2 3 and 2 4 6.  k = 0 1 0 takes the arm `0` on the
+  // samples 0 and 2.
+  let ks: [U32; 3] = [0, 1, 0]
+  let o = the_arm_reads_the_index_of_the_replica.render(ks, 8.0)
+  assert o.out[0][0] == 1.0
+  assert o.out[0][1] == 0.0
+  assert o.out[0][2] == 3.0
+  assert o.out[1][0] == 2.0
+  assert o.out[1][1] == 0.0
+  assert o.out[1][2] == 6.0
+}

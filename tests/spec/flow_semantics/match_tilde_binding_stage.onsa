@@ -1,0 +1,258 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.5", "§11.3", "§11.6", "§9.2"]
+
+// W7-06 U3b/t, S-1131, S-110 (spec §11.5: "腕の本体で読む束縛のクロックは、対象のクロックと、最初の腕からその腕までのガードのクロックのうち最も速いものである。
+// … 束縛を読む式は、他の式と同じく、そのクロックの段で評価する（`match~ k { n => lp~(x, (n as F64)) }` の `(n as F64)` は、`k` が `block` なら `process` の
+// 呼び出しごとに一度、腕が取られるかによらず評価する）。値は、束縛を `let` と `if~` で書いた形と同じである"; §11.3: "`init` の式は `init` で 1 回、`block` の式は
+// `process` の呼び出しごとに 1 回（0 フレームの呼び出しでも、§11.6）"): a binding of an arm that an argument of the clock `block` or `init` reads (the input of
+// an instance, the length or the initial value of a delay) has its value at that stage: the part of the target where the arm is taken and `T.default()` where it
+// is not, whatever the arm is at the stage `sample`. The first group checks the values, over `process` calls with other parameters and a `reset`: an instance
+// in an arm that is not taken is fed the default (a counter `gsum~(x, g)` that adds `x * g` shows the `g` that it got: 0.0, and not the value of the last call);
+// the second the stage of a panic: a division by the binding that is evaluated although the arm is not taken (at `init`, and at `block` even for a call of
+// 0 frames), and the guards of the later arms, which are condition positions guarded by the arms before them. Every value is worked out by hand.
+
+pub flow acc(x: F32 at sample) -> F32 at sample {
+  let y = x + prev~(^y)
+  y
+}
+
+pub flow scale(x: F32 at sample, g: F32 at block) -> F32 at sample {
+  x * g
+}
+
+// A sum of `x * g`: what it gets as `g` is seen in the sum.
+pub flow gsum(x: F32 at sample, g: F32 at block) -> F32 at sample {
+  let y = x * g + prev~(^y)
+  y
+}
+
+pub flow bias(a: F32 at init, x: F32 at sample) -> F32 at sample {
+  x + a
+}
+
+// ---- values at `block`
+
+// The spec's example: the binding is read by the `block` input of the instance in the arm.
+pub flow a_binding_in_a_block_input(x: F32 at sample, k: U32 at block) -> F32 at sample {
+  match~ k {
+    n => scale~(x, F32.round_from(n)),
+  }
+}
+
+// The arm `Some(n)` is not taken where `k` is 0, and its instance is fed `g = 0.0` from the binding that is the default.
+pub flow an_untaken_arm_is_fed_the_default(x: F32 at sample, k: U32 at block) -> F32 at sample {
+  let o: Option[U32] = if k > 0 { Some(k) } else { None }
+  match~ o {
+    Some(n) => gsum~(x, F32.round_from(n)),
+    None => 0.0,
+  }
+}
+
+// The guard `n > 2` is of `block`, so the binding of the second arm has the clock `block` too: both arms feed their instance at `block`.
+pub flow guards_at_block(x: F32 at sample, k: U32 at block) -> F32 at sample {
+  match~ k {
+    n if n > 2 => gsum~(x, F32.round_from(n)),
+    m => gsum~(x, F32.round_from(m) * 10.0),
+  }
+}
+
+// ---- values at `init`
+
+pub flow a_binding_in_an_init_input(x: F32 at sample, k: U32 at init) -> F32 at sample {
+  match~ k {
+    n => bias~(F32.round_from(n), x),
+  }
+}
+
+// The initial value of a delay.
+pub flow a_binding_in_the_init_of_a_delay(x: F32 at sample, k: U32 at init) -> F32 at sample {
+  match~ k {
+    n => prev~(x, F32.round_from(n)),
+  }
+}
+
+// ---- the stage of a panic
+
+// The arm `Some(n)` is not taken for k = 0 and `n` is 0 there: `100 / n` is evaluated at `init`.
+pub flow an_untaken_arm_divides_at_init(x: F32 at sample, k: I32 at init) -> F32 at sample {
+  let o: Option[I32] = if k > 0 { Some(k) } else { None }
+  match~ o {
+    Some(n) => bias~(F32.round_from(100 / n), x),
+    None => 0.0,
+  }
+}
+
+// The same at `block`: evaluated for every call of `process`, one of 0 frames too.
+pub flow an_untaken_arm_divides_at_block(x: F32 at sample, k: I32 at block) -> F32 at sample {
+  let o: Option[I32] = if k > 0 { Some(k) } else { None }
+  match~ o {
+    Some(n) => scale~(x, F32.round_from(100 / n)),
+    None => 0.0,
+  }
+}
+
+// The contrast: in a plain `match` the part `100 / n` is in the arm `Some(n)`, which `o` (of `block`) does not take for k = 0, so it is not evaluated.
+pub flow the_same_in_a_plain_match(x: F32 at sample, k: I32 at block) -> F32 at sample {
+  let o: Option[I32] = if k > 0 { Some(k) } else { None }
+  match o {
+    Some(n) => x * F32.round_from(100 / n),
+    None => 0.0,
+  }
+}
+
+// The guard `100 / n` of the second arm is a condition position, under the target and the arm before it: for k = 0 the first arm is taken, and it is not
+// evaluated, at `block` either.
+pub flow the_guard_of_a_later_arm_at_block(x: F32 at sample, k: I32 at block) -> F32 at sample {
+  match~ k {
+    0 => acc~(x),
+    n if 100 / n > 5 => 2.0,
+    _ => 3.0,
+  }
+}
+
+// The guard of the first arm fails for k = 0, so the second guard is evaluated at `block`, for a call of 0 frames too.
+pub flow the_guard_after_a_guard_that_fails_at_block(x: F32 at sample, k: I32 at block) -> F32 at sample {
+  match~ k {
+    n if n < 0 => acc~(x),
+    m if 100 / m > 5 => 2.0,
+    _ => 3.0,
+  }
+}
+
+test "a binding read by a block input is the part of the target" {
+  // k = 3: scale gets g = 3.0.  x = 2 5: 6, 15.
+  let xs: [F32; 2] = [2.0, 5.0]
+  let o = a_binding_in_a_block_input.render(a_binding_in_a_block_input.Params { k: 3 }, xs, 8.0)
+  assert o.out[0] == 6.0
+  assert o.out[1] == 15.0
+}
+
+test "an arm that is not taken is fed the default of its binding at block" {
+  // x = 1 each frame.  Call 1 (k = 3): Some(3), g = 3: the sums 3, 6.  Call 2 (k = 0): None, the arm is not taken and n = 0: g = 0.0: the sums stay 6, 6
+  // (a binding that kept the 3 of the last call would give 9, 12); the value is `None`'s 0.0.  Call 3 (k = 2): g = 2: 8, 10.
+  let xs: [F32; 6] = [1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+  var out: [F32; 6] = [0.0; 6]
+  var st = an_untaken_arm_is_fed_the_default.init(8.0)
+  an_untaken_arm_is_fed_the_default.process(inout st, an_untaken_arm_is_fed_the_default.Params { k: 3 }, xs.slice(0, 2), inout out.slice(0, 2))
+  an_untaken_arm_is_fed_the_default.process(inout st, an_untaken_arm_is_fed_the_default.Params { k: 0 }, xs.slice(2, 4), inout out.slice(2, 4))
+  an_untaken_arm_is_fed_the_default.process(inout st, an_untaken_arm_is_fed_the_default.Params { k: 2 }, xs.slice(4, 6), inout out.slice(4, 6))
+  assert out[0] == 3.0
+  assert out[1] == 6.0
+  assert out[2] == 0.0
+  assert out[3] == 0.0
+  assert out[4] == 8.0
+  assert out[5] == 10.0
+}
+
+test "the binding of an arm after a guard of block is read by a block input in both arms" {
+  // x = 1 each frame.  The arms: A (`n > 2`, g = n) and B (`m`, g = m * 10); the instance of each is fed the default where its arm is not taken.
+  // Call 1 (k = 5): A: g = 5: 5, 10; B: g = 0: 0, 0.  The value is A's: 5, 10.
+  // Call 2 (k = 1): A: g = 0: 10, 10; B: g = 10: 10, 20.  The value is B's: 10, 20.
+  // Call 3 (k = 5): A: g = 5: 15, 20; B: g = 0: 20, 20.  The value is A's: 15, 20.
+  // After a reset: call 4 (k = 1): A: 0, 0; B: g = 10: 10, 20.  The value is B's: 10, 20 (without the reset it would be 30, 40).
+  let xs: [F32; 6] = [1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+  var out: [F32; 6] = [0.0; 6]
+  var again: [F32; 2] = [0.0; 2]
+  var st = guards_at_block.init(8.0)
+  guards_at_block.process(inout st, guards_at_block.Params { k: 5 }, xs.slice(0, 2), inout out.slice(0, 2))
+  guards_at_block.process(inout st, guards_at_block.Params { k: 1 }, xs.slice(2, 4), inout out.slice(2, 4))
+  guards_at_block.process(inout st, guards_at_block.Params { k: 5 }, xs.slice(4, 6), inout out.slice(4, 6))
+  assert out[0] == 5.0
+  assert out[1] == 10.0
+  assert out[2] == 10.0
+  assert out[3] == 20.0
+  assert out[4] == 15.0
+  assert out[5] == 20.0
+  guards_at_block.reset(inout st)
+  guards_at_block.process(inout st, guards_at_block.Params { k: 1 }, xs.slice(0, 2), inout again)
+  assert again[0] == 10.0
+  assert again[1] == 20.0
+}
+
+test "a binding read by an init input is the part of the target" {
+  // k = 3: bias gets a = 3.0.  x = 1 2: 4, 5.
+  let xs: [F32; 2] = [1.0, 2.0]
+  let o = a_binding_in_an_init_input.render(a_binding_in_an_init_input.Config { k: 3 }, xs, 8.0)
+  assert o.out[0] == 4.0
+  assert o.out[1] == 5.0
+}
+
+test "a binding read by the initial value of a delay is the part of the target" {
+  // k = 3: the delay starts from 3.0.  x = 5 6: 3, 5.
+  let xs: [F32; 2] = [5.0, 6.0]
+  let o = a_binding_in_the_init_of_a_delay.render(a_binding_in_the_init_of_a_delay.Config { k: 3 }, xs, 8.0)
+  assert o.out[0] == 3.0
+  assert o.out[1] == 5.0
+}
+
+test "an arm that is not taken divides by its default binding at init" {
+  let _ = an_untaken_arm_divides_at_init.init(an_untaken_arm_divides_at_init.Config { k: 0 }, 8.0) //~ PANIC "an arm that is not taken divides by its default binding at init"
+}
+
+test "the same arm gives no panic at init when it is taken" {
+  // k = 4: Some(4): bias gets 100 / 4 = 25.  x = 1: 26.
+  let xs: [F32; 1] = [1.0]
+  let o = an_untaken_arm_divides_at_init.render(an_untaken_arm_divides_at_init.Config { k: 4 }, xs, 8.0)
+  assert o.out[0] == 26.0
+}
+
+test "an arm that is not taken divides by its default binding at block in a call of 0 frames" {
+  let xs: [F32; 1] = [1.0]
+  var out: [F32; 1] = [7.0]
+  var st = an_untaken_arm_divides_at_block.init(8.0)
+  an_untaken_arm_divides_at_block.process(inout st, an_untaken_arm_divides_at_block.Params { k: 0 }, xs.slice(0, 0), inout out.slice(0, 0)) //~ PANIC "an arm that is not taken divides by its default binding at block in a call of 0 frames"
+  assert out[0] == 7.0
+}
+
+test "the same arm gives no panic at block when it is taken" {
+  // k = 4: g = 100 / 4 = 25; x = 2: 50.  A call of 0 frames gives no panic either.
+  let xs: [F32; 1] = [2.0]
+  var out: [F32; 1] = [7.0]
+  var st = an_untaken_arm_divides_at_block.init(8.0)
+  an_untaken_arm_divides_at_block.process(inout st, an_untaken_arm_divides_at_block.Params { k: 4 }, xs.slice(0, 0), inout out.slice(0, 0))
+  assert out[0] == 7.0
+  an_untaken_arm_divides_at_block.process(inout st, an_untaken_arm_divides_at_block.Params { k: 4 }, xs, inout out)
+  assert out[0] == 50.0
+}
+
+test "the part in the arm of a plain match is not evaluated where the arm is not taken" {
+  // The contrast: k = 0 takes `None`, so `100 / n` is not evaluated, in a call of 0 frames and in one that renders.
+  let xs: [F32; 1] = [1.0]
+  var out: [F32; 1] = [7.0]
+  var st = the_same_in_a_plain_match.init(8.0)
+  the_same_in_a_plain_match.process(inout st, the_same_in_a_plain_match.Params { k: 0 }, xs.slice(0, 0), inout out.slice(0, 0))
+  assert out[0] == 7.0
+  let o = the_same_in_a_plain_match.render(the_same_in_a_plain_match.Params { k: 0 }, xs, 8.0)
+  assert o.out[0] == 0.0
+}
+
+test "the guard of a later arm is not evaluated at block where an arm before it is taken" {
+  // k = 0: the first arm; `100 / n` of the second guard is not evaluated, in a call of 0 frames either.  x = 1 1: the counter 1, 2.
+  let xs: [F32; 2] = [1.0, 1.0]
+  var out: [F32; 1] = [7.0]
+  var st = the_guard_of_a_later_arm_at_block.init(8.0)
+  the_guard_of_a_later_arm_at_block.process(inout st, the_guard_of_a_later_arm_at_block.Params { k: 0 }, xs.slice(0, 0), inout out.slice(0, 0))
+  assert out[0] == 7.0
+  let o = the_guard_of_a_later_arm_at_block.render(the_guard_of_a_later_arm_at_block.Params { k: 0 }, xs, 8.0)
+  assert o.out[0] == 1.0
+  assert o.out[1] == 2.0
+}
+
+test "the guard of a later arm gives its value at block" {
+  // k = 10: 100 / 10 = 10 > 5: 2.0; k = 50: 2 > 5 is false: 3.0 (the counter of the first arm runs and is not taken).
+  let xs: [F32; 1] = [1.0]
+  let near = the_guard_of_a_later_arm_at_block.render(the_guard_of_a_later_arm_at_block.Params { k: 10 }, xs, 8.0)
+  assert near.out[0] == 2.0
+  let far = the_guard_of_a_later_arm_at_block.render(the_guard_of_a_later_arm_at_block.Params { k: 50 }, xs, 8.0)
+  assert far.out[0] == 3.0
+}
+
+test "the guard after a guard that fails is evaluated at block, in a call of 0 frames too" {
+  let xs: [F32; 1] = [1.0]
+  var out: [F32; 1] = [7.0]
+  var st = the_guard_after_a_guard_that_fails_at_block.init(8.0)
+  the_guard_after_a_guard_that_fails_at_block.process(inout st, the_guard_after_a_guard_that_fails_at_block.Params { k: 0 }, xs.slice(0, 0), inout out.slice(0, 0)) //~ PANIC "the guard after a guard that fails is evaluated at block, in a call of 0 frames too"
+  assert out[0] == 7.0
+}

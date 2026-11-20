@@ -97,7 +97,7 @@ fn str_lit(cx: &FnCx, pat: PatId) -> Option<Span> {
 }
 
 /// Test of a refutable pattern against a place; `None` means "always matches".
-fn pat_test(lw: &mut Lowerer, cx: &mut FnCx, pat: PatId, place: &Expr) -> R<Option<Expr>> {
+pub(crate) fn pat_test(lw: &mut Lowerer, cx: &mut FnCx, pat: PatId, place: &Expr) -> R<Option<Expr>> {
     let p = cx.ast.pat(pat);
     let span = p.span;
     let and = |a: Option<Expr>, b: Option<Expr>| match (a, b) {
@@ -204,7 +204,7 @@ pub(super) fn tag_test(lw: &Lowerer, place: &Expr, tag: u32) -> R<Expr> {
 }
 
 /// Bindings of a (possibly refutable) pattern once it is known to match.
-fn pat_bind(lw: &mut Lowerer, cx: &mut FnCx, pat: PatId, place: &Expr, out: &mut Vec<Stmt>) -> R<()> {
+pub(crate) fn pat_bind(lw: &mut Lowerer, cx: &mut FnCx, pat: PatId, place: &Expr, out: &mut Vec<Stmt>) -> R<()> {
     let p = cx.ast.pat(pat);
     let span = p.span;
     match &p.kind {
@@ -255,6 +255,27 @@ pub(super) fn lower_match(
     };
     let s = lower_expr(lw, cx, scrut_ast)?;
     lower_match_with(lw, cx, e, s, arms, ty, &mut |lw, cx, i| lower_block_expr(lw, cx, arms[i].body))
+}
+
+/// The test of the arm pattern `pat` against `place` (none: always), and
+/// whether it binds. One that uses an unsupported feature (S-67), or any
+/// against a subject that stands in for a type lowering does not support
+/// (`()`), never matches and binds nothing, so lowering reaches the guard
+/// and the body; a string literal against a stand-in is the E0200 of one
+/// at the head (R-434).
+pub(crate) fn arm_test(lw: &mut Lowerer, cx: &mut FnCx, pat: PatId, place: &Expr) -> R<(Option<Expr>, bool)> {
+    let stand_in = place.ty == Ty::Unit && lw.stand_in_spans.contains(&place.span);
+    let hole = Hole::Pat(cx.module, pat);
+    let placeholder = lw.holes.contains(&hole);
+    if !placeholder && !stand_in {
+        return Ok((pat_test(lw, cx, pat, place).map_err(|f| at_hole(f, hole))?, true));
+    }
+    if let (false, Some(at)) = (placeholder, str_lit(cx, pat)) {
+        return Err(at_hole(unsupported(at, Feature::StrPatterns, &[]), hole));
+    }
+    let span = cx.ast.pat(pat).span;
+    lw.hole_spans.push(span);
+    Ok((Some(bool_lit(span, false)), false))
 }
 
 /// The `match` `e` of the lowered scrutinee `s`, whose arm `i` has the body
@@ -317,29 +338,12 @@ pub(crate) fn lower_match_with(
         });
     }
     // General path: `if` chain with a `done` flag (guards may fall through).
-    // A subject that stands in for a type lowering does not support (`()`,
-    // S-67): no pattern is tested against it, and a string literal in one is
-    // the E0200 of one at the head (R-434).
-    let stand_in = place.ty == Ty::Unit && lw.stand_in_spans.contains(&place.span);
     let done = cx.temp("__done", Ty::Bool);
     stmts.push(stmt(span, StmtKind::Let(done, bool_lit(span, false))));
     let result = if want { Some(cx.temp("__result", ty.clone())) } else { None };
     for (i, arm) in arms.iter().enumerate() {
         let not_done = Expr::new(Ty::Bool, span, ExprKind::Unary(UnOp::Not, Box::new(local_expr(cx, done, span))));
-        // A pattern that uses an unsupported feature (S-67): the arm never
-        // matches and binds nothing, so lowering reaches its guard and body.
-        let pat_hole = Hole::Pat(cx.module, arm.pat);
-        let placeholder = lw.holes.contains(&pat_hole);
-        let test = if placeholder || stand_in {
-            if let (false, Some(at)) = (placeholder, str_lit(cx, arm.pat)) {
-                return Err(at_hole(unsupported(at, Feature::StrPatterns, &[]), pat_hole));
-            }
-            let pat_span = cx.ast.pat(arm.pat).span;
-            lw.hole_spans.push(pat_span);
-            Some(bool_lit(pat_span, false))
-        } else {
-            pat_test(lw, cx, arm.pat, &place).map_err(|f| at_hole(f, pat_hole))?
-        };
+        let (test, binds) = arm_test(lw, cx, arm.pat, &place)?;
         let cond = match test {
             None => not_done,
             Some(t) => Expr::new(
@@ -349,7 +353,7 @@ pub(crate) fn lower_match_with(
             ),
         };
         let mut inner = Vec::new();
-        if !placeholder && !stand_in {
+        if binds {
             pat_bind(lw, cx, arm.pat, &place, &mut inner)?;
         }
         let mut body_stmts = vec![stmt(span, StmtKind::Assign(Place::Local(done), bool_lit(span, true)))];

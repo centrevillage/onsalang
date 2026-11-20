@@ -130,12 +130,12 @@ fn no_default_is_the_bound_of_the_types_of_the_elements() {
     let error = a.types.error();
     let span = onsa_diag::Span::new(onsa_diag::FileId(0), 3, 5);
     for (i, (t, none)) in table.iter().enumerate() {
-        let d = no_default_signal(&a, alias(&a, &format!("K{i}")), span, "the omitted `init` of `prev~`");
+        let d = no_default_signal(&a, alias(&a, &format!("K{i}")), span, "the omitted `init` of `prev~`", "§11.4");
         assert_eq!(d.is_some(), *none, "{t}");
         if let Some(d) = d {
             assert_eq!((d.code, d.stage, d.span), (onsa_diag::Code::E0816, onsa_diag::Stage::Flow, span), "{t}");
             assert!(d.message.starts_with("the omitted `init` of `prev~`"), "{t}: {}", d.message);
         }
     }
-    assert!(no_default_signal(&a, error, span, "it").is_none());
+    assert!(no_default_signal(&a, error, span, "it", "§11.4").is_none());
 }

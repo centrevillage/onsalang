@@ -82,7 +82,7 @@ use onsa_syntax::ast::ExprId;
 use super::body::{FnCx, bind_irrefutable, lower_expr, of_type, span_of};
 use super::build::{
     assign, borrow, call, checked_binary, cmp, expr_stmt, field, float_lit, index, index_as, inout, lit, local_expr,
-    materialize, stmt, u32_lit,
+    materialize, place_of, stmt, u32_lit,
 };
 use super::{Lowerer, R, core_mode, internal, unsupported};
 use crate::ir::*;
@@ -100,7 +100,7 @@ mod state;
 mod tests;
 
 use boundary::{gen_params_default, gen_process, gen_process_inplace, gen_render};
-pub(crate) use branches::tilde_if;
+pub(crate) use branches::{tilde_if, tilde_match};
 use generated::{Gen, init_value, instance_args, replica_loop, ring_len, sfield};
 pub(crate) use nodes::lower_flow_expr;
 use phases::{gen_ctl, gen_init, gen_reset, gen_tick};
@@ -244,10 +244,13 @@ fn check_stages(info: &FlowInfo, span: Span) -> R<()> {
     Ok(())
 }
 
-/// A replica scope: the state place the nodes of this scope live in.
+/// A replica scope: the state place the nodes of this scope live in, and
+/// the arms of `match~` chosen in it or in one around it, whose bindings
+/// are in their places ([`branches::choose`]).
 #[derive(Debug, Clone)]
 struct Scope {
     state: Expr,
+    chosen: HashSet<(ExprId, usize)>,
 }
 
 /// Flow-mode state of a [`FnCx`] (one per generated function).
@@ -265,6 +268,14 @@ pub struct FlowLowerCx<'b> {
     sample_rate_calls: HashSet<ExprId>,
     /// Innermost scope last.
     scopes: Vec<Scope>,
+}
+
+impl FlowLowerCx<'_> {
+    /// A scope of `state` in the innermost, whose arms chosen it has.
+    fn push_scope(&mut self, state: Expr) {
+        let chosen = self.scopes.last().map(|s| s.chosen.clone()).unwrap_or_default();
+        self.scopes.push(Scope { state, chosen });
+    }
 }
 
 /// What all generated functions of one flow share.

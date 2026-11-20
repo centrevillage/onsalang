@@ -1,0 +1,203 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.5", "§9.2", "§3.5"]
+
+// W7-06 U3b/t, S-1094 (1), S-110, R-14 (spec §11.5: "選ぶ側（`if~` の連鎖の条件、`match~` の対象とパターンとガード）は普通の `if` / `match` と同じく
+// 上から評価し、最初に真になった条件か合った腕で止める（後ろの条件とガードは評価しない）。`~` が全て評価するのは枝と腕の本体である。評価の順は、選ぶ側を
+// 先に、次に全ての枝と腕の本体を書いた順である"): which parts of a `match~` are evaluated, seen by whether a division by zero panics. The guards are evaluated
+// from the top until the first arm that the pattern and the guard choose (a guard after it is not evaluated, nor is the guard of an arm whose pattern does not
+// match), and every arm body is evaluated, the ones that are not taken too, and the body of an arm that holds a `match~` evaluates its target whatever the
+// outer arm is. Which panic is reported when there are two on one sample (the guard or the body, an earlier arm or a later one) is in the CLI test
+// crates/onsa_cli/tests/cli/match_tilde_order.rs, which reads the position of the panic. `acc~(1.0)` counts the samples: 1, 2, 3, ...
+// (the arms of a `match~` hold state so that it is no E0812). The binding of an arm that is not taken is `T.default()`: the panic of a division by it is
+// in match_tilde_default_bindings.onsa.
+
+pub flow acc(x: F32 at sample) -> F32 at sample {
+  let y = x + prev~(^y)
+  y
+}
+
+// `n <= 0` is true for 0, so the guard `100 / n > 5` of the second arm is not evaluated there.
+pub flow the_guard_after_a_taken_arm(k: I32 at sample) -> F32 at sample {
+  match~ k {
+    n if n <= 0 => acc~(1.0),
+    n if 100 / n > 5 => 2.0,
+    _ => 3.0,
+  }
+}
+
+// `n < 0` is false for 0, so the second guard is evaluated there and divides by zero.
+pub flow the_guard_after_a_guard_that_fails(k: I32 at sample) -> F32 at sample {
+  match~ k {
+    n if n < 0 => acc~(1.0),
+    n if 100 / n > 5 => 2.0,
+    _ => 3.0,
+  }
+}
+
+// The pattern `0` chooses the first arm, so the guard of the second arm is not evaluated for 0.
+pub flow a_guard_after_a_pattern(k: I32 at sample) -> F32 at sample {
+  match~ k {
+    0 => acc~(1.0),
+    n if 100 / n > 5 => 2.0,
+    _ => 3.0,
+  }
+}
+
+// The guard `100 / v` of the first arm is tried only where the pattern `Some(v)` matches: not for `None`.
+pub flow the_guard_of_an_arm_whose_pattern_does_not_match(k: I32 at sample) -> F32 at sample {
+  let o: Option[I32] = if k >= 0 { Some(k) } else { None }
+  match~ o {
+    Some(v) if 100 / v > 5 => acc~(1.0),
+    Some(_) => 2.0,
+    None => 3.0,
+  }
+}
+
+// The first arm is not taken for `k <= 0`, and its body is evaluated all the same: `100 / k`.
+pub flow the_first_arm_that_is_not_taken(k: I32 at sample) -> F32 at sample {
+  match~ k {
+    n if n > 0 => acc~(F32.round_from(100 / k)),
+    _ => 0.0,
+  }
+}
+
+// A middle arm that is not taken.
+pub flow the_middle_arm_that_is_not_taken(k: I32 at sample) -> F32 at sample {
+  match~ k {
+    7 => acc~(1.0),
+    n if n > 0 => F32.round_from(100 / k),
+    _ => 0.0,
+  }
+}
+
+// The last arm, taken for no `k` that is 0.
+pub flow the_last_arm_that_is_not_taken(k: I32 at sample) -> F32 at sample {
+  match~ k {
+    0 => acc~(1.0),
+    _ => F32.round_from(100 / k),
+  }
+}
+
+// The target of a `match~` in an arm is evaluated whatever the outer arm is: `100 / a` for a = 0, where the first arm is taken.
+pub flow the_target_of_a_nested_match_tilde(a: I32 at sample) -> F32 at sample {
+  match~ a {
+    0 => acc~(1.0),
+    _ => match~ 100 / a {
+      0 => 2.0,
+      _ => acc~(3.0),
+    },
+  }
+}
+
+test "the guard after the arm that is taken is not evaluated" {
+  // k = 0 -2 1 50: the first guard is true for 0 and -2 (the counter: 1, 2) and the second is not evaluated for them; 100 / 1 = 100 > 5
+  // takes the second arm (2.0); 100 / 50 = 2 > 5 is false and the `_` arm gives 3.0.
+  let ks: [I32; 4] = [0, -2, 1, 50]
+  let o = the_guard_after_a_taken_arm.render(ks, 8.0)
+  assert o.out[0] == 1.0
+  assert o.out[1] == 2.0
+  assert o.out[2] == 2.0
+  assert o.out[3] == 3.0
+}
+
+test "the guard after a guard that fails is evaluated" {
+  // k = -1 5 20: the counter 1; 100 / 5 = 20 > 5: 2.0; 100 / 20 = 5 > 5 is false: 3.0.
+  let ks: [I32; 3] = [-1, 5, 20]
+  let o = the_guard_after_a_guard_that_fails.render(ks, 8.0)
+  assert o.out[0] == 1.0
+  assert o.out[1] == 2.0
+  assert o.out[2] == 3.0
+}
+
+test "the guard after a guard that fails divides by zero" {
+  let ks: [I32; 3] = [-1, 5, 0]
+  let o = the_guard_after_a_guard_that_fails.render(ks, 8.0) //~ PANIC "the guard after a guard that fails divides by zero"
+  assert o.out[0] == 1.0
+}
+
+test "the guard after the arm that a pattern chooses is not evaluated" {
+  // k = 0 -2 1 50: the pattern takes the first arm for 0 (the counter: 1); -2: 100 / -2 = -50 > 5 is false: 3.0; 100 / 1 > 5: 2.0; 2 > 5 is false: 3.0.
+  let ks: [I32; 4] = [0, -2, 1, 50]
+  let o = a_guard_after_a_pattern.render(ks, 8.0)
+  assert o.out[0] == 1.0
+  assert o.out[1] == 3.0
+  assert o.out[2] == 2.0
+  assert o.out[3] == 3.0
+}
+
+test "the guard of an arm whose pattern does not match is not evaluated" {
+  // k = -1 5 50: None (3.0); Some(5), 100 / 5 = 20 > 5 takes the first arm (the counter: its second sample, 2.0); Some(50), 2 > 5 is false: 2.0.
+  let ks: [I32; 3] = [-1, 5, 50]
+  let o = the_guard_of_an_arm_whose_pattern_does_not_match.render(ks, 8.0)
+  assert o.out[0] == 3.0
+  assert o.out[1] == 2.0
+  assert o.out[2] == 2.0
+}
+
+test "the guard of an arm whose pattern matches is evaluated and divides by zero" {
+  let ks: [I32; 2] = [5, 0]
+  let o = the_guard_of_an_arm_whose_pattern_does_not_match.render(ks, 8.0) //~ PANIC "the guard of an arm whose pattern matches is evaluated and divides by zero"
+  assert o.out[0] == 1.0
+}
+
+test "the body of the first arm that is not taken divides by zero" {
+  // k = 5: 100 / 5 = 20 is added by the counter; k = 0: the arm `_` is taken, but the body of the first arm is evaluated.
+  let ks: [I32; 2] = [5, 0]
+  let o = the_first_arm_that_is_not_taken.render(ks, 8.0) //~ PANIC "the body of the first arm that is not taken divides by zero"
+  assert o.out[0] == 20.0
+}
+
+test "the first arm that is not taken gives no panic when it does not divide by zero" {
+  // k = 5 20 -3: 100 / 5 = 20, 100 / 20 = 5: the counter 20, 25; -3 takes `_` (0.0) and 100 / -3 = -33 is evaluated.
+  let ks: [I32; 3] = [5, 20, -3]
+  let o = the_first_arm_that_is_not_taken.render(ks, 8.0)
+  assert o.out[0] == 20.0
+  assert o.out[1] == 25.0
+  assert o.out[2] == 0.0
+}
+
+test "the body of a middle arm that is not taken divides by zero" {
+  // k = 7 takes the first arm; k = 0 takes `_`, and 100 / 0 of the second arm is evaluated.
+  let ks: [I32; 2] = [7, 0]
+  let o = the_middle_arm_that_is_not_taken.render(ks, 8.0) //~ PANIC "the body of a middle arm that is not taken divides by zero"
+  assert o.out[0] == 1.0
+}
+
+test "the middle arm that is not taken gives no panic when it does not divide by zero" {
+  // k = 7 -3: the first arm (the counter: 1); -3 takes `_` (0.0), and 100 / -3 = -33 is evaluated.
+  let ks: [I32; 2] = [7, -3]
+  let o = the_middle_arm_that_is_not_taken.render(ks, 8.0)
+  assert o.out[0] == 1.0
+  assert o.out[1] == 0.0
+}
+
+test "the body of the last arm that is not taken divides by zero" {
+  let ks: [I32; 1] = [0]
+  let o = the_last_arm_that_is_not_taken.render(ks, 8.0) //~ PANIC "the body of the last arm that is not taken divides by zero"
+  assert o.out[0] == 1.0
+}
+
+test "the last arm that is not taken gives no panic when it does not divide by zero" {
+  // k = 4 25: the arm `_`: 100 / 4 = 25, 100 / 25 = 4.
+  let ks: [I32; 2] = [4, 25]
+  let o = the_last_arm_that_is_not_taken.render(ks, 8.0)
+  assert o.out[0] == 25.0
+  assert o.out[1] == 4.0
+}
+
+test "the target of a match~ in an arm is evaluated although the outer arm is taken" {
+  // a = 5 0: the outer first arm is taken for 0, and the target `100 / a` of the inner `match~`, which is in the body of the other arm, divides by zero.
+  let as_: [I32; 2] = [5, 0]
+  let o = the_target_of_a_nested_match_tilde.render(as_, 8.0) //~ PANIC "the target of a match~ in an arm is evaluated although the outer arm is taken"
+  assert o.out[0] == 3.0
+}
+
+test "the match~ in an arm gives its value when its target does not divide by zero" {
+  // a = 5 20: the outer arm `_`; the inner target is 100 / 5 = 20 and 100 / 20 = 5, both take its `_` arm (the counter of 3.0: 3, 6).
+  let as_: [I32; 2] = [5, 20]
+  let o = the_target_of_a_nested_match_tilde.render(as_, 8.0)
+  assert o.out[0] == 3.0
+  assert o.out[1] == 6.0
+}

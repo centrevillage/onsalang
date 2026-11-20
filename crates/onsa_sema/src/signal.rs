@@ -29,16 +29,17 @@ pub(crate) fn not_copy(a: &Analysis, ty: TyId) -> Option<&'static str> {
 /// The E0816 at `span` of the value type `ty` of a signal that does not
 /// satisfy `Default`, where the value of `what` is not written and is
 /// `T.default()` (§11.4: the omitted `init` of a delay, an arm `match~` did
-/// not take, the first values of `when~` and of a gathered rate, an event
-/// before its first). The predicate is the bound's (§6.3, as of E0416): of
-/// the types of the elements whatever the length (S-1104), quiet of a type
-/// not known (§18.1). No candidate: the value is the writer's.
-pub(crate) fn no_default_signal(a: &Analysis, ty: TyId, span: Span, what: &str) -> Option<Diagnostic> {
+/// not take (§11.5), the first values of `when~` and of a gathered rate, an
+/// event before its first), of the section `at`. The predicate is the
+/// bound's (§6.3, as of E0416): of the types of the elements whatever the
+/// length (S-1104), quiet of a type not known (§18.1). No candidate: the
+/// value is the writer's.
+pub(crate) fn no_default_signal(a: &Analysis, ty: TyId, span: Span, what: &str, at: &str) -> Option<Diagnostic> {
     if (crate::bounds::Bounds { a, generics: &[] }).satisfies(ty, crate::def::Bound::Default) {
         return None;
     }
     let shown = a.display_type(ty);
-    let msg = format!("{what} is the default of its type, and `{shown}` does not satisfy `Default` (§11.4)");
+    let msg = format!("{what} is the default of its type, and `{shown}` does not satisfy `Default` ({at})");
     Some(Diagnostic::new(Stage::Flow, Code::E0816, span, msg))
 }
 

@@ -1,0 +1,24 @@
+# flow_ref 1 source=tests/spec/flow_semantics/match_tilde_par_store.onsa tests=5 evaluated=5 unavailable=0 skipped=0 waiting=0
+@ a delay in a par~ saves the binding of its own replica
+render match_tilde_par_store.the_binding_saved_in_each_replica sr=0x41000000 in k=[3 5]
+out[0]=[0x00000000 0x40400000]
+out[1]=[0x00000000 0x40800000]
+out[2]=[0x00000000 0x40a00000]
+@ a delay in a par~ saves a value of the binding and the index of its replica
+render match_tilde_par_store.the_binding_and_the_index_saved sr=0x41000000 in k=[3 5]
+out[0]=[0x00000000 0x40400000]
+out[1]=[0x00000000 0x40a00000]
+@ an arm of a par~ that is not taken saves the default of its binding
+render match_tilde_par_store.an_untaken_arm_saves_the_default sr=0x41000000 in k=[4 0 7]
+out[0]=[0x00000000 0x00000000 0x00000000]
+out[1]=[0x00000000 0x40a00000 0x3f800000]
+@ a delay in nested par~s saves the binding of its own pair of indexes
+render match_tilde_par_store.the_binding_saved_in_nested_pars sr=0x41000000 in k=[10 20]
+out[0]=[0x00000000 0x41200000]
+out[1]=[0x00000000 0x41300000]
+out[2]=[0x00000000 0x41400000]
+out[3]=[0x00000000 0x41500000]
+@ a block input of an arm in a par~ reads the binding and the index of its replica
+render match_tilde_par_store.a_block_input_in_each_replica sr=0x41000000 params k=3 in x=[0x40000000 0x3f800000]
+out[0]=[0x40c00000 0x40400000]
+out[1]=[0x41000000 0x40800000]

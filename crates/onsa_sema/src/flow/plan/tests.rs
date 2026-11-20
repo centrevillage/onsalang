@@ -175,3 +175,40 @@ pub flow f(x: F32 at sample) -> F32 at sample {
     let edges = edges.chain([(la, Output, false), (ly, Output, false), (ls, Output, false)]);
     assert_eq!(f.edges, edges.map(|(from, to, lookback)| Edge { from, to, lookback }).collect::<Vec<_>>());
 }
+
+/// S-1131, §11.4: the record of each `match~` (the bindings of its arms in
+/// order, the `par~`s around it, the outermost first), the arms around each
+/// node, and the bindings read in the first argument of a delay, which the
+/// end of `tick` reads (of each replica); not one read elsewhere.
+#[test]
+fn the_plan_records_the_match_tildes_the_arms_of_the_nodes_and_the_bindings_stored() {
+    let src = "pub flow acc(x: F32 at sample) -> F32 at sample {
+  x + prev~(x)
+}
+pub flow f(x: F32 at sample, k: U32 at sample) -> F32 at sample {
+  let o = if x > 0.0 { Some(x) } else { None }
+  let a = match~ o { Some(v) => acc~(v), None => acc~(x) }
+  let s = (par~ i in 0..<2 { match~ k { 0 => prev~(x), n => prev~(F32.round_from(n)) } })[0]
+  a + s
+}
+";
+    let a = check(src);
+    assert!(a.diagnostics.is_empty(), "{:?}", a.diagnostics);
+    let f = flow(&a, "f");
+    let arms = |path: &str| f.node(named(f, path)).arms.clone();
+    let (outer, inner) = (arms("a.acc_0")[0].0, arms("s.par_0.prev_0")[0].0);
+    assert_eq!(arms("a.acc_0"), [(outer, 0)]);
+    assert_eq!(arms("a.acc_1"), [(outer, 1)]);
+    assert_eq!(arms("s.par_0"), []);
+    assert_eq!(arms("s.par_0.prev_0"), [(inner, 0)]);
+    assert_eq!(arms("s.par_0.prev_1"), [(inner, 1)]);
+    assert_eq!(f.tilde_matches.keys().copied().collect::<Vec<_>>(), [outer, inner]);
+    let (o, i) = (&f.tilde_matches[&outer], &f.tilde_matches[&inner]);
+    assert_eq!((o.arms.iter().map(Vec::len).collect::<Vec<_>>(), o.pars.as_slice()), (vec![1, 0], &[][..]));
+    assert_eq!(
+        (i.arms.iter().map(Vec::len).collect::<Vec<_>>(), i.pars.as_slice()),
+        (vec![0, 1], &[named(f, "s.par_0")][..])
+    );
+    // `n` is read in the first argument of a delay, `v` in that of an instance.
+    assert_eq!(f.store_bindings.iter().copied().collect::<Vec<_>>(), [i.arms[1][0]]);
+}

@@ -247,13 +247,6 @@ note = "match prev~(k) { 0 => …, _ => … }（リテラルの腕の値の matc
 
 [[pending]]
 kind = "test-case"
-target = "tests/spec/flow_semantics/branches_tilde.onsa"
-reasons = ["S-110", "R-14"]
-until = "W7-06"
-note = "if~ / match~ は全ての枝を評価して状態を進める。取られない枝の panic、match~ の取られない腕の束縛は T.default()。W3-10 の写しでは E0200（K-08）"
-
-[[pending]]
-kind = "test-case"
 target = "tests/spec/flow_semantics/enum_construct_match.onsa"
 reasons = ["S-102", "R-06"]
 until = "W8-06"
@@ -741,13 +734,6 @@ target = "tests/spec/c_runtime/c_generic_param_path_closed.onsa"
 reasons = ["S-257"]
 until = "W8-03"
 note = "閉じた範囲 `a ..= b` の `for` が E0200（W8-03、具体的な型も同じ）"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/flow_semantics/struct_pattern_rest_match.onsa"
-reasons = ["S-110", "S-903"]
-until = "W7-06"
-note = "flow の `match~` が E0200（W7-06）"
 
 [[pending]]
 kind = "test-case"

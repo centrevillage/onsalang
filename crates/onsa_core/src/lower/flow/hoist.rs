@@ -9,6 +9,7 @@ use onsa_sema::flow::strip;
 use onsa_syntax::ast::{Ast, BinOp, ExprKind as AK};
 
 use super::super::body::{lower_match_with, push_expr_stmt};
+use super::branches::{Pick, choose};
 use super::*;
 
 #[cfg(test)]
@@ -94,12 +95,12 @@ pub(super) fn writes(
             push_expr_stmt(m, out);
         }
         AK::If { tilde: Some(_), .. } => tilde_if_writes(lw, cx, info, e, s, state, out)?,
-        AK::Match { scrutinee: x, .. } => writes(lw, cx, info, *x, s, state, out)?,
+        AK::Match { tilde: Some(_), .. } => tilde_match_writes(lw, cx, info, e, s, state, out)?,
         AK::Par { body, .. } if has_writes(info, ast, *body, s) => {
             let Some(&id) = info.node_of.get(&e) else { return Err(internal(span, "a `par~` of no node")) };
             let r = replica_loop(cx, &info.node(id).kind, span)?;
             let elem = index(sfield(lw, info, state, FieldOf::Node(id, Part::Own), span)?, r.index(cx, span))?;
-            cx.flow.as_mut().unwrap().scopes.push(Scope { state: elem.clone() });
+            cx.flow.as_mut().unwrap().push_scope(elem.clone());
             let mut b = Vec::new();
             let done = writes(lw, cx, info, *body, s, &elem, &mut b);
             cx.flow.as_mut().unwrap().scopes.pop();
@@ -153,6 +154,41 @@ fn tilde_if_writes(
     Ok(())
 }
 
+/// The fields of `s` of the `match~` `e` ([`writes`]), as it evaluates
+/// them (S-1094, S-1131): of its scrutinee; of a guard, while the arms
+/// before it are not taken and its pattern matches (§11.3); then of every
+/// arm body, under no more condition (R-14), after the places of the
+/// bindings of `s` ([`choose`], its arms to the last whose binding has one,
+/// or to the last guard with a field).
+fn tilde_match_writes(
+    lw: &mut Lowerer,
+    cx: &mut FnCx,
+    info: &FlowInfo,
+    e: ExprId,
+    s: ClockStage,
+    state: &Expr,
+    out: &mut Vec<Stmt>,
+) -> R<()> {
+    let (ast, span) = (cx.ast, cx.ast.expr(e).span);
+    let (AK::Match { scrutinee, arms, .. }, Some(t)) = (&ast.expr(e).kind, info.tilde_matches.get(&e)) else {
+        return Err(internal(span, "a `match~` the plan did not record"));
+    };
+    let guards = arms.iter().rposition(|a| a.guard.is_some_and(|g| has_writes(info, ast, g, s))).map_or(0, |w| w + 1);
+    let slots = &cx.flow.as_ref().unwrap().local_override;
+    let bound = t.arms.iter().rposition(|b| b.iter().any(|b| slots.contains_key(&b.0))).map_or(0, |b| b + 1);
+    let bound = if arms.iter().any(|a| has_writes(info, ast, a.body, s)) { bound } else { 0 };
+    if guards == 0 && bound == 0 {
+        writes(lw, cx, info, *scrutinee, s, state, out)?;
+    } else {
+        let pick = Pick { upto: guards.max(bound), eval: guards.saturating_sub(1).max(bound), write: true };
+        choose(lw, cx, e, pick, s, state, out)?;
+    }
+    for a in arms {
+        writes(lw, cx, info, a.body, s, state, out)?;
+    }
+    Ok(())
+}
+
 /// Whether `e` holds a field or a check of the stage `s`.
 fn has_writes(info: &FlowInfo, ast: &Ast, e: ExprId, s: ClockStage) -> bool {
     let here = info.hoist_of(e).map(|h| info.hoist(h).stage).or(info.check_of(e));
@@ -163,7 +199,14 @@ fn has_writes(info: &FlowInfo, ast: &Ast, e: ExprId, s: ClockStage) -> bool {
 /// `s`: its field, which [`writes`] wrote before, when it is one of `s`;
 /// else lowered, an earlier field read ([`super::lower_flow_expr`]). The
 /// plan guards a field of `s` with conditions decided by `s` only (D-15).
-fn cond_value(lw: &mut Lowerer, cx: &mut FnCx, info: &FlowInfo, c: ExprId, s: ClockStage, state: &Expr) -> R<Expr> {
+pub(super) fn cond_value(
+    lw: &mut Lowerer,
+    cx: &mut FnCx,
+    info: &FlowInfo,
+    c: ExprId,
+    s: ClockStage,
+    state: &Expr,
+) -> R<Expr> {
     let x = strip(cx.ast, c);
     let span = cx.ast.expr(c).span;
     let late = |k: Clock| k.stage().is_some_and(|k| k > s);

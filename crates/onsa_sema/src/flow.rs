@@ -86,9 +86,9 @@
 //! the `let`s), `nodes` (the record of the nodes), `plan` (the table of the
 //! nodes) and `reads` (the state marking). The tables are here.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
-use onsa_diag::hash::HashMap;
+use onsa_diag::hash::{HashMap, HashSet};
 use onsa_diag::unsupported::Feature;
 use onsa_diag::{Code, Diagnostic, Edit, Fix, Span, Stage};
 use onsa_syntax::ast::{Arg, CallKind, ExprId, ExprKind, Ident, PatId, PatKind, RangeEnd, RangeHead, StmtId, StmtKind};
@@ -229,8 +229,27 @@ pub struct FlowInfo {
     pub sample_rate_at: Option<ClockStage>,
     pub sample_rate_calls: Vec<ExprId>,
     pub read_at: HashMap<LocalId, BTreeSet<ClockStage>>,
+    /// The stages each binding of an arm of `match~` is read at in a body,
+    /// not its guard (S-1131): where it has a place, which its arm chosen
+    /// there writes.
+    pub bound_at: HashMap<LocalId, BTreeSet<ClockStage>>,
+    /// The `match~`s of the body (§11.5, S-1131), whose arms the lowering
+    /// chooses at each stage their bindings are read at (`bound_at`).
+    pub tilde_matches: BTreeMap<ExprId, TildeMatch>,
+    /// The bindings of a `match~` read in the first argument of a delay,
+    /// which the end of `tick` reads (§11.4): of each replica of the `par~`s
+    /// around it.
+    pub store_bindings: HashSet<LocalId>,
     pub output: Option<ExprId>,
     pub complete: bool,
+}
+
+/// A `match~` of a flow body (§11.5): the bindings of each arm in the order
+/// of the text, and the `par~`s around it, the outermost first.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct TildeMatch {
+    pub arms: Vec<Vec<LocalId>>,
+    pub pars: Vec<NodeId>,
 }
 
 // ---------------------------------------------------------------- checker side

@@ -113,3 +113,70 @@ pub flow f(x: F32 at sample, p: F32 at block, q: F32 at block) -> F32 at sample 
     let (c1, guard, c2, body) = (at(&ctl, "p@4.0 > 1.0"), at(&ctl, "if (!s."), at(&ctl, "* 2.0"), at(&ctl, "+ 1.0"));
     assert!(c1 < guard && guard < c2 && c2 < body, "{ctl}");
 }
+
+/// §11.5, S-1094 (1): a `match~` chooses its arm first (the scrutinee, then
+/// the pattern and the guard of each arm while none is taken), then
+/// evaluates every arm body in the order of the text (each instance goes
+/// on), then takes the value of the arm chosen.
+#[test]
+fn a_match_tilde_chooses_its_arm_then_evaluates_every_arm_body() {
+    let src = "pub flow acc(x: F32 at sample) -> F32 at sample { x + prev~(x) }
+pub flow f(x: F32 at sample, k: U32 at sample) -> F32 at sample {
+  match~ k { 0 => acc~(x), n if n > 5 => acc~(x * 2.0), _ => x }
+}";
+    let t = tick(src, "f");
+    let (arm, first, second, body0, body1, choice) = (
+        at(&t, "let __arm: U32 = 3:U32"),
+        at(&t, "if ((__arm == 3:U32) && (k == 0:U32))"),
+        at(&t, "if (n > 5:U32)"),
+        at(&t, "acc.tick(inout s.0"),
+        at(&t, "acc.tick(inout s.1"),
+        at(&t, "if (__arm == 0:U32)"),
+    );
+    assert!(arm < first && first < second && second < body0 && body0 < body1 && body1 < choice, "{t}");
+}
+
+/// S-1131: a binding read at `block` has a place in `ctl`, declared at its
+/// head; the arm of a node is chosen before it, once in a scope however
+/// many nodes of the arm read it, and the arms before it with it.
+#[test]
+fn the_bindings_read_at_block_have_places_and_an_arm_is_chosen_once() {
+    let src = "pub flow lp(x: F32 at sample, g: F32 at block) -> F32 at sample { x * g }
+pub flow f(x: F32 at sample, o: Option[F32] at block, n: I32 at block) -> F32 at sample {
+  match~ o {
+    Some(v) if n > 0 => lp~(x, v + 1.0),
+    Some(w) => lp~(x, w) + lp~(x, w * 2.0) + lp~(x, w * 3.0),
+    None => x,
+  }
+}";
+    let ctl = crate::dump::dump_item(&crate::tests::core(src), "t.f.ctl");
+    let (v, w, first) =
+        (at(&ctl, "let __bind.v: F32 = zeroed"), at(&ctl, "let __bind.w: F32 = zeroed"), at(&ctl, "s.0 = p.0"));
+    assert!(v < first && w < first, "{ctl}");
+    // The writes of the field of the guard (which choose no arm), the arm 0
+    // and the arm 1 once, which writes `v` too.
+    assert_eq!(ctl.matches(": U32 = 3:U32").count(), 3, "{ctl}");
+    assert_eq!(ctl.matches("__bind.v = v").count(), 2, "{ctl}");
+    assert_eq!(ctl.matches("__bind.w = w").count(), 1, "{ctl}");
+    let (w_set, lp1) = (at(&ctl, "__bind.w = w"), at(&ctl, "Params { g: __bind.w }"));
+    assert!(w_set < lp1, "{ctl}");
+}
+
+/// §11.4, S-1131: a binding read in the first argument of a delay in a
+/// `par~` has a place of each replica, which the stores at the end of
+/// `tick` read.
+#[test]
+fn a_binding_a_delay_stores_in_a_par_has_a_place_of_each_replica() {
+    let src = "pub flow f(x: F32 at sample, k: U32 at sample) -> F32 at sample {
+  (par~ i in 0..<2 { match~ k { 0 => prev~(x), n => prev~(F32.round_from(n)) } })[0]
+}";
+    let t = tick(src, "f");
+    let (place, write, store) = (
+        at(&t, "let __bind.n: [U32; 2] = zeroed:[U32; 2]"),
+        at(&t, "__bind.n[i] = n"),
+        at(&t, "s.0[i].1 = round.U32.F32(__bind.n[i])"),
+    );
+    // The store is in the loop of the stores after the output.
+    let stores = t.rfind("for i in").unwrap_or_default();
+    assert!(place < write && write < stores && stores < store, "{t}");
+}

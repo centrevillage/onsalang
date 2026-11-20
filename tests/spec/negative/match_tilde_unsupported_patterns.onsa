@@ -1,0 +1,44 @@
+// onsa.toml
+// [package]
+// name = "match_tilde_unsupported_patterns"
+// edition = "2026"
+//
+// [targets.c]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [test]
+// spec = ["§18.1", "§11.5"]
+
+// E0200 from lowering in the arms of a `match~` (S-67, as in lower_unsupported.onsa): lowering does not stop at the first unsupported feature of a function, so
+// a pattern of an arm of `match~` that uses one does not hide the next one: in another arm's pattern, or in an arm body, which `match~` lowers after it chooses
+// its arm (§11.5). A plain `match` reports the same ones. The unsupported feature here is an or-pattern with bindings.
+
+pub enum E { A(F32), B(F32), C(F32), D(F32) }
+
+pub flow acc(x: F32 at sample) -> F32 at sample {
+  let y = x + prev~(^y)
+  y
+}
+
+// Two arms whose patterns are or-patterns with bindings: both are reported.
+pub flow two_patterns(k: U32 at sample, x: F32 at sample) -> F32 at sample {
+  let e = if k == 0 { E.A(x) } else if k == 1 { E.B(x) } else { E.C(x) }
+  match~ e {
+    E.A(v) | E.B(v) => acc~(v), //~ E0200
+    E.C(v) | E.D(v) => acc~(v), //~ E0200
+  }
+}
+
+// The value of a plain `match` with a guard in the body of the first arm, and an or-pattern with bindings in the second: both are reported.
+pub flow body_then_pattern(k: U32 at sample, x: F32 at sample) -> F32 at sample {
+  let e = if k == 0 { E.A(x) } else if k == 1 { E.B(x) } else { E.C(x) }
+  match~ e {
+    E.A(_) => acc~(match e { E.A(w) if w > 0.0 => w, _ => 0.0 }), //~ E0200
+    E.C(v) | E.D(v) => acc~(v), //~ E0200
+    _ => 0.0,
+  }
+}

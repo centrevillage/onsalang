@@ -1,0 +1,121 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.5", "§11.4", "§11.3"]
+
+// W7-06 U3b/t, S-1131, S-110 (spec §11.5: "`par~ i in a ..< b { e }` は、`e` を `N = b - a` 個並べる"; §11.4: a delay saves its first argument at the end of the tick,
+// and "取られない腕の束縛は `T.default()`" of §11.5): a `match~` in the body of a `par~` has a binding for each replica, and a delay that saves it, `prev~(n)`, saves
+// the value of its own replica: the value comes out a tick later in the replica it was saved in (a delay that read the binding of the last replica would give every
+// replica the value of the last one). An arm that is not taken saves the default of its binding. A `block` input that reads the binding gets the value of its own
+// replica at `block`. Every value is worked out by hand.
+
+pub flow scale(x: F32 at sample, g: F32 at block) -> F32 at sample {
+  x * g
+}
+
+// The binding is saved by a delay in each replica: `k + i` of the tick before.
+pub flow the_binding_saved_in_each_replica(k: U32 at sample) -> [F32; 3] at sample {
+  par~ i in 0 ..< 3 {
+    match~ k + i {
+      n => prev~(F32.round_from(n)),
+    }
+  }
+}
+
+// The saved value is made of the binding and of the index of the replica.
+pub flow the_binding_and_the_index_saved(k: U32 at sample) -> [F32; 2] at sample {
+  par~ i in 0 ..< 2 {
+    match~ k + i {
+      n => prev~(F32.round_from(n) + F32.round_from(i)),
+    }
+  }
+}
+
+// The arm `n` is not taken where `k + i` is 0, and it saves the default (0.0) there.
+pub flow an_untaken_arm_saves_the_default(k: U32 at sample) -> [F32; 2] at sample {
+  par~ i in 0 ..< 2 {
+    match~ k + i {
+      0 => 0.0,
+      n => prev~(F32.round_from(n)),
+    }
+  }
+}
+
+// A `par~` in a `par~`: a store for each pair of indexes.
+pub flow the_binding_saved_in_nested_pars(k: U32 at sample) -> [F32; 4] at sample {
+  let r = par~ i in 0 ..< 2 {
+    par~ j in 0 ..< 2 {
+      match~ k + i * 2 + j {
+        n => prev~(F32.round_from(n)),
+      }
+    }
+  }
+  [r[0][0], r[0][1], r[1][0], r[1][1]]
+}
+
+// The binding read by a `block` input in each replica.
+pub flow a_block_input_in_each_replica(x: F32 at sample, k: U32 at block) -> [F32; 2] at sample {
+  par~ i in 0 ..< 2 {
+    match~ k {
+      n => scale~(x, F32.round_from(n + i)),
+    }
+  }
+}
+
+test "a delay in a par~ saves the binding of its own replica" {
+  // k = 3 5.  Frame 0 reads the default 0.0 in each replica.  Frame 1 reads the n of frame 0: 3 + i = 3, 4, 5 (the n of the last replica would give 5, 5, 5).
+  let ks: [U32; 2] = [3, 5]
+  let o = the_binding_saved_in_each_replica.render(ks, 8.0)
+  assert o.out[0][0] == 0.0
+  assert o.out[1][0] == 0.0
+  assert o.out[2][0] == 0.0
+  assert o.out[0][1] == 3.0
+  assert o.out[1][1] == 4.0
+  assert o.out[2][1] == 5.0
+}
+
+test "a delay in a par~ saves a value of the binding and the index of its replica" {
+  // k = 3 5.  Frame 1 reads n + i of frame 0: 3 + 0 = 3 and 4 + 1 = 5.
+  let ks: [U32; 2] = [3, 5]
+  let o = the_binding_and_the_index_saved.render(ks, 8.0)
+  assert o.out[0][0] == 0.0
+  assert o.out[1][0] == 0.0
+  assert o.out[0][1] == 3.0
+  assert o.out[1][1] == 5.0
+}
+
+test "an arm of a par~ that is not taken saves the default of its binding" {
+  // k = 4 0 7.  The replica 0 has the target 4, 0, 7 and the replica 1 has 5, 1, 8.  The arm `n` saves n where it is taken and 0.0 where `0` takes the arm before.
+  // The replica 0 saves 4, 0 (not taken), 7; it gives (frame 0, 1, 2) 0.0 (the delay holds 0.0), 0.0 (the first arm), the delay of frame 1: 0.0 (a binding that
+  // kept 4 would give 4.0).  The replica 1 saves 5, 1, 8: 0.0, 5.0, 1.0.
+  let ks: [U32; 3] = [4, 0, 7]
+  let o = an_untaken_arm_saves_the_default.render(ks, 8.0)
+  assert o.out[0][0] == 0.0
+  assert o.out[0][1] == 0.0
+  assert o.out[0][2] == 0.0
+  assert o.out[1][0] == 0.0
+  assert o.out[1][1] == 5.0
+  assert o.out[1][2] == 1.0
+}
+
+test "a delay in nested par~s saves the binding of its own pair of indexes" {
+  // k = 10 20.  Frame 1 reads the n of frame 0: 10 + 2i + j = 10, 11, 12, 13.
+  let ks: [U32; 2] = [10, 20]
+  let o = the_binding_saved_in_nested_pars.render(ks, 8.0)
+  assert o.out[0][0] == 0.0
+  assert o.out[3][0] == 0.0
+  assert o.out[0][1] == 10.0
+  assert o.out[1][1] == 11.0
+  assert o.out[2][1] == 12.0
+  assert o.out[3][1] == 13.0
+}
+
+test "a block input of an arm in a par~ reads the binding and the index of its replica" {
+  // k = 3: scale gets g = 3 + 0 = 3.0 in the replica 0 and 3 + 1 = 4.0 in the replica 1.  x = 2 1: 6, 3 and 8, 4.
+  let xs: [F32; 2] = [2.0, 1.0]
+  let o = a_block_input_in_each_replica.render(a_block_input_in_each_replica.Params { k: 3 }, xs, 8.0)
+  assert o.out[0][0] == 6.0
+  assert o.out[0][1] == 3.0
+  assert o.out[1][0] == 8.0
+  assert o.out[1][1] == 4.0
+}

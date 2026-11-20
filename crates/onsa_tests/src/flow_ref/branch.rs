@@ -5,10 +5,12 @@
 //! so that what a delay saves in it (read in the second phase of the tick, after it) is read under them.
 
 use onsa_diag::Span;
-use onsa_syntax::ast::{ExprId, ExprKind, RangeEnd};
+use onsa_sema::LocalId;
+use onsa_syntax::ast::{ExprId, ExprKind, PatId, RangeEnd};
 
 use super::expr::{Eval, Frame, Stop};
-use super::scalar::Fault::{Internal, Unavailable};
+use super::scalar::Fault::{self, Internal, Unavailable};
+use super::sema_view::Body;
 use super::value::{IntKind, Value};
 
 impl<'a> Frame<'a> {
@@ -114,15 +116,7 @@ impl<'a> Frame<'a> {
         }
         let mut value = None;
         for (n, arm) in arms.iter().enumerate() {
-            let mut bound = Vec::new();
-            for l in self.body.pat_locals(arm.pat).map_err(here)? {
-                if Some(n) == taken {
-                    bound.extend(self.locals.get(&l).map(|v| (l, v.clone())));
-                    continue;
-                }
-                let default = self.shape(self.body.local_ty(l).map_err(here)?, at)?.default_value();
-                bound.push((l, default.ok_or(here(Unavailable("a binding of a type with no default")))?));
-            }
+            let bound = if Some(n) == taken { self.pat_values(arm.pat)? } else { self.default_values(arm.pat, at)? };
             let result = self.with_bindings(&[], bound, |f| f.eval(arm.body))?;
             if Some(n) == taken {
                 value = Some(result);
@@ -130,4 +124,97 @@ impl<'a> Frame<'a> {
         }
         value.ok_or(here(Internal("no arm of a match~ is taken")))
     }
+
+    /// The values the locals of the pattern `pat` have now (the arm it is of has just matched).
+    pub(super) fn pat_values(&self, pat: PatId) -> Result<Vec<(LocalId, Value)>, Stop> {
+        let at = self.body.ast.pat(pat).span;
+        let locals = self.body.pat_locals(pat).map_err(|fault| Stop { fault, at })?;
+        Ok(locals.into_iter().filter_map(|l| self.locals.get(&l).map(|v| (l, v.clone()))).collect())
+    }
+
+    /// The locals of the pattern `pat` at `T.default()` of their types, as those of an arm that is not taken have them (§11.5).
+    pub(super) fn default_values(&mut self, pat: PatId, at: Span) -> Result<Vec<(LocalId, Value)>, Stop> {
+        let here = |fault| Stop { fault, at };
+        let mut out = Vec::new();
+        for l in self.body.pat_locals(pat).map_err(here)? {
+            let default = self.shape(self.body.local_ty(l).map_err(here)?, at)?.default_value();
+            out.push((l, default.ok_or(here(Unavailable("a binding of a type with no default")))?));
+        }
+        Ok(out)
+    }
+
+    /// The bindings of the arm `arm` of the `match~` `m` at the stage this evaluation is of (`init` or `block`): the parts of the object where the
+    /// arm is the first that the pattern and the guard choose, `T.default()` where it is not (S-1131). The object and the guards of the arms
+    /// up to it are evaluated from the top, and the arms after it are not.
+    fn arm_values(&mut self, m: ExprId, arm: usize) -> Result<Vec<(LocalId, Value)>, Stop> {
+        let (ast, at) = (self.body.ast, self.body.ast.expr(m).span);
+        let here = |fault| Stop { fault, at };
+        let ExprKind::Match { scrutinee, arms, .. } = &ast.expr(m).kind else {
+            return Err(here(Internal("not a match~")));
+        };
+        let (v, ty) = (self.eval(*scrutinee)?, self.body.ty(*scrutinee).map_err(here)?);
+        for (n, a) in arms.iter().enumerate().take(arm + 1) {
+            if self.arm(a.pat, &v, ty, a.guard, at)? {
+                return if n == arm { self.pat_values(a.pat) } else { self.default_values(arms[arm].pat, at) };
+            }
+        }
+        self.default_values(arms[arm].pat, at)
+    }
+
+    /// `go` with the bindings of the arms (outermost first) that hold the call as the stage gives them.
+    fn with_arms<R>(
+        &mut self,
+        arms: &[(ExprId, usize)],
+        go: impl FnOnce(&mut Self) -> Result<R, Stop>,
+    ) -> Result<R, Stop> {
+        match arms.split_first() {
+            None => go(self),
+            Some((&(m, arm), rest)) => {
+                let binds = self.arm_values(m, arm)?;
+                self.with_bindings(&[], binds, |f| f.with_arms(rest, go))
+            }
+        }
+    }
+
+    /// The argument `arg` of the call `call`, evaluated for the stage `stage` of the input it is for: at `init` and `block` a binding of an
+    /// arm that it reads has the value that stage gives it (`with_arms`), whether the arm is taken or not (S-1131); at `sample` it is live.
+    pub(super) fn eval_staged(
+        &mut self,
+        call: ExprId,
+        arg: ExprId,
+        stage: super::sema_view::Stage,
+    ) -> Result<Value, Stop> {
+        if stage == super::sema_view::Stage::Sample || !self.body.reads_arm_binding(arg, arg) {
+            return self.eval(arg);
+        }
+        let at = self.body.ast.expr(call).span;
+        let arms = arms_of(&self.body, call).map_err(|fault| Stop { fault, at })?;
+        self.with_arms(&arms, |f| f.eval(arg))
+    }
+}
+
+/// The arms of the `match~`s that hold `call`, outermost first, with the number of each arm: the bindings its arguments may read.
+pub(super) fn arms_of(body: &Body, call: ExprId) -> Result<Vec<(ExprId, usize)>, Fault> {
+    fn find(body: &Body, e: ExprId, call: ExprId, path: &mut Vec<(ExprId, usize)>) -> bool {
+        if e == call {
+            return true;
+        }
+        if let ExprKind::Match { scrutinee, arms, tilde: Some(_) } = &body.ast.expr(e).kind {
+            if find(body, *scrutinee, call, path) {
+                return true;
+            }
+            for (n, arm) in arms.iter().enumerate() {
+                path.push((e, n));
+                if find(body, arm.body, call, path) {
+                    return true;
+                }
+                path.pop();
+            }
+            return false;
+        }
+        body.ast.sub_exprs(e).into_iter().any(|x| find(body, x, call, path))
+    }
+    let root = body.view.flow(body.def)?.body;
+    let mut path = Vec::new();
+    find(body, root, call, &mut path).then_some(path).ok_or(Internal("a call that is not in the body of its flow"))
 }

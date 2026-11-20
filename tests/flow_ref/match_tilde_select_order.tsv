@@ -1,0 +1,43 @@
+# flow_ref 1 source=tests/spec/flow_semantics/match_tilde_select_order.onsa tests=14 evaluated=14 unavailable=0 skipped=0 waiting=0
+@ the guard after the arm that is taken is not evaluated
+render match_tilde_select_order.the_guard_after_a_taken_arm sr=0x41000000 in k=[0 -2 1 50]
+out=[0x3f800000 0x40000000 0x40000000 0x40400000]
+@ the guard after a guard that fails is evaluated
+render match_tilde_select_order.the_guard_after_a_guard_that_fails sr=0x41000000 in k=[-1 5 20]
+out=[0x3f800000 0x40000000 0x40400000]
+@ the guard after a guard that fails divides by zero
+render match_tilde_select_order.the_guard_after_a_guard_that_fails sr=0x41000000 in k=[-1 5 0]
+panic sample 2
+@ the guard after the arm that a pattern chooses is not evaluated
+render match_tilde_select_order.a_guard_after_a_pattern sr=0x41000000 in k=[0 -2 1 50]
+out=[0x3f800000 0x40400000 0x40000000 0x40400000]
+@ the guard of an arm whose pattern does not match is not evaluated
+render match_tilde_select_order.the_guard_of_an_arm_whose_pattern_does_not_match sr=0x41000000 in k=[-1 5 50]
+out=[0x40400000 0x40000000 0x40000000]
+@ the guard of an arm whose pattern matches is evaluated and divides by zero
+render match_tilde_select_order.the_guard_of_an_arm_whose_pattern_does_not_match sr=0x41000000 in k=[5 0]
+panic sample 1
+@ the body of the first arm that is not taken divides by zero
+render match_tilde_select_order.the_first_arm_that_is_not_taken sr=0x41000000 in k=[5 0]
+panic sample 1
+@ the first arm that is not taken gives no panic when it does not divide by zero
+render match_tilde_select_order.the_first_arm_that_is_not_taken sr=0x41000000 in k=[5 20 -3]
+out=[0x41a00000 0x41c80000 0x00000000]
+@ the body of a middle arm that is not taken divides by zero
+render match_tilde_select_order.the_middle_arm_that_is_not_taken sr=0x41000000 in k=[7 0]
+panic sample 1
+@ the middle arm that is not taken gives no panic when it does not divide by zero
+render match_tilde_select_order.the_middle_arm_that_is_not_taken sr=0x41000000 in k=[7 -3]
+out=[0x3f800000 0x00000000]
+@ the body of the last arm that is not taken divides by zero
+render match_tilde_select_order.the_last_arm_that_is_not_taken sr=0x41000000 in k=[0]
+panic sample 0
+@ the last arm that is not taken gives no panic when it does not divide by zero
+render match_tilde_select_order.the_last_arm_that_is_not_taken sr=0x41000000 in k=[4 25]
+out=[0x41c80000 0x40800000]
+@ the target of a match~ in an arm is evaluated although the outer arm is taken
+render match_tilde_select_order.the_target_of_a_nested_match_tilde sr=0x41000000 in a=[5 0]
+panic sample 1
+@ the match~ in an arm gives its value when its target does not divide by zero
+render match_tilde_select_order.the_target_of_a_nested_match_tilde sr=0x41000000 in a=[5 20]
+out=[0x40400000 0x40c00000]

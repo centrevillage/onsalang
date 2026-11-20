@@ -184,6 +184,22 @@ impl<'a> View<'a> {
         self.analysis.modules.trait_impls.contains_key(&(onsa_sema::def::Bound::Default, def))
     }
 
+    /// The `default` function of the hand-written `impl Default` of the type `def` and the type it returns (§6.4).
+    pub fn hand_default(self, def: DefId) -> Result<(DefId, TyId), Fault> {
+        let imp =
+            need(self.analysis.modules.trait_impls.get(&(onsa_sema::def::Bound::Default, def)), "an impl Default")?;
+        let imp = need(self.analysis.def(*imp).as_impl(), "an impl that is not one")?;
+        // `Default` has the one member `default` (§6.4), so the one function of its `impl` is it.
+        let f = need(imp.fns.first().filter(|_| imp.fns.len() == 1), "an impl Default that has not one function")?;
+        Ok((*f, imp.self_ty))
+    }
+
+    /// The function `def` as a callee with no type argument (a function that is not generic, called by name).
+    pub fn fn_callee(self, def: DefId) -> Result<Callee<'a>, Fault> {
+        let func = need(self.analysis.def(def).as_fn(), "a callee that is not a function")?;
+        Ok(Callee { def, func, method: false, type_args: &[] })
+    }
+
     /// The fields of a struct in the order of the declaration, with the declared default of each.
     pub fn struct_fields(self, def: DefId) -> Result<&'a [FieldDef], Fault> {
         match &self.analysis.def(def).kind {

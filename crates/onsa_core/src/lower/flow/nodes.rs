@@ -73,7 +73,7 @@ pub(crate) fn lower_flow_expr(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId) -> R<O
             } else {
                 state.clone()
             };
-            cx.flow.as_mut().unwrap().scopes.push(Scope { state: elem_state.clone() });
+            cx.flow.as_mut().unwrap().push_scope(elem_state.clone());
             let mut loop_body = Vec::new();
             let v = lower_expr(lw, cx, *body)?;
             assign(&mut loop_body, &index(arr_e.clone(), idx)?, v)?;

@@ -137,6 +137,8 @@ pub struct PlanNode {
     /// The place of its first field in the struct that holds it
     /// ([`FlowInfo::fields_of`]); none of a `par~` with no state.
     pub field: Option<u32>,
+    /// The arms of the `match~`s around it, the outermost first (S-1131).
+    pub arms: Vec<(ExprId, u32)>,
 }
 
 /// A value of the body the state may keep beside its nodes (S-05).
@@ -254,6 +256,7 @@ pub(super) fn build(
             whole: r.whole,
             span: r.span,
             field: None,
+            arms: r.arms,
         }
     });
     info.nodes = nodes.collect();

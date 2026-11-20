@@ -20,6 +20,8 @@ mod tests;
 /// What the marking gives.
 pub(super) struct Marked {
     pub(super) read_at: HashMap<LocalId, BTreeSet<ClockStage>>,
+    /// `FlowInfo::bound_at`.
+    pub(super) bound_at: HashMap<LocalId, BTreeSet<ClockStage>>,
     pub(super) sample_rate_at: Option<ClockStage>,
     /// The first call (in the order of the file) of a function that is not
     /// `rt` evaluated at a stage after `init` (R-17): E0815 in a
@@ -64,7 +66,24 @@ struct Marker<'a> {
     /// hold the expression marked now, the innermost last: its owner.
     par_of: HashMap<ExprId, NodeId>,
     pars: Vec<NodeId>,
+    /// The bindings of the arms of the `match~`s marked, the `match~`s whose
+    /// arms are chosen at a stage ([`Marker::read_select`]), and the one
+    /// whose guards are marked now.
+    binding_of: HashMap<LocalId, Bound>,
+    selected: HashSet<(ExprId, usize, ClockStage)>,
+    guard: Option<ExprId>,
     out: Marked,
+}
+
+/// The arm `arm` of the `match~` `m` marked at `at` under `g`, with `depth`
+/// conditions on its path.
+#[derive(Debug, Clone, Copy)]
+struct Bound {
+    m: ExprId,
+    arm: usize,
+    at: ClockStage,
+    g: Cond,
+    depth: usize,
 }
 
 /// The stage a read at the clock `c` is at: a constant at `init`, the first
@@ -111,8 +130,12 @@ pub(super) fn mark_all(
         konst: false,
         par_of,
         pars: Vec::new(),
+        binding_of: HashMap::default(),
+        selected: HashSet::default(),
+        guard: None,
         out: Marked {
             read_at: HashMap::default(),
+            bound_at: HashMap::default(),
             sample_rate_at: None,
             diag: None,
             hoisted: Vec::new(),
@@ -281,8 +304,9 @@ impl Marker<'_> {
         let expr = ast.expr(e);
         match &expr.kind {
             ExprKind::Path(_) | ExprKind::Feedback(_) | ExprKind::Field { .. } => {
-                if let Some(Target::Local(id)) = self.body.targets.get(&e) {
-                    self.out.read_at.entry(*id).or_default().insert(at);
+                if let Some(&Target::Local(id)) = self.body.targets.get(&e) {
+                    self.out.read_at.entry(id).or_default().insert(at);
+                    self.read_select(id, at);
                 }
                 if let ExprKind::Field { base, .. } = &expr.kind
                     && !self.body.targets.contains_key(&e)
@@ -360,11 +384,17 @@ impl Marker<'_> {
             // A guard under the scrutinee and the guards before it; the arm
             // bodies of `match~` (S-1094) under no more than it.
             ExprKind::Match { scrutinee, arms, tilde } => {
+                let depth = self.conds.len();
+                let arms_of = self.clocks.tilde.get(&e).filter(|_| tilde.is_some());
+                for (arm, bound) in arms_of.into_iter().flat_map(|t| t.arms.iter().enumerate()) {
+                    let b = Bound { m: e, arm, at, g, depth };
+                    self.binding_of.extend(bound.iter().map(|&l| (l, b)));
+                }
                 self.mark(*scrutinee, at, g);
-                let (depth, mut inner) = (self.conds.len(), self.enter(*scrutinee, at, g));
+                let mut inner = self.enter(*scrutinee, at, g);
                 for arm in arms {
                     if let Some(x) = arm.guard {
-                        self.mark(x, at, inner);
+                        self.mark_guard(e, x, at, inner);
                         inner = self.enter(x, at, inner);
                     }
                     if tilde.is_none() {
@@ -408,6 +438,42 @@ impl Marker<'_> {
                 self.conds.extend(rest);
             }
         }
+    }
+
+    /// The guard `x` of the `match` `m`, marked at `at` under `g`: a binding
+    /// of `m` read in it is of the choice (S-1131).
+    fn mark_guard(&mut self, m: ExprId, x: ExprId, at: ClockStage, g: Cond) {
+        let outer = self.guard.replace(m);
+        self.mark(x, at, g);
+        self.guard = outer;
+    }
+
+    /// The binding `b` of an arm of `match~` read at `s` (S-1131): in its
+    /// guard, the value of the pattern, nothing more; in a body, that arm is
+    /// chosen at `s` too (`bound_at`), so the scrutinee and the guards to it
+    /// are read there, under the conditions on the path of the `match~`;
+    /// once each, and not at the stage of the `match~`, which reads them.
+    /// Of a binding slower than `s`, nothing: the walk reports it (E0815).
+    fn read_select(&mut self, b: LocalId, s: ClockStage) {
+        let Some(&Bound { m, arm, at, g, depth }) = self.binding_of.get(&b) else { return };
+        if self.guard == Some(m) {
+            return;
+        }
+        self.out.bound_at.entry(b).or_default().insert(s);
+        let ready = self.clocks.info.locals.get(&b).and_then(|&c| read_stage(c)).is_some_and(|c| c <= s);
+        if s == at || !ready || !self.selected.insert((m, arm, s)) {
+            return;
+        }
+        let ExprKind::Match { scrutinee, arms, .. } = &self.ast.expr(m).kind else { return };
+        let rest = self.conds.split_off(depth);
+        self.mark(*scrutinee, s, g);
+        let mut inner = self.enter(*scrutinee, s, g);
+        for x in arms[..=arm].iter().filter_map(|a| a.guard) {
+            self.mark_guard(m, x, s, inner);
+            inner = self.enter(x, s, inner);
+        }
+        self.conds.truncate(depth);
+        self.conds.extend(rest);
     }
 
     /// The reads of the parts of the constant expression `e` at `s`.

@@ -368,15 +368,12 @@ flow small(x: I64 at sample) -> I64 at sample {
 }
 
 #[test]
-fn a_match_arm_binding_read_by_a_block_or_init_argument_is_unavailable_and_not_an_internal_error() {
-    // S-1131 (provisional reading (1) of the evaluator: it does not evaluate it): a `match~` arm is evaluated in the `sample` stage,
-    // so a binding of it (`n`) has no value in the `block` stage of an instance in the arm, which reads the argument of its
-    // `block` input, or at `init`, which reads those of the `init` inputs of an instance or a delay. The spec does not say
-    // at which stage the binding's value is made: that is not an internal error of the evaluator but a form it has not. No
-    // value is written (the spec has none).
-    // The same forms that do not read the binding of an arm do run: `k` itself (the `block` argument `lp~(x, k)` is 3.0,
-    // x * g = 2.0 * 3.0 = 6.0), a `match` inside the argument that binds its own `m`, the binding read in a `sample` input (`mul~`
-    // multiplies x = 2.0 by n = 3.0: 6.0), and the `init` of a delay that reads `k` (`prev~(x, 3.0)` starts from 3.0).
+fn a_match_arm_binding_read_by_a_block_or_init_argument_has_its_value_at_that_stage() {
+    // S-1131 (§11.5): "束縛を読む式は、そのクロックの段で評価する（`match~ k { n => lp~(x, (n as F64)) }` の `(n as F64)` は、`k` が `block` なら `process` の
+    // 呼び出しごとに一度、腕が取られるかによらず評価する）". The binding of the arm has the clock of its object, so the `block` argument `(n as F64)` of
+    // `lp~` (k = 3, x = 2.0: 2.0 * 3.0 = 6.0) and the `init` arguments of `st~` and of `prev~` (k = 3: x + 3.0 = 5.0, and the delay starts from 3.0) read the part of
+    // the object that the arm takes (here the whole of it), made at that stage and not in the arm. What the arm does not read is as before: `k` itself, a
+    // `match` inside the argument that binds its own `m`, the binding read in a `sample` input (`mul~` multiplies x = 2.0 by n = 3.0: 6.0).
     let src = "flow lp(x: F64 at sample, g: F64 at block) -> F64 at sample { x * g }
 flow mul(x: F64 at sample, y: F64 at sample) -> F64 at sample { x * y }
 flow st(a: F64 at init, x: F64 at sample) -> F64 at sample { x + a }
@@ -388,12 +385,11 @@ flow ini_delay(k: U32 at init, x: F64 at sample) -> F64 at sample { match~ k { n
 flow ini_inst(k: U32 at init, x: F64 at sample) -> F64 at sample { match~ k { n => st~((n as F64), x), } }
 flow ini_k(k: U32 at init, x: F64 at sample) -> F64 at sample { match~ k { n => prev~(x, (k as F64)), } }";
     let k = |name| (name, Value::int(IntKind::U32, 3));
-    let unavailable = |r: Result<Vec<f64>, Stop>| matches!(r, Err(Stop { fault: Fault::Unavailable(_), .. }));
     let by_block = |name: &'static str| open_run(src, name, vec![], vec![k("k")], &[2.0]);
     let by_init = |name: &'static str| open_run(src, name, vec![k("k")], vec![], &[2.0]);
-    assert!(unavailable(by_block("blk")), "{:?}", by_block("blk"));
-    assert!(unavailable(by_init("ini_delay")), "{:?}", by_init("ini_delay"));
-    assert!(unavailable(by_init("ini_inst")), "{:?}", by_init("ini_inst"));
+    same64(&by_block("blk").expect("a block argument that reads the binding"), &[6.0]);
+    same64(&by_init("ini_delay").expect("the init of a delay that reads the binding"), &[3.0]);
+    same64(&by_init("ini_inst").expect("an init argument of an instance that reads the binding"), &[5.0]);
     same64(&by_block("blk_k").expect("a block argument that reads k"), &[6.0]);
     same64(&by_block("blk_own").expect("a match of the argument that binds its own"), &[6.0]);
     same64(&by_block("blk_sample").expect("a sample argument that reads the arm binding"), &[6.0]);
@@ -491,4 +487,168 @@ flow second(x: I32 at sample) -> F64 at sample {{
     assert_eq!(run("nest", &[3, 3, 0]), [1.0, 2.0, 300.0]);
     assert_eq!(run("later", &[3, 2, 1, 2]), [0.0, 2.0, 30.0, 4.0]);
     assert_eq!(run("second", &[0, -2, 1, 50]), [1.0, 2.0, 2.0, 3.0]);
+}
+
+// ---------------------------------------------------------------------------------------------------------------------------------
+// W7-06 U3b/t, S-1131, S-1094 (1), §11.5, §6.4: the stage of the binding of an arm, the default of an arm that is not taken whatever type the
+// binding has (a struct with a `Default` written by hand, a field with a declared value whose type has no `Default`), and the values of the
+// cases tests/spec/flow_semantics/match_tilde_*.onsa, which the checks of this version stop with E0200 (so unclean).
+
+/// The `F64`s that the calls (the value of `k`, the number of frames of x = 1, and whether a `reset` goes before it) of `name` give in turn.
+fn calls_of(src: &'static str, name: &'static str, calls: &[(u32, usize, bool)]) -> Vec<f64> {
+    let calls = calls.to_vec();
+    with_checked(src, false, move |a| {
+        let (view, def) = (super::sema_view::View::new(a), super::expr_tests::def_named(a, name));
+        let mut me = Instance::init(view, def, 48000.0, &[], None).expect("init");
+        let mut out = Vec::new();
+        for (k, n, reset) in calls {
+            if reset {
+                me.reset();
+            }
+            let xs = doubles(&vec![1.0; n]);
+            let params = [("k", Value::int(IntKind::U32, i128::from(k)))];
+            out.extend(f64s(&me.process(&params, &[("x", &xs[..])], n, None).expect("process")));
+        }
+        out
+    })
+}
+
+const GSUM: &str = "flow gsum(x: F64 at sample, g: F64 at block) -> F64 at sample {
+  let y = x * g + prev~(^y)
+  y
+}
+";
+
+#[test]
+fn the_binding_of_an_arm_is_fed_to_a_block_input_in_each_arm_and_is_the_default_where_the_arm_is_not_taken() {
+    // S-1131: both arms have the clock `block` (the guard `n > 2` is of `block`), and each feeds its own `gsum` (a sum of x * g, x = 1) the g of
+    // its binding at `block`: the value of the object where the arm is taken (A: n, B: m * 10) and 0.0 where it is not. Calls (k = 5, 1, 5; two
+    // frames each): A adds 5 5 / 0 0 / 5 5 (sums 5 10 / 10 10 / 15 20) and B adds 0 0 / 10 10 / 0 0 (sums 0 0 / 10 20 / 20 20); the value is that of the
+    // arm taken: 5 10 / 10 20 / 15 20. After a `reset` (k = 1): A 0 0, B 10 20: 10 20 (without it 30 40).
+    let src = format!(
+        "{GSUM}flow top(x: F64 at sample, k: U32 at block) -> F64 at sample {{
+  match~ k {{
+    n if n > 2 => gsum~(x, (n as F64)),
+    m => gsum~(x, (m as F64) * 10.0),
+  }}
+}}"
+    );
+    let src: &'static str = Box::leak(src.into_boxed_str());
+    same64(
+        &calls_of(src, "top", &[(5, 2, false), (1, 2, false), (5, 2, false), (1, 2, true)]),
+        &[5.0, 10.0, 10.0, 20.0, 15.0, 20.0, 10.0, 20.0],
+    );
+}
+
+#[test]
+fn an_arm_that_is_not_taken_is_fed_the_default_by_the_block_input_and_a_call_of_0_frames_runs_it() {
+    // The arm `Some(n)` is not taken for k = 0 (`None`), and `n` is 0 there: the sum of `gsum~(x, n)` stays (3 6 / 6 6 / 8 10 for k = 3, 0, 2; the
+    // binding that kept the 3 of the last call would give 9 12 in the second call). A call of 0 frames evaluates the `block` part too: `100 / n` of
+    // the arm panics with n = 0 (the default) in a call of 0 frames, at `block`, and not where the arm is taken (k = 4).
+    let src = format!(
+        "{GSUM}flow top(x: F64 at sample, k: U32 at block) -> F64 at sample {{
+  let o: Option[U32] = if k > 0 {{ Some(k) }} else {{ None }}
+  match~ o {{
+    Some(n) => gsum~(x, (n as F64)),
+    None => 0.0,
+  }}
+}}
+flow div(x: F64 at sample, k: U32 at block) -> F64 at sample {{
+  let o: Option[U32] = if k > 0 {{ Some(k) }} else {{ None }}
+  match~ o {{
+    Some(n) => gsum~(x, ((100 / n) as F64)),
+    None => 0.0,
+  }}
+}}"
+    );
+    let src: &'static str = Box::leak(src.into_boxed_str());
+    same64(&calls_of(src, "top", &[(3, 2, false), (0, 2, false), (2, 2, false)]), &[3.0, 6.0, 0.0, 0.0, 8.0, 10.0]);
+    let zero_frames = |k: u32| {
+        with_checked(src, false, move |a| {
+            let (view, def) = (super::sema_view::View::new(a), super::expr_tests::def_named(a, "div"));
+            let mut me = Instance::init(view, def, 48000.0, &[], None).expect("init");
+            let params = [("k", Value::int(IntKind::U32, i128::from(k)))];
+            me.process(&params, &[("x", &[][..])], 0, None).is_ok()
+        })
+    };
+    assert!(!zero_frames(0), "the division by the default binding is evaluated at block");
+    assert!(zero_frames(4));
+}
+
+#[test]
+fn an_arm_that_is_not_taken_has_the_default_of_a_struct_with_a_default_written_by_hand() {
+    // §6.4: the default of a type with a `Default` written by hand is what its `default()` gives (Pt { x: 1.0, y: -1.0 }); the arm adds x * 10 + y.
+    // x = 3 1 4: the arm is taken for 3 and 4 (33, 44) and not for 1, where it adds the default (1 * 10 - 1 = 9): the sums 33 42 86.
+    let src = format!(
+        "struct Pt {{
+  x: F64,
+  y: F64,
+}}
+impl Default for Pt {{
+  rt fn default() -> Pt {{
+    Pt {{ x: 1.0, y: -1.0 }}
+  }}
+}}
+{ACC}flow hand(x: F64 at sample) -> F64 at sample {{
+  let t = Pt {{ x: x, y: x }}
+  match~ t {{
+    p if p.x > 2.0 => acc~(p.x * 10.0 + p.y),
+    _ => 0.0,
+  }}
+}}"
+    );
+    let cols = vec![("x", doubles(&[3.0, 1.0, 4.0]))];
+    same64(&f64s(&run_with(false, &src, "hand", vec![], vec![], cols, vec![3])), &[33.0, 0.0, 86.0]);
+}
+
+#[test]
+fn a_field_that_declares_a_value_does_not_ask_for_the_default_of_its_type() {
+    // §6.4: "宣言に既定値を書いたフィールドはその値で、型の `Default` を要らない". `c: Char = 'k'` has a value, and `Char` has no `Default`: the struct
+    // has its default all the same, and an arm that is not taken binds it (x = 3 1 4: the arm adds g.v = x where it is taken and 0.0 where it is not).
+    let src = format!(
+        "struct Tagged: Default {{
+  c: Char = 'k',
+  v: F64,
+}}
+{ACC}flow tagged(x: F64 at sample) -> F64 at sample {{
+  let t = Tagged {{ c: 'q', v: x }}
+  match~ t {{
+    g if g.v > 2.0 => acc~(g.v),
+    _ => 0.0,
+  }}
+}}"
+    );
+    let cols = vec![("x", doubles(&[3.0, 1.0, 4.0]))];
+    same64(&f64s(&run_with(false, &src, "tagged", vec![], vec![], cols, vec![3])), &[3.0, 0.0, 7.0]);
+}
+
+#[test]
+fn the_values_of_the_cases_of_match_tilde_all_arms_onsa() {
+    // The expected values of tests/spec/flow_semantics/match_tilde_all_arms.onsa and match_tilde_default_bindings.onsa, on this evaluator: the
+    // counters of the nested `match~`, and a tuple pattern with a guard (the three arms of the first take the counters 1s, 10s and 100s).
+    let src = format!(
+        "{ACC}flow nested(a: U32 at sample, b: U32 at sample) -> F64 at sample {{
+  match~ a {{
+    0 => match~ b {{
+      0 => acc~(1.0),
+      _ => acc~(10.0),
+    }},
+    _ => acc~(100.0),
+  }}
+}}
+flow tuples(a: U32 at sample, b: U32 at sample) -> F64 at sample {{
+  match~ (a, b) {{
+    (0, 0) => acc~(1.0),
+    (0, _) => acc~(10.0),
+    (_, n) if n > 1 => acc~(100.0),
+    _ => acc~(1000.0),
+  }}
+}}"
+    );
+    let u32s = |xs: &[i128]| xs.iter().map(|x| Value::int(IntKind::U32, *x)).collect::<Vec<_>>();
+    let run = |name: &'static str, a: &[i128], b: &[i128]| {
+        f64s(&run_with(false, &src, name, vec![], vec![], vec![("a", u32s(a)), ("b", u32s(b))], vec![a.len()]))
+    };
+    assert_eq!(run("nested", &[0, 0, 1, 0], &[0, 1, 0, 1]), [1.0, 20.0, 300.0, 40.0]);
+    assert_eq!(run("tuples", &[0, 0, 3, 3, 0], &[0, 5, 2, 1, 0]), [1.0, 20.0, 300.0, 4000.0, 5.0]);
 }

@@ -1,0 +1,247 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.5", "§11.3"]
+
+// W7-06 U3b (the review U3b/b, finding 1), S-1131, S-1094 (spec §11.5: "ガードの中で読む束縛は、対象のクロックである"; "値は、束縛を `let` と `if~` で
+// 書いた形と同じである"): a guard that reads the binding of its arm, with a part of a clock faster than the target, in an arm that holds a state. Each flow `fa_*`
+// is checked against `fb_*`, the same flow written by the definition: the choice in a `let` (a plain `match` in an `rt fn`), a binding the body reads in a `let`
+// that is the default of its type where its arm is not taken, every arm body in a `let`, and the value of the arm chosen by an `if` chain. The two give the same
+// output over `process` calls with other parameters, for each `init` input.
+
+pub flow acc(x: F32 at sample) -> F32 at sample {
+  let y = x + prev~(^y)
+  y
+}
+
+// The choices of the plain `match` of the rewrites: the number of the arm taken.
+rt fn sel_x(v: U32, x: F32) -> U32 {
+  var r: U32 = 1
+  match v { b2 if b2 < 2 && x > 0.0 => { r = 0 }, _ => {} }
+  r
+}
+
+rt fn sel_k(v: U32, k: U32) -> U32 {
+  var r: U32 = 1
+  match v { b if F32.round_from(b) * F32.round_from(k) > 1.0 => { r = 0 }, _ => {} }
+  r
+}
+
+rt fn sel_s(v: U32, x: F32) -> U32 {
+  var r: U32 = 1
+  match v { b if F32.round_from(b) + x > 1.0 => { r = 0 }, _ => {} }
+  r
+}
+
+rt fn sel_second(v: U32, k: U32) -> U32 {
+  var r: U32 = 2
+  match v { 0 => { r = 0 }, b2 if b2 < 2 && k > 0 => { r = 1 }, _ => {} }
+  r
+}
+
+// The target at `init` (S-1131 U3b/b, v1_init_sample).
+pub flow fa_an_init_target_and_a_sample_guard(x: F32 at sample, k: U32 at block, n: U32 at init) -> F32 at sample {
+  match~ n {
+    b2 if b2 < 2 && x > 0.0 => acc~(x),
+    _ => 0.5,
+  }
+}
+
+pub flow fb_an_init_target_and_a_sample_guard(x: F32 at sample, k: U32 at block, n: U32 at init) -> F32 at sample {
+  let sel = sel_x(n, x)
+  let t0 = acc~(x)
+  let t1 = 0.5
+  if sel == 0 { t0 } else { t1 }
+}
+
+// The target at `block` (v2_block_sample).
+pub flow fa_a_block_target_and_a_sample_guard(x: F32 at sample, k: U32 at block, n: U32 at init) -> F32 at sample {
+  match~ k {
+    b2 if b2 < 2 && x > 0.0 => acc~(x),
+    _ => 0.5,
+  }
+}
+
+pub flow fb_a_block_target_and_a_sample_guard(x: F32 at sample, k: U32 at block, n: U32 at init) -> F32 at sample {
+  let sel = sel_x(k, x)
+  let t0 = acc~(x)
+  let t1 = 0.5
+  if sel == 0 { t0 } else { t1 }
+}
+
+// The binding and a `block` input in one comparison (c3_round_mul).
+pub flow fa_a_guard_of_the_binding_times_a_block_input(x: F32 at sample, k: U32 at block, n: U32 at init) -> F32 at sample {
+  match~ n {
+    b if F32.round_from(b) * F32.round_from(k) > 1.0 => acc~(x),
+    _ => 0.5,
+  }
+}
+
+pub flow fb_a_guard_of_the_binding_times_a_block_input(x: F32 at sample, k: U32 at block, n: U32 at init) -> F32 at sample {
+  let sel = sel_k(n, k)
+  let t0 = acc~(x)
+  let t1 = 0.5
+  if sel == 0 { t0 } else { t1 }
+}
+
+// The binding and a `sample` input in one comparison (c6_b_sample).
+pub flow fa_a_guard_of_the_binding_plus_a_sample_input(x: F32 at sample, k: U32 at block, n: U32 at init) -> F32 at sample {
+  match~ n {
+    b if F32.round_from(b) + x > 1.0 => acc~(x),
+    _ => 0.5,
+  }
+}
+
+pub flow fb_a_guard_of_the_binding_plus_a_sample_input(x: F32 at sample, k: U32 at block, n: U32 at init) -> F32 at sample {
+  let sel = sel_s(n, x)
+  let t0 = acc~(x)
+  let t1 = 0.5
+  if sel == 0 { t0 } else { t1 }
+}
+
+// The guard in the second arm (v4_init_second_arm).
+pub flow fa_the_guard_of_the_second_arm(x: F32 at sample, k: U32 at block, n: U32 at init) -> F32 at sample {
+  match~ n {
+    0 => 1.0,
+    b2 if b2 < 2 && k > 0 => acc~(x),
+    _ => 0.5,
+  }
+}
+
+pub flow fb_the_guard_of_the_second_arm(x: F32 at sample, k: U32 at block, n: U32 at init) -> F32 at sample {
+  let sel = sel_second(n, k)
+  let t0 = 1.0
+  let t1 = acc~(x)
+  let t2 = 0.5
+  if sel == 0 { t0 } else if sel == 1 { t1 } else { t2 }
+}
+
+// A body that reads the binding too, at the clock of the guard (`sample`).
+pub flow fa_a_body_that_reads_the_binding_too(x: F32 at sample, k: U32 at block, n: U32 at init) -> F32 at sample {
+  match~ k {
+    b2 if b2 < 2 && x > 0.0 => acc~(x + F32.round_from(b2)),
+    _ => 0.5,
+  }
+}
+
+pub flow fb_a_body_that_reads_the_binding_too(x: F32 at sample, k: U32 at block, n: U32 at init) -> F32 at sample {
+  let sel = sel_x(k, x)
+  let b2 = if sel == 0 { k } else { 0 }
+  let t0 = acc~(x + F32.round_from(b2))
+  let t1 = 0.5
+  if sel == 0 { t0 } else { t1 }
+}
+
+test "an init target and a sample guard gives the output of its rewrite" {
+  let xs: [F32; 6] = [1.0, -0.5, 2.0, 0.0, 0.25, -1.0]
+  for n in 0 ..< 3 {
+    var oa: [F32; 6] = [0.0; 6]
+    var ob: [F32; 6] = [0.0; 6]
+    var sa = fa_an_init_target_and_a_sample_guard.init(fa_an_init_target_and_a_sample_guard.Config { n: n }, 8.0)
+    var sb = fb_an_init_target_and_a_sample_guard.init(fb_an_init_target_and_a_sample_guard.Config { n: n }, 8.0)
+    fa_an_init_target_and_a_sample_guard.process(inout sa, fa_an_init_target_and_a_sample_guard.Params { k: 0 }, xs.slice(0, 2), inout oa.slice(0, 2))
+    fb_an_init_target_and_a_sample_guard.process(inout sb, fb_an_init_target_and_a_sample_guard.Params { k: 0 }, xs.slice(0, 2), inout ob.slice(0, 2))
+    fa_an_init_target_and_a_sample_guard.process(inout sa, fa_an_init_target_and_a_sample_guard.Params { k: 1 }, xs.slice(2, 4), inout oa.slice(2, 4))
+    fb_an_init_target_and_a_sample_guard.process(inout sb, fb_an_init_target_and_a_sample_guard.Params { k: 1 }, xs.slice(2, 4), inout ob.slice(2, 4))
+    fa_an_init_target_and_a_sample_guard.process(inout sa, fa_an_init_target_and_a_sample_guard.Params { k: 3 }, xs.slice(4, 6), inout oa.slice(4, 6))
+    fb_an_init_target_and_a_sample_guard.process(inout sb, fb_an_init_target_and_a_sample_guard.Params { k: 3 }, xs.slice(4, 6), inout ob.slice(4, 6))
+    for i in 0 ..< 6 {
+      assert oa[i] == ob[i]
+    }
+  }
+}
+
+test "a block target and a sample guard gives the output of its rewrite" {
+  let xs: [F32; 6] = [1.0, -0.5, 2.0, 0.0, 0.25, -1.0]
+  for n in 0 ..< 3 {
+    var oa: [F32; 6] = [0.0; 6]
+    var ob: [F32; 6] = [0.0; 6]
+    var sa = fa_a_block_target_and_a_sample_guard.init(fa_a_block_target_and_a_sample_guard.Config { n: n }, 8.0)
+    var sb = fb_a_block_target_and_a_sample_guard.init(fb_a_block_target_and_a_sample_guard.Config { n: n }, 8.0)
+    fa_a_block_target_and_a_sample_guard.process(inout sa, fa_a_block_target_and_a_sample_guard.Params { k: 0 }, xs.slice(0, 2), inout oa.slice(0, 2))
+    fb_a_block_target_and_a_sample_guard.process(inout sb, fb_a_block_target_and_a_sample_guard.Params { k: 0 }, xs.slice(0, 2), inout ob.slice(0, 2))
+    fa_a_block_target_and_a_sample_guard.process(inout sa, fa_a_block_target_and_a_sample_guard.Params { k: 1 }, xs.slice(2, 4), inout oa.slice(2, 4))
+    fb_a_block_target_and_a_sample_guard.process(inout sb, fb_a_block_target_and_a_sample_guard.Params { k: 1 }, xs.slice(2, 4), inout ob.slice(2, 4))
+    fa_a_block_target_and_a_sample_guard.process(inout sa, fa_a_block_target_and_a_sample_guard.Params { k: 3 }, xs.slice(4, 6), inout oa.slice(4, 6))
+    fb_a_block_target_and_a_sample_guard.process(inout sb, fb_a_block_target_and_a_sample_guard.Params { k: 3 }, xs.slice(4, 6), inout ob.slice(4, 6))
+    for i in 0 ..< 6 {
+      assert oa[i] == ob[i]
+    }
+  }
+}
+
+test "a guard of the binding times a block input gives the output of its rewrite" {
+  let xs: [F32; 6] = [1.0, -0.5, 2.0, 0.0, 0.25, -1.0]
+  for n in 0 ..< 3 {
+    var oa: [F32; 6] = [0.0; 6]
+    var ob: [F32; 6] = [0.0; 6]
+    var sa = fa_a_guard_of_the_binding_times_a_block_input.init(fa_a_guard_of_the_binding_times_a_block_input.Config { n: n }, 8.0)
+    var sb = fb_a_guard_of_the_binding_times_a_block_input.init(fb_a_guard_of_the_binding_times_a_block_input.Config { n: n }, 8.0)
+    fa_a_guard_of_the_binding_times_a_block_input.process(inout sa, fa_a_guard_of_the_binding_times_a_block_input.Params { k: 0 }, xs.slice(0, 2), inout oa.slice(0, 2))
+    fb_a_guard_of_the_binding_times_a_block_input.process(inout sb, fb_a_guard_of_the_binding_times_a_block_input.Params { k: 0 }, xs.slice(0, 2), inout ob.slice(0, 2))
+    fa_a_guard_of_the_binding_times_a_block_input.process(inout sa, fa_a_guard_of_the_binding_times_a_block_input.Params { k: 1 }, xs.slice(2, 4), inout oa.slice(2, 4))
+    fb_a_guard_of_the_binding_times_a_block_input.process(inout sb, fb_a_guard_of_the_binding_times_a_block_input.Params { k: 1 }, xs.slice(2, 4), inout ob.slice(2, 4))
+    fa_a_guard_of_the_binding_times_a_block_input.process(inout sa, fa_a_guard_of_the_binding_times_a_block_input.Params { k: 3 }, xs.slice(4, 6), inout oa.slice(4, 6))
+    fb_a_guard_of_the_binding_times_a_block_input.process(inout sb, fb_a_guard_of_the_binding_times_a_block_input.Params { k: 3 }, xs.slice(4, 6), inout ob.slice(4, 6))
+    for i in 0 ..< 6 {
+      assert oa[i] == ob[i]
+    }
+  }
+}
+
+test "a guard of the binding plus a sample input gives the output of its rewrite" {
+  let xs: [F32; 6] = [1.0, -0.5, 2.0, 0.0, 0.25, -1.0]
+  for n in 0 ..< 3 {
+    var oa: [F32; 6] = [0.0; 6]
+    var ob: [F32; 6] = [0.0; 6]
+    var sa = fa_a_guard_of_the_binding_plus_a_sample_input.init(fa_a_guard_of_the_binding_plus_a_sample_input.Config { n: n }, 8.0)
+    var sb = fb_a_guard_of_the_binding_plus_a_sample_input.init(fb_a_guard_of_the_binding_plus_a_sample_input.Config { n: n }, 8.0)
+    fa_a_guard_of_the_binding_plus_a_sample_input.process(inout sa, fa_a_guard_of_the_binding_plus_a_sample_input.Params { k: 0 }, xs.slice(0, 2), inout oa.slice(0, 2))
+    fb_a_guard_of_the_binding_plus_a_sample_input.process(inout sb, fb_a_guard_of_the_binding_plus_a_sample_input.Params { k: 0 }, xs.slice(0, 2), inout ob.slice(0, 2))
+    fa_a_guard_of_the_binding_plus_a_sample_input.process(inout sa, fa_a_guard_of_the_binding_plus_a_sample_input.Params { k: 1 }, xs.slice(2, 4), inout oa.slice(2, 4))
+    fb_a_guard_of_the_binding_plus_a_sample_input.process(inout sb, fb_a_guard_of_the_binding_plus_a_sample_input.Params { k: 1 }, xs.slice(2, 4), inout ob.slice(2, 4))
+    fa_a_guard_of_the_binding_plus_a_sample_input.process(inout sa, fa_a_guard_of_the_binding_plus_a_sample_input.Params { k: 3 }, xs.slice(4, 6), inout oa.slice(4, 6))
+    fb_a_guard_of_the_binding_plus_a_sample_input.process(inout sb, fb_a_guard_of_the_binding_plus_a_sample_input.Params { k: 3 }, xs.slice(4, 6), inout ob.slice(4, 6))
+    for i in 0 ..< 6 {
+      assert oa[i] == ob[i]
+    }
+  }
+}
+
+test "the guard of the second arm gives the output of its rewrite" {
+  let xs: [F32; 6] = [1.0, -0.5, 2.0, 0.0, 0.25, -1.0]
+  for n in 0 ..< 3 {
+    var oa: [F32; 6] = [0.0; 6]
+    var ob: [F32; 6] = [0.0; 6]
+    var sa = fa_the_guard_of_the_second_arm.init(fa_the_guard_of_the_second_arm.Config { n: n }, 8.0)
+    var sb = fb_the_guard_of_the_second_arm.init(fb_the_guard_of_the_second_arm.Config { n: n }, 8.0)
+    fa_the_guard_of_the_second_arm.process(inout sa, fa_the_guard_of_the_second_arm.Params { k: 0 }, xs.slice(0, 2), inout oa.slice(0, 2))
+    fb_the_guard_of_the_second_arm.process(inout sb, fb_the_guard_of_the_second_arm.Params { k: 0 }, xs.slice(0, 2), inout ob.slice(0, 2))
+    fa_the_guard_of_the_second_arm.process(inout sa, fa_the_guard_of_the_second_arm.Params { k: 1 }, xs.slice(2, 4), inout oa.slice(2, 4))
+    fb_the_guard_of_the_second_arm.process(inout sb, fb_the_guard_of_the_second_arm.Params { k: 1 }, xs.slice(2, 4), inout ob.slice(2, 4))
+    fa_the_guard_of_the_second_arm.process(inout sa, fa_the_guard_of_the_second_arm.Params { k: 3 }, xs.slice(4, 6), inout oa.slice(4, 6))
+    fb_the_guard_of_the_second_arm.process(inout sb, fb_the_guard_of_the_second_arm.Params { k: 3 }, xs.slice(4, 6), inout ob.slice(4, 6))
+    for i in 0 ..< 6 {
+      assert oa[i] == ob[i]
+    }
+  }
+}
+
+test "a body that reads the binding too gives the output of its rewrite" {
+  let xs: [F32; 6] = [1.0, -0.5, 2.0, 0.0, 0.25, -1.0]
+  for n in 0 ..< 3 {
+    var oa: [F32; 6] = [0.0; 6]
+    var ob: [F32; 6] = [0.0; 6]
+    var sa = fa_a_body_that_reads_the_binding_too.init(fa_a_body_that_reads_the_binding_too.Config { n: n }, 8.0)
+    var sb = fb_a_body_that_reads_the_binding_too.init(fb_a_body_that_reads_the_binding_too.Config { n: n }, 8.0)
+    fa_a_body_that_reads_the_binding_too.process(inout sa, fa_a_body_that_reads_the_binding_too.Params { k: 0 }, xs.slice(0, 2), inout oa.slice(0, 2))
+    fb_a_body_that_reads_the_binding_too.process(inout sb, fb_a_body_that_reads_the_binding_too.Params { k: 0 }, xs.slice(0, 2), inout ob.slice(0, 2))
+    fa_a_body_that_reads_the_binding_too.process(inout sa, fa_a_body_that_reads_the_binding_too.Params { k: 1 }, xs.slice(2, 4), inout oa.slice(2, 4))
+    fb_a_body_that_reads_the_binding_too.process(inout sb, fb_a_body_that_reads_the_binding_too.Params { k: 1 }, xs.slice(2, 4), inout ob.slice(2, 4))
+    fa_a_body_that_reads_the_binding_too.process(inout sa, fa_a_body_that_reads_the_binding_too.Params { k: 3 }, xs.slice(4, 6), inout oa.slice(4, 6))
+    fb_a_body_that_reads_the_binding_too.process(inout sb, fb_a_body_that_reads_the_binding_too.Params { k: 3 }, xs.slice(4, 6), inout ob.slice(4, 6))
+    for i in 0 ..< 6 {
+      assert oa[i] == ob[i]
+    }
+  }
+}

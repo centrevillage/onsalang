@@ -21,7 +21,8 @@ pub(super) fn gen_init<'b>(lw: &mut Lowerer<'b>, shape: &FlowShape, info: &'b Fl
         ),
     ));
     g.flow().sample_rate = sr.clone();
-    g.flow().scopes.push(Scope { state: s.clone() });
+    g.flow().push_scope(s.clone());
+    g.slots(info)?;
     if info.stored(Kept::SampleRate) {
         let f = sfield(lw, info, &s, FieldOf::SampleRate, span)?;
         assign(&mut g.stmts, &f, sr.clone())?;
@@ -52,6 +53,7 @@ fn init_nodes(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, ids: &[NodeI
     for &id in ids {
         let n = info.node(id);
         let (span, name, at) = (cx.ast.expr(n.expr).span, &n.path, |p| FieldOf::Node(id, p));
+        super::branches::choose_arms(lw, cx, &n.arms, ClockStage::Init, state, out)?;
         match &n.kind {
             PlanKind::Prev { init, ty, .. } => {
                 let t = lw.core_ty(*ty, &[], span)?;
@@ -89,7 +91,7 @@ fn init_nodes(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, ids: &[NodeI
                 let r = replica_loop(cx, &n.kind, span)?;
                 let elem = index(sfield(lw, info, state, at(Part::Own), span)?, r.index(cx, span))?;
                 let mut body = Vec::new();
-                cx.flow.as_mut().unwrap().scopes.push(Scope { state: elem.clone() });
+                cx.flow.as_mut().unwrap().push_scope(elem.clone());
                 init_nodes(lw, cx, &mut body, children, &elem, sr)?;
                 cx.flow.as_mut().unwrap().scopes.pop();
                 out.push(r.each(span, body));
@@ -107,7 +109,7 @@ pub(super) fn gen_reset<'b>(lw: &mut Lowerer<'b>, shape: &FlowShape, info: &'b F
         return Err(internal(span, "`reset` with another number of parameters"));
     };
     let s = s.clone();
-    g.flow().scopes.push(Scope { state: s.clone() });
+    g.flow().push_scope(s.clone());
     let nodes: Vec<NodeId> = info.top().collect();
     reset_nodes(lw, &mut g.cx, &mut g.stmts, &nodes, &s)?;
     let poisoned = sfield(lw, info, &s, FieldOf::Poisoned, span)?;
@@ -161,7 +163,8 @@ pub(super) fn gen_ctl<'b>(lw: &mut Lowerer<'b>, shape: &FlowShape, info: &'b Flo
     let mut g = Gen::new(lw, shape, info, Phase::Ctl, Ty::Unit)?;
     let s = g.param("s", Mode::Inout, Ty::Struct(shape.state_ty));
     let p = g.param("p", Mode::Borrow, Ty::Struct(shape.params_ty));
-    g.flow().scopes.push(Scope { state: s.clone() });
+    g.flow().push_scope(s.clone());
+    g.slots(info)?;
     g.inputs_from(lw, shape, info, &p, &s)?;
     g.state_overrides(lw, info, &s)?;
     g.const_lets(lw, info)?;
@@ -178,6 +181,7 @@ fn ctl_nodes(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, ids: &[NodeId
     for &id in ids {
         let n = info.node(id);
         let (span, own) = (cx.ast.expr(n.expr).span, FieldOf::Node(id, Part::Own));
+        super::branches::choose_arms(lw, cx, &n.arms, ClockStage::Block, state, out)?;
         match &n.kind {
             PlanKind::Instance { callee, args, .. } => {
                 let sub = lw.ensure_flow(*callee)?;
@@ -193,7 +197,7 @@ fn ctl_nodes(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, ids: &[NodeId
                 let r = replica_loop(cx, &n.kind, span)?;
                 let elem = index(sfield(lw, info, state, own, span)?, r.index(cx, span))?;
                 let mut body = Vec::new();
-                cx.flow.as_mut().unwrap().scopes.push(Scope { state: elem.clone() });
+                cx.flow.as_mut().unwrap().push_scope(elem.clone());
                 ctl_nodes(lw, cx, &mut body, children, &elem)?;
                 cx.flow.as_mut().unwrap().scopes.pop();
                 out.push(r.each(span, body));
@@ -212,7 +216,8 @@ pub(super) fn gen_tick<'b>(lw: &mut Lowerer<'b>, shape: &FlowShape, info: &'b Fl
     for i in shape.inputs.iter().filter(|i| i.phase == Phase::Tick) {
         g.param_local(LocalId(i.local.0), Mode::Borrow);
     }
-    g.flow().scopes.push(Scope { state: s.clone() });
+    g.flow().push_scope(s.clone());
+    g.slots(info)?;
     g.state_overrides(lw, info, &s)?;
     g.const_lets(lw, info)?;
     g.stage_lets(lw, info, &s)?;
@@ -273,7 +278,7 @@ fn store_nodes(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, ids: &[Node
                 let r = replica_loop(cx, &n.kind, span)?;
                 let elem = index(sfield(lw, info, state, at(Part::Own), span)?, r.index(cx, span))?;
                 let mut body = Vec::new();
-                cx.flow.as_mut().unwrap().scopes.push(Scope { state: elem.clone() });
+                cx.flow.as_mut().unwrap().push_scope(elem.clone());
                 store_nodes(lw, cx, &mut body, children, &elem)?;
                 cx.flow.as_mut().unwrap().scopes.pop();
                 out.push(r.each(span, body));

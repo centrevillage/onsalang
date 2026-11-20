@@ -54,8 +54,7 @@ fn lower_expr_at(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId) -> R<Expr> {
     let ty = lw.core_ty(cx.value_ty(e)?, &cx.args, span)?;
     match cx.expr(e).kind {
         AK::If { tilde: Some(_), .. } => return super::flow::tilde_if(lw, cx, e, ty),
-        // The checks pass it (W7-06 U3a); W7-06 U3b lowers it.
-        AK::Match { tilde: Some(t), .. } => return Err(unsupported(t, Feature::TildeBranches, &["match~"])),
+        AK::Match { tilde: Some(_), .. } => return super::flow::tilde_match(lw, cx, e, ty),
         _ => {}
     }
     // Resolved names first (locals, consts, variants, builtin constants).

@@ -1,0 +1,49 @@
+// onsa.toml
+// [package]
+// name = "match_tilde_block_bindings"
+// edition = "2026"
+//
+// [export]
+// prefix = "match_tilde_block_bindings_"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "poison"
+// provides = []
+//
+// [test]
+// spec = ["§11.5", "§11.3", "§13.4"]
+// conformance = true
+
+// Conformance (W7-06 U3b, the review U3b/b, findings 1 and 2; S-1131, §11.5, §13.4): the interpreter and C give the same values for a binding of `match~`
+// that only an input at `block` reads (the C of the choice at `block` declares no binding it does not read), and for a guard that reads the binding of its
+// arm with a part at `sample`, in an arm that holds a state (the choice is at `sample` only).
+
+flow gsum(x: F32 at sample, g: F32 at block) -> F32 at sample {
+  let y = x * g + prev~(^y)
+  y
+}
+
+flow acc(x: F32 at sample) -> F32 at sample {
+  let y = x + prev~(^y)
+  y
+}
+
+// The binding is read by the `block` input of an instance only.
+@export
+pub flow a_binding_read_at_block(x: F32 at sample, @param(min: 0, max: 7, default: 2) k: U32 at block) -> F32 at sample {
+  match~ k {
+    n => gsum~(x, F32.round_from(n)),
+  }
+}
+
+// The guard reads the binding and `x`.
+@export
+pub flow a_guard_of_the_binding_and_x(x: F32 at sample, @param(min: 0, max: 7, default: 1) k: U32 at block) -> F32 at sample {
+  match~ k {
+    b if b < 2 && x > 0.0 => acc~(x),
+    _ => 0.5,
+  }
+}

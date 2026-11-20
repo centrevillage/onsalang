@@ -124,3 +124,26 @@ pub flow f(x: F32 at sample, level: F32 at block) -> F32 at sample {
     assert!(!tick.contains("make") && !tick.contains("round"), "{tick}");
     assert!(!phase(src, "reset").contains("for "), "the replicas have no node");
 }
+
+/// §11.3, S-1094 (1): `ctl` writes the field of a guard of `match~` while
+/// the arms before it are not taken and its pattern matches, and the field
+/// of an arm body under no condition (every arm body is evaluated, R-14).
+#[test]
+fn the_field_of_a_guard_of_match_tilde_is_guarded_and_that_of_a_body_is_not() {
+    let src = "pub flow acc(x: F32 at sample) -> F32 at sample { x + prev~(x) }
+pub flow f(x: F32 at sample, o: Option[I32] at block, n: I32 at block) -> F32 at sample {
+  match~ o {
+    Some(_) if n > 7 => acc~(x),
+    Some(v) if v > 100 / n => acc~(x),
+    Some(_) => acc~(x) * F32.round_from(200 / n),
+    None => x,
+  }
+}";
+    let ctl = phase(src, "ctl");
+    let open = "if ((__arm == 4:U32) && (tag(p.0) == 1:U8)) {\n";
+    let first = at(&ctl, &format!("{open}    s.4 = (p.1 > 7:I32)\n"));
+    let second =
+        at(&ctl, &format!("{open}    let v: I32 = payload(p.0, Some, 0)\n    v\n    s.5 = (v > (100:I32 / p.1))\n"));
+    let body = at(&ctl, "\n  s.6 = round.I32.F32((200:I32 / p.1))\n");
+    assert!(first < second && second < body, "{ctl}");
+}

@@ -143,7 +143,7 @@ fn makes(body: &Body, known: &Known, root: ExprId, e: ExprId, here: Clock, guard
 }
 
 /// The operands that are in a position that is not a condition: the parts `walk` goes on into (the conditional forms and the block
-/// expression are walked by themselves; `if` and `if~` are not here, and `match~` gives its object only, until W7-06 U3).
+/// expression are walked by themselves; `if`, `if~`, `match` and `match~` are not here).
 fn operands(body: &Body, e: ExprId) -> Vec<ExprId> {
     use ExprKind as K;
     let ast = body.ast;
@@ -157,7 +157,6 @@ fn operands(body: &Body, e: ExprId) -> Vec<ExprId> {
         K::Tuple(xs) | K::Array(xs) => xs.clone(),
         K::Repeat { elem, len } => vec![*elem, *len],
         K::Struct { fields, .. } => fields.iter().map(|(_, x)| *x).collect(),
-        K::Match { scrutinee, .. } => vec![*scrutinee],
         K::Call { callee, args, .. } => {
             let mut out = Vec::new();
             if let K::Field { base, .. } = &ast.expr(*callee).kind {
@@ -252,6 +251,28 @@ fn kids(body: &Body, known: &Known, root: ExprId, e: ExprId, guard: Clock) -> Re
                 }
                 out.push((arm.body, inner, at_body));
                 acc = at_body;
+            }
+            out
+        }
+        K::Match { scrutinee, arms, tilde: Some(_) } => {
+            // The side that selects goes first, under the object and the guards before it; the bodies are not under a condition (the arms of a
+            // `match~` are not condition positions, §11.3). The guard sees the clock of the object; the body binds the clock of the object
+            // and of the guards from the first arm to its own, the fastest of them (S-1131).
+            let sc = clock_of(body, known, root, *scrutinee)?;
+            let mut acc = after(guard, cond_clock(body, known, root, *scrutinee)?);
+            let (mut out, mut bound) = (own(vec![*scrutinee]), sc);
+            for arm in arms {
+                let locals = body.pat_locals(arm.pat)?;
+                if let Some(g) = arm.guard {
+                    let mut seen = known.clone();
+                    seen.extend(locals.iter().map(|l| (*l, sc)));
+                    out.push((g, seen.clone(), acc));
+                    let gc = cond_clock(body, &seen, root, g)?;
+                    (acc, bound) = (after(acc, gc), bound.max(gc));
+                }
+                let mut inner = known.clone();
+                inner.extend(locals.iter().map(|l| (*l, bound)));
+                out.push((arm.body, inner, guard));
             }
             out
         }
@@ -412,6 +433,58 @@ fn descend(f: &mut Frame, known: &Known, root: ExprId, e: ExprId, here: Clock, g
                     }
                 }
                 return walk(f, &inner, root, arm.body, here, at_body);
+            }
+            Ok(())
+        }
+        K::Match { scrutinee, arms, tilde: Some(_) } => {
+            // The side that selects first (§11.5, S-1094 (1)): the object and then the patterns and guards from the top, as far as this stage
+            // decides them (the clock of each is not after it), up to the first arm that the pattern and the guard choose. Then every body in the
+            // order written, not under a condition. The bindings of an arm that the stage makes (the fastest clock of the object and of the guards
+            // from the first arm to its own is not after it) are the parts of the object where the arm is taken and `T.default()` where it is
+            // not (S-1131); a body that binds later than this stage is walked without them (what reads them is made by that stage).
+            walk(f, known, root, *scrutinee, here, guard)?;
+            let sc = clock_of(&body, known, root, *scrutinee).map_err(stop)?;
+            let mut acc = guard.max(cond_clock(&body, known, root, *scrutinee).map_err(stop)?);
+            let mut deciding = acc <= here;
+            let (v, ty) = (if deciding { Some(f.eval(*scrutinee)?) } else { None }, body.ty(*scrutinee).map_err(stop)?);
+            let (mut bound, mut taken, mut plan) = (sc, None, Vec::new());
+            for (n, arm) in arms.iter().enumerate() {
+                let locals = body.pat_locals(arm.pat).map_err(stop)?;
+                let mut seen = known.clone();
+                seen.extend(locals.iter().map(|l| (*l, sc)));
+                let gc = arm.guard.map(|g| cond_clock(&body, &seen, root, g)).transpose().map_err(stop)?;
+                if let (true, None, Some(v)) = (deciding, &taken, &v) {
+                    if f.arm(arm.pat, v, ty, None, span)? {
+                        let mine = f.pat_values(arm.pat)?;
+                        match arm.guard {
+                            None => taken = Some((n, mine)),
+                            Some(g) => {
+                                walk(f, &seen, root, g, here, acc)?;
+                                if gc.is_some_and(|c| c <= here) && f.truth(g, span)? {
+                                    taken = Some((n, mine));
+                                }
+                            }
+                        }
+                    }
+                }
+                if let Some(c) = gc {
+                    (acc, bound) = (acc.max(c), bound.max(c));
+                    deciding = deciding && acc <= here;
+                }
+                let mut inner = known.clone();
+                inner.extend(locals.iter().map(|l| (*l, bound)));
+                plan.push((inner, deciding && bound <= here));
+            }
+            for (n, (arm, (inner, bound_here))) in arms.iter().zip(plan).enumerate() {
+                if !bound_here {
+                    walk(f, &inner, root, arm.body, here, guard)?;
+                    continue;
+                }
+                let binds = match &taken {
+                    Some((t, mine)) if *t == n => mine.clone(),
+                    _ => f.default_values(arm.pat, span)?,
+                };
+                f.with_bindings(&[], binds, |f| walk(f, &inner, root, arm.body, here, guard))?;
             }
             Ok(())
         }

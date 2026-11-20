@@ -8,7 +8,7 @@
 //! call nested deeper than [`DEPTH`] panics at the call (§12.5).
 
 use onsa_diag::Span;
-use onsa_sema::Target;
+use onsa_sema::{Target, TyId};
 use onsa_syntax::ast::{Arg, ExprId, ExprKind, Mode};
 
 use super::expr::{Eval, Frame, Stop, evaluates};
@@ -52,13 +52,28 @@ impl<'a> Frame<'a> {
     /// The value of `func` on `args`: the body evaluated here when it is plain, else what the host gives.
     #[inline(never)]
     pub(super) fn invoke(&mut self, func: &Callee<'a>, args: Vec<Value>, call: ExprId, at: Span) -> Eval {
+        self.invoke_with(func, args, at, |f| {
+            let types = parts(&f.body, call).into_iter().map(|x| f.body.ty_id(x)).collect::<Result<_, _>>()?;
+            Ok((types, f.body.ty_id(call)?))
+        })
+    }
+
+    /// `invoke` of a call that is no expression of the body (`T.default()` of a type that has it written by hand): `signature` is
+    /// the types of the arguments and of the result that a host is given, asked for only when the host is.
+    #[inline(never)]
+    pub(super) fn invoke_with(
+        &mut self,
+        func: &Callee<'a>,
+        args: Vec<Value>,
+        at: Span,
+        signature: impl FnOnce(&Self) -> Result<(Vec<TyId>, TyId), Fault>,
+    ) -> Eval {
         let here = |fault| Stop { fault, at };
         if self.depth() >= DEPTH && !func.primitive() {
             return Err(here(Fault::Panic(PanicKind::Depth)));
         }
         let Some((body, expr)) = self.plain(func).map_err(here)? else {
-            let types = parts(&self.body, call).into_iter().map(|x| self.body.ty_id(x)).collect::<Result<_, _>>();
-            let (types, ret) = (types.map_err(here)?, self.body.ty_id(call).map_err(here)?);
+            let (types, ret) = signature(self).map_err(here)?;
             let call = HostCall { view: self.body.view, callee: func, args, types, ret };
             return match self.host.as_deref_mut() {
                 Some(host) => host.call(call),
@@ -110,4 +125,16 @@ pub(super) fn parts(body: &Body, e: ExprId) -> Vec<ExprId> {
 /// Does the evaluator evaluate `e` and what it evaluates in it ([`evaluates`] of each, [`parts`])?
 pub(super) fn evaluated(body: &Body, e: ExprId) -> bool {
     evaluates(body, e) && parts(body, e).into_iter().all(|x| evaluated(body, x))
+}
+
+impl<'a> Frame<'a> {
+    /// `T.default()` of a type whose `Default` is written by hand (§6.4): its `default` function, called with no argument (evaluated here
+    /// when its body is plain, else handed to the host).
+    pub(super) fn hand_default(&mut self, def: onsa_sema::DefId, at: Span) -> Eval {
+        let here = |fault| Stop { fault, at };
+        let view = self.body.view;
+        let (f, ret) = view.hand_default(def).map_err(here)?;
+        let func = view.fn_callee(f).map_err(here)?;
+        self.invoke_with(&func, Vec::new(), at, |_| Ok((Vec::new(), ret)))
+    }
 }

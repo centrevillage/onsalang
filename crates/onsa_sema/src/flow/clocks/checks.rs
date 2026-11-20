@@ -36,6 +36,23 @@ pub(super) enum Fault {
     Fn,
 }
 
+/// The branching an `if~` or a `match~` is ([`Walk::check_tilde`]): its
+/// word and what its parts are called.
+#[derive(Debug, Clone, Copy)]
+pub(super) enum Branching {
+    If,
+    Match,
+}
+
+impl Branching {
+    fn words(self) -> (&'static str, &'static str) {
+        match self {
+            Branching::If => ("if", "branches"),
+            Branching::Match => ("match", "arms"),
+        }
+    }
+}
+
 impl Walk<'_> {
     /// Whether the checks run: at `Check`.
     pub(super) fn checking(&self) -> bool {
@@ -178,7 +195,7 @@ impl Walk<'_> {
         }
     }
 
-    /// The `if~` / `match~` (`word` and its `~` `tilde`) whose branches or
+    /// The `if~` / `match~` (`of` and its `~` `tilde`) whose branches or
     /// arm bodies are `bodies` and whose first condition or scrutinee is
     /// `next` (§11.5, S-1177): E0812 at its `~` (S-392) when no body holds
     /// state, with the candidate that takes the `~` off (a space before a
@@ -191,14 +208,14 @@ impl Walk<'_> {
     pub(super) fn check_tilde(
         &mut self,
         tilde: Span,
-        word: &str,
+        of: Branching,
         mut bodies: impl Iterator<Item = ExprId>,
         next: ExprId,
     ) {
         if bodies.any(|x| super::super::nodes::holds_state(self.ast, x)) {
             return;
         }
-        let parts = if word == "if" { "branches" } else { "arms" };
+        let (word, parts) = of.words();
         let msg = format!("this `{word}~` holds no state in its {parts} and is written `{word}` (§2.6, §11.5)");
         let touches = self.ast.expr(next).span.start == tilde.end;
         let fix = Fix::replace("remove `~`", tilde, if touches { " " } else { "" });
@@ -209,25 +226,29 @@ impl Walk<'_> {
     /// The bindings of the pattern `pat` of an arm of `match~`, each the
     /// default of its type on a sample that does not take the arm (§11.5):
     /// at `Check`, E0816 at the binding of a type that does not satisfy
-    /// `Default`.
+    /// `Default`. Its bindings, in the order of the text (none but at
+    /// `Check`).
     // SPEC-GAP(S-1174): every binding of every arm, read or not
     // (provisional).
     // SPEC-GAP(S-392): the main place of the E0816 is the binding
     // (provisional).
-    pub(super) fn check_arm_bindings(&mut self, pat: PatId) {
+    pub(super) fn check_arm_bindings(&mut self, pat: PatId) -> Vec<LocalId> {
+        let mut bound = Vec::new();
         if !self.checking() {
-            return;
+            return bound;
         }
         let (a, ast, body) = (self.a, self.ast, self.body);
         crate::pat::each_bind(ast, pat, true, &mut |q, name| {
             let Some(&l) = body.pat_locals.get(&q) else { return };
+            bound.push(l);
             let (ty, span) = (body.locals[l.0 as usize].ty, ast.pat(q).span);
             let what = format!("the binding `{}` of an arm of `match~`, on a sample that does not take it,", name.name);
-            if let Some(d) = crate::signal::no_default_signal(a, ty, span, &what) {
+            if let Some(d) = crate::signal::no_default_signal(a, ty, span, &what, "§11.5") {
                 let found = self.src(span);
                 self.report(d.with_found(found));
             }
         });
+        bound
     }
 
     /// The `~` of the replication `e` written with `tilde`, whose body holds
