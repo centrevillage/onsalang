@@ -6,6 +6,7 @@
 //! are its E0200 (`onsa_diag/src/unsupported.rs`, the works named on each).
 
 use super::*;
+use crate::clock::{Base, ClockName, ClockRef, Ratio};
 use crate::def::Bound;
 use crate::deferred::DeferredKind;
 use crate::flow_names::FlowBuiltin;
@@ -13,6 +14,7 @@ use crate::names::body::{NoFlowForm, Origin, PathRes, no_flow_form};
 use crate::requirement::Required;
 use crate::resolve::{Callee, NameKind};
 use crate::ty::TyId;
+use onsa_syntax::ast::RatioOp;
 
 impl<'a> Checker<'a> {
     pub(super) fn fcx(&mut self) -> &mut FlowCx {
@@ -507,13 +509,50 @@ impl<'a> Checker<'a> {
         Ok(t)
     }
 
-    /// `e at k` in a flow body (§11.3): the type of `e`; the clock is the
-    /// names stage's record ([`crate::names::body::BodyNames::clocks`]), which
-    /// the walk of the clocks reads.
+    /// `e at k` in a flow body (§11.3): the type of `e`; the clock of the
+    /// names stage's record ([`crate::names::body::BodyNames::clocks`]),
+    /// which the walk of the clocks reads ([`FlowCx::at_clocks`]).
     fn check_at(&mut self, e: ExprId, inner: ExprId, expected: Option<TyId>) -> R<TyId> {
         let t = self.check_expr_as(inner, expected, self.joining)?;
-        self.names_record(e, self.names.clocks.get(&e).copied())?;
+        let clock = match self.names_record(e, self.names.clocks.get(&e).copied())? {
+            ClockRef::Name(name) => name.clock(),
+            ClockRef::Derived(base, op, n) => self.derived_clock(e, base, op, n)?,
+        };
+        self.fcx().at_clocks.insert(e, clock);
         Ok(t)
+    }
+
+    /// The clock of the derived clock `(base op n)` of `e at k` (§11.3,
+    /// S-1078, S-1077): `n` a constant expression of type `U32` as the length
+    /// of a delay is (§4.5), its ratio of [`Ratio::of_n`], else E0808 at `n`.
+    /// An expression writes `(sample / N)` only: a base that is not `sample`
+    /// and `(sample * N)` (S-567 K3) are E0815 at the clock, with no
+    /// candidate. In error with any of them (S-1133): after those E0815 it
+    /// makes no clock `k` for the result, which rests on the failed check
+    /// (S-1133 (1)).
+    fn derived_clock(&mut self, e: ExprId, base: Base, op: RatioOp, n: ExprId) -> R<Clock> {
+        let value = self.flow_const_u32(n)?;
+        let ExprKind::At { clock, .. } = &self.expr(e).kind else {
+            onsa_diag::internal::bug(Some(self.expr(e).span), "a derived clock of no `at`")
+        };
+        if base != Base::Clock(ClockName::Sample) || op == RatioOp::Mul {
+            let msg = format!(
+                "the derived clock of an expression is `(sample / N)`, never faster than the `sample` of the body; `({} {} N)` stands in the inputs and the output of a flow (§11.3, §11.9)",
+                base.name(),
+                op.symbol()
+            );
+            self.flow_hold_at(Code::E0815, clock.span, msg);
+            return Ok(Clock::Error);
+        }
+        let Some(value) = value else { return Ok(Clock::Error) };
+        match Ratio::of_n(op, value) {
+            Some(r) => Ok(Clock::Tick(r)),
+            None => {
+                let msg = "the N of a derived clock is a power of 2 that is 2 or more (§11.3, §11.9)";
+                self.flow_hold_at(Code::E0808, self.expr(n).span, msg);
+                Ok(Clock::Error)
+            }
+        }
     }
 
     /// `^name` in a flow body (§11.2): a later `let` of the body, read in the

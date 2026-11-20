@@ -3,11 +3,19 @@
 // spec = ["§4.5", "§11.3", "§15.1", "§18.1"]
 
 // The N of a derived clock is a constant of another module (§4.5: "`cfg.N` のような修飾した名前", §11.3, S-1078): the
-// name is read as in any expression of the flow, through the `use`. No diagnostic.
+// name is read as in any expression of the flow, through the `use`, and the value of the constant is the ratio (`cfg.N` and `4`
+// mix, §11.3, S-1077). No diagnostic.
 
 use cfg
 
 pub flow slow_by_a_constant_of_a_module(p: F32 at block, x: F32 at sample) -> F32 at sample {
   let s = p at (sample / cfg.N)
+  x * (s at sample)
+}
+
+pub flow mixes_a_constant_of_a_module_with_its_value(p: F32 at block, q: F32 at init, x: F32 at sample) -> F32 at sample {
+  let a = p at (sample / cfg.N)
+  let b = q at (sample / 4)
+  let s = a + b
   x * (s at sample)
 }

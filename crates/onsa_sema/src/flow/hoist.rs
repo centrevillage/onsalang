@@ -102,6 +102,10 @@ pub(super) enum Place {
     Const,
     /// Where it is read.
     Here,
+    /// A computed part or a node of a tick slower than the stage that reads
+    /// it, whose field W7-09 U2r2 makes (§11.3, §11.6, S-1158 (c)): E0200
+    /// until then.
+    Gate(ClockStage),
 }
 
 /// What the choice reads of a flow body.
@@ -130,6 +134,11 @@ impl Choose<'_> {
             Some(Clock::Const) if g != Cond::None && self.computed(e) => {
                 return g.stage().filter(|&s| s < at).map_or(Place::Const, Place::Check);
             }
+            // The current clock of the part decides it, `at` on a parameter
+            // kind in it too (S-1196, U2s).
+            Some(&Clock::Tick(r)) if ClockStage::Tick(r) < at && (self.part(e) || self.nodes.contains(&e)) => {
+                return Place::Gate(ClockStage::Tick(r));
+            }
             _ => return Place::Here,
         };
         let s = match g {
@@ -157,25 +166,26 @@ impl Choose<'_> {
         }
     }
 
-    /// Whether `e` may have a field: its type is Copy (S-1046 (a)), and it
-    /// is none of a name (an input, a `let`, the index of a `par~`, a
-    /// binding of an arm, `^y`), `sample_rate()` and a node (§11.3), nor
-    /// parentheses or `at`, whose operand is the same value at the same
-    /// stage (§11.3: `at` changes neither), nor a block of a value only,
-    /// whose value the lowering makes of its tail in place: the operand or
-    /// the tail is chosen instead.
+    /// Whether `e` may have a field: a [`Choose::part`] whose type is Copy
+    /// (S-1046 (a)).
     fn hoistable(&self, e: ExprId) -> bool {
+        self.part(e) && self.copy(e)
+    }
+
+    /// Whether `e` is a computed part: none of a name (an input, a `let`,
+    /// the index of a `par~`, a binding of an arm, `^y`), `sample_rate()`
+    /// and a node (§11.3), nor parentheses or `at`, whose operand is the
+    /// same value at the same stage (§11.3: `at` changes neither), nor a
+    /// block of a value only, whose value the lowering makes of its tail in
+    /// place: the operand or the tail is chosen instead.
+    fn part(&self, e: ExprId) -> bool {
         let kind = &self.ast.expr(e).kind;
         let name = matches!(self.body.targets.get(&e), Some(Target::Local(_)));
-        if name
+        !(name
             || matches!(kind, ExprKind::At { .. } | ExprKind::Par { .. })
             || value_of(kind).is_some()
             || self.nodes.contains(&e)
-            || self.sample_rate.contains(&e)
-        {
-            return false;
-        }
-        self.copy(e)
+            || self.sample_rate.contains(&e))
     }
 
     /// A constant expression that is computed: one [`Choose::hoistable`]

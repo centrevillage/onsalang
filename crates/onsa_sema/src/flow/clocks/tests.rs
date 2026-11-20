@@ -387,3 +387,26 @@ fn a_match_tilde_with_no_state_in_its_arm_bodies_is_e0812() {
     let edits: Vec<&str> = d.fixes[0].edits().iter().map(|e| e.replace.as_str()).collect();
     assert_eq!(edits, [" "]);
 }
+
+/// M-7, S-1198 (provisional): a loop of two `let`s that two ratios enter is
+/// one E0815, at the initializer of the `let` the second enters, and every
+/// `let` of the loop is in error; one `let` of a tick of a ratio names the
+/// node of its whole value in its scope (S-1139 (a)).
+#[test]
+fn a_loop_of_two_ratios_is_one_e0815_at_the_let_the_second_enters() {
+    let f = walk_of(
+        "pub flow f(p: F32 at block, q: F32 at block, x: F32 at sample) -> F32 at sample {\n  let a = p at (sample / 4)\n  let c = q at (sample / 2)\n  let u = prev~(^v) + a\n  let v = u + c\n  x\n}\n",
+        "f",
+    );
+    let d = f.walked.diag.as_ref().expect("a diagnostic");
+    assert_eq!((d.code, &f.src[d.span.start as usize..d.span.end as usize]), (onsa_diag::Code::E0815, "u + c"));
+    assert_eq!(d.notes.len(), 3, "{d:?}");
+    assert_eq!((f.walked.checked[2], f.walked.checked[3]), (Clock::Error, Clock::Error));
+    let g = walk_of(
+        "pub flow g(p: F32 at block, x: F32 at sample) -> F32 at sample {\n  let d = prev~(p at (sample / 4))\n  x * (d at sample)\n}\n",
+        "g",
+    );
+    assert!(g.complete, "{:?}", g.walked.diag);
+    let paths: Vec<&str> = g.a.flows[&g.flow].nodes.iter().map(|n| n.path.as_str()).collect();
+    assert_eq!(paths, ["d.prev_0"]);
+}

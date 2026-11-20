@@ -1,0 +1,62 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§11.4"]
+
+// The `d` of `vdelay~` is at the clock of its first argument, or one read anywhere (a parameter kind) (§11.4: "`d` は第 1
+// 引数と同じクロックか、暗黙に読めるもの"). A value of a periodic tick is read at another ratio with `at` only (§11.3), so a `d`
+// at a tick of another ratio than its first argument is E0815 at the `d`: slower or faster, by a name or written in place. With
+// `at` to the clock of the first argument, or at the same ratio, or a parameter kind, it is read. One error per flow, so each
+// form is a flow of its own.
+
+// ---------------------------------------------------------------- a `d` at another ratio
+
+pub flow a_slow_d_by_name(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  let a = p at (sample / 4)
+  vdelay~(x, a, 8)                                          //~ E0815
+}
+
+pub flow a_slow_d_in_place(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  vdelay~(x, p at (sample / 4), 8)                          //~ E0815
+}
+
+pub flow a_fast_d_of_a_slow_delay(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  let a = p at (sample / 4)
+  let y = vdelay~(a, x, 8)                                  //~ E0815
+  y at sample
+}
+
+pub flow a_slower_d_of_a_slow_delay(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  let a = p at (sample / 4)
+  let b = p at (sample / 8)
+  let y = vdelay~(a, b, 8)                                  //~ E0815
+  y at sample
+}
+
+pub flow a_slower_d_of_a_sample_delay(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  let b = p at (sample / 8)
+  vdelay~(x, b, 8)                                          //~ E0815
+}
+
+// ---------------------------------------------------------------- a `d` that is read
+
+pub flow a_slow_d_read_at_sample(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  let b = p at (sample / 8)
+  vdelay~(x, b at sample, 8)
+}
+
+pub flow a_d_of_the_same_ratio(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  let a = p at (sample / 4)
+  let b = p at (sample / 4)
+  let y = vdelay~(a, b, 8)
+  y at sample
+}
+
+pub flow a_parameter_kind_d_of_a_slow_delay(p: F32 at block, c: F32 at init, x: F32 at sample) -> F32 at sample {
+  let a = p at (sample / 4)
+  let y = vdelay~(a, p, 8) + vdelay~(a, c, 8) + vdelay~(a, 2.0, 8)
+  y at sample
+}
+
+pub flow a_parameter_kind_d_of_a_sample_delay(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  vdelay~(x, p, 8)
+}

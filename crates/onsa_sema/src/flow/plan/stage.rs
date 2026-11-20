@@ -32,6 +32,15 @@ impl FlowInfo {
         self.read_at.values().flatten().copied()
     }
 
+    /// The first `let` or node (by its place) whose clock is a periodic
+    /// tick of a ratio (`sample / N`, §11.3): the Core lowers no stage of it
+    /// until W7-16, which stops at it (E0200, R-91 (1)).
+    pub fn multirate_at(&self) -> Option<Span> {
+        let lets = self.lets.iter().filter(|l| l.clock.of_ratio()).map(|l| l.span);
+        let nodes = self.nodes.iter().filter(|n| n.clock.of_ratio()).map(|n| n.span);
+        lets.chain(nodes).min_by_key(|s| (s.start, s.end))
+    }
+
     /// The `let`s of the stage `stage`, in their order (§11.4).
     pub fn lets_at(&self, stage: ClockStage) -> impl Iterator<Item = &FlowLet> {
         self.lets.iter().filter(move |l| l.clock.stage() == Some(stage))

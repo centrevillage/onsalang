@@ -64,26 +64,72 @@ impl ClockName {
     }
 }
 
-/// The clock after `at` (§11.3, S-359): a name of the clock namespace, or
-/// E0302 at the name, whatever value or type has that name.
+/// The name of the clock of an event input (§11.11), which this version
+/// does not look up as a clock (E0302 until W7-11): the base of a derived
+/// clock of an expression that is not `sample` (E0815, S-1078).
+const EVENT: &str = "event";
+
+/// The clock after `at` of an expression of a flow body, as the names
+/// stage looked it up (§11.3, S-359, S-1078): a name of the clocks, or a
+/// derived clock `(base / N)`, `(base * N)`, whose N the types stage
+/// evaluates.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ClockRef {
+    Name(ClockName),
+    Derived(Base, ast::RatioOp, ast::ExprId),
+}
+
+/// The base of a derived clock (S-1078): a name of the clocks, or `event`,
+/// looked up by its text until W7-11 puts it in the clock namespace.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Base {
+    Clock(ClockName),
+    Event,
+}
+
+impl Base {
+    /// The name the base is written as.
+    pub fn name(self) -> &'static str {
+        if let Base::Clock(c) = self { c.name() } else { EVENT }
+    }
+}
+
+/// The clock after `at` of an input or the output of a flow (§11.3,
+/// S-359): a name of the clock namespace, or E0302 at the name, whatever
+/// value or type has that name.
 pub(crate) fn resolve_name(c: &ast::Clock) -> Result<ClockName, Diagnostic> {
-    // The derived clocks of a flow (S-1078) come in W7-09: the gate of the
-    // expressions goes in U2r, of the inputs and the output in U4a.
+    // The derived clocks of the inputs and the output of a flow (S-1078)
+    // come in W7-09 U4a.
     if c.ratio.is_some() {
         return Err(onsa_diag::unsupported::Feature::DerivedClockRatios.diagnostic(Stage::Names, c.span, &[]));
     }
-    if let Some(r) = ClockName::of_name(&c.name.name) {
-        return Ok(r);
+    ClockName::of_name(&c.name.name).ok_or_else(|| not_found(c))
+}
+
+/// The clock after `at` of an expression of a flow body (§11.3, S-359,
+/// S-1078): a name of the clock namespace, or a derived clock whose base is
+/// one (`event` too), else E0302 at the name.
+pub(crate) fn resolve_at(c: &ast::Clock) -> Result<ClockRef, Diagnostic> {
+    let name = ClockName::of_name(&c.name.name);
+    let base = name.map(Base::Clock).or_else(|| (c.name.name == EVENT).then_some(Base::Event));
+    match (&c.ratio, base) {
+        (None, _) => name.map(ClockRef::Name).ok_or_else(|| not_found(c)),
+        (Some(r), Some(base)) => Ok(ClockRef::Derived(base, r.op, r.n)),
+        (Some(_), None) => Err(not_found(c)),
     }
+}
+
+/// The E0302 of the name of the clock `c`, which is none (§11.3).
+fn not_found(c: &ast::Clock) -> Diagnostic {
     let names = ClockName::ALL.iter().map(|r| format!("`{}`", r.name())).collect::<Vec<_>>().join(", ");
-    Err(Diagnostic::new(
+    Diagnostic::new(
         Stage::Names,
         Code::E0302,
         c.name.span,
         format!("cannot find the clock `{}`; a clock after `at` is a name of the clocks (§11.3)", c.name.name),
     )
     .with_found(c.name.name.clone())
-    .with_rule(format!("the clocks of this version are {names}")))
+    .with_rule(format!("the clocks of this version are {names}"))
 }
 
 /// The clock of a value of a flow (§11.3). No order: two clocks are compared
@@ -115,6 +161,17 @@ impl Ratio {
     pub fn faster_than_body(self) -> bool {
         self.0 > 0
     }
+
+    /// The ratio of `(sample / n)` (`op` `/`) or `(sample * n)` (`*`), and
+    /// of `.down~(n)` and `.up~(n)` (S-1077): `n` a power of 2 that is 2 or
+    /// more, else none (E0808). The one test of an N (D-15).
+    pub fn of_n(op: ast::RatioOp, n: u32) -> Option<Ratio> {
+        let k = (n >= 2 && n.is_power_of_two()).then(|| n.trailing_zeros() as i32)?;
+        Some(Ratio(match op {
+            ast::RatioOp::Div => -k,
+            ast::RatioOp::Mul => k,
+        }))
+    }
 }
 
 /// The source of an event clock: a provisional form (W7-11 decides it).
@@ -134,11 +191,27 @@ impl ClockStage {
     /// The stage of the `sample` of the body ([`Clock::SAMPLE`]): the one
     /// spelling of it (D-15).
     pub const SAMPLE: ClockStage = ClockStage::Tick(Ratio(0));
+
+    /// The stage as the text of a diagnostic writes it: the name of its
+    /// clock ([`Clock::shown`]), `sample / 4` of a tick.
+    pub fn shown(self, at: Span) -> String {
+        match self {
+            ClockStage::Init => Clock::Init,
+            ClockStage::Block => Clock::Block,
+            ClockStage::Tick(k) => Clock::Tick(k),
+        }
+        .shown(at)
+    }
 }
 
 impl Clock {
     /// The `sample` of the body.
     pub const SAMPLE: Clock = Clock::Tick(Ratio(0));
+
+    /// A periodic tick of a ratio (§11.3): `sample / N`, `sample * N`.
+    pub fn of_ratio(self) -> bool {
+        matches!(self, Clock::Tick(k) if k != Ratio(0))
+    }
 
     /// The stage the values of the clock are evaluated at. `None` of a
     /// constant, `sample_tick()` and a clock in error, whose stage is the
@@ -224,7 +297,13 @@ fn param_rank(c: Clock) -> u8 {
 /// solved) is the unit, and the result of no other operand. The clash holds
 /// indices of `ops`. Linear in the operands.
 pub fn join(ops: &[Option<Clock>]) -> Result<Option<Clock>, Clash> {
-    let given = || ops.iter().enumerate().filter_map(|(i, c)| c.map(|c| (i, c)));
+    join_by(ops, |&c| c)
+}
+
+/// [`join`] of the clocks `clock` gives of the operands `ops`, whose indices
+/// the clash holds.
+pub fn join_by<T>(ops: &[T], clock: impl Fn(&T) -> Option<Clock>) -> Result<Option<Clock>, Clash> {
+    let given = || ops.iter().enumerate().filter_map(|(i, c)| clock(c).map(|c| (i, c)));
     if given().any(|(_, c)| matches!(c, Clock::Event(_))) {
         event_bug("a join");
     }
@@ -288,6 +367,8 @@ pub fn promote(value: Clock, to: Clock) -> Result<Clock, Clash> {
 /// (§11.4, E0813): a tick of the body (`sample`, `sample / N`) and
 /// `sample_tick()` (S-567 K6), not a parameter kind nor the `sample * N` of
 /// the caller. A clock in error holds (no second diagnostic).
+// SPEC-GAP(S-1097): the `sample * N` of the caller is this E0813, with no
+// candidate (provisional).
 pub fn keeps_delay_state(c: Clock) -> bool {
     match c {
         Clock::Tick(k) => !k.faster_than_body(),

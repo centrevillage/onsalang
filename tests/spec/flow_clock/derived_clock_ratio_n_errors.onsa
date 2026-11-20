@@ -1,0 +1,116 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§11.3", "§11.9", "§18.1"]
+
+// The N of `e at (sample / N)` is a constant expression of type `U32` of the places that hold a size (§4.5), the same table as
+// the length of a delay line (S-1077, S-1078, S-969): a value that is not a power of two that is 2 or more is E0808 (`N = 1`
+// and `N = 0` too), a literal of another type, a constant of another type and a prefix `-` are E0401, a literal that `U32`
+// does not hold is E0408, and a name that is not a constant (an input, a `let`, a function) is E0417. The clock of the part in
+// error is an error, so what reads it reports nothing (§18.1). One error per flow, so each form is a flow of its own.
+// The N that needs arithmetic (`K * 2`) waits for W9-03 (derived_clock_const_expressions_w9_03.onsa).
+
+const ONE: U32 = 1
+const THREE: U32 = 3
+const FOUR_I: I32 = 4
+const FOUR_F: F32 = 4.0
+
+pub fn pick(v: U32) -> U32 {
+  v
+}
+
+// ---------------------------------------------------------------- E0808: the value
+
+pub flow n_is_three(p: F32 at block) -> F32 at sample {
+  p at (sample / 3)                                         //~ E0808
+}
+
+pub flow n_is_one(p: F32 at block) -> F32 at sample {
+  p at (sample / 1)                                         //~ E0808
+}
+
+pub flow n_is_zero(p: F32 at block) -> F32 at sample {
+  p at (sample / 0)                                         //~ E0808
+}
+
+pub flow n_is_six_in_a_let(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  let a = p at (sample / 6)                                 //~ E0808
+  x + a
+}
+
+pub flow n_is_a_constant_of_one(p: F32 at block) -> F32 at sample {
+  p at (sample / ONE)                                       //~ E0808
+}
+
+pub flow n_is_a_constant_of_three(p: F32 at block) -> F32 at sample {
+  p at (sample / THREE)                                     //~ E0808
+}
+
+pub flow n_in_a_branch(p: F32 at block, g: Bool at sample, x: F32 at sample) -> F32 at sample {
+  if g { x * (p at (sample / 5)) } else { x }               //~ E0808
+}
+
+pub flow n_in_a_par(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  let ys = par i in 0 ..< 2 { x * (p at (sample / 7)) }     //~ E0808
+  ys[0] + ys[1]
+}
+
+// ---------------------------------------------------------------- E0401: the type
+
+pub flow n_is_negative(p: F32 at block) -> F32 at sample {
+  p at (sample / -4)                                        //~ E0401
+}
+
+pub flow n_is_negative_zero(p: F32 at block) -> F32 at sample {
+  p at (sample / -0)                                        //~ E0401
+}
+
+pub flow n_is_a_float_literal(p: F32 at block) -> F32 at sample {
+  p at (sample / 4.0)                                       //~ E0401
+}
+
+pub flow n_is_a_bool_literal(p: F32 at block) -> F32 at sample {
+  p at (sample / true)                                      //~ E0401
+}
+
+pub flow n_is_a_constant_of_i32(p: F32 at block) -> F32 at sample {
+  p at (sample / FOUR_I)                                    //~ E0401
+}
+
+pub flow n_is_a_constant_of_f32(p: F32 at block) -> F32 at sample {
+  p at (sample / FOUR_F)                                    //~ E0401
+}
+
+// ---------------------------------------------------------------- E0408: a literal that U32 does not hold
+
+pub flow n_is_two_to_the_32(p: F32 at block) -> F32 at sample {
+  p at (sample / 4294967296)                                //~ E0408
+}
+
+pub flow n_is_five_billion(p: F32 at block) -> F32 at sample {
+  p at (sample / 5000000000)                                //~ E0408
+}
+
+pub flow n_is_a_big_literal_in_a_let(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  let a = p at (sample / 99999999999)                       //~ E0408
+  x + a
+}
+
+// ---------------------------------------------------------------- E0417: not a constant expression
+
+pub flow n_is_an_init_input(p: F32 at block, n: U32 at init) -> F32 at sample {
+  p at (sample / n)                                         //~ E0417
+}
+
+pub flow n_is_a_block_input(p: F32 at block, m: U32 at block) -> F32 at sample {
+  p at (sample / m)                                         //~ E0417
+}
+
+pub flow n_is_a_let(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  let k = 4
+  let a = p at (sample / k)                                 //~ E0417
+  x + a
+}
+
+pub flow n_is_a_function(p: F32 at block) -> F32 at sample {
+  p at (sample / pick)                                      //~ E0417
+}

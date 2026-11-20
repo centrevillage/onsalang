@@ -114,9 +114,16 @@ features! {
     /// (S-1160); under a condition decided after `init` it is E0815.
     NonRtCallAtClock: Language, "a call of a function that is not `rt` in an expression at the clock `{}`",
         Some("bind the call with a `let` of its own, which is computed at `init`");
-    /// §11.3, S-1078: `at (sample / N)` and `at (sample * N)` in a flow
-    /// (W7-09: the expressions in U2r, the inputs and the output in U4a).
+    /// §11.3, S-1078: `at (sample / N)` and `at (sample * N)` of the inputs
+    /// and the output of a flow (W7-09 U4a).
     DerivedClockRatios: Language, "the derived clocks `at (sample / N)` and `at (sample * N)`", None;
+    /// §11.3, §11.6, S-1158: `{}`: the clock of the part. The field of a
+    /// computed part or a node of a tick read at a faster stage (W7-09 U2r2).
+    TickFields: Language, "a computed value or a delay at the clock `{}` read at a faster clock",
+        Some("bind it with a `let` and read the name at the faster clock (`let s = a * 2.0` and `s at sample`)");
+    /// §11.3, §11.9: the Core of a flow with a periodic clock of a ratio
+    /// (`sample / N`), which W7-16 lowers.
+    MultirateFlows: Language, "building a flow with the clock `sample / N`", None;
     /// §11.4, S-565: the time since `reset` in ticks (W7-09, R-288).
     SampleTick: Language, "the builtin `sample_tick()` of a flow", None;
     Iteration: Language, "iteration over types other than arrays, `Span`, `Buf` and `Array`", None;

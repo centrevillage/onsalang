@@ -320,3 +320,28 @@ fn an_event_clock_with_a_clock_in_error_is_an_internal_error() {
     assert!(is_internal_error(move || readable_at(Clock::Error, ev)));
     assert!(is_internal_error(move || promote(ev, Clock::Error)));
 }
+
+/// S-1077: the N of a derived clock and of `.down~` / `.up~` is a power of
+/// 2 that is 2 or more; `/` makes the ratio negative, `*` positive.
+#[test]
+fn the_ratio_of_an_n_is_its_power_of_two() {
+    use onsa_syntax::ast::RatioOp::{Div, Mul};
+    assert_eq!(Ratio::of_n(Div, 4), Some(Ratio(-2)));
+    assert_eq!(Ratio::of_n(Mul, 2), Some(Ratio(1)));
+    assert_eq!(Ratio::of_n(Div, 1 << 31), Some(Ratio(-31)));
+    for n in [0, 1, 3, 6, 12, u32::MAX] {
+        assert_eq!((Ratio::of_n(Div, n), Ratio::of_n(Mul, n)), (None, None), "{n}");
+    }
+}
+
+/// The stages are written as their clocks, and a tick of a ratio is not
+/// the `sample` of the body.
+#[test]
+fn a_stage_is_shown_as_its_clock() {
+    let at = Span::new(FileId(0), 0, 0);
+    let shown =
+        [ClockStage::Init, ClockStage::Block, ClockStage::SAMPLE, ClockStage::Tick(Ratio(-2))].map(|s| s.shown(at));
+    assert_eq!(shown, ["init", "block", "sample", "sample / 4"]);
+    assert!(tick(-2).of_ratio() && tick(1).of_ratio());
+    assert!(![S, Clock::Block, Clock::Const, Clock::Error, Clock::Ambient].iter().any(|c| c.of_ratio()));
+}

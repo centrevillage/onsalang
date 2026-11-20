@@ -55,6 +55,7 @@
 
 [allow."crates/onsa_sema/src/clock.rs"]
 "block" = 1
+"event" = 1
 "init" = 1
 "sample" = 1
 

@@ -381,6 +381,9 @@ fn lower_flow<'b>(lw: &mut Lowerer<'b>, flow: DefId, fd: FlowDef, span: Span) ->
     if !info.complete {
         return Err(internal(span, "flow body has errors"));
     }
+    if let Some(at) = info.multirate_at() {
+        return Err(unsupported(at, Feature::MultirateFlows, &[]));
+    }
     let need = |f: FlowFn| generated_fn(a, &fd, f).ok_or_else(|| internal(span, format!("flow without {f:?}")));
     let state_ty = lw.flow_ty(flow, FlowTy::State, span)?;
     let config_ty = lw.flow_ty(flow, FlowTy::Config, span)?;

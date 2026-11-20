@@ -95,7 +95,7 @@ use onsa_syntax::ast::{Arg, CallKind, ExprId, ExprKind, Ident, PatId, PatKind, R
 use serde::{Deserialize, Serialize};
 
 use crate::body::{BodyInfo, Checker, Frame, LocalId, R, Target};
-use crate::clock::{Clock, ClockName, ClockStage};
+use crate::clock::{Clock, ClockStage};
 use crate::consteval::{self, ConstValue};
 use crate::def::FlowInput;
 use crate::ty::{FloatKind, Len, Ty, TyId};
@@ -316,6 +316,9 @@ pub(crate) struct FlowCx {
     /// instances, the end of its range), §11.5.
     pars: HashMap<ExprId, (LocalId, u32, u32, RangeEnd)>,
     sample_rate_calls: Vec<ExprId>,
+    /// The clock of each `e at k` (§11.3), the N of a derived clock
+    /// evaluated: what the walk of the clocks reads.
+    at_clocks: HashMap<ExprId, Clock>,
     output: Option<ExprId>,
     /// The first error of the flow stage the check of the types found
     /// (§18.1): held, not reported, while the types are checked on, since a

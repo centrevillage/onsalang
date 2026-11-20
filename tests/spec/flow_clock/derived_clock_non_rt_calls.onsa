@@ -1,0 +1,65 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§11.5", "§18.1"]
+
+// A call of a function that is not `rt` is evaluated at `init` (§11.5), so an argument that is a value of a tick (a value of
+// `sample / N`, faster than `init`) is E0815, and the call cannot be in a position that a condition of a tick chooses (§11.3, §11.5:
+// "その位置を選ぶ条件のどれかが `init` より速い段で決まる条件の位置には書けない"). A call of an `rt` function takes the clock of its
+// arguments, and a condition that `init` decides allows the call. One error per flow. The name of the stage in the text of the
+// error is not fixed by the spec.
+
+pub fn make(v: F32) -> F32 {
+  v * 0.5
+}
+
+pub rt fn keep(v: F32) -> F32 {
+  v
+}
+
+pub flow a_tick_argument(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  let a = p at (sample / 4)
+  let m = make(a)                                           //~ E0815
+  x
+}
+
+pub flow a_tick_argument_of_a_delay(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  let a = p at (sample / 4)
+  let m = make(prev~(a))                                    //~ E0815
+  x
+}
+
+pub flow a_tick_argument_read_at_a_faster_tick(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  let a = p at (sample / 4)
+  let m = make(a at (sample / 2))                           //~ E0815
+  x
+}
+
+pub flow in_a_branch_that_a_tick_chooses(p: F32 at block, q: F32 at init) -> F32 at sample {
+  let a = p at (sample / 4)
+  let r = if a > 0.0 { make(q) * a } else { a }             //~ E0815
+  r at sample
+}
+
+pub flow right_of_an_and_with_a_tick_on_the_left(p: F32 at block, q: F32 at init) -> F32 at sample {
+  let a = p at (sample / 4)
+  let r = if a > 0.0 && make(q) > a { 1.0 } else { 0.0 }    //~ E0815
+  r at sample
+}
+
+pub flow in_an_arm_that_a_tick_chooses(p: F32 at block, q: F32 at init, n: U32 at block) -> F32 at sample {
+  let a = p at (sample / 4)
+  let k = n at (sample / 4)
+  let r = match k { 0 => make(q) * a, _ => a }              //~ E0815
+  r at sample
+}
+
+// The calls that are accepted: an `rt` function with a tick, a call at `init` outside a position that a tick chooses, a call in
+// a branch that `init` decides, and an `rt` function in a branch that a tick chooses.
+pub flow accepted_calls(p: F32 at block, q: F32 at init) -> F32 at sample {
+  let a = p at (sample / 4)
+  let h = keep(a)
+  let m = make(q)
+  let r = if q > 0.0 { make(q) * a } else { a }
+  let s = if a > 0.0 { keep(q) * a } else { a }
+  (h at sample) + m + (r at sample) + (s at sample)
+}

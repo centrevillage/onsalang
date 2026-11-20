@@ -65,6 +65,11 @@ impl NodeBuilder {
         NodeBuilder { nodes: Vec::new(), owners: Vec::new(), namer, readers, edges, seen, arms: Vec::new() }
     }
 
+    /// [`names::Namer::apart`].
+    pub(super) fn apart(&mut self, init: ExprId) {
+        self.namer.apart(init);
+    }
+
     /// The `par~`s around the place walked now, the outermost first.
     pub(super) fn pars(&self) -> Vec<NodeId> {
         self.owners.iter().filter_map(|o| if let Owner::Par(p) = o { Some(*p) } else { None }).collect()

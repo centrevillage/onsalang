@@ -918,21 +918,14 @@ note = "内の `if` に `~` を足す候補の後に、外の E0811 の前の `l
 
 [[pending]]
 kind = "test-case"
-target = "tests/spec/flow_clock/derived_clock_expressions.onsa"
-reasons = ["S-1078"]
-until = "W7-09"
-note = "式の導くクロック `p at (sample / N)` は U1 の後も名前の段の仮の門 E0200（DerivedClockRatios）で止まる。U2r で門を外す"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/packages/derived_clock_names_modules"
-reasons = ["S-1078"]
-until = "W7-09"
-note = "式の導くクロックの N が他のモジュールの定数（`at (sample / cfg.N)`）。U1 の後も名前の段の仮の門 E0200（DerivedClockRatios）で止まる。U2r で門を外す"
-
-[[pending]]
-kind = "test-case"
 target = "tests/spec/flow_clock/derived_clock_declarations.onsa"
 reasons = ["S-1078"]
 until = "W7-09"
 note = "入出力の宣言の導くクロック `at (sample / N)`・`at (sample * N)` は U1 の後も名前の段の仮の門 E0200（DerivedClockRatios）で止まる。U4a で門を外す"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/flow_clock/derived_clock_const_expressions_w9_03.onsa"
+reasons = ["S-1077"]
+until = "W9-03"
+note = "導くクロックの N の算術（`(sample / (K * 2))`）。N の値は W9-03 まで E0200（FlowConstExprs）"

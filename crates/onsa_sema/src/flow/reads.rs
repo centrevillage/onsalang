@@ -299,6 +299,11 @@ impl Marker<'_> {
                 return self.konst_parts(e, at, g);
             }
             Place::Here => at,
+            Place::Gate(s) => {
+                let span = self.ast.expr(e).span;
+                let d = Feature::TickFields.diagnostic(Stage::Flow, span, &[&s.shown(span)]);
+                return Diagnostic::keep_first(&mut self.out.diag, d.with_found(span.text_in(self.text)));
+            }
         };
         let ast = self.ast;
         let expr = ast.expr(e);
@@ -500,14 +505,9 @@ impl Marker<'_> {
             );
             Diagnostic::new(Stage::Flow, Code::E0815, span, msg)
         } else {
-            let stage = match at {
-                ClockStage::Block => ClockName::Block.name(),
-                ClockStage::SAMPLE => ClockName::Sample.name(),
-                s => onsa_diag::internal::bug(Some(span), format!("a read at the stage {s:?}, which W7-09 makes")),
-            };
             // SPEC-GAP(S-1160): one whose result is not Copy is not hoisted,
             // and is E0200 (§11.3, §11.5).
-            Feature::NonRtCallAtClock.diagnostic(Stage::Flow, span, &[stage])
+            Feature::NonRtCallAtClock.diagnostic(Stage::Flow, span, &[&at.shown(span)])
         };
         Diagnostic::keep_first(&mut self.out.diag, d.with_found(found));
     }

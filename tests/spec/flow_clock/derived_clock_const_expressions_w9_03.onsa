@@ -1,0 +1,34 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§11.3", "§18.1"]
+
+// The N of a derived clock is a constant expression (§4.5, S-1077, S-1078), so it may be an arithmetic expression of constants
+// (`(sample / (K * 2))`): the value is the ratio (`K * 2` is 8, the same clock as `(sample / 8)`), and it is checked as the N of
+// a literal is (E0808 for a value that is not a power of two that is 2 or more). This version does not compute the value of a
+// constant expression of a flow (E0200, `FlowConstExprs`, W9-03: flow_delay_const_expression_w9_03.onsa), so the cases wait
+// for it. One error per flow.
+
+const K: U32 = 4
+const TWO: U32 = 2
+
+pub flow ratio_by_a_product(p: F32 at block, q: F32 at init, x: F32 at sample) -> F32 at sample {
+  let a = p at (sample / (K * 2))
+  let b = q at (sample / 8)
+  let s = a + b
+  x * (s at sample)
+}
+
+pub flow ratio_by_a_sum_of_constants(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  let a = p at (sample / (K + TWO + TWO))
+  let b = p at (sample / 8)
+  let s = a + b
+  x * (s at sample)
+}
+
+pub flow ratio_by_a_product_is_not_a_power_of_two(p: F32 at block) -> F32 at sample {
+  p at (sample / (K * TWO + TWO))                           //~ E0808
+}
+
+pub flow ratio_by_a_difference_is_one(p: F32 at block) -> F32 at sample {
+  p at (sample / (K - 3))                                   //~ E0808
+}

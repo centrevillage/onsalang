@@ -343,7 +343,8 @@ const PARTS: [&str; 8] = ["sample", "K", "4", "(K * 2)", "-4", "/", "*", "+"];
 #[test]
 fn a_derived_clock_reads_by_the_model_of_its_parts() {
     // The model of S-1078: a name, `/` or `*`, one operand N. The first part that is a name is a base the syntax reads
-    // (the names stage looks it up); the operand is any part but an operator.
+    // (the names stage looks it up); the operand is any part but an operator. Where the model reads a form, a place
+    // with a code stops at that code, and an expression (no gate since W7-09 U2r1) has only errors of later stages.
     let model = |s: &[&str]| {
         s.len() == 3
             && ["sample", "K"].contains(&s[0])
@@ -351,9 +352,9 @@ fn a_derived_clock_reads_by_the_model_of_its_parts() {
             && !["/", "*", "+"].contains(&s[2])
     };
     let places = [
-        ("an input", "pub flow f(x: F32 at ({})) -> F32 at sample {\n  x\n}\n", "E0200"),
-        ("an expression", "pub flow f(x: F32 at block) -> F32 at sample {\n  let y = x at ({})\n  y\n}\n", "E0200"),
-        ("an input of fn", "pub fn g(x: F32 at ({})) -> F32 {\n  x\n}\n", "E0821"),
+        ("an input", "pub flow f(x: F32 at ({})) -> F32 at sample {\n  x\n}\n", Some("E0200")),
+        ("an expression", "pub flow f(x: F32 at block) -> F32 at sample {\n  let y = x at ({})\n  y\n}\n", None),
+        ("an input of fn", "pub fn g(x: F32 at ({})) -> F32 {\n  x\n}\n", Some("E0821")),
     ];
     // Every sequence of 3 parts, and of 4 by a fixed stride (the model has none of them read), in each place.
     let mut seqs: Vec<Vec<&str>> = Vec::new();
@@ -371,10 +372,17 @@ fn a_derived_clock_reads_by_the_model_of_its_parts() {
                 continue;
             }
             let text = format!("const K: U32 = 4\n\n{}", frame.replacen("{}", &seq.join(" "), 1));
-            let codes: Vec<String> = diags(&text).iter().map(|d| code_of(d).to_string()).collect();
-            let want = if model(seq) { gate } else { "E0002" };
+            let found = diags(&text);
+            let codes: Vec<String> = found.iter().map(|d| code_of(d).to_string()).collect();
             read += usize::from(model(seq));
-            if codes != [want] {
+            let (fits, want) = match (model(seq), gate) {
+                (true, Some(gate)) => (codes == [gate], gate),
+                (true, None) => {
+                    (found.iter().all(|d| later(d) || code_of(d) == "E0200"), "no error of the syntax stage")
+                }
+                (false, _) => (codes == ["E0002"], "E0002"),
+            };
+            if !fits {
                 problems.push(format!("{place}, `{}`: {codes:?}, the model says {want}", seq.join(" ")));
             }
         }

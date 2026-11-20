@@ -101,6 +101,13 @@ impl Namer {
         Namer { numbers: HashMap::default(), scopes, whole }
     }
 
+    /// The node `init`, the whole value of a `let` of a tick of a ratio, is
+    /// named in its scope (`d.prev_0`), apart from the field of the value of
+    /// the `let` (S-1139 (a)).
+    pub(in crate::flow) fn apart(&mut self, init: ExprId) {
+        self.whole.remove(&init);
+    }
+
     /// Whether the node `e` is the whole value of a `let` of a single name
     /// and takes its name (S-148): the one place of the judgement.
     pub(in crate::flow) fn whole(&self, e: ExprId) -> bool {

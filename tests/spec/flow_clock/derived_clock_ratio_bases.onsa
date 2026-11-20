@@ -1,0 +1,35 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§18.1"]
+
+// The base of `e at (base / N)` is looked up in the namespace of the clocks (S-359, S-1078): a name that is not there is E0302,
+// whatever a value or a type of that name is. A base that is not `sample` (`block`, `init`, `event`) is E0815 in an expression
+// (E0810 in a declaration, which is U4a). One error per flow.
+
+pub flow base_is_block(p: F32 at block) -> F32 at sample {
+  p at (block / 2)                                          //~ E0815
+}
+
+pub flow base_is_init(q: F32 at init) -> F32 at sample {
+  q at (init / 2)                                           //~ E0815
+}
+
+pub flow base_is_event(q: F32 at init) -> F32 at sample {
+  q at (event / 2)                                          //~ E0815
+}
+
+pub flow base_is_block_with_a_product(p: F32 at block) -> F32 at sample {
+  p at (block * 2)                                          //~ E0815
+}
+
+pub flow base_is_not_found(p: F32 at block) -> F32 at sample {
+  p at (nope / 2)                                           //~ E0302
+}
+
+pub flow base_is_an_input_name(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  p at (x / 2)                                              //~ E0302
+}
+
+pub flow base_is_a_type_name(p: F32 at block) -> F32 at sample {
+  p at (F32 / 2)                                            //~ E0302
+}

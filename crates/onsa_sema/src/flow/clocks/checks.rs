@@ -195,6 +195,27 @@ impl Walk<'_> {
         }
     }
 
+    /// The E0815 at `e` of two operands whose clocks do not meet (§11.3,
+    /// M-7), with a note at the expression of each. `looped`: they enter one
+    /// loop of `let`s, which has one clock, and `e` is the initializer of the
+    /// `let` that the second enters.
+    // SPEC-GAP(S-1198): the E0815 of a loop of `let`s is one, at the
+    // initializer of the `let` that the second operand enters (provisional).
+    // SPEC-GAP(S-1083): `sample * N` of the caller with another operand is
+    // this E0815 (provisional).
+    pub(super) fn report_clash(&mut self, e: ExprId, ops: Clashed, looped: bool) {
+        let span = self.ast.expr(e).span;
+        let [a, b] = ops.map(|(_, c)| c.shown(span));
+        let what = if looped { "operands that enter a loop of `let`s, which has one clock," } else { "operands" };
+        let msg = format!("the {what} are at the clocks `{a}` and `{b}`, which do not meet (§11.3, §11.9)");
+        let mut d = Diagnostic::new(Stage::Flow, Code::E0815, span, msg).with_found(self.src(span));
+        for (x, c) in ops.iter().filter_map(|&(x, c)| Some((x?, c))) {
+            d = d.with_note(self.ast.expr(x).span, format!("this operand is at `{}`", c.shown(span)));
+        }
+        let rule = "a slower value is read at a faster clock with `at` (`a at sample`), and a value at `sample * N` meets no other for now (§11.3, §11.9)";
+        self.report(d.with_rule(rule));
+    }
+
     /// The `if~` / `match~` (`of` and its `~` `tilde`) whose branches or
     /// arm bodies are `bodies` and whose first condition or scrutinee is
     /// `next` (§11.5, S-1177): E0812 at its `~` (S-392) when no body holds
@@ -347,7 +368,7 @@ impl Walk<'_> {
         e: ExprId,
         def: DefId,
         receiver: bool,
-        ops: &[Option<Clock>],
+        ops: &[Op],
         r: Option<Clock>,
     ) -> bool {
         let Some(f) = self.a.def(def).as_fn().filter(|_| self.checking()) else { return true };
@@ -366,16 +387,16 @@ impl Walk<'_> {
         if f.rt || r == Some(Clock::Error) {
             return true;
         }
-        let fast = |c: &Option<Clock>| readable_at(c.unwrap_or(Clock::Const), Clock::Init).is_err();
+        let fast = |o: &Op| readable_at(o.1.unwrap_or(Clock::Const), Clock::Init).is_err();
         let Some(k) = ops.iter().position(fast) else {
-            self.non_rt.insert(e, ops.iter().any(|c| c.is_some_and(|c| c != Clock::Const)));
+            self.non_rt.insert(e, ops.iter().any(|o| o.1.is_some_and(|c| c != Clock::Const)));
             return true;
         };
         let place = match k.checked_sub(usize::from(receiver)) {
             None => "its receiver".to_string(),
             Some(k) => format!("its argument {}", k + 1),
         };
-        let shown = ops[k].unwrap_or(Clock::Const).shown(span);
+        let shown = ops[k].1.unwrap_or(Clock::Const).shown(span);
         let msg = format!(
             "`{name}` is not `rt` and takes values at the clock `init` or constants only, but {place} is at `{shown}`; mark it `rt` or pass values at `init` (§11.5)"
         );
@@ -394,6 +415,35 @@ impl Walk<'_> {
         let msg = format!(
             "this argument is at the clock `{shown}` but the input `{}` of `{name}` is at `{to}`; a value is never made slower (§11.3)",
             input.name
+        );
+        self.err(Code::E0815, span, msg);
+    }
+
+    /// The output `out` at the clock `c`, read at `at`, the clock of the
+    /// output of the flow (§11.3: a value is never made slower, E0815).
+    pub(super) fn check_out(&mut self, out: ExprId, c: Clock, at: Clock) {
+        if readable_at(c, at).is_ok() {
+            return;
+        }
+        let span = self.ast.expr(out).span;
+        let (shown, to) = (c.shown(span), at.shown(span));
+        let msg = format!(
+            "the output is at the clock `{shown}` but the flow outputs at `{to}`; read it at `{to}` with `at` (§11.3)"
+        );
+        self.err(Code::E0815, span, msg);
+    }
+
+    /// The argument `d` of a `vdelay~`, at the clock `c`, read at `at`, the
+    /// clock of the delay: its first argument's, or a parameter kind (§11.4;
+    /// a tick of another ratio is read with `at`, §11.3, E0815).
+    pub(super) fn check_d(&mut self, d: ExprId, c: Clock, at: Clock) {
+        if !self.checking() || readable_at(c, at).is_ok() {
+            return;
+        }
+        let span = self.ast.expr(d).span;
+        let (shown, to) = (c.shown(span), at.shown(span));
+        let msg = format!(
+            "the `d` of `vdelay~` is at the clock `{shown}` but the delay is at `{to}`; read it at `{to}` with `at` (§11.3, §11.4)"
         );
         self.err(Code::E0815, span, msg);
     }
@@ -421,6 +471,10 @@ impl Walk<'_> {
         };
         let src = self.src(span);
         let mut diag = Diagnostic::new(Stage::Flow, Code::E0813, span, msg).with_found(src.clone());
+        if !matches!(c, Clock::Tick(_)) {
+            let rule = "a delay counts the ticks of its first argument: `at sample` delays per sample, `at (sample / N)` per tick of a slower clock (`prev~(p at (sample / 32))`, §11.4)";
+            diag = diag.with_rule(rule);
+        }
         let inside = self.diag.as_ref().is_some_and(|d| span.start <= d.span.start && d.span.end <= span.end);
         // SPEC-GAP(S-1165): `^b` (past parentheses and `at`) has no candidate:
         // the error it would leave may be in the `let` of `b`, walked later.

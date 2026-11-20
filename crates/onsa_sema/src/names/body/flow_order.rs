@@ -245,12 +245,14 @@ impl Walker<'_> {
     }
 
     /// The clock of `e at k` of a flow body (§11.3): its name, of the
-    /// namespace of the clocks (E0302 at it), recorded for the types stage
-    /// and the analysis of the clocks.
+    /// namespace of the clocks (E0302 at it), recorded for the types stage;
+    /// the N of a derived clock walked as a constant expression (§4.5,
+    /// S-1077).
     pub(super) fn clock(&mut self, e: ExprId, clock: &Clock) -> W {
-        match crate::clock::resolve_name(clock) {
-            Ok(name) => Ok(_ = self.out.clocks.insert(e, name)),
-            Err(d) => Err(self.fail(Fail::Report(d))),
+        match crate::clock::resolve_at(clock) {
+            Ok(r) => _ = self.out.clocks.insert(e, r),
+            Err(d) => return Err(self.fail(Fail::Report(d))),
         }
+        clock.ratio.as_ref().map_or(Ok(()), |r| self.const_expr(r.n))
     }
 }

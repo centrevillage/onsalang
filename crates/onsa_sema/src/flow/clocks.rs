@@ -224,7 +224,19 @@ pub(super) struct Walk<'a> {
     tilde: BTreeMap<ExprId, TildeMatch>,
     store: HashSet<LocalId>,
     first: u32,
+    /// Stage 1: the first clash of the `let` walked ([`Walk::join`]).
+    clash: Option<Clashed>,
+    /// The clash of a loop by the `let` it is reported at (S-1198).
+    loop_clash: Vec<Option<Clashed>>,
 }
+
+/// An operand of a join: its expression (none of the `init` that the index
+/// of a `par~` and a call of constants add) and its clock.
+type Op = (Option<ExprId>, Option<Clock>);
+
+/// Two operands whose clocks do not meet (E0815, M-7), each with its
+/// expression and its clock, the one the join held first.
+pub(super) type Clashed = [(Option<ExprId>, Clock); 2];
 
 /// Runs the two stages over the body of the flow `id` of the module of
 /// `ast` and `text`; `error` is the error type.
@@ -277,11 +289,19 @@ pub(super) fn walk(
         tilde: BTreeMap::new(),
         store: HashSet::default(),
         first: 0,
+        clash: None,
+        loop_clash: vec![None; n],
     };
     for (l, input) in cx.inputs.iter().zip(&decl.inputs) {
         w.out.locals.insert(*l, input.api_clock());
     }
     w.solve();
+    // S-1139 (a): of the clocks of stage 1, before the nodes are named.
+    for (p, c) in cx.pending.iter().zip(&w.lets) {
+        if c.is_some_and(Clock::of_ratio) {
+            w.recorder.apart(ast.without_parens(p.init));
+        }
+    }
     w.check();
     let solved = |c: Option<Clock>| c.unwrap_or_else(|| onsa_diag::internal::bug(span, "a `let` left unsolved"));
     let (recorded, edges) = w.recorder.finish();
@@ -318,9 +338,24 @@ impl Walk<'_> {
                 (self.looped[k], self.solving[k]) = (scc.looped, scc.looped);
             }
             self.in_loop = scc.looped;
-            let ops: Vec<Option<Clock>> = scc.lets.iter().map(|&k| self.expr(self.cx.pending[k].init)).collect();
+            // The first clash in a loop, in the order of its `let`s, then of
+            // their clocks: of the `let` the second operand enters (S-1198).
+            let mut clashed = None;
+            let mut ops: Vec<Op> = Vec::with_capacity(scc.lets.len());
+            for &k in &scc.lets {
+                self.clash = None;
+                let init = self.cx.pending[k].init;
+                ops.push((Some(init), self.expr(init)));
+                clashed = clashed.or(self.clash.map(|x| (k, x)));
+            }
             let first = self.cx.pending[scc.lets[0]].init;
-            let c = if scc.looped { loop_clock(self.join(first, &ops)) } else { ops[0].unwrap_or(Clock::Const) };
+            self.clash = None;
+            let c = if scc.looped { loop_clock(self.join(first, &ops)) } else { ops[0].1.unwrap_or(Clock::Const) };
+            let second = |x: &Clashed| scc.lets.iter().copied().find(|&k| Some(self.cx.pending[k].init) == x[1].0);
+            clashed = clashed.or(self.clash.and_then(|x| Some((second(&x)?, x))));
+            if let Some((k, x)) = clashed.filter(|_| scc.looped) {
+                self.loop_clash[k] = Some(x);
+            }
             for &k in &scc.lets {
                 (self.lets[k], self.solving[k]) = (Some(c), false);
             }
@@ -341,13 +376,18 @@ impl Walk<'_> {
             for &l in &p.locals {
                 self.out.locals.insert(l, c);
             }
+            if let Some(x) = self.loop_clash[k] {
+                self.report_clash(p.init, x, true);
+            }
             self.check_let(p);
         }
         if let Some(out) = self.cx.output {
             self.recorder.owner(Owner::Output);
             self.stmt = Some(Stmt { root: out, start: self.ast.expr(out).span.start });
             self.in_loop = false;
-            self.expr(out);
+            if let (Some(c), Some(f)) = (self.expr(out), self.a.def(self.def).as_flow()) {
+                self.check_out(out, c, f.out_clock);
+            }
         }
     }
 
@@ -398,21 +438,28 @@ impl Walk<'_> {
         lift::lift(&body, e, kind, self.stmt?)
     }
 
-    /// The join of the clocks of operands of `e` (a constant of none). A
-    /// clash is no error of W7-02, whose ticks are all the `sample` of the
-    /// body: W7-09 reports it (E0815).
-    fn join(&self, e: ExprId, ops: &[Option<Clock>]) -> Option<Clock> {
+    /// The join of the clocks of the operands `ops` of `e` (a constant of
+    /// none). A clash (M-7) is in error (S-1133): at `Check` the E0815 at `e`
+    /// ([`Self::report_clash`]); in stage 1 the first of the `let` walked is
+    /// kept for its loop ([`Self::solve`]).
+    fn join(&mut self, e: ExprId, ops: &[Op]) -> Option<Clock> {
         if ops.is_empty() {
             return Some(Clock::Const);
         }
-        clock::join(ops).unwrap_or_else(|c| {
-            let msg = format!("the clocks of the operands {:?} and {:?} clash, which W7-09 reports", c.first, c.second);
-            onsa_diag::internal::bug(self.span(e), msg)
-        })
+        let x = match clock::join_by(ops, |o| o.1) {
+            Ok(c) => return c,
+            Err(x) => [x.first, x.second].map(|(i, c)| (ops[i].0, c)),
+        };
+        if self.checking() {
+            self.report_clash(e, x, false);
+        } else {
+            self.clash.get_or_insert(x);
+        }
+        Some(Clock::Error)
     }
 
     fn join_of(&mut self, e: ExprId, es: impl IntoIterator<Item = ExprId>) -> Option<Clock> {
-        let ops: Vec<Option<Clock>> = es.into_iter().map(|x| self.expr(x)).collect();
+        let ops: Vec<Op> = es.into_iter().map(|x| (Some(x), self.expr(x))).collect();
         self.join(e, &ops)
     }
 
@@ -440,11 +487,11 @@ impl Walk<'_> {
             | ExprKind::Repeat { elem: x, .. } => self.expr(*x),
             ExprKind::At { expr, .. } => {
                 let c = self.cut(*expr);
-                let Some(k) = self.names.clocks.get(&e) else {
-                    onsa_diag::internal::bug(self.span(e), "an `at` whose clock the names stage did not record")
+                let Some(&k) = self.cx.at_clocks.get(&e) else {
+                    onsa_diag::internal::bug(self.span(e), "an `at` whose clock the check did not record")
                 };
-                self.check_at(e, c, k.clock());
-                Some(k.clock())
+                self.check_at(e, c, k);
+                Some(k)
             }
             ExprKind::Tuple(es) | ExprKind::Array(es) => self.join_of(e, es.iter().copied()),
             ExprKind::Struct { fields, .. } => self.join_of(e, fields.iter().map(|(_, x)| *x)),
@@ -460,7 +507,7 @@ impl Walk<'_> {
                     BinOp::And | BinOp::Or => self.at(Site::Right, |w| w.expr(*rhs)),
                     _ => self.expr(*rhs),
                 };
-                self.join(e, &[l, r])
+                self.join(e, &[(Some(*lhs), l), (Some(*rhs), r)])
             }
             ExprKind::Index { base, index } => self.join_of(e, [*base, *index]),
             ExprKind::Par { tilde, body, .. } => self.par(e, *tilde, *body),
@@ -532,16 +579,18 @@ impl Walk<'_> {
             None => w.at(Site::Branch { head: e }, |w| w.expr(x)),
             Some(_) => w.expr(x),
         };
-        let mut ops = Vec::with_capacity(2 * chain.links.len() + 1);
+        let mut ops: Vec<Op> = Vec::with_capacity(2 * chain.links.len() + 1);
         for (k, l) in chain.links.iter().enumerate() {
-            ops.push(if k == 0 { self.expr(l.cond) } else { self.at(Site::Choose, |w| w.expr(l.cond)) });
-            ops.push(branch(self, l.then));
+            let c = if k == 0 { self.expr(l.cond) } else { self.at(Site::Choose, |w| w.expr(l.cond)) };
+            ops.push((Some(l.cond), c));
+            ops.push((Some(l.then), branch(self, l.then)));
         }
-        let last = chain.last.map(|x| branch(self, x));
-        let mut c = last.flatten();
+        let last = chain.last.map(|x| (Some(x), branch(self, x)));
+        let (mut c, mut rest) = (last.and_then(|o| o.1), chain.last);
         let later = if self.checking() { chain.links.len() } else { 1 };
         for (k, l) in chain.links.iter().enumerate().take(later).skip(1).rev() {
-            c = self.join(l.at, &[c, ops[2 * k], ops[2 * k + 1]]);
+            c = self.join(l.at, &[(rest, c), ops[2 * k], ops[2 * k + 1]]);
+            rest = Some(l.at);
             self.out.exprs.insert(l.at, c.unwrap_or(Clock::Const));
         }
         ops.extend(last);
@@ -562,13 +611,13 @@ impl Walk<'_> {
             self.check_tilde(t, Branching::Match, arms.iter().map(|a| a.body), scrutinee);
         }
         let s = self.expr(scrutinee);
-        let (mut ops, mut chosen, mut bound) = (vec![s], s, Vec::new());
+        let (mut ops, mut chosen, mut bound) = (vec![(Some(scrutinee), s)], s, Vec::new());
         for (k, arm) in arms.iter().enumerate() {
             self.bind_pat(arm.pat, s);
             if let Some(g) = arm.guard {
-                let g = self.at(Site::Choose, |w| w.expr(g));
-                chosen = self.join(e, &[chosen, g]);
-                ops.push(g);
+                let c = self.at(Site::Choose, |w| w.expr(g));
+                chosen = self.join(e, &[(Some(scrutinee), chosen), (Some(g), c)]);
+                ops.push((Some(g), c));
             }
             let body = match tilde {
                 None => self.at(Site::Branch { head: e }, |w| w.expr(arm.body)),
@@ -585,7 +634,7 @@ impl Walk<'_> {
                     c
                 }
             };
-            ops.push(body);
+            ops.push((Some(arm.body), body));
         }
         if record {
             self.tilde.insert(e, TildeMatch { arms: bound, pars: self.recorder.pars() });
@@ -617,7 +666,7 @@ impl Walk<'_> {
             self.recorder.leave_par(e, span);
             self.check_par(e);
         }
-        self.join(e, &[b, Some(Clock::Init)])
+        self.join(e, &[(Some(body), b), (None, Some(Clock::Init))])
     }
 
     fn bind_pat(&mut self, p: PatId, c: Option<Clock>) {
@@ -647,8 +696,8 @@ impl Walk<'_> {
         let target = self.body.targets.get(&e);
         let receiver = crate::names::body::receiver(self.ast, callee)
             .filter(|b| self.body.expr_types.contains_key(b) && !matches!(target, Some(Target::Fn { .. })));
-        let ops: Vec<Option<Clock>> =
-            receiver.into_iter().chain(args.iter().map(|x| x.expr)).map(|x| self.expr(x)).collect();
+        let ops: Vec<Op> =
+            receiver.into_iter().chain(args.iter().map(|x| x.expr)).map(|x| (Some(x), self.expr(x))).collect();
         let r = self.join(e, &ops);
         if let Some(Target::Fn { def, .. } | Target::Method { def, .. }) = target
             && (self.signature_failed(*def) || !self.check_fn_call(e, *def, receiver.is_some(), &ops, r))
@@ -660,7 +709,7 @@ impl Walk<'_> {
             Some(Target::Value) => onsa_diag::internal::bug(self.span(e), "a call of a function value in a flow body"),
             // Provisional (W9-03 takes it off, §11.3 "定数のクロックの式"): a
             // call of constants alone is at `init` until they are evaluated.
-            _ => self.join(e, &[r, Some(Clock::Init)]),
+            _ => self.join(e, &[(None, r), (None, Some(Clock::Init))]),
         }
     }
 
@@ -738,16 +787,18 @@ impl Walk<'_> {
             self.recorder.lookback(false);
         }
         let held = c.filter(|_| self.checking()).is_none_or(|c| self.check_first(delay, first, c));
-        if let Some(d) = d {
-            self.cut(d);
+        let out = if held { delay_out(c, self.in_loop) } else { Some(Clock::Error) };
+        let at = out.unwrap_or(Clock::Const);
+        if let Some(d) = d
+            && let Some(c) = self.cut(d)
+        {
+            self.check_d(d, c, at);
         }
         if let Some(i) = init
             && let Some(c) = self.cut(i)
         {
             self.check_init(delay, i, c);
         }
-        let out = if held { delay_out(c, self.in_loop) } else { Some(Clock::Error) };
-        let at = out.unwrap_or(Clock::Const);
         let reads = [Some(first), d].into_iter().flatten().map(|x| ArgRead { expr: x, at });
         let init = init.map(|i| ArgRead { expr: i, at: Clock::Init });
         (out, reads.chain(init).collect())
