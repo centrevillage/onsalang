@@ -1,0 +1,136 @@
+// onsa.toml
+// [test]
+// spec = ["§2.6", "§11.5", "§11.3", "§18.1"]
+// fixes = 1
+
+// W7-06 U3a/t, S-394 (a)+X1, S-1094 (1), S-1172 (§11.5: "枝と、`match` / `match~` のガードと `if~` の連鎖の二つ目からの条件（選ぶ側で、取られる腕か真になる条件までしか
+// 評価しない）には、状態を持つもの（インスタンス、組込みの遅延、`par~`）を書けない（E0811 … ）。`if` の条件と `if~` の連鎖の最初の条件、`match` の対象は常に評価されるので書ける";
+// "選ぶ側（`match~` の対象とパターンとガード）は普通の `match` と同じく上から評価し、取られた腕で止める"): the guards of a `match~` are the side that selects, evaluated from the
+// top until an arm is taken, so a thing with state in one (an instance, a built-in delay, a `par~`) is E0811 although the arm bodies of the `match~` are evaluated every
+// sample. The one candidate is the lift into a `let` before the statement (S-1172, §11.5): the candidate that would write `~` is not offered, as the `match~` is there
+// already and the guard stays a place that is not evaluated every sample (`fixes = 1` is the most candidates that any error of this file has; the runner's default says
+// that the lift is clean). Every `match~` here holds a thing with state in an arm body (it is no E0812). The scrutinee of the `match~` is evaluated every sample, so it
+// may hold state (the last flows). The forms that have no candidate are in e0811_match_tilde_guard_no_candidate.onsa. One error per flow (P-01); the marker is on the line of
+// the offending construct, and the spec does not fix its column.
+
+pub flow acc(x: F32 at sample) -> F32 at sample {
+  let y = x + prev~(^y)
+  y
+}
+
+pub rt fn wrap(x: F32) -> F32 {
+  x
+}
+
+pub rt fn pair_sum(xs: [F32; 2]) -> F32 {
+  xs[0] + xs[1]
+}
+
+// ---- E0811: the guard of an arm ----
+
+pub flow guard_with_an_instance(k: U32 at sample, x: F32 at sample) -> F32 at sample {
+  match~ k {
+    0 if acc~(x) > 1.0 => prev~(x), //~ E0811
+    _ => 0.0,
+  }
+}
+
+pub flow guard_with_a_delay(k: U32 at sample, x: F32 at sample) -> F32 at sample {
+  match~ k {
+    _ if prev~(x) > 0.0 => acc~(x), //~ E0811
+    _ => 0.0,
+  }
+}
+
+pub flow guard_with_a_vdelay(k: U32 at sample, x: F32 at sample) -> F32 at sample {
+  match~ k {
+    0 if vdelay~(x, 1.5, 4) > 0.5 => acc~(x), //~ E0811
+    _ => 0.0,
+  }
+}
+
+pub flow guard_of_a_later_arm(k: U32 at sample, x: F32 at sample) -> F32 at sample {
+  match~ k {
+    0 => 2.0,
+    1 if delay~(x, 2) > 0.5 => acc~(x), //~ E0811
+    _ => 0.0,
+  }
+}
+
+pub flow guard_with_state_inside_a_call(k: U32 at sample, x: F32 at sample) -> F32 at sample {
+  match~ k {
+    0 if wrap(acc~(x)) > 1.0 => prev~(x), //~ E0811
+    _ => 0.0,
+  }
+}
+
+pub flow guard_with_a_par_tilde(k: U32 at sample, x: F32 at sample) -> F32 at sample {
+  match~ k {
+    0 if pair_sum(par~ i in 0 ..< 2 { prev~(x * F32.round_from(i)) }) > 0.5 => acc~(x), //~ E0811
+    _ => 0.0,
+  }
+}
+
+pub flow guard_in_an_option_match_that_reads_no_binding(x: F32 at sample) -> F32 at sample {
+  let o: Option[F32] = if x > 2.0 { Some(x) } else { None }
+  match~ o {
+    Some(v) if prev~(x) > 0.0 => v + acc~(x), //~ E0811
+    _ => 0.0,
+  }
+}
+
+pub flow guard_in_the_value_of_a_let(k: U32 at sample, x: F32 at sample) -> F32 at sample {
+  let a = match~ k { 0 if prev~(x) > 0.0 => acc~(x), _ => 0.0 } //~ E0811
+  a * 0.5
+}
+
+pub flow guard_of_a_match_tilde_in_an_arm(k: U32 at sample, j: U32 at sample, x: F32 at sample) -> F32 at sample {
+  match~ j {
+    0 => (match~ k { 0 if prev~(x) > 0.0 => acc~(x), _ => 0.0 }), //~ E0811
+    _ => 0.0,
+  }
+}
+
+pub flow guard_of_a_match_tilde_in_an_if_tilde_branch(k: U32 at sample, c: Bool at sample, x: F32 at sample) -> F32 at sample {
+  if~ c {
+    match~ k { 0 if prev~(x) > 0.0 => acc~(x), _ => 0.0 } //~ E0811
+  } else {
+    0.0
+  }
+}
+
+// ---- Not errors: what is evaluated every sample, or holds no state ----
+
+// The scrutinee is evaluated every sample.
+pub flow scrutinee_with_state(x: F32 at sample) -> F32 at sample {
+  match~ (prev~(x) > 0.0) { true => acc~(x), false => 0.0 }
+}
+
+pub flow scrutinee_with_an_instance(x: F32 at sample) -> F32 at sample {
+  match~ (acc~(x) > 3.0) { true => prev~(x), false => 0.0 }
+}
+
+// A guard without state, with and without a binding of the arm.
+pub flow guard_that_reads_a_binding(x: F32 at sample) -> F32 at sample {
+  let o: Option[F32] = if x > 2.0 { Some(x) } else { None }
+  match~ o {
+    Some(v) if v > 0.5 => acc~(v),
+    _ => 0.0,
+  }
+}
+
+pub flow guard_that_calls_an_rt_fn(k: U32 at sample, x: F32 at sample) -> F32 at sample {
+  match~ k {
+    0 if wrap(x) > 0.5 => acc~(x),
+    _ => 0.0,
+  }
+}
+
+// The thing with state taken out into a `let` before the statement, which is what the candidate writes.
+pub flow guard_state_lifted_out_by_hand(k: U32 at sample, x: F32 at sample) -> F32 at sample {
+  let d = prev~(x)
+  match~ k {
+    0 if d > 0.0 => acc~(x),
+    _ => 0.0,
+  }
+}

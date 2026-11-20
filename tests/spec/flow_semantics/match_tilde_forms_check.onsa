@@ -1,0 +1,179 @@
+// onsa.toml
+// [test]
+// spec = ["§2.6", "§11.3", "§11.5", "§6.4", "§7"]
+
+// W7-06 U3a/t, S-110, S-1131, S-394, S-1177 (§11.5: "`if~ c { a } else { b }` と `match~ x { ... }` は、全ての枝を評価してから一つを選ぶ。全ての枝の状態を持つものが進み、状態を持たない部分も全て
+// 評価される"): the check of the `match~` accepts the forms that are right and reports nothing (the file has no error, `mode = "check"`; what the values are is in branches_tilde.onsa and the
+// cases of W7-06 U3b). The arms hold things with state (an instance, a built-in delay, a `par~`), read bindings, and have guards that hold no state; the patterns are the patterns of a plain
+// `match` (an `Option`, an enum with payloads, a struct, a tuple, literals, a choice `|` with no binding); the bindings have a type with a `Default`; the `match~` stands where an expression does
+// and is nested with `if~`, `match~` and `par~`.
+
+pub struct Gate: Default {
+  open: Bool,
+  level: F32,
+}
+
+pub enum Cmd {
+  Idle,
+  Gain(F32),
+  Span(F32, F32),
+}
+
+pub flow acc(x: F32 at sample) -> F32 at sample {
+  let y = x + prev~(^y)
+  y
+}
+
+pub flow lp(x: F32 at sample, g: F32 at block) -> F32 at sample {
+  x * g
+}
+
+pub rt fn wrap(x: F32) -> F32 {
+  x
+}
+
+// ---- state in the arms ----
+
+pub flow an_instance_and_a_delay(x: F32 at sample, k: U32 at sample) -> F32 at sample {
+  match~ k {
+    0 => acc~(x),
+    1 => prev~(x),
+    _ => 0.0,
+  }
+}
+
+pub flow a_par_tilde_in_an_arm(x: F32 at sample, k: U32 at sample) -> [F32; 2] at sample {
+  match~ k {
+    0 => par~ i in 0 ..< 2 { acc~(x * F32.round_from(i)) },
+    _ => [x, x],
+  }
+}
+
+// ---- guards ----
+
+pub flow guards_without_state(x: F32 at sample, k: U32 at sample) -> F32 at sample {
+  match~ k {
+    n if n > 4 => acc~(x),
+    n if wrap(F32.round_from(n)) > 1.0 => prev~(x),
+    _ => 0.0,
+  }
+}
+
+// ---- patterns and bindings ----
+
+pub flow an_option(x: F32 at sample) -> F32 at sample {
+  let o: Option[F32] = if x > 2.0 { Some(x) } else { None }
+  match~ o {
+    Some(v) if v > 3.0 => acc~(v),
+    Some(v) => prev~(v),
+    None => 0.0,
+  }
+}
+
+pub flow an_enum_with_payloads(x: F32 at sample) -> F32 at sample {
+  let c = if x > 2.0 { Cmd.Gain(x) } else if x > 1.0 { Cmd.Span(x, 2.0) } else { Cmd.Idle }
+  match~ c {
+    Cmd.Idle => 0.0,
+    Cmd.Gain(g) => acc~(g),
+    Cmd.Span(lo, hi) => prev~(lo + hi),
+  }
+}
+
+pub flow a_struct_pattern(x: F32 at sample) -> F32 at sample {
+  let g = Gate { open: x > 1.0, level: x }
+  match~ g {
+    Gate { open: true, level: l } => acc~(l),
+    Gate { open: false, _ } => 0.0,
+  }
+}
+
+pub flow a_tuple_pattern(x: F32 at sample, y: F32 at sample) -> F32 at sample {
+  match~ (x, y) {
+    (a, b) if a > b => acc~(a),
+    (a, b) => prev~(a + b),
+  }
+}
+
+pub flow a_choice_with_no_binding(x: F32 at sample, k: U32 at sample) -> F32 at sample {
+  match~ k {
+    0 | 1 => acc~(x),
+    _ => 0.0,
+  }
+}
+
+pub flow a_bool_scrutinee(x: F32 at sample) -> F32 at sample {
+  match~ (x > 0.5) {
+    true => acc~(x),
+    false => prev~(x),
+  }
+}
+
+pub flow a_binding_with_a_default(x: F32 at sample) -> F32 at sample {
+  let o: Option[Gate] = if x > 2.0 { Some(Gate { open: true, level: x }) } else { None }
+  match~ o {
+    Some(g) => acc~(g.level),
+    None => 0.0,
+  }
+}
+
+// ---- where the `match~` stands ----
+
+pub flow in_a_let_and_an_operand(x: F32 at sample, k: U32 at sample) -> F32 at sample {
+  let a = match~ k { 0 => acc~(x), _ => 0.0 }
+  a + (match~ k { 1 => prev~(x), _ => 0.0 })
+}
+
+pub flow as_an_argument(x: F32 at sample, k: U32 at sample) -> F32 at sample {
+  wrap(match~ k { 0 => acc~(x), _ => 0.0 })
+}
+
+pub flow with_a_let_in_front_of_it(x: F32 at sample, k: U32 at sample) -> F32 at sample {
+  let d = prev~(x)
+  match~ k {
+    0 if d > 0.0 => acc~(x),
+    _ => 0.0,
+  }
+}
+
+// ---- nested ----
+
+pub flow an_if_tilde_in_an_arm(x: F32 at sample, k: U32 at sample, c: Bool at sample) -> F32 at sample {
+  match~ k {
+    0 => if~ c { acc~(x) } else { prev~(x) },
+    _ => 0.0,
+  }
+}
+
+pub flow a_match_tilde_in_a_branch_of_an_if_tilde(x: F32 at sample, k: U32 at sample, c: Bool at sample) -> F32 at sample {
+  if~ c {
+    match~ k { 0 => acc~(x), _ => 0.0 }
+  } else {
+    prev~(x)
+  }
+}
+
+pub flow a_match_tilde_in_an_arm_of_a_match_tilde(x: F32 at sample, k: U32 at sample, j: U32 at sample) -> F32 at sample {
+  match~ k {
+    0 => (match~ j { 0 => acc~(x), _ => prev~(x) }),
+    _ => 0.0,
+  }
+}
+
+pub flow a_match_tilde_in_a_par_tilde_body(x: F32 at sample, k: U32 at sample) -> [F32; 2] at sample {
+  par~ i in 0 ..< 2 {
+    match~ k { 0 => acc~(x * F32.round_from(i)), _ => 0.0 }
+  }
+}
+
+pub flow a_match_tilde_in_a_par_body_that_has_state(x: F32 at sample, k: U32 at sample) -> [F32; 2] at sample {
+  par~ i in 0 ..< 2 {
+    prev~((match~ k { 0 => acc~(x), _ => 0.0 }) * F32.round_from(i))
+  }
+}
+
+pub flow a_plain_if_in_an_arm_that_holds_no_state(x: F32 at sample, k: U32 at sample, c: Bool at sample) -> F32 at sample {
+  match~ k {
+    0 => acc~(if c { x } else { 0.0 }),
+    _ => 0.0,
+  }
+}

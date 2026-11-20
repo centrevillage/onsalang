@@ -109,7 +109,7 @@ features! {
         Some("write the length as a literal or as the name of a constant");
     ComputedArrayLengths: Language, "constants computed by expressions as array lengths",
         Some("give the constant a literal value, or write the length as a literal");
-    /// `{}`: `if~` or `match~` (S-110, W7-06; K-02).
+    /// `{}`: `match~`, which the checks pass and W7-06 U3b lowers (S-110; K-02).
     TildeBranches: Language, "`{}`, which evaluates every branch", None;
     /// `{}`: the clock. R-17, S-33: hoisting computes it at `init`, but not
     /// with constant arguments only (W9-03) or of a type that is not Copy

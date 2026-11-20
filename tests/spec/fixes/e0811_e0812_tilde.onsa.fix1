@@ -6,7 +6,7 @@
 // E0811: a flow called without `~` (one candidate: insert `~`, the example of §18.1); E0812: `~`
 // on something with no state (one candidate: remove it). A plain `if` with state in a branch
 // also has the second candidate of lifting the state out into a `let`; it is not written here
-// (S-NEW: the name and the place of that `let` are not in the spec).
+// (S-1172 decided it, a new `let` before the statement: fixes/e0811_lift_branch_forms.onsa).
 
 pub flow acc(x: F32 at sample) -> F32 at sample {
   let y = x + prev~(^y)

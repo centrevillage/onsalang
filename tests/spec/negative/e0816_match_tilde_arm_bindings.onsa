@@ -1,0 +1,178 @@
+// onsa.toml
+// [test]
+// spec = ["§11.5", "§6.4", "§18.1"]
+
+// W7-06 U3a/t, S-110 (§11.5: "`match~` の取られない腕の束縛は、値型の既定値 `T.default()` になり、`T` が `Default` を満たさなければ E0816"; §6.4: a struct satisfies `Default` by the
+// derive, an enum by a hand-written `impl Default`, a tuple and an array when their elements do): an arm of a `match~` that is not taken still binds its pattern to the default of
+// the type, so the binding of an arm whose type does not satisfy `Default` is E0816. The bindings here are read in the arm body (the form that the default is seen in). The main
+// position of the error is the pattern of the binding (S-392, provisional): the marker is on its line and has no column. An arm that binds a type with a `Default` is no error
+// (the flows at the end). The forms whose range is not fixed by the spec (a binding that the body does not read, a binding that only the guard reads, the binding of a first
+// arm that is always taken: S-1174) are in e0816_match_tilde_arm_bindings_s1174.onsa. The error has no candidate. One error per flow (P-01).
+
+pub struct Plain {
+  a: F32,
+}
+
+pub struct Pair: Default {
+  a: F32,
+  b: F32,
+}
+
+pub enum Mode {
+  Off,
+  On,
+}
+
+pub enum Tone {
+  Low,
+  High,
+}
+
+impl Default for Tone {
+  rt fn default() -> Tone {
+    Tone.High
+  }
+}
+
+pub enum Cmd {
+  Idle,
+  Set(Plain),
+  Gain(F32),
+}
+
+pub flow acc(x: F32 at sample) -> F32 at sample {
+  let y = x + prev~(^y)
+  y
+}
+
+// ---- E0816: a binding whose type has no `Default` ----
+
+pub flow a_struct_without_default(x: F32 at sample) -> F32 at sample {
+  let o: Option[Plain] = if x > 0.0 { Some(Plain { a: x }) } else { None }
+  match~ o {
+    Some(p) => acc~(p.a), //~ E0816
+    None => 0.0,
+  }
+}
+
+pub flow an_enum_without_default(x: F32 at sample) -> F32 at sample {
+  let o: Option[Mode] = if x > 0.0 { Some(Mode.On) } else { None }
+  match~ o {
+    Some(m) => acc~(x) * (match m { Mode.Off => 0.0, Mode.On => 1.0 }), //~ E0816
+    None => 0.0,
+  }
+}
+
+pub flow the_payload_of_a_variant(x: F32 at sample) -> F32 at sample {
+  let c = if x > 0.0 { Cmd.Set(Plain { a: x }) } else { Cmd.Idle }
+  match~ c {
+    Cmd.Idle => 0.0,
+    Cmd.Set(p) => acc~(p.a), //~ E0816
+    Cmd.Gain(g) => acc~(g),
+  }
+}
+
+pub flow a_tuple_with_an_element_without_default(x: F32 at sample) -> F32 at sample {
+  let o: Option[(Plain, F32)] = if x > 0.0 { Some((Plain { a: x }, x)) } else { None }
+  match~ o {
+    Some(t) => acc~(t.0.a + t.1), //~ E0816
+    None => 0.0,
+  }
+}
+
+pub flow one_element_of_a_destructured_tuple_without_default(x: F32 at sample) -> F32 at sample {
+  let o: Option[(Plain, F32)] = if x > 0.0 { Some((Plain { a: x }, x)) } else { None }
+  match~ o {
+    Some((p, g)) => acc~(p.a * g), //~ E0816
+    None => 0.0,
+  }
+}
+
+pub flow in_the_last_arm(x: F32 at sample) -> F32 at sample {
+  let r: Result[F32, Plain] = if x > 0.0 { Ok(x) } else { Err(Plain { a: x }) }
+  match~ r {
+    Ok(v) => acc~(v),
+    Err(p) => acc~(p.a), //~ E0816
+  }
+}
+
+pub flow in_the_value_of_a_let(x: F32 at sample) -> F32 at sample {
+  let o: Option[Plain] = if x > 0.0 { Some(Plain { a: x }) } else { None }
+  let a = match~ o { Some(p) => acc~(p.a), None => 0.0 } //~ E0816
+  a * 2.0
+}
+
+pub flow in_a_par_tilde_body(x: F32 at sample) -> [F32; 2] at sample {
+  let o: Option[Plain] = if x > 0.0 { Some(Plain { a: x }) } else { None }
+  par~ i in 0 ..< 2 {
+    match~ o { Some(p) => acc~(p.a * F32.round_from(i)), None => 0.0 } //~ E0816
+  }
+}
+
+// ---- Not errors: a binding whose type satisfies `Default` ----
+
+pub flow a_number(x: F32 at sample) -> F32 at sample {
+  let o: Option[F32] = if x > 0.0 { Some(x) } else { None }
+  match~ o {
+    Some(v) => acc~(v),
+    None => 0.0,
+  }
+}
+
+pub flow an_integer_and_a_bool(x: F32 at sample) -> F32 at sample {
+  let o: Option[(U32, Bool)] = if x > 0.0 { Some((3, true)) } else { None }
+  match~ o {
+    Some((n, b)) => acc~(if b { F32.round_from(n) } else { x }),
+    None => 0.0,
+  }
+}
+
+pub flow a_tuple(x: F32 at sample) -> F32 at sample {
+  let o: Option[(F32, F32)] = if x > 0.0 { Some((x, x)) } else { None }
+  match~ o {
+    Some(t) => acc~(t.0 + t.1),
+    None => 0.0,
+  }
+}
+
+pub flow an_array(x: F32 at sample) -> F32 at sample {
+  let o: Option[[F32; 2]] = if x > 0.0 { Some([x, x]) } else { None }
+  match~ o {
+    Some(a) => acc~(a[0] + a[1]),
+    None => 0.0,
+  }
+}
+
+pub flow a_struct_with_the_derive(x: F32 at sample) -> F32 at sample {
+  let o: Option[Pair] = if x > 0.0 { Some(Pair { a: x, b: x }) } else { None }
+  match~ o {
+    Some(p) => acc~(p.a + p.b),
+    None => 0.0,
+  }
+}
+
+pub flow an_enum_with_a_hand_written_default(x: F32 at sample) -> F32 at sample {
+  let o: Option[Tone] = if x > 0.0 { Some(Tone.Low) } else { None }
+  match~ o {
+    Some(t) => acc~(x) * (match t { Tone.Low => 0.5, Tone.High => 1.0 }),
+    None => 0.0,
+  }
+}
+
+pub flow the_payload_of_a_variant_with_a_default(x: F32 at sample) -> F32 at sample {
+  let c = if x > 0.0 { Cmd.Gain(x) } else { Cmd.Idle }
+  match~ c {
+    Cmd.Idle => 0.0,
+    Cmd.Set(_) => 1.0,
+    Cmd.Gain(g) => acc~(g),
+  }
+}
+
+// A pattern with no binding has nothing to default: a `Plain` that is not bound by name is no error.
+pub flow a_struct_that_is_not_bound(x: F32 at sample) -> F32 at sample {
+  let o: Option[Plain] = if x > 0.0 { Some(Plain { a: x }) } else { None }
+  match~ o {
+    Some(_) => acc~(x),
+    None => 0.0,
+  }
+}

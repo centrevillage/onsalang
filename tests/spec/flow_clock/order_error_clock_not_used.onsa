@@ -52,7 +52,7 @@
 
 // A part that could not be read is an error and the part that uses it gets no diagnostic of its own
 // (§18.1): the result of a delay whose first argument is not at a clock of ticks (E0813), of an
-// `match~` (E0200 until W7-06 U3a) or of `sample_tick()` (E0200 until W7-09) has the clock of an error (the clock of a stateful part in a branch, E0811 since W7-06 U1, is a gap that the spec does not close, and is not in this file). The check
+// `sample_tick()` (E0200 until W7-09) has the clock of an error (the clock of a stateful part in a branch, E0811 since W7-06 U1, is a gap that the spec does not close, and is not in this file, nor is the clock of an E0812 `if~` / `match~`, S-1192). The check
 // that would read that clock (an `at` that makes it slower, a delay that needs its first argument at
 // `sample`, an input of an instance that is at `block`) does not report even where it starts before
 // the error; only the error is reported, though by its position the outer one is first. The other
@@ -111,15 +111,15 @@ pub flow result_as_a_block_argument(x: F32 at sample, p: F32 at block) -> F32 at
   gate~(x, prev~(p))                                             //~ E0813 @18
 }
 
-// ---------------------------------------------------------------- the result of `match~`, `sample_tick()` (E0200)
+// ---------------------------------------------------------------- the result of `sample_tick()` (E0200)
 
 pub flow at_slower_of_sample_tick(x: F32 at sample) -> F32 at sample {
   let a = (sample_tick() + 1) at block                           //~ E0200 @12
   x
 }
 
-pub flow at_slower_of_match_tilde(x: F32 at sample, c: Bool at sample) -> F32 at sample {
-  let a = (match~ c { true => x, false => 0.0 }) at block        //~ E0200 @17
+pub flow at_slower_of_sample_tick_plus_two(x: F32 at sample) -> F32 at sample {
+  let a = (sample_tick() + 2) at block                           //~ E0200 @12
   x
 }
 

@@ -1,0 +1,138 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§11.4", "§11.5"]
+
+// W7-06 U3a/t, S-1131, S-110 (§11.5: "腕の本体で読む束縛のクロックは、対象のクロックと、最初の腕からその腕までのガードのクロックのうち最も速いものである（… ガードの中で読む束縛は
+// 対象のクロック）。束縛を読む式は、他の式と同じく、そのクロックの段で評価する（`match~ k { n => lp~(x, (n as F64)) }` の `(n as F64)` は、`k` が `block` なら `process` の呼び出しごとに
+// 一度、腕が取られるかによらず評価する）"): the forms of match_tilde_binding_clock_errors.onsa with the clocks the right way, and the forms that look like those errors and are none. A binding
+// that no guard before its arm (and in it) is decided on every sample has the clock of the scrutinee: `block` goes to a `block` input, `init` to an `init` input and to a function that is not
+// an `rt fn`. A guard that reads a binding reads it at the clock of the scrutinee, whatever the guards before it are. A binding that is `sample` goes where a `sample` value goes (a delay,
+// an operand). The file has no error.
+
+pub flow lp(x: F32 at sample, g: F32 at block) -> F32 at sample {
+  x * g
+}
+
+pub flow cfg(x: F32 at sample, c: F32 at init) -> F32 at sample {
+  x * c
+}
+
+pub flow acc(x: F32 at sample) -> F32 at sample {
+  let y = x + prev~(^y)
+  y
+}
+
+pub fn design(v: F32) -> F32 {
+  v * 0.5
+}
+
+// ---- the clock of the scrutinee ----
+
+pub flow no_guard_keeps_the_target_clock(x: F32 at sample, k: U32 at block) -> F32 at sample {
+  match~ k {
+    0 => x,
+    n => lp~(x, F32.round_from(n)),
+  }
+}
+
+pub flow a_guard_at_the_target_clock(x: F32 at sample, k: U32 at block) -> F32 at sample {
+  match~ k {
+    n if n > 5 => lp~(x, F32.round_from(n)),
+    _ => x,
+  }
+}
+
+pub flow a_guard_on_block(x: F32 at sample, k: U32 at block, b: Bool at block) -> F32 at sample {
+  match~ k {
+    n if b => lp~(x, F32.round_from(n)),
+    _ => x,
+  }
+}
+
+pub flow an_init_scrutinee_to_an_init_input(x: F32 at sample, k: U32 at init) -> F32 at sample {
+  match~ k {
+    0 => x,
+    n => cfg~(x, F32.round_from(n)),
+  }
+}
+
+pub flow an_init_scrutinee_and_an_init_guard(x: F32 at sample, k: U32 at init, i: Bool at init) -> F32 at sample {
+  match~ k {
+    n if i => cfg~(x, F32.round_from(n)),
+    _ => x,
+  }
+}
+
+pub flow an_init_binding_to_a_function_that_is_not_rt(x: F32 at sample, k: U32 at init) -> F32 at sample {
+  match~ k {
+    n => acc~(x) + design(F32.round_from(n)),
+  }
+}
+
+pub flow a_block_binding_of_an_option(x: F32 at sample, o: F32 at block) -> F32 at sample {
+  let c: Option[F32] = if o > 0.5 { Some(o) } else { None }
+  match~ c {
+    Some(v) => lp~(x, v),
+    None => x,
+  }
+}
+
+pub flow a_tuple_scrutinee_of_blocks(x: F32 at sample, p: F32 at block, q: F32 at block) -> F32 at sample {
+  match~ (p, q) { (a, b) => lp~(x, a + b) }
+}
+
+pub flow a_match_in_an_arm_of_a_block_scrutinee(x: F32 at sample, k: U32 at block) -> F32 at sample {
+  match~ k {
+    n => (match~ n { m => lp~(x, F32.round_from(m)) }),
+  }
+}
+
+pub flow in_a_par_tilde_body(x: F32 at sample, k: U32 at block) -> [F32; 2] at sample {
+  par~ i in 0 ..< 2 {
+    match~ k {
+      n => lp~(x * F32.round_from(i), F32.round_from(n)),
+    }
+  }
+}
+
+// ---- only the guards from the first arm to the arm count ----
+
+pub flow a_later_guard_on_sample_does_not_reach_an_earlier_arm(x: F32 at sample, k: U32 at block, s: Bool at sample) -> F32 at sample {
+  match~ k {
+    n if n > 5 => lp~(x, F32.round_from(n)),
+    _ if s => x,
+    _ => 0.0,
+  }
+}
+
+// ---- a guard reads a binding at the clock of the scrutinee ----
+
+pub flow a_guard_after_a_guard_on_sample_reads_the_binding_at_block(x: F32 at sample, k: U32 at block, s: Bool at sample) -> F32 at sample {
+  match~ k {
+    0 if s => x,
+    n if (n at block) > 1 => acc~(x),
+    _ => 0.0,
+  }
+}
+
+// ---- a binding that is `sample` goes where a `sample` value goes ----
+
+pub flow a_sample_binding_to_a_delay(x: F32 at sample, k: U32 at block, s: Bool at sample) -> F32 at sample {
+  match~ k {
+    n if s => prev~(F32.round_from(n)),
+    _ => x,
+  }
+}
+
+pub flow a_sample_binding_as_an_operand(x: F32 at sample, k: U32 at block, s: Bool at sample) -> F32 at sample {
+  match~ k {
+    n if s => acc~(x) + F32.round_from(n),
+    _ => 0.0,
+  }
+}
+
+pub flow a_sample_binding_of_a_sample_scrutinee_to_a_delay(x: F32 at sample, k: U32 at sample) -> F32 at sample {
+  match~ k {
+    n => prev~(F32.round_from(n)),
+  }
+}

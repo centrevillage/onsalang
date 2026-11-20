@@ -1,0 +1,94 @@
+// onsa.toml
+// [test]
+// spec = ["§2.6", "§11.5", "§11.3", "§18.1"]
+// fixes = 2
+
+// W7-06 U3a/t, S-110, S-1172 (§11.5: "枝と … には、状態を持つもの … を書けない（E0811。修正候補は `if~` / `match~` にすることと、状態を持つものを前の `let` に出すこと …）"; "`&&` / `||` の右辺には、
+// 状態を持つものを書けない（E0806。修正候補は前の `let` に出すこと）"; §11.3: "条件の位置は … `if~` / `match~` の腕は含めない"): an arm of a `match~` is not a place where only one side is evaluated, but a plain
+// `if` or `match` in it still is, so a thing with state in a branch of that `if` (or in an arm of that `match`) is E0811, and one on the right of an `&&` / `||` in it is E0806. The E0811 has the two
+// candidates, the `~` after the `if` / `match` (the first) and the lift into a `let` before the statement (the second; `fixes = 2` is the most candidates that any error of this file has; the E0806
+// has the lift only), and the runner's default says that both are clean (another arm of the `match~` holds a thing with state, so the lift does not leave an E0812). One error per flow (P-01); the marker
+// is on the line of the offending construct, and the spec does not fix its column. The `match~` in a branch of a plain `if` (the E0811 of the outer branch) is in crates/onsa_cli/tests/cli/match_tilde_candidates.rs.
+
+pub flow acc(x: F32 at sample) -> F32 at sample {
+  let y = x + prev~(^y)
+  y
+}
+
+// ---- E0811: a plain `if` or `match` in an arm ----
+
+pub flow a_plain_if_in_an_arm(x: F32 at sample, k: U32 at sample, c: Bool at sample) -> F32 at sample {
+  match~ k {
+    0 => if~ c { acc~(x) } else { 0.0 }, //~ E0811
+    _ => prev~(x),
+  }
+}
+
+pub flow a_plain_if_in_the_else_of_an_arm(x: F32 at sample, k: U32 at sample, c: Bool at sample) -> F32 at sample {
+  match~ k {
+    0 => if~ c { 1.0 } else { prev~(x) }, //~ E0811
+    _ => acc~(x),
+  }
+}
+
+pub flow a_plain_match_in_an_arm(x: F32 at sample, k: U32 at sample, j: U32 at sample) -> F32 at sample {
+  match~ k {
+    0 => match~ j { 0 => 1.0, _ => acc~(x) }, //~ E0811
+    _ => prev~(x),
+  }
+}
+
+pub flow a_plain_if_in_an_arm_in_the_value_of_a_let(x: F32 at sample, k: U32 at sample, c: Bool at sample) -> F32 at sample {
+  let a = match~ k { 0 => if~ c { acc~(x) } else { 0.0 }, _ => prev~(x) } //~ E0811
+  a
+}
+
+pub flow a_plain_if_in_an_arm_of_a_match_tilde_in_an_arm(x: F32 at sample, k: U32 at sample, j: U32 at sample, c: Bool at sample) -> F32 at sample {
+  match~ k {
+    0 => (match~ j { 0 => if~ c { acc~(x) } else { 0.0 }, _ => prev~(x) }), //~ E0811
+    _ => prev~(x),
+  }
+}
+
+// ---- E0806: the right side of `&&` / `||` in an arm ----
+
+pub flow and_with_state_in_an_arm(x: F32 at sample, k: U32 at sample, c: Bool at sample) -> F32 at sample {
+  let prev_0 = prev~(x)
+  match~ k {
+    0 => if c && prev_0 > 0.0 { 1.0 } else { 0.0 }, //~ E0806
+    _ => acc~(x),
+  }
+}
+
+pub flow or_with_state_in_an_arm(x: F32 at sample, k: U32 at sample, c: Bool at sample) -> F32 at sample {
+  let prev_0 = prev~(x)
+  match~ k {
+    0 => acc~(x),
+    _ => if c || prev_0 > 0.0 { 1.0 } else { 0.0 }, //~ E0806
+  }
+}
+
+// ---- Not errors: what is evaluated every sample in an arm ----
+
+// The condition of a plain `if` and the left of `&&` are evaluated whenever the arm is, and the arm is evaluated every sample.
+pub flow state_in_the_condition_of_a_plain_if_in_an_arm(x: F32 at sample, k: U32 at sample) -> F32 at sample {
+  match~ k {
+    0 => if prev~(x) > 0.0 { 1.0 } else { 0.0 },
+    _ => acc~(x),
+  }
+}
+
+pub flow state_on_the_left_of_an_and_in_an_arm(x: F32 at sample, k: U32 at sample, c: Bool at sample) -> F32 at sample {
+  match~ k {
+    0 => if prev~(x) > 0.0 && c { 1.0 } else { 0.0 },
+    _ => acc~(x),
+  }
+}
+
+// An `if~` in an arm holds the state in its branch.
+pub flow an_if_tilde_in_an_arm(x: F32 at sample, k: U32 at sample, c: Bool at sample) -> F32 at sample {
+  match~ k {
+    0 => if~ c { acc~(x) } else { 0.0 },
+    _ => prev~(x),
+  }
+}

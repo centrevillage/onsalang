@@ -4,8 +4,7 @@
 //! of a check (§18.1): the comparisons of [`crate::clock`] pass it. The
 //! checks on which the rule of the clock of their expression rests give it
 //! in error when they fail: the E0813 of a delay, the E0805 and the E0815 of
-//! a call of a function (§11.5), `match~`, a node in a branch
-//! (E0811, E0806); the
+//! a call of a function (§11.5), a node in a branch (E0811, E0806); the
 //! others leave it as the rules give it (the `k` of `e at k`, the output of
 //! an instance, the clock of a delay by its first argument, a value whose
 //! type holds a function type, E0810). A value made with `Alloc` to drop
@@ -55,11 +54,6 @@ impl Walk<'_> {
     fn err(&mut self, code: Code, span: Span, msg: String) {
         let found = self.src(span);
         self.report(Diagnostic::new(Stage::Flow, code, span, msg).with_found(found));
-    }
-
-    fn gate(&mut self, feature: Feature, span: Span, details: &[&str]) {
-        let found = self.src(span);
-        self.report(feature.diagnostic(Stage::Flow, span, details).with_found(found));
     }
 
     fn ty_of(&self, e: ExprId) -> TyId {
@@ -184,33 +178,56 @@ impl Walk<'_> {
         }
     }
 
-    /// `match~` (`form`) at its `~`: W7-06 U3a, in error.
-    pub(super) fn tilde(&mut self, tilde: Span, form: &str) -> Option<Clock> {
-        if self.checking() {
-            self.gate(Feature::TildeBranches, tilde, &[form]);
-        }
-        Some(Clock::Error)
-    }
-
-    /// The `if~` of the `~` `tilde` and the chain `chain` (§11.5, S-1177):
-    /// E0812 at its `~` (S-392) when no branch holds state, with the
-    /// candidate that takes the `~` off (a space before a condition it
-    /// touches). Its clock stays the join of its parts.
+    /// The `if~` / `match~` (`word` and its `~` `tilde`) whose branches or
+    /// arm bodies are `bodies` and whose first condition or scrutinee is
+    /// `next` (§11.5, S-1177): E0812 at its `~` (S-392) when no body holds
+    /// state, with the candidate that takes the `~` off (a space before a
+    /// `next` it touches). Its clock stays the join of its parts.
     // SPEC-GAP(S-392): the main place of the E0812 is the `~` (provisional).
-    // SPEC-GAP(S-1191): a later condition with state is no branch, so not
-    // counted: E0812 too (provisional).
-    // SPEC-GAP(S-1192): the `if~` of the E0812 keeps its clock, as a `par~`
-    // that holds none (provisional).
-    pub(super) fn check_tilde(&mut self, tilde: Span, chain: &crate::flow::Chain) {
-        let mut branches = chain.links.iter().map(|l| l.then).chain(chain.last);
-        if branches.any(|x| super::super::nodes::holds_state(self.ast, x)) {
+    // SPEC-GAP(S-1191): a later condition or a guard with state is no
+    // branch, so not counted: E0812 too (provisional).
+    // SPEC-GAP(S-1192): the `if~` / `match~` of the E0812 keeps its clock, as
+    // a `par~` that holds none (provisional).
+    pub(super) fn check_tilde(
+        &mut self,
+        tilde: Span,
+        word: &str,
+        mut bodies: impl Iterator<Item = ExprId>,
+        next: ExprId,
+    ) {
+        if bodies.any(|x| super::super::nodes::holds_state(self.ast, x)) {
             return;
         }
-        let msg = "this `if~` holds no state in its branches and is written `if` (§2.6, §11.5)";
-        let touches = chain.links.first().is_some_and(|l| self.ast.expr(l.cond).span.start == tilde.end);
+        let parts = if word == "if" { "branches" } else { "arms" };
+        let msg = format!("this `{word}~` holds no state in its {parts} and is written `{word}` (§2.6, §11.5)");
+        let touches = self.ast.expr(next).span.start == tilde.end;
         let fix = Fix::replace("remove `~`", tilde, if touches { " " } else { "" });
         let d = Diagnostic::new(Stage::Flow, Code::E0812, tilde, msg).with_found(self.src(tilde));
         self.report(d.with_fix(fix));
+    }
+
+    /// The bindings of the pattern `pat` of an arm of `match~`, each the
+    /// default of its type on a sample that does not take the arm (§11.5):
+    /// at `Check`, E0816 at the binding of a type that does not satisfy
+    /// `Default`.
+    // SPEC-GAP(S-1174): every binding of every arm, read or not
+    // (provisional).
+    // SPEC-GAP(S-392): the main place of the E0816 is the binding
+    // (provisional).
+    pub(super) fn check_arm_bindings(&mut self, pat: PatId) {
+        if !self.checking() {
+            return;
+        }
+        let (a, ast, body) = (self.a, self.ast, self.body);
+        crate::pat::each_bind(ast, pat, true, &mut |q, name| {
+            let Some(&l) = body.pat_locals.get(&q) else { return };
+            let (ty, span) = (body.locals[l.0 as usize].ty, ast.pat(q).span);
+            let what = format!("the binding `{}` of an arm of `match~`, on a sample that does not take it,", name.name);
+            if let Some(d) = crate::signal::no_default_signal(a, ty, span, &what) {
+                let found = self.src(span);
+                self.report(d.with_found(found));
+            }
+        });
     }
 
     /// The `~` of the replication `e` written with `tilde`, whose body holds

@@ -1,0 +1,43 @@
+// onsa.toml
+// [test]
+// spec = ["§11.5", "§6.4", "§18.1"]
+
+// W7-06 U3a/t, S-1174 (the provisional reading (1); an open detail: this file is read again when S-1174 is decided), S-110 (§11.5: "`match~` の取られない腕の束縛は、値型の既定値
+// `T.default()` になり、`T` が `Default` を満たさなければ E0816"): the spec does not say which bindings the E0816 is for. The provisional reading is the letter: every binding of every arm
+// (a binding that the body does not read, a binding that only the guard reads, and the binding of an arm that is always taken: the only arm, whose pattern matches every value and has no
+// guard). If S-1174 is decided as (2) (only the binding that is read in an arm body and has the default seen), the flows of the first and the second kind are the E0309 of a binding that
+// is not read (a unit with no other error) or no error, and the flow of the third kind has no E0816 either (an arm that is always taken shows no default). The main position is the
+// pattern of the binding (S-392, provisional): the marker is on its line and has no column. The error has no candidate. One error per flow (P-01); each flow holds a thing with state in an arm
+// body (it is no E0812).
+
+pub struct Plain {
+  a: F32,
+}
+
+pub flow acc(x: F32 at sample) -> F32 at sample {
+  let y = x + prev~(^y)
+  y
+}
+
+pub flow a_binding_that_the_body_does_not_read(x: F32 at sample) -> F32 at sample {
+  let o: Option[Plain] = if x > 0.0 { Some(Plain { a: x }) } else { None }
+  match~ o {
+    Some(p) => acc~(x), //~ E0816
+    None => 0.0,
+  }
+}
+
+pub flow a_binding_that_only_the_guard_reads(x: F32 at sample) -> F32 at sample {
+  let o: Option[Plain] = if x > 0.0 { Some(Plain { a: x }) } else { None }
+  match~ o {
+    Some(p) if p.a > 0.5 => acc~(x), //~ E0816
+    _ => 0.0,
+  }
+}
+
+pub flow the_binding_of_the_only_arm(x: F32 at sample) -> F32 at sample {
+  let pl = Plain { a: x }
+  match~ pl {
+    q => acc~(q.a), //~ E0816
+  }
+}

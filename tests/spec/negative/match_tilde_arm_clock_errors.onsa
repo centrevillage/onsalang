@@ -1,0 +1,92 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§11.4", "§11.5", "§18.1"]
+
+// W7-06 U3a/t, S-110, S-1094 (1) (§11.5: "`~` が全て評価するのは枝と腕の本体である"): the arms of a `match~` are not a place that the check of the flow body leaves (the `match~` was E0200 before
+// W7-06 and hid them), so the errors of the flow check stage that are found in an arm or in a guard are reported: a clock that goes the wrong way (E0815: `at block` over a value of `sample`), the
+// first argument of a delay at a clock that has no ticks (E0813: a value of `block`), and a signal value that is not Copy (E0810: the value of a delay is a `Str`, §11.3). Every `match~` here holds
+// a thing with state in an arm body (it is no E0812; the delay of the E0813 and the E0810 is that thing, and `acc~` is it for the E0815). One error per flow (P-01); the marker is on the line
+// of the offending construct, and the spec does not fix its column.
+
+pub flow acc(x: F32 at sample) -> F32 at sample {
+  let y = x + prev~(^y)
+  y
+}
+
+pub rt fn str_len(s: Str) -> F32 { F32.round_from(s.len()) }
+
+// ---- E0815 ----
+
+pub flow e0815_in_the_first_arm(x: F32 at sample, k: U32 at sample) -> F32 at sample {
+  match~ k {
+    0 => acc~(x) + (x at block), //~ E0815
+    _ => 0.0,
+  }
+}
+
+pub flow e0815_in_the_last_arm(x: F32 at sample, k: U32 at sample) -> F32 at sample {
+  match~ k {
+    0 => acc~(x),
+    _ => x at block, //~ E0815
+  }
+}
+
+pub flow e0815_in_a_guard(x: F32 at sample, k: U32 at sample) -> F32 at sample {
+  match~ k {
+    0 if (x at block) > 0.5 => acc~(x), //~ E0815
+    _ => 0.0,
+  }
+}
+
+pub flow e0815_in_a_match_tilde_in_an_arm(x: F32 at sample, k: U32 at sample, j: U32 at sample) -> F32 at sample {
+  match~ k {
+    0 => (match~ j { 0 => acc~(x), _ => x at block }), //~ E0815
+    _ => 0.0,
+  }
+}
+
+// ---- E0813 ----
+
+pub flow e0813_in_the_first_arm(x: F32 at sample, p: F32 at block, k: U32 at sample) -> F32 at sample {
+  match~ k {
+    0 => prev~(p), //~ E0813
+    _ => x,
+  }
+}
+
+pub flow e0813_in_the_last_arm(x: F32 at sample, p: F32 at block, k: U32 at sample) -> F32 at sample {
+  match~ k {
+    0 => x,
+    _ => prev~(p), //~ E0813
+  }
+}
+
+pub flow e0813_in_the_value_of_a_let(x: F32 at sample, p: F32 at block, k: U32 at sample) -> F32 at sample {
+  let a = match~ k { 0 => prev~(p), _ => x } //~ E0813
+  a
+}
+
+// ---- E0810 ----
+
+pub flow e0810_in_the_first_arm(x: F32 at sample, k: U32 at sample) -> F32 at sample {
+  match~ k {
+    0 => x * str_len(prev~(if x > 0.0 { "a" } else { "bb" }, "z")), //~ E0810
+    _ => 0.0,
+  }
+}
+
+pub flow e0810_in_the_last_arm(x: F32 at sample, k: U32 at sample) -> F32 at sample {
+  match~ k {
+    0 => 0.0,
+    _ => x * str_len(prev~(if x > 0.0 { "a" } else { "bb" }, "z")), //~ E0810
+  }
+}
+
+// ---- Not errors: the same forms with the clocks the right way ----
+
+pub flow fine(x: F32 at sample, p: F32 at block, k: U32 at sample) -> F32 at sample {
+  match~ k {
+    0 => acc~(x) + (p at sample),
+    _ => prev~(x),
+  }
+}

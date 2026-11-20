@@ -381,7 +381,6 @@ fn the_tilde_applied_to_a_nested_if_stops() {
 }
 
 #[test]
-#[ignore = "W7-06 U3a: S-1183"]
 fn the_tilde_applied_to_a_nested_match_stops() {
     the_first_candidate_stops(&NESTED_MATCH);
 }

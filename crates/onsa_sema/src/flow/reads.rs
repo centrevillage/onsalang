@@ -348,7 +348,7 @@ impl Marker<'_> {
                 }
             }
             // The conditional positions (§11.3) under the conditions that
-            // select them, not the arms of `match~` (W7-06 U3a).
+            // select them.
             ExprKind::If { cond, then, else_, tilde: None } => {
                 self.mark(*cond, at, g);
                 let inner = self.enter(*cond, at, g);
@@ -357,7 +357,9 @@ impl Marker<'_> {
                 }
                 self.conds.pop();
             }
-            ExprKind::Match { scrutinee, arms, tilde: None } => {
+            // A guard under the scrutinee and the guards before it; the arm
+            // bodies of `match~` (S-1094) under no more than it.
+            ExprKind::Match { scrutinee, arms, tilde } => {
                 self.mark(*scrutinee, at, g);
                 let (depth, mut inner) = (self.conds.len(), self.enter(*scrutinee, at, g));
                 for arm in arms {
@@ -365,9 +367,14 @@ impl Marker<'_> {
                         self.mark(x, at, inner);
                         inner = self.enter(x, at, inner);
                     }
-                    self.mark(arm.body, at, inner);
+                    if tilde.is_none() {
+                        self.mark(arm.body, at, inner);
+                    }
                 }
                 self.conds.truncate(depth);
+                for arm in arms.iter().filter(|_| tilde.is_some()) {
+                    self.mark(arm.body, at, g);
+                }
             }
             ExprKind::Binary { op: BinOp::And | BinOp::Or, lhs, rhs, .. } => {
                 self.mark(*lhs, at, g);

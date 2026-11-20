@@ -305,3 +305,15 @@ fn a_block_of_a_value_only_has_its_tail_hoisted() {
         ]
     );
 }
+
+/// S-1094: a guard of `match~` chooses, under the scrutinee and the guards
+/// before it, so its slow part is guarded; an arm body, evaluated on every
+/// sample, is under no more than the `match~`.
+#[test]
+fn the_guards_of_a_match_tilde_are_guarded_and_its_arm_bodies_are_not() {
+    let src = "pub flow f(x: F32 at sample, level: F32 at block, n: I32 at block) -> F32 at sample {
+  let r = match~ n { 0 if level * 2.0 > 1.0 => prev~(x) * (level * 3.0), _ => prev~(x) }
+  r
+}";
+    assert_eq!(guarded(src), [g("r._hoist_0", B, true, "level * 2.0 > 1.0"), g("r._hoist_1", B, false, "level * 3.0")]);
+}

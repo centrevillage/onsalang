@@ -1,7 +1,7 @@
 // onsa.toml
 // [test]
 // spec = ["§2.6", "§11.2", "§11.5", "§18.1"]
-// fix = [{ at = "57:29", code = "E0811", candidate = 1, leaves = ["57:30 E0811"] }, { at = "61:31", code = "E0811", candidate = 1, leaves = ["61:32 E0811"] }]
+// fix = [{ at = "57:29", code = "E0811", candidate = 1, leaves = ["57:30 E0811"] }, { at = "61:31", code = "E0811", candidate = 1, leaves = ["61:32 E0811"] }, { at = "65:31", code = "E0811", candidate = 1, leaves = ["65:32 E0811"] }]
 
 // Something with state (an instance, a built-in delay, a `par~`; a `par` without state is no state, par_in_plain_branches.onsa) where only one side is evaluated (§11.5, S-110): in a branch or in the guard of a plain `if` / `match` it is E0811 ("枝と `match` の
 // ガードには、状態を持つもの … を書けない（E0811）。条件と `match` の対象は常に評価されるので書ける"),

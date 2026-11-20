@@ -1,0 +1,127 @@
+// onsa.toml
+// [test]
+// spec = ["§2.6", "§11.5", "§18.1"]
+// fixes = 1
+
+// W7-06 U3a/t, S-110, S-1177 (§11.5: "状態を持つものを枝に含まなければ E0812（修正候補は `~` を外すこと）"; §2.6: "状態を持つものを枝に含まない `if~` /
+// `match~` の E0812 は、`~` を外す修正候補を示す"; "状態を持つものを含むかは、書いた `~` でなく中身（呼び先の種類と入れ子）で決める"). A `match~` whose
+// arm bodies hold no thing with state is E0812: the arms are values, calls without state (an `rt fn`), a binding that is read, a guard that holds no
+// state, a `par` without state (it is not a thing with state, §11.5), or a thing with state that is only in the scrutinee (it is evaluated every
+// sample, it is no arm). The one candidate is the removal of the `~` (`fixes = 1`), and the runner's default says that the flow checks clean after it
+// (the `match` that is left holds no state in an arm, and the thing with state in its scrutinee is where it may be). The main position of the error
+// is the `~` of the `match~` (S-392, provisional): the marker has no column. One error per flow (P-01); the marker is on the line of the `~`.
+// The `match~` that holds a thing with state only in a guard (S-1191) is in negative/e0812_match_tilde_state_only_in_a_guard.onsa.
+
+pub rt fn wrap(x: F32) -> F32 {
+  x
+}
+
+pub flow values_only(k: U32 at sample) -> F32 at sample {
+  match k { 0 => 1.0, _ => 2.0 } //~ E0812
+}
+
+pub flow arms_on_several_lines(k: U32 at sample) -> F32 at sample {
+  match k { //~ E0812
+    0 => 1.0,
+    1 => 2.0,
+    _ => 3.0,
+  }
+}
+
+pub flow a_call_without_state(x: F32 at sample, k: U32 at sample) -> F32 at sample {
+  match k { 0 => wrap(x), _ => 0.0 } //~ E0812
+}
+
+pub flow a_binding_that_is_read(x: F32 at sample) -> F32 at sample {
+  let o: Option[F32] = if x > 2.0 { Some(x) } else { None }
+  match o { Some(v) => v * x, None => 0.0 } //~ E0812
+}
+
+pub flow a_guard_without_state(x: F32 at sample, k: U32 at sample) -> F32 at sample {
+  match k { //~ E0812
+    n if n > 1 => x,
+    _ => 0.0,
+  }
+}
+
+pub flow a_par_without_state_in_an_arm(x: F32 at sample, k: U32 at sample) -> [F32; 2] at sample {
+  match k { 0 => par i in 0 ..< 2 { x * F32.round_from(i) }, _ => [x, x] } //~ E0812
+}
+
+pub flow a_par_without_state_in_every_arm(x: F32 at sample, k: U32 at sample) -> [F32; 2] at sample {
+  match k { //~ E0812
+    0 => par i in 0 ..< 2 { x * F32.round_from(i) },
+    _ => par j in 0 ..< 2 { x + F32.round_from(j) },
+  }
+}
+
+pub flow in_the_value_of_a_let(x: F32 at sample, k: U32 at sample) -> F32 at sample {
+  let a = match k { 0 => x, _ => 0.0 } //~ E0812
+  a * 2.0
+}
+
+pub flow in_an_operand(x: F32 at sample, k: U32 at sample) -> F32 at sample {
+  x + (match k { 0 => 1.0, _ => 2.0 }) //~ E0812
+}
+
+pub flow in_an_argument(k: U32 at sample) -> F32 at sample {
+  wrap(match k { 0 => 1.0, _ => 2.0 }) //~ E0812
+}
+
+pub flow state_only_in_the_scrutinee(x: F32 at sample) -> F32 at sample {
+  match (prev~(x) > 0.0) { true => 1.0, false => 0.0 } //~ E0812
+}
+
+pub flow a_one_arm_match(x: F32 at sample, y: F32 at sample) -> F32 at sample {
+  match (x, y) { (a, b) => a + b * x } //~ E0812
+}
+
+pub flow in_a_par_body_without_state(x: F32 at sample, k: U32 at sample) -> [F32; 2] at sample {
+  par i in 0 ..< 2 {
+    x + (match k { 0 => 1.0, _ => 2.0 }) //~ E0812
+  }
+}
+
+// ---- Not errors: a thing with state in an arm (an instance of a flow without state of its own is one, by the kind of the callee) ----
+
+pub flow acc(x: F32 at sample) -> F32 at sample {
+  let y = x + prev~(^y)
+  y
+}
+
+pub flow twice(x: F32 at sample) -> F32 at sample {
+  x * 2.0
+}
+
+pub flow state_in_the_first_arm(x: F32 at sample, k: U32 at sample) -> F32 at sample {
+  match~ k { 0 => prev~(x), _ => 0.0 }
+}
+
+pub flow state_in_the_last_arm(x: F32 at sample, k: U32 at sample) -> F32 at sample {
+  match~ k { 0 => 0.0, _ => prev~(x) }
+}
+
+pub flow state_in_an_arm_that_reads_a_binding(x: F32 at sample) -> F32 at sample {
+  let o: Option[F32] = if x > 2.0 { Some(x) } else { None }
+  match~ o { Some(v) => acc~(v), None => 0.0 }
+}
+
+pub flow an_instance_of_a_flow_without_state(x: F32 at sample, k: U32 at sample) -> F32 at sample {
+  match~ k { 0 => twice~(x), _ => 0.0 }
+}
+
+pub flow a_par_tilde_in_an_arm(x: F32 at sample, k: U32 at sample) -> [F32; 2] at sample {
+  match~ k { 0 => par~ i in 0 ..< 2 { prev~(x * F32.round_from(i)) }, _ => [x, x] }
+}
+
+pub flow state_in_an_arm_of_a_match_tilde_in_an_arm(x: F32 at sample, k: U32 at sample, j: U32 at sample) -> F32 at sample {
+  match~ k { 0 => (match~ j { 0 => prev~(x), _ => 0.0 }), _ => 0.0 }
+}
+
+pub flow state_in_a_branch_of_an_if_tilde_in_an_arm(x: F32 at sample, k: U32 at sample, c: Bool at sample) -> F32 at sample {
+  match~ k { 0 => (if~ c { prev~(x) } else { 0.0 }), _ => 0.0 }
+}
+
+pub flow state_in_the_scrutinee_and_in_an_arm(x: F32 at sample) -> F32 at sample {
+  match~ (prev~(x) > 0.0) { true => acc~(x), false => 0.0 }
+}

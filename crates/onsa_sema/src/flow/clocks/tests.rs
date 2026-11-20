@@ -357,3 +357,33 @@ fn an_if_tilde_with_no_state_in_its_branches_is_e0812() {
     let d = f.walked.diag.as_ref().expect("a diagnostic");
     assert_eq!((d.code, &f.src[d.span.start as usize..d.span.end as usize]), (onsa_diag::Code::E0812, "~"));
 }
+
+/// S-1131: a binding of an arm of `match~` read in its body has the join of
+/// the clock of the scrutinee and of the guards of the arms to its own; in a
+/// guard, and of a plain `match`, the clock of the scrutinee.
+#[test]
+fn the_bindings_of_a_match_tilde_have_the_clocks_of_the_guards_before_them() {
+    let f = walk_of(
+        "pub flow f(x: F32 at sample, k: U32 at block, s: Bool at sample) -> F32 at sample {\n  let a = match~ k {\n    n if n > 1 => prev~(x) + F32.round_from(n),\n    m if s => prev~(x) * F32.round_from(m),\n    j => prev~(x) - F32.round_from(j),\n  }\n  let b = match k {\n    v if s => F32.round_from(v),\n    _ => 0.0,\n  }\n  a + b\n}\n",
+        "f",
+    );
+    assert!(f.complete, "{:?}", f.walked.diag);
+    assert_eq!((f.local("n"), f.expr("n > 1")), (Clock::Block, Clock::Block));
+    assert_eq!((f.local("m"), f.local("j"), f.local("v")), (S, S, Clock::Block));
+    assert_eq!(f.expr("F32.round_from(v)"), Clock::Block);
+}
+
+/// §11.5, S-1177: a `match~` none of whose arm bodies holds state is E0812
+/// at its `~`, a guard with state not counted (S-1191); the candidate keeps
+/// a space before a scrutinee that touches the `~`.
+#[test]
+fn a_match_tilde_with_no_state_in_its_arm_bodies_is_e0812() {
+    let f = walk_of(
+        "pub flow f(x: F32 at sample) -> F32 at sample {\n  match~(x > 0.0) {\n    true if prev~(x) > 0.0 => 1.0,\n    _ => x,\n  }\n}\n",
+        "f",
+    );
+    let d = f.walked.diag.as_ref().expect("a diagnostic");
+    assert_eq!((d.code, &f.src[d.span.start as usize..d.span.end as usize]), (onsa_diag::Code::E0812, "~"));
+    let edits: Vec<&str> = d.fixes[0].edits().iter().map(|e| e.replace.as_str()).collect();
+    assert_eq!(edits, [" "]);
+}

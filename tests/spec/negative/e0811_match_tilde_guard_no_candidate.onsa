@@ -1,0 +1,90 @@
+// onsa.toml
+// [test]
+// spec = ["§2.6", "§11.5", "§18.1"]
+// fixes = 0
+
+// W7-06 U3a/t, S-394 (a)+X1, S-1172 (§11.5: "ガードと `if` / `if~` の連鎖の二つ目からの条件の中の状態を持つものには、当てても誤りが残る `~` の候補を出さない"; "式が腕の束縛を
+// 読むときと、`par~` の本体の中にあるときは、この候補（前の `let` に出す）を作らない（他の候補は残す）"): the thing with state in the guard of a `match~` has no candidate of the
+// `~` (the `match~` is there already), and has none of the lift when it reads a binding of its arm (the `let` before the statement is before the binding), or when it
+// is in the body of a `par~` (taken out of it, the replication count would change). Such an E0811 has no candidate at all (`fixes = 0`; X1: the candidate is a must of the E0811
+// of a flow called without `~` only). The guard may be written (it is the E0811, no E0200 nor a crash). Every `match~` holds a thing with state in an arm
+// body (it is no E0812). One error per flow (P-01); the marker is on the line of the offending construct.
+
+pub flow acc(x: F32 at sample) -> F32 at sample {
+  let y = x + prev~(^y)
+  y
+}
+
+pub rt fn wrap(x: F32) -> F32 {
+  x
+}
+
+// ---- E0811 without a candidate: the thing with state reads a binding of the arm ----
+
+pub flow guard_state_reads_an_option_binding(x: F32 at sample) -> F32 at sample {
+  let o: Option[F32] = if x > 2.0 { Some(x) } else { None }
+  match~ o {
+    Some(v) if acc~(v) > 0.5 => prev~(x), //~ E0811
+    _ => 0.0,
+  }
+}
+
+pub flow guard_state_reads_a_variable_pattern(k: U32 at sample, x: F32 at sample) -> F32 at sample {
+  match~ k {
+    0 => acc~(x),
+    n if prev~(F32.round_from(n)) > 0.5 => 1.0, //~ E0811
+    _ => 0.0,
+  }
+}
+
+pub flow guard_state_reads_a_binding_inside_a_call(x: F32 at sample) -> F32 at sample {
+  let o: Option[F32] = if x > 2.0 { Some(x) } else { None }
+  match~ o {
+    Some(v) if wrap(prev~(v)) > 0.5 => acc~(x), //~ E0811
+    _ => 0.0,
+  }
+}
+
+pub flow guard_state_reads_the_binding_of_a_tuple_pattern(x: F32 at sample, y: F32 at sample) -> F32 at sample {
+  match~ (x, y) {
+    (a, b) if acc~(a) > b => prev~(x), //~ E0811
+    _ => 0.0,
+  }
+}
+
+// ---- E0811 without a candidate: the guard is in the body of a `par~` ----
+
+pub flow guard_in_a_par_tilde_body(k: U32 at sample, x: F32 at sample) -> [F32; 2] at sample {
+  par~ i in 0 ..< 2 {
+    match~ k {
+      0 if prev~(x) > 0.0 => acc~(x), //~ E0811
+      _ => 0.0,
+    }
+  }
+}
+
+pub flow guard_in_a_par_tilde_body_reading_the_index(k: U32 at sample, x: F32 at sample) -> [F32; 2] at sample {
+  par~ i in 0 ..< 2 {
+    match~ k {
+      0 if prev~(x * F32.round_from(i)) > 0.0 => acc~(x), //~ E0811
+      _ => 0.0,
+    }
+  }
+}
+
+// ---- Not errors: a guard that reads a binding and holds no state ----
+
+pub flow guard_reads_a_binding_and_holds_no_state(x: F32 at sample) -> F32 at sample {
+  let o: Option[F32] = if x > 2.0 { Some(x) } else { None }
+  match~ o {
+    Some(v) if wrap(v) > 0.5 => acc~(v),
+    _ => 0.0,
+  }
+}
+
+// The scrutinee, which reads no binding, may hold state, in the body of a `par~` too.
+pub flow scrutinee_with_state_in_a_par_tilde_body(x: F32 at sample) -> [F32; 2] at sample {
+  par~ i in 0 ..< 2 {
+    match~ (prev~(x * F32.round_from(i)) > 0.0) { true => acc~(x), false => 0.0 }
+  }
+}

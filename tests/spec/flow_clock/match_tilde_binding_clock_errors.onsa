@@ -1,0 +1,115 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§11.4", "§11.5", "§18.1"]
+
+// W7-06 U3a/t, S-1131, S-110 (§11.5: "腕の本体で読む束縛のクロックは、対象のクロックと、最初の腕からその腕までのガードのクロックのうち最も速いものである（取られない腕では既定値に
+// なり、値が腕の選びで変わるため。ガードの中で読む束縛は対象のクロック）。束縛を読む式は、他の式と同じく、そのクロックの段で評価する"; §11.5: "`block` の入力に `sample` の値、`init` の
+// 入力に `block` の値を渡すと E0815"): the binding of an arm that an arm body reads is as fast as the fastest of the clocks of the scrutinee and of the guards from the first arm to that arm, so
+// a guard that is decided on every sample makes the binding `sample`, and a body that gives it to a `block` or `init` input, to the `init` argument of a delay, to a function that is not an `rt fn`, or to
+// an `at block` is E0815 by the rules that are there already, and the first argument of a delay that is at `block` is E0813. The same forms with the clocks the right way are in
+// match_tilde_binding_clock_ok.onsa. Every `match~` holds a thing with state in an arm body (it is no E0812; an instance of a flow without state of its own is one, by the kind of the
+// callee). One error per flow (P-01); the marker is on the line of the offending construct, and the spec does not fix its column.
+
+pub flow lp(x: F32 at sample, g: F32 at block) -> F32 at sample {
+  x * g
+}
+
+pub flow cfg(x: F32 at sample, c: F32 at init) -> F32 at sample {
+  x * c
+}
+
+pub flow acc(x: F32 at sample) -> F32 at sample {
+  let y = x + prev~(^y)
+  y
+}
+
+pub fn design(v: F32) -> F32 {
+  v * 0.5
+}
+
+// ---- E0815: the binding is `sample` because a guard is decided on every sample ----
+
+pub flow guard_on_sample_then_a_block_input(x: F32 at sample, k: U32 at block, s: Bool at sample) -> F32 at sample {
+  match~ k {
+    n if s => lp~(x, F32.round_from(n)), //~ E0815
+    _ => x,
+  }
+}
+
+pub flow an_earlier_guard_on_sample_then_a_block_input(x: F32 at sample, k: U32 at block, s: Bool at sample) -> F32 at sample {
+  match~ k {
+    0 if s => x,
+    n => lp~(x, F32.round_from(n)), //~ E0815
+  }
+}
+
+pub flow guard_on_block_then_an_init_argument_of_a_delay(x: F32 at sample, k: U32 at init, b: Bool at block) -> F32 at sample {
+  match~ k {
+    n if b => prev~(x, F32.round_from(n)), //~ E0815
+    _ => x,
+  }
+}
+
+pub flow guard_on_sample_then_a_function_that_is_not_rt(x: F32 at sample, k: U32 at init, s: Bool at sample) -> F32 at sample {
+  match~ k {
+    n if s => acc~(x) + design(F32.round_from(n)), //~ E0815
+    _ => 0.0,
+  }
+}
+
+pub flow guard_on_sample_then_at_block(x: F32 at sample, k: U32 at block, s: Bool at sample) -> F32 at sample {
+  match~ k {
+    n if s => acc~(x) + F32.round_from(n at block), //~ E0815
+    _ => 0.0,
+  }
+}
+
+pub flow a_binding_of_an_outer_arm_as_the_scrutinee(x: F32 at sample, k: U32 at block, s: Bool at sample) -> F32 at sample {
+  match~ k {
+    n if s => (match~ n { m => lp~(x, F32.round_from(m)) }), //~ E0815
+    _ => x,
+  }
+}
+
+pub flow in_a_par_tilde_body(x: F32 at sample, k: U32 at block, s: Bool at sample) -> [F32; 2] at sample {
+  par~ i in 0 ..< 2 {
+    match~ k {
+      n if s => lp~(x * F32.round_from(i), F32.round_from(n)), //~ E0815
+      _ => x,
+    }
+  }
+}
+
+// ---- E0815: the binding is as fast as the scrutinee, and the scrutinee is a value whose clocks are mixed ----
+
+// A tuple has one clock, the fastest of its parts, and the binding of a pattern that takes it apart has that clock (the fields are not followed apart): `a` is the `block`
+// part of the target, and is `sample` in the arm.
+pub flow a_tuple_scrutinee_of_mixed_clocks(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  match~ (p, x) { (a, b) => lp~(b, a) } //~ E0815
+}
+
+// ---- E0815: the binding is `block` and goes to an `init` input ----
+
+pub flow a_block_binding_to_an_init_input(x: F32 at sample, k: U32 at block) -> F32 at sample {
+  match~ k {
+    0 => x,
+    n => cfg~(x, F32.round_from(n)), //~ E0815
+  }
+}
+
+// ---- E0813: the first argument of a delay is a binding that is `block` ----
+
+pub flow a_block_binding_to_a_delay(x: F32 at sample, k: U32 at block) -> F32 at sample {
+  match~ k {
+    0 => x,
+    n => prev~(F32.round_from(n)), //~ E0813
+  }
+}
+
+pub flow a_block_binding_of_an_option_to_a_delay(x: F32 at sample, o: F32 at block) -> F32 at sample {
+  let c: Option[F32] = if o > 0.5 { Some(o) } else { None }
+  match~ c {
+    Some(v) => prev~(v), //~ E0813
+    None => x,
+  }
+}

@@ -1,0 +1,18 @@
+// onsa.toml
+// [test]
+// spec = ["§2.6", "§11.5", "§18.1"]
+//
+// [[test.fix]]
+// at = "17:8"
+// code = "E0812"
+// candidate = 1
+// clean = true
+
+// W7-06 U3a/t, S-110, S-1177 (§11.5: "状態を持つものを枝に含まなければ E0812（修正候補は `~` を外すこと）"; §2.6): a `match~` over an `Option` whose arms read the binding
+// and have a guard, but hold no state. The removal of the `~` leaves a plain `match` with a guard and a binding, which checks clean (the `Default` of the binding
+// is the rule of the `match~` only, §11.5). The main position (`at`) is the `~` (S-392, provisional). One error per flow (P-01).
+
+pub flow binding_and_guard(x: F32 at sample) -> F32 at sample {
+  let o: Option[F32] = if x > 2.0 { Some(x) } else { None }
+  match~ o { Some(v) if v > 3.0 => v * 2.0, Some(v) => v, None => 0.0 } //~ E0812
+}

@@ -435,10 +435,8 @@ impl Walk<'_> {
                 Some(t) => self.expr(t),
                 None => Some(Clock::Const),
             },
-            // E0200 of W7-06 U3a: the walk stops at it.
-            ExprKind::Match { tilde: Some(t), .. } => self.tilde(*t, "match~"),
             ExprKind::If { tilde, .. } => self.if_chain(e, *tilde),
-            ExprKind::Match { scrutinee, arms, .. } => self.match_arms(e, *scrutinee, arms),
+            ExprKind::Match { scrutinee, arms, tilde } => self.match_arms(e, *scrutinee, arms, *tilde),
             ExprKind::Binary { op, lhs, rhs, .. } => {
                 let l = self.expr(*lhs);
                 let r = match op {
@@ -507,8 +505,8 @@ impl Walk<'_> {
     /// the last. One loop over the chain.
     fn if_chain(&mut self, e: ExprId, tilde: Option<Span>) -> Option<Clock> {
         let chain = super::branching::chain(self.ast, e);
-        if let Some(t) = tilde.filter(|_| self.checking()) {
-            self.check_tilde(t, &chain);
+        if let (Some(t), Some(first)) = (tilde.filter(|_| self.checking()), chain.links.first()) {
+            self.check_tilde(t, "if", chain.links.iter().map(|l| l.then).chain(chain.last), first.cond);
         }
         let branch = |w: &mut Self, x| match tilde {
             None => w.at(Site::Branch { head: e }, |w| w.expr(x)),
@@ -530,16 +528,35 @@ impl Walk<'_> {
         self.join(e, &ops)
     }
 
-    /// `match` (§11.3): the scrutinee, the guards, which choose, and the
-    /// bodies, branches; the bindings of a pattern have the clock of the
-    /// scrutinee.
-    fn match_arms(&mut self, e: ExprId, scrutinee: ExprId, arms: &[MatchArm]) -> Option<Clock> {
+    /// `match` / `match~` (§11.3, §11.5), `tilde` its `~`: the scrutinee, the
+    /// guards, which choose (S-1094, S-394), and the bodies, of a `match` the
+    /// places of its head, of a `match~` evaluated every sample, which holds
+    /// state in one ([`Self::check_tilde`]). The bindings of a pattern have
+    /// the clock of the scrutinee in the guard; in the body of a `match~`, the
+    /// join of it and the guards of the arms to this one (S-1131), the
+    /// default of their type on a sample that does not take it (E0816).
+    fn match_arms(&mut self, e: ExprId, scrutinee: ExprId, arms: &[MatchArm], tilde: Option<Span>) -> Option<Clock> {
+        if let Some(t) = tilde.filter(|_| self.checking()) {
+            self.check_tilde(t, "match", arms.iter().map(|a| a.body), scrutinee);
+        }
         let s = self.expr(scrutinee);
-        let mut ops = vec![s];
+        let (mut ops, mut chosen) = (vec![s], s);
         for arm in arms {
             self.bind_pat(arm.pat, s);
-            ops.extend(arm.guard.map(|g| self.at(Site::Choose, |w| w.expr(g))));
-            ops.push(self.at(Site::Branch { head: e }, |w| w.expr(arm.body)));
+            if let Some(g) = arm.guard {
+                let g = self.at(Site::Choose, |w| w.expr(g));
+                chosen = self.join(e, &[chosen, g]);
+                ops.push(g);
+            }
+            let body = match tilde {
+                None => self.at(Site::Branch { head: e }, |w| w.expr(arm.body)),
+                Some(_) => {
+                    self.bind_pat(arm.pat, chosen);
+                    self.check_arm_bindings(arm.pat);
+                    self.expr(arm.body)
+                }
+            };
+            ops.push(body);
         }
         self.join(e, &ops)
     }

@@ -1,0 +1,17 @@
+// onsa.toml
+// [test]
+// spec = ["§2.6", "§11.5", "§18.1"]
+//
+// [[test.fix]]
+// at = "16:8"
+// code = "E0812"
+// candidate = 1
+// clean = true
+
+// W7-06 U3a/t, S-110, S-1177 (§11.5: "状態を持つものを枝に含まなければ E0812（修正候補は `~` を外すこと）"; §2.6: "状態を持つものを枝に含まない `if~` / `match~` の
+// E0812 は、`~` を外す修正候補を示す"): a `match~` whose arms are values. The one error has the one candidate, the removal of the `~`, and the file with it checks
+// clean (`clean` is about the whole file, so the file has this one error and no other unit with a candidate). The main position (`at`) is the `~` (S-392, provisional). One error per flow (P-01).
+
+pub flow value_only(k: U32 at sample) -> F32 at sample {
+  match~ k { 0 => 1.0, _ => 2.0 } //~ E0812
+}

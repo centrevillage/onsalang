@@ -7,8 +7,8 @@
 // `match` stands: in the body of a closure, of a generic function, of an `impl` member, of a
 // `test`, of a flow, in the body of a `par`, and in the initializer of a `let`. Each function,
 // member, test and flow is one unit. Every name bound is read, so no binding is unused. The
-// `let` pattern and `match~` are not here: a choice in a `let` is the E0502 of §7 (the stage of
-// that is not in the spec), and `match~` is E0200 in this version.
+// `let` pattern is not here: a choice in a `let` is the E0502 of §7 (the stage of that is not in
+// the spec). A `match~` takes the patterns of a `match` (§11.5).
 
 pub struct Pair {
   a: U32,

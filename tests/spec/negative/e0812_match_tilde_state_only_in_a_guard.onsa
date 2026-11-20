@@ -1,0 +1,43 @@
+// onsa.toml
+// [test]
+// spec = ["§2.6", "§11.5", "§18.1"]
+//
+// [[test.fix]]
+// at = "31:8"
+// code = "E0812"
+// candidate = 1
+// leaves = ["32:10 E0811"]
+//
+// [[test.fix]]
+// at = "38:8"
+// code = "E0812"
+// candidate = 1
+// leaves = ["40:10 E0811"]
+
+// W7-06 U3a/t, S-1191 (the provisional reading (2); an open detail: the file is read again when S-1191 is decided), S-394 (a) (§11.5: "状態を持つものを枝に含まなければ E0812";
+// "`match` / `match~` のガード … には、状態を持つものを書けない（E0811）"): a `match~` whose only thing with state is in a guard, and no arm body holds one. The
+// E0812 counts the arm bodies (§11.5 says "枝"; a guard is the side that selects, not a branch), so the `match~` is the E0812 although its guard is the E0811 of a
+// plain `match` too; the main position of the E0812 is the `~` (S-392, provisional), which comes before the guard, so it is the one error reported (P-01). The
+// candidate of the E0812 is the removal of the `~`, and what is left is the E0811 of the guard of a plain `match` (`leaves`; the position is after the removal, which is
+// on the line before and moves nothing): the lift into a `let` that the E0811 then offers ends the loop. If S-1191 is decided as (1) (the thing in a guard counts, so
+// the `match~` is no E0812), these two flows are the E0811 of the guard (negative/e0811_match_tilde_guards.onsa) and this file goes. The marker is on the line of the `~`.
+
+pub flow acc(x: F32 at sample) -> F32 at sample {
+  let y = x + prev~(^y)
+  y
+}
+
+pub flow a_delay_in_the_only_guard(k: U32 at sample, x: F32 at sample) -> F32 at sample {
+  match~ k { //~ E0812
+    0 if prev~(x) > 0.0 => 1.0,
+    _ => 0.0,
+  }
+}
+
+pub flow an_instance_in_the_later_guard(k: U32 at sample, x: F32 at sample) -> F32 at sample {
+  match~ k { //~ E0812
+    0 => 2.0,
+    1 if acc~(x) > 1.0 => 1.0,
+    _ => 0.0,
+  }
+}

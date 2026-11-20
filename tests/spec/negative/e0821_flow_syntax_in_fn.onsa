@@ -16,8 +16,8 @@
 // unit in e0821_position_order.onsa. The forms are the ones of tests/review-phase1/parent/t5.onsa
 // (`with_par`, `with_instance`, `with_prev`, `with_feedback`), moved here. Each form is in the body of a
 // function, in a `test` and in a `const` at least, and the other places give the same error. The right
-// forms in a flow body are in the last unit (`match~` with an instance in an arm is E0200 in this
-// version, so it is not there; the right `if~` is in flow_semantics/if_tilde_all_branches.onsa). One error per unit (P-01).
+// forms in a flow body are in the last unit (the right `if~` is in flow_semantics/if_tilde_all_branches.onsa, the
+// right `match~` in flow_semantics/match_tilde_forms_check.onsa). One error per unit (P-01).
 
 pub flow lp(x: F32 at sample) -> F32 at sample {
   x
