@@ -296,7 +296,7 @@ impl<'b> Gen<'b> {
     pub(super) fn stage_lets(&mut self, lw: &mut Lowerer, info: &FlowInfo, state: &Expr) -> R<()> {
         let stage = self.flow().phase.stage();
         for l in &info.lets {
-            match l.clock.stage() {
+            match l.stage.stage() {
                 Some(s) if s == stage => {}
                 Some(s) if s > stage => {
                     super::hoist::writes(lw, &mut self.cx, info, l.init, stage, state, &mut self.stmts)?;

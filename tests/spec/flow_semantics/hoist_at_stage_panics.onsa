@@ -1,0 +1,54 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.3", "§11.6", "§9.2"]
+
+// W7-09 U2s/t, S-1161 (decided (2)), S-1196 (spec §11.3): the panics of the stage of an expression of the parameter kinds that holds an `at` ("`at` で付けたクロックによらず、その値が決まる段…の式として扱う"; "`init` の式は
+// `init` で 1 回、`block` の式は `process` の呼び出しごとに 1 回（0 フレームの呼び出しでも）"). `(n at sample) / m` (`n` and `m` of `block`) panics in a call of 0 frames, a `let` of it too, and `(a at block) / b0` (`a`
+// and `b0` of `init`) panics in `init`. The values of the same flows are in hoist_at_larger_expr_s1161.onsa. `x` is the `sample` input.
+
+pub flow at_in_a_division(x: I32 at sample, n: I32 at block, m: I32 at block) -> I32 at sample {
+  x + (n at sample) / m
+}
+
+pub flow at_in_a_let(x: I32 at sample, n: I32 at block, m: I32 at block) -> I32 at sample {
+  let q = (n at sample) / m
+  x + q
+}
+
+pub flow init_through_block(x: I32 at sample, a: I32 at init, b0: I32 at init) -> I32 at sample {
+  x + (a at block) / b0
+}
+
+test "S-1161 (2): the division of an at expression with m = 0 panics in a call of 0 frames" {
+  let xs: [I32; 1] = [1]
+  var out: [I32; 1] = [7]
+  var st = at_in_a_division.init(8.0)
+  at_in_a_division.process(inout st, at_in_a_division.Params { n: 6, m: 0 }, xs.slice(0, 0), inout out.slice(0, 0)) //~ PANIC "S-1161 (2): the division of an at expression with m = 0 panics in a call of 0 frames"
+  assert out[0] == 7
+}
+
+
+test "the block stage is made again by each call: m = 3 gives a value, m = 0 panics in the next call of 0 frames" {
+  let xs: [I32; 1] = [1]
+  var out: [I32; 1] = [7]
+  var st = at_in_a_division.init(8.0)
+  at_in_a_division.process(inout st, at_in_a_division.Params { n: 6, m: 3 }, xs, inout out)
+  assert out[0] == 3
+  at_in_a_division.process(inout st, at_in_a_division.Params { n: 6, m: 0 }, xs.slice(0, 0), inout out.slice(0, 0)) //~ PANIC "the block stage is made again by each call: m = 3 gives a value, m = 0 panics in the next call of 0 frames"
+  assert out[0] == 3
+}
+
+
+test "a let of an at expression has the stage of its value: q panics in a call of 0 frames" {
+  let xs: [I32; 1] = [1]
+  var out: [I32; 1] = [7]
+  var st = at_in_a_let.init(8.0)
+  at_in_a_let.process(inout st, at_in_a_let.Params { n: 6, m: 0 }, xs.slice(0, 0), inout out.slice(0, 0)) //~ PANIC "a let of an at expression has the stage of its value: q panics in a call of 0 frames"
+  assert out[0] == 7
+}
+
+
+test "an init value read through at block is made at init: b0 = 0 panics in init, before any process" {
+  let _ = init_through_block.init(init_through_block.Config { a: 6, b0: 0 }, 8.0) //~ PANIC "an init value read through at block is made at init: b0 = 0 panics in init, before any process"
+}

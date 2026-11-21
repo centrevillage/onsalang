@@ -2,8 +2,9 @@
 //! The clock of a `let` says when its value is made again: a `let` of a constant or of `init` once, at `init`; of `block`
 //! once for each `process` call, a call of 0 frames too; of `sample` for each frame. A `let` of a faster clock reads the
 //! latest value of a slower one. The `let`s of a stage run in the order they are written (§11.2), the stages of a frame
-//! in the order of the clocks, and `e at k` has the clock `k` but not another value (§11.3; it changes no stage: the
-//! expression under it is made in its own). The parts of a `let` that are of a slower clock than the `let` are made by the
+//! in the order of the clocks, and `e at k` has the clock `k` but not another value (§11.3). S-1196: a value of the parameter kinds
+//! alone is made at the stage its values decide, `at` seen through, and the clock `k` is what a condition on it is decided by (S-1166);
+//! a value of a tick keeps the clock `k`. The parts of a `let` that are of a slower clock than the `let` are made by the
 //! slower stage (`hoist.rs`, §11.3: "各式を、部分式も含めて、その値と評価されるかどうかが決まる最も遅い段で評価する"), whether the value is
 //! read or not, so a panic of a `block` part is a panic of the `block` stage of a call of 0 frames too. The delays (`state.rs`) are in the `sample` stage, and
 //! the second phase of each frame stores what they save, after the stage and before `tick` goes up. The instances of
@@ -22,7 +23,7 @@ use onsa_sema::{DefId, LocalId, Target};
 use onsa_syntax::ast::{CallKind, ExprId, ExprKind, PatId, StmtKind};
 
 use super::expr::{Frame, Hoisted, Stop};
-use super::hoist::pre;
+use super::hoist::{pre, seen_of};
 use super::host::FnHost;
 use super::scalar::{Fault, PanicKind};
 use super::sema_view::{Body, Called, Stage, View, clock_stage, input_stage, inputs_at, output_stage};
@@ -38,6 +39,24 @@ pub enum Clock {
     Block,
     Sample,
 }
+
+/// What a name stands for in the clocks (S-1196, §11.3): the *stage* its value is made in (a value of the parameter kinds alone is made
+/// at the stage its values decide, whatever clock `at` gave it) and the clock it is *read* at (the clock `at` gave it, which a condition
+/// on it is decided by, S-1166). The read clock is `None` for a derived clock (`p at (sample / 4)`), which this evaluator has not.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) struct Seen {
+    pub stage: Clock,
+    pub read: Option<Clock>,
+}
+
+impl Seen {
+    /// A name whose stage and clock are the same.
+    pub(super) fn both(c: Clock) -> Seen {
+        Seen { stage: c, read: Some(c) }
+    }
+}
+
+pub(super) type Known = HashMap<LocalId, Seen>;
 
 /// The clock of an expression of two operands: the faster, as §11.3 has it. `None` for two that do not join (the event
 /// clocks of two inputs, W7-17); there is always one today.
@@ -74,13 +93,15 @@ pub struct Ctx {
     pub tick: u32,
 }
 
-/// The clock of `e` (the stage it is made in): the fastest of the names in it. A name has the clock its local has so far
+/// The clock of `e` (the clock it is *read* at, §11.3: `e at k` has the clock `k`; a condition on it is decided by this clock, S-1166): the
+/// fastest of the names in it. The stage it is made in is [`super::hoist::stage_of`], which sees through `at` for a value of the
+/// parameter kinds alone (S-1196). A name has the clock its local has so far
 /// (`known`); one that `known` has not must be bound inside `root`, the expression being clocked (an arm of a `match`),
 /// and has no clock of its own: bound anywhere else is an internal error. A constant has none, a delay or an instance
 /// ticks with the `sample` of the body (§11.4: the first argument of a delay is at `sample`, or `^name`, which has no clock of
 /// its own and is read as `sample`, §11.3; a constant or a `block` one is E0813; the other clocks of a delay come with W7-09
 /// and W7-17), and `e at k` has the clock `k` (§11.3).
-pub(super) fn clock_of(body: &Body, known: &HashMap<LocalId, Clock>, root: ExprId, e: ExprId) -> Result<Clock, Fault> {
+pub(super) fn clock_of(body: &Body, known: &Known, root: ExprId, e: ExprId) -> Result<Clock, Fault> {
     match &body.ast.expr(e).kind {
         ExprKind::Call { kind, .. } if matches!(kind, CallKind::Flow) || body.time_call(e) => {
             Ok(match body.called(e)? {
@@ -92,7 +113,7 @@ pub(super) fn clock_of(body: &Body, known: &HashMap<LocalId, Clock>, root: ExprI
         // The index of a `par~` is a value of `init` (§11.5), not a constant: the body is clocked with it.
         ExprKind::Par { var, body: inner, .. } => {
             let mut inside = known.clone();
-            inside.insert(body.par_var(var.span)?, Clock::Init);
+            inside.insert(body.par_var(var.span)?, Seen::both(Clock::Init));
             clock_of(body, &inside, root, *inner)
         }
         ExprKind::At { expr, clock } => {
@@ -104,7 +125,7 @@ pub(super) fn clock_of(body: &Body, known: &HashMap<LocalId, Clock>, root: ExprI
         }
         ExprKind::Path(_) | ExprKind::Field { .. } if body.names(e) => match body.target(e)? {
             Target::Local(l) => match known.get(l) {
-                Some(c) => Ok(*c),
+                Some(seen) => seen.read.ok_or(Fault::Unavailable("a derived clock")),
                 None if body.bound_within(*l, root) => Ok(Clock::Const),
                 None => Err(Fault::Internal("a local with no clock")),
             },
@@ -123,7 +144,7 @@ pub(super) struct Step {
     init: ExprId,
     clock: Clock,
     /// The clocks of the locals before this step (`hoist::pre` reads the clocks of the parts of `init` by them).
-    known: Rc<HashMap<LocalId, Clock>>,
+    known: Rc<Known>,
 }
 
 /// The plans made so far for a tree of instances, one for each flow: the clocks of a body are the same at each call.
@@ -333,10 +354,13 @@ impl Inst {
         let wrong = |e, what| Stop { fault: Fault::Internal(what), at: body.ast.expr(e).span };
         let ExprKind::Block(b) = &body.ast.expr(decl.body).kind else { return Err(wrong(decl.body, "a body")) };
         let tail = b.tail.ok_or(wrong(decl.body, "a flow with no output expression"))?;
-        let mut known = HashMap::new();
+        let mut known = Known::new();
         for i in &decl.inputs {
             let stage = input_stage(i).map_err(|fault| Stop { fault, at: body.ast.expr(decl.body).span })?;
-            known.insert(body.input(&i.name).ok_or(wrong(decl.body, "an input with no local"))?, stage.into());
+            known.insert(
+                body.input(&i.name).ok_or(wrong(decl.body, "an input with no local"))?,
+                Seen::both(stage.into()),
+            );
         }
         let mut steps = Vec::new();
         for s in &b.stmts {
@@ -344,17 +368,17 @@ impl Inst {
                 return Err(wrong(decl.body, "a statement"));
             };
             let at = |fault| Stop { fault, at: body.ast.expr(*init).span };
-            let clock = clock_of(body, &known, *init, *init).map_err(at)?;
+            let seen = seen_of(body, &known, *init, *init).map_err(at)?;
             let before = Rc::new(known.clone());
             // SPEC-GAP(S-1119): the locals the pattern binds (a `let` taken apart) have the clock of the whole right
             // side, as the interpreter has it; the other reading gives each the clock of its own element.
             for l in body.pat_locals(*pat).map_err(at)? {
-                known.insert(l, clock);
+                known.insert(l, seen);
             }
-            steps.push(Step { pat: Some(*pat), init: *init, clock, known: before });
+            steps.push(Step { pat: Some(*pat), init: *init, clock: seen.stage, known: before });
         }
-        let clock = clock_of(body, &known, tail, tail).map_err(|fault| Stop { fault, at: body.ast.expr(tail).span })?;
-        steps.push(Step { pat: None, init: tail, clock, known: Rc::new(known) });
+        let seen = seen_of(body, &known, tail, tail).map_err(|fault| Stop { fault, at: body.ast.expr(tail).span })?;
+        steps.push(Step { pat: None, init: tail, clock: seen.stage, known: Rc::new(known) });
         Ok(steps.into())
     }
 

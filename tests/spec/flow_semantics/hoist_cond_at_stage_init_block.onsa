@@ -1,0 +1,30 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.3", "§9.2"]
+
+// W7-09 U2s/t, S-1166, S-1196 (spec §11.3): "条件が決まる段は、その条件を評価する段と、条件の式のクロック（`at` で付けたクロックを含む）の段のうち速い方である". The condition `(d != 0) at block` of `init` values
+// (`d` is `init`) is decided at `block`, so the part of `init` in its branch, `100 / (d - 1)`, is made at "式の段と条件の段のうち最も速い段", `block`, where the condition holds: `init` does not panic with d = 1, and a call of 0 frames
+// does (the same part under `if d != 0`, with no `at`, is made at `init` and panics there, hoist_cond_panic_init.onsa). `x` is the `sample` input, `d` of `init`; `d - 1` is 0 for d = 1.
+
+pub flow init_condition_at_block(x: F32 at sample, d: I32 at init) -> F32 at sample {
+  if (d != 0) at block { x * F32.round_from(100 / (d - 1)) } else { x }
+}
+
+test "an init condition made block with at: the part is made at block, so init does not panic, and a call of 0 frames does" {
+  let xs: [F32; 1] = [2.0]
+  var out: [F32; 1] = [7.0]
+  var off = init_condition_at_block.init(init_condition_at_block.Config { d: 0 }, 8.0)
+  init_condition_at_block.process(inout off, xs.slice(0, 0), inout out.slice(0, 0))
+  var on = init_condition_at_block.init(init_condition_at_block.Config { d: 1 }, 8.0)
+  init_condition_at_block.process(inout on, xs.slice(0, 0), inout out.slice(0, 0)) //~ PANIC "an init condition made block with at: the part is made at block, so init does not panic, and a call of 0 frames does"
+  assert out[0] == 7.0
+}
+
+test "an init condition made block with at gives x * 20 for d = 6 and x for d = 0" {
+  let xs: [F32; 1] = [2.0]
+  let r0 = init_condition_at_block.render(init_condition_at_block.Config { d: 6 }, xs, 8.0)
+  assert r0.out[0] == 40.0
+  let r1 = init_condition_at_block.render(init_condition_at_block.Config { d: 0 }, xs, 8.0)
+  assert r1.out[0] == 2.0
+}

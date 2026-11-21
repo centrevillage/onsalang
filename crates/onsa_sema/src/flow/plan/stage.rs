@@ -6,9 +6,10 @@ use super::*;
 
 impl FlowInfo {
     /// The stage of the local `l` (of an input its `api_clock`, of a `let`
-    /// its clock); `None` of a constant or a local the walk gave no clock.
+    /// its stage, S-1196); `None` of a constant or a local the walk gave no
+    /// clock. The one place of the stage of a local.
     pub fn own_stage(&self, l: LocalId) -> Option<ClockStage> {
-        self.clocks.locals.get(&l).and_then(|c| c.stage())
+        self.clocks.local_stage(l).and_then(Clock::stage)
     }
 
     /// The field of the state that keeps the local `l` (an input or a local
@@ -32,18 +33,18 @@ impl FlowInfo {
         self.read_at.values().flatten().copied()
     }
 
-    /// The first `let` or node (by its place) whose clock is a periodic
+    /// The first `let` or node (by its place) whose stage is a periodic
     /// tick of a ratio (`sample / N`, §11.3): the Core lowers no stage of it
     /// until W7-16, which stops at it (E0200, R-91 (1)).
     pub fn multirate_at(&self) -> Option<Span> {
-        let lets = self.lets.iter().filter(|l| l.clock.of_ratio()).map(|l| l.span);
+        let lets = self.lets.iter().filter(|l| l.stage.of_ratio()).map(|l| l.span);
         let nodes = self.nodes.iter().filter(|n| n.clock.of_ratio()).map(|n| n.span);
         lets.chain(nodes).min_by_key(|s| (s.start, s.end))
     }
 
     /// The `let`s of the stage `stage`, in their order (§11.4).
     pub fn lets_at(&self, stage: ClockStage) -> impl Iterator<Item = &FlowLet> {
-        self.lets.iter().filter(move |l| l.clock.stage() == Some(stage))
+        self.lets.iter().filter(move |l| l.stage.stage() == Some(stage))
     }
 
     /// The `let`s of a constant a local of which is read at the stage
@@ -51,7 +52,7 @@ impl FlowInfo {
     /// (§11.3, [`FlowInfo::read_at`]).
     pub fn consts_at(&self, stage: ClockStage) -> impl Iterator<Item = &FlowLet> {
         let read = move |v: &LocalId| self.read_at.get(v).is_some_and(|r| r.contains(&stage));
-        self.lets.iter().filter(move |l| l.clock == Clock::Const && l.locals.iter().any(read))
+        self.lets.iter().filter(move |l| l.stage == Clock::Const && l.locals.iter().any(read))
     }
 }
 

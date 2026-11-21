@@ -22,7 +22,12 @@ file flow_const_alias_order.tsv rows=59 tests=12 evaluated=12 unavailable=0 skip
 file flow_const_alias_stages.tsv rows=89 tests=24 evaluated=24 unavailable=0 skipped=0 waiting=0
 file flow_const_alias_two_stages.tsv rows=68 tests=15 evaluated=15 unavailable=0 skipped=0 waiting=0
 file hoist_at_computed.tsv rows=23 tests=7 evaluated=7 unavailable=0 skipped=0 waiting=0
-file hoist_at_larger_expr_s1161.tsv rows=11 tests=3 evaluated=3 unavailable=0 skipped=0 waiting=0
+file hoist_at_derived_values.tsv rows=23 tests=5 evaluated=5 unavailable=0 skipped=0 waiting=0
+file hoist_at_larger_expr_s1161.tsv rows=13 tests=4 evaluated=4 unavailable=0 skipped=0 waiting=0
+file hoist_at_stage_panics.tsv rows=18 tests=4 evaluated=4 unavailable=0 skipped=0 waiting=0
+file hoist_cond_at_guard.tsv rows=14 tests=2 evaluated=2 unavailable=0 skipped=0 waiting=1
+file hoist_cond_at_stage.tsv rows=95 tests=16 evaluated=16 unavailable=0 skipped=0 waiting=0
+file hoist_cond_at_stage_init_block.tsv rows=13 tests=2 evaluated=2 unavailable=0 skipped=0 waiting=0
 file hoist_cond_block_branches.tsv rows=27 tests=4 evaluated=4 unavailable=0 skipped=0 waiting=0
 file hoist_cond_match_forms.tsv rows=34 tests=6 evaluated=6 unavailable=0 skipped=0 waiting=1
 file hoist_cond_panic_block.tsv rows=94 tests=14 evaluated=14 unavailable=0 skipped=0 waiting=0
@@ -106,4 +111,4 @@ file struct_pattern_rest_let.tsv rows=7 tests=2 evaluated=2 unavailable=0 skippe
 file struct_pattern_rest_match.tsv rows=4 tests=1 evaluated=1 unavailable=0 skipped=0 waiting=0
 file vdelay_edges.tsv rows=64 tests=15 evaluated=14 unavailable=0 skipped=1 waiting=0
 file vdelay_varying_d.tsv rows=2 tests=1 evaluated=0 unavailable=0 skipped=1 waiting=0
-total files=107 rows=2844 tests=739 evaluated=673 unavailable=1 skipped=65 waiting=5
+total files=112 rows=3009 tests=769 evaluated=703 unavailable=1 skipped=65 waiting=6

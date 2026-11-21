@@ -34,6 +34,7 @@ use crate::flow_names::FlowBuiltin;
 use crate::names::body::{BodyNames, PathRes, named};
 
 mod checks;
+mod stages;
 
 use checks::Branching;
 
@@ -74,12 +75,13 @@ pub(crate) fn finish_flow(a: &mut Analysis, module: &Module, id: DefId, body: Bo
     }
     let ty = |p: &PendingLet| body.expr_types.get(&p.init).copied().unwrap_or(error);
     let lets = fcx.pending.iter().zip(&w.checked);
-    let lets = lets.map(|(p, &clock)| FlowLet {
+    let lets = lets.zip(&w.stages).map(|((p, &clock), &stage)| FlowLet {
         pat: p.pat,
         locals: p.locals.clone(),
         name: p.name.clone(),
         ty: ty(p),
         clock,
+        stage,
         init: p.init,
         span: p.span,
         state: false,
@@ -132,6 +134,8 @@ pub(super) struct Walked {
     pub(super) lets: Vec<Clock>,
     /// Stage 2: the clock of each `let`.
     pub(super) checked: Vec<Clock>,
+    /// The stage of each `let` ([`FlowLet::stage`]).
+    pub(super) stages: Vec<Clock>,
     /// Stage 2: the clocks of the expressions and the locals.
     pub(super) info: ClockInfo,
     /// Stage 2: the clocks of the delays and the instance calls in the order
@@ -303,11 +307,14 @@ pub(super) fn walk(
         }
     }
     w.check();
+    let stages;
+    (w.out.stages, w.out.local_stages, stages) = stages::of_walk(&w);
     let solved = |c: Option<Clock>| c.unwrap_or_else(|| onsa_diag::internal::bug(span, "a `let` left unsolved"));
     let (recorded, edges) = w.recorder.finish();
     Walked {
         lets: w.lets.into_iter().map(solved).collect(),
         checked: w.checked.into_iter().map(solved).collect(),
+        stages,
         info: w.out,
         diag: w.diag,
         inout_call: w.inout_call,

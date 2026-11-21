@@ -3,33 +3,55 @@
 // mode = "test"
 // spec = ["§11.3", "§11.6"]
 
-// W7-05 U1/t, S-1161 (provisional, the decision is OPEN): the stage of a larger expression that holds an `at`,
-// `(n at sample) / m` with `n` and `m` of `block`. The reading taken here is S-1161 (1): the parent of an `at` expression is
-// evaluated at the clock of the `at` expression (`sample`), so the division is a `sample` expression and the call of 0
-// frames does not panic, the call of one frame does. The other reading (2) evaluates the division at `block` and panics in
-// a call of 0 frames too. Only this file reads (1): if S-1161 is decided as (2), only this file changes.
+// W7-09 U2s/t, S-1161 (decided (2)), S-1196 (spec §11.3): "パラメータの種類の値だけで決まる式は、`at` で付けたクロックによらず、その値が決まる段（定数・`init`・`block`）の式として扱う。
+// 数える値は、定数、`init`・`block` の入力、…で、`at` と括弧を通し". So `(n at sample) / m` (`n` and `m` of `block`) is a `block` expression: made once for each `process` call, a call of 0
+// frames too, and its panic is the panic of the `block` stage. `(a at block) / b0` (`a` and `b0` of `init`) is an `init` expression, made at `init`; `(K at sample) * 2` (`K` a constant) has no clock
+// and is made at compile time. A `let` of such a value has the stage of the value, whatever clock `at` gives it. The value is the one the expression has; only the stage differs from the reading
+// that evaluates it at the clock of the `at`. The panics of the stage (a call of 0 frames, `init`) are in hoist_at_stage_panics.onsa. The forms with a derived clock (`n at (sample / 4)`) are in hoist_at_derived_values.onsa; the forms with `at` in a condition in hoist_cond_at_stage.onsa.
+
+const K: I32 = 3
 
 pub flow at_in_a_division(x: I32 at sample, n: I32 at block, m: I32 at block) -> I32 at sample {
   x + (n at sample) / m
 }
 
-test "S-1161 (1): the division of an at expression with m = 0 does not panic in a call of 0 frames" {
-  let xs: [I32; 1] = [1]
-  var out: [I32; 1] = [7]
-  var st = at_in_a_division.init(8.0)
-  at_in_a_division.process(inout st, at_in_a_division.Params { n: 6, m: 0 }, xs.slice(0, 0), inout out.slice(0, 0))
-  assert out[0] == 7
+pub flow at_in_a_let(x: I32 at sample, n: I32 at block, m: I32 at block) -> I32 at sample {
+  let q = (n at sample) / m
+  x + q
 }
 
-test "S-1161 (1): the division panics in a call of one frame" {
-  let xs: [I32; 1] = [1]
-  let o = at_in_a_division.render(at_in_a_division.Params { n: 6, m: 0 }, xs, 8.0) //~ PANIC "S-1161 (1): the division panics in a call of one frame"
-  assert o.out[0] == 0
+pub flow init_through_block(x: I32 at sample, a: I32 at init, b0: I32 at init) -> I32 at sample {
+  x + (a at block) / b0
 }
 
-test "the value of the division: 6 / 3 = 2" {
+pub flow constant_through_sample(x: I32 at sample) -> I32 at sample {
+  x + (K at sample) * 2
+}
+
+test "S-1161 (2): the division gives its value: 6 / 3 = 2, once for the call and read by each frame" {
   let xs: [I32; 2] = [1, 10]
   let o = at_in_a_division.render(at_in_a_division.Params { n: 6, m: 3 }, xs, 8.0)
   assert o.out[0] == 3
   assert o.out[1] == 12
+}
+
+test "a let of an at expression gives its value: q = 6 / 3 = 2" {
+  let xs: [I32; 2] = [1, 10]
+  let o = at_in_a_let.render(at_in_a_let.Params { n: 6, m: 3 }, xs, 8.0)
+  assert o.out[0] == 3
+  assert o.out[1] == 12
+}
+
+test "an init value read through at block gives its value: 6 / 3 = 2" {
+  let xs: [I32; 2] = [1, 10]
+  let o = init_through_block.render(init_through_block.Config { a: 6, b0: 3 }, xs, 8.0)
+  assert o.out[0] == 3
+  assert o.out[1] == 12
+}
+
+test "a constant read through at sample is a constant: K * 2 = 6" {
+  let xs: [I32; 2] = [1, 10]
+  let o = constant_through_sample.render(xs, 8.0)
+  assert o.out[0] == 7
+  assert o.out[1] == 16
 }

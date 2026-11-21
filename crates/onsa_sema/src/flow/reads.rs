@@ -144,9 +144,9 @@ pub(super) fn mark_all(
         },
     };
     // The `let`s and the output are evaluated at their stages whether and
-    // where they are read (§11.3, S-1093): roots under no condition.
-    for (k, l) in lets.iter().enumerate().filter(|(_, l)| l.clock != Clock::Const) {
-        if let Some(s) = read_stage(l.clock) {
+    // where they are read (§11.3, S-1093, S-1196): roots under no condition.
+    for (k, l) in lets.iter().enumerate().filter(|(_, l)| l.stage != Clock::Const) {
+        if let Some(s) = read_stage(l.stage) {
             m.consumer = k;
             m.mark(l.init, s, Cond::None);
         }
@@ -158,7 +158,7 @@ pub(super) fn mark_all(
     // A constant `let` is defined in each phase that reads it, and its
     // initializer read there (§11.3, R-488): from the last, so that one
     // read by a later constant `let` has the stages of that one.
-    for (k, l) in lets.iter().enumerate().rev().filter(|(_, l)| l.clock == Clock::Const) {
+    for (k, l) in lets.iter().enumerate().rev().filter(|(_, l)| l.stage == Clock::Const) {
         m.consumer = k;
         let reads = l.locals.iter().filter_map(|id| m.out.read_at.get(id));
         let mut stages: BTreeSet<ClockStage> = reads.flatten().copied().collect();

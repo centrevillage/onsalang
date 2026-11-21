@@ -1,0 +1,40 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§11.5", "§18.1"]
+// fixes = 0
+
+// W7-09 U2s/t, S-1196 (the second form of A1), S-1166 (spec §11.5, §11.3): the name of a `let` whose value `at` makes `block` or `sample` (`let g = (k != 0) at block`) is read at that clock, so a condition on it is decided
+// after `init` and a call of a function that is not `rt` with an argument that is not a constant under it is E0815 (§11.5), as it is under the condition written in place
+// (e0815_non_rt_call_under_at_sample_condition.onsa). This was an error before the decision too (the `let` was a `block` or a `sample` `let`), and stays one. `x` is the `sample` input, `k` and `n` of `init`;
+// `mk` is not `rt`.
+
+pub fn mk(a: I32) -> I32 {
+  a + 1
+}
+
+pub flow name_at_block(x: F32 at sample, k: I32 at init, n: I32 at init) -> F32 at sample {
+  let g = (k != 0) at block
+  if g { x * F32.round_from(mk(n)) } else { x }                               //~ E0815
+}
+
+pub flow name_at_sample(x: F32 at sample, k: I32 at init, n: I32 at init) -> F32 at sample {
+  let g = (k != 0) at sample
+  if g { x * F32.round_from(mk(n)) } else { x }                               //~ E0815
+}
+
+pub flow name_on_the_left_of_and(x: F32 at sample, k: I32 at init, n: I32 at init) -> F32 at sample {
+  let g = (k != 0) at block
+  if g && mk(n) > 1 { x } else { 0.0 }                                        //~ E0815
+}
+
+// ---------------------------------------------------------------- accepted: the name is not made slower by `at`
+
+pub flow name_at_init(x: F32 at sample, k: I32 at init, n: I32 at init) -> F32 at sample {
+  let g = (k != 0) at init
+  if g { x * F32.round_from(mk(n)) } else { x }
+}
+
+pub flow name_with_no_at(x: F32 at sample, k: I32 at init, n: I32 at init) -> F32 at sample {
+  let g = k != 0
+  if g { x * F32.round_from(mk(n)) } else { x }
+}

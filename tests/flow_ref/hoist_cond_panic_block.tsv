@@ -74,12 +74,12 @@ process 0 params o=#1(4) frames=0 in x=[]
 out=[]
 process 0 params o=#1(0) frames=0 in x=[]
 panic block
-@ a condition with at is counted at the stage of its expression: the guard holds at block
+@ a condition with at sample is decided at sample, not at block: d = 1 does not panic in a call of 0 frames
 init 0 hoist_cond_panic_block.at_in_the_condition sr=0x41000000
 process 0 params d=0 frames=0 in x=[]
 out=[]
 process 0 params d=1 frames=0 in x=[]
-panic block
+out=[]
 @ the second let that is guarded panics when its guard holds, the first one with its guard not holding
 init 0 hoist_cond_panic_block.two_guarded_lets sr=0x41000000
 process 0 params d=0 e=2 frames=0 in x=[]

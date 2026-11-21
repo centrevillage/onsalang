@@ -183,10 +183,10 @@ fn a_let_of_constants_is_made_once_at_init() {
 
 #[test]
 fn at_gives_the_clock_k_and_changes_neither_the_value_nor_the_stage_of_what_it_reads() {
-    // §11.3: `e at k` has the clock `k`; the value does not change (5) and the name under it is read in its own stage:
-    // `a` is `bq(p)`, of `block` (made once for each call; a computed `e` under `at` is hoisted, W7-05 U1). `q = a at
-    // sample` is of `sample`, it is made for each frame and only reads `a`, so `bq` is called once for each call, not
-    // for each frame. `r` and the output read `q`: `sample`.
+    // §11.3, S-1196: `e at k` has the clock `k` for the checks and for what it decides; the value does not change (5) and
+    // the stage is that of its values when they are of the parameter kinds alone: `a` is `bq(p)`, of `block` (made once for
+    // each call). `q = a at sample` reads `a` (`block`) and nothing of a tick, so it is of `block` too (its read clock is
+    // `sample`), and so are `r` and the output: `bq` is called once for each call, not for each frame.
     counter!(row_q, N_Q);
     let src = format!(
         "{}flow f(p: I32 at block) -> I32 at sample {{
@@ -200,7 +200,7 @@ fn at_gives_the_clock_k_and_changes_neither_the_value_nor_the_stage_of_what_it_r
     with_flow(&src, "f", |view, def| {
         let mut table = TableHost::default().with("t.bq", row_q);
         let mut me = Instance::init(view, def, 48000.0, &[], host(&mut table)).expect("init");
-        assert_eq!(me.clocks(), [Clock::Block, Clock::Sample, Clock::Sample, Clock::Sample]);
+        assert_eq!(me.clocks(), [Clock::Block; 4]);
         let outs = me.process(&[("p", i32v(5))], &[], 4, host(&mut table)).expect("process");
         assert!(outs.len() == 4 && outs.iter().all(|o| is(&Ok(o.clone()), &i32v(5))), "{outs:?}");
         assert_eq!(N_Q.load(Relaxed), 1);
@@ -210,10 +210,10 @@ fn at_gives_the_clock_k_and_changes_neither_the_value_nor_the_stage_of_what_it_r
 }
 
 #[test]
-fn a_let_that_reads_a_name_at_sample_is_not_made_in_a_call_of_0_frames() {
-    // §11.3: `ps = p at sample` is of `sample` (the promotion that a delay takes, §11.4), so `r = 100 / ps` is made for
-    // each frame, not for each call. With p = 0 a call of 0 frames makes no frame and does not panic; with 1 frame it does,
-    // at `100 / ps`. With p = 4 and x = 1, 2: 100 / 4 = 25, so 26 and 27.
+fn a_let_of_the_parameter_kinds_made_faster_with_at_has_the_stage_of_its_values() {
+    // §11.3, S-1196: `ps = p at sample` is of `block` (the stage its value decides; `at` gives it the clock `sample` for what reads it),
+    // so `r = 100 / ps` is made once for each call, a call of 0 frames too: with p = 0 it panics at `100 / ps` there. With p = 4 and
+    // x = 1, 2: 100 / 4 = 25, so 26 and 27.
     let src = "flow f(p: I32 at block, x: I32 at sample) -> I32 at sample {
   let ps = p at sample
   let r = 100 / ps
@@ -221,28 +221,23 @@ fn a_let_that_reads_a_name_at_sample_is_not_made_in_a_call_of_0_frames() {
 }";
     with_flow(src, "f", move |view, def| {
         let mut me = Instance::init(view, def, 48000.0, &[], None).expect("init");
-        assert_eq!(me.clocks(), [Clock::Sample; 3]);
-        let outs = me.process(&[("p", i32v(0))], &[("x", &[])], 0, None).expect("0 frames does not panic");
-        assert!(outs.is_empty() && me.ctx.tick == 0);
-        let r = me.process(&[("p", i32v(0))], &[("x", &[i32v(1)])], 1, None);
+        assert_eq!(me.clocks(), [Clock::Block, Clock::Block, Clock::Sample]);
+        let r = me.process(&[("p", i32v(0))], &[("x", &[])], 0, None);
         assert_eq!(panic_at(&r.map(|_| Value::Unit), src), (PanicKind::DivZero, "100 / ps".to_string()));
         let outs = me.process(&[("p", i32v(4))], &[("x", &[i32v(1), i32v(2)])], 2, None).expect("process");
         assert!(is(&Ok(outs[0].clone()), &i32v(26)) && is(&Ok(outs[1].clone()), &i32v(27)), "{outs:?}");
     });
-    // `q = a at block` takes a value of `init` to `block`: with a = 0, `init` is made (`q` is not of `init`), and each
-    // call of `process` makes `100 / q`, a call of 0 frames too.
+    // `q = a at block` takes a value of `init` to the clock `block`, and it is a value of `init`: with a = 0, `100 / q` is made by `init`.
     let src = "flow g(a: I32 at init, x: I32 at sample) -> I32 at sample {
   let q = a at block
   let r = 100 / q
   x + r
 }";
     with_flow(src, "g", move |view, def| {
-        let mut me = Instance::init(view, def, 48000.0, &[("a", i32v(0))], None).expect("init");
-        assert_eq!(me.clocks(), [Clock::Block, Clock::Block, Clock::Sample]);
-        let r = me.process(&[], &[("x", &[])], 0, None);
-        assert_eq!(panic_at(&r.map(|_| Value::Unit), src), (PanicKind::DivZero, "100 / q".to_string()));
+        let r = Instance::init(view, def, 48000.0, &[("a", i32v(0))], None).map(|_| Value::Unit);
+        assert_eq!(panic_at(&r, src), (PanicKind::DivZero, "100 / q".to_string()));
     });
-    // `K at init` takes a constant to `init`: the `let` of it is of `init`, and `x + k` of `sample`.
+    // `K at init` takes a constant to the clock `init`: the `let` of it is a constant (no stage), and `x + k` is of `sample`.
     let src = "const K: I32 = 3
 flow h(x: I32 at sample) -> I32 at sample {
   let k = K at init
@@ -250,9 +245,33 @@ flow h(x: I32 at sample) -> I32 at sample {
 }";
     with_flow(src, "h", move |view, def| {
         let mut me = Instance::init(view, def, 48000.0, &[], None).expect("init");
-        assert_eq!(me.clocks(), [Clock::Init, Clock::Sample]);
+        assert_eq!(me.clocks(), [Clock::Const, Clock::Sample]);
         let outs = me.process(&[], &[("x", &[i32v(4)])], 1, None).expect("process");
         assert!(is(&Ok(outs[0].clone()), &i32v(7)), "{outs:?}");
+    });
+}
+
+#[test]
+fn a_conditional_form_is_made_at_the_clock_its_condition_is_decided_by_with_at_counted() {
+    // §11.3, S-1166, S-1196: the value of `g` is of the parameter kinds alone, so it is of `block` (its read clock is `sample`); a
+    // conditional form is made at the clock its conditions decide, `at` counted, so `if g { .. }` and `if (d != 0) at sample { .. }`
+    // are of `sample` whole, though all their values are of `block`; `(d + 1) at sample` is of `block`; a tick read keeps its clock.
+    let src = "flow f(d: I32 at block, x: I32 at sample) -> I32 at sample {
+  let g = (d != 0) at sample
+  let y = if g { 100 / (d - 1) } else { 0 }
+  let z = if (d != 0) at sample { d } else { 0 }
+  let w = (d + 1) at sample
+  let t = prev~(x)
+  x + y + z + w + t
+}";
+    with_flow(src, "f", |view, def| {
+        let mut me = Instance::init(view, def, 48000.0, &[], None).expect("init");
+        let [b, s] = [Clock::Block, Clock::Sample];
+        assert_eq!(me.clocks(), [b, s, s, b, s, s]);
+        // d = 1 does not divide in a call of 0 frames, and gives y = 0 for the frame that takes the else branch.
+        me.process(&[("d", i32v(1))], &[("x", &[])], 0, None).expect("0 frames does not panic");
+        let outs = me.process(&[("d", i32v(0))], &[("x", &[i32v(5)])], 1, None).expect("process");
+        assert!(is(&Ok(outs[0].clone()), &i32v(6)), "{outs:?}");
     });
 }
 
@@ -267,7 +286,7 @@ fn a_local_that_has_no_clock_is_an_internal_error_and_not_a_constant() {
         let tail = b.tail.expect("the output");
         let r = clock_of(&body, &HashMap::new(), tail, tail);
         assert!(matches!(r, Err(Fault::Internal(_))), "{r:?}");
-        let known = HashMap::from([(body.input("x").expect("x"), Clock::Block)]);
+        let known = HashMap::from([(body.input("x").expect("x"), super::flow::Seen::both(Clock::Block))]);
         assert!(matches!(clock_of(&body, &known, tail, tail), Ok(Clock::Block)));
     });
 }

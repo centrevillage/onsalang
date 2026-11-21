@@ -1,0 +1,76 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.3", "§11.6", "§11.9"]
+
+// W7-09 U2s/t, S-1196, S-1161 (spec §11.3): "`(p at (sample / 4)) * 2.0` と `let m = p at (sample / 4)`（`p` は `block`）は `block` の段で評価し、刻みで書くフィールドを作らず、下の刻みのクロックの式の規則は当たらない
+// （`((p at (sample / 4)) * 2.0) at sample` は、読む位置の `p` の 2 倍である）". The value is the one of the `p` of the call that reads it (not the `p` that a last tick of `sample / 4` kept), it needs
+// no `Default` (the field of a tick that a faster stage reads is not made, so E0816 does not apply: `Gain` has none), and its panic is the panic of the `block` stage, a call of 0 frames too. `x` is
+// the `sample` input, `p` and `m` of `block`. The tick is not counted by this case: the value does not depend on the frame (the reading of a value that is not of the parameter kinds, `(lf at sample) * 2.0`,
+// is the work of the fields of a slow tick, U2r2).
+
+pub struct Gain {
+  g: F32,
+}
+
+pub flow computed_part(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  x * (((p at (sample / 4)) * 2.0) at sample)
+}
+
+pub flow let_of_a_ratio(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let m = p at (sample / 4)
+  x * ((m * 2.0) at sample)
+}
+
+pub flow no_default(x: F32 at sample, p: Gain at block) -> F32 at sample {
+  let m = p at (sample / 4)
+  x * ((m.g * 2.0) at sample)
+}
+
+pub flow divided_at_a_ratio(x: I32 at sample, n: I32 at block, m: I32 at block) -> I32 at sample {
+  x + (((n at (sample / 4)) / m) at sample)
+}
+
+test "a computed part of a ratio read at sample is twice the p of the call that reads it" {
+  // x = 3: p = 1.0 gives 3 * 2 = 6.0; the next call with p = 5.0 gives 3 * 10 = 30.0 (the p of the first call is not kept).
+  let xs: [F32; 1] = [3.0]
+  var out: [F32; 1] = [0.0]
+  var st = computed_part.init(8.0)
+  computed_part.process(inout st, computed_part.Params { p: 1.0 }, xs, inout out)
+  assert out[0] == 6.0
+  computed_part.process(inout st, computed_part.Params { p: 5.0 }, xs, inout out)
+  assert out[0] == 30.0
+}
+
+test "the name of a ratio read at sample after a computation is twice the p of the call that reads it" {
+  let xs: [F32; 2] = [3.0, 4.0]
+  var out: [F32; 2] = [0.0; 2]
+  var st = let_of_a_ratio.init(8.0)
+  let_of_a_ratio.process(inout st, let_of_a_ratio.Params { p: 1.0 }, xs, inout out)
+  assert out[0] == 6.0
+  assert out[1] == 8.0
+  let_of_a_ratio.process(inout st, let_of_a_ratio.Params { p: 5.0 }, xs, inout out)
+  assert out[0] == 30.0
+  assert out[1] == 40.0
+}
+
+test "a ratio of a type with no Default is read at sample: no field of a tick, so E0816 does not apply" {
+  let xs: [F32; 1] = [3.0]
+  let o = no_default.render(no_default.Params { p: Gain { g: 1.5 } }, xs, 8.0)
+  assert o.out[0] == 9.0
+}
+
+test "a division at a ratio of a block value panics in a call of 0 frames (the block stage)" {
+  let xs: [I32; 1] = [1]
+  var out: [I32; 1] = [7]
+  var st = divided_at_a_ratio.init(8.0)
+  divided_at_a_ratio.process(inout st, divided_at_a_ratio.Params { n: 6, m: 0 }, xs.slice(0, 0), inout out.slice(0, 0)) //~ PANIC "a division at a ratio of a block value panics in a call of 0 frames (the block stage)"
+  assert out[0] == 7
+}
+
+test "a division at a ratio of a block value gives its value: 6 / 3 = 2" {
+  let xs: [I32; 2] = [1, 10]
+  let o = divided_at_a_ratio.render(divided_at_a_ratio.Params { n: 6, m: 3 }, xs, 8.0)
+  assert o.out[0] == 3
+  assert o.out[1] == 12
+}

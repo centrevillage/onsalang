@@ -5,7 +5,6 @@
 //! written under its conditions (S-1157). The plan chose and ordered them;
 //! the lowering finds them by `FlowInfo::hoist_of` and judges nothing (D-15).
 
-use onsa_sema::flow::strip;
 use onsa_syntax::ast::{Ast, BinOp, ExprKind as AK};
 
 use super::super::body::{lower_match_with, push_expr_stmt};
@@ -207,10 +206,10 @@ pub(super) fn cond_value(
     s: ClockStage,
     state: &Expr,
 ) -> R<Expr> {
-    let x = strip(cx.ast, c);
+    let x = cx.ast.without_parens(c);
     let span = cx.ast.expr(c).span;
     let late = |k: Clock| k.stage().is_some_and(|k| k > s);
-    if info.clocks.exprs.get(&x).copied().is_some_and(late) {
+    if info.clocks.exprs.get(&c).copied().is_some_and(late) {
         return Err(internal(span, "a field guarded by a condition decided after its stage"));
     }
     match info.hoist_of(x).filter(|&h| info.hoist(h).stage == s) {

@@ -38,11 +38,11 @@ pub flow two_ratios_in_one_flow(p: F32 at block, q: F32 at init, x: F32 at sampl
   x * (a at sample) + (b at sample)
 }
 
+// `a + b` is of the parameter kinds alone (`a` and `b` are `p at (sample / N)` of `block`), so it is a `block` expression read at `sample` (S-1196, §11.3), not a field of a tick.
 pub flow the_same_ratio_written_two_ways(p: F32 at block, x: F32 at sample) -> F32 at sample {
   let a = p at (sample / 8)
   let b = p at (sample / K)
-  let s = a + b
-  x * (s at sample)
+  x * ((a + b) at sample)
 }
 
 pub flow a_delay_of_a_slow_value(p: F32 at block) -> F32 at sample {

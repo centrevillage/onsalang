@@ -1,5 +1,5 @@
 //! Hoisting (§11.3, S-33, S-1157): the slow subexpressions of a flow body
-//! read at a faster stage are evaluated at the stage of their clock, and
+//! read at a faster stage are evaluated at their stage (S-1196), and
 //! the state keeps their values in hidden fields (`a._hoist_0`, §11.6,
 //! §12.4). The marking ([`super::reads`]) asks [`Choose::place`] of each
 //! expression it walks, with the stage it is read at, and reads the parts
@@ -53,15 +53,6 @@ impl Cond {
     }
 }
 
-/// `e` past its parentheses and `at`, which change neither its value nor
-/// its stage (§11.3): what a condition is decided by.
-pub fn strip(ast: &Ast, mut e: ExprId) -> ExprId {
-    while let ExprKind::Paren(x) | ExprKind::At { expr: x, .. } = &ast.expr(e).kind {
-        e = *x;
-    }
-    e
-}
-
 /// The index of a hoisted subexpression in [`FlowInfo::hoists`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct HoistId(pub u32);
@@ -70,8 +61,8 @@ pub struct HoistId(pub u32);
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Hoist {
     pub expr: ExprId,
-    /// The stage it is evaluated at, `init` or `block`: before every stage
-    /// that reads it.
+    /// The stage it is evaluated at, `init` or `block` ([`ClockInfo::stage`]
+    /// and its conditions): before every stage that reads it.
     pub stage: ClockStage,
     /// Written only when the conditions on its path hold (S-1157): under
     /// a conditional position. W8-07 makes of it what `init` sets (V-17).
@@ -121,22 +112,22 @@ pub(super) struct Choose<'a> {
 
 impl Choose<'_> {
     /// Where `e`, read at the stage `at` under the conditions `g`, is
-    /// evaluated (§11.3, S-1157): at the stage of its clock and of `g`,
-    /// the later, in a field when that is `init` or `block` and before
-    /// `at`, `g` is not `Late` and it may have one ([`Choose::hoistable`]);
-    /// else where it is read. The marking reads the parts of a hoisted one
-    /// at its stage, so the first met from the root is the largest, and a
-    /// slower part in it is hoisted again (`make(a)` in `level * make(a)`).
+    /// evaluated (§11.3, S-1157): at its stage ([`ClockInfo::stage`],
+    /// S-1196) and that of `g`, the later, in a field when that is `init` or
+    /// `block` and before `at`, `g` is not `Late` and it may have one
+    /// ([`Choose::hoistable`]); else where it is read. The marking reads the
+    /// parts of a hoisted one at its stage, so the first met from the root
+    /// is the largest, and a slower part in it is hoisted again (`make(a)`
+    /// in `level * make(a)`).
     pub(super) fn place(&self, e: ExprId, at: ClockStage, g: Cond) -> Place {
-        let d = match self.clocks.exprs.get(&e) {
+        let d = match self.clocks.stage(e) {
             Some(Clock::Init) => ClockStage::Init,
             Some(Clock::Block) => ClockStage::Block,
             Some(Clock::Const) if g != Cond::None && self.computed(e) => {
                 return g.stage().filter(|&s| s < at).map_or(Place::Const, Place::Check);
             }
-            // The current clock of the part decides it, `at` on a parameter
-            // kind in it too (S-1196, U2s).
-            Some(&Clock::Tick(r)) if ClockStage::Tick(r) < at && (self.part(e) || self.nodes.contains(&e)) => {
+            // A part that reads a tick: of the stage of its clock.
+            Some(Clock::Tick(r)) if ClockStage::Tick(r) < at && (self.part(e) || self.nodes.contains(&e)) => {
                 return Place::Gate(ClockStage::Tick(r));
             }
             _ => return Place::Here,
@@ -153,13 +144,15 @@ impl Choose<'_> {
 
     /// The stage at which the condition `c` (an `if`, the left of `&&` /
     /// `||`, a guard, the scrutinee of a `match`), read at `at`, is decided
-    /// (§11.3): of its clock past parentheses and `at`; of a value that is
-    /// not Copy, which is not hoisted (S-1046 (a)), `at`.
+    /// (§11.3, S-1166): the faster of its stage and that of its clock, `at`
+    /// counted, which is its clock (a stage is never faster than its
+    /// clock); of a value that is not Copy, which is not hoisted (S-1046
+    /// (a)), `at`.
     pub(super) fn cond_stage(&self, c: ExprId, at: ClockStage) -> Cond {
         if !self.copy(c) {
             return Cond::of(at);
         }
-        match self.clocks.exprs.get(&strip(self.ast, c)) {
+        match self.clocks.exprs.get(&c) {
             Some(Clock::Const) => Cond::Const,
             Some(k) => k.stage().map_or(Cond::Late, Cond::of),
             None => Cond::Late,
@@ -175,7 +168,7 @@ impl Choose<'_> {
     /// Whether `e` is a computed part: none of a name (an input, a `let`,
     /// the index of a `par~`, a binding of an arm, `^y`), `sample_rate()`
     /// and a node (§11.3), nor parentheses or `at`, whose operand is the
-    /// same value at the same stage (§11.3: `at` changes neither), nor a
+    /// same value (§11.3: `at` changes no value), nor a
     /// block of a value only, whose value the lowering makes of its tail in
     /// place: the operand or the tail is chosen instead.
     fn part(&self, e: ExprId) -> bool {

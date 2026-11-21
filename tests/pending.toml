@@ -929,3 +929,10 @@ target = "tests/spec/flow_clock/derived_clock_const_expressions_w9_03.onsa"
 reasons = ["S-1077"]
 until = "W9-03"
 note = "導くクロックの N の算術（`(sample / (K * 2))`）。N の値は W9-03 まで E0200（FlowConstExprs）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/flow_semantics/hoist_cond_at_guard.onsa"
+reasons = ["S-1166", "S-1196", "R-06"]
+until = "W8-06"
+note = "ガードに at sample を書いた値の match（Some(v) if (v != 0) at sample）が降下で E0200（値の match のガード、W8-06）。検査と段の読みは W7-09 U2s で入れた"

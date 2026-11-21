@@ -165,9 +165,8 @@ impl FlowInfo {
     pub fn stored(&self, v: Kept) -> bool {
         match v {
             Kept::Local(l) => {
-                let own = self.clocks.locals.get(&l).and_then(|c| c.stage());
                 let reads = self.read_at.get(&l).into_iter().flatten();
-                own.is_some_and(|own| reads.into_iter().any(|&s| s != own))
+                self.own_stage(l).is_some_and(|own| reads.into_iter().any(|&s| s != own))
             }
             Kept::SampleRate => self.sample_rate_at.is_some_and(|s| s != ClockStage::Init),
         }

@@ -116,7 +116,7 @@ mod reads;
 mod tests;
 
 pub use branching::{Chain, Link, chain};
-pub use hoist::{Cond, Hoist, HoistId, strip};
+pub use hoist::{Cond, Hoist, HoistId};
 pub use plan::{Edge, Field, FieldOf, Kept, NodeId, Owner, Part, PlanKind, PlanNode, Vertex};
 
 pub(crate) use clocks::finish_flow;
@@ -132,6 +132,10 @@ pub struct FlowLet {
     /// Type of the initializer (resolved).
     pub ty: TyId,
     pub clock: Clock,
+    /// The stage it is evaluated at, as a clock (§11.3, S-1196): its clock,
+    /// but of a value of the parameter kinds alone, theirs (`let m = p at
+    /// (sample / 4)`, `p` at `block`, is of `block`).
+    pub stage: Clock,
     pub init: ExprId,
     pub span: Span,
     /// A local of it is read at a stage that is not its own: its locals
@@ -173,6 +177,27 @@ pub enum InitArg {
 pub struct ClockInfo {
     pub exprs: HashMap<ExprId, Clock>,
     pub locals: HashMap<LocalId, Clock>,
+    /// The stages of the expressions and the locals that differ from their
+    /// clocks ([`ClockInfo::stage`]).
+    pub stages: HashMap<ExprId, Clock>,
+    pub local_stages: HashMap<LocalId, Clock>,
+}
+
+impl ClockInfo {
+    /// The stage `e` is evaluated at, as a clock (§11.3, S-1196): of an
+    /// expression decided by values of the parameter kinds alone, theirs,
+    /// whatever clock an `at` gives it (`(n at sample) / m`, `m` and `n` at
+    /// `block`, is of `block`); of one that reads a tick, its clock. Made
+    /// once by the walk (`clocks::stages`).
+    pub fn stage(&self, e: ExprId) -> Option<Clock> {
+        self.stages.get(&e).or(self.exprs.get(&e)).copied()
+    }
+
+    /// The stage of the local `l` ([`ClockInfo::stage`]): of a local of a
+    /// `let`, that of the `let`; else its clock.
+    pub fn local_stage(&self, l: LocalId) -> Option<Clock> {
+        self.local_stages.get(&l).or(self.locals.get(&l)).copied()
+    }
 }
 
 /// The clock of a delay or an instance call the walk of the clocks gives,

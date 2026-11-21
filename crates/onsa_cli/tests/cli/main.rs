@@ -5,6 +5,7 @@
 mod test_support;
 
 mod alias_sameness;
+mod at_stage_fields;
 mod binding_clock_notes;
 mod block_operands;
 mod body_paths;

@@ -96,7 +96,7 @@ render hoist_cond_values.match_division sr=0x41000000 params o=#1(4) in x=[0x400
 out=[0x42480000]
 render hoist_cond_values.match_division sr=0x41000000 params o=#0() in x=[0x40000000]
 out=[0x40000000]
-@ a condition with at is counted at the stage of its expression: d = 0 does not divide, d = 4 gives x * 25
+@ a condition with at sample is decided at sample: d = 0 does not divide, d = 4 gives x * 25
 render hoist_cond_values.at_in_the_condition sr=0x41000000 params d=0 in x=[0x40000000]
 out=[0x40000000]
 render hoist_cond_values.at_in_the_condition sr=0x41000000 params d=4 in x=[0x40000000]

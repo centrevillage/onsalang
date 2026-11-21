@@ -1,0 +1,206 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.3", "§9.2"]
+
+// W7-09 U2s/t, S-1166, S-1196, S-1157 (spec §11.3): "条件が決まる段は、その条件を評価する段と、条件の式のクロック（`at` で付けたクロックを含む）の段のうち速い方である。…
+// `if (d != 0) at sample { … }` と、`let g = (d != 0) at sample` の `if g { … }`（`d` は `block`）は、どちらも `sample` で決まる条件である（枝の中の `block` の式は巻き上げず、届いたときに評価する）".
+// So a part of `block` in a branch under such a condition is evaluated where the evaluation reaches it: a call of 0 frames does not panic and a frame that takes the branch does. "条件に `at` を書いた式は、
+// 全体がパラメータの種類の値でも、条件が決まる段で選ぶ" (the whole `if` of a `let` is a `sample` expression). `x` is the `sample` input, `d` and `e` of `block`; `d - 1` is 0 for d = 1,
+// so d = 1 is the panic of each flow. A condition of `init` that `at block` makes `block` is in hoist_cond_at_stage_init_block.onsa; the guard of a `match` with `at sample` in hoist_cond_at_guard.onsa (E0200 until W8-06).
+
+pub flow direct(x: F32 at sample, d: I32 at block) -> F32 at sample {
+  if (d != 0) at sample { x * F32.round_from(100 / (d - 1)) } else { x }
+}
+
+pub flow through_let(x: F32 at sample, d: I32 at block) -> F32 at sample {
+  let g = (d != 0) at sample
+  if g { x * F32.round_from(100 / (d - 1)) } else { x }
+}
+
+pub flow match_object_at_sample(x: F32 at sample, o: Option[I32] at block) -> F32 at sample {
+  match (o at sample) {
+    Some(v) => x * F32.round_from(100 / v),
+    None => x,
+  }
+}
+
+pub flow and_left_at_sample(x: F32 at sample, d: I32 at block) -> F32 at sample {
+  if ((d != 0) at sample) && F32.round_from(100 / (d - 1)) > x { 1.0 } else { 0.0 }
+}
+
+// The second condition is under the first, which is decided at `sample`, so it is reached by the frame.
+pub flow tilde_second_condition(x: F32 at sample, d: I32 at block) -> F32 at sample {
+  if~ (d == 0) at sample { prev~(x) + 10.0 } else if F32.round_from(100 / (d - 1)) > x { 2.0 } else { 3.0 }
+}
+
+pub flow block_outside_at_sample_inside(x: F32 at sample, d: I32 at block, e: I32 at block) -> F32 at sample {
+  if e != 0 { if (d != 0) at sample { x * F32.round_from(100 / (d - 1)) } else { x } } else { 0.0 }
+}
+
+pub flow in_a_par(x: F32 at sample, d: I32 at block) -> F32 at sample {
+  let ys = par i in 0 ..< 2 {
+    if (d != 0) at sample { x * F32.round_from(100 / (d - 1)) + F32.round_from(i) } else { x }
+  }
+  ys[0] + ys[1]
+}
+
+pub flow whole_if(x: F32 at sample, d: I32 at block) -> F32 at sample {
+  let y = if (d != 0) at sample { 100 / (d - 1) } else { 0 }
+  x + F32.round_from(y)
+}
+
+test "direct: d = 1 does not panic in a call of 0 frames, and the values are x for d = 0 and x * 20 for d = 6" {
+  let xs: [F32; 1] = [2.0]
+  var out: [F32; 1] = [7.0]
+  var st = direct.init(8.0)
+  direct.process(inout st, direct.Params { d: 1 }, xs.slice(0, 0), inout out.slice(0, 0))
+  assert out[0] == 7.0
+  direct.process(inout st, direct.Params { d: 0 }, xs, inout out)
+  assert out[0] == 2.0
+  direct.process(inout st, direct.Params { d: 6 }, xs, inout out)
+  assert out[0] == 40.0
+}
+
+test "direct: d = 1 panics in the frame that takes the branch" {
+  let xs: [F32; 1] = [2.0]
+  let o = direct.render(direct.Params { d: 1 }, xs, 8.0) //~ PANIC "direct: d = 1 panics in the frame that takes the branch"
+  assert o.out[0] == 0.0
+}
+
+test "through a let: d = 1 does not panic in a call of 0 frames, and the values are x for d = 0 and x * 20 for d = 6" {
+  let xs: [F32; 1] = [2.0]
+  var out: [F32; 1] = [7.0]
+  var st = through_let.init(8.0)
+  through_let.process(inout st, through_let.Params { d: 1 }, xs.slice(0, 0), inout out.slice(0, 0))
+  assert out[0] == 7.0
+  through_let.process(inout st, through_let.Params { d: 0 }, xs, inout out)
+  assert out[0] == 2.0
+  through_let.process(inout st, through_let.Params { d: 6 }, xs, inout out)
+  assert out[0] == 40.0
+}
+
+test "through a let: d = 1 panics in the frame that takes the branch" {
+  let xs: [F32; 1] = [2.0]
+  let o = through_let.render(through_let.Params { d: 1 }, xs, 8.0) //~ PANIC "through a let: d = 1 panics in the frame that takes the branch"
+  assert o.out[0] == 0.0
+}
+
+test "a match on an object with at sample: Some(0) does not divide in a call of 0 frames; Some(4) gives x * 25, None gives x" {
+  let xs: [F32; 1] = [2.0]
+  var out: [F32; 1] = [7.0]
+  var st = match_object_at_sample.init(8.0)
+  match_object_at_sample.process(inout st, match_object_at_sample.Params { o: Some(0) }, xs.slice(0, 0), inout out.slice(0, 0))
+  assert out[0] == 7.0
+  match_object_at_sample.process(inout st, match_object_at_sample.Params { o: Some(4) }, xs, inout out)
+  assert out[0] == 50.0
+  match_object_at_sample.process(inout st, match_object_at_sample.Params { o: None }, xs, inout out)
+  assert out[0] == 2.0
+}
+
+test "a match on an object with at sample: Some(0) panics in the frame that takes the arm" {
+  let xs: [F32; 1] = [2.0]
+  let o = match_object_at_sample.render(match_object_at_sample.Params { o: Some(0) }, xs, 8.0) //~ PANIC "a match on an object with at sample: Some(0) panics in the frame that takes the arm"
+  assert o.out[0] == 0.0
+}
+
+test "the left side of && with at sample: d = 1 does not panic in a call of 0 frames; d = 0 gives 0.0, d = 6 gives 1.0 or 0.0 by 20 > x" {
+  let xs: [F32; 1] = [2.0]
+  let big: [F32; 1] = [30.0]
+  var out: [F32; 1] = [7.0]
+  var st = and_left_at_sample.init(8.0)
+  and_left_at_sample.process(inout st, and_left_at_sample.Params { d: 1 }, xs.slice(0, 0), inout out.slice(0, 0))
+  assert out[0] == 7.0
+  and_left_at_sample.process(inout st, and_left_at_sample.Params { d: 0 }, xs, inout out)
+  assert out[0] == 0.0
+  and_left_at_sample.process(inout st, and_left_at_sample.Params { d: 6 }, xs, inout out)
+  assert out[0] == 1.0
+  and_left_at_sample.process(inout st, and_left_at_sample.Params { d: 6 }, big, inout out)
+  assert out[0] == 0.0
+}
+
+test "the left side of && with at sample: d = 1 panics in the frame that reaches the right side" {
+  let xs: [F32; 1] = [2.0]
+  let o = and_left_at_sample.render(and_left_at_sample.Params { d: 1 }, xs, 8.0) //~ PANIC "the left side of && with at sample: d = 1 panics in the frame that reaches the right side"
+  assert o.out[0] == 0.0
+}
+
+test "if~ chain: the second condition after a first with at sample does not panic in a call of 0 frames; the values are 10.0, 2.0, 3.0" {
+  // d = 0: the first condition holds, prev~(x) + 10.0 = 10.0 (the delay holds 0.0 at the first frame). d = 6: 100 / 5 = 20 > x for x = 2.0, so 2.0; for x = 30.0, 3.0.
+  let xs: [F32; 1] = [2.0]
+  let big: [F32; 1] = [30.0]
+  var out: [F32; 1] = [7.0]
+  var st = tilde_second_condition.init(8.0)
+  tilde_second_condition.process(inout st, tilde_second_condition.Params { d: 1 }, xs.slice(0, 0), inout out.slice(0, 0))
+  assert out[0] == 7.0
+  tilde_second_condition.process(inout st, tilde_second_condition.Params { d: 0 }, xs, inout out)
+  assert out[0] == 10.0
+  tilde_second_condition.process(inout st, tilde_second_condition.Params { d: 6 }, xs, inout out)
+  assert out[0] == 2.0
+  tilde_second_condition.process(inout st, tilde_second_condition.Params { d: 6 }, big, inout out)
+  assert out[0] == 3.0
+}
+
+test "if~ chain: d = 1 panics in the frame that reaches the second condition" {
+  let xs: [F32; 1] = [2.0]
+  let o = tilde_second_condition.render(tilde_second_condition.Params { d: 1 }, xs, 8.0) //~ PANIC "if~ chain: d = 1 panics in the frame that reaches the second condition"
+  assert o.out[0] == 0.0
+}
+
+test "a condition of block outside a condition of sample inside: e = 1, d = 1 does not panic in a call of 0 frames; the values" {
+  // e = 0: 0.0. e = 1, d = 0: x. e = 1, d = 6: x * 20.
+  let xs: [F32; 1] = [2.0]
+  var out: [F32; 1] = [7.0]
+  var st = block_outside_at_sample_inside.init(8.0)
+  block_outside_at_sample_inside.process(inout st, block_outside_at_sample_inside.Params { d: 1, e: 1 }, xs.slice(0, 0), inout out.slice(0, 0))
+  assert out[0] == 7.0
+  block_outside_at_sample_inside.process(inout st, block_outside_at_sample_inside.Params { d: 6, e: 0 }, xs, inout out)
+  assert out[0] == 0.0
+  block_outside_at_sample_inside.process(inout st, block_outside_at_sample_inside.Params { d: 0, e: 1 }, xs, inout out)
+  assert out[0] == 2.0
+  block_outside_at_sample_inside.process(inout st, block_outside_at_sample_inside.Params { d: 6, e: 1 }, xs, inout out)
+  assert out[0] == 40.0
+}
+
+test "a condition of block outside a condition of sample inside: e = 1, d = 1 panics in the frame" {
+  let xs: [F32; 1] = [2.0]
+  let o = block_outside_at_sample_inside.render(block_outside_at_sample_inside.Params { d: 1, e: 1 }, xs, 8.0) //~ PANIC "a condition of block outside a condition of sample inside: e = 1, d = 1 panics in the frame"
+  assert o.out[0] == 0.0
+}
+
+test "in a par: d = 1 does not panic in a call of 0 frames; d = 0 gives x + x, d = 6 gives (x * 20) + (x * 20 + 1)" {
+  let xs: [F32; 1] = [2.0]
+  var out: [F32; 1] = [7.0]
+  var st = in_a_par.init(8.0)
+  in_a_par.process(inout st, in_a_par.Params { d: 1 }, xs.slice(0, 0), inout out.slice(0, 0))
+  assert out[0] == 7.0
+  in_a_par.process(inout st, in_a_par.Params { d: 0 }, xs, inout out)
+  assert out[0] == 4.0
+  in_a_par.process(inout st, in_a_par.Params { d: 6 }, xs, inout out)
+  assert out[0] == 81.0
+}
+
+test "in a par: d = 1 panics in the frame that takes the branch" {
+  let xs: [F32; 1] = [2.0]
+  let o = in_a_par.render(in_a_par.Params { d: 1 }, xs, 8.0) //~ PANIC "in a par: d = 1 panics in the frame that takes the branch"
+  assert o.out[0] == 0.0
+}
+
+test "the whole if of a let with at in its condition is a sample expression: d = 1 does not panic in a call of 0 frames; the values" {
+  // d = 0: y = 0, x + 0 = 2.0. d = 6: y = 20, x + 20 = 22.0.
+  let xs: [F32; 1] = [2.0]
+  var out: [F32; 1] = [7.0]
+  var st = whole_if.init(8.0)
+  whole_if.process(inout st, whole_if.Params { d: 1 }, xs.slice(0, 0), inout out.slice(0, 0))
+  assert out[0] == 7.0
+  whole_if.process(inout st, whole_if.Params { d: 0 }, xs, inout out)
+  assert out[0] == 2.0
+  whole_if.process(inout st, whole_if.Params { d: 6 }, xs, inout out)
+  assert out[0] == 22.0
+}
+
+test "the whole if of a let with at in its condition: d = 1 panics in the frame that takes the branch" {
+  let xs: [F32; 1] = [2.0]
+  let o = whole_if.render(whole_if.Params { d: 1 }, xs, 8.0) //~ PANIC "the whole if of a let with at in its condition: d = 1 panics in the frame that takes the branch"
+  assert o.out[0] == 0.0
+}

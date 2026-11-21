@@ -6,6 +6,9 @@
 //! place already, or none, §11.3). The value is kept, so the `let` reads it where it is written and does not make it again (`Frame::hoisted`;
 //! the field of the state of §11.6).
 //!
+//! The stage a part is made at is [`stage_of`] (S-1196: the stage its values decide, `at` seen through, when they are of the parameter kinds alone), and the
+//! clock a condition is decided by is its clock with `at` counted (S-1166: `(d != 0) at sample`, and the name of `let g = (d != 0) at sample`, are `sample`).
+//!
 //! The walk goes down with a *guard*: the fastest of the clocks of the conditions on the way (S-1157 (D'): the condition of an `if`, the object
 //! of a `match` and the patterns and guards of the arms up to the one, the left side of `&&` / `||`). The stage that makes a part is the
 //! fastest of its clock and its guard, and a constant-clock part (a `panic("…")`) is made by the stage of its guard when it has one, else it
@@ -22,18 +25,14 @@
 //! reads a `^name` is left where it is (a feedback has the clock of the reader, §11.3). The order inside a stage is the order the parts are written (S-1159, provisional): `flow::stage` walks the `let`s in order and
 //! each `let` from the left.
 
-use std::collections::HashMap;
-
 use onsa_diag::Span;
-use onsa_sema::{LocalId, Target};
-use onsa_syntax::ast::{BinOp, ExprId, ExprKind, StmtKind};
+use onsa_sema::Target;
+use onsa_syntax::ast::{BinOp, CallKind, ExprId, ExprKind, StmtKind};
 
 use super::expr::{Frame, LOW_STACK, Stop};
-use super::flow::{Clock, clock_of};
+use super::flow::{Clock, Known, Seen, clock_of};
 use super::scalar::Fault;
 use super::sema_view::{Body, Stage};
-
-type Known = HashMap<LocalId, Clock>;
 
 /// What has a place of its own or none, so it is not hoisted: a literal, a name, `sample_rate()` and `sample_tick()`, and a parenthesis
 /// or an `at` over one.
@@ -70,22 +69,81 @@ fn reads_unknown(body: &Body, known: &Known, part: ExprId, x: ExprId) -> bool {
     }
 }
 
-/// A parenthesis or an `at` takes nothing from the stage of the expression it holds (§11.3: "`at` は段を変えない").
-fn strip(body: &Body, mut e: ExprId) -> ExprId {
-    while let ExprKind::Paren(x) | ExprKind::At { expr: x, .. } = &body.ast.expr(e).kind {
-        e = *x;
+/// The stage `e` is made in (§11.3, S-1196): that of its values when they are of the parameter kinds alone (a constant, `init`, `block`),
+/// whatever clock an `at` in it gives (`at` and a parenthesis are seen through, and so are the names of a `let` of such a value); the
+/// clock of the expression when it reads a value of a tick (a delay, the output of an instance, a `sample` input: `(lf at sample) * 2.0`
+/// is of `sample`). A conditional form (`if`, `match`, `&&` / `||`, and `if~` / `match~`) is made at the stage of the clock of its conditions
+/// too, `at` counted ("条件に `at` を書いた式は、全体がパラメータの種類の値でも、条件が決まる段で選ぶ"), but a condition is made at its own stage:
+/// `d != 0` of `(d != 0) at sample` is a part of `block`, and what `sample` decides is the choice.
+pub(super) fn stage_of(body: &Body, known: &Known, root: ExprId, e: ExprId) -> Result<Clock, Fault> {
+    use ExprKind as K;
+    match &body.ast.expr(e).kind {
+        // An instance, a delay and the builtin clocks of a flow: a call that has the clock of what it makes (as `clock_of` has it).
+        K::Call { kind, .. } if matches!(kind, CallKind::Flow) || body.time_call(e) => clock_of(body, known, root, e),
+        K::Par { var, body: inner, .. } => {
+            let inside = with_index(body, known, var.span)?;
+            stage_of(body, &inside, root, *inner)
+        }
+        K::At { expr, .. } => match stage_of(body, known, root, *expr)? {
+            Clock::Sample => clock_of(body, known, root, e),
+            parameter => Ok(parameter),
+        },
+        K::Path(_) | K::Field { .. } if body.names(e) => match body.target(e)? {
+            Target::Local(l) => match known.get(l) {
+                Some(seen) => Ok(seen.stage),
+                None if body.bound_within(*l, root) => Ok(Clock::Const),
+                None => Err(Fault::Internal("a local with no clock")),
+            },
+            _ => Ok(Clock::Const),
+        },
+        _ => {
+            let mut stage = Clock::Const;
+            for x in body.ast.sub_exprs(e) {
+                stage = stage.max(stage_of(body, known, root, x)?);
+            }
+            for c in conditions(body, e) {
+                stage = stage.max(clock_of(body, known, root, c)?);
+            }
+            Ok(stage)
+        }
     }
-    e
 }
 
-/// The stage of a condition `c`, as a clock: that of the expression it is (`at` and parentheses off), and the stage of the reader (`sample`) for
-/// a value that is not Copy, which is not hoisted (S-1046 (a)).
+/// The conditions of a conditional form (those that choose a position, and the first one of a chain of `if~`): the condition of an `if`,
+/// the conditions of the chain of an `if~`, the left side of `&&` / `||`, the object and the guards of a `match` / `match~`.
+fn conditions(body: &Body, e: ExprId) -> Vec<ExprId> {
+    use ExprKind as K;
+    match &body.ast.expr(e).kind {
+        K::If { cond, tilde: None, .. } => vec![*cond],
+        K::If { tilde: Some(_), .. } => {
+            let mut out = Vec::new();
+            let mut at = e;
+            while let K::If { cond, else_, .. } = &body.ast.expr(at).kind {
+                out.push(*cond);
+                match else_ {
+                    Some(rest) if matches!(body.ast.expr(*rest).kind, K::If { .. }) => at = *rest,
+                    _ => break,
+                }
+            }
+            out
+        }
+        K::Binary { op: BinOp::And | BinOp::Or, lhs, .. } => vec![*lhs],
+        K::Match { scrutinee, arms, .. } => {
+            std::iter::once(*scrutinee).chain(arms.iter().filter_map(|a| a.guard)).collect()
+        }
+        _ => Vec::new(),
+    }
+}
+
+/// The clock a condition `c` is decided by: the clock of the expression it is, `at` counted (S-1166: `(d != 0) at sample`, and the name of
+/// a `let g = (d != 0) at sample`, are decided at `sample`; §11.3: "条件が決まる段は、その条件を評価する段と、条件の式のクロック（`at` で
+/// 付けたクロックを含む）の段のうち速い方"), and the stage of the reader (`sample`) for a value that is not Copy, which is not hoisted
+/// (S-1046 (a)).
 fn cond_clock(body: &Body, known: &Known, root: ExprId, c: ExprId) -> Result<Clock, Fault> {
-    let inner = strip(body, c);
-    if !body.view.is_copy(body.ty_id(inner)?) {
+    if !body.view.is_copy(body.ty_id(c)?) {
         return Ok(Clock::Sample);
     }
-    clock_of(body, known, root, inner)
+    clock_of(body, known, root, c)
 }
 
 /// The guard under a condition of the clock `cc`: the slower of the two. A constant condition is decided before `init` (S-888 (c'): W9-03
@@ -123,7 +181,7 @@ fn decides(
 
 /// Does the stage `here` make a part of `e` (or of the parts in it)? The walk of [`walk`] without the values and the conditions' truth.
 fn makes(body: &Body, known: &Known, root: ExprId, e: ExprId, here: Clock, guard: Clock) -> Result<bool, Fault> {
-    let clock = clock_of(body, known, root, e)?;
+    let clock = stage_of(body, known, root, e)?;
     if clock == Clock::Const && guard == Clock::Const {
         return Ok(false);
     }
@@ -181,7 +239,7 @@ fn kept(body: &Body, known: &Known, e: ExprId) -> Result<bool, Fault> {
 /// The clocks of the names in scope in the body of a `par~` whose variable is written at `at`: the index is of `init` (§11.5).
 fn with_index(body: &Body, known: &Known, at: Span) -> Result<Known, Fault> {
     let mut inside = known.clone();
-    inside.insert(body.par_var(at)?, Clock::Init);
+    inside.insert(body.par_var(at)?, Seen::both(Clock::Init));
     Ok(inside)
 }
 
@@ -236,7 +294,7 @@ fn kids(body: &Body, known: &Known, root: ExprId, e: ExprId, guard: Clock) -> Re
             vec![(*lhs, known.clone(), guard), (*rhs, known.clone(), g)]
         }
         K::Match { scrutinee, arms, tilde: None } => {
-            let sc = clock_of(body, known, root, *scrutinee)?;
+            let sc = seen_of(body, known, root, *scrutinee)?;
             let mut acc = after(guard, cond_clock(body, known, root, *scrutinee)?);
             let mut out = own(vec![*scrutinee]);
             for arm in arms {
@@ -258,9 +316,11 @@ fn kids(body: &Body, known: &Known, root: ExprId, e: ExprId, guard: Clock) -> Re
             // The side that selects goes first, under the object and the guards before it; the bodies are not under a condition (the arms of a
             // `match~` are not condition positions, §11.3). The guard sees the clock of the object; the body binds the clock of the object
             // and of the guards from the first arm to its own, the fastest of them (S-1131).
-            let sc = clock_of(body, known, root, *scrutinee)?;
+            // (A binding is of the clock the choice is decided by, here: `at` in the object or a guard makes the binding of that clock, the
+            // stage included, which is more than S-1196 asks for a `match~`; no case reads the difference.)
+            let sc = seen_of(body, known, root, *scrutinee)?;
             let mut acc = after(guard, cond_clock(body, known, root, *scrutinee)?);
-            let (mut out, mut bound) = (own(vec![*scrutinee]), sc);
+            let (mut out, mut bound) = (own(vec![*scrutinee]), clock_of(body, known, root, *scrutinee)?);
             for arm in arms {
                 let locals = body.pat_locals(arm.pat)?;
                 if let Some(g) = arm.guard {
@@ -271,7 +331,7 @@ fn kids(body: &Body, known: &Known, root: ExprId, e: ExprId, guard: Clock) -> Re
                     (acc, bound) = (after(acc, gc), bound.max(gc));
                 }
                 let mut inner = known.clone();
-                inner.extend(locals.iter().map(|l| (*l, bound)));
+                inner.extend(locals.iter().map(|l| (*l, Seen::both(bound))));
                 out.push((arm.body, inner, guard));
             }
             out
@@ -298,7 +358,7 @@ pub(super) fn part_clock(body: &Body, known: &Known, root: ExprId, at: Span) -> 
     };
     let (mut e, mut known, mut guard, mut found) = (root, known.clone(), Clock::Const, None);
     loop {
-        let clock = clock_of(body, &known, root, e)?;
+        let clock = stage_of(body, &known, root, e)?;
         if clock == Clock::Const && guard == Clock::Const {
             return Ok(found);
         }
@@ -326,7 +386,7 @@ fn walk(f: &mut Frame, known: &Known, root: ExprId, e: ExprId, here: Clock, guar
     if f.low_stack() {
         return Err(stop(LOW_STACK));
     }
-    let clock = clock_of(&body, known, root, e).map_err(stop)?;
+    let clock = stage_of(&body, known, root, e).map_err(stop)?;
     if clock == Clock::Const && guard == Clock::Const {
         // A constant: where it is written (W9-03), and no part of it is of another stage.
         return Ok(());
@@ -404,7 +464,7 @@ fn descend(f: &mut Frame, known: &Known, root: ExprId, e: ExprId, here: Clock, g
         }
         K::Match { scrutinee, arms, tilde: None } => {
             walk(f, known, root, *scrutinee, here, guard)?;
-            let sc = clock_of(&body, known, root, *scrutinee).map_err(stop)?;
+            let sc = seen_of(&body, known, root, *scrutinee).map_err(stop)?;
             let cc = cond_clock(&body, known, root, *scrutinee).map_err(stop)?;
             let mut acc = guard.max(cc);
             if !decides(&body, known, root, e, (cc, acc), here).map_err(stop)? {
@@ -443,11 +503,12 @@ fn descend(f: &mut Frame, known: &Known, root: ExprId, e: ExprId, here: Clock, g
             // from the first arm to its own is not after it) are the parts of the object where the arm is taken and `T.default()` where it is
             // not (S-1131); a body that binds later than this stage is walked without them (what reads them is made by that stage).
             walk(f, known, root, *scrutinee, here, guard)?;
-            let sc = clock_of(&body, known, root, *scrutinee).map_err(stop)?;
+            let sc = seen_of(&body, known, root, *scrutinee).map_err(stop)?;
             let mut acc = guard.max(cond_clock(&body, known, root, *scrutinee).map_err(stop)?);
             let mut deciding = acc <= here;
             let (v, ty) = (if deciding { Some(f.eval(*scrutinee)?) } else { None }, body.ty(*scrutinee).map_err(stop)?);
-            let (mut bound, mut taken, mut plan) = (sc, None, Vec::new());
+            let (mut bound, mut taken, mut plan) =
+                (clock_of(&body, known, root, *scrutinee).map_err(stop)?, None, Vec::new());
             for (n, arm) in arms.iter().enumerate() {
                 let locals = body.pat_locals(arm.pat).map_err(stop)?;
                 let mut seen = known.clone();
@@ -472,7 +533,7 @@ fn descend(f: &mut Frame, known: &Known, root: ExprId, e: ExprId, here: Clock, g
                     deciding = deciding && acc <= here;
                 }
                 let mut inner = known.clone();
-                inner.extend(locals.iter().map(|l| (*l, bound)));
+                inner.extend(locals.iter().map(|l| (*l, Seen::both(bound))));
                 plan.push((inner, deciding && bound <= here));
             }
             for (n, (arm, (inner, bound_here))) in arms.iter().zip(plan).enumerate() {
@@ -515,4 +576,16 @@ fn descend(f: &mut Frame, known: &Known, root: ExprId, e: ExprId, here: Clock, g
             Ok(())
         }
     }
+}
+
+/// What a name that stands for `e` is (a `let` of it, an arm binding of it as an object): the stage its value is made in (S-1196) and the clock
+/// it is read at. A derived clock has no read clock here (an error only where a condition reads it).
+pub(super) fn seen_of(body: &Body, known: &Known, root: ExprId, e: ExprId) -> Result<Seen, Fault> {
+    let stage = stage_of(body, known, root, e)?;
+    let read = match clock_of(body, known, root, e) {
+        Ok(c) => Some(c),
+        Err(Fault::Unavailable(_)) => None,
+        Err(fault) => return Err(fault),
+    };
+    Ok(Seen { stage, read })
 }

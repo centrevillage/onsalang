@@ -1,0 +1,18 @@
+# flow_ref 1 source=tests/spec/flow_semantics/hoist_at_stage_panics.onsa tests=4 evaluated=4 unavailable=0 skipped=0 waiting=0
+@ S-1161 (2): the division of an at expression with m = 0 panics in a call of 0 frames
+init 0 hoist_at_stage_panics.at_in_a_division sr=0x41000000
+process 0 params n=6 m=0 frames=0 in x=[]
+panic block
+@ the block stage is made again by each call: m = 3 gives a value, m = 0 panics in the next call of 0 frames
+init 0 hoist_at_stage_panics.at_in_a_division sr=0x41000000
+process 0 params n=6 m=3 frames=1 in x=[1]
+out=[3]
+process 0 params n=6 m=0 frames=0 in x=[]
+panic block
+@ a let of an at expression has the stage of its value: q panics in a call of 0 frames
+init 0 hoist_at_stage_panics.at_in_a_let sr=0x41000000
+process 0 params n=6 m=0 frames=0 in x=[]
+panic block
+@ an init value read through at block is made at init: b0 = 0 panics in init, before any process
+init 0 hoist_at_stage_panics.init_through_block sr=0x41000000 cfg a=6 b0=0
+panic init

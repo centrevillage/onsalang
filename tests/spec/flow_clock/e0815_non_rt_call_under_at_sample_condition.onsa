@@ -1,0 +1,61 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§11.5", "§18.1"]
+// fixes = 0
+
+// W7-09 U2s/t, S-1196 (A1), S-1166 (spec §11.5, §11.3): a call of a function that is not `rt` with an argument that is not a constant is evaluated at `init`, so it cannot be in a position of a condition that
+// is decided after `init` (E0815, e0815_non_rt_call_in_a_condition.onsa). "条件が決まる段は、その条件を評価する段と、条件の式のクロック（`at` で付けたクロックを含む）の段のうち速い方" so a condition of `init`
+// that `at` makes `sample` or `block` is decided after `init`: the call under it is E0815 although the condition reads `init` values alone. The error is at the call, with no candidate (`fixes = 0`). `x` is the `sample`
+// input, `a` and `b` of `init`; `mk` is not `rt`. The forms that an `at` on a name already reached are in e0815_non_rt_call_under_a_let_at_condition.onsa. The same call under a condition of `init` with no `at`
+// is accepted (the forms at the end).
+
+pub fn mk(a: I32) -> I32 {
+  a + 1
+}
+
+pub flow if_at_sample(x: F32 at sample, a: I32 at init) -> F32 at sample {
+  if (a != 0) at sample { x * F32.round_from(mk(a)) } else { x }              //~ E0815
+}
+
+pub flow if_at_block(x: F32 at sample, a: I32 at init) -> F32 at sample {
+  if (a != 0) at block { x * F32.round_from(mk(a)) } else { x }               //~ E0815
+}
+
+pub flow else_branch_at_sample(x: F32 at sample, a: I32 at init) -> F32 at sample {
+  if (a == 0) at sample { x } else { x * F32.round_from(mk(a)) }              //~ E0815
+}
+
+pub flow right_of_and_at_sample(x: F32 at sample, a: I32 at init) -> F32 at sample {
+  if ((a != 0) at sample) && mk(a) > 1 { x } else { 0.0 }                     //~ E0815
+}
+
+pub flow arm_of_an_object_at_sample(x: F32 at sample, o: Option[I32] at init) -> F32 at sample {
+  match (o at sample) {
+    Some(v) => x * F32.round_from(mk(v)),                                     //~ E0815
+    None => x,
+  }
+}
+
+pub flow nested_in_an_init_condition(x: F32 at sample, a: I32 at init, b: I32 at init) -> F32 at sample {
+  if b != 0 {
+    if (a != 0) at sample { x * F32.round_from(mk(a)) } else { x }            //~ E0815
+  } else {
+    x
+  }
+}
+
+// ---------------------------------------------------------------- accepted: the condition is decided at init
+
+pub flow init_condition_without_at(x: F32 at sample, a: I32 at init) -> F32 at sample {
+  if a != 0 { x * F32.round_from(mk(a)) } else { x }
+}
+
+// `at init` does not make the condition slower.
+pub flow init_condition_at_init(x: F32 at sample, a: I32 at init) -> F32 at sample {
+  if (a != 0) at init { x * F32.round_from(mk(a)) } else { x }
+}
+
+// The call is in the condition, which is not a position of a condition.
+pub flow call_in_the_condition_at_sample(x: F32 at sample, a: I32 at init) -> F32 at sample {
+  if (mk(a) != 0) at sample { x } else { 0.0 }
+}

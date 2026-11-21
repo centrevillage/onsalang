@@ -478,7 +478,11 @@ impl Walk<'_> {
         let inside = self.diag.as_ref().is_some_and(|d| span.start <= d.span.start && d.span.end <= span.end);
         // SPEC-GAP(S-1165): `^b` (past parentheses and `at`) has no candidate:
         // the error it would leave may be in the `let` of `b`, walked later.
-        let feedback = matches!(self.ast.expr(crate::flow::strip(self.ast, first)).kind, ExprKind::Feedback(_));
+        let mut bare = first;
+        while let ExprKind::Paren(x) | ExprKind::At { expr: x, .. } = &self.ast.expr(bare).kind {
+            bare = *x;
+        }
+        let feedback = matches!(self.ast.expr(bare).kind, ExprKind::Feedback(_));
         if promotable(c, Clock::SAMPLE) && !inside && !feedback {
             let wrap = Slot::Operand(OperandPlace::AsAtLeft).wraps(Form::of(self.ast, first));
             let (open, close) = if wrap { ("(", ")") } else { ("", "") };

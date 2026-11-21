@@ -54,6 +54,7 @@ pub flow match_division(x: F32 at sample, o: Option[I32] at block) -> F32 at sam
   }
 }
 
+// `at sample` on the condition makes it a condition of `sample` (S-1166, §11.3), so this is not a guard of `block`.
 pub flow at_in_the_condition(x: F32 at sample, d: I32 at block) -> F32 at sample {
   if (d != 0) at sample { x * F32.round_from(100 / (d - 1)) } else { x }
 }
@@ -184,12 +185,13 @@ test "an arm reads what its pattern binds: Some(0) divides by zero in a call of 
   assert out[0] == 7.0
 }
 
-test "a condition with at is counted at the stage of its expression: the guard holds at block" {
+test "a condition with at sample is decided at sample, not at block: d = 1 does not panic in a call of 0 frames" {
+  // S-1166, S-1196: the part is evaluated where the frame reaches it (the panic of the frame is in hoist_cond_at_stage.onsa).
   let xs: [F32; 1] = [1.0]
   var out: [F32; 1] = [7.0]
   var st = at_in_the_condition.init(8.0)
   at_in_the_condition.process(inout st, at_in_the_condition.Params { d: 0 }, xs.slice(0, 0), inout out.slice(0, 0))
-  at_in_the_condition.process(inout st, at_in_the_condition.Params { d: 1 }, xs.slice(0, 0), inout out.slice(0, 0)) //~ PANIC "a condition with at is counted at the stage of its expression: the guard holds at block"
+  at_in_the_condition.process(inout st, at_in_the_condition.Params { d: 1 }, xs.slice(0, 0), inout out.slice(0, 0))
   assert out[0] == 7.0
 }
 

@@ -1,0 +1,26 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§11.9", "§18.1"]
+
+// W7-09 U2s/t, S-1196 (spec §11.3): the forms that stay accepted when a condition of the clock `sample / 4` guards a computation of that tick: "条件の位置の中では、その位置を選ぶ条件が全て定数・`init`・その式と同じ刻みで
+// 決まるときだけ書け". `if (p at (sample / 4)) > 0.0 { l4 * 2.0 } else { 0.0 }` is a tick `let` (its condition has the clock `sample / 4`, as the expression has) that is read by its name at `sample` (`y4 at sample`), and
+// `if (p > 0.0) at (sample / 4) { … }` gives the same condition by the clock `at` gives it. (`if (c4 at sample) { (l4 * 2.0) at sample }`, whose condition is decided at `sample`, is E0815 of the fields of a slow tick, U2r2, and not
+// here.) `x` is the `sample` input, `p` of `block`, `l4` a value of `sample / 4`.
+
+pub flow tick_condition_by_a_name(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let l4 = prev~(p at (sample / 4))
+  let y4 = if (p at (sample / 4)) > 0.0 { l4 * 2.0 } else { 0.0 }
+  x * (y4 at sample)
+}
+
+pub flow tick_condition_by_at(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let l4 = prev~(p at (sample / 4))
+  let y4 = if (p > 0.0) at (sample / 4) { l4 * 2.0 } else { 0.0 }
+  x * (y4 at sample)
+}
+
+pub flow tick_condition_in_a_branch_of_a_constant(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let l4 = prev~(p at (sample / 4))
+  let y4 = if true { l4 * 2.0 } else { 0.0 }
+  x * (y4 at sample)
+}

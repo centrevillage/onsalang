@@ -80,7 +80,7 @@ pub flow match_division(x: F32 at sample, o: Option[I32] at block) -> F32 at sam
   }
 }
 
-// `at` does not change the stage the condition is evaluated at: `n != 0` is evaluated at `block` ("`at` は段を変えない").
+// S-1166, S-1196 (§11.3): `at sample` makes the clock of the condition `sample`, so the condition is decided at `sample` ("条件が決まる段は、その条件を評価する段と、条件の式のクロック（`at` で付けたクロックを含む）の段のうち速い方") and the branch is evaluated where it is reached: the value is the same (hoist_cond_at_stage.onsa has the panics and the other forms).
 pub flow at_in_the_condition(x: F32 at sample, d: I32 at block) -> F32 at sample {
   if (d != 0) at sample { x * F32.round_from(100 / d) } else { x }
 }
@@ -277,7 +277,7 @@ test "an arm divides by what its pattern binds only when it is taken" {
   assert r1.out[0] == 2.0
 }
 
-test "a condition with at is counted at the stage of its expression: d = 0 does not divide, d = 4 gives x * 25" {
+test "a condition with at sample is decided at sample: d = 0 does not divide, d = 4 gives x * 25" {
   let xs: [F32; 1] = [2.0]
   let r0 = at_in_the_condition.render(at_in_the_condition.Params { d: 0 }, xs, 8.0)
   assert r0.out[0] == 2.0

@@ -1,0 +1,14 @@
+# flow_ref 1 source=tests/spec/flow_semantics/hoist_cond_at_guard.onsa tests=2 evaluated=2 unavailable=0 skipped=0 waiting=1
+@ a guard with at sample: Some(1) does not divide in a call of 0 frames; Some(0) gives x, Some(6) gives x * 20, None gives 0.0
+init 0 hoist_cond_at_guard.guard_at_sample sr=0x41000000
+process 0 params o=#1(1) frames=0 in x=[]
+out=[]
+process 0 params o=#1(0) frames=1 in x=[0x40000000]
+out=[0x40000000]
+process 0 params o=#1(6) frames=1 in x=[0x40000000]
+out=[0x42200000]
+process 0 params o=#0() frames=1 in x=[0x40000000]
+out=[0x00000000]
+@ a guard with at sample: Some(1) panics in the frame that takes the arm
+render hoist_cond_at_guard.guard_at_sample sr=0x41000000 params o=#1(1) in x=[0x40000000]
+panic sample 0

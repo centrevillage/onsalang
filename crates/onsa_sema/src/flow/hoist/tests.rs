@@ -140,7 +140,7 @@ fn conditions_decided_at_init_or_block_guard_the_fields_under_them() {
 
 /// A condition decided per sample (§11.3), or by a value that is not Copy
 /// read at `sample` (S-1046 (a)), leaves what is under it where it is
-/// reached; one in `at` is decided at the stage of its operand.
+/// reached; one in `at` is decided at the stage of its clock (S-1166).
 #[test]
 fn a_condition_decided_per_sample_leaves_its_branches_where_they_are_reached() {
     let src = "pub flow f(x: F32 at sample, a: I32 at init, level: F32 at block) -> F32 at sample {
@@ -151,7 +151,7 @@ fn a_condition_decided_per_sample_leaves_its_branches_where_they_are_reached() {
   p + q + r
 }";
     let hoisted: Vec<String> = guarded(src).into_iter().map(|h| h.3).collect();
-    assert_eq!(hoisted, ["a > 0", "level * 4.0"]);
+    assert_eq!(hoisted, ["a > 0"]);
 }
 
 /// The binding of an arm read in a guarded field is read at its stage, where

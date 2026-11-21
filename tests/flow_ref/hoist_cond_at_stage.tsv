@@ -1,0 +1,95 @@
+# flow_ref 1 source=tests/spec/flow_semantics/hoist_cond_at_stage.onsa tests=16 evaluated=16 unavailable=0 skipped=0 waiting=0
+@ direct: d = 1 does not panic in a call of 0 frames, and the values are x for d = 0 and x * 20 for d = 6
+init 0 hoist_cond_at_stage.direct sr=0x41000000
+process 0 params d=1 frames=0 in x=[]
+out=[]
+process 0 params d=0 frames=1 in x=[0x40000000]
+out=[0x40000000]
+process 0 params d=6 frames=1 in x=[0x40000000]
+out=[0x42200000]
+@ direct: d = 1 panics in the frame that takes the branch
+render hoist_cond_at_stage.direct sr=0x41000000 params d=1 in x=[0x40000000]
+panic sample 0
+@ through a let: d = 1 does not panic in a call of 0 frames, and the values are x for d = 0 and x * 20 for d = 6
+init 0 hoist_cond_at_stage.through_let sr=0x41000000
+process 0 params d=1 frames=0 in x=[]
+out=[]
+process 0 params d=0 frames=1 in x=[0x40000000]
+out=[0x40000000]
+process 0 params d=6 frames=1 in x=[0x40000000]
+out=[0x42200000]
+@ through a let: d = 1 panics in the frame that takes the branch
+render hoist_cond_at_stage.through_let sr=0x41000000 params d=1 in x=[0x40000000]
+panic sample 0
+@ a match on an object with at sample: Some(0) does not divide in a call of 0 frames; Some(4) gives x * 25, None gives x
+init 0 hoist_cond_at_stage.match_object_at_sample sr=0x41000000
+process 0 params o=#1(0) frames=0 in x=[]
+out=[]
+process 0 params o=#1(4) frames=1 in x=[0x40000000]
+out=[0x42480000]
+process 0 params o=#0() frames=1 in x=[0x40000000]
+out=[0x40000000]
+@ a match on an object with at sample: Some(0) panics in the frame that takes the arm
+render hoist_cond_at_stage.match_object_at_sample sr=0x41000000 params o=#1(0) in x=[0x40000000]
+panic sample 0
+@ the left side of && with at sample: d = 1 does not panic in a call of 0 frames; d = 0 gives 0.0, d = 6 gives 1.0 or 0.0 by 20 > x
+init 0 hoist_cond_at_stage.and_left_at_sample sr=0x41000000
+process 0 params d=1 frames=0 in x=[]
+out=[]
+process 0 params d=0 frames=1 in x=[0x40000000]
+out=[0x00000000]
+process 0 params d=6 frames=1 in x=[0x40000000]
+out=[0x3f800000]
+process 0 params d=6 frames=1 in x=[0x41f00000]
+out=[0x00000000]
+@ the left side of && with at sample: d = 1 panics in the frame that reaches the right side
+render hoist_cond_at_stage.and_left_at_sample sr=0x41000000 params d=1 in x=[0x40000000]
+panic sample 0
+@ if~ chain: the second condition after a first with at sample does not panic in a call of 0 frames; the values are 10.0, 2.0, 3.0
+init 0 hoist_cond_at_stage.tilde_second_condition sr=0x41000000
+process 0 params d=1 frames=0 in x=[]
+out=[]
+process 0 params d=0 frames=1 in x=[0x40000000]
+out=[0x41200000]
+process 0 params d=6 frames=1 in x=[0x40000000]
+out=[0x40000000]
+process 0 params d=6 frames=1 in x=[0x41f00000]
+out=[0x40400000]
+@ if~ chain: d = 1 panics in the frame that reaches the second condition
+render hoist_cond_at_stage.tilde_second_condition sr=0x41000000 params d=1 in x=[0x40000000]
+panic sample 0
+@ a condition of block outside a condition of sample inside: e = 1, d = 1 does not panic in a call of 0 frames; the values
+init 0 hoist_cond_at_stage.block_outside_at_sample_inside sr=0x41000000
+process 0 params d=1 e=1 frames=0 in x=[]
+out=[]
+process 0 params d=6 e=0 frames=1 in x=[0x40000000]
+out=[0x00000000]
+process 0 params d=0 e=1 frames=1 in x=[0x40000000]
+out=[0x40000000]
+process 0 params d=6 e=1 frames=1 in x=[0x40000000]
+out=[0x42200000]
+@ a condition of block outside a condition of sample inside: e = 1, d = 1 panics in the frame
+render hoist_cond_at_stage.block_outside_at_sample_inside sr=0x41000000 params d=1 e=1 in x=[0x40000000]
+panic sample 0
+@ in a par: d = 1 does not panic in a call of 0 frames; d = 0 gives x + x, d = 6 gives (x * 20) + (x * 20 + 1)
+init 0 hoist_cond_at_stage.in_a_par sr=0x41000000
+process 0 params d=1 frames=0 in x=[]
+out=[]
+process 0 params d=0 frames=1 in x=[0x40000000]
+out=[0x40800000]
+process 0 params d=6 frames=1 in x=[0x40000000]
+out=[0x42a20000]
+@ in a par: d = 1 panics in the frame that takes the branch
+render hoist_cond_at_stage.in_a_par sr=0x41000000 params d=1 in x=[0x40000000]
+panic sample 0
+@ the whole if of a let with at in its condition is a sample expression: d = 1 does not panic in a call of 0 frames; the values
+init 0 hoist_cond_at_stage.whole_if sr=0x41000000
+process 0 params d=1 frames=0 in x=[]
+out=[]
+process 0 params d=0 frames=1 in x=[0x40000000]
+out=[0x40000000]
+process 0 params d=6 frames=1 in x=[0x40000000]
+out=[0x41b00000]
+@ the whole if of a let with at in its condition: d = 1 panics in the frame that takes the branch
+render hoist_cond_at_stage.whole_if sr=0x41000000 params d=1 in x=[0x40000000]
+panic sample 0

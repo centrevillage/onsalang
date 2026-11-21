@@ -183,7 +183,9 @@ fn unison_par_nests_instances() {
 fn at_promotes_and_cannot_lower() {
     let a = ok("pub flow f(p: F32 at block) -> F32 at sample {\n  let ps = p at sample\n  prev~(ps)\n}\n");
     let f = flow(&a, "f");
-    assert_eq!(let_rate(f, "ps"), (Clock::SAMPLE, false));
+    // Of `block` values, the `let` is of the stage `block` (S-1196): the
+    // delay reads it from the state at `sample`.
+    assert_eq!(let_rate(f, "ps"), (Clock::SAMPLE, true));
     // `at` does not make a value slower: E0815 (§11.3; the annotation of the
     // draft was E0810).
     assert_eq!(
