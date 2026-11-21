@@ -117,10 +117,10 @@ features! {
     /// §11.3, S-1078: `at (sample / N)` and `at (sample * N)` of the inputs
     /// and the output of a flow (W7-09 U4a).
     DerivedClockRatios: Language, "the derived clocks `at (sample / N)` and `at (sample * N)`", None;
-    /// §11.3, §11.6, S-1158: `{}`: the clock of the part. The field of a
-    /// computed part or a node of a tick read at a faster stage (W7-09 U2r2).
-    TickFields: Language, "a computed value or a delay at the clock `{}` read at a faster clock",
-        Some("bind it with a `let` and read the name at the faster clock (`let s = a * 2.0` and `s at sample`)");
+    /// §11.3, S-1195: `{}`: the clock of the part. A computed part of a tick
+    /// of a type that is not Copy read at a faster stage (provisional).
+    NonCopyTickParts: Language, "a value that is not Copy computed at the clock `{}` and read at a faster clock",
+        Some("write `at` on the names it reads, so that it is computed where it is read (`(a at sample) > 0.0`)");
     /// §11.3, §11.9: the Core of a flow with a periodic clock of a ratio
     /// (`sample / N`), which W7-16 lowers.
     MultirateFlows: Language, "building a flow with the clock `sample / N`", None;

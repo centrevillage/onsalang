@@ -1,0 +1,113 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§11.5", "§18.1"]
+
+// W7-09 U2r2/t, S-1158 (c), S-1196 A2 (spec §11.3): "条件のどれかが他の段（`block`、別の刻み、`sample`）で決まる位置には書けない（E0815。刻みごとに計算するなら前の `let` に出し、届いたときに計算するなら
+// 読む名前に `at` を書く…）". A computed part of a tick (`(a * 2.0) at sample`, `a` is a value of `sample / 4`) cannot stand in a position that a condition selects when the condition is decided at `block`, at
+// `sample` or at another tick: the part is computed at its tick, and the condition is not decided there. The error is on the part; the spec promises no candidate, so none is checked. The condition
+// that `at` gives a clock decides where the clock is (S-1196): `if (c4 at sample) { … }` is decided at `sample` although `c4` is of `sample / 4`. The read of a name (`a at sample`) and a condition of the same
+// forms over the parameter kinds are accepted (the flows at the end). One error per flow, so each form is a flow of its own. `x` is the `sample` input, `a` is a value of `sample / 4`.
+
+// ---------------------------------------------------------------- a condition decided at sample
+
+pub flow if_on_a_sample_condition(p: F32 at block, g: Bool at sample, x: F32 at sample) -> F32 at sample {
+  let a = prev~(p at (sample / 4))
+  x * (if g { (a * 2.0) at sample } else { 0.0 }) //~ E0815
+}
+
+pub flow else_branch_of_a_sample_condition(p: F32 at block, g: Bool at sample, x: F32 at sample) -> F32 at sample {
+  let a = prev~(p at (sample / 4))
+  x * (if g { 0.0 } else { (a * 2.0) at sample }) //~ E0815
+}
+
+pub flow condition_of_the_tick_read_at_sample(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  let a = prev~(p at (sample / 4))
+  let c4 = a > 0.5
+  if (c4 at sample) { (a * 2.0) at sample } else { x } //~ E0815
+}
+
+pub flow condition_of_a_let_read_at_sample(p: F32 at block, d: I32 at block, x: F32 at sample) -> F32 at sample {
+  let a = prev~(p at (sample / 4))
+  let g = (d != 0) at sample
+  x * (if g { (a * 2.0) at sample } else { 0.0 }) //~ E0815
+}
+
+pub flow right_of_a_sample_condition(p: F32 at block, g: Bool at sample, x: F32 at sample) -> F32 at sample {
+  let a = prev~(p at (sample / 4))
+  if g && ((a * 2.0) at sample) > 1.0 { x } else { 0.0 } //~ E0815
+}
+
+pub flow arm_of_a_match_on_a_sample_value(p: F32 at block, k: I32 at sample, x: F32 at sample) -> F32 at sample {
+  let a = prev~(p at (sample / 4))
+  x * (match k {
+    0 => (a * 2.0) at sample, //~ E0815
+    _ => 0.0,
+  })
+}
+
+// ---------------------------------------------------------------- a condition decided at block
+
+pub flow if_on_a_block_condition(p: F32 at block, n: I32 at block, x: F32 at sample) -> F32 at sample {
+  let a = prev~(p at (sample / 4))
+  x * (if n > 0 { (a * 2.0) at sample } else { 0.0 }) //~ E0815
+}
+
+pub flow arm_of_a_match_on_a_block_value(p: F32 at block, k: I32 at block, x: F32 at sample) -> F32 at sample {
+  let a = prev~(p at (sample / 4))
+  x * (match k {
+    0 => (a * 2.0) at sample, //~ E0815
+    _ => 0.0,
+  })
+}
+
+pub flow right_of_a_block_condition(p: F32 at block, n: I32 at block, x: F32 at sample) -> F32 at sample {
+  let a = prev~(p at (sample / 4))
+  if n > 0 && ((a * 2.0) at sample) > 1.0 { x } else { 0.0 } //~ E0815
+}
+
+pub flow a_block_and_an_init_condition(p: F32 at block, n: I32 at block, k: I32 at init, x: F32 at sample) -> F32 at sample {
+  let a = prev~(p at (sample / 4))
+  x * (if k > 0 { if n > 0 { (a * 2.0) at sample } else { 0.0 } } else { 0.0 }) //~ E0815
+}
+
+pub flow the_block_condition_with_an_at(p: F32 at block, n: I32 at block, x: F32 at sample) -> F32 at sample {
+  let a = prev~(p at (sample / 4))
+  x * (if (n > 0) at block { (a * 2.0) at sample } else { 0.0 }) //~ E0815
+}
+
+// ---------------------------------------------------------------- a condition decided at another tick
+
+pub flow a_condition_of_another_tick(p: F32 at block, q: F32 at block, x: F32 at sample) -> F32 at sample {
+  let a = prev~(p at (sample / 4))
+  let c2 = prev~(q at (sample / 2)) > 0.0
+  let y2 = if c2 { (a * 2.0) at (sample / 2) } else { 0.0 } //~ E0815
+  y2 at sample
+}
+
+pub flow a_condition_of_another_tick_in_a_match(p: F32 at block, q: F32 at block, x: F32 at sample) -> F32 at sample {
+  let a = prev~(p at (sample / 4))
+  let k2 = prev~(q at (sample / 2))
+  let y2 = match k2 > 0.0 {
+    true => (a * 2.0) at (sample / 2), //~ E0815
+    false => 0.0,
+  }
+  y2 at sample
+}
+
+// ---------------------------------------------------------------- accepted: a name read, and the same conditions over the parameter kinds
+
+pub flow a_name_read_under_a_sample_condition(p: F32 at block, g: Bool at sample, x: F32 at sample) -> F32 at sample {
+  let a = prev~(p at (sample / 4))
+  x * (if g { a at sample } else { 0.0 })
+}
+
+pub flow a_name_read_under_a_block_condition(p: F32 at block, n: I32 at block, x: F32 at sample) -> F32 at sample {
+  let a = prev~(p at (sample / 4))
+  x * (if n > 0 { a at sample } else { 0.0 })
+}
+
+pub flow a_name_read_under_the_condition_of_a_tick(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  let a = prev~(p at (sample / 4))
+  let c4 = a > 0.5
+  if (c4 at sample) { a at sample } else { x }
+}

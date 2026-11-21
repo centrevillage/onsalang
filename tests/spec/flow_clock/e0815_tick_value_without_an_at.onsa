@@ -1,0 +1,46 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§11.4", "§11.9", "§18.1"]
+
+// W7-09 U2r2/t (U2r1's F-2, spec §11.3): "周期の刻みのクロックの値を別の周期のクロックで使うには `at` を書く" and "式のクロックは三つで決まる: 周期の刻みのクロックの被演算子は揃っていること". A computed value of
+// a tick (a delay, an operation) that meets `sample` with no `at` is E0815 wherever it stands: the argument of a call, a delay of a delay, an index, the output of the flow, and a value too slow for the `at`
+// that is written on it. The first of these did not reach the check while a computed part of a tick that a faster stage reads was E0200 (the gate of U2r1), so they are cases of their own. `x` is the `sample`
+// input, `a` is a value of `sample / 4`. One error per flow, so each form is a flow of its own.
+
+const TABLE: [F32; 4] = [1.0, 2.0, 3.0, 4.0]
+
+pub flow lp(x: F32 at sample) -> F32 at sample {
+  x
+}
+
+pub flow argument_that_is_computed(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  let a = prev~(p at (sample / 4))
+  lp~(a * 2.0) //~ E0815
+}
+
+pub flow argument_that_is_a_delay(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  let a = prev~(p at (sample / 4))
+  lp~(prev~(a)) //~ E0815
+}
+
+pub flow index_that_is_a_tick(n: U32 at block, x: F32 at sample) -> F32 at sample {
+  let i = prev~(n at (sample / 4))
+  TABLE[i] * x //~ E0815
+}
+
+pub flow output_that_is_a_delay_of_a_tick(p: F32 at block) -> F32 at sample {
+  prev~(p at (sample / 4)) //~ E0815
+}
+
+pub flow output_that_is_computed_at_a_tick(p: F32 at block) -> F32 at sample {
+  let a = prev~(p at (sample / 4))
+  a * 2.0 //~ E0815
+}
+
+pub flow a_value_too_slow_for_the_at(x: F32 at sample) -> F32 at sample {
+  prev~(x at (sample / 4)) + x //~ E0815
+}
+
+pub flow a_delay_of_a_value_too_slow_for_the_at(x: F32 at sample) -> F32 at sample {
+  delay~(x at (sample / 2), 2) * x //~ E0815
+}

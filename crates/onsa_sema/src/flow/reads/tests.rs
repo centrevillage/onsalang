@@ -168,3 +168,42 @@ pub flow f(x: F32 at sample, k: U32 at block) -> F32 at sample {
     assert!(!f.bound_at.contains_key(&b), "{:?}", f.bound_at);
     assert_eq!(f.bound_at[&c].len(), 1, "{:?}", f.bound_at);
 }
+
+/// S-1158 (c), S-1186 #14, S-1195: a computed part of a tick a faster stage
+/// reads under a condition decided at `block` or `sample` is E0815 at the
+/// part, which names the stage of the condition; a value of a tick of a
+/// type that does not satisfy `Default` read from its field at a faster
+/// stage is E0816 at the part or the name that reads it; a part that is not
+/// Copy is E0200. One read at its own tick, and a name under any condition,
+/// is none.
+#[test]
+fn a_field_of_a_tick_is_refused_under_a_late_condition_and_needs_default() {
+    let head = "pub struct N { f: F32 }
+pub flow f(x: F32 at sample, p: F32 at block, n: I32 at block, g: Bool at sample) -> F32 at sample {
+  let a = prev~(p at (sample / 4))
+  let m = N { f: a }\n";
+    let cases = [
+        ("x * (if n > 0 { (a * 2.0) at sample } else { 0.0 })", Some((Code::E0815, "a * 2.0", "`block`"))),
+        ("x * (if g { (a * 2.0) at sample } else { 0.0 })", Some((Code::E0815, "a * 2.0", "`sample`"))),
+        ("x * (if g { a at sample } else { 0.0 })", None),
+        ("x * (m at sample).f", Some((Code::E0816, "m", "`m`"))),
+        ("x * ((N { f: a }) at sample).f", Some((Code::E0816, "N { f: a }", "this value"))),
+        ("let h = m.f * 2.0\n  x * (h at sample)", None),
+        (
+            "match (if a > 0.0 { Some(\"on\") } else { None }) at sample { Some(_) => x, None => 0.0 }",
+            Some((Code::E0200, "if a > 0.0 { Some(\"on\") } else { None }", "not Copy")),
+        ),
+    ];
+    for (body, want) in cases {
+        let a = crate::tests::check(&format!("{head}  {body}\n}}\n"));
+        // `m` is not read by every body (E0309).
+        let ds: Vec<_> = a.diagnostics.iter().filter(|d| d.code != Code::E0309).collect();
+        let got: Vec<_> = ds.iter().map(|d| (d.code, d.found.clone().unwrap_or_default())).collect();
+        let Some((code, found, text)) = want else {
+            assert!(got.is_empty(), "{body}: {ds:?}");
+            continue;
+        };
+        assert_eq!(got, [(code, found.to_string())], "{body}: {ds:?}");
+        assert!(ds[0].message.contains(text), "{body}: {ds:?}");
+    }
+}

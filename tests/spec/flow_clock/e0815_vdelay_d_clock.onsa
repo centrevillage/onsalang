@@ -19,6 +19,10 @@ pub flow a_slow_d_in_place(p: F32 at block, x: F32 at sample) -> F32 at sample {
   vdelay~(x, p at (sample / 4), 8)                          //~ E0815
 }
 
+pub flow a_slow_d_computed_in_place(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  vdelay~(x, (p at (sample / 4)) * 2.0, 8)                  //~ E0815
+}
+
 pub flow a_fast_d_of_a_slow_delay(p: F32 at block, x: F32 at sample) -> F32 at sample {
   let a = p at (sample / 4)
   let y = vdelay~(a, x, 8)                                  //~ E0815

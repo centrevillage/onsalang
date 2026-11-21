@@ -7,9 +7,27 @@ use super::*;
 impl FlowInfo {
     /// The stage of the local `l` (of an input its `api_clock`, of a `let`
     /// its stage, S-1196); `None` of a constant or a local the walk gave no
-    /// clock. The one place of the stage of a local.
+    /// clock ([`ClockInfo::own_stage`]).
     pub fn own_stage(&self, l: LocalId) -> Option<ClockStage> {
-        self.clocks.local_stage(l).and_then(Clock::stage)
+        self.clocks.own_stage(l)
+    }
+
+    /// Whether the field `of` is written at a tick and read at a faster
+    /// stage, so that it starts at `T.default()` at `init` and `reset` sets
+    /// it back (§11.3, S-1186, R-92): a field hoisted to a tick, and that of
+    /// a `let` or an input of a tick read at a faster stage. W8-07 and
+    /// W7-10 read it.
+    pub fn starts_default(&self, of: FieldOf) -> bool {
+        let read_faster = |l: LocalId| {
+            let reads = self.read_at.get(&l).into_iter().flatten();
+            self.own_stage(l).is_some_and(|own| reads.into_iter().any(|&s| own.tick_slower_than(s)))
+        };
+        self.field_at(of).is_some()
+            && match of {
+                FieldOf::Hoist(h) => matches!(self.hoist(h).stage, ClockStage::Tick(_)),
+                FieldOf::Input(l) | FieldOf::Let(l) => read_faster(l),
+                _ => false,
+            }
     }
 
     /// The field of the state that keeps the local `l` (an input or a local

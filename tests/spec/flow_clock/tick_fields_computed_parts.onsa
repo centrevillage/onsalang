@@ -1,0 +1,133 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§11.6", "§11.9", "§18.1"]
+
+// W7-09 U2r2/t, S-1158 (c), S-1197 (spec §11.3): "段が刻みの計算した部分式は、より速い式の中でもその刻みで評価し、値を隠れたフィールドに置く". A computed part of a tick (not a name) that a faster
+// stage reads is written in a field at the tick, and the faster stage reads the field. All of these are accepted: no diagnostic. `a`, `c` are values of `sample / 4` (a delay of a `block` value at that
+// tick; `p at (sample / 4)` alone is a `block` value, S-1196, and makes no field), `x` is the `sample` input. A position that is not decided at the tick is E0815 (e0815_tick_field_in_a_condition.onsa),
+// and a part that is not Copy is S-1195 (tick_field_not_copy_s1195.onsa).
+// Where the part is under a condition (§11.3: "条件の位置の中では、その位置を選ぶ条件が全て定数・`init`・その式と同じ刻みで決まるときだけ書け"): a condition that is a constant or `init` selects a
+// guarded field (written at the tick when the condition holds). The condition of an `if`, the target of a `match`, the left of `&&` and the arms of `if~` are not positions of a condition.
+// What the spec leaves open (S-1197): whether `s.f at sample` is a part that is computed or a name read; here the position has no condition, so either reading accepts it.
+
+pub struct Pair {
+  f: F32,
+  g: F32,
+}
+
+const K: I32 = 1
+
+pub flow computed_part(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  let a = prev~(p at (sample / 4))
+  x * ((a * 2.0) at sample)
+}
+
+pub flow two_ticks_of_one_ratio(p: F32 at block, q: F32 at block, x: F32 at sample) -> F32 at sample {
+  let a = prev~(p at (sample / 4))
+  let c = prev~(q at (sample / 4))
+  x * ((a + c) at sample)
+}
+
+pub flow product_in_a_larger_expression(p: F32 at block, q: F32 at block, x: F32 at sample) -> F32 at sample {
+  let a = prev~(p at (sample / 4))
+  let c = prev~(q at (sample / 4))
+  x * ((a * c + 1.0) at sample) - ((c * 0.5) at sample)
+}
+
+pub flow whole_if_of_the_tick(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  let a = prev~(p at (sample / 4))
+  x * ((if (p at (sample / 4)) > 0.0 { a * 2.0 } else { 0.0 }) at sample)
+}
+
+pub flow unnamed_node_of_a_slow_tick(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  x * (prev~(p at (sample / 32)) at sample)
+}
+
+pub flow unnamed_node_with_a_computed_input(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  x * (delay~((p * 2.0) at (sample / 8), 2) at sample)
+}
+
+pub flow field_of_a_tick_value(p: F32 at block, q: F32 at block, x: F32 at sample) -> F32 at sample {
+  let a = prev~(p at (sample / 4))
+  let c = prev~(q at (sample / 4))
+  let s = Pair { f: a, g: c }
+  x * (s.f at sample)
+}
+
+// ---------------------------------------------------------------- under a condition that selects a field
+
+pub flow under_an_init_condition(p: F32 at block, k: I32 at init, x: F32 at sample) -> F32 at sample {
+  let a = prev~(p at (sample / 4))
+  x * (if k > 0 { (a * 2.0) at sample } else { 0.0 })
+}
+
+pub flow under_a_constant_condition(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  let a = prev~(p at (sample / 4))
+  x * (if K > 0 { (a * 2.0) at sample } else { 0.0 })
+}
+
+pub flow in_the_other_branch(p: F32 at block, k: I32 at init, x: F32 at sample) -> F32 at sample {
+  let a = prev~(p at (sample / 4))
+  x * (if k > 0 { 0.0 } else { (a * 2.0) at sample })
+}
+
+pub flow in_an_arm_of_an_init_match(p: F32 at block, k: I32 at init, x: F32 at sample) -> F32 at sample {
+  let a = prev~(p at (sample / 4))
+  x * (match k {
+    0 => (a * 2.0) at sample,
+    _ => 0.0,
+  })
+}
+
+pub flow right_of_an_and_of_an_init_condition(p: F32 at block, k: I32 at init, x: F32 at sample) -> F32 at sample {
+  let a = prev~(p at (sample / 4))
+  if k > 0 && ((a * 2.0) at sample) > 1.0 { x } else { 0.0 }
+}
+
+pub flow in_two_levels_of_init_conditions(p: F32 at block, k: I32 at init, m: I32 at init, x: F32 at sample) -> F32 at sample {
+  let a = prev~(p at (sample / 4))
+  x * (if k > 0 { if m > 0 { (a * 2.0) at sample } else { 1.0 } } else { 0.0 })
+}
+
+// ---------------------------------------------------------------- places that are not positions of a condition
+
+pub flow the_condition_of_an_if(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  let a = prev~(p at (sample / 4))
+  if ((a * 2.0) at sample) > 1.0 { x } else { 0.0 }
+}
+
+pub flow the_target_of_a_match(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  let a = prev~(p at (sample / 4))
+  match ((a * 2.0) at sample) > 1.0 {
+    true => x,
+    false => 0.0,
+  }
+}
+
+pub flow the_left_of_an_and(p: F32 at block, g: Bool at sample, x: F32 at sample) -> F32 at sample {
+  let a = prev~(p at (sample / 4))
+  if ((a * 2.0) at sample) > 1.0 && g { x } else { 0.0 }
+}
+
+pub flow the_arms_of_an_if_tilde(p: F32 at block, g: Bool at sample, x: F32 at sample) -> F32 at sample {
+  let a = prev~(p at (sample / 4))
+  if~ g {
+    prev~(x) * ((a * 2.0) at sample)
+  } else {
+    0.0
+  }
+}
+
+// ---------------------------------------------------------------- with a `par` and an instance
+
+pub flow in_a_par(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  let a = prev~(p at (sample / 4))
+  let ys = par i in 0 ..< 3 {
+    x * ((a * F32.round_from(i)) at sample)
+  }
+  ys[0] + ys[1] + ys[2]
+}
+
+pub flow in_an_instance(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  computed_part~(p, x) + computed_part~(p * 0.5, x)
+}

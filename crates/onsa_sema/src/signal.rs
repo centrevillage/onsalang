@@ -43,6 +43,36 @@ pub(crate) fn no_default_signal(a: &Analysis, ty: TyId, span: Span, what: &str, 
     Some(Diagnostic::new(Stage::Flow, Code::E0816, span, msg))
 }
 
+/// A value of a tick a faster stage reads from a field written at the tick
+/// ([`slow_field_default`]): of a computed part or a node, or of a name.
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum SlowField<'a> {
+    Part,
+    Name(&'a str),
+}
+
+/// The E0816 at `span` of a value of the type `ty` and the tick `clock` a
+/// faster stage reads from its field, which starts at `T.default()` and
+/// `reset` sets back (§11.3, S-1186 #14), of a type that does not satisfy
+/// `Default`. The one judgement of the fields of the ticks: the predicate
+/// is [`no_default_signal`]'s.
+pub(crate) fn slow_field_default(
+    a: &Analysis,
+    ty: TyId,
+    span: Span,
+    clock: &str,
+    field: SlowField,
+) -> Option<Diagnostic> {
+    let of = match field {
+        SlowField::Part => "this value".to_string(),
+        SlowField::Name(n) => format!("`{n}`"),
+    };
+    let what = format!(
+        "the field that keeps {of} of the clock `{clock}` for a faster stage, before its first tick and after `reset`,"
+    );
+    no_default_signal(a, ty, span, &what, "§11.3")
+}
+
 /// The E0810 at `span` of the value type `ty` of a signal, in this order:
 /// not Copy, holding a function type.
 pub(crate) fn signal_type_error(a: &Analysis, ty: TyId, span: Span) -> Option<Diagnostic> {

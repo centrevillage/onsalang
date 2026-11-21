@@ -317,3 +317,38 @@ fn the_guards_of_a_match_tilde_are_guarded_and_its_arm_bodies_are_not() {
 }";
     assert_eq!(guarded(src), [g("r._hoist_0", B, true, "level * 2.0 > 1.0"), g("r._hoist_1", B, false, "level * 3.0")]);
 }
+
+/// S-1158 (c): a computed part and a node with no name of a tick slower
+/// than the stage that reads them have fields written at the tick, guarded
+/// under a condition decided at `init`; a name of a tick has none of its
+/// own. The fields at a tick and the `let` of a tick read at `sample` start
+/// at `T.default()` (S-1186, R-92), not those at `block` or `init`.
+#[test]
+fn a_computed_part_and_a_node_of_a_slow_tick_have_fields_at_the_tick() {
+    use crate::clock::Ratio;
+    let (t4, t8) = (ClockStage::Tick(Ratio(-2)), ClockStage::Tick(Ratio(-3)));
+    let src = "pub flow f(x: F32 at sample, p: F32 at block, k: I32 at init) -> F32 at sample {
+  let a = prev~(p at (sample / 4))
+  let y = x * ((a * 2.0) at sample) + (a at sample) + (prev~(p at (sample / 8)) at sample)
+  let z = if k > 0 { (a + 1.0) at sample } else { (p * 2.0) at sample }
+  y + z
+}";
+    assert_eq!(
+        guarded(src),
+        [
+            g("y._hoist_0", t4, false, "a * 2.0"),
+            g("y._hoist_1", t8, false, "prev~(p at (sample / 8))"),
+            g("z._hoist_0", I, false, "k > 0"),
+            g("z._hoist_1", t4, true, "a + 1.0"),
+            g("z._hoist_2", B, true, "p * 2.0"),
+        ]
+    );
+    let (a, _) = flow(src);
+    let f = info(&a);
+    let starts: Vec<bool> =
+        (0..f.hoists.len()).map(|h| f.starts_default(FieldOf::Hoist(super::HoistId(h as u32)))).collect();
+    assert_eq!(starts, [true, true, false, true, false]);
+    let local = |n: &str| f.lets.iter().find(|l| l.name.as_deref() == Some(n)).expect("the let").locals[0];
+    assert!(f.starts_default(FieldOf::Let(local("a"))), "read at `sample` from its field");
+    assert!(!f.starts_default(FieldOf::Let(local("y"))) && !f.starts_default(FieldOf::Input(f.inputs[1])));
+}

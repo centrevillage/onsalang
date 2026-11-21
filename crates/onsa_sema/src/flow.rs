@@ -198,6 +198,13 @@ impl ClockInfo {
     pub fn local_stage(&self, l: LocalId) -> Option<Clock> {
         self.local_stages.get(&l).or(self.locals.get(&l)).copied()
     }
+
+    /// The stage of the local `l` ([`ClockInfo::local_stage`]); `None` of
+    /// a constant or a local the walk gave no clock. The one place of the
+    /// stage of a local ([`FlowInfo::own_stage`]).
+    pub fn own_stage(&self, l: LocalId) -> Option<ClockStage> {
+        self.local_stage(l).and_then(Clock::stage)
+    }
 }
 
 /// The clock of a delay or an instance call the walk of the clocks gives,

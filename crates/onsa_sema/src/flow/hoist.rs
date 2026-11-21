@@ -61,8 +61,9 @@ pub struct HoistId(pub u32);
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Hoist {
     pub expr: ExprId,
-    /// The stage it is evaluated at, `init` or `block` ([`ClockInfo::stage`]
-    /// and its conditions): before every stage that reads it.
+    /// The stage it is evaluated at, `init`, `block` ([`ClockInfo::stage`]
+    /// and its conditions) or a tick ([`FlowInfo::starts_default`]): before
+    /// every stage that reads it.
     pub stage: ClockStage,
     /// Written only when the conditions on its path hold (S-1157): under
     /// a conditional position. W8-07 makes of it what `init` sets (V-17).
@@ -93,10 +94,13 @@ pub(super) enum Place {
     Const,
     /// Where it is read.
     Here,
-    /// A computed part or a node of a tick slower than the stage that reads
-    /// it, whose field W7-09 U2r2 makes (§11.3, §11.6, S-1158 (c)): E0200
-    /// until then.
-    Gate(ClockStage),
+    /// A computed part or a node of the tick `stage`, slower than the stage
+    /// that reads it, in a conditional position a condition decided at
+    /// another stage selects (§11.3, S-1158 (c)): E0815, with no field.
+    Refuse(ClockStage),
+    /// Such a part of a type that is not Copy (S-1195): E0200, with no
+    /// field.
+    NotCopy(ClockStage),
 }
 
 /// What the choice reads of a flow body.
@@ -118,7 +122,10 @@ impl Choose<'_> {
     /// ([`Choose::hoistable`]); else where it is read. The marking reads the
     /// parts of a hoisted one at its stage, so the first met from the root
     /// is the largest, and a slower part in it is hoisted again (`make(a)`
-    /// in `level * make(a)`).
+    /// in `level * make(a)`). A computed part or a node of a tick slower
+    /// than `at` ([`Choose::tick_field`]) is in a field written at the tick,
+    /// guarded under conditions of constants and `init`; under one decided
+    /// at another stage it is refused (S-1158 (c)).
     pub(super) fn place(&self, e: ExprId, at: ClockStage, g: Cond) -> Place {
         let d = match self.clocks.stage(e) {
             Some(Clock::Init) => ClockStage::Init,
@@ -126,13 +133,21 @@ impl Choose<'_> {
             Some(Clock::Const) if g != Cond::None && self.computed(e) => {
                 return g.stage().filter(|&s| s < at).map_or(Place::Const, Place::Check);
             }
-            // A part that reads a tick: of the stage of its clock.
-            Some(Clock::Tick(r)) if ClockStage::Tick(r) < at && (self.part(e) || self.nodes.contains(&e)) => {
-                return Place::Gate(ClockStage::Tick(r));
+            Some(Clock::Tick(r)) if ClockStage::Tick(r).tick_slower_than(at) && self.tick_field(e) => {
+                let d = ClockStage::Tick(r);
+                return match g {
+                    // SPEC-GAP(S-1195): of a type that is not Copy, E0200
+                    // (provisional).
+                    _ if self.part(e) && !self.copy(e) => Place::NotCopy(d),
+                    Cond::None | Cond::Const | Cond::Init => Place::Hoist(d),
+                    Cond::Block | Cond::Late => Place::Refuse(d),
+                };
             }
             _ => return Place::Here,
         };
         let s = match g {
+            // SPEC-GAP(S-1184): under a condition decided at a tick, where
+            // it is reached (provisional).
             Cond::Late => return Place::Here,
             g => g.stage().map_or(d, |c| c.max(d)),
         };
@@ -165,12 +180,21 @@ impl Choose<'_> {
         self.part(e) && self.copy(e)
     }
 
+    /// Whether `e`, of a tick slower than the stage that reads it, has a
+    /// field written at the tick: a [`Choose::part`] or a node, whose value
+    /// is kept there with no name (§11.3, §11.6).
+    fn tick_field(&self, e: ExprId) -> bool {
+        self.part(e) || self.nodes.contains(&e)
+    }
+
     /// Whether `e` is a computed part: none of a name (an input, a `let`,
     /// the index of a `par~`, a binding of an arm, `^y`), `sample_rate()`
     /// and a node (§11.3), nor parentheses or `at`, whose operand is the
     /// same value (§11.3: `at` changes no value), nor a
     /// block of a value only, whose value the lowering makes of its tail in
     /// place: the operand or the tail is chosen instead.
+    // SPEC-GAP(S-1197): the field of a struct read of a name (`s.f`) is a
+    // computed part (provisional).
     fn part(&self, e: ExprId) -> bool {
         let kind = &self.ast.expr(e).kind;
         let name = matches!(self.body.targets.get(&e), Some(Target::Local(_)));

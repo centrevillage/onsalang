@@ -1,0 +1,57 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§18.1"]
+
+// W7-09 U2r2/t, S-1158 (c), S-1186 (#12, #14), S-1196 (spec §11.3): "速い段で読まない刻みの値には要らない" and "パラメータの種類の値だけで決まる式は、刻みのクロックを付けてもこのフィールドを作らない". So a type with no
+// `Default` (`NoDef`, Copy) is accepted as the value of a tick that only its own tick or a slower one reads, and as a `block` value that `at (sample / 4)` gives a clock and `at sample` reads, and a name of a tick is read
+// under a condition of another stage (the name is the field, and no part is computed there, §11.3: "名前とそのフィールドを読むだけなら書ける"). The same forms that a faster stage reads are E0816
+// (e0816_tick_field_without_default.onsa). No diagnostic. `x` is the `sample` input.
+
+pub struct NoDef {
+  f: F32,
+}
+
+pub flow read_at_its_own_tick(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  let a = prev~(p at (sample / 4))
+  let m = NoDef { f: a }
+  let n = m.f * 2.0
+  x * (n at sample)
+}
+
+pub flow delay_value_read_at_its_own_tick(p: NoDef at block, x: F32 at sample) -> F32 at sample {
+  let g = prev~(p at (sample / 4), NoDef { f: 0.0 })
+  let h = g.f + 1.0
+  x * (h at sample)
+}
+
+pub flow block_value_at_a_ratio(p: NoDef at block, x: F32 at sample) -> F32 at sample {
+  let m = p at (sample / 4)
+  x * ((m.f * 2.0) at sample)
+}
+
+pub flow block_value_in_place(p: NoDef at block, x: F32 at sample) -> F32 at sample {
+  x * (((p at (sample / 4)).f * 2.0) at sample)
+}
+
+pub flow name_of_a_tick_under_a_sample_condition(p: F32 at block, g: Bool at sample, x: F32 at sample) -> F32 at sample {
+  let a = prev~(p at (sample / 4))
+  let m = NoDef { f: a }
+  let n = m.f
+  x * (if g { n at sample } else { 0.0 })
+}
+
+pub flow name_of_a_tick_under_a_block_condition(p: F32 at block, k: I32 at block, x: F32 at sample) -> F32 at sample {
+  let a = prev~(p at (sample / 4))
+  x * (if k > 0 { a at sample } else { 0.0 })
+}
+
+pub flow tick_let_of_a_tick_condition(p: F32 at block, c: Bool at block, x: F32 at sample) -> F32 at sample {
+  let m = if (c at (sample / 4)) { p } else { 0.0 }
+  x * (m at sample)
+}
+
+pub flow delay_with_a_computed_d_of_the_same_tick(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  let lf = prev~(p at (sample / 4))
+  let y = vdelay~(lf, (p at (sample / 4)) * 2.0, 8)
+  x * (y at sample)
+}

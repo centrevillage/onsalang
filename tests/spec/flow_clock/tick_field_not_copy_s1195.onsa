@@ -1,0 +1,24 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§18.1"]
+
+// W7-09 U2r2/t, S-1195 (OPEN, spec §11.3): the spec says "型が Copy でない部分式 … は巻き上げず、読む側の段で評価し", and also "段が刻みの計算した部分式は、より速い式の中でもその刻みで評価し、値を隠れたフィールドに
+// 置く" with no word about Copy. What a computed part of a tick that is not Copy does when a faster stage reads it (read at the faster stage, an error, or a field after all) is not decided. The expectation here is the most
+// conservative one that S-1195 holds until it is decided: E0200 (the spec has it and this version does not carry it, Q-09), on the part. This case is to be changed with the decision. `a` is a value of `sample / 4`; an
+// `Option[Str]` of a static string is not Copy (§4.6) and cannot be the value of a `let` (E0810), so it is the part itself and the target of a `match`. `x` is the `sample` input.
+
+pub flow option_of_a_string_in_a_match(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  let a = prev~(p at (sample / 4))
+  match (if a > 0.0 { Some("hi") } else { None }) at sample { //~ E0200
+    Some(_) => x,
+    None => 0.0,
+  }
+}
+
+pub flow option_of_a_string_matched_by_a_pattern(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  let a = prev~(p at (sample / 4))
+  match (if a > 0.0 { Some("hi") } else { Some("lo") }) at sample { //~ E0200
+    Some("hi") => x,
+    _ => 0.0,
+  }
+}

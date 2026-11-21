@@ -12,7 +12,9 @@ use onsa_syntax::ast::{Ast, BinOp};
 use super::clocks::Walked;
 use super::hoist::{Choose, Cond, Place};
 use super::*;
+use crate::body::LocalKind;
 use crate::names::body::Binding;
+use crate::signal::SlowField;
 
 #[cfg(test)]
 mod tests;
@@ -286,6 +288,9 @@ impl Marker<'_> {
                 if g != Cond::None {
                     self.read_conds(s);
                 }
+                if s.tick_slower_than(at) {
+                    self.no_default(e, s, SlowField::Part);
+                }
                 s
             }
             Place::Check(_) | Place::Const => {
@@ -299,11 +304,9 @@ impl Marker<'_> {
                 return self.konst_parts(e, at, g);
             }
             Place::Here => at,
-            Place::Gate(s) => {
-                let span = self.ast.expr(e).span;
-                let d = Feature::TickFields.diagnostic(Stage::Flow, span, &[&s.shown(span)]);
-                return Diagnostic::keep_first(&mut self.out.diag, d.with_found(span.text_in(self.text)));
-            }
+            // The condition is decided at `block` or at `at`.
+            Place::Refuse(s) => return self.refuse(e, s, Some(if g == Cond::Block { ClockStage::Block } else { at })),
+            Place::NotCopy(s) => return self.refuse(e, s, None),
         };
         let ast = self.ast;
         let expr = ast.expr(e);
@@ -312,6 +315,11 @@ impl Marker<'_> {
                 if let Some(&Target::Local(id)) = self.body.targets.get(&e) {
                     self.out.read_at.entry(id).or_default().insert(at);
                     self.read_select(id, at);
+                    let own = self.clocks.info.own_stage(id).filter(|s| s.tick_slower_than(at));
+                    if let Some(s) = own.filter(|_| self.body.locals[id.0 as usize].kind != LocalKind::MatchBind) {
+                        let name = expr.span.text_in(self.text);
+                        self.no_default(e, s, SlowField::Name(name));
+                    }
                 }
                 if let ExprKind::Field { base, .. } = &expr.kind
                     && !self.body.targets.contains_key(&e)
@@ -479,6 +487,36 @@ impl Marker<'_> {
         }
         self.conds.truncate(depth);
         self.conds.extend(rest);
+    }
+
+    /// The part `e` of the tick `s` that `place` refused, at it: E0815 of
+    /// [`Place::Refuse`] under a condition decided at `cond` (S-1158 (c));
+    /// E0200 of [`Place::NotCopy`] (S-1195).
+    fn refuse(&mut self, e: ExprId, s: ClockStage, cond: Option<ClockStage>) {
+        let span = self.ast.expr(e).span;
+        let d = match cond {
+            None => Feature::NonCopyTickParts.diagnostic(Stage::Flow, span, &[&s.shown(span)]),
+            Some(c) => {
+                let msg = format!(
+                    "this value of the clock `{}` is computed at its ticks, and a condition decided at `{}` selects this place; bind it with a `let` before the condition to compute it at each tick, or write `at` on the names it reads to compute it where it is reached (§11.3)",
+                    s.shown(span),
+                    c.shown(span)
+                );
+                Diagnostic::new(Stage::Flow, Code::E0815, span, msg)
+            }
+        };
+        Diagnostic::keep_first(&mut self.out.diag, d.with_found(span.text_in(self.text)));
+    }
+
+    /// The E0816 at `e` of a value of the tick `s` a faster stage reads from
+    /// its field, which starts at `T.default()` (§11.3, S-1186 #14), of a
+    /// type that does not satisfy `Default`.
+    fn no_default(&mut self, e: ExprId, s: ClockStage, field: SlowField) {
+        let Some(&ty) = self.body.expr_types.get(&e) else { return };
+        let span = self.ast.expr(e).span;
+        if let Some(d) = crate::signal::slow_field_default(self.choose.a, ty, span, &s.shown(span), field) {
+            Diagnostic::keep_first(&mut self.out.diag, d.with_found(span.text_in(self.text)));
+        }
     }
 
     /// The reads of the parts of the constant expression `e` at `s`.
