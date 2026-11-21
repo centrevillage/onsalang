@@ -1,0 +1,134 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§11.4", "§11.9", "§18.1"]
+
+// W7-09 U4a/t, S-566, S-567, S-1098 (b), S-1182 (a) (spec §11.9: "本体の中で、`sample * N` の入出力は 1 刻みに N 個の配列 `[T; N]` として見え（`x[N - 1]` が最新、ステレオの `[F32; 2] at (sample * 2)` は
+// `[[F32; 2]; 2]`）、`sample / N` の入力は遅い値（速い式で使うには `at sample`）である。出力の式は、出力の宣言のクロック（`sample * N` の出力は本体の `sample`）で §11.3 の読み方のとおりに読めなければ E0815
+// である。同じ比の値、パラメータの種類、イベントの値は読め、より遅い周期のクロックの式は `at` で昇格する（`l8 at (sample / 4)`）"): what the body of a conversion flow sees. An input at `sample * N` is an
+// array of N whose last element is the newest, and an output at `sample * N` is the array the body writes at its own `sample` (its elements are values of `sample` or of the parameter kinds, a slower value by
+// `at sample`). An input at `sample / N` is a slow value that a faster expression reads with `at sample`. An output at `sample / N` reads values of its own ratio, of the parameter kinds, and a
+// slower tick by `at` (S-1098 (b); the event values are in conversion_flow_events_until_w7_11.onsa). The state of the body counts the ticks of the body: a delay of an array counts the `sample` of the body, and the
+// state of a `sample / N` value is written as in any flow (S-1182 (a)). The ports are used in the places a flow of `sample` has them (a `par`, a branch, a function, a `let`). No diagnostic. The errors are in e0401_conversion_flow_body_types.onsa and
+// e0815_conversion_flow_body_clocks.onsa.
+
+const K: U32 = 4
+
+pub rt fn half(v: F32) -> F32 {
+  v * 0.5
+}
+
+// ---------------------------------------------------------------- an input at `sample * N` is an array of N
+
+pub flow newest_is_the_last(x: F32 at (sample * 4)) -> F32 at sample {
+  x[3]
+}
+
+pub flow oldest_is_the_first(x: F32 at (sample * 4)) -> F32 at sample {
+  x[0]
+}
+
+pub flow the_length_is_a_constant(x: F32 at (sample * K)) -> F32 at sample {
+  x[K - 1]
+}
+
+pub flow the_elements_go_to_a_function(x: F32 at (sample * 2)) -> F32 at sample {
+  half(x[0]) + half(x[1])
+}
+
+pub flow a_stereo_input_is_an_array_of_pairs(x: [F32; 2] at (sample * 2)) -> [F32; 2] at sample {
+  [(x[0][0] + x[1][0]) * 0.5, (x[0][1] + x[1][1]) * 0.5]
+}
+
+pub flow the_newest_pair_of_a_stereo_input(x: [F32; 2] at (sample * 2)) -> [F32; 2] at sample {
+  x[1]
+}
+
+pub flow a_par_reads_the_elements(x: F32 at (sample * 4)) -> F32 at sample {
+  let ys = par i in 0 ..< 4 { x[i] * 0.25 }
+  ys[0] + ys[1] + ys[2] + ys[3]
+}
+
+pub flow a_branch_picks_an_element(g: Bool at sample, x: F32 at (sample * 2)) -> F32 at sample {
+  if g { x[1] } else { x[0] }
+}
+
+pub flow a_delay_of_the_array_counts_the_sample_of_the_body(x: F32 at (sample * 2)) -> F32 at sample {
+  let d = prev~(x, [0.0; 2])
+  d[1] + x[1]
+}
+
+pub flow the_rate_is_the_rate_of_the_body(x: F32 at (sample * 2)) -> F32 at sample {
+  (x[0] + x[1]) * (1.0 / sample_rate())
+}
+
+// ---------------------------------------------------------------- an output at `sample * N` is an array of N written at `sample`
+
+pub flow two_elements_of_the_sample(x: F32 at sample) -> F32 at (sample * 2) {
+  [x, x * 0.5]
+}
+
+pub flow elements_of_the_parameter_kinds(p: F32 at block, q: F32 at init) -> F32 at (sample * 2) {
+  [p, q]
+}
+
+pub flow an_element_of_a_slow_value_at_sample(lf: F32 at (sample / 4)) -> F32 at (sample * 2) {
+  [lf at sample, 0.0]
+}
+
+pub flow the_output_array_is_a_par(x: F32 at sample) -> F32 at (sample * 4) {
+  par i in 0 ..< 4 { x * 0.25 }
+}
+
+// ---------------------------------------------------------------- an input at `sample / N` is a slow value
+
+pub flow a_slow_input_is_read_at_sample(lf: F32 at (sample / 4), x: F32 at sample) -> F32 at sample {
+  x * (lf at sample)
+}
+
+pub flow a_state_of_a_slow_input_counts_its_ticks(lf: F32 at (sample / 4)) -> F32 at (sample / 4) {
+  lf + prev~(lf)
+}
+
+pub flow a_state_of_a_slow_input_read_at_sample(lf: F32 at (sample / 4), x: F32 at sample) -> F32 at sample {
+  x * (prev~(lf) at sample)
+}
+
+// ---------------------------------------------------------------- an output at `sample / N` reads what its clock reads
+
+pub flow a_slow_output_of_its_own_ratio(lf: F32 at (sample / 4)) -> F32 at (sample / 4) {
+  lf * 2.0
+}
+
+pub flow a_slow_output_from_a_let(lf: F32 at (sample / 4), p: F32 at block) -> F32 at (sample / 4) {
+  let m = lf * p
+  m
+}
+
+pub flow a_slow_output_from_a_delay(lf: F32 at (sample / 4)) -> F32 at (sample / 4) {
+  prev~(lf)
+}
+
+pub flow a_slow_output_from_a_parameter(p: F32 at block) -> F32 at (sample / 4) {
+  p
+}
+
+pub flow a_slow_output_from_an_init_value(q: F32 at init) -> F32 at (sample / 4) {
+  q + 1.0
+}
+
+pub flow a_slow_output_from_a_slower_value_by_at(l8: F32 at (sample / 8)) -> F32 at (sample / 4) {
+  l8 at (sample / 4)
+}
+
+pub flow a_slow_output_from_a_slower_value_in_an_expression(l8: F32 at (sample / 8), p: F32 at block) -> F32 at (sample / 4) {
+  (l8 at (sample / 4)) * p
+}
+
+pub flow a_slow_output_by_a_branch(c: Bool at (sample / 4), lf: F32 at (sample / 4)) -> F32 at (sample / 4) {
+  if c { lf } else { 0.0 }
+}
+
+pub flow a_slow_output_by_a_par(lf: F32 at (sample / 4)) -> F32 at (sample / 4) {
+  let ys = par i in 0 ..< 2 { lf * 0.5 }
+  ys[0] + ys[1]
+}

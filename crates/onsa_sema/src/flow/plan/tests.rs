@@ -256,3 +256,19 @@ pub flow g(x: F32 at sample) -> F32 at sample {
     let g = flow(&a, "g");
     assert_eq!(g.multirate_at(), Some(g.nodes[0].span), "a chain of the ratio one stops the Core too");
 }
+
+/// The Core stops at a flow with a port of a derived clock until W7-16
+/// (§11.9): at the first input of one, or at the name of a flow whose
+/// output alone is of one, also when the body has no tick of a ratio.
+#[test]
+fn a_port_of_a_derived_clock_stops_the_core() {
+    let src = "pub flow f(p: F32 at block, x: F32 at (sample * 2)) -> F32 at sample {\n  x[0] * p\n}\n\
+               pub flow g(x: F32 at sample) -> F32 at (sample * 2) {\n  [x, x]\n}\n\
+               pub flow h(x: F32 at sample) -> F32 at sample {\n  x\n}\n";
+    let a = check(src);
+    assert!(a.diagnostics.is_empty(), "{:?}", a.diagnostics);
+    let at = |name: &str| flow(&a, name).multirate_at().map(|s| &src[s.start as usize..s.end as usize]);
+    assert_eq!(at("f"), Some("x: F32 at (sample * 2)"));
+    assert_eq!(at("g"), Some("g"));
+    assert_eq!(at("h"), None);
+}

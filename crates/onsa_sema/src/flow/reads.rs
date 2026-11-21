@@ -100,15 +100,16 @@ fn read_stage(c: Clock) -> Option<ClockStage> {
 
 /// The stages each local is read at and the stage at which `sample_rate()`
 /// is read (S-05), in the module of `ast` and `text`, from the walk `walked`, also
-/// one with a diagnostic. A `let` in error is not marked.
+/// one with a diagnostic, of the output the body writes at `out` (§11.9: the
+/// tick of an output at `sample / N`). A `let` in error is not marked.
 pub(super) fn mark_all(
     a: &Analysis,
-    ast: &Ast,
-    text: &str,
+    (ast, text): (&Ast, &str),
     body: &BodyInfo,
     cx: &FlowCx,
     walked: &Walked,
     lets: &[FlowLet],
+    out: Clock,
 ) -> Marked {
     let nodes = cx.node_exprs();
     let sample_rate: HashSet<ExprId> = cx.sample_rate_calls.iter().copied().collect();
@@ -153,9 +154,9 @@ pub(super) fn mark_all(
             m.mark(l.init, s, Cond::None);
         }
     }
-    if let Some(out) = cx.output {
+    if let Some(e) = cx.output {
         m.consumer = lets.len();
-        m.mark(out, ClockStage::SAMPLE, Cond::None);
+        m.mark(e, read_stage(out).unwrap_or(ClockStage::SAMPLE), Cond::None);
     }
     // A constant `let` is defined in each phase that reads it, and its
     // initializer read there (§11.3, R-488): from the last, so that one

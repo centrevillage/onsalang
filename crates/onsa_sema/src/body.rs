@@ -185,8 +185,12 @@ fn body_of(a: &mut Analysis, id: DefId) -> Option<(Option<TyId>, ExprId, TyId)> 
         BodyKind::Fn(f) => (self_ty, f.body?, Some(f.ret)),
         BodyKind::Test(body) => (None, body, None),
         BodyKind::Initializer(c) => (self_ty, c.value?, Some(c.ty)),
-        // Flow bodies (T3-1): the same inference, in flow mode (`flow.rs`).
-        BodyKind::Flow(f) => (None, f.body, Some(f.out)),
+        // Flow bodies (T3-1): the same inference, in flow mode (`flow.rs`),
+        // of the body's view of the output (an array of N at `sample * N`, §11.9).
+        BodyKind::Flow(f) => {
+            let (body, clock, out) = (f.body, f.out_clock, f.out);
+            (None, body, Some(crate::def::body_ty(clock, out, &mut a.types)))
+        }
     };
     Some((self_ty, body, ret.unwrap_or_else(|| a.types.unit())))
 }
@@ -433,6 +437,16 @@ impl<'a> Checker<'a> {
     /// does not generate (`Out`, S-1087): of the types stage, as in a type.
     pub(crate) fn generated_at(&mut self, d: DefId, span: Span) -> R<()> {
         match self.a.not_generated_error(d, span) {
+            Some(err) => Err(self.diag(err.with_found(self.src(span)))),
+            None => Ok(()),
+        }
+    }
+
+    /// The E0200 of the path at `span` in the body to `d`, a generated
+    /// function that crosses the boundary of a flow with a port of a derived
+    /// clock ([`crate::Analysis::boundary_gate`]).
+    pub(crate) fn boundary_at(&mut self, d: DefId, span: Span) -> R<()> {
+        match self.a.boundary_gate(d, span) {
             Some(err) => Err(self.diag(err.with_found(self.src(span)))),
             None => Ok(()),
         }

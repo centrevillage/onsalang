@@ -196,7 +196,7 @@ impl Phase {
 
 /// An input of the flow as its functions read it (§11.2, §11.6): its local,
 /// its declaration, the phase of its stage in the plan (of
-/// `FlowInput::api_clock`) and its place among the inputs of that stage
+/// `FlowInput::body_clock`) and its place among the inputs of that stage
 /// (its field of `Config` or `Params`).
 #[derive(Debug, Clone)]
 struct Input {

@@ -127,6 +127,7 @@ impl<'a> Checker<'a> {
                 if f.self_mode.is_some() {
                     onsa_diag::internal::bug(Some(name.span), "a method in the function form the names stage took");
                 }
+                self.boundary_at(d, self.expr(callee).span)?;
                 if kind == CallKind::Bang {
                     let at = self.expr(callee).span.end;
                     return Err(self.diag(

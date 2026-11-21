@@ -543,7 +543,7 @@ impl<'p> Sema<'p> {
     /// arguments lowered ([`Self::listed`], S-329), then its value. The error
     /// of the names stage is reported as the walk has it; the diagnostic of
     /// type arguments, by the reader where it reads them, as in a body.
-    fn read_const(
+    pub(super) fn read_const(
         &mut self,
         cx: &Cx<'p>,
         e: onsa_syntax::ast::ExprId,

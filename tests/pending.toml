@@ -918,13 +918,6 @@ note = "内の `if` に `~` を足す候補の後に、外の E0811 の前の `l
 
 [[pending]]
 kind = "test-case"
-target = "tests/spec/flow_clock/derived_clock_declarations.onsa"
-reasons = ["S-1078"]
-until = "W7-09"
-note = "入出力の宣言の導くクロック `at (sample / N)`・`at (sample * N)` は U1 の後も名前の段の仮の門 E0200（DerivedClockRatios）で止まる。U4a で門を外す"
-
-[[pending]]
-kind = "test-case"
 target = "tests/spec/flow_clock/derived_clock_const_expressions_w9_03.onsa"
 reasons = ["S-1077"]
 until = "W9-03"
@@ -939,14 +932,14 @@ note = "ガードに at sample を書いた値の match（Some(v) if (v != 0) at
 
 [[pending]]
 kind = "test-case"
-target = "tests/spec/flow_clock/modifier_up_forms.onsa"
-reasons = ["S-556", "S-566", "S-567"]
-until = "W7-09"
-note = "U4a の変換の flow の宣言 `at (sample * N)` で止まる（名前の段の仮の門 E0200（DerivedClockRatios））。U4a で門を外す"
-
-[[pending]]
-kind = "test-case"
 target = "tests/spec/flow_clock/modifier_n_const_expressions_w9_03.onsa"
 reasons = ["S-1077"]
 until = "W9-03"
 note = "修飾子の N の算術は W9-03 まで E0200（FlowConstExprs）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/flow_clock/conversion_flow_events_until_w7_11.onsa"
+reasons = ["S-1182", "S-1098"]
+until = "W7-11"
+note = "`event` のクロックの名前が引けるまで E0302"

@@ -1,0 +1,98 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§11.9", "§18.1"]
+
+// W7-09 U4a/t, S-566, S-567, S-1079, S-1083 (spec §11.3: "速い→遅いと、`sample * N` へは、変換の flow（速い側を配列で受ける）で書く。`at` の無い形は E0815"; "式のクロックは三つで決まる: 周期の刻みのクロックの被演算子は
+// 揃っていること"; §11.9: the clock of a port is read in the frame of the call, see conversion_flow_calls.onsa): the arguments and the results of a conversion flow are read at the clocks of its ports in the frame of the
+// call, so a value of another clock is E0815. A value of the `sample` (or of a faster tick) is not made slower: it does not go to an input at `sample * N` or at `sample / N` of a flow that has no modifier (`fold2~(x)`,
+// there is no clock of the caller to give it), nor to the input of a flow that a `.down~(N)` of another N runs (the input at `sample * 4` of `.down~(2)` is at `sample * 2` of the caller, and of `.down~(8)` at
+// `sample / 2`), nor to the input at `sample` of a gather that deals. A slower tick with no `at` is not read at a faster input, and the value of a `.up~(N)` is at `sample * N` only. The result of a conversion
+// flow is a tick of the clock of its port in the frame, so a faster expression reads it with `at` and the output of a flow at `sample` is not given it. The error is at the argument or at the expression that reads
+// the result. One error per flow, so each form is a flow of its own. `x` is the `sample` input, `p` is a `block` input.
+
+flow smooth(a: F32 at sample) -> F32 at sample {
+  a * 0.5 + prev~(a) * 0.5
+}
+
+flow fold2(x: F32 at (sample * 2)) -> F32 at sample {
+  (x[0] + x[1]) * 0.5
+}
+
+flow sum4(x: F32 at (sample * 4)) -> F32 at sample {
+  (x[0] + x[1] + x[2] + x[3]) * 0.25
+}
+
+flow hold4(c: F32 at sample) -> F32 at (sample * 4) {
+  let v = c
+  [v, v, v, v]
+}
+
+flow ramp4(v: F32 at (sample / 4)) -> F32 at sample {
+  (v at sample) * 0.5 + (prev~(v) at sample) * 0.5
+}
+
+flow avg4(x: F32 at sample) -> F32 at (sample / 4) {
+  sum4~(x).down~(4)
+}
+
+// ---------------------------------------------------------------- a value that is not made slower
+
+pub flow sample_into_an_input_at_sample_times(x: F32 at sample) -> F32 at sample {
+  fold2~(x)                                                 //~ E0815
+}
+
+pub flow sample_into_an_input_at_sample_times_of_a_down_of_another_n(x: F32 at sample) -> F32 at sample {
+  sum4~(x).down~(2) at sample                               //~ E0815
+}
+
+pub flow sample_into_an_input_at_sample_over_two(x: F32 at sample) -> F32 at sample {
+  sum4~(x).down~(8) at sample                               //~ E0815
+}
+
+pub flow sample_into_a_slow_input(x: F32 at sample) -> F32 at sample {
+  ramp4~(x)                                                 //~ E0815
+}
+
+pub flow sample_into_the_input_of_a_deal(x: F32 at sample) -> F32 at sample {
+  hold4~(x).down~(4)                                        //~ E0815
+}
+
+pub flow faster_tick_into_a_slow_input(p: F32 at block) -> F32 at sample {
+  let a = p at (sample / 2)
+  ramp4~(a)                                                 //~ E0815
+}
+
+// ---------------------------------------------------------------- a slower tick with no `at`, a value of `sample * N` of another N
+
+pub flow slower_tick_into_a_slow_input(p: F32 at block) -> F32 at sample {
+  let a = p at (sample / 8)
+  ramp4~(a)                                                 //~ E0815
+}
+
+pub flow slower_tick_into_the_input_of_a_deal(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  let a = p at (sample / 8)
+  x * hold4~(a).down~(4)                                    //~ E0815
+}
+
+pub flow up_value_of_another_n_into_an_input_at_sample_times(p: F32 at block) -> F32 at sample {
+  fold2~(smooth~(p).up~(4))                                 //~ E0815
+}
+
+pub flow sample_value_into_an_input_at_sample_times_in_a_let(x: F32 at sample) -> F32 at sample {
+  let y = fold2~(x * 0.5)                                   //~ E0815
+  y
+}
+
+// ---------------------------------------------------------------- the result is a tick
+
+pub flow slow_result_in_a_sample_expression(x: F32 at sample) -> F32 at sample {
+  x * avg4~(x)                                              //~ E0815
+}
+
+pub flow slow_result_as_a_sample_output(x: F32 at sample) -> F32 at sample {
+  avg4~(x)                                                  //~ E0815
+}
+
+pub flow slow_result_of_a_chain_with_no_at(x: F32 at sample) -> F32 at sample {
+  x + sum4~(x).down~(4)                                     //~ E0815
+}

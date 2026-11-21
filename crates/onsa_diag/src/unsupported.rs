@@ -114,16 +114,23 @@ features! {
     /// (S-1160); under a condition decided after `init` it is E0815.
     NonRtCallAtClock: Language, "a call of a function that is not `rt` in an expression at the clock `{}`",
         Some("bind the call with a `let` of its own, which is computed at `init`");
-    /// §11.3, S-1078: `at (sample / N)` and `at (sample * N)` of the inputs
-    /// and the output of a flow (W7-09 U4a).
-    DerivedClockRatios: Language, "the derived clocks `at (sample / N)` and `at (sample * N)`", None;
+    /// §11.3, S-1078: the N of a derived clock of a port computed by an
+    /// expression (`(sample / (K * 2))`, W9-03, as the array lengths).
+    DerivedClockNExprs: Language, "computing the N of a derived clock by an expression",
+        Some("write N as an integer literal, or as a `const` whose value is an integer literal");
+    /// §11.9, X26-23: `{}`: the use. A flow with a port of a derived clock
+    /// at the boundary, its `process`, `process_inplace` and `render` and
+    /// `@export`, which is E0810 from W10-01.
+    ConversionFlowBoundary: Language, "{} of a flow with an input or an output at `(sample / N)` or `(sample * N)`",
+        Some("run the flow inside a flow at `sample` with `.down~(N)` or `.up~(N)`");
     /// §11.3, S-1195: `{}`: the clock of the part. A computed part of a tick
     /// of a type that is not Copy read at a faster stage (provisional).
     NonCopyTickParts: Language, "a value that is not Copy computed at the clock `{}` and read at a faster clock",
         Some("write `at` on the names it reads, so that it is computed where it is read (`(a at sample) > 0.0`)");
     /// §11.3, §11.9: the Core of a flow with a periodic clock of a ratio
-    /// (`sample / N`) or a chain of modifiers, which W7-16 lowers.
-    MultirateFlows: Language, "building a flow with the clock `sample / N` or a chain of `.down~(N)` and `.up~(N)`", None;
+    /// (`sample / N`), a chain of modifiers or a port of a derived clock,
+    /// which W7-16 lowers.
+    MultirateFlows: Language, "building a flow with the clock `sample / N`, a chain of `.down~(N)` and `.up~(N)` or a port at `(sample / N)` or `(sample * N)`", None;
     /// §11.10: the meaning of `.when~(c)` and `.reset_if~(r)` (W7-10).
     InstanceModifiers: Language, "the modifiers `.when~(c)` and `.reset_if~(r)` of an instance", None;
     /// §11.4, S-565: the time since `reset` in ticks (W7-09, R-288).

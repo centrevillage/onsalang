@@ -225,6 +225,7 @@ impl<'p> Sema<'p> {
                     members: Vec::new(),
                     absent: Vec::new(),
                     unpaired: None,
+                    ports_in_error: true,
                 }),
                 None,
             ),
@@ -258,7 +259,7 @@ impl<'p> Sema<'p> {
         };
         let d = self.add_def(at.def(name.name.clone(), name.span, kind));
         if let Some(f) = flow {
-            let clocks = f.params.iter().map(|p| p.clock.as_ref().and_then(|c| crate::clock::resolve_name(c).ok()));
+            let clocks = f.params.iter().map(|p| p.clock.as_ref().and_then(|c| crate::clock::resolve_at(c).ok()));
             self.generated_defs(d, &clocks.collect::<Vec<_>>());
         }
         if let Some(list) = list {

@@ -1,0 +1,83 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§11.9", "§18.1"]
+
+// W7-09 U4a/t, S-578, S-1186 (1a), S-1203 (provisional reading (1)), S-1185 (spec §11.9: "配る型が `Default` を満たさなければ、集める入力の型と同じく、その呼び出しで E0816 である（§11.3 の刻みのフィールドと同じく、
+// `reset_if~` が付くかに依らない）"; §11.3: "刻みで書いて速い段で読むフィールド…の初めの値と…戻り先は `T.default()` である（`T` が `Default` を満たさなければ、速い段で読む式で E0816。速い段で読まない刻みの値には
+// 要らない）"): a conversion flow that `.down~(N)` runs deals an output at `sample * N` out of an array that starts at `T.default()`, so the type of the output needs `Default`; the E0816 is at the call, with
+// its chain (the value that becomes a value of the caller's `sample`), S-1203 (1) (an open point: the other readings put it at the call of the flow only, or at the whole chain for both). `NoDef` is a struct with no
+// `Default` (and Copy, as the field `F32` is, as in e0816_tick_field_without_default.onsa). The gather is in e0816_conversion_flow_gather_struct.onsa. The value of a `.up~` chain whose ratio is a tick
+// (`.up~(4).down~(8)` is `sample / 2`) is read as the value of a `.down~` chain is (e0816_chain_value_without_default.onsa): the flow that is no conversion flow is no gather or deal, so the error is where a faster
+// stage reads it. The values that need no `Default`: the value of a gather whose type has no `Default` that no faster stage reads (the part of it that a faster stage reads is of a type that has it), a chain of
+// the ratio one, and an output at `sample / N` of a type with no `Default` (the root of an output at `sample / N` is the tick of the output: its computed part is no field). One error per flow, so each form
+// is a flow of its own. `x` is the `sample` input, `p` is a `block` input.
+
+pub struct NoDef {
+  f: F32,
+}
+
+flow mk(c: F32 at sample) -> NoDef at sample {
+  NoDef { f: c }
+}
+
+flow give_four(c: F32 at sample) -> NoDef at (sample * 4) {
+  let v = NoDef { f: c }
+  [v, v, v, v]
+}
+
+flow make_from_four(x: F32 at (sample * 4)) -> NoDef at sample {
+  NoDef { f: x[3] }
+}
+
+// ---------------------------------------------------------------- the deal: an output at `sample * N` of a type with no `Default`
+
+pub flow deal_a_nodef(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  let r = give_four~(p).down~(4)                            //~ E0816
+  x * r.f
+}
+
+pub flow deal_a_nodef_as_the_output(p: F32 at block) -> NoDef at sample {
+  give_four~(p).down~(4)                                    //~ E0816
+}
+
+pub flow deal_a_nodef_of_a_slow_value(lf: F32 at (sample / 4), x: F32 at sample) -> F32 at sample {
+  x * give_four~(lf).down~(4).f                             //~ E0816
+}
+
+// ---------------------------------------------------------------- a chain with `.up~` whose ratio is a tick
+
+pub flow up_down_chain_read_at_sample(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  x * (mk~(p).up~(4).down~(8) at sample).f                  //~ E0816
+}
+
+pub flow up_down_chain_read_at_its_tick(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  let r = mk~(p).up~(4).down~(8).f
+  x * (r at sample)
+}
+
+pub flow up_down_chain_of_the_ratio_one(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  let r = mk~(p).up~(2).down~(2)
+  x * r.f
+}
+
+// ---------------------------------------------------------------- the values that need no `Default`
+
+pub flow gather_of_a_float(x: F32 at sample) -> F32 at sample {
+  let m = make_from_four~(x).down~(4)
+  x * ((m.f * 2.0) at sample)
+}
+
+pub flow gather_that_makes_a_nodef_read_at_its_tick(x: F32 at sample) -> F32 at sample {
+  let m = make_from_four~(x).down~(4)
+  let n = m.f * 2.0
+  x * (n at sample)
+}
+
+pub flow slow_nodef_output_of_a_literal(lf: F32 at (sample / 4)) -> NoDef at (sample / 4) {
+  NoDef { f: lf * 2.0 }
+}
+
+pub flow slow_nodef_output_of_a_let(lf: F32 at (sample / 4)) -> NoDef at (sample / 4) {
+  let m = NoDef { f: lf }
+  m
+}

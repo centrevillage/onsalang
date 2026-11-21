@@ -389,3 +389,64 @@ fn a_param_value_reading_a_failed_constant_is_silent() {
         assert_eq!(a.diagnostics[0].span.start < decl.len() as u32, in_decl, "{decl} / {value}");
     }
 }
+
+/// The names stage and the signature agree on the ports of the host of a
+/// flow with a derived clock (§11.6, §11.9; `ClockRef::host` and
+/// `FlowInput::host`): an input at `(sample * N)` or `(sample / N)` is no
+/// `sample` input of `In` and `process`, also when its N is in error (the
+/// names stage does not read N), and a `block` input of a derived clock is
+/// none of `Params`.
+#[test]
+fn a_port_of_a_derived_clock_is_no_port_of_the_host_whatever_its_n() {
+    let a = check(
+        "pub flow k(a: F32 at sample, x: F32 at (sample * 1), lf: F32 at (sample / 4), y: F32 at sample) -> F32 at sample { a + y }\n\
+         pub flow m(a: F32 at sample, x: F32 at (sample * 2)) -> F32 at sample { a + x[1] }\n",
+    );
+    assert_eq!(codes(&a), vec![Code::E0808], "{:?}", a.diagnostics);
+    let members = |name: &str| -> Vec<String> {
+        a.def(def(&a, name)).as_flow().unwrap().members.iter().map(|(n, _)| n.clone()).collect()
+    };
+    assert!(members("k").contains(&"In".to_string()), "two `sample` inputs: {:?}", members("k"));
+    assert!(!members("m").contains(&"In".to_string()), "one `sample` input: {:?}", members("m"));
+    let k = a.def(def(&a, "k")).as_flow().unwrap();
+    let hosts: Vec<_> = k.inputs.iter().map(|i| i.host()).collect();
+    use crate::clock::ClockName::Sample;
+    assert_eq!(hosts, [Some(Sample), None, None, Some(Sample)]);
+    let fields = match &a.def(members_def(&a, "k", "In")).kind {
+        DefKind::Struct(s) => match &s.fields {
+            crate::def::Fields::Named(fs) => fs.iter().map(|f| f.name.clone()).collect::<Vec<_>>(),
+            _ => Vec::new(),
+        },
+        _ => Vec::new(),
+    };
+    assert_eq!(fields, ["a", "y"]);
+}
+
+/// The def of the member `member` of the flow `flow`.
+fn members_def(a: &crate::Analysis, flow: &str, member: &str) -> crate::DefId {
+    let f = a.def(def(a, flow)).as_flow().unwrap();
+    f.members.iter().find(|(n, _)| n == member).map(|&(_, d)| d).unwrap()
+}
+
+/// The E0810 of the value type of an input names the clock of the input
+/// (§11.6, §11.9, S-1204 (2)), and a flow is one with a port in error
+/// (§18.1, `FlowDef::ports_in_error`) of that E0810 and of a clock in error,
+/// not of a port of a derived clock alone.
+#[test]
+fn the_e0810_of_the_value_type_of_an_input_names_its_clock() {
+    let a = check(
+        "pub struct P { a: F32 }\n\
+         pub flow s(x: P at sample) -> F32 at sample { 0.0 }\n\
+         pub flow d(x: P at (sample * 4)) -> F32 at sample { 0.0 }\n\
+         pub flow n(x: F32 at (sample / 3)) -> F32 at sample { 0.0 }\n\
+         pub flow u(x: F32 at foo) -> F32 at sample { 0.0 }\n\
+         pub flow ok(x: F32 at (sample / 4)) -> P at (sample / 4) { P { a: x } }\n",
+    );
+    let texts: Vec<&str> = a.diagnostics.iter().filter(|d| d.code == Code::E0810).map(|d| d.message.as_str()).collect();
+    assert_eq!(texts.len(), 2, "{:?}", a.diagnostics);
+    assert!(texts[0].contains("a `sample` input is"), "{texts:?}");
+    assert!(texts[1].contains("a `sample * 4` input is"), "{texts:?}");
+    let in_error = |name: &str| a.def(def(&a, name)).as_flow().unwrap().ports_in_error;
+    let flows = ["s", "d", "n", "u", "ok"];
+    assert_eq!(flows.map(in_error), [true, true, true, true, false]);
+}

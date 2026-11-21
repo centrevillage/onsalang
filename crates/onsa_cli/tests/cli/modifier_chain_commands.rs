@@ -6,7 +6,7 @@
 //!   the state, which W7-16 changes, is not pinned).
 //! - `onsa graph` of such a flow: the label of the vertex of an instance with modifiers writes the kind and then the modifiers in the order
 //!   they are written, with the N as a value, and the type and the clock of the value of the chain at the call side (S-1084, provisional
-//!   reading (2): `lp_0 = lp~.down~(4): F32 at sample / 4`). No colour is added (the vertices keep the three of §1.1, and a tick has the black
+//!   reading (2): `lp_0 = lp~.down~(4): F32 at (sample / 4)`). No colour is added (the vertices keep the three of §1.1, and a tick has the black
 //!   of `sample`), and the edge of the head argument is the edge of any call. The node whose `let` is a tick has the name of S-1139 (a)
 //!   (`b.lp_0`, a node with no name of §1.1 whose label drops the qualification, drawn into the vertex of the `let` `b`).
 //!
@@ -161,12 +161,12 @@ fn label_of<'a>(dot: &'a str, id: &str) -> (&'a str, &'a str) {
 #[test]
 fn the_label_of_an_instance_with_modifiers_writes_the_modifiers_and_the_clock_of_the_chain() {
     let dot = graph_of_f();
-    // SPEC-GAP(S-1084): `tools.md` §1.1 has no label for modifiers; the provisional form is `<name> = lp~.down~(4): F32 at sample / 4`.
+    // SPEC-GAP(S-1084): `tools.md` §1.1 has no label for modifiers; the provisional form is `<name> = lp~.down~(4): F32 at (sample / 4)`.
     let cases = [
-        ("b.lp_0", "lp~.down~(4): F32 at sample / 4"),
-        ("c.lp_0", "lp~.down~(2).down~(4): F32 at sample / 8"),
-        ("e.lp_0", "lp~.down~(4).up~(2): F32 at sample / 2"),
-        ("_out.lp_0", "lp~.down~(8): F32 at sample / 8"),
+        ("b.lp_0", "lp~.down~(4): F32 at (sample / 4)"),
+        ("c.lp_0", "lp~.down~(2).down~(4): F32 at (sample / 8)"),
+        ("e.lp_0", "lp~.down~(4).up~(2): F32 at (sample / 2)"),
+        ("_out.lp_0", "lp~.down~(8): F32 at (sample / 8)"),
     ];
     for (id, rest) in cases {
         let (name, got) = label_of(&dot, id);
@@ -177,7 +177,7 @@ fn the_label_of_an_instance_with_modifiers_writes_the_modifiers_and_the_clock_of
         assert_eq!(name, last, "the name in the label of \"{id}\"");
     }
     // The `let` of the tick is a vertex of its own (`名前: 型 at クロック`), and the node is drawn into it.
-    assert_eq!(attr(vertex_line(&dot, "b"), "label"), Some("b: F32 at sample / 4"), "the vertex of the `let` b");
+    assert_eq!(attr(vertex_line(&dot, "b"), "label"), Some("b: F32 at (sample / 4)"), "the vertex of the `let` b");
     assert!(dot.lines().map(str::trim).any(|l| l.starts_with("\"b.lp_0\" -> \"b\"")), "no edge b.lp_0 -> b:\n{dot}");
     // The chain whose ratio is one is a `let` whose clock is `sample`, so the `let` names the node (§11.6: the `let` of a tick only is
     // qualified) and the clock is `sample`.

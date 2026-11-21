@@ -1,0 +1,43 @@
+// onsa.toml
+// [test]
+// spec = ["§11.6", "§11.9", "§19.1", "§18.1"]
+// fixes = 0
+
+// W7-09 U4a, S-1204 (2) (spec §11.6: "`sample` の入出力の値型は、スカラ、`[スカラ; N]`（N は 1 以上）、または（出力のみ）それらを一つ以上フィールドに持つ struct。… 変換の flow の `sample / N`・`sample * N`
+// の入出力（§11.9）の値型も同じである", §19.1: "struct の入力は今は E0810（§11.6。変換の flow の `sample / N`・`sample * N` の入力も同じ）"): an input of a conversion flow at `sample / N` or at `sample * N`
+// takes the value types of a `sample` input, so a struct, an enum and an `Option` are E0810 at the type of the input, as in negative/flow_input_type_struct_sample.onsa, and a struct is an output of a derived clock
+// as it is of `sample`. A flow that calls a flow whose input is in error has no error of its own (§18.1: what could not be read is of the type in error). One error per flow. No candidate (`fixes = 0`).
+
+pub struct Two {
+  a: F32,
+  b: F32,
+}
+
+pub enum Mode {
+  Low,
+  High,
+}
+
+pub flow struct_input_gathered(x: Two at (sample * 4)) -> F32 at sample {   //~ E0810
+  x[3].a
+}
+
+pub flow struct_input_slow(lf: Two at (sample / 4)) -> F32 at (sample / 4) {   //~ E0810
+  lf.a
+}
+
+pub flow enum_input_slow(m: Mode at (sample / 4)) -> F32 at (sample / 4) {   //~ E0810
+  match m { Mode.Low => 0.0, Mode.High => 1.0 }
+}
+
+pub flow option_input_gathered(o: Option[F32] at (sample * 2)) -> F32 at sample {   //~ E0810
+  0.0
+}
+
+pub flow struct_output_slow(lf: F32 at (sample / 4)) -> Two at (sample / 4) {
+  Two { a: lf, b: lf * 2.0 }
+}
+
+pub flow a_caller_of_an_input_in_error(x: F32 at sample) -> F32 at sample {
+  struct_input_gathered~(Two { a: x, b: x }).down~(4) at sample
+}

@@ -1,0 +1,69 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§11.9", "§18.1"]
+
+// W7-09 U4a/t, S-566, S-1098 (b), S-1079 (spec §11.9: "`sample / N` の入力は遅い値（速い式で使うには `at sample`）"; "出力の式は、出力の宣言のクロック（`sample * N` の出力は本体の `sample`）で §11.3 の読み方のとおりに
+// 読めなければ E0815 である。同じ比の値、パラメータの種類、イベントの値は読め、より遅い周期のクロックの式は `at` で昇格する"; §11.3: a value of a tick is read at another tick by `at`, `at` goes to a faster
+// tick only): the clock of a value in the body of a conversion flow is read as in any flow. A slow input read at `sample` with no `at`, a value of `sample` or of a faster tick that an output at `sample / N`
+// is given, and a slower tick that it is given with no `at` (or that `at` brings down) are E0815 (S-1098 (b) is that the slower tick takes `at`, not the same reading as the parameter kinds). The element
+// of an array at `sample * N` is a value at `sample`, so a slow value in it takes `at sample` too. The error is at the expression that is read wrong. One error per flow, so each form is a flow of
+// its own. `x` is the `sample` input, `p` is a `block` input.
+
+// ---------------------------------------------------------------- a slow input read at a faster clock
+
+pub flow slow_input_in_a_sample_expression(lf: F32 at (sample / 4), x: F32 at sample) -> F32 at sample {
+  x * lf                                                    //~ E0815
+}
+
+pub flow slow_input_as_a_sample_output(lf: F32 at (sample / 4)) -> F32 at sample {
+  lf                                                        //~ E0815
+}
+
+pub flow slow_input_in_an_element_of_the_output(lf: F32 at (sample / 4)) -> F32 at (sample * 2) {
+  [lf, 0.0]                                                 //~ E0815
+}
+
+pub flow slow_input_at_sample_times(lf: F32 at (sample / 4)) -> F32 at (sample * 2) {
+  [lf at (sample * 2), 0.0]                                 //~ E0815
+}
+
+// ---------------------------------------------------------------- the output at `sample / N` is given a faster value
+
+pub flow sample_value_to_a_slow_output(x: F32 at sample) -> F32 at (sample / 4) {
+  x                                                         //~ E0815
+}
+
+pub flow computed_sample_value_to_a_slow_output(p: F32 at block, x: F32 at sample) -> F32 at (sample / 4) {
+  x * p                                                     //~ E0815
+}
+
+pub flow faster_tick_to_a_slow_output(l2: F32 at (sample / 2)) -> F32 at (sample / 4) {
+  l2                                                        //~ E0815
+}
+
+pub flow sample_value_by_at_is_no_slower(x: F32 at sample) -> F32 at (sample / 4) {
+  x at (sample / 4)                                         //~ E0815
+}
+
+// ---------------------------------------------------------------- the output at `sample / N` is given a slower tick
+
+pub flow slower_tick_with_no_at(l8: F32 at (sample / 8)) -> F32 at (sample / 4) {
+  l8                                                        //~ E0815
+}
+
+pub flow slower_tick_in_an_expression_with_no_at(l8: F32 at (sample / 8), p: F32 at block) -> F32 at (sample / 4) {
+  l8 * p                                                    //~ E0815
+}
+
+pub flow slower_tick_of_a_let_with_no_at(l8: F32 at (sample / 8)) -> F32 at (sample / 4) {
+  let m = l8 * 2.0
+  m                                                         //~ E0815
+}
+
+pub flow faster_tick_by_at_goes_nowhere(l4: F32 at (sample / 4)) -> F32 at (sample / 8) {
+  l4 at (sample / 8)                                        //~ E0815
+}
+
+pub flow two_ticks_of_two_ratios_meet(l4: F32 at (sample / 4), l8: F32 at (sample / 8)) -> F32 at (sample / 4) {
+  l4 + l8                                                   //~ E0815
+}

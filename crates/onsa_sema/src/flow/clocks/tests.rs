@@ -6,7 +6,7 @@ use onsa_diag::FileId;
 use onsa_syntax::ast::Ast;
 
 use super::{WALKED, Walked};
-use crate::clock::Clock;
+use crate::clock::{Clock, Ratio};
 use crate::tests::check;
 use crate::{Analysis, DefId};
 
@@ -505,4 +505,42 @@ fn the_e0815_of_a_slower_argument_says_to_read_it_with_at() {
         assert_eq!(code, "E0815", "{body}");
         assert!(msg.contains(text), "{body}: {msg}");
     }
+}
+
+/// The two views of a port of a derived clock (§11.9): the body reads an
+/// input at `(sample * 2)` as an array of 2 at its `sample` and one at
+/// `(sample / 4)` at that tick, and a caller reads them in the frame of its
+/// call (`.down~(2)`: `sample` and `sample / 8`), whose output is a tick of
+/// the frame.
+#[test]
+fn a_port_of_a_derived_clock_is_of_the_body_in_the_body_and_of_the_frame_at_a_call() {
+    let src = "flow g(x: F32 at (sample * 2), lf: F32 at (sample / 4)) -> F32 at sample {\n  x[1] * (lf at sample)\n}\n\
+               pub flow f(p: F32 at block, s: F32 at sample) -> F32 at sample {\n  let a = p at (sample / 8)\n  g~(s, a).down~(2) at sample\n}\n";
+    let g = walk_of(src, "g");
+    assert!(g.complete);
+    assert_eq!((g.local("x"), g.local("lf")), (S, Clock::Tick(Ratio(-2))));
+    let locals = &g.a.flows[&g.flow].body.locals;
+    let x = locals.iter().find(|l| l.name == "x").unwrap();
+    assert_eq!(g.a.display_type(x.ty), "[F32; 2]");
+    let f = walk_of(src, "f");
+    assert!(f.complete, "{:?}", f.walked.diag);
+    assert_eq!(f.expr("g~(s, a)"), Clock::Tick(Ratio(-1)));
+}
+
+/// A port whose derived clock is in error (its N, its base) is in error to
+/// its callers, so they report nothing more (§18.1), and the output of the
+/// body is read at the clock it writes the output at (S-1098 (b)).
+#[test]
+fn a_port_of_a_derived_clock_in_error_is_quiet_to_its_callers() {
+    let callees = "flow h(x: F32 at (sample * 3)) -> F32 at sample {\n  x\n}\n\
+                   flow k(p: F32 at (block / 2)) -> F32 at sample {\n  p\n}\n\
+                   flow q(x: F32 at sample) -> F32 at (sample / 6) {\n  x\n}\n";
+    let caller = "pub flow f(s: F32 at sample) -> F32 at sample {\n  (h~(s).down~(4) at sample) + k~(s) + q~(s)\n}\n";
+    let got = reported(&format!("{callees}{caller}"));
+    let texts: Vec<_> = got.iter().map(|(c, t)| (*c, t.as_str())).collect();
+    use onsa_diag::Code::{E0808, E0810};
+    assert_eq!(texts, [(E0808, "3"), (E0810, "at (block / 2)"), (E0808, "6")]);
+    let slow = "pub flow o(l8: F32 at (sample / 8)) -> F32 at (sample / 4) {\n  l8\n}\n";
+    let got = reported(slow);
+    assert_eq!(got.iter().map(|(c, t)| (*c, t.as_str())).collect::<Vec<_>>(), [(onsa_diag::Code::E0815, "l8")]);
 }

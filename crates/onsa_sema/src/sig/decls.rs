@@ -454,8 +454,10 @@ impl<'p> Sema<'p> {
                 let Some(ItemKind::Flow(f)) = self.a.def(flow).item.map(|i| item_kind(&ast.item(i).kind)) else {
                     return;
                 };
-                let rated =
-                    |p: &&Param| p.clock.as_ref().and_then(|c| crate::clock::resolve_name(c).ok()) == Some(clock);
+                let rated = |p: &&Param| {
+                    p.clock.as_ref().and_then(|c| crate::clock::resolve_at(c).ok()).and_then(ClockRef::host)
+                        == Some(clock)
+                };
                 walk(g, (false, &[], None), &mut f.params.iter().filter(rated).filter_map(|p| p.ty));
             }
             (DefKind::Alias(_) | DefKind::Const(_), _) => _ = g.point((d, true)),

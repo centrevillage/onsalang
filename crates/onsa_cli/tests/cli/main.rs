@@ -17,6 +17,7 @@ mod candidate_shapes;
 mod check_json_document;
 mod command_paths;
 mod const_placement_model;
+mod conversion_flow_commands;
 mod copy_notes;
 mod decided_notes;
 mod declaration_headings;

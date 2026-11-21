@@ -1,0 +1,17 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§11.9", "§11.11", "§18.1"]
+
+// W7-09 U4a/t, S-1182 (a), S-1098 (b) (spec §11.9: "本体の `sample / N` とイベントのクロックの状態は、他の flow と同じに書ける（§11.4）"; "同じ比の値、パラメータの種類、イベントの値は読め"): the event
+// clock in a conversion flow. The body of a flow that has an input at `sample * N` writes the state of an event as any flow does (a delay of the value of an event counts the events, and the last value is read
+// at `sample`), and an output at `sample / N` reads the value of an event as it reads a parameter. The inputs of the event clock are W7-11's, so the file waits for it (the clock name `event` is not
+// found until then). No diagnostic.
+
+pub flow a_state_of_an_event(m: Bool at event, x: F32 at (sample * 2)) -> F32 at sample {
+  let on = prev~(m)
+  if on { x[1] } else { x[0] }
+}
+
+pub flow a_slow_output_from_an_event_value(m: F32 at event) -> F32 at (sample / 4) {
+  m
+}

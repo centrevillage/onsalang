@@ -412,9 +412,9 @@ pub(super) fn stage_of(clock: Clock) -> Result<Stage, Fault> {
     }
 }
 
-/// The stage of an input: its `Clock` as the generated API reads it (`FlowInput::api_clock`).
+/// The stage of an input: its `Clock` as the body reads it (`FlowInput::body_clock`).
 pub fn input_stage(input: &FlowInput) -> Result<Stage, Fault> {
-    stage_of(input.api_clock())
+    stage_of(input.body_clock())
 }
 
 /// The inputs of `decl` that are at `stage`, in the order of the heading.

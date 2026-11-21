@@ -1,0 +1,116 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§11.9", "§18.1"]
+
+// W7-09 U4a/t, S-566, S-567, S-578, S-1088, S-1203 (spec §11.9: "フレームに集めるのは `x: F32 at (sample * 256)` の flow を `.down~(256)` で動かす形、ばらすのは `-> F32 at (sample * 256)` の flow を
+// `.down~(256)` で動かす形"; "std の flow は遅い側を `at (sample / N)` で宣言し、中で公開しない変換の flow を `.down~(N)` で動かすので、呼び出しに修飾子は要らない（`lin_up32~(ctl~(avg_down32~(x)).down~(32))`）"): the
+// call side of a conversion flow. The clock of a port is read in the frame of the call, which is the call position and the ratio of its chain: an input at `sample * 4` of a flow that `.down~(4)` runs takes a value
+// of the `sample` of the caller (it gathers), an output at `sample * 4` of it is a value of the `sample` of the caller (it deals), and an input or an output at `sample / 4` of a flow that has no modifier is a
+// tick of the caller. The value of a gather is a tick at `sample / 4` that a faster expression reads with `at sample`. The same shapes are written with the names of the std (the last flows: the control path
+// `lin_up~(ctl~(avg_down~(x)).down~(4))` with its flows at N = 4). The calls stand where a call of any flow does (`par~`, `if~`). No diagnostic. The errors are in e0815_conversion_flow_call_clocks.onsa and
+// e0816_conversion_flow_gather_deal.onsa and e0816_conversion_flow_gather_struct.onsa. `x` is the `sample` input, `p` is a `block` input.
+
+flow smooth(a: F32 at sample) -> F32 at sample {
+  a * 0.5 + prev~(a) * 0.5
+}
+
+flow sum4(x: F32 at (sample * 4)) -> F32 at sample {
+  (x[0] + x[1] + x[2] + x[3]) * 0.25
+}
+
+flow hold4(c: F32 at sample) -> F32 at (sample * 4) {
+  let v = c
+  [v, v, v, v]
+}
+
+flow ramp4(v: F32 at (sample / 4)) -> F32 at sample {
+  (v at sample) * 0.5 + (prev~(v) at sample) * 0.5
+}
+
+flow slow_gain(g: F32 at (sample / 4), x: F32 at sample) -> F32 at sample {
+  x * (g at sample)
+}
+
+// ---------------------------------------------------------------- gather: an input at `sample * N`, run by `.down~(N)`
+
+pub flow gather_a_value_of_the_sample(x: F32 at sample) -> F32 at sample {
+  let m = sum4~(x).down~(4)
+  x * (m at sample)
+}
+
+pub flow gather_read_at_sample_in_place(x: F32 at sample) -> F32 at sample {
+  sum4~(x).down~(4) at sample
+}
+
+pub flow gather_a_computed_sample_value(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  sum4~(x * p + 1.0).down~(4) at sample
+}
+
+pub flow gather_in_a_par(x: F32 at sample) -> F32 at sample {
+  let ys = par~ i in 0 ..< 2 { sum4~(x).down~(4) at sample }
+  ys[0] + ys[1]
+}
+
+pub flow gather_in_an_arm_of_if_tilde(c: Bool at sample, x: F32 at sample) -> F32 at sample {
+  if~ c { sum4~(x).down~(4) at sample } else { 0.0 }
+}
+
+// ---------------------------------------------------------------- deal: an output at `sample * N`, run by `.down~(N)`
+
+pub flow deal_a_slow_value(lf: F32 at (sample / 4)) -> F32 at sample {
+  hold4~(lf).down~(4)
+}
+
+pub flow deal_a_parameter(p: F32 at block) -> F32 at sample {
+  hold4~(p).down~(4)
+}
+
+pub flow deal_next_to_a_sample_value(lf: F32 at (sample / 4), x: F32 at sample) -> F32 at sample {
+  x * hold4~(lf).down~(4)
+}
+
+pub flow gather_and_deal_again(x: F32 at sample) -> F32 at sample {
+  hold4~(sum4~(x).down~(4)).down~(4)
+}
+
+// ---------------------------------------------------------------- an input or an output at `sample / N`, run with no modifier
+
+pub flow a_slow_input_takes_a_slow_value(lf: F32 at (sample / 4), x: F32 at sample) -> F32 at sample {
+  slow_gain~(lf, x)
+}
+
+pub flow a_slow_input_takes_a_parameter(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  slow_gain~(p, x)
+}
+
+pub flow a_slow_input_takes_a_let_of_a_tick(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  let a = p at (sample / 4)
+  slow_gain~(a, x)
+}
+
+pub flow a_slow_input_takes_a_chain(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  slow_gain~(smooth~(p).down~(4), x)
+}
+
+// ---------------------------------------------------------------- the shapes of the std, with the flows of a user
+
+flow avg4(x: F32 at sample) -> F32 at (sample / 4) {
+  sum4~(x).down~(4)
+}
+
+pub flow the_slow_output_is_a_tick_of_the_caller(x: F32 at sample) -> F32 at sample {
+  let a = avg4~(x)
+  x * (a at sample)
+}
+
+pub flow the_slow_output_is_read_at_sample_in_place(x: F32 at sample) -> F32 at sample {
+  avg4~(x) at sample
+}
+
+pub flow the_control_path(x: F32 at sample) -> F32 at sample {
+  ramp4~(smooth~(avg4~(x)).down~(4))
+}
+
+pub flow the_control_path_of_a_part_of_the_input(x: F32 at sample) -> F32 at sample {
+  x * ramp4~(smooth~(avg4~(x * 0.5)).down~(4))
+}

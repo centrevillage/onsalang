@@ -352,7 +352,7 @@ fn a_derived_clock_reads_by_the_model_of_its_parts() {
             && !["/", "*", "+"].contains(&s[2])
     };
     let places = [
-        ("an input", "pub flow f(x: F32 at ({})) -> F32 at sample {\n  x\n}\n", Some("E0200")),
+        ("an input", "pub flow f(x: F32 at ({})) -> F32 at sample {\n  x\n}\n", None),
         ("an expression", "pub flow f(x: F32 at block) -> F32 at sample {\n  let y = x at ({})\n  y\n}\n", None),
         ("an input of fn", "pub fn g(x: F32 at ({})) -> F32 {\n  x\n}\n", Some("E0821")),
     ];
@@ -371,6 +371,11 @@ fn a_derived_clock_reads_by_the_model_of_its_parts() {
             if !model(seq) && k % 3 != places.iter().position(|p| p.0 == place).unwrap_or(0) {
                 continue;
             }
+            // What the model reads of the clock of an input is the declaration of a conversion flow, which W7-09 U4a reads
+            // by its own rules (a_derived_clock_of_an_input_reads_by_the_model_of_its_parts): only the forms it does not read stay here.
+            if place == "an input" && model(seq) {
+                continue;
+            }
             let text = format!("const K: U32 = 4\n\n{}", frame.replacen("{}", &seq.join(" "), 1));
             let found = diags(&text);
             let codes: Vec<String> = found.iter().map(|d| code_of(d).to_string()).collect();
@@ -387,7 +392,38 @@ fn a_derived_clock_reads_by_the_model_of_its_parts() {
             }
         }
     }
-    assert_eq!(read, 3 * 2 * 2 * 5, "the sequences the model reads, in each place");
+    assert_eq!(read, 2 * 2 * 2 * 5, "the sequences the model reads, in the places but an input");
+    assert!(problems.is_empty(), "{}", problems.join("\n"));
+}
+
+/// The clock of an input, once the declaration of a conversion flow is read (W7-09 U4a, S-1078, S-1077): the same forms
+/// that the model of the test above reads, with a body that reads no port (`0.5`), by what each part is. A base that is
+/// not a name of the clocks (`K`) is E0302 whatever N is; the base `sample` with N the literal `4` or the constant `K` is
+/// no error in either operator; N that needs arithmetic (`(K * 2)`) is E0200 until W9-03; a prefix `-` is E0401; the name
+/// `sample` as N is a name of no constant (an error that is not of the syntax: E0002 is for the forms the model does not read).
+#[test]
+fn a_derived_clock_of_an_input_reads_by_the_model_of_its_parts() {
+    let mut problems = Vec::new();
+    for base in ["sample", "K"] {
+        for op in ["/", "*"] {
+            for n in ["sample", "K", "4", "(K * 2)", "-4"] {
+                let clock = format!("{base} {op} {n}");
+                let text =
+                    format!("const K: U32 = 4\n\npub flow f(x: F32 at ({clock})) -> F32 at sample {{\n  0.5\n}}\n");
+                let codes: Vec<String> = diags(&text).iter().map(|d| code_of(d).to_string()).collect();
+                let fits = match (base, n) {
+                    ("K", _) => codes.iter().any(|c| c == "E0302") && !codes.iter().any(|c| c == "E0002"),
+                    (_, "4" | "K") => codes.is_empty(),
+                    (_, "(K * 2)") => codes == ["E0200"],
+                    (_, "-4") => codes == ["E0401"],
+                    _ => !codes.is_empty() && !codes.iter().any(|c| c == "E0002"),
+                };
+                if !fits {
+                    problems.push(format!("`{clock}`: {codes:?}"));
+                }
+            }
+        }
+    }
     assert!(problems.is_empty(), "{}", problems.join("\n"));
 }
 

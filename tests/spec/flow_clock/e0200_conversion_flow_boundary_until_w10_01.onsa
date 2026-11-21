@@ -1,0 +1,86 @@
+// onsa.toml
+// [test]
+// spec = ["§11.6", "§11.9", "§18.1"]
+
+// W7-09 U4a/t, S-566, S-574, X-26 (X26-23) (spec §11.9: "境界（一番外の flow の入出力）: 入出力のクロックは `init`・`block`・`sample`・イベントだけで、`sample / N`・`sample * N` は E0810 である…。誤りの位置は、その
+// flow の `process`・`process_inplace`・`render` を使う所と `@export` の印で、`init`・`reset`・`State` は使える（変換の flow を `.down~(N)` で中に置くため）"): the border of the outermost flow takes only the clocks
+// `init`, `block`, `sample` and the events, and the error is at the places that use the generated functions that cross it, and at the mark `@export`. Until W10-01 gives the error (E0810) this version reports
+// E0200 at the same places (the feature of the conversion flow at the border). The places are the use of the generated `process` and `render` of a flow with a derived clock in an input or in the output (the
+// form of an argument is that of the type of the port, §11.6: `Span[F32]` for a value of `F32`) and the mark `@export` on such a flow. One error per flow, so each use is a flow or a `test` of its own. The
+// forms that are no error (the calls of the flow in another flow, `init`, `reset` and `State`, a wrapper at `sample` that is exported) are in conversion_flow_boundary_accepted.onsa. When W10-01 comes
+// the codes of this file are E0810 and the file is renamed.
+
+flow fold2(x: F32 at (sample * 2)) -> F32 at sample {
+  (x[0] + x[1]) * 0.5
+}
+
+flow dup2(x: F32 at sample) -> F32 at (sample * 2) {
+  [x, x]
+}
+
+flow decim(x: F32 at sample) -> F32 at (sample / 2) {
+  fold2~(x).down~(2)
+}
+
+flow slow_source(p: F32 at block) -> F32 at (sample / 2) {
+  p
+}
+
+// ---------------------------------------------------------------- `render` and `process`
+
+test "render of a flow with an input at sample times" {
+  let xs: [F32; 4] = [1.0, 2.0, 3.0, 4.0]
+  let o = fold2.render(xs, 8.0)                             //~ E0200
+  assert o.out.len() > 0
+}
+
+test "render of a flow with an output at sample times" {
+  let xs: [F32; 2] = [1.0, 2.0]
+  let o = dup2.render(xs, 8.0)                              //~ E0200
+  assert o.out.len() > 0
+}
+
+test "render of a flow with an output at a slow clock" {
+  let xs: [F32; 4] = [1.0, 2.0, 3.0, 4.0]
+  let o = decim.render(xs, 8.0)                             //~ E0200
+  assert o.out.len() > 0
+}
+
+test "render of a flow with no input and an output at a slow clock" {
+  let o = slow_source.render(slow_source.Params { p: 1.0 }, 4, 8.0)   //~ E0200
+  assert o.out.len() > 0
+}
+
+fn run_decim(inout st: decim.State, xs: Span[F32], inout ys: Span[F32]) {
+  decim.process(inout st, xs, inout ys)                     //~ E0200
+}
+
+fn run_fold2(inout st: fold2.State, xs: Span[F32], inout ys: Span[F32]) {
+  fold2.process(inout st, xs, inout ys)                     //~ E0200
+}
+
+fn run_dup2(inout st: dup2.State, xs: Span[F32], inout ys: Span[F32]) {
+  dup2.process(inout st, xs, inout ys)                      //~ E0200
+}
+
+// ---------------------------------------------------------------- `@export`
+
+@export                                                     //~ E0200
+pub flow exported_with_an_input_at_sample_times(x: F32 at (sample * 2)) -> F32 at sample {
+  (x[0] + x[1]) * 0.5
+}
+
+@export                                                     //~ E0200
+pub flow exported_with_an_output_at_sample_times(x: F32 at sample) -> F32 at (sample * 2) {
+  [x, x]
+}
+
+@export                                                     //~ E0200
+pub flow exported_with_an_output_at_a_slow_clock(x: F32 at sample) -> F32 at (sample / 2) {
+  fold2~(x).down~(2)
+}
+
+@export                                                     //~ E0200
+pub flow exported_with_an_input_at_a_slow_clock(lf: F32 at (sample / 2)) -> F32 at sample {
+  lf at sample
+}

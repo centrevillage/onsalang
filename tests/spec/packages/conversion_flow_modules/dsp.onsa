@@ -1,0 +1,19 @@
+// The conversion flows of the module that main.onsa runs: the N of their ports is the constant of another module.
+
+use cfg
+
+pub flow gather_n(x: F32 at (sample * cfg.N)) -> F32 at sample {
+  x[cfg.N - 1]
+}
+
+pub flow spread_n(c: F32 at sample) -> F32 at (sample * cfg.N) {
+  [c; cfg.N]
+}
+
+pub flow slow_n(lf: F32 at (sample / cfg.N)) -> F32 at sample {
+  lf at sample
+}
+
+pub flow average_n(x: F32 at sample) -> F32 at (sample / cfg.N) {
+  gather_n~(x).down~(cfg.N)
+}

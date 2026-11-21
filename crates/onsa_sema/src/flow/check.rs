@@ -73,7 +73,9 @@ impl<'a> Checker<'a> {
         let inputs: Vec<FlowInput> = self.a.def(self.def).as_flow().map(|f| f.inputs.clone()).unwrap_or_default();
         for (k, input) in (0..).zip(inputs) {
             let id = self.local_of(Origin::FlowInput(k))?;
-            self.bind_local(id, input.ty, input.span)?;
+            // The body's view of it: an array of N at `sample * N` (§11.9).
+            let ty = input.body_ty(&mut self.a.types);
+            self.bind_local(id, ty, input.span)?;
             self.fcx().inputs.push(id);
         }
         Ok(())

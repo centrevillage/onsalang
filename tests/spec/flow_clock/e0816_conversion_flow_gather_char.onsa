@@ -1,0 +1,54 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§11.9", "§18.1"]
+
+// W7-09 U4a, S-578, S-1186 (1a), S-1203 (provisional reading (1), and the first argument only, as the flow stage keeps the first error of a flow, §18.1) (spec §11.9: "位相 0 の遅い刻み…の配列は、前のサンプルの
+// 無い所を `T.default()` で埋める…。集める入力の型が `Default` を満たさなければ E0816"): a conversion flow that `.down~(N)` runs gathers an input at `sample * N` into an array whose first elements, where there is
+// no earlier sample, are `T.default()`, so the type of the input needs `Default`. `Char` is a scalar (§4) that a `sample` input takes (§11.6, and the inputs at `sample * N` take the same types, S-1204) and has no
+// `Default` (§6.4). The error is at the argument given to that input (S-1203 (1)); with two such inputs, at the first. The values that need no `Default`: a slow input of `Char` that no faster stage reads, and a
+// delay of it with its `init` that is the output. One error per flow. `c` is the `sample` input of `Char`.
+
+flow take_four(x: Char at (sample * 4)) -> F32 at sample {
+  if x[3] == 'a' { 1.0 } else { 0.0 }
+}
+
+flow take_four_pair(a: Char at (sample * 4), b: Char at (sample * 4)) -> F32 at sample {
+  if a[3] == b[3] { 1.0 } else { 0.0 }
+}
+
+flow take_four_of_a_float_and_a_char(f: F32 at (sample * 4), a: Char at (sample * 4)) -> F32 at sample {
+  if a[3] == 'a' { f[3] } else { 0.0 }
+}
+
+// ---------------------------------------------------------------- the gather: an input at `sample * N` of a type with no `Default`
+
+pub flow gather_a_char(c: Char at sample) -> F32 at sample {
+  take_four~(c).down~(4) at sample                           //~ E0816
+}
+
+pub flow gather_a_char_in_a_let(c: Char at sample, x: F32 at sample) -> F32 at sample {
+  let m = take_four~(c).down~(4)                             //~ E0816
+  x * (m at sample)
+}
+
+pub flow gather_two_chars(c: Char at sample, d: Char at sample) -> F32 at sample {
+  let m = take_four_pair~(
+    c,                                                       //~ E0816
+    d
+  ).down~(4)
+  m at sample
+}
+
+pub flow gather_a_float_and_a_char(c: Char at sample, x: F32 at sample) -> F32 at sample {
+  take_four_of_a_float_and_a_char~(x, c).down~(4) at sample   //~ E0816
+}
+
+// ---------------------------------------------------------------- the values that need no `Default`
+
+pub flow slow_char_input_read_at_its_tick(lf: Char at (sample / 4)) -> F32 at (sample / 4) {
+  if lf == 'a' { 2.0 } else { 0.0 }
+}
+
+pub flow slow_char_output_of_a_delay(lf: Char at (sample / 4)) -> Char at (sample / 4) {
+  prev~(lf, 'a')
+}

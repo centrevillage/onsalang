@@ -6,9 +6,11 @@
 // `at (sample / N)` and `at (sample * N)` against the `sample` of its own body. A `sample / N` input is a slow value in
 // the body (`lf at sample` reads it at `sample`), a `sample * N` input is an array of N elements (`x[N - 1]` is the
 // newest, a stereo `[F32; 2]` is `[[F32; 2]; 2]`), a `sample * N` output is the array the body returns, and a
-// `sample / N` output is read at its own clock. N may be the name of a constant. No diagnostic: a flow with such a
-// declaration is an error only where its `process` is used or it is exported (E0810 and the E0200 until W10-01, §11.9), and
-// nothing here does.
+// `sample / N` output is read at its own clock. N may be the name of a constant or an associated constant (the constant of
+// another module is in packages/conversion_flow_modules). Several ports may have different ratios, and a port of the
+// parameter kinds stands next to one. No diagnostic: a flow with such a declaration is an error only where its `process` is
+// used or it is exported (E0810 and the E0200 until W10-01, §11.9, flow_clock/e0200_conversion_flow_boundary_until_w10_01.onsa),
+// and nothing here does. The bodies and the calls are in conversion_flow_bodies.onsa and conversion_flow_calls.onsa.
 
 const K: U32 = 4
 
@@ -41,5 +43,33 @@ pub flow n_is_a_constant(x: F32 at sample) -> F32 at (sample * K) {
 }
 
 pub flow slow_n_is_a_constant(lf: F32 at (sample / K)) -> F32 at (sample / K) {
+  lf
+}
+
+pub flow n_is_an_associated_constant(x: F32 at (sample * U32.BITS)) -> F32 at sample {
+  x[31]
+}
+
+pub flow a_stereo_input_is_two_pairs(x: [F32; 2] at (sample * 2)) -> F32 at sample {
+  x[1][0] + x[1][1]
+}
+
+pub flow two_inputs_of_two_ratios(a: F32 at (sample / 2), b: F32 at (sample * 4)) -> F32 at sample {
+  (a at sample) + b[3]
+}
+
+pub flow slow_inputs_of_two_ratios(a: F32 at (sample / 8), b: F32 at (sample / 4)) -> F32 at (sample / 4) {
+  (a at (sample / 4)) + b
+}
+
+pub flow parameters_stand_next_to_a_ratio(p: F32 at block, q: F32 at init, x: F32 at (sample * 2)) -> F32 at sample {
+  (x[0] + x[1]) * p * q
+}
+
+pub flow a_parameter_is_a_slow_output(p: F32 at block) -> F32 at (sample / 2) {
+  p
+}
+
+pub flow a_large_n(lf: F32 at (sample / 1024)) -> F32 at (sample / 1024) {
   lf
 }

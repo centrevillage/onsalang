@@ -5,7 +5,7 @@
 use super::*;
 
 impl FlowInfo {
-    /// The stage of the local `l` (of an input its `api_clock`, of a `let`
+    /// The stage of the local `l` (of an input its `body_clock`, of a `let`
     /// its stage, S-1196); `None` of a constant or a local the walk gave no
     /// clock ([`ClockInfo::own_stage`]).
     pub fn own_stage(&self, l: LocalId) -> Option<ClockStage> {
@@ -51,14 +51,18 @@ impl FlowInfo {
         self.read_at.values().flatten().copied()
     }
 
-    /// The first `let` or node (by its place) whose stage is a periodic
-    /// tick of a ratio (`sample / N`, §11.3), or a node with a chain of
-    /// modifiers, whose ratio may be one (§11.9): the Core lowers no stage
-    /// of them until W7-16, which stops at it (E0200, R-91 (1)).
+    /// The first place of the plan (by its place) with a stage of a
+    /// periodic tick of a ratio (`sample / N`, `sample * N`, §11.3, §11.9):
+    /// a port of a derived clock, a `let` of one, a node of one, a node that
+    /// reads an argument at one (an input of a derived clock of its callee,
+    /// in `if~` and `par~` too) or a node with a chain of modifiers, whose
+    /// ratio may be one. The Core lowers no such stage until W7-16, which
+    /// stops at it (E0200, R-91 (1)). The one gate of them (D-15).
     pub fn multirate_at(&self) -> Option<Span> {
         let lets = self.lets.iter().filter(|l| l.stage.of_ratio()).map(|l| l.span);
-        let nodes = self.nodes.iter().filter(|n| n.clock.of_ratio() || !n.chain.is_empty()).map(|n| n.span);
-        lets.chain(nodes).min_by_key(|s| (s.start, s.end))
+        let reads = |n: &PlanNode| n.args.iter().any(|a| a.at.of_ratio());
+        let nodes = self.nodes.iter().filter(|n| n.clock.of_ratio() || reads(n) || !n.chain.is_empty());
+        self.derived_port.into_iter().chain(lets).chain(nodes.map(|n| n.span)).min_by_key(|s| (s.start, s.end))
     }
 
     /// The `let`s of the stage `stage`, in their order (§11.4).

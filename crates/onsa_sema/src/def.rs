@@ -5,8 +5,8 @@ use onsa_diag::Span;
 use onsa_syntax::ast::{ExprId, ItemId, Mode, Vis};
 use serde::{Deserialize, Serialize};
 
-use crate::clock::{Clock, ClockName};
-use crate::ty::{EffectSet, TyId};
+use crate::clock::{Clock, ClockName, ClockRef};
+use crate::ty::{EffectSet, Len, Ty, TyId, Types};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct DefId(pub u32);
@@ -421,9 +421,15 @@ impl From<ParamNumber> for crate::consteval::ConstValue {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FlowInput {
     pub name: String,
-    /// The clock written after the type (§11.3); `Clock::Error` when it has
-    /// a diagnostic. Read through [`FlowInput::api_clock`] outside the checks.
+    /// The clock written after the type (§11.3) as a caller reads it, a
+    /// derived clock by its ratio (`sample * 2` is `Tick(1)`, S-1077);
+    /// `Clock::Error` when it has a diagnostic. Read through
+    /// [`FlowInput::caller_clock`] and [`FlowInput::body_clock`] outside the
+    /// checks.
     pub(crate) clock: Clock,
+    /// The clock written as the names stage reads it; none of no clock or a
+    /// name not found.
+    pub(crate) written: Option<ClockRef>,
     /// Value type (without the clock).
     pub ty: TyId,
     pub param: Option<ParamMeta>,
@@ -433,14 +439,66 @@ pub struct FlowInput {
 }
 
 impl FlowInput {
-    /// The clock the generated API and the flow checks read: an input whose
-    /// clock is in error is a `sample` input there, so that its uses report
-    /// as of one (R-471: no cascade of other text). The one place of that rule.
-    pub fn api_clock(&self) -> Clock {
-        match self.clock {
-            Clock::Error => Clock::SAMPLE,
-            c => c,
+    /// The clock of the host the input is at (§11.6), of
+    /// [`ClockRef::host`] (the names stage reads the same): none of a derived
+    /// clock. An input whose clock was not read is a `sample` input there
+    /// (R-471: the items its inputs decide are kept as failed).
+    pub fn host(&self) -> Option<ClockName> {
+        self.written.map_or(Some(ClockName::Sample), ClockRef::host)
+    }
+
+    /// The clock a caller reads the input at (§11.9, the walk moves it to
+    /// the frame of the call): the declared one, a derived clock by its
+    /// ratio. One whose clock is in error (a name not found, its N or its
+    /// base) is in error, so that its callers report nothing more (§18.1).
+    pub fn caller_clock(&self) -> Clock {
+        self.clock
+    }
+
+    /// The clock the body reads the input at ([`body_view`]).
+    pub fn body_clock(&self) -> Clock {
+        body_view(self.body_port()).0
+    }
+
+    /// The type the body reads the input as ([`body_view`]).
+    pub(crate) fn body_ty(&self, types: &mut Types) -> TyId {
+        body_ty(self.body_port(), self.ty, types)
+    }
+
+    /// The clock of the input the body sees before [`body_view`]: of one
+    /// whose clock is in error, its clock of the host ([`FlowInput::host`]),
+    /// so that its uses report as of one (R-471: no cascade of other text).
+    fn body_port(&self) -> Clock {
+        match (self.clock, self.host()) {
+            (Clock::Error, Some(h)) => h.clock(),
+            (c, _) => c,
         }
+    }
+}
+
+/// The clock of a port at the clock `c` as the body sees it, and the length
+/// of the array its value type is in there (§11.9): a port at `sample * N`
+/// is an array of N at the `sample` of the body (`x[N - 1]` the newest); the
+/// others are as the caller's. The one place of the body's view of the ports
+/// (D-15).
+fn body_view(c: Clock) -> (Clock, Option<u32>) {
+    match c {
+        Clock::Tick(k) if k.faster_than_body() => {
+            let Some(n) = k.n().and_then(|n| u32::try_from(n).ok()) else {
+                onsa_diag::internal::bug(None, format!("a port at {c:?}, past `U32`"))
+            };
+            (Clock::SAMPLE, Some(n))
+        }
+        c => (c, None),
+    }
+}
+
+/// The value type `ty` of a port at the clock `c` as the body sees it
+/// ([`body_view`]): of an input ([`FlowInput::body_ty`]) and of the output.
+pub(crate) fn body_ty(c: Clock, ty: TyId, types: &mut Types) -> TyId {
+    match body_view(c).1 {
+        Some(n) => types.intern(Ty::Array(ty, Len::Const(n))),
+        None => ty,
     }
 }
 
@@ -449,8 +507,9 @@ pub struct FlowDef {
     pub inputs: Vec<FlowInput>,
     /// Output value type (its clock is `out_clock`, §11.6).
     pub out: TyId,
-    /// The clock of the output: `Clock::SAMPLE` (§11.6: its one clock in this
-    /// version), or `Clock::Error` when the clock written has a diagnostic.
+    /// The clock of the output as a caller reads it (§11.9): `sample`, or a
+    /// derived clock by its ratio, or `Clock::Error` when the clock written
+    /// has a diagnostic ([`FlowDef::body_out_clock`] is the body's).
     pub out_clock: Clock,
     pub body: ExprId,
     /// Generated namespace items (§11.6): `State`, `Config`, ..., `process`, ...
@@ -464,9 +523,29 @@ pub struct FlowDef {
     /// of its `sample` inputs and of its outputs (the fields of a struct),
     /// in order, that did not pair up, for the note of its E0302.
     pub unpaired: Option<(Vec<TyId>, Vec<TyId>)>,
+    /// A port of its heading has a diagnostic (its clock, its type or its
+    /// value type at the boundary), or its heading was not checked: its uses
+    /// report nothing of its ports (§18.1), the E0200 of its boundary
+    /// ([`crate::Analysis::boundary_gate`]) and the E0816 of a gather or a
+    /// deal. Set once, with the E0810 of the value types of the ports
+    /// (`check_generated`).
+    pub(crate) ports_in_error: bool,
 }
 
 impl FlowDef {
+    /// The clock the body writes the output at ([`body_view`]).
+    pub fn body_out_clock(&self) -> Clock {
+        body_view(self.out_clock).0
+    }
+
+    /// The first port of a derived clock (§11.9: `sample / N`, `sample *
+    /// N`), of the clock read, by its ratio, as of the output: the span of an
+    /// input, or `out` of the output.
+    pub fn derived_port(&self, out: Span) -> Option<Span> {
+        let input = self.inputs.iter().find(|i| i.clock.of_ratio());
+        input.map(|i| i.span).or_else(|| self.out_clock.of_ratio().then_some(out))
+    }
+
     /// Whether the generated item `item` of a flow (of its `members` or
     /// `absent`) is in the namespace of the flow (§11.6): the sizes of the
     /// state (`SIZE`, `BULK_SIZE`, the consts of the list) are not, the C

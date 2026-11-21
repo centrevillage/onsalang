@@ -1,0 +1,3 @@
+[package]
+name = "conversion_flow_modules"
+edition = "2026"

@@ -15,8 +15,8 @@
 //!   `sample_rate()` have no `Target`; use `node_of` / `sample_rate_calls`.
 //!   A feedback reference `^y` has the `Target::Local` of `y`.
 //! - `clocks: ClockInfo` — `exprs`, the clock of every expression (§11.3),
-//!   and `locals`, the clock of every local (inputs: declared, of
-//!   [`FlowInput::api_clock`]; `let`s: the clock of the `let`; `par`
+//!   and `locals`, the clock of every local (inputs: the body's view of the
+//!   declared one, [`FlowInput::body_clock`]; `let`s: the clock of the `let`; `par`
 //!   variables: `Init`; match bindings: the clock of the scrutinee).
 //! - `inputs: Vec<LocalId>` — locals of the inputs, in signature order.
 //! - `lets: Vec<FlowLet>` — the top-level `let`s in source order. `state`
@@ -258,6 +258,10 @@ pub struct FlowInfo {
     /// The place of each field in the struct that holds it, made once with
     /// the fields ([`FlowInfo::field_at`]).
     pub(crate) places: HashMap<FieldOf, u32>,
+    /// The first port of the flow of a derived clock (§11.9,
+    /// [`crate::def::FlowDef::derived_port`]), which the Core lowers in W7-16
+    /// ([`FlowInfo::multirate_at`]).
+    pub(crate) derived_port: Option<Span>,
     pub sample_rate_at: Option<ClockStage>,
     pub sample_rate_calls: Vec<ExprId>,
     pub read_at: HashMap<LocalId, BTreeSet<ClockStage>>,

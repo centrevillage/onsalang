@@ -26,7 +26,7 @@ use onsa_syntax::ast::{
 };
 use onsa_syntax::foreign::{self, RowId};
 
-use crate::clock::{Clock, ClockName};
+use crate::clock::{Base, Clock, ClockName, ClockRef, Ratio};
 use crate::def::*;
 use crate::names::body::clock_after;
 use crate::resolve::{Builtin, Entity, NameKind};

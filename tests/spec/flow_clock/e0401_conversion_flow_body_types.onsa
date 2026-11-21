@@ -1,0 +1,61 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§6.3", "§11.9", "§18.1"]
+
+// W7-09 U4a/t, S-566 (spec §11.9: "配列で返していない・受けていない本体は型の誤り（E0401 の類）"; §4.5: an operator needs the trait of its type, §6.3): the body of a conversion flow sees an input at
+// `sample * N` as an array `[T; N]` (a stereo `[F32; 2]` as `[[F32; 2]; 2]`), and has to write an output at `sample * N` as the array, so a use of the array as a scalar, a scalar or an array of another length or
+// depth where the array is wanted, is a type error (E0401). The clock is right in each, so no E0815 comes with it. The error is at the expression that has the wrong type. One error per flow, so each
+// form is a flow of its own. `x` is the input at `sample * N` or `sample`.
+
+pub rt fn half(v: F32) -> F32 {
+  v * 0.5
+}
+
+// ---------------------------------------------------------------- the input is an array
+
+pub flow input_plus_a_scalar(x: F32 at (sample * 2)) -> F32 at sample {
+  x + 1.0                                                   //~ E0401
+}
+
+pub flow input_negated(x: F32 at (sample * 2)) -> F32 at sample {
+  let y = -x                                                //~ E0401
+  y[0]
+}
+
+pub flow input_compared_with_a_scalar(x: F32 at (sample * 2)) -> F32 at sample {
+  if x > 0.0 { 1.0 } else { 0.0 }                           //~ E0401
+}
+
+pub flow input_given_to_a_function_of_a_scalar(x: F32 at (sample * 2)) -> F32 at sample {
+  half(x)                                                   //~ E0401
+}
+
+pub flow input_returned_as_a_scalar(x: F32 at (sample * 2)) -> F32 at sample {
+  x                                                         //~ E0401
+}
+
+pub flow stereo_input_returned_as_one_pair(x: [F32; 2] at (sample * 2)) -> [F32; 2] at sample {
+  x                                                         //~ E0401
+}
+
+// ---------------------------------------------------------------- the output is an array
+
+pub flow output_is_a_scalar(x: F32 at sample) -> F32 at (sample * 2) {
+  x                                                         //~ E0401
+}
+
+pub flow output_array_is_too_long(x: F32 at sample) -> F32 at (sample * 2) {
+  [x, x, x]                                                 //~ E0401
+}
+
+pub flow output_array_is_too_short(x: F32 at sample) -> F32 at (sample * 4) {
+  [x, x]                                                    //~ E0401
+}
+
+pub flow stereo_output_is_not_nested(x: [F32; 2] at sample) -> [F32; 2] at (sample * 2) {
+  x                                                         //~ E0401
+}
+
+pub flow output_array_of_the_wrong_element(x: F32 at sample) -> F32 at (sample * 2) {
+  [x > 0.0, true]                                           //~ E0401
+}

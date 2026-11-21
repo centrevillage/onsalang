@@ -580,6 +580,27 @@ impl Analysis {
         Some(self.with_ungenerated_notes(err, flow, &self.def(d).name))
     }
 
+    /// The E0200 at `span` of the boundary of a flow with a port of a
+    /// derived clock (§11.9: E0810 from W10-01, at the same places; X26-23):
+    /// of `d`, a generated function that crosses it (`process`,
+    /// `process_inplace`, `render`) at a path of a body, or the flow itself
+    /// at its `@export`; none of a flow with a port in error (§18.1,
+    /// [`def::FlowDef::ports_in_error`]). The one test of it (D-15).
+    pub(crate) fn boundary_gate(&self, d: DefId, span: Span) -> Option<Diagnostic> {
+        use def::FlowFn;
+        let (flow, what, stage) = match self.def(d).as_fn().and_then(|f| f.flow_fn) {
+            Some(FlowFn::Process | FlowFn::ProcessInplace | FlowFn::Render) => {
+                let flow = self.def(d).owner?;
+                (flow, format!("the use of `{}.{}`", self.def(flow).name, self.def(d).name), onsa_diag::Stage::Types)
+            }
+            None if self.def(d).as_flow().is_some() => (d, "`@export`".to_string(), onsa_diag::Stage::Flow),
+            _ => return None,
+        };
+        let fd = self.def(flow).as_flow().filter(|fd| !fd.ports_in_error)?;
+        fd.derived_port(span)?;
+        Some(onsa_diag::unsupported::Feature::ConversionFlowBoundary.diagnostic(stage, span, &[&what]))
+    }
+
     /// The def is an alias of the error type (§18.1, R-271): a struct, a
     /// variant or a member written through it is not known.
     pub fn error_alias(&self, id: DefId) -> bool {

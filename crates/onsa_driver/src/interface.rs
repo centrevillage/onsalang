@@ -556,7 +556,7 @@ impl Builder<'_> {
             .iter()
             .map(|i| FlowInputIface {
                 name: i.name.clone(),
-                clock: i.api_clock().shown(i.span),
+                clock: i.caller_clock().written(i.span),
                 ty: self.ty(i.ty, &[]),
                 parens: self.a.types.parens_before_uses(i.ty, true),
                 param: self.param_meta(i),
@@ -605,7 +605,7 @@ impl Builder<'_> {
             vis: vis_str(def.vis).into(),
             inputs,
             out: self.ty(f.out, &[]),
-            out_clock: f.out_clock.shown(def.name_span),
+            out_clock: f.out_clock.written(def.name_span),
             members,
         })
     }

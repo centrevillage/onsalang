@@ -6,7 +6,7 @@
 // its output is a value at `sample * N` that only a conversion flow takes (an input `at (sample * N)`, which the body sees as an
 // array `[F32; N]` with the last at `x[N - 1]`; a call side operation on it is an error for now). The ratios of a chain compose
 // whatever the order (`.down~(2).up~(4)` and `.up~(4).down~(2)` are the same 2 times). The cases wait for the conversion flows
-// (W7-09 U4a) and for the chain clocks (U3b). No diagnostic.
+// (W7-09 U4a: the declaration `x: F32 at (sample * 2)` is read, so the value of the chain meets an input of its ratio). No diagnostic.
 
 const TWO: U32 = 2
 

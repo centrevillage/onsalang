@@ -1,0 +1,146 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§11.3", "§11.9", "§18.1"]
+
+// W7-09 U4a/t, S-1078, S-1077, S-566 (spec §11.3: "N は修飾子の N と同じく、§4.5 の大きさを表す位置の定数式（型は `U32`）で、値は 2 以上の 2 のべき乗（違えば E0808、§11.9）"; "`sample` でない底（`block`・`init`・
+// `event`）は、入出力の宣言では E0810、式では E0815 である"; "クロックの名前空間に無い名前は、値や型に同じ名前があっても E0302"; §18.1: a part that could not be read is an error that nothing reads): the derived clock of
+// a declaration. The N of an input or an output is E0808 when it is not a power of two that is 2 or more (3, 1, 0), E0401 when its type is not `U32` (a prefix `-`, a literal or a constant of another type), E0408
+// when `U32` does not hold the literal, and E0417 when it is no constant expression (the name of a function). A base that is not `sample` is E0810, and E0302 when the clocks have no such name. The error is at the
+// declaration (the line of the signature). A flow whose declaration is in error has a clock that is an error, so the flow that calls it reports nothing more (no E0815 of an argument or of a result): the last
+// flows. The same errors of the N of an expression are in derived_clock_ratio_n_errors.onsa and of its base in derived_clock_ratio_bases.onsa. The N that needs arithmetic (`K * 2`) waits for W9-03. One error
+// per flow, so each form is a flow of its own. An output is at `sample / N` here (the array of an output at `sample * N` has no length to write while N is in error). `x` is the `sample` input.
+
+const ONE: U32 = 1
+const THREE: U32 = 3
+const FOUR_I: I32 = 4
+const FOUR_F: F32 = 4.0
+
+pub fn pick(v: U32) -> U32 {
+  v
+}
+
+// ---------------------------------------------------------------- E0808: the value
+
+pub flow input_div_by_three(lf: F32 at (sample / 3)) -> F32 at sample {   //~ E0808
+  lf at sample
+}
+
+pub flow input_times_one(x: F32 at (sample * 1)) -> F32 at sample {   //~ E0808
+  x[0]
+}
+
+pub flow input_div_by_zero(lf: F32 at (sample / 0)) -> F32 at sample {   //~ E0808
+  lf at sample
+}
+
+pub flow output_div_by_six(x: F32 at sample) -> F32 at (sample / 6) {   //~ E0808
+  x
+}
+
+pub flow input_div_by_a_constant_of_one(lf: F32 at (sample / ONE)) -> F32 at sample {   //~ E0808
+  lf at sample
+}
+
+pub flow output_div_by_a_constant_of_three(x: F32 at sample) -> F32 at (sample / THREE) {   //~ E0808
+  x
+}
+
+// ---------------------------------------------------------------- E0401: the type of N
+
+pub flow input_div_by_a_negative(lf: F32 at (sample / -4)) -> F32 at sample {   //~ E0401
+  lf at sample
+}
+
+pub flow input_times_a_float_literal(x: F32 at (sample * 4.0)) -> F32 at sample {   //~ E0401
+  x[0]
+}
+
+pub flow output_div_by_a_constant_of_i32(x: F32 at sample) -> F32 at (sample / FOUR_I) {   //~ E0401
+  x
+}
+
+pub flow input_div_by_a_constant_of_f32(lf: F32 at (sample / FOUR_F)) -> F32 at sample {   //~ E0401
+  lf at sample
+}
+
+// ---------------------------------------------------------------- E0408 and E0417
+
+pub flow input_div_by_two_to_the_32(lf: F32 at (sample / 4294967296)) -> F32 at sample {   //~ E0408
+  lf at sample
+}
+
+pub flow output_div_by_five_billion(x: F32 at sample) -> F32 at (sample / 5000000000) {   //~ E0408
+  x
+}
+
+pub flow input_div_by_a_function(lf: F32 at (sample / pick)) -> F32 at sample {   //~ E0417
+  lf at sample
+}
+
+pub flow output_div_by_a_function(x: F32 at sample) -> F32 at (sample / pick) {   //~ E0417
+  x
+}
+
+// ---------------------------------------------------------------- the base
+
+pub flow input_base_is_block(p: F32 at (block / 2)) -> F32 at sample {   //~ E0810
+  p
+}
+
+pub flow input_base_is_init(q: F32 at (init * 2)) -> F32 at sample {   //~ E0810
+  q
+}
+
+pub flow input_base_is_event(m: F32 at (event / 2)) -> F32 at sample {   //~ E0810
+  m
+}
+
+pub flow output_base_is_block(x: F32 at sample) -> F32 at (block / 2) {   //~ E0810
+  x
+}
+
+pub flow input_base_is_not_a_clock(lf: F32 at (nope / 2)) -> F32 at sample {   //~ E0302
+  lf
+}
+
+pub flow input_base_is_a_type(lf: F32 at (F32 / 2)) -> F32 at sample {   //~ E0302
+  lf
+}
+
+pub flow output_base_is_an_input_name(x: F32 at sample) -> F32 at (x / 2) {   //~ E0302
+  x
+}
+
+// ---------------------------------------------------------------- the flow that calls a flow whose declaration is in error reports nothing more
+
+flow gather_of_three(x: F32 at (sample * 3)) -> F32 at sample {   //~ E0808
+  x[2]
+}
+
+flow slow_by_three(x: F32 at sample) -> F32 at (sample / 3) {   //~ E0808
+  x
+}
+
+flow base_is_block(p: F32 at (block / 2)) -> F32 at sample {   //~ E0810
+  p
+}
+
+pub flow call_of_a_gather_in_error(x: F32 at sample) -> F32 at sample {
+  gather_of_three~(x)
+}
+
+pub flow call_of_a_gather_in_error_with_a_chain(x: F32 at sample) -> F32 at sample {
+  gather_of_three~(x).down~(4) at sample
+}
+
+pub flow call_of_a_slow_output_in_error(x: F32 at sample) -> F32 at sample {
+  x * slow_by_three~(x)
+}
+
+pub flow call_of_a_slow_output_in_error_as_the_output(x: F32 at sample) -> F32 at sample {
+  slow_by_three~(x)
+}
+
+pub flow call_of_an_input_with_a_base_in_error(x: F32 at sample) -> F32 at sample {
+  base_is_block~(x)
+}

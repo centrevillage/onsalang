@@ -1,0 +1,47 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§11.3", "§11.9", "§15.1", "§18.1"]
+
+// W7-09 U4a/t, S-566, S-1077, S-1078 (spec §4.5: "`cfg.N` のような修飾した名前"; §11.9, §15.1): the conversion flows of another module, with the N of their ports a constant of a third module (dsp.onsa, cfg.onsa),
+// are called as a flow of this file is (conversion_flow_calls.onsa): the N of a port and the N of a chain are read by value (`cfg.N` and `4` are one ratio), so a gather of `sample * cfg.N` is run by
+// `.down~(4)` and by `.down~(cfg.N)`, the output of `sample / cfg.N` is a tick of `sample / 4`, and the last flow is E0815 (a chain of another ratio than that of the port). `x` is the `sample` input,
+// `p` is a `block` input.
+
+use cfg
+use dsp
+
+pub flow gather_by_the_constant(x: F32 at sample) -> F32 at sample {
+  dsp.gather_n~(x).down~(cfg.N) at sample
+}
+
+pub flow gather_by_the_value(x: F32 at sample) -> F32 at sample {
+  dsp.gather_n~(x).down~(4) at sample
+}
+
+pub flow deal_by_the_value(lf: F32 at (sample / 4)) -> F32 at sample {
+  dsp.spread_n~(lf).down~(4)
+}
+
+pub flow slow_input_by_the_value(p: F32 at block) -> F32 at sample {
+  let a = p at (sample / 4)
+  dsp.slow_n~(a)
+}
+
+pub flow slow_input_by_the_constant(p: F32 at block) -> F32 at sample {
+  let a = p at (sample / cfg.N)
+  dsp.slow_n~(a)
+}
+
+pub flow slow_output_is_a_tick_of_the_value(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  let a = dsp.average_n~(x)
+  let b = a + (p at (sample / 4))
+  x * (b at sample)
+}
+
+pub flow control_path_across_the_modules(x: F32 at sample) -> F32 at sample {
+  dsp.slow_n~(dsp.average_n~(x))
+}
+
+pub flow gather_by_another_ratio(x: F32 at sample) -> F32 at sample {
+  dsp.gather_n~(x).down~(2) at sample                       //~ E0815
+}

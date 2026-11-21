@@ -434,17 +434,49 @@ impl Walk<'_> {
         self.err(Code::E0815, span, msg);
     }
 
-    /// The output `out` at the clock `c`, read at `at`, the clock of the
-    /// output of the flow (§11.3: a value is never made slower, E0815).
+    /// The E0816 of the conversion flow `g` run at `e` in a frame slower
+    /// than the call (`.down~`, §11.9, S-578, S-1186): of an input at
+    /// `sample * N`, which its first tick gathers before any sample, at its
+    /// argument in `args`, and of an output at `sample * N`, which is dealt
+    /// before its first tick, at the whole chain (S-1203 (1)), of a value type
+    /// that does not satisfy `Default` ([`crate::signal::no_default_signal`]).
+    // SPEC-GAP(S-1203): the places, provisional (1).
+    pub(super) fn check_gather_deal(&mut self, e: ExprId, g: DefId, args: &[ExprId]) {
+        let (a, name) = (self.a, &self.a.def(g).name);
+        // Of a flow with a port in error, none (§18.1).
+        let Some(f) = a.def(g).as_flow().filter(|f| !f.ports_in_error) else { return };
+        let gathered = |c: Clock| matches!(c, Clock::Tick(k) if k.faster_than_body());
+        let mut found = Vec::new();
+        for (&x, input) in args.iter().zip(&f.inputs).filter(|(_, i)| gathered(i.caller_clock())) {
+            let what = format!("the part of the input `{}` of `{name}` gathered before the first samples", input.name);
+            found.extend(crate::signal::no_default_signal(a, input.ty, self.ast.expr(x).span, &what, "§11.9"));
+        }
+        let chain = self.cx.chains.get(&e).and_then(|c| c.mods.last()).map_or(e, |m| m.call);
+        let what = format!("the array `{name}` deals before its first tick");
+        if gathered(f.out_clock) {
+            found.extend(crate::signal::no_default_signal(a, f.out, self.ast.expr(chain).span, &what, "§11.9"));
+        }
+        for d in found {
+            let at = self.src(d.span);
+            self.report(d.with_found(at));
+        }
+    }
+
+    /// The output `out` at the clock `c`, read at `at`, the clock the body
+    /// writes the output at (§11.3, §11.9, S-1098 (b): a slower tick is read
+    /// with `at`, a value is never made slower, E0815).
     pub(super) fn check_out(&mut self, out: ExprId, c: Clock, at: Clock) {
         if readable_at(c, at).is_ok() {
             return;
         }
         let span = self.ast.expr(out).span;
         let (shown, to) = (c.shown(span), at.shown(span));
-        let msg = format!(
-            "the output is at the clock `{shown}` but the flow outputs at `{to}`; read it at `{to}` with `at` (§11.3)"
-        );
+        let how = if promotable(c, at) {
+            format!("read it at `{to}` with `at`")
+        } else {
+            "a value is never made slower".into()
+        };
+        let msg = format!("the output is at the clock `{shown}` but the flow outputs at `{to}`; {how} (§11.3)");
         self.err(Code::E0815, span, msg);
     }
 

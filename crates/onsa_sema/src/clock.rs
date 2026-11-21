@@ -2,10 +2,10 @@
 //!
 //! - [`ClockName`]: the names stage's layer, the base clocks a name after
 //!   `at` and the heading of a flow write (`init`, `block`, `sample`). The
-//!   one table of the names (D-15); [`resolve_name`] looks one up (E0302).
+//!   one table of the names (D-15); [`resolve_at`] looks one up (E0302).
 //! - [`Clock`]: the layer of the values, the clock of an expression, a local,
 //!   an input or the output, which the tables of a flow hold
-//!   ([`crate::flow::FlowInfo::clocks`], [`crate::def::FlowInput::api_clock`]).
+//!   ([`crate::flow::FlowInfo::clocks`], [`crate::def::FlowInput::caller_clock`]).
 //!   Its stage of evaluation is a [`ClockStage`] ([`Clock::stage`]).
 //!
 //! The comparisons of clocks ([`join`], [`readable_at`], [`promote`],
@@ -87,6 +87,19 @@ pub enum Base {
     Event,
 }
 
+impl ClockRef {
+    /// The clock of the host a port written at it is at: a name with no
+    /// ratio (§11.6), none of a derived clock, which no port of the host has
+    /// (§11.9). The one test of the ports of the generated API (D-15): the
+    /// items a flow generates by its inputs ([`crate::def::FlowInput::host`]).
+    pub fn host(self) -> Option<ClockName> {
+        match self {
+            ClockRef::Name(n) => Some(n),
+            ClockRef::Derived(..) => None,
+        }
+    }
+}
+
 impl Base {
     /// The name the base is written as.
     pub fn name(self) -> &'static str {
@@ -94,21 +107,10 @@ impl Base {
     }
 }
 
-/// The clock after `at` of an input or the output of a flow (§11.3,
-/// S-359): a name of the clock namespace, or E0302 at the name, whatever
-/// value or type has that name.
-pub(crate) fn resolve_name(c: &ast::Clock) -> Result<ClockName, Diagnostic> {
-    // The derived clocks of the inputs and the output of a flow (S-1078)
-    // come in W7-09 U4a.
-    if c.ratio.is_some() {
-        return Err(onsa_diag::unsupported::Feature::DerivedClockRatios.diagnostic(Stage::Names, c.span, &[]));
-    }
-    ClockName::of_name(&c.name.name).ok_or_else(|| not_found(c))
-}
-
-/// The clock after `at` of an expression of a flow body (§11.3, S-359,
-/// S-1078): a name of the clock namespace, or a derived clock whose base is
-/// one (`event` too), else E0302 at the name.
+/// The clock after `at` of an expression of a flow body, of an input and
+/// of the output of a flow (§11.3, S-359, S-1078): a name of the clock
+/// namespace, or a derived clock whose base is one (`event` too), else E0302
+/// at the name, whatever value or type has that name.
 pub(crate) fn resolve_at(c: &ast::Clock) -> Result<ClockRef, Diagnostic> {
     let name = ClockName::of_name(&c.name.name);
     let base = name.map(Base::Clock).or_else(|| (c.name.name == EVENT).then_some(Base::Event));
@@ -261,6 +263,19 @@ impl Clock {
             1.. => format!("{sample} * {n}"),
             _ => format!("{sample} / {n}"),
         }
+    }
+}
+
+impl Clock {
+    /// The clock as a declaration writes it after `at` (§11.3): of a ratio
+    /// in parentheses, `(sample / 4)`, else [`Clock::shown`]. The one text of
+    /// the clocks `onsa graph` and `onsa interface` write (S-1084), which the
+    /// diagnostics do not (their text is [`Clock::shown`]).
+    // SPEC-GAP(S-1084): the parentheses of the declaration in the labels and
+    // the heading (provisional (2)).
+    pub fn written(self, at: Span) -> String {
+        let shown = self.shown(at);
+        if self.of_ratio() { format!("({shown})") } else { shown }
     }
 }
 

@@ -61,14 +61,8 @@ impl<'p> Sema<'p> {
             let lowered = self.lower_type(&cx, t);
             let tspan = cx.ast.ty(t).span;
             // The clock after the type (§11.3).
-            let clock = match &p.clock {
-                Some(c) => match crate::clock::resolve_name(c) {
-                    Ok(n) => Some(n.clock()),
-                    Err(d) => {
-                        self.report(id, d);
-                        None
-                    }
-                },
+            let (written, clock) = match &p.clock {
+                Some(c) => self.port_clock(&cx, c),
                 None => {
                     self.report(
                         id,
@@ -80,68 +74,127 @@ impl<'p> Sema<'p> {
                         )
                         .with_found(src(&cx, tspan)),
                     );
-                    None
+                    (None, None)
                 }
             };
             // An input whose type or clock is in error stays, as the error
             // type, so that the body sees its name (no cascade in the unit, R-71).
             // An input of the error type keeps its clock (§18.1, S-692).
+            let input = |clock, ty| FlowInput { name, clock, written, ty, param: None, span: p.span, name_span };
             let Some(clock) = clock else {
-                let error = self.a.types.error();
-                inputs.push(FlowInput { name, clock: Clock::Error, ty: error, param: None, span: p.span, name_span });
+                inputs.push(input(Clock::Error, self.a.types.error()));
                 continue;
             };
-            if matches!(self.a.types.get(lowered), Ty::Error) {
-                inputs.push(FlowInput { name, clock, ty: lowered, param: None, span: p.span, name_span });
-                continue;
+            if !matches!(self.a.types.get(lowered), Ty::Error) {
+                heading.inputs.push((inputs.len(), k, tspan));
             }
-            heading.inputs.push((inputs.len(), k, tspan));
-            inputs.push(FlowInput { name, clock, ty: lowered, param: None, span: p.span, name_span });
+            inputs.push(input(clock, lowered));
         }
         let out_lowered = self.lower_type(&cx, f.ret);
         let rspan = cx.ast.ty(f.ret).span;
-        // The output's clock is `sample` in this version (§11.3, §11.6, §19.1).
-        let out_clock = match &f.ret_clock {
-            Some(c) => match crate::clock::resolve_name(c) {
-                Ok(ClockName::Sample) => None,
-                Ok(_) => Some(
-                    Diagnostic::new(
-                        Stage::Names,
-                        Code::E0810,
-                        c.span,
-                        "the output of a flow is at the clock `sample` in this version (§11.6)",
-                    )
-                    .with_found(src(&cx, c.span)),
-                ),
-                Err(d) => Some(d),
+        // The output's clock (§11.3, §11.9): of an output of the error type it
+        // is not read (§18.1).
+        let out_error = matches!(self.a.types.get(out_lowered), Ty::Error);
+        let clock = match &f.ret_clock {
+            _ if out_error => None,
+            Some(c) => match self.port_clock(&cx, c).1 {
+                Some(k @ Clock::Tick(_)) => Some(k),
+                Some(_) => {
+                    let msg = "the output of a flow is at the clock `sample`, `(sample / N)` or `(sample * N)` in this version (§11.3, §11.6)";
+                    self.report(
+                        id,
+                        Diagnostic::new(Stage::Names, Code::E0810, c.span, msg).with_found(src(&cx, c.span)),
+                    );
+                    None
+                }
+                None => None,
             },
-            None => Some(
-                Diagnostic::new(
-                    Stage::Names,
-                    Code::E0810,
-                    rspan,
-                    "a flow output needs its clock after its type: `-> T at sample` (§11.3)",
-                )
-                .with_found(src(&cx, rspan)),
-            ),
+            None => {
+                let msg = "a flow output needs its clock after its type: `-> T at sample` (§11.3)";
+                self.report(id, Diagnostic::new(Stage::Names, Code::E0810, rspan, msg).with_found(src(&cx, rspan)));
+                None
+            }
         };
-        let clock = if out_clock.is_none() { Clock::SAMPLE } else { Clock::Error };
-        let out = match (out_clock, self.a.types.get(out_lowered)) {
-            (_, Ty::Error) => out_lowered,
-            (None, _) => {
+        let out = match clock {
+            Some(_) => {
                 heading.out = Some(rspan);
                 out_lowered
             }
-            (Some(d), _) => {
-                self.report(id, d);
-                self.a.types.error()
-            }
+            None if out_error => out_lowered,
+            None => self.a.types.error(),
         };
+        let clock = clock.unwrap_or(Clock::Error);
         if let DefKind::Flow(fd) = &mut self.a.defs[id.0 as usize].kind {
             fd.inputs = inputs;
             fd.out = out;
             fd.out_clock = clock;
         }
         Some(heading)
+    }
+
+    /// The clock `c` written after the type of an input or the output of a
+    /// flow (§11.3, S-359, S-1078): what the names stage reads of it, and
+    /// the clock, none with a diagnostic (reported). A name of the clocks,
+    /// or a derived clock of `sample` whose N is a constant expression of
+    /// `U32`, as an array length is (§4.5: E0401, E0408, E0417), a power of 2
+    /// that is 2 or more (E0808, §11.9); another base is E0810 at the clock,
+    /// and a name not found E0302.
+    fn port_clock(&mut self, cx: &Cx<'p>, c: &onsa_syntax::ast::Clock) -> (Option<ClockRef>, Option<Clock>) {
+        let written = match crate::clock::resolve_at(c) {
+            Ok(r) => r,
+            Err(d) => {
+                self.report(cx.def, d);
+                return (None, None);
+            }
+        };
+        let clock = match written {
+            ClockRef::Name(n) => Some(n.clock()),
+            ClockRef::Derived(Base::Clock(ClockName::Sample), op, n) => self.port_ratio(cx, op, n),
+            ClockRef::Derived(base, op, _) => {
+                let msg = format!(
+                    "the base of a derived clock of an input or the output of a flow is `sample`, not `{}`: `(sample {} N)` (§11.3)",
+                    base.name(),
+                    op.symbol()
+                );
+                self.report(
+                    cx.def,
+                    Diagnostic::new(Stage::Names, Code::E0810, c.span, msg).with_found(src(cx, c.span)),
+                );
+                None
+            }
+        };
+        (Some(written), clock)
+    }
+
+    /// The tick of `(sample op n)` of a port ([`Self::port_clock`]): the
+    /// ratio of [`Ratio::of_n`] of the value of `n`, else E0808 at `n`.
+    fn port_ratio(&mut self, cx: &Cx<'p>, op: onsa_syntax::ast::RatioOp, n: onsa_syntax::ast::ExprId) -> Option<Clock> {
+        let value = match self.read_const(cx, n) {
+            Ok((crate::constarg::ConstU32::Value(v), _)) => v,
+            // A flow has no generics (§11.2).
+            Ok((crate::constarg::ConstU32::Param(_), _)) => {
+                onsa_diag::internal::bug(Some(cx.ast.expr(n).span), "a const parameter in the heading of a flow")
+            }
+            // In its own words, of the N (§4.5: as the array lengths).
+            Err(crate::constarg::ConstErr::Uncomputed(_)) => {
+                let span = cx.ast.expr(n).span;
+                self.report(
+                    cx.def,
+                    Feature::DerivedClockNExprs.diagnostic(Stage::Names, span, &[]).with_found(src(cx, span)),
+                );
+                return None;
+            }
+            Err(e) => {
+                self.const_error(cx.def, e);
+                return None;
+            }
+        };
+        if let Some(r) = Ratio::of_n(op, value) {
+            return Some(Clock::Tick(r));
+        }
+        let span = cx.ast.expr(n).span;
+        let msg = "the N of a derived clock is a power of 2 that is 2 or more (§11.3, §11.9)";
+        self.report(cx.def, Diagnostic::new(Stage::Flow, Code::E0808, span, msg).with_found(src(cx, span)));
+        None
     }
 }

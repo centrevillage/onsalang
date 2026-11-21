@@ -318,6 +318,7 @@ impl<'a> Checker<'a> {
                 match &def.kind {
                     DefKind::Fn(_) if crate::names::unknown_callee(self.a, entity) => Ok(Some(self.a.types.error())),
                     DefKind::Fn(f) => {
+                        self.boundary_at(d, span)?;
                         if f.self_mode.is_some() {
                             onsa_diag::internal::bug(Some(name.span), "a method as a value the names stage took");
                         }

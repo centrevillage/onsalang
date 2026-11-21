@@ -1,0 +1,62 @@
+// onsa.toml
+// [test]
+// spec = ["§11.6", "§11.9", "§18.1"]
+
+// W7-09 U4a/t, S-566, S-574 (spec §11.9: "誤りの位置は、その flow の `process`・`process_inplace`・`render` を使う所と `@export` の印で、`init`・`reset`・`State` は使える（変換の flow を `.down~(N)` で中に置くため）…
+// E0810 の note で、中の部品を `.down~(N)`・`.up~(N)` で包み、一番外を `sample` にする書き方を示す"): what the border of the outermost flow does not refuse. A flow with a derived clock in a port is no error
+// by itself (`pub` or not), the functions of it that do not cross the border (`init`, `reset`, the type `State`) are usable, and a flow that is exported has its ports at `sample` and runs the conversion flow
+// inside as an instance (`.down~(N)`, `.up~(N)`, or with no modifier when the conversion flow's own body runs the chain). The places that are an error are in e0200_conversion_flow_boundary_until_w10_01.onsa.
+// No diagnostic.
+
+flow fold2(x: F32 at (sample * 2)) -> F32 at sample {
+  (x[0] + x[1]) * 0.5
+}
+
+flow dup2(x: F32 at sample) -> F32 at (sample * 2) {
+  [x, x]
+}
+
+flow decim(x: F32 at sample) -> F32 at (sample / 2) {
+  fold2~(x).down~(2)
+}
+
+pub flow ramp2(lf: F32 at (sample / 2)) -> F32 at sample {
+  lf at sample
+}
+
+fn make_state() -> decim.State {
+  decim.init(8.0)
+}
+
+fn make_state_of_a_gather() -> fold2.State {
+  fold2.init(8.0)
+}
+
+fn reset_state(inout st: dup2.State) {
+  dup2.reset(inout st)
+}
+
+test "init and reset of a conversion flow are usable" {
+  var st = decim.init(8.0)
+  decim.reset(inout st)
+}
+
+@export
+pub flow wrapper_of_a_gather(x: F32 at sample) -> F32 at sample {
+  fold2~(x).down~(2) at sample
+}
+
+@export
+pub flow wrapper_of_a_deal(x: F32 at sample) -> F32 at sample {
+  dup2~(decim~(x)).down~(2)
+}
+
+@export
+pub flow wrapper_of_the_slow_output_of_a_flow(x: F32 at sample) -> F32 at sample {
+  decim~(x) at sample
+}
+
+@export
+pub flow wrapper_of_a_slow_input(x: F32 at sample) -> F32 at sample {
+  ramp2~(decim~(x))
+}

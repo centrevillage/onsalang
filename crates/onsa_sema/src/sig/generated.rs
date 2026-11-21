@@ -16,11 +16,12 @@ enum Unfit {
 }
 
 /// Where the value type of an input or the output of a flow is, of the
-/// boundary (§11.6): a `sample` input, the output, or neither.
+/// boundary (§11.6, §11.9): an input of a periodic tick, the output, at
+/// their clocks, or neither.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Boundary {
-    Input,
-    Output,
+    Input(Clock),
+    Output(Clock),
     Inside,
 }
 
@@ -59,10 +60,11 @@ impl Generated {
     /// always, as only its parameter `cfg` (of `Config`) is of the inputs.
     /// These are the items a flow whose clocks are not read keeps as failed
     /// (R-471). None of an item the inputs do not decide.
-    fn of_inputs(self, rates: &[Option<ClockName>]) -> Option<bool> {
+    fn of_inputs(self, rates: &[Option<ClockRef>]) -> Option<bool> {
+        let host = || rates.iter().map(|r| r.and_then(ClockRef::host));
         match self {
-            Generated::Type(FlowTy::In) => Some(rates.iter().filter(|&&r| r == Some(ClockName::Sample)).count() >= 2),
-            Generated::Type(t) => t.input_clock().map(|r| rates.contains(&Some(r))),
+            Generated::Type(FlowTy::In) => Some(host().filter(|&r| r == Some(ClockName::Sample)).count() >= 2),
+            Generated::Type(t) => t.input_clock().map(|r| host().any(|h| h == Some(r))),
             Generated::Fn(FlowFn::Init) => Some(true),
             _ => None,
         }
@@ -140,7 +142,7 @@ impl<'p> Sema<'p> {
     /// (`Out` is of the output alone, S-1087). Whether it has `Out` and
     /// `process_inplace` its types decide (S-1087: [`Sema::fill_by_output`],
     /// [`Sema::trim_members`]).
-    pub(crate) fn generated_defs(&mut self, flow: DefId, rates: &[Option<ClockName>]) {
+    pub(crate) fn generated_defs(&mut self, flow: DefId, rates: &[Option<ClockRef>]) {
         let d = self.a.def(flow);
         let (module, vis, span, name_span) = (d.module, d.vis, d.span, d.name_span);
         let (u32, unit) = (self.a.types.int(IntKind::U32), self.a.types.unit());
@@ -195,7 +197,8 @@ impl<'p> Sema<'p> {
     /// kept, as of a cut heading: its uses get no diagnostic.
     fn members_unknown(&mut self, flow: DefId, inputs: bool) -> bool {
         let f = self.flow_def(flow);
-        let ins = f.inputs.iter().filter(|_| inputs).map(|i| (i.ty, (i.api_clock() == Clock::SAMPLE).then_some(true)));
+        let ins =
+            f.inputs.iter().filter(|_| inputs).map(|i| (i.ty, (i.host() == Some(ClockName::Sample)).then_some(true)));
         let tys: Vec<(TyId, Option<bool>)> = std::iter::once((f.out, Some(false))).chain(ins).collect();
         let mut seen = HashSet::default();
         tys.into_iter().any(|(t, edge)| {
@@ -259,9 +262,10 @@ impl<'p> Sema<'p> {
             self.report(id, d);
             return true;
         }
-        let input = match boundary {
+        let (input, clock) = match boundary {
             Boundary::Inside => return false,
-            b => b == Boundary::Input,
+            Boundary::Input(c) => (true, c.shown(span)),
+            Boundary::Output(c) => (false, c.shown(span)),
         };
         let fit = self.boundary_outputs(ty, input);
         let shown = |t: TyId| self.a.display_type(t);
@@ -269,23 +273,23 @@ impl<'p> Sema<'p> {
             Ok(_) => return false,
             // R-245: the type, and the forms that cross.
             Err(Unfit::Form(nested)) => format!(
-                "`{}` cannot cross the boundary{}: a `sample` input or output is a scalar or `[scalar; N]`, \
+                "`{}` cannot cross the boundary{}: a `{clock}` input or output is a scalar or `[scalar; N]`, \
                  and an output may be a struct of those (§11.6)",
                 shown(ty),
                 if nested { ", as nested arrays do not" } else { "" }
             ),
             Err(Unfit::Struct) => format!(
-                "`{}` is a struct, which crosses the boundary as an output only: a `sample` input is a scalar or \
+                "`{}` is a struct, which crosses the boundary as an output only: a `{clock}` input is a scalar or \
                  `[scalar; N]` (§11.6)",
                 shown(ty)
             ),
             Err(Unfit::NoChannel(None)) => format!(
-                "a `sample` input or output needs at least one channel; the struct `{}` has no field (§11.6)",
+                "a `{clock}` input or output needs at least one channel; the struct `{}` has no field (§11.6)",
                 shown(ty)
             ),
             Err(Unfit::NoChannel(Some((f, t)))) => {
                 let of = f.map_or_else(|| format!("`{}`", shown(t)), |f| format!("the field `{f}`, `{}`,", shown(t)));
-                format!("a `sample` input or output needs at least one channel; {of} is an array of length 0 (§11.6)")
+                format!("a `{clock}` input or output needs at least one channel; {of} is an array of length 0 (§11.6)")
             }
         };
         self.report(id, Diagnostic::new(Stage::Flow, Code::E0810, span, msg));
@@ -358,13 +362,19 @@ impl<'p> Sema<'p> {
             let Some((cx, f)) = cx.as_ref().and_then(|cx| Some((cx, flow_decl(cx, self.a.def(h.flow).item?)?))) else {
                 onsa_diag::internal::bug(Some(self.a.def(h.flow).name_span), "a flow lowered with no declaration")
             };
+            // What the loops do not see: a port whose clock or type is in error.
+            let lost = |i: &FlowInput| i.clock == Clock::Error || self.a.types.has_error(i.ty);
+            let mut in_error = h.out.is_none() || self.flow_def(h.flow).inputs.iter().any(lost);
             for &(k, at, span) in &h.inputs {
                 let input = &self.flow_def(h.flow).inputs[k];
-                let (clock, api, ty) = (input.clock, input.api_clock(), input.ty);
+                let (clock, caller, ty) = (input.clock, input.caller_clock(), input.ty);
                 // A type with the error type in it has its diagnostic (§18.1):
                 // of an input of the E0810 of [`Self::signal_type_error`] too.
-                let place = if api == Clock::SAMPLE { Boundary::Input } else { Boundary::Inside };
+                // S-1204 (2): an input of any periodic tick, `sample / N` and
+                // `sample * N` too, has the value types of the `sample` input.
+                let place = if matches!(caller, Clock::Tick(_)) { Boundary::Input(caller) } else { Boundary::Inside };
                 let unfit = self.check_rate_value_type(h.flow, ty, span, place) || self.a.types.has_error(ty);
+                in_error |= unfit;
                 let attr = Attr::find(&f.params[at].attrs, onsa_syntax::attrs::PARAM);
                 // The `@param` of an input of a type no signal has, or with a
                 // diagnostic, is not read (§6.5: as the arguments of an
@@ -382,7 +392,14 @@ impl<'p> Sema<'p> {
             }
             if let Some(span) = h.out {
                 let out = self.flow_def(h.flow).out;
-                self.check_rate_value_type(h.flow, out, span, Boundary::Output);
+                let clock = self.flow_def(h.flow).out_clock;
+                in_error |= self.check_rate_value_type(h.flow, out, span, Boundary::Output(clock));
+            }
+            if let DefKind::Flow(fd) = &mut self.a.defs[h.flow.0 as usize].kind {
+                fd.ports_in_error = in_error;
+            }
+            if let Some(d) = self.a.def(h.flow).export.and_then(|at| self.a.boundary_gate(h.flow, at)) {
+                self.report(h.flow, d);
             }
             self.trim_members(h.flow, pairs);
         }
@@ -466,7 +483,7 @@ impl<'p> Sema<'p> {
 
     /// The `sample` inputs of `flow`: name, element and length of an array.
     fn sig_inputs(&self, flow: DefId) -> Vec<(String, TyId, Option<Len>)> {
-        let inputs = self.flow_def(flow).inputs.iter().filter(|i| i.api_clock() == Clock::SAMPLE);
+        let inputs = self.flow_def(flow).inputs.iter().filter(|i| i.host() == Some(ClockName::Sample));
         inputs
             .map(|i| match self.a.types.get(i.ty) {
                 Ty::Array(e, l) => (i.name.clone(), *e, Some(*l)),
@@ -486,7 +503,7 @@ impl<'p> Sema<'p> {
     fn fill_by_inputs(&mut self, flow: DefId) {
         let inputs = self.flow_def(flow).inputs.clone();
         let fields = |s: &Self, clock: ClockName| -> Vec<FieldDef> {
-            let of = |i: &&FlowInput| i.api_clock() == clock.clock();
+            let of = |i: &&FlowInput| i.host() == Some(clock);
             inputs.iter().filter(of).map(|i| s.generated_field(flow, &i.name, i.ty)).collect()
         };
         self.fill_struct(flow, FlowTy::State, Vec::new());
@@ -501,7 +518,7 @@ impl<'p> Sema<'p> {
             // The field of an input that does not cross (its E0810) is not
             // known: its uses get no diagnostic (§18.1).
             let error = self.a.types.error();
-            for (f, i) in fs.iter_mut().zip(inputs.iter().filter(|i| i.api_clock() == Clock::SAMPLE)) {
+            for (f, i) in fs.iter_mut().zip(inputs.iter().filter(|i| i.host() == Some(ClockName::Sample))) {
                 if self.boundary_outputs(i.ty, true).is_err() {
                     f.ty = error;
                 }

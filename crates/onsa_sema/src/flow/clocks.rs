@@ -53,6 +53,7 @@ pub(crate) fn finish_flow(a: &mut Analysis, module: &Module, id: DefId, body: Bo
         inputs: fcx.inputs.clone(),
         sample_rate_calls: fcx.sample_rate_calls.clone(),
         output: fcx.output,
+        derived_port: a.def(id).as_flow().and_then(|f| f.derived_port(a.def(id).name_span)),
         complete: false,
         ..Default::default()
     };
@@ -87,7 +88,8 @@ pub(crate) fn finish_flow(a: &mut Analysis, module: &Module, id: DefId, body: Bo
         state: false,
     });
     info.lets = lets.collect();
-    let mut m = super::reads::mark_all(a, ast, text, &body, &fcx, &w, &info.lets);
+    let out = a.def(id).as_flow().map_or(Clock::SAMPLE, |f| f.body_out_clock());
+    let mut m = super::reads::mark_all(a, (ast, text), &body, &fcx, &w, &info.lets, out);
     (info.read_at, info.bound_at, info.sample_rate_at) = (m.read_at, m.bound_at, m.sample_rate_at);
     info.complete = w.diag.is_none() && m.diag.is_none() && w.inout_call.is_none() && fcx.held.is_none() && !fcx.unread;
     #[cfg(test)]
@@ -301,7 +303,7 @@ pub(super) fn walk(
         loop_clash: vec![None; n],
     };
     for (l, input) in cx.inputs.iter().zip(&decl.inputs) {
-        w.out.locals.insert(*l, input.api_clock());
+        w.out.locals.insert(*l, input.body_clock());
     }
     w.solve();
     // S-1139 (a): of the clocks of stage 1, before the nodes are named.
@@ -397,7 +399,7 @@ impl Walk<'_> {
             self.stmt = Some(Stmt { root: out, start: self.ast.expr(out).span.start });
             self.in_loop = false;
             if let (Some(c), Some(f)) = (self.expr(out), self.a.def(self.def).as_flow()) {
-                self.check_out(out, c, f.out_clock);
+                self.check_out(out, c, f.body_out_clock());
             }
         }
     }
@@ -803,13 +805,16 @@ impl Walk<'_> {
         let mut reads = Vec::new();
         let outer = std::mem::replace(&mut self.frame, frame.unwrap_or(ClockFrame::BODY));
         for (&x, input) in call.args.iter().zip(&f.inputs) {
-            let at = rebased(input.api_clock());
+            let at = rebased(input.caller_clock());
             if let Some(c) = self.cut(x) {
                 self.check_arg(x, c, at, input, g);
                 reads.push(ArgRead { expr: x, at });
             }
         }
         self.frame = outer;
+        if self.checking() && frame.is_some_and(|f| f.ratio < Ratio(0)) {
+            self.check_gather_deal(e, g, &call.args);
+        }
         (Some(rebased(f.out_clock)), reads)
     }
 

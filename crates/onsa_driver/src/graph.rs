@@ -108,7 +108,8 @@ impl Graph<'_> {
         for (&l, input) in info.inputs.iter().zip(&flow.inputs) {
             let name = info.body.locals[l.0 as usize].name.clone();
             self.local_node.insert(l, name.clone());
-            let rate = self.clock_of(l, input.span);
+            // As the declaration writes it (§1.1): the clock of a caller, not the body's view of it.
+            let rate = input.caller_clock();
             let label = format!("{name}: {}", typed(&self.a.display_type(input.ty), rate, input.span));
             items.push(self.push(name, label, "shape=ellipse ", (rate, input.span)));
         }
@@ -138,10 +139,16 @@ impl Graph<'_> {
     }
 
     /// The output: the vertex of a name no input, `let` or node has (R-497).
-    fn output(&mut self) -> Option<Item> {
+    fn output(&mut self, flow: &FlowDef) -> Option<Item> {
         let o = self.info.output?;
         let (rate, at) = (self.rate_of(o), self.ast.expr(o).span);
-        let label = format!("out: {}", typed(&self.ty_of(o), rate, at));
+        // Of a derived clock (§11.9), as the declaration writes the port: not the body's view of it.
+        let (ty, rate) = if flow.out_clock.of_ratio() {
+            (self.a.display_type(flow.out), flow.out_clock)
+        } else {
+            (self.ty_of(o), rate)
+        };
+        let label = format!("out: {}", typed(&ty, rate, at));
         Some(self.push(OUTPUT_SCOPE.to_string(), label, "shape=doubleoctagon ", (rate, at)))
     }
 
@@ -253,7 +260,7 @@ fn range(node: &PlanNode) -> String {
 fn typed(ty: &str, r: Clock, at: Span) -> String {
     match r {
         Clock::Const => ty.to_string(),
-        r => format!("{ty} at {}", r.shown(at)),
+        r => format!("{ty} at {}", r.written(at)),
     }
 }
 
@@ -353,7 +360,7 @@ fn draw(analyzed: &Analyzed, id: DefId) -> Result<Drawing, String> {
     let mut g = Graph { a, ast: &module.parsed.ast, info, local_node, let_names, d, seen };
     let mut top = g.inputs(flow);
     top.extend(g.lets());
-    top.extend(g.output());
+    top.extend(g.output(flow));
     // The nodes in no `par~`, in the order of the table, with their frames.
     for (i, node) in info.nodes.iter().enumerate() {
         if !matches!(node.owner, Owner::Par(_)) {

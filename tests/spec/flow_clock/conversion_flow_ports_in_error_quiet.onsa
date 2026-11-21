@@ -1,0 +1,86 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§11.6", "§11.9", "§18.1"]
+// fixes = 0
+
+// W7-09 U4a, S-1078, S-1204 (2), S-578 (spec §18.1: a part that could not be read is an error that nothing reads; §11.9: "N は … 2 以上の 2 のべき乗（違えば E0808）"; §11.6: the value types of a `sample`
+// input, and of an input at `sample / N` or `sample * N` too, S-1204 (2)): a flow whose port is in error in its declaration reports that error alone. Its `@export` has no E0200 of the boundary of a derived clock
+// (the N of an input or of the output is E0808, the type of an input is E0810), a use of its `render` has no E0200, a call that gathers or deals through `.down~` has no E0816, and a caller that passes a value of
+// a slower tick to an input whose clock is not found (E0302, a derived clock of an unknown base or an unknown name) has no E0815. The same forms with no error are E0200 in
+// e0200_conversion_flow_boundary_until_w10_01.onsa and E0816 in e0816_conversion_flow_gather_char.onsa. One error per flow. No candidate (`fixes = 0`). `x` is the `sample` input.
+
+pub struct Two {
+  a: F32,
+  b: F32,
+}
+
+// ---------------------------------------------------------------- `@export` of a flow whose port is in error
+
+@export
+pub flow exported_input_div_by_three(x: F32 at (sample / 3)) -> F32 at sample {   //~ E0808
+  0.0
+}
+
+@export
+pub flow exported_output_div_by_three(x: F32 at sample) -> F32 at (sample / 3) {   //~ E0808
+  x
+}
+
+@export
+pub flow exported_one_input_in_error(x: F32 at (sample / 3), y: F32 at (sample / 2)) -> F32 at sample {   //~ E0808
+  0.0
+}
+
+@export
+pub flow exported_struct_input_slow(x: Two at (sample / 2)) -> F32 at sample {   //~ E0810
+  0.0
+}
+
+// ---------------------------------------------------------------- the uses of a flow whose port is in error
+
+pub flow struct_input_slow(x: Two at (sample / 2)) -> F32 at sample {   //~ E0810
+  0.0
+}
+
+test "render of a flow whose input is in error" {
+  let o = struct_input_slow.render(4, 8.0)
+  assert o.out.len() > 0
+}
+
+pub flow deals_with_an_input_in_error(c: F32 at (sample / 3)) -> Two at (sample * 4) {   //~ E0808
+  [Two { a: 0.0, b: 0.0 }, Two { a: 0.0, b: 0.0 }, Two { a: 0.0, b: 0.0 }, Two { a: 0.0, b: 0.0 }]
+}
+
+pub flow gathers_with_a_struct_input(x: Two at (sample * 4), y: Char at (sample * 4)) -> F32 at sample {   //~ E0810
+  0.0
+}
+
+pub flow a_caller_of_a_deal_in_error(x: F32 at sample) -> F32 at sample {
+  x + deals_with_an_input_in_error~(x).down~(4).a
+}
+
+pub flow a_caller_of_a_gather_in_error(x: F32 at sample) -> F32 at sample {
+  x * (gathers_with_a_struct_input~(Two { a: x, b: x }, 'c').down~(4) at sample)
+}
+
+// ---------------------------------------------------------------- a clock not found
+
+pub flow input_of_an_unknown_base(x: F32 at (foo / 4)) -> F32 at sample {   //~ E0302
+  x
+}
+
+pub flow input_of_an_unknown_name(x: F32 at foo) -> F32 at sample {   //~ E0302
+  x
+}
+
+pub flow a_slow_argument_to_an_unknown_base(x: F32 at sample, l4: F32 at (sample / 4)) -> F32 at sample {
+  input_of_an_unknown_base~(l4)
+}
+
+pub flow a_slow_argument_to_an_unknown_name(x: F32 at sample, l4: F32 at (sample / 4)) -> F32 at sample {
+  input_of_an_unknown_name~(l4)
+}
+
+pub flow a_chain_to_an_unknown_base(x: F32 at sample, l4: F32 at (sample / 4)) -> F32 at sample {
+  input_of_an_unknown_base~(l4).down~(2) at sample
+}
