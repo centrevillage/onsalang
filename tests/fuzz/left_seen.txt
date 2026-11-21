@@ -1,5 +1,6 @@
 # The classes of the fix stage with an error left at a candidate's place that the parent has read
 # (X-25): `class<TAB>left` a line, sorted. tools/fuzz.py left --seen adds them.
+fix|E0002|end the line before it|E0005	`…` cannot be attached to a struct; it goes on a function or a flow
 fix|E0002|end the line before it|E0005	there is no attribute `…`
 fix|E0002|end the line before it|E0020	attributes are written `…`
 fix|E0002|remove the empty brackets|E0002	expected `…` or `…`, found `…`
@@ -7,6 +8,9 @@ fix|E0002|remove the empty brackets|E0002	expected `…`, found `…`
 fix|E0002|remove the empty brackets|E0002	expected `…`, found newline
 fix|E0002|remove the empty list|E0002	expected `…` or `…`, found `…`
 fix|E0002|remove the line break|E0001	`…` (U+#) cannot be written outside comments and strings: a name is written with
+fix|E0002|remove the line break|E0002	expected `…` or `…`, found `…`
+fix|E0002|remove the line break|E0002	expected an expression, found `…`
+fix|E0002|remove the line break|E0002	expected newline or `…`, found identifier
 fix|E0002|remove the line break|E0002	this `…` is never closed
 fix|E0002|write the `…` between the elements|E0002	expected imported name, found `…`
 fix|E0002|write the `…` between the elements|E0002	expected imported name, found integer literal
@@ -34,8 +38,10 @@ fix|E0003|move `…` to the end of the line before|E0001	U+# cannot be written o
 fix|E0003|move `…` to the end of the line before|E0001	`…` (U+#) cannot be written outside comments and strings: a name is written with
 fix|E0003|move `…` to the end of the line before|E0001	number prefix without digits
 fix|E0003|move `…` to the end of the line before|E0002	a `…` that opens a list is written right after the token before it
+fix|E0003|move `…` to the end of the line before|E0002	expected `…` (a function body), found `…`
 fix|E0003|move `…` to the end of the line before|E0002	expected `…` after `…`
 fix|E0003|move `…` to the end of the line before|E0002	expected `…` or `…`, found identifier
+fix|E0003|move `…` to the end of the line before|E0002	expected `…` or `…`, found integer literal
 fix|E0003|move `…` to the end of the line before|E0002	expected `…`, found identifier
 fix|E0003|move `…` to the end of the line before|E0002	expected a declaration, found `…`
 fix|E0003|move `…` to the end of the line before|E0002	expected a declaration, found identifier
@@ -79,6 +85,7 @@ fix|E0020|join it to the line before|E0020	a `…` that opens a list is written 
 fix|E0020|move it to the end of the line before|E0002	`…` is no part of the head of a declaration
 fix|E0020|move it to the end of the line before|E0002	expected a declaration, found `…`
 fix|E0020|move it to the end of the line before|E0002	expected a declaration, found integer literal
+fix|E0020|move it to the end of the line before|E0002	expected an operand right after the prefix operator, found `…`
 fix|E0020|move it to the end of the line before|E0020	a callee that is no path of names is a function value; it is called with `…`
 fix|E0020|move it to the end of the line before|E0020	a float literal needs digits on both sides of the point
 fix|E0020|move it to the end of the line before|E0408	integer literal is larger than any integer type holds
@@ -92,8 +99,10 @@ fix|E0020|remove the `…`|E0002	expected newline after the declaration, found `
 fix|E0020|remove the `…`|E0002	this `…` is never closed
 fix|E0020|remove the spaces|E0002	expected `…` or `…`, found `…`
 fix|E0020|remove the space|E0002	empty brackets are not written here
+fix|E0020|remove the space|E0002	expected `…` or `…`, found `…`
 fix|E0020|remove the space|E0002	expected an expression, found `…`
 fix|E0020|remove the space|E0002	expected module path, found `…`
+fix|E0020|remove the space|E0002	expected newline or `…`, found `…`
 fix|E0020|remove the space|E0020	a callee that is no path of names is a function value; it is called with `…`
 fix|E0020|take the `…` out|E0002	expected a pattern, found `…`
 fix|E0020|write `…`|E0002	expected `…`, found `…`
@@ -128,8 +137,17 @@ fix|E0806|call the item without `…`|E0302	cannot find `…`
 fix|E0806|call the item without `…`|E0806	a flow body cannot contain an anonymous function; flows call named `…` functions
 fix|E0806|call the item without `…`|E0806	a flow body cannot contain function values; `…` calls one (§#.#, §#.#)
 fix|E0806|call the item without `…`|E0806	a flow body cannot contain function values; call the function directly (§#.#)
+fix|E0806|compute it on every sample in a new `…` before this statement|E0200	this version does not support the rates of the modifiers `…` and `…` of an insta
 fix|E0806|remove `…`|E0806	a flow body cannot contain a call with `…`, which calls an `…` method (§#.#, §#.
 fix|E0806|write `…` in place of `…`|E0806	a flow body cannot contain a call with `…` (§#.#): `…` is a flow; calling it cre
+fix|E0811|add `…`|E0200	this version does not support a flow instance, a delay or a `…` where it is eval
 fix|E0811|add `…`|E0302	cannot find `…`
 fix|E0811|add `…`|E0801	`…` is defined below; names are defined from the top, and a later `…` is read as
+fix|E0811|add `…`|E0808	`…` / `…` replicates `…` instances; the bounds `…` give none (§#.#)
+fix|E0811|add `…`|E0811	a flow instance, a delay or a `…` cannot be in a branch of `…` / `…`, evaluated
+fix|E0811|compute it on every sample in a new `…` before this statement|E0200	this version does not support the rates of the modifiers `…` and `…` of an insta
+fix|E0811|write `…`, which evaluates every branch|E0200	this version does not support `…`, which evaluates every branch
+fix|E0811|write `…`, which evaluates every branch|E0200	this version does not support the rates of the modifiers `…` and `…` of an insta
+fix|E0811|write `…`, which evaluates every branch|E0811	a flow instance, a delay or a `…` cannot be in a branch of `…` / `…`, evaluated
 fix|E0812|remove `…`|E0302	cannot find `…`
+fix|E0812|remove `…`|E0808	`…` / `…` replicates `…` instances; the bounds `…` give none (§#.#)
