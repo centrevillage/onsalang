@@ -550,3 +550,132 @@ fn with_bindings_takes_the_replicas_and_the_scope_off_the_run_when_it_is_done() 
         assert_eq!(lens(&f), (0, 0));
     });
 }
+
+#[test]
+fn a_name_of_a_loop_under_an_at_has_a_clock_when_the_clock_of_the_loop_is_made() {
+    // §11.3: the clock of a loop is that of what enters it from outside, and `(a at sample)` over a name of the loop is still a name that has a clock (the one the loop is given). p = 1.0 for the 12 frames, so `lf`
+    // (`prev~(p at (sample / 4), 1.0)`) is 1.0 at every tick. `a = prev~(^b)` is the `b` of the frame before and `b = (a at sample) + (lf at sample)` is a loop of `sample` (an `at` to `sample` enters it): b = a + 1 =
+    // 1, 2, 3 .. 12. With `(a at (sample / 4))` and `lf` it is a loop of `sample / 4`, whose `b` is the running sum of `lf` at c = 0, 4, 8: 1, 2, 3, each held 4 frames.
+    let src = "flow at_sample(p: F32 at block) -> F32 at sample {
+  let lf = prev~(p at (sample / 4), 1.0)
+  let a = prev~(^b)
+  let b = (a at sample) + (lf at sample)
+  b
+}
+flow at_tick(p: F32 at block) -> F32 at sample {
+  let lf = prev~(p at (sample / 4), 1.0)
+  let a = prev~(^b)
+  let b = (a at (sample / 4)) + lf
+  b at sample
+}";
+    for sizes in [&[12][..], &[5, 0, 7], &[1; 12]] {
+        let ones: Vec<f32> = (1..=12).map(|c| c as f32).collect();
+        same(&split(src, "at_sample", 1.0, sizes), &ones);
+        same(&split(src, "at_tick", 1.0, sizes), &[1.0, 1.0, 1.0, 1.0, 2.0, 2.0, 2.0, 2.0, 3.0, 3.0, 3.0, 3.0]);
+    }
+}
+
+#[test]
+fn a_loop_is_clocked_after_the_loop_that_a_name_of_it_enters_and_before_the_loop_that_the_name_enters() {
+    // §11.3: a loop has the clock of what enters it from outside, wherever the `let`s are written. `lf` ticks with `sample / 4` and enters the loop {a, b}; `c` (written between `a` and `b`) reads `a`, so it has the
+    // clock of that loop and is not in it; {d, e} reads `c`, so it enters that loop. p = 2.0 for 12 frames: `lf` is 1.0 (init) at c = 0, then 2.0, 2.0. a(k) = b(k - 1) (0 at the first tick) and b(k) = a(k) + lf(k):
+    // b = 1, 3, 5. c = a + 1 = 1, 2, 4. d(k) = e(k - 1) + c(k) and e = d + 0.0: e = 1, 3, 7, each held 4 frames. A value of `sample` that enters the first loop instead of `lf` makes all of it `sample`.
+    let src = "flow three(p: F32 at block) -> F32 at sample {
+  let lf = prev~(p at (sample / 4), 1.0)
+  let a = prev~(^b)
+  let c = a + 1.0
+  let b = a + lf
+  let d = prev~(^e) + c
+  let e = d + 0.0
+  e at sample
+}";
+    let want: Vec<f32> = [1.0, 3.0, 7.0].iter().flat_map(|v| [*v; 4]).collect();
+    for sizes in [&[12][..], &[5, 0, 7], &[1; 12]] {
+        same(&split(src, "three", 2.0, sizes), &want);
+    }
+}
+
+#[test]
+fn an_up_chain_runs_each_stage_of_its_body_in_the_stage_of_its_caller_that_the_ratio_gives() {
+    // §11.9, S-1088: the body of `.up~(2)` runs 2 times in a frame of the caller with the counter n = 2 c + j, so its `sample / 8` ticks when n is a multiple of 8 (c a multiple of 4, j = 0: a tick of `sample / 4` of the caller) and
+    // its `sample / 2` ticks when n is even (j = 0, every c). `h = prev~(p at (sample / 8), 7.0)` and `g = prev~(p at (sample / 2), 5.0)` hold the `p` of the tick before; the output of a run is `100 h + g` and `sum2` adds the two runs.
+    // p = 1.0, 2.0, 3.0 in three calls of 4 frames: h is 7 for c = 0 .. 3 (init), 1.0 for c = 4 .. 7 (the p at n = 0) and 2.0 for c = 8 .. 11 (the p at n = 8, c = 4); g(c) is 5.0 (init) at c = 0 and the p of
+    // the frame c - 1 after: 1 1 1 | 1 2 2 2 | 2 3 3 3 (c = 1 .. 11). 100 h + g: 705, 701 701 701, 101, 102 102 102, 202, 203 203 203; twice that for the two runs.
+    let src = "flow sum2(x: F32 at (sample * 2)) -> F32 at sample { x[0] + x[1] }
+flow slow3(p: F32 at block) -> F32 at sample {
+  let h = prev~(p at (sample / 8), 7.0)
+  let g = prev~(p at (sample / 2), 5.0)
+  (h at sample) * 100.0 + (g at sample)
+}
+flow up3(p: F32 at block) -> F32 at sample { sum2~(slow3~(p).up~(2)) }";
+    let want = [1410.0, 1402.0, 1402.0, 1402.0, 202.0, 204.0, 204.0, 204.0, 404.0, 406.0, 406.0, 406.0];
+    let given = || vec![(p(1.0), 4), (p(2.0), 4), (p(3.0), 4)];
+    same(&f32s(&calls(src, "up3", vec![], given())), &want);
+    // §13.4: not what the calls are cut at (the `p` of each frame is that of its call).
+    let cut = vec![(p(1.0), 1), (p(1.0), 3), (p(2.0), 2), (p(2.0), 2), (p(3.0), 4)];
+    same(&f32s(&calls(src, "up3", vec![], cut)), &want);
+}
+
+#[test]
+fn reset_makes_the_stages_of_an_instance_run_again_in_the_frame_with_the_counter_0() {
+    // §11.6, §11.9: `reset` puts the counter back to 0 and the stage of an instance that a chain runs in the frame with the counter 0 runs as it did the first time. `cnt~(p).down~(2)` runs at c = 0 with the `p` of that
+    // call: p = 1.0 for the first frame gives 1; after `reset`, p = 5.0 for the first frame gives 5 (`cnt` starts again), not the 1 of the run before.
+    let src = format!(
+        "{CNT}flow dn(p: F32 at block) -> F32 at sample {{
+  let a = cnt~(p).down~(2)
+  a at sample
+}}"
+    );
+    let outs = with_checked(&src, true, |a| {
+        let mut me = Instance::init(View::new(a), def_named(a, "dn"), 48000.0, &[], None).expect("init");
+        let first = f32s(&me.process(&p(1.0), &[], 1, None).expect("process"));
+        me.reset();
+        (first, f32s(&me.process(&p(5.0), &[], 3, None).expect("process")))
+    });
+    same(&outs.0, &[1.0]);
+    same(&outs.1, &[5.0, 5.0, 10.0]);
+}
+
+#[test]
+fn the_lets_of_a_loop_that_sample_enters_are_clocked_in_the_order_they_are_written() {
+    // §11.3: `a = prev~(^c)`, `b = a + p`, `c = b + 1.0` read one another (`a` reads `c` through `^c`, so the loop is entered from `a` to `c` to `b` and back), and `(p at sample)` enters it with `sample`; each `let`
+    // has the clock of the operands it reads that are written before it. p = 1.0: a is the `c` of the frame before (0.0 at the first), b = a + 1, c = b + 1: c = 2, 4, 6, 8, 10, 12.
+    let src = "flow three(p: F32 at block) -> F32 at sample {
+  let a = prev~(^c)
+  let b = a + (p at sample)
+  let c = b + 1.0
+  c
+}";
+    for sizes in [&[6][..], &[1; 6], &[2, 0, 4]] {
+        same(&split(src, "three", 1.0, sizes), &[2.0, 4.0, 6.0, 8.0, 10.0, 12.0]);
+    }
+}
+
+#[test]
+fn a_call_in_what_a_delay_saves_reads_its_arguments_with_the_bindings_of_the_arm_it_is_in() {
+    // §11.4, §11.5: a delay stores what its argument is in the second phase, and a call in it is read there: `match~ sample_tick() { n => pass~(n) }` binds `n` to the counter of the frame as the arm is evaluated,
+    // and the call reads it. `d` is the stored value of the frame before: 0 (init), then the counter of the frame before: 0 0 1 2 3, whatever the calls of `process` are cut at.
+    let src = "flow pass(x: U32 at sample) -> U32 at sample { x }
+flow arm_in_save() -> U32 at sample {
+  let d = prev~(match~ sample_tick() { n => pass~(n) }, 0)
+  d
+}";
+    let got = with_checked(src, true, |a| {
+        let mut me = Instance::init(View::new(a), def_named(a, "arm_in_save"), 48000.0, &[], None).expect("init");
+        [3, 2].iter().flat_map(|n| me.process(&[], &[], *n, None).expect("process")).collect::<Vec<_>>()
+    });
+    assert_eq!(u32s(&got), [0, 0, 1, 2, 3]);
+}
+
+#[test]
+fn a_delay_in_the_argument_of_a_stage_that_an_instance_runs_at_the_end_of_a_frame_stores_in_that_frame() {
+    // §11.4: what a delay stores in a frame is what its argument is in that frame. `acc2` has an input at `sample` and an output at `sample / 2` (`half~(v).down~(2)`: the newest of the two values it took
+    // before its tick, 0.0 at the first), and its `sample` stage runs at the end of the frame of its caller, reading `prev~(p at sample, 0.0)`: that delay stores `p` in the frame it is read. p = 1.0: the delay gives
+    // 0 1 1 1 1 1 1 1, and `acc2` at c = 0, 2, 4, 6 gives 0 (nothing before), v(1) = 1, v(3) = 1, v(5) = 1, each held two frames: 0 0 1 1 1 1 1 1.
+    let src = "flow half(x: F32 at (sample * 2)) -> F32 at sample { x[1] }
+flow acc2(v: F32 at sample) -> F32 at (sample / 2) { half~(v).down~(2) }
+flow late(p: F32 at block) -> F32 at sample { acc2~(prev~(p at sample, 0.0)) at sample }";
+    for sizes in [&[8][..], &[1; 8], &[3, 0, 5]] {
+        same(&split(src, "late", 1.0, sizes), &[0.0, 0.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]);
+    }
+}

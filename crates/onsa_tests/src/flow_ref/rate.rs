@@ -6,14 +6,13 @@
 use std::collections::{BTreeSet, HashMap};
 use std::rc::Rc;
 
-use onsa_diag::Span;
 use onsa_sema::flow_names::FlowBuiltin;
 use onsa_sema::{LocalId, Target};
-use onsa_syntax::ast::{CallKind, ClockRatio, ExprId, ExprKind, RatioOp};
+use onsa_syntax::ast::{CallKind, ClockRatio, ExprId, ExprKind, PatId, RatioOp};
 
 use super::call::parts;
 use super::expr::{Frame, LIMITS, LOW_STACK, Stop};
-use super::flow::{Clock, Ctx, Inst, Known, Plans, Step, clock_of, join};
+use super::flow::{Clock, Ctx, Inst, Known, Plans, Seen, Step, clock_of, join};
 use super::hoist::{feedback, stage_of};
 use super::scalar::Fault;
 use super::sema_view::{Body, Called, Stage, View, output_stage};
@@ -122,12 +121,6 @@ pub(super) fn n_of(ratio: i32) -> u64 {
     1u64 << ratio.unsigned_abs().min(40)
 }
 
-/// Does an instance of the rate `ratio` run at the time of its caller (a call with no modifier, or a chain whose ratios cancel)? S-1088: its ticks slower than
-/// `sample` are then in the stages of its caller, at the same position; one of another rate has a time of its own, and its ticks are its own.
-pub(super) fn at_callers_time(ratio: i32) -> bool {
-    ratio == 0
-}
-
 /// How many frames the time `ctx` is after the last tick of `sample / N` (the ratio `r` < 0): the counter modulo N, 0 on the tick (§11.9).
 pub(super) fn phase(ctx: Ctx, r: i32) -> u64 {
     ctx.total() % n_of(r)
@@ -171,13 +164,23 @@ pub(super) fn time_of(ctx: Ctx, ratio: i32, j: u32) -> Ctx {
     }
 }
 
-/// The ticks slower than `sample` that the stages of a body are of, in the order they run: the larger N (the slower tick) first (§11.9, S-1079): those of the parts of each step that
-/// a tick makes (the ticks of a delay, of an `at (sample / N)`, of a chain), and those of the instances the body calls at its own time (a call with
-/// no modifier, or a chain of ratio 0: S-1088 puts their ticks in the stage of the caller). The ticks of an instance that a chain runs at another rate
-/// are its own (its frame has them).
+/// The stage of the caller an instance of the ratio `r` of its chain runs the stage `x` of its body in (§11.9, S-1088): `min(x + r, 0)`, one rule for a call with no
+/// modifier (`r` = 0: the same stage), for `.down~(N)` (a stage of the body is N times slower in the caller) and for `.up~(N)` (the stages faster than `sample / N` of the caller are in its `sample`).
+pub(super) fn caller_stage(x: i32, r: i32) -> i32 {
+    (x + r).min(0)
+}
+
+/// The stage of the caller that makes the output at `m` of an instance of the ratio `r`: the body makes it at its `sample` for a `sample * N`.
+pub(super) fn out_stage(m: i32, r: i32) -> i32 {
+    caller_stage(m.min(0), r)
+}
+
+/// The ticks slower than `sample` that the stages of a body are of, in the order they run: the larger N (the slower tick) first (§11.9, S-1079): the clock of each step, the clocks of its parts,
+/// and the stage of the body of each instance it calls that is in this one (`caller_stage` of each of its slow ticks and of its `sample`, with the ratio of the chain it is called by).
 pub(super) fn slow_ticks(view: View, body: &Body, steps: &[Step], plans: &Plans) -> Result<Rc<[i32]>, Stop> {
     let mut all = BTreeSet::new();
     for s in steps {
+        all.extend(Some(s.clock).into_iter().filter_map(slow));
         visit(view, body, &s.known, s.init, s.init, plans, &mut all)?;
     }
     let mut ticks: Vec<i32> = all.into_iter().collect();
@@ -185,86 +188,104 @@ pub(super) fn slow_ticks(view: View, body: &Body, steps: &[Step], plans: &Plans)
     Ok(ticks.into())
 }
 
-/// The sets of steps that read each other (§11.3: "互いに頼る `let` は一つのクロックを持ち、外から入る被演算子の刻みのクロックから決まる") whose clock is a tick slower than `sample`, with that clock:
-/// a loop of one `let` (`let s = prev~(^s) + lf`) or of a ring of them (`let a = prev~(^b)`, `let b = a + lf`) ticks with the clock of what enters it from outside, so its delays count that tick. A loop
-/// that a tick enters only under an `at` to `sample` (`let u = (lf at sample) + prev~(^u)`) ticks with `sample`. A clock of what enters that the evaluator has not is `Unavailable`: it is not `sample`.
-pub(super) fn slow_rings(body: &Body, steps: &[Step]) -> Result<Vec<(Vec<usize>, Clock)>, Stop> {
-    let mut found = Vec::new();
-    for ring in loops(body, steps) {
-        let at = body.ast.expr(steps[ring[0]].init).span;
-        let inside: Vec<LocalId> = ring.iter().flat_map(|i| step_locals(body, &steps[*i])).collect();
-        let mut clock = Clock::Const;
-        for i in &ring {
-            let c = entering(body, &steps[*i].known, steps[*i].init, steps[*i].init, &inside)
-                .map_err(|fault| Stop { fault, at })?;
-            clock = join(clock, c).ok_or(Stop { fault: Fault::Internal("clocks that do not join"), at })?;
-        }
-        if slower(clock) {
-            found.push((ring, clock.rooted()));
-        }
+/// The sets of the `lets` that read each other (§11.3: "互いに頼る `let`", a `^name` among the reads), each with whether it is a loop (more than one `let`, or one that reads itself), the ones read
+/// by the others first: the strongly connected components of the graph of the reads, so that the clock of a loop is made once, after those of what enters it.
+pub(super) fn components(body: &Body, lets: &[(PatId, ExprId)]) -> Result<Vec<(Vec<usize>, bool)>, Fault> {
+    let mut owner = HashMap::new();
+    for (i, l) in lets.iter().enumerate() {
+        owner.extend(body.pat_locals(l.0)?.into_iter().map(|x| (x, i)));
     }
-    Ok(found)
-}
-
-/// The locals a step binds.
-fn step_locals(body: &Body, s: &Step) -> Vec<LocalId> {
-    s.pat.and_then(|p| body.pat_locals(p).ok()).unwrap_or_default()
-}
-
-/// The sets of steps that read each other, a `^name` among the reads (§11.3: "互いに頼る `let`", a `let` that reads itself included): each step with a way back to itself,
-/// with the steps it shares that way with.
-fn loops(body: &Body, steps: &[Step]) -> Vec<Vec<usize>> {
-    if !steps.iter().any(|s| feedback(body, s.init)) {
-        return Vec::new();
-    }
-    let owner: HashMap<LocalId, usize> =
-        steps.iter().enumerate().flat_map(|(i, s)| step_locals(body, s).into_iter().map(move |l| (l, i))).collect();
     fn reads(body: &Body, owner: &HashMap<LocalId, usize>, e: ExprId, out: &mut Vec<usize>) {
         if let (true, Ok(Target::Local(l))) = (body.names(e), body.target(e)) {
             out.extend(owner.get(l));
         }
         body.ast.sub_exprs(e).into_iter().for_each(|x| reads(body, owner, x, out));
     }
-    let edges: Vec<Vec<usize>> = steps
+    let edges: Vec<Vec<usize>> = lets
         .iter()
-        .map(|s| {
+        .map(|l| {
             let mut v = Vec::new();
-            reads(body, &owner, s.init, &mut v);
+            reads(body, &owner, l.1, &mut v);
             v
         })
         .collect();
-    let reach = |from: usize| {
-        let (mut seen, mut todo) = (vec![false; steps.len()], edges[from].clone());
-        while let Some(i) = todo.pop() {
-            if !std::mem::replace(&mut seen[i], true) {
-                todo.extend(&edges[i]);
+    // Tarjan's, with the calls kept in a list (a flow may have thousands of `let`s).
+    let n = lets.len();
+    let (mut index, mut low, mut on) = (vec![usize::MAX; n], vec![0; n], vec![false; n]);
+    let (mut path, mut found, mut next) = (Vec::new(), Vec::new(), 0);
+    for root in 0..n {
+        if index[root] != usize::MAX {
+            continue;
+        }
+        let mut calls = vec![(root, 0)];
+        while let Some(&(v, k)) = calls.last() {
+            if k == 0 && index[v] == usize::MAX {
+                (index[v], low[v], on[v]) = (next, next, true);
+                next += 1;
+                path.push(v);
+            }
+            match edges[v].get(k) {
+                Some(&w) => {
+                    let top = calls.len() - 1;
+                    calls[top].1 += 1;
+                    if index[w] == usize::MAX {
+                        calls.push((w, 0));
+                    } else if on[w] {
+                        low[v] = low[v].min(index[w]);
+                    }
+                }
+                None => {
+                    calls.pop();
+                    if let Some(&(parent, _)) = calls.last() {
+                        low[parent] = low[parent].min(low[v]);
+                    }
+                    if low[v] == index[v] {
+                        let mut part = Vec::new();
+                        while let Some(w) = path.pop() {
+                            on[w] = false;
+                            part.push(w);
+                            if w == v {
+                                break;
+                            }
+                        }
+                        part.sort_unstable();
+                        let looped = part.len() > 1 || edges[v].contains(&v);
+                        found.push((part, looped));
+                    }
+                }
             }
         }
-        seen
-    };
-    let reaches: Vec<Vec<bool>> = (0..steps.len()).map(reach).collect();
-    let mut done = vec![false; steps.len()];
-    let mut out = Vec::new();
-    for i in (0..steps.len()).filter(|i| reaches[*i][*i]) {
-        if !std::mem::replace(&mut done[i], true) {
-            let ring: Vec<usize> = (i..steps.len()).filter(|j| reaches[i][*j] && reaches[*j][i]).collect();
-            ring.iter().for_each(|j| done[*j] = true);
-            out.push(ring);
-        }
     }
-    out
+    Ok(found)
 }
 
-/// Is `c` a tick slower than `sample`?
-fn slower(c: Clock) -> bool {
-    matches!(c.rooted(), Clock::Tick(r) if r < 0)
+/// The clock the loop of the `members` of `lets` ticks with (§11.3): the fastest of what enters it from outside, by `entering`. A tick slower than `sample` is the clock of its steps (a delay in it counts
+/// that tick); `None` for a loop that `sample` enters, whose steps have the clocks their operands give. A clock that the evaluator has not is `Unavailable`: it is not `sample`.
+pub(super) fn ring_clock(
+    body: &Body,
+    known: &mut Known,
+    lets: &[(PatId, ExprId)],
+    members: &[usize],
+) -> Result<Option<Clock>, Fault> {
+    let mut inside = Vec::new();
+    for i in members {
+        inside.extend(body.pat_locals(lets[*i].0)?);
+    }
+    // A name of the loop enters nothing, but `(a at sample)` over one asks for a clock to be there: they are set again when the steps are clocked.
+    known.extend(inside.iter().map(|l| (*l, Seen::both(Clock::Const))));
+    let mut clock = Clock::Const;
+    for i in members {
+        let c = entering(body, known, lets[*i].1, lets[*i].1, &inside)?;
+        clock = join(clock, c).ok_or(Fault::Internal("clocks that do not join"))?;
+    }
+    Ok(slow(clock).map(|_| clock.rooted()))
 }
 
-/// A clock the evaluator has not (`Unavailable`) is no clock here, as for the ticks of a part: the plan does not stop at what it does not read.
-fn lenient(clock: Result<Clock, Fault>, at: Span) -> Result<Clock, Stop> {
-    match clock {
-        Err(Fault::Unavailable(_)) => Ok(Clock::Const),
-        other => other.map_err(|fault| Stop { fault, at }),
+/// The ratio of a tick slower than `sample` that `c` is, if it is one.
+fn slow(c: Clock) -> Option<i32> {
+    match c.rooted() {
+        Clock::Tick(r) if r < 0 => Some(r),
+        _ => None,
     }
 }
 
@@ -314,17 +335,15 @@ fn visit(
     if onsa_diag::stack::remaining().is_some_and(|left| left < LIMITS.reserve) {
         return Err(here(LOW_STACK));
     }
-    // The clock `at` gives a part of `block` (`p at (sample / 4)`) is a tick too (a loop it enters ticks with it, `slow_rings`).
-    let read = lenient(clock_of(body, known, root, e), at)?;
-    let clocks = [stage_of(body, known, root, e).map_err(here)?, read];
-    out.extend(clocks.into_iter().filter_map(|c| match c.rooted() {
-        Clock::Tick(r) if r < 0 => Some(r),
-        _ => None,
-    }));
+    // The clock `at` gives a part of `block` (`p at (sample / 4)`) is a tick too (a loop it enters ticks with it, `ring_clock`).
+    let read = clock_of(body, known, root, e).map_err(here)?;
+    out.extend([stage_of(body, known, root, e).map_err(here)?, read].into_iter().filter_map(slow));
     let chain = chain_of(body, e).map_err(here)?;
-    let own = at_callers_time(chain.as_ref().map_or(0, |c| c.ratio)).then_some(chain.as_ref().map_or(e, |c| c.head));
-    if let Some(Ok(Called::Flow(def))) = own.map(|call| body.called(call)) {
-        out.extend(Inst::planned(view, def, plans)?.slow.iter());
+    // The stages of an instance that is called here are stages of this one (`caller_stage`, at the ratio of the chain, 0 for no modifier).
+    let (call, ratio) = chain.as_ref().map_or((e, 0), |c| (c.head, c.ratio));
+    if let Ok(Called::Flow(def)) = body.called(call) {
+        let body_ticks = Inst::planned(view, def, plans)?.slow;
+        out.extend(body_ticks.iter().chain(&[0]).map(|x| caller_stage(*x, ratio)).filter(|s| *s < 0));
     }
     let inside = match &chain {
         Some(c) => args_of(body, c.head),

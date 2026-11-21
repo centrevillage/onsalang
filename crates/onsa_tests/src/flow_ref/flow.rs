@@ -23,9 +23,9 @@ use onsa_sema::{DefId, LocalId, Target};
 use onsa_syntax::ast::{CallKind, ExprId, ExprKind, PatId, StmtKind};
 
 use super::expr::{Frame, Hoisted, Stop};
-use super::hoist::{pre, seen_of};
+use super::hoist::{pre, seen_of, stage_of};
 use super::host::FnHost;
-use super::rate::{chain_of, derived, on_tick, slow_rings, slow_ticks};
+use super::rate::{chain_of, components, derived, on_tick, ring_clock, slow_ticks};
 use super::scalar::{Fault, PanicKind};
 use super::sema_view::{Body, Called, Stage, View, clock_stage, input_stage, inputs_at, output_stage};
 use super::state::SAVED;
@@ -194,7 +194,7 @@ pub(super) fn clock_of(body: &Body, known: &Known, root: ExprId, e: ExprId) -> R
 pub(super) struct Step {
     pub(super) pat: Option<PatId>,
     pub(super) init: ExprId,
-    clock: Clock,
+    pub(super) clock: Clock,
     /// The clocks of the locals before this step (`hoist::pre` reads the clocks of the parts of `init` by them).
     pub(super) known: Rc<Known>,
 }
@@ -219,6 +219,10 @@ pub struct Inst {
     pub(super) slow: Rc<[i32]>,
     /// The ratio of the chain of modifiers it is the head of (`.down~(2)` is -1); 0 for a call with none, which runs at the time of its caller.
     pub(super) rate: i32,
+    /// The time of its caller and the stage of it that this instance last ran the stages of (`Frame::run_unit`): each stage of it runs once for each, whoever asks first.
+    pub(super) done: Option<(u64, Stage)>,
+    /// The outputs of the runs of the last frame of a `.up~(N)` chain, the N of them: what its call reads (`Out::All`).
+    pub(super) runs: Vec<Value>,
     locals: HashMap<LocalId, Value>,
     /// The parts of the body that a slower stage made (`Frame::hoisted`).
     hoisted: Hoisted,
@@ -364,8 +368,8 @@ fn stage(f: &mut Frame, steps: &[Step], out: &mut Value, at: Stage) -> Result<()
 }
 
 /// One entry of `inst` in its frame `f` (the time is `f.run.ctx`): the inputs of the stage `at` (`given`, by name), its
-/// `let`s, then what the stage has besides: at `init` the nodes (the delays, the instances it calls), at `block` the
-/// `block` stage of those instances (§11.3, a call of 0 frames too), for a frame the second phase of the delays (§11.4).
+/// `let`s, then what the stage has besides: at `init` the nodes (the delays, the instances it calls), for any other stage the stage of the instances it calls that runs in it
+/// (`run_children`, §11.9, S-1088, at `block` also the `block` stage of those, a call of 0 frames too), and for a tick the second phase of the delays (§11.4), whose saves are stored at once.
 pub(super) fn enter<V: std::borrow::Borrow<Value>>(
     f: &mut Frame,
     inst: &mut Inst,
@@ -374,62 +378,36 @@ pub(super) fn enter<V: std::borrow::Borrow<Value>>(
     given: &[(&str, V)],
 ) -> Result<(), Stop> {
     give(f, decl, at, given)?;
+    f.run.as_mut().iter_mut().for_each(|run| run.stage = at);
     stage(f, &inst.steps, &mut inst.out, at)?;
+    let whole = f.body.ast.expr(decl.body).span;
     match at {
         Stage::Init => f.make_cells(&inst.steps.iter().map(|s| s.init).collect::<Vec<_>>()),
-        Stage::Block => f.block_children(f.body.ast.expr(decl.body).span),
-        Stage::Sample => {
-            let whole = f.body.ast.expr(decl.body).span;
-            f.sample_nodes(whole)?;
-            f.commit(whole)
-        }
-        // A slower tick (§11.9): the instances called at the time of this one have the stage of the tick in this one (S-1088), whose saves are stored at once.
-        Stage::Tick(r) => {
-            let whole = f.body.ast.expr(decl.body).span;
-            f.tick_children(r, whole)?;
+        Stage::Block => f.run_children(at, whole),
+        _ => {
+            if at == Stage::Sample {
+                f.save_gathers(whole)?;
+            }
+            f.run_children(at, whole)?;
             f.commit(whole)
         }
     }
 }
 
-/// A frame of `inst` at the time of its frame `f` (§11.9): the stages of the slower ticks that the time is on, the larger N first (S-578, S-1079), then
+/// A frame of the outermost instance `inst` at the time of its frame `f` (§11.9): the stages of the slower ticks that the time is on, the larger N first (S-578, S-1079), then
 /// `sample` with its inputs (`given`, by name). A tick of ratio `2^-k` is on when the counter of the instance is a multiple of `2^k`, the first
-/// frame included, whatever the calls of `process` are (§11.9, §13.4).
+/// frame included, whatever the calls of `process` are (§11.9, §13.4). The instances it calls run theirs in the stages of this one (`Frame::run_children`).
 pub(super) fn run_frame<V: std::borrow::Borrow<Value>>(
     f: &mut Frame,
     inst: &mut Inst,
     decl: &FlowDef,
-    ticks: &[(&str, Value)],
     given: &[(&str, V)],
 ) -> Result<(), Stop> {
-    run_ticks(f, inst, decl, ticks, |_| true)?;
-    enter(f, inst, decl, Stage::Sample, given)
-}
-
-/// The stages of the ticks that `which` takes (a part of a frame: the others run where their inputs are read), those the time of `f` is on.
-pub(super) fn run_ticks(
-    f: &mut Frame,
-    inst: &mut Inst,
-    decl: &FlowDef,
-    ticks: &[(&str, Value)],
-    which: impl Fn(i32) -> bool,
-) -> Result<(), Stop> {
     let time = f.run.as_ref().map(|run| run.ctx);
-    for r in inst.slow.clone().iter().filter(|r| which(**r) && time.is_none_or(|ctx| on_tick(ctx, **r))) {
-        let mine = at_tick(decl, *r, ticks).map_err(|fault| Stop { fault, at: f.body.ast.expr(decl.body).span })?;
-        enter(f, inst, decl, Stage::Tick(*r), &mine)?;
+    for r in inst.slow.clone().iter().filter(|r| time.is_none_or(|ctx| on_tick(ctx, **r))) {
+        enter(f, inst, decl, Stage::Tick(*r), &[] as &[(&str, Value)])?;
     }
-    Ok(())
-}
-
-/// The inputs of `decl` at the stage of the tick `r` among the `ticks` a caller gave (by name).
-pub(super) fn at_tick<'t>(
-    decl: &FlowDef,
-    r: i32,
-    ticks: &'t [(&str, Value)],
-) -> Result<Vec<(&'t str, &'t Value)>, Fault> {
-    let mine = inputs_at(decl, Stage::Tick(r))?;
-    Ok(ticks.iter().filter(|(n, _)| mine.iter().any(|i| i.name == *n)).map(|(n, v)| (*n, v)).collect())
+    enter(f, inst, decl, Stage::Sample, given)
 }
 
 impl Inst {
@@ -458,6 +436,8 @@ impl Inst {
                 steps,
                 slow,
                 rate: 0,
+                done: None,
+                runs: Vec::new(),
                 locals: HashMap::new(),
                 hoisted: HashMap::new(),
                 out: Value::Unit,
@@ -469,60 +449,62 @@ impl Inst {
         ))
     }
 
-    /// The clock of each `let` and of the output (§11.2). A loop that a tick enters has that tick (§11.3, `slow_rings`): its steps are clocked with it, and the clocks of what reads them
-    /// follow, until the loops found are the ones the clocks were made with.
+    /// The clock of each `let` and of the output (§11.2), made once, the `let`s that others read before those that read them (`components`): one that no loop goes through has the clock its operands give,
+    /// a loop the clock of what enters it from outside when that is a tick slower than `sample` (§11.3, `ring_clock`), the same for all its steps. The output of a tick that `sample_tick()` alone makes is made at that tick.
     fn steps(body: &Body, decl: &FlowDef) -> Result<Rc<[Step]>, Stop> {
-        let mut rings: HashMap<usize, Clock> = HashMap::new();
-        for passes in 1.. {
-            let steps = Inst::clocked(body, decl, &rings)?;
-            let found: HashMap<usize, Clock> = slow_rings(body, &steps)?
-                .into_iter()
-                .flat_map(|(ring, c)| ring.into_iter().map(move |i| (i, c)))
-                .collect();
-            if found == rings {
-                return Ok(steps);
-            }
-            if passes > steps.len() + 1 {
-                break;
-            }
-            rings = found;
-        }
-        Err(Stop { fault: Fault::Internal("the clocks of the loops do not settle"), at: body.ast.expr(decl.body).span })
-    }
-
-    /// The steps with the clock each has: those of `rings` (by place) the clock of their loop, the others the one their operands give.
-    fn clocked(body: &Body, decl: &FlowDef, rings: &HashMap<usize, Clock>) -> Result<Rc<[Step]>, Stop> {
         let wrong = |e, what| Stop { fault: Fault::Internal(what), at: body.ast.expr(e).span };
+        let at = |e| move |fault| Stop { fault, at: body.ast.expr(e).span };
         let ExprKind::Block(b) = &body.ast.expr(decl.body).kind else { return Err(wrong(decl.body, "a body")) };
         let tail = b.tail.ok_or(wrong(decl.body, "a flow with no output expression"))?;
-        let mut known = Known::new();
+        let mut lets = Vec::new();
+        for s in &b.stmts {
+            let StmtKind::Let { pat, init, .. } = &body.ast.stmt(*s).kind else {
+                return Err(wrong(decl.body, "a statement"));
+            };
+            lets.push((*pat, *init));
+        }
+        let mut inputs = Known::new();
         for i in &decl.inputs {
-            let stage = input_stage(i).map_err(|fault| Stop { fault, at: body.ast.expr(decl.body).span })?;
-            known.insert(
+            let stage = input_stage(i).map_err(at(decl.body))?;
+            inputs.insert(
                 body.input(&i.name).ok_or(wrong(decl.body, "an input with no local"))?,
                 Seen::both(stage.into()),
             );
         }
-        let mut steps = Vec::new();
-        for (n, s) in b.stmts.iter().enumerate() {
-            let StmtKind::Let { pat, init, .. } = &body.ast.stmt(*s).kind else {
-                return Err(wrong(decl.body, "a statement"));
+        let (mut known, mut seen) = (inputs.clone(), vec![None; lets.len()]);
+        for (members, looped) in components(body, &lets).map_err(at(decl.body))? {
+            let ring = if looped {
+                ring_clock(body, &mut known, &lets, &members).map_err(at(lets[members[0]].1))?
+            } else {
+                None
             };
-            let at = |fault| Stop { fault, at: body.ast.expr(*init).span };
-            let seen = match rings.get(&n) {
-                Some(clock) => Seen::both(*clock),
-                None => seen_of(body, &known, *init, *init).map_err(at)?,
-            };
-            let before = Rc::new(known.clone());
-            // SPEC-GAP(S-1119): the locals the pattern binds (a `let` taken apart) have the clock of the whole right
-            // side, as the interpreter has it; the other reading gives each the clock of its own element.
-            for l in body.pat_locals(*pat).map_err(at)? {
-                known.insert(l, seen);
+            for i in members {
+                let (pat, init) = lets[i];
+                let clock = match ring {
+                    Some(c) => Seen::both(c),
+                    None => seen_of(body, &known, init, init).map_err(at(init))?,
+                };
+                // SPEC-GAP(S-1119): the locals the pattern binds (a `let` taken apart) have the clock of the whole right
+                // side, as the interpreter has it; the other reading gives each the clock of its own element.
+                known.extend(body.pat_locals(pat).map_err(at(init))?.into_iter().map(|l| (l, clock)));
+                seen[i] = Some(clock);
             }
-            steps.push(Step { pat: Some(*pat), init: *init, clock: seen.stage, known: before });
         }
-        let seen = seen_of(body, &known, tail, tail).map_err(|fault| Stop { fault, at: body.ast.expr(tail).span })?;
-        steps.push(Step { pat: None, init: tail, clock: seen.stage, known: Rc::new(known) });
+        // The steps in the order they are written, each with the clocks of the locals before it.
+        let (mut known, mut steps) = (inputs, Vec::new());
+        for ((pat, init), clock) in lets.iter().zip(seen) {
+            let clock = clock.ok_or(wrong(*init, "a `let` with no clock"))?;
+            let before = Rc::new(known.clone());
+            known.extend(body.pat_locals(*pat).map_err(at(*init))?.into_iter().map(|l| (l, clock)));
+            steps.push(Step { pat: Some(*pat), init: *init, clock: clock.stage, known: before });
+        }
+        let out = seen_of(body, &known, tail, tail).map_err(at(tail))?;
+        let ambient = stage_of(body, &known, tail, tail).map_err(at(tail))? == Clock::AMBIENT;
+        let clock = match output_stage(decl) {
+            Ok(Stage::Tick(m)) if ambient && m < 0 => Clock::Tick(m),
+            _ => out.stage,
+        };
+        steps.push(Step { pat: None, init: tail, clock, known: Rc::new(known) });
         Ok(steps.into())
     }
 
@@ -632,7 +614,7 @@ impl<'a> Instance<'a> {
                 let run = f.run.as_mut().ok_or(Stop { fault: Fault::Internal("a frame with no run"), at })?;
                 run.ctx = self.ctx;
                 let given: Vec<(&str, &Value)> = inputs.iter().map(|(name, col)| (*name, &col[n])).collect();
-                run_frame(&mut f, &mut self.me, decl, &[], &given)?;
+                run_frame(&mut f, &mut self.me, decl, &given)?;
                 outs.push(self.me.out.clone());
                 self.ctx = Ctx::at(self.ctx.sample_rate, self.ctx.total().wrapping_add(1));
             }

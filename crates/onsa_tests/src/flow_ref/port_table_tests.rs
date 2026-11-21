@@ -31,9 +31,9 @@ const STOPS_NOW: &[&str] = &[
     "in_d1_u2_s", "in_d1_u2_p", "in_u1_d2_s", "in_u1_d2_p", "in_u1_z_p", "in_u1_u1_s", "in_u1_u1_p", "in_u1_u2_s", "in_u1_u2_p", "in_u2_d1_p", "in_u2_z_p", "in_u2_u1_s", "in_u2_u1_p", "in_u2_u2_s", "in_u2_u2_p",
     // Outputs: at `sample / 2^-m` with a chain that makes it faster (`m < 0`, `r > 0`), a bundle that a chain makes faster (`m > 0`, `r > 0`), and at `sample * 2^m` run slower than a tick (`m > 0`, `m + r < 0`).
     "out_d2_u1", "out_d2_u2", "out_d1_u1", "out_d1_u2", "out_u1_d2", "out_u1_u1", "out_u1_u2", "out_u2_u1", "out_u2_u2",
-    // The forms of W7-09 U2b that are not rows of the table: a `block` array given to a `.up~(2)` part, a call with an output at a tick in the argument of a gather, a call at `sample * N` kept in a `let` or in
-    // parentheses, and a flow whose output is `sample_tick()` alone at a tick.
-    "repro_up_array_param", "repro_j02", "repro_j03", "repro_j04", "repro_k01", "repro_h01", "repro_h02", "repro_h08", "repro_f09", "repro_h03", "repro_h04",
+    // The forms of W7-09 U2b that are not rows of the table: a `block` array given to a `.up~(2)` part, and a call at `sample * N` kept in a `let` or in parentheses (the call with an output at a tick in the argument
+    // of a gather and the flow whose output is `sample_tick()` alone at a tick gave their values in U2d, and are held to them).
+    "repro_up_array_param", "repro_h01", "repro_h02", "repro_h08", "repro_f09",
 ];
 
 fn two(k: i32) -> usize {
