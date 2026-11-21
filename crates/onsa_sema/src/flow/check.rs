@@ -10,7 +10,7 @@ use crate::clock::{Base, ClockName, ClockRef, Ratio};
 use crate::def::Bound;
 use crate::deferred::DeferredKind;
 use crate::flow_names::FlowBuiltin;
-use crate::names::body::{NoFlowForm, Origin, PathRes, no_flow_form};
+use crate::names::body::{ModifierCall, NoFlowForm, Origin, PathRes, no_flow_form};
 use crate::requirement::Required;
 use crate::resolve::{Callee, NameKind};
 use crate::ty::TyId;
@@ -51,6 +51,10 @@ impl<'a> Checker<'a> {
             Ok(())
         })();
         let _ = r;
+        // The E0200 of this version is of a form with no other error: it
+        // waits for the N of the whole chain (§11.9).
+        let gates = std::mem::take(&mut self.fcx().chains).into_values().flatten();
+        gates.for_each(|d| self.flow_hold(d));
         self.frames.pop();
     }
 
@@ -337,6 +341,9 @@ impl<'a> Checker<'a> {
         if let Some(d) = self.names.instance(e) {
             return self.check_instance(e, d, args, expected).map(Some);
         }
+        if let Some(m) = self.names.modifier(e) {
+            return self.check_modifier(e, m, args, expected).map(Some);
+        }
         let span = self.expr(e).span;
         // The builtin names (§2.2), as the names stage found them (one an
         // item or a `use` of the module takes is an E0304 there, held as an
@@ -414,6 +421,51 @@ impl<'a> Checker<'a> {
             ty: f.out,
         });
         Ok(f.out)
+    }
+
+    /// The modifier `m` of the call `e` (§11.9, §11.10): the type of its
+    /// receiver, and one argument, the N of `.down~` and `.up~` (a constant
+    /// expression of type `U32`, a power of 2 that is 2 or more, else the
+    /// E0808 of the flow stage, S-969, S-1077) or the `Bool` condition of
+    /// `.when~` and `.reset_if~`. The flow stage holds the E0200 of what
+    /// this version has not: the meaning of `when~` and `reset_if~`
+    /// (W7-10), the clocks of a chain (U3b), when no N of the chain is in
+    /// error ([`FlowCx::chains`]).
+    fn check_modifier(&mut self, e: ExprId, m: ModifierCall, args: &[Arg], expected: Option<TyId>) -> R<TyId> {
+        let t = self.check_expr(m.receiver, expected)?;
+        let inner = self.fcx().chains.remove(&m.receiver);
+        // SPEC-GAP(S-1090): the number of the arguments is E0412, as of a
+        // delay (provisional (1)).
+        let [arg] = args else {
+            let msg = format!("the modifier `{}~` takes 1 argument but {} were given", m.modifier.name(), args.len());
+            return Err(self.err(Code::E0412, self.expr(e).span, msg));
+        };
+        let feature = match m.modifier.ratio_op() {
+            Some(op) => match self.flow_const_u32(arg.expr)?.map(|n| Ratio::of_n(op, n)) {
+                Some(Some(_)) => Some(Feature::ModifierRates),
+                Some(None) => {
+                    let msg =
+                        format!("the N of `.{}~(N)` is a power of 2 that is 2 or more (§11.9)", m.modifier.name());
+                    self.flow_hold_at(Code::E0808, self.expr(arg.expr).span, msg);
+                    None
+                }
+                // A failed constant (§18.1) or a gate of its own.
+                None => None,
+            },
+            None => {
+                let bool = self.bool_();
+                self.check_expr(arg.expr, Some(bool))?;
+                Some(Feature::InstanceModifiers)
+            }
+        };
+        let own = feature.map(|f| f.diagnostic(Stage::Flow, m.name, &[]).with_found(self.src(m.name)));
+        // The first of the chain, inner first by position.
+        let gate = match inner {
+            Some(inner) => own.and(inner),
+            None => own,
+        };
+        self.fcx().chains.insert(e, gate);
+        Ok(t)
     }
 
     /// `sample_rate()` (§11.4).

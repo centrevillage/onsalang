@@ -13,7 +13,8 @@
 // reaches a value in its middle (`x.prev~`, `g.y~`, `g(x).y~`), which is not a chain of names. The
 // modifier forms `x.when~(c)` and `s.when~(c)` are E0812 as well (§11.10: "受け手は flow の呼び出し（組込みの
 // 遅延を含む）か修飾子の連鎖である。`let` で受けた名前…、値、`par`、`if~` / `match~` は E0812"), also
-// without a candidate, and the head `lp~(x)` of a modifier chain is in e0812_modifier_head_instance_until_w7_10.onsa.
+// without a candidate, and the head `lp~(x)` of a modifier chain is no value (W7-09 U3a: the instance forms are in
+// modifier_when_reset_if_e0200_until_w7_10.onsa and e0812_modifier_receivers.onsa).
 // The range is the whole call, so the column of each mark is where the call starts. One error per flow (P-01).
 
 pub const K: F32 = 1.0

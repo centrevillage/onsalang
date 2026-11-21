@@ -1,0 +1,51 @@
+// onsa.toml
+// [test]
+// spec = ["§2.6", "§11.10", "§18.1"]
+// fixes = 0
+
+// W7-09 U3a/t, replacing negative/e0812_modifier_head_instance_until_w7_10.onsa (W4-12 U2, R-252): this file fixes the output of this
+// version, not a sentence of the spec, and it changes when W7-10 lands. The forms `lp~(x).when~(c)` and `.reset_if~(c)` are correct
+// forms of §11.10 ("受け手は flow の呼び出し（組込みの遅延を含む）か修飾子の連鎖である"): the names stage reads them (the receiver is
+// an instance, the name is in the closed list, S-555, S-556), the type stage checks the condition, and the flow stage stops at the
+// meaning that W7-10 gives (§11.10: the instance runs only on the ticks where `c` holds, and is reset on those where `r` holds),
+// which this version has not, with E0200 (Q-09). There is no candidate (`fixes = 0`). When W7-10 lands each unit of the flows below
+// changes to the correct form (a value, no diagnostic, or the errors of the clocks of §11.10) and this file is rewritten or removed
+// with it. The `down` and `up` forms are in flow_clock/modifier_down_forms.onsa. One error per flow (P-01).
+
+pub flow lp(x: F32 at sample) -> F32 at sample {
+  x * 0.5 + prev~(x) * 0.5
+}
+
+pub flow when_on_an_instance(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  let a = lp~(x).when~(c)                           //~ E0200
+  a
+}
+
+pub flow reset_if_on_an_instance(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  lp~(x).reset_if~(c)                               //~ E0200
+}
+
+pub flow when_on_a_builtin_delay(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  prev~(x).when~(c)                                 //~ E0200
+}
+
+pub flow two_modifiers_on_an_instance(x: F32 at sample, c: Bool at sample, r: Bool at sample) -> F32 at sample {
+  let a = lp~(x).when~(c).reset_if~(r)              //~ E0200
+  a
+}
+
+pub flow reset_if_then_when(x: F32 at sample, c: Bool at sample, r: Bool at sample) -> F32 at sample {
+  lp~(x).reset_if~(r).when~(c)                      //~ E0200
+}
+
+pub flow when_after_a_down(p: F32 at block, c: Bool at block) -> F32 at sample {
+  lp~(p).down~(4).when~(c) at sample                //~ E0200
+}
+
+pub flow when_in_an_argument(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  lp~(lp~(x).when~(c))                              //~ E0200
+}
+
+pub flow when_in_an_if_tilde(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  if~ c { lp~(x).when~(c) } else { x }              //~ E0200
+}

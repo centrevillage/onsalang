@@ -46,8 +46,9 @@ struct Marker<'a> {
     body: &'a BodyInfo,
     clocks: &'a Walked,
     choose: Choose<'a>,
-    /// The walk had a diagnostic: it did not record the nodes it did not
-    /// reach (in a branch, in `match~`).
+    /// The walk had a diagnostic or did not go into a chain of modifiers:
+    /// it did not record the nodes it did not reach (in a branch, in
+    /// `match~`, in the chain).
     partial: bool,
     non_rt: &'a HashMap<ExprId, bool>,
     /// The number of the `let`s, the `consumer` of the output.
@@ -122,7 +123,7 @@ pub(super) fn mark_all(
         body,
         clocks: walked,
         choose,
-        partial: walked.diag.is_some(),
+        partial: walked.diag.is_some() || walked.skipped,
         non_rt: &walked.non_rt,
         lets: lets.len(),
         consumer: lets.len(),

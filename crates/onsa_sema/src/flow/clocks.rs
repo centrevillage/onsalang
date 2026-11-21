@@ -148,6 +148,9 @@ pub(super) struct Walked {
     pub(super) node_of: HashMap<ExprId, usize>,
     /// Stage 2: the first diagnostic in the order of the file.
     pub(super) diag: Option<Diagnostic>,
+    /// The walk did not go into a chain of modifiers (U3b): it did not
+    /// record the nodes in it.
+    pub(super) skipped: bool,
     /// Stage 2: the first call of an `inout self` method (E0713, §5.2),
     /// reported when the flow checks find no error.
     pub(super) inout_call: Option<Diagnostic>,
@@ -217,6 +220,7 @@ pub(super) struct Walk<'a> {
     /// At `Check`: the statement walked.
     stmt: Option<Stmt>,
     diag: Option<Diagnostic>,
+    skipped: bool,
     inout_call: Option<Diagnostic>,
     non_rt: HashMap<ExprId, bool>,
     recorder: NodeBuilder,
@@ -286,6 +290,7 @@ pub(super) fn walk(
         sites: Vec::new(),
         stmt: None,
         diag: None,
+        skipped: false,
         inout_call: None,
         non_rt: HashMap::default(),
         recorder: NodeBuilder::new(&cx.pending, ast, body),
@@ -317,6 +322,7 @@ pub(super) fn walk(
         stages,
         info: w.out,
         diag: w.diag,
+        skipped: w.skipped,
         inout_call: w.inout_call,
         non_rt: w.non_rt,
         nodes: w.node_clocks,
@@ -693,6 +699,25 @@ impl Walk<'_> {
         }
         if self.sample_rate.contains(&e) {
             return Some(Clock::Init);
+        }
+        // A modifier, at the E0200 the check of the types held (U3b, W7-10):
+        // in error, so that no later check reads a clock it has not. The
+        // chain is the thing with state (§11.10); its receiver and argument
+        // are walked apart, with no join, but in a chain of a rate, whose
+        // clocks U3b reads.
+        if let Some(m) = self.names.modifier(e) {
+            let (mut head, mut rated) = (m.receiver, m.modifier.ratio_op().is_some());
+            while let Some(inner) = self.names.modifier(head) {
+                (head, rated) = (inner.receiver, rated || inner.modifier.ratio_op().is_some());
+            }
+            // A flow whose heading a syntax error cut has no node (S-59).
+            let kind = self.calls.get(&head).map(|&i| super::plan::names::kind(self.a, &self.cx.calls[i].kind));
+            if kind.is_some_and(|kind| self.stateful_here(e, kind)) && !rated {
+                std::iter::once(m.receiver).chain(args.iter().map(|x| x.expr)).for_each(|x| _ = self.expr(x));
+            } else {
+                self.skipped = true;
+            }
+            return Some(Clock::Error);
         }
         // The check of the types held the E0200 of `sample_tick()` (W7-09):
         // in error, so that no later check reads a clock it has not.

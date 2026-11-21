@@ -1,0 +1,68 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§11.3", "§11.9", "§11.10", "§18.1"]
+
+// The modifier `.down~(N)` after the call of an instance (§11.9, S-555, S-556, S-566): N is a constant expression of type `U32`
+// of the places that hold a size (§4.5), a literal, a constant, an associated constant (S-1077), and the call runs at 1/N of the
+// call position. The value of the call is the value of the output at `sample / N` (the output clock is relative to the chain rate,
+// §11.3), so a faster stage reads it with `at sample` and an argument is read at the clock of the chain rate (a value of the
+// parameter kinds, or `sample / N` here). The modifiers wrap everything on their left (S-557), so a chain is a composition of
+// the ratios, and the call with no modifier next to it is an instance of its own. The modifier is stateful as the call is: in a
+// branch it is E0811 and in the right operand of `&&` and `||` it is E0806 (§11.10). This version stops at the flow stage with
+// E0200 until the chain clocks are read (W7-09 U3b), so the cases wait for it. One error per flow.
+
+const K: U32 = 4
+
+pub flow lp(x: F32 at sample) -> F32 at sample {
+  x * 0.5 + prev~(x) * 0.5
+}
+
+pub flow gate(c: Bool at sample) -> Bool at sample {
+  c
+}
+
+pub flow down_by_a_literal(p: F32 at block) -> F32 at sample {
+  let y = lp~(p).down~(4)
+  y at sample
+}
+
+pub flow down_by_a_constant(p: F32 at block) -> F32 at sample {
+  lp~(p).down~(K) at sample
+}
+
+pub flow down_by_an_associated_constant(p: F32 at block) -> F32 at sample {
+  lp~(p).down~(U32.BITS) at sample
+}
+
+pub flow chain_of_two_downs(p: F32 at block) -> F32 at sample {
+  lp~(p).down~(2).down~(2) at sample
+}
+
+pub flow chain_down_then_up(p: F32 at block) -> F32 at sample {
+  lp~(p).down~(4).up~(2) at sample
+}
+
+pub flow argument_at_the_chain_rate(p: F32 at block) -> F32 at sample {
+  let a = p at (sample / 4)
+  lp~(a).down~(4) at sample
+}
+
+pub flow the_modified_call_and_the_call_beside_it(p: F32 at block) -> F32 at sample {
+  let a = lp~(p)
+  let b = lp~(p).down~(4)
+  a + (b at sample)
+}
+
+pub flow the_name_of_a_down_read_in_a_branch_and_a_par(p: F32 at block, c: Bool at sample, x: F32 at sample) -> F32 at sample {
+  let y = lp~(p).down~(4)
+  let zs = par i in 0 ..< 2 { x * (y at sample) * F32.round_from(i) }
+  if c { zs[0] + (y at sample) } else { zs[1] }
+}
+
+pub flow down_in_a_plain_branch(p: F32 at block, c: Bool at sample) -> F32 at sample {
+  if c { lp~(p).down~(4) at sample } else { 0.0 }           //~ E0811
+}
+
+pub flow down_in_the_right_operand_of_and(c: Bool at sample, d: Bool at block) -> Bool at sample {
+  c && (gate~(d).down~(2) at sample)                        //~ E0806
+}

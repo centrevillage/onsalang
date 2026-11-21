@@ -1,0 +1,31 @@
+// onsa.toml
+// [test]
+// spec = ["§2.2", "§11.1", "§11.10", "§15.1", "§18.1"]
+
+// W7-09 U3a/t, S-555, S-556: the modifiers have a namespace of their own and are looked up only where the head of `.name~(` is the
+// call of an instance (§11.10: "頭がモジュールか flow の名前空間なら、今の flow の呼び出し"), and `down` and `up` are no reserved
+// words (§2.2), so a flow of a module or of the file that has such a name is called as any flow: `ops.down~(x)` is the call of the
+// flow `down` of the module `ops`, `down~(x)` that of the flow of this file, and a modifier of the list on the instance that
+// they give is the modifier (flow_clock/modifier_down_forms.onsa). No diagnostic.
+
+use ops
+
+flow up(x: F32 at sample) -> F32 at sample {
+  x * 4.0
+}
+
+pub flow module_flow_named_down(x: F32 at sample) -> F32 at sample {
+  ops.down~(x)
+}
+
+pub flow module_flow_named_up(x: F32 at sample) -> F32 at sample {
+  ops.up~(x)
+}
+
+pub flow flow_of_the_file_named_up(x: F32 at sample) -> F32 at sample {
+  up~(x)
+}
+
+pub flow flows_named_like_the_modifiers_in_one_expression(x: F32 at sample) -> F32 at sample {
+  ops.down~(ops.up~(up~(x)))
+}

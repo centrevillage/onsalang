@@ -232,7 +232,7 @@ impl Walker<'_> {
     /// stopped or not.
     pub(super) fn walks_clean_as_let(&mut self, name: &Ident, s: StmtId, value: ExprId) -> bool {
         let (bindings, scopes) = (self.out.bindings.len(), self.out.scopes.len());
-        let (callee, clocks) = (self.order.callee, self.out.clocks.clone());
+        let (callee, clocks, modifiers) = (self.order.callee, self.out.clocks.clone(), self.out.modifiers.clone());
         self.open_scope();
         let clean = self.declare(name, BindingKind::FlowLet, Origin::Let(s), None).is_ok() && self.walks_clean(value);
         self.close_scope();
@@ -240,7 +240,7 @@ impl Walker<'_> {
         self.out.scopes.truncate(scopes);
         self.out.paths.retain(|_, r| !matches!(r, PathRes::Local(b) if b.0 as usize >= bindings));
         self.order.clashes.retain(|b, _| (b.0 as usize) < bindings);
-        (self.order.callee, self.out.clocks) = (callee, clocks);
+        (self.order.callee, self.out.clocks, self.out.modifiers) = (callee, clocks, modifiers);
         clean
     }
 

@@ -1,0 +1,40 @@
+// onsa.toml
+// [test]
+// spec = ["§2.6", "§11.10", "§18.1"]
+// fixes = 1
+
+// W7-09 U3a/t, S-555, S-556: the modifiers are written with the `~` (§11.10: "修飾子の名前には `~` を付ける"), and a modifier
+// of the closed list written without it after the call of an instance (a user flow, a built-in delay, a chain of modifiers) is
+// E0811 of the names stage, whose one candidate adds the `~` (§11.10: "`~` の無い `saw~(f0).when(c)` は E0811（修正候補は `~` を
+// 足す形）"). The names of the list that are no reserved words (`down`, `up`) are in negative/modifier_down_up_without_tilde_s1178.onsa.
+// The range of each diagnostic is not pinned. One error per flow (P-01).
+
+pub flow lp(x: F32 at sample) -> F32 at sample {
+  x * 0.5 + prev~(x) * 0.5
+}
+
+pub flow when_on_an_instance(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  lp~(x).when~(c)                                    //~ E0811
+}
+
+pub flow reset_if_on_an_instance(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  lp~(x).reset_if~(c)                                //~ E0811
+}
+
+pub flow when_on_a_builtin_delay(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  prev~(x).when~(c)                                  //~ E0811
+}
+
+pub flow when_after_a_modifier(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  lp~(x).reset_if~(c).when~(c)                       //~ E0811
+}
+
+pub flow reset_if_after_a_down(p: F32 at block, c: Bool at block) -> F32 at sample {
+  let y = lp~(p).down~(2).reset_if~(c)               //~ E0811
+  y at sample
+}
+
+pub flow when_in_a_let_and_an_argument(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  let y = lp~(lp~(x).when~(c))                       //~ E0811
+  y
+}

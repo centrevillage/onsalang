@@ -27,12 +27,14 @@ mod flow;
 mod flow_forms;
 mod flow_order;
 mod kinds;
+mod modifiers;
 mod paths;
 pub(crate) use consts::{ConstScope, const_names, const_path_names};
 pub(crate) use exprs::heads;
 pub(crate) use flow::{clock_after, par_head};
 pub(crate) use flow_forms::{NoFlowForm, no_flow_form};
 pub(crate) use kinds::METHOD_IS_CALLED;
+pub(crate) use modifiers::ModifierCall;
 pub(crate) use paths::{is_value, not_a_struct};
 pub(crate) use scope::{unused, unused_binding};
 pub(crate) use type_args::{Form, names_only, own_count_error, own_kinds, own_params};
@@ -145,6 +147,10 @@ pub(crate) struct BodyNames {
     pub instances: Vec<(ExprId, DefId, onsa_diag::Span)>,
     /// A call of [`Self::instances`] to its index there.
     pub instance_of: HashMap<ExprId, usize>,
+    /// The calls of the modifiers of an instance (`lp~(x).down~(2)`,
+    /// §11.10) of a flow body, which the types stage and the flow stage
+    /// check: the one place that decides one (`modifiers.rs`, D-15).
+    pub modifiers: HashMap<ExprId, ModifierCall>,
     /// The clock of each `e at k` of a flow body, its name looked up (§11.3,
     /// R-472, S-1078): the one lookup that the types stage reads, which
     /// evaluates the N of a derived clock for the clocks.
@@ -189,6 +195,11 @@ impl BodyNames {
     /// The flow the call `e` makes an instance of ([`Self::instances`]).
     pub(crate) fn instance(&self, e: ExprId) -> Option<DefId> {
         self.instance_of.get(&e).map(|&k| self.instances[k].1)
+    }
+
+    /// The modifier the call `e` is ([`Self::modifiers`]).
+    pub(crate) fn modifier(&self, e: ExprId) -> Option<ModifierCall> {
+        self.modifiers.get(&e).copied()
     }
 
     /// The first diagnostic of the type arguments `::[…]` of the chain `e`

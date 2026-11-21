@@ -1,0 +1,101 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§11.9", "§18.1"]
+
+// The N of `.down~(N)` and `.up~(N)` is a constant expression of type `U32` of the places that hold a size (§4.5), the same table as
+// the length of a delay line and the N of a derived clock (S-1077, S-969; flow_clock/derived_clock_ratio_n_errors.onsa): a value that
+// is not a power of two that is 2 or more is E0808 (`N = 1` and `N = 0` too), a literal of another type, a constant of another type
+// and a prefix `-` are E0401, a literal that `U32` does not hold is E0408, and a name that is not a constant (an input, a `let`, a
+// function) is E0417 (§11.9: "期待型でない値は E0401、定数式でないものは E0417、2 以上の 2 のべき乗（違えば E0808）"). The clock
+// of the call in error is an error, so what reads it reports nothing (§18.1). The N that needs arithmetic (`K * 2`) waits for W9-03
+// (modifier_n_const_expressions_w9_03.onsa). One error per flow, so each form is a flow of its own. In a chain, the N in error
+// after another modifier is the error of the chain: the E0200 of this version is of a form with no other error (W7-09 U3a).
+
+const ONE: U32 = 1
+const THREE: U32 = 3
+const FOUR_I: I32 = 4
+const FOUR_F: F32 = 4.0
+
+pub fn pick(v: U32) -> U32 {
+  v
+}
+
+pub flow lp(x: F32 at sample) -> F32 at sample {
+  x * 0.5 + prev~(x) * 0.5
+}
+
+// ---------------------------------------------------------------- E0808: the value
+
+pub flow down_by_three(p: F32 at block) -> F32 at sample {
+  lp~(p).down~(3) at sample                                 //~ E0808
+}
+
+pub flow down_by_one(p: F32 at block) -> F32 at sample {
+  lp~(p).down~(1) at sample                                 //~ E0808
+}
+
+pub flow down_by_zero(p: F32 at block) -> F32 at sample {
+  lp~(p).down~(0) at sample                                 //~ E0808
+}
+
+pub flow up_by_six(p: F32 at block) -> F32 at sample {
+  let y = lp~(p).up~(6)                                     //~ E0808
+  y at sample
+}
+
+pub flow down_by_a_constant_of_three(p: F32 at block) -> F32 at sample {
+  lp~(p).down~(THREE) at sample                             //~ E0808
+}
+
+// ---------------------------------------------------------------- E0401: the type
+
+pub flow down_by_a_negative(p: F32 at block) -> F32 at sample {
+  lp~(p).down~(-4) at sample                                //~ E0401
+}
+
+pub flow up_by_a_bool_literal(p: F32 at block) -> F32 at sample {
+  lp~(p).up~(true) at sample                                //~ E0401
+}
+
+pub flow down_by_a_constant_of_i32(p: F32 at block) -> F32 at sample {
+  lp~(p).down~(FOUR_I) at sample                            //~ E0401
+}
+
+// ---------------------------------------------------------------- E0408: a literal that U32 does not hold
+
+pub flow down_by_two_to_the_32(p: F32 at block) -> F32 at sample {
+  lp~(p).down~(4294967296) at sample                        //~ E0408
+}
+
+// ---------------------------------------------------------------- E0417: not a constant expression
+
+pub flow down_by_an_init_input(p: F32 at block, n: U32 at init) -> F32 at sample {
+  lp~(p).down~(n) at sample                                 //~ E0417
+}
+
+pub flow down_by_a_let(p: F32 at block) -> F32 at sample {
+  let k = 4
+  lp~(p).down~(k) at sample                                 //~ E0417
+}
+
+pub flow up_by_a_function(p: F32 at block) -> F32 at sample {
+  lp~(p).up~(pick) at sample                                //~ E0417
+}
+
+// ---------------------------------------------------------------- E0808: after another modifier of the chain
+
+pub flow down_after_a_down(p: F32 at block) -> F32 at sample {
+  lp~(p).down~(2).down~(3) at sample                        //~ E0808
+}
+
+pub flow up_after_a_down(p: F32 at block) -> F32 at sample {
+  lp~(p).down~(2).up~(5) at sample                          //~ E0808
+}
+
+pub flow down_after_when(p: F32 at block, c: Bool at block) -> F32 at sample {
+  lp~(p).when~(c).down~(3) at sample                        //~ E0808
+}
+
+pub flow down_after_reset_if_and_up(p: F32 at block, c: Bool at block) -> F32 at sample {
+  lp~(p).reset_if~(c).up~(2).down~(0) at sample             //~ E0808
+}

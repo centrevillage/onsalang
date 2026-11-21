@@ -86,6 +86,7 @@ mod match_tilde_candidates;
 mod match_tilde_clock_model;
 mod match_tilde_order;
 mod mode_only_notes;
+mod modifier_rules;
 mod name_overlaps;
 mod naming_shapes;
 mod nesting;

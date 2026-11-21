@@ -1,0 +1,5 @@
+const CA: U32 = BAD
+const BAD: U32 = CA
+pub flow t(x: F32 at sample) -> F32 at sample {
+  delay~(x, BAD)
+}

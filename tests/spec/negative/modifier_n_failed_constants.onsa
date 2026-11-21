@@ -1,0 +1,45 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§11.9", "§6.6"]
+
+// W7-09 U3a (the fix of the breaker's #1): the N of `.down~(N)` and `.up~(N)` that reads a constant whose own unit failed
+// (a name not found, E0302; a cycle, E0312; a literal of another type, E0401) is an error with no diagnostic (§18.1:
+// "読めなかった部分は誤りの型として扱い、それを使う側には診断を出さない", R-499), at the head of the body, in a `par~`, in a
+// branch of `if~` and in an argument of an instance: only the errors of the constants are reported, no error of the flow
+// stage (no E0808, no E0200 of this version for the chain, whose N is in error) and no internal error.
+
+const BAD: U32 = nope                                        //~ E0302
+const CYC: U32 = CYC                                         //~ E0312
+const FLOAT: U32 = 1.5                                       //~ E0401
+
+pub flow lp(x: F32 at sample) -> F32 at sample {
+  x * 0.5 + prev~(x) * 0.5
+}
+
+pub flow down_at_the_head(x: F32 at sample) -> F32 at sample {
+  lp~(x).down~(BAD)
+}
+
+pub flow up_at_the_head(x: F32 at sample) -> F32 at sample {
+  lp~(x).up~(CYC) * 2.0
+}
+
+pub flow up_in_a_par(x: F32 at sample) -> F32 at sample {
+  (par~ i in 0 ..< 2 { lp~(x).up~(BAD) })[0]
+}
+
+pub flow down_in_a_branch_of_if_tilde(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  if~ c { lp~(x).down~(CYC) } else { 0.0 }
+}
+
+pub flow down_in_an_argument(x: F32 at sample) -> F32 at sample {
+  lp~(lp~(x).down~(FLOAT))
+}
+
+pub flow down_after_when(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  lp~(x).when~(c).down~(BAD)
+}
+
+pub flow up_before_reset_if(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  lp~(x).up~(CYC).reset_if~(c)
+}

@@ -91,10 +91,11 @@ impl Walker<'_> {
             true => self.flow_mark(e, callee, kind)?,
             false => self.call_outside(e, callee, kind, true)?,
         }
-        // The constant of a delay (`delay~(x, N)`, §11.4).
+        // The constant of a delay (`delay~(x, N)`, §11.4) and the N of a
+        // modifier (`.down~(N)`, §11.9).
         let constant = match self.out.paths.get(&super::named(self.ast, callee)) {
             Some(PathRes::FlowBuiltin(FlowBuiltin::Delay(d))) => d.const_index(),
-            _ => None,
+            _ => self.out.modifiers.get(&e).and_then(|m| m.modifier.ratio_op()).map(|_| 0),
         };
         // In a flow body, an `inout` or `move` argument is E0806 (R-342).
         // The past values an argument reads (§11.2, `flow_order.rs`).

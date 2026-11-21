@@ -101,6 +101,46 @@ pub(crate) fn is_builtin(name: &str) -> bool {
     FlowBuiltin::named(name).is_some()
 }
 
+/// A modifier of an instance (§11.9, §11.10): the closed list of their
+/// names, which the names stage looks up only after the call of an instance
+/// (S-556). The one table of them (D-15).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Modifier {
+    Down,
+    Up,
+    When,
+    ResetIf,
+}
+
+impl Modifier {
+    pub const ALL: [Modifier; 4] = [Modifier::Down, Modifier::Up, Modifier::When, Modifier::ResetIf];
+
+    /// The name (`down`); a call writes `~` after it (`.down~(…)`).
+    pub fn name(self) -> &'static str {
+        match self {
+            Modifier::Down => "down",
+            Modifier::Up => "up",
+            Modifier::When => "when",
+            Modifier::ResetIf => "reset_if",
+        }
+    }
+
+    pub fn named(name: &str) -> Option<Modifier> {
+        Modifier::ALL.into_iter().find(|m| m.name() == name)
+    }
+
+    /// The rate it gives (§11.9): `.down~(N)` the `sample / N` of the
+    /// caller, `.up~(N)` the `sample * N`; none of `when~` and `reset_if~`,
+    /// which keep it. Its one argument is then the N, a constant expression.
+    pub fn ratio_op(self) -> Option<onsa_syntax::ast::RatioOp> {
+        match self {
+            Modifier::Down => Some(onsa_syntax::ast::RatioOp::Div),
+            Modifier::Up => Some(onsa_syntax::ast::RatioOp::Mul),
+            Modifier::When | Modifier::ResetIf => None,
+        }
+    }
+}
+
 /// A built-in delay (§11.4): the one table of their names and arguments.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Delay {

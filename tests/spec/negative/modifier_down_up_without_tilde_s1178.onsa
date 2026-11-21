@@ -1,0 +1,26 @@
+// onsa.toml
+// [test]
+// spec = ["§2.2", "§11.10", "§18.1"]
+
+// W7-09 U3a/t, S-1178, provisional reading (1): `down` and `up` are in the closed list of the modifiers (§11.10) but are no reserved
+// words (§2.2: only `when` and `reset_if` are), so after the call of an instance a call written without the `~` is the call of a
+// method of the value that the instance gives, and the type of the output (`F32`) has no method of that name (E0413 of the type
+// stage), not the E0811 of `when` and `reset_if` (fixes/e0811_modifier_without_tilde.onsa). The open question is S-1178 (whether
+// the four names are E0811 whenever the receiver is an instance); drop this file if it is decided otherwise. One error per flow (P-01).
+
+pub flow lp(x: F32 at sample) -> F32 at sample {
+  x * 0.5 + prev~(x) * 0.5
+}
+
+pub flow down_without_a_tilde(p: F32 at block) -> F32 at sample {
+  lp~(p).down(4) at sample                          //~ E0413
+}
+
+pub flow up_without_a_tilde(p: F32 at block) -> F32 at sample {
+  lp~(p).up(2) at sample                            //~ E0413
+}
+
+pub flow down_after_a_modifier_without_a_tilde(p: F32 at block, c: Bool at block) -> F32 at sample {
+  let y = lp~(p).reset_if~(c).down(2)               //~ E0413
+  y at sample
+}

@@ -598,7 +598,8 @@ fn the_marks_of_the_calls_of_a_flow_body_are_one_table() {
         ("x.prev~(0.5)", E0812, false, true),
         ("g.y~(x)", E0812, false, true),
         ("g(x).y~(x)", E0812, false, true),
-        ("lp~(x).when~(x > 0.0)", E0812, false, true),
+        // A modifier on a value (§11.10); on an instance it is read (`modifiers.rs`).
+        ("x.when~(x > 0.0)", E0812, false, true),
         ("P~(x)", E0812, false, false),
         ("P.get~(P { a: x })", E0812, false, true),
         ("nope~(x)", E0302, false, false),

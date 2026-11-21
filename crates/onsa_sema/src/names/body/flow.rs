@@ -150,11 +150,15 @@ impl Walker<'_> {
                 Called::Value | Called::UnitVariant => Mark::Value,
                 Called::Other => Mark::NoFlow,
             },
-            // A chain whose names stop at a value, or no chain. A modifier
-            // of an instance (`lp~(x).when~(c)`: `when`, `reset_if`, `down`,
-            // `up`, §11.10) is a value here until W7-10 reads its table first.
+            // A chain whose names stop at a value, or no chain.
             None => Mark::Value,
         };
+        // A member of a value may be a modifier of an instance (§11.10).
+        if let Mark::Value = mark
+            && let Some(w) = self.modifier_mark(e, callee, kind)
+        {
+            return w;
+        }
         let (span, end) = (self.ast.expr(e).span, self.ast.expr(callee).span.end);
         // The mark is right after the callee (§2.6, §5.2; the syntax stage
         // reports one apart from it, E0020).

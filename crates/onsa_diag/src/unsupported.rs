@@ -124,6 +124,11 @@ features! {
     /// §11.3, §11.9: the Core of a flow with a periodic clock of a ratio
     /// (`sample / N`), which W7-16 lowers.
     MultirateFlows: Language, "building a flow with the clock `sample / N`", None;
+    /// §11.9: the rates of `.down~(N)` and `.up~(N)`, the clocks of their
+    /// chains (W7-09 U3b).
+    ModifierRates: Language, "the rates of the modifiers `.down~(N)` and `.up~(N)` of an instance", None;
+    /// §11.10: the meaning of `.when~(c)` and `.reset_if~(r)` (W7-10).
+    InstanceModifiers: Language, "the modifiers `.when~(c)` and `.reset_if~(r)` of an instance", None;
     /// §11.4, S-565: the time since `reset` in ticks (W7-09, R-288).
     SampleTick: Language, "the builtin `sample_tick()` of a flow", None;
     Iteration: Language, "iteration over types other than arrays, `Span`, `Buf` and `Array`", None;

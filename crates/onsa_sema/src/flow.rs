@@ -363,4 +363,8 @@ pub(crate) struct FlowCx {
     /// A constant expression read a constant whose unit failed (§18.1,
     /// R-499): no plan is made, with no diagnostic.
     unread: bool,
+    /// A chain of modifiers by its outer modifier, while the check has not
+    /// reached a modifier around it: the E0200 of its first modifier, none
+    /// when an N of the chain is in error (U3b, W7-10).
+    chains: HashMap<ExprId, Option<Diagnostic>>,
 }

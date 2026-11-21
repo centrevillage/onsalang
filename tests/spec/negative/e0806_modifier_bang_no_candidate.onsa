@@ -1,0 +1,39 @@
+// onsa.toml
+// [test]
+// spec = ["§2.6", "§11.2", "§11.10", "§18.1"]
+// fixes = 0
+
+// W7-09 U3a/t, S-811, S-1086: a modifier called with `!` is E0806 in a flow body whatever its receiver is, and it has the candidate
+// `!` to `~` only when the receiver is an instance and the name is one of the closed list (fixes/e0806_modifier_bang.onsa); a
+// receiver that is a value (an input, a name bound by `let`, the result of a function) and a name that the list has not
+// (`foo`, on an instance or on a value) have no candidate (`fixes = 0` checks that no diagnostic of the file has one). One error per
+// flow (P-01).
+
+pub rt fn g(x: F32) -> F32 {
+  x
+}
+
+pub flow lp(x: F32 at sample) -> F32 at sample {
+  x * 0.5 + prev~(x) * 0.5
+}
+
+pub flow when_on_an_input(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  x.when!(c)                                        //~ E0806
+}
+
+pub flow down_on_a_let_binding(x: F32 at sample) -> F32 at sample {
+  let s = lp~(x)
+  s.down!(4)                                        //~ E0806
+}
+
+pub flow up_on_the_result_of_a_function(x: F32 at sample) -> F32 at sample {
+  g(x).up!(2)                                       //~ E0806
+}
+
+pub flow unlisted_name_on_an_instance(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  lp~(x).foo!(c)                                    //~ E0806
+}
+
+pub flow unlisted_name_on_a_value(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  x.foo!(c)                                         //~ E0806
+}

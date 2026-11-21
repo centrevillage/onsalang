@@ -1,0 +1,9 @@
+// The module whose flows are named like the modifiers (`down`, `up`): `ops.down~(x)` in main.onsa is the call of this flow.
+
+pub flow down(x: F32 at sample) -> F32 at sample {
+  x * 0.5 + prev~(x) * 0.5
+}
+
+pub flow up(x: F32 at sample) -> F32 at sample {
+  x * 2.0
+}

@@ -1,0 +1,5 @@
+flow lp
+flow fold2
+pub flow s(p:F32 at block)->F32 at sample{
+  fold2~(lp~(p).down~(2).up~(4))
+}

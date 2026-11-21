@@ -1,0 +1,35 @@
+// onsa.toml
+// [test]
+// spec = ["§11.4", "§11.9", "§11.10", "§18.1"]
+
+// W7-09 U3a/t, S-1090, provisional reading (1): a modifier takes one argument (the N of `down` and `up`, the condition of `when` and
+// `reset_if`, §11.9 and §11.10), and a call with another number of arguments is E0412 of the type stage, as the arguments of a built-in
+// delay are (`delay~(x)`). The open question is the code (S-1090); drop this file if another is decided. One error per flow (P-01).
+
+pub flow lp(x: F32 at sample) -> F32 at sample {
+  x * 0.5 + prev~(x) * 0.5
+}
+
+pub flow down_with_no_argument(p: F32 at block) -> F32 at sample {
+  lp~(p).down~() at sample                          //~ E0412
+}
+
+pub flow down_with_two_arguments(p: F32 at block) -> F32 at sample {
+  lp~(p).down~(2, 4) at sample                      //~ E0412
+}
+
+pub flow up_with_no_argument(p: F32 at block) -> F32 at sample {
+  lp~(p).up~() at sample                            //~ E0412
+}
+
+pub flow when_with_no_argument(x: F32 at sample) -> F32 at sample {
+  lp~(x).when~()                                    //~ E0412
+}
+
+pub flow when_with_two_arguments(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  lp~(x).when~(c, c)                                //~ E0412
+}
+
+pub flow reset_if_with_no_argument(x: F32 at sample) -> F32 at sample {
+  lp~(x).reset_if~()                                //~ E0412
+}
