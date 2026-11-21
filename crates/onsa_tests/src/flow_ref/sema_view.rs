@@ -417,13 +417,22 @@ impl Stage {
     pub const Sample: Stage = Stage::Tick(0);
 }
 
-/// The stage a clock is made in; the clocks no declaration makes today (W7-09, W7-11, W7-17) are `Unavailable`.
+/// The stage a clock is made in; the clocks of events (W7-11, W7-17) are `Unavailable`. A tick of any ratio has its own: `sample / N` is
+/// `Tick(-k)` and `sample * N` `Tick(k)` (§11.9).
 pub(super) fn stage_of(clock: Clock) -> Result<Stage, Fault> {
     match clock {
         Clock::Init => Ok(Stage::Init),
         Clock::Block => Ok(Stage::Block),
-        Clock::SAMPLE => Ok(Stage::Sample),
+        Clock::Tick(onsa_sema::clock::Ratio(r)) => Ok(Stage::Tick(r)),
         _ => Err(Fault::Unavailable("a clock of no stage the evaluator has")),
+    }
+}
+
+/// The ratio `r` of the tick an input is declared at, as a caller reads it (`sample * 2^r`, §11.9): `None` for the parameter kinds.
+pub(super) fn input_ratio(input: &FlowInput) -> Option<i32> {
+    match input.caller_clock() {
+        Clock::Tick(onsa_sema::clock::Ratio(r)) => Some(r),
+        _ => None,
     }
 }
 
@@ -448,7 +457,7 @@ pub fn clock_stage(name: &str) -> Option<Stage> {
     ClockName::of_name(name).map(name_stage)
 }
 
-/// The clock of the output of a flow (§11.3), as its declaration made it.
+/// The clock of the output of a flow (§11.3), as its declaration made it: `sample * 2^r` for a caller to read (§11.9).
 pub fn output_stage(decl: &FlowDef) -> Result<Stage, Fault> {
     stage_of(decl.out_clock)
 }

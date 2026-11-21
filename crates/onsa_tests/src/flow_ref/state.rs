@@ -16,10 +16,12 @@ use onsa_syntax::ast::{Arg, CallKind, ExprId, ExprKind};
 
 use super::call::parts;
 use super::expr::{Eval, Frame, LOW_STACK, Stop, evaluates};
-use super::flow::{Ctx, Inst, Plans, enter, run_frame};
-use super::rate::{Chain, at_callers_time, chain_of, frames, time_of};
+use super::flow::{Ctx, Inst, Plans, enter, run_frame, run_ticks};
+use super::rate::{
+    Chain, Feed, Out, at_callers_time, chain_of, feed, frames, on_tick, out_of, out_ratio, phase, time_of,
+};
 use super::scalar::{Fault, Fault::Internal};
-use super::sema_view::{Called, Stage, input_stage};
+use super::sema_view::{Called, Stage, input_ratio, input_stage};
 use super::value::{IntKind, Scalar, Shape, Value};
 
 /// The places an instance takes in the limit of the tree (`Limits::most`): some 100 thousand instances, not 2^20.
@@ -30,11 +32,20 @@ const INSTANCE: usize = 8;
 pub(super) const SAVED: usize = 0;
 const D: usize = 1;
 
-/// Where a node of the state is: the call that makes it, and the replica of each `par~` it is in (U2).
+/// Where a node of the state is: the call that makes it (for the ring of a gather, the argument it takes, which may be a delay itself: `gather` tells them apart), and the
+/// replica of each `par~` it is in (U2).
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct NodeKey {
     pub call: ExprId,
     pub replicas: Vec<u32>,
+    pub gather: bool,
+}
+
+impl NodeKey {
+    /// The ring that the argument `arg` of a chain gathers, in the replicas `replicas`.
+    fn gathered(arg: ExprId, replicas: &[u32]) -> NodeKey {
+        NodeKey { call: arg, replicas: replicas.to_vec(), gather: true }
+    }
 }
 
 /// What a delay holds: `prev~` its last value, the others a ring of values and the place `w` that is written next.
@@ -77,7 +88,7 @@ struct Save {
 }
 
 /// What an evaluation of a flow body holds besides its locals: the state, what the delays save this tick, the time it is
-/// at (an instance reads its caller's; W7-09 gives `.down~` and `.up~` another), the places of the tree made so far and
+/// at (an instance reads its caller's, one that a chain runs the time of its rate, `rate::time_of`), the places of the tree made so far and
 /// the plans of its flows.
 pub struct Run {
     pub state: InstState,
@@ -96,8 +107,16 @@ impl Run {
     }
 }
 
+/// What the arguments of a chain give its instance: the inputs of `sample` with how each is fed, and the inputs of the ticks, by name.
+type ChainInputs<'a> = (Vec<(&'a str, Feed, Value)>, Vec<(&'a str, Value)>);
+
 enum Node {
     Delay(Delay),
+    /// The ring of the `frames` values of the argument (each of `per` elements for a `sample * per`) that an input of a `.down~` chain gathers (§11.9): at the argument.
+    Gather {
+        frames: usize,
+        per: usize,
+    },
     /// The flow, and the ratio of the chain of modifiers it is the head of (0 for none).
     Instance(DefId, i32),
 }
@@ -141,8 +160,7 @@ impl<'a> Frame<'a> {
             ExprKind::Call { args, .. } => match self.body.called(e).map_err(here)? {
                 Called::Builtin(FlowBuiltin::Delay(d)) => self.delay(e, d, args, at),
                 Called::Builtin(FlowBuiltin::SampleRate) => Ok(Value::F32(self.time(at)?.sample_rate)),
-                // SPEC-GAP(S-1127): the first frame after `init` or `reset` reads 0 (the time since then, §11.4); the other
-                // reading is that it reads 1, the ticks counted when the frame is made.
+                // S-1127 (1), §11.4: the first tick after `init` or `reset` reads 0, and each tick adds 1.
                 Called::Builtin(FlowBuiltin::SampleTick) => Ok(Value::int(IntKind::U32, self.time(at)?.tick.into())),
                 Called::Flow(def) => self.instance(e, def, at),
             },
@@ -152,7 +170,7 @@ impl<'a> Frame<'a> {
 
     /// The node of the call `call` here: in the replica of each `par~` around it (U2).
     pub(super) fn key(&self, call: ExprId) -> NodeKey {
-        NodeKey { call, replicas: self.run.as_ref().map(|r| r.replicas.clone()).unwrap_or_default() }
+        NodeKey { call, replicas: self.run.as_ref().map(|r| r.replicas.clone()).unwrap_or_default(), gather: false }
     }
 
     /// `go` inside the replicas `replicas` of the `par~`s (after the ones it is already in) with the bindings `binds` (the index
@@ -245,6 +263,18 @@ impl<'a> Frame<'a> {
                 return Err(here(Fault::Unavailable("a modifier of a delay")));
             };
             args.iter().try_for_each(|a| self.nodes(a.expr, out))?;
+            let decl = self.body.view.flow(def).map_err(here)?;
+            if !at_callers_time(chain.ratio) {
+                out_of(out_ratio(decl).map_err(here)?, chain.ratio).map_err(here)?;
+                for (i, a) in decl.inputs.iter().zip(args) {
+                    let k = input_ratio(i);
+                    if let Some(Feed::Gather { frames, per }) =
+                        k.map(|k| feed(k, chain.ratio)).transpose().map_err(here)?
+                    {
+                        out.push(Site::Node(a.expr, Node::Gather { frames, per }, args.as_slice()));
+                    }
+                }
+            }
             out.push(Site::Node(chain.head, Node::Instance(def, chain.ratio), args.as_slice()));
             return Ok(());
         }
@@ -283,6 +313,7 @@ impl<'a> Frame<'a> {
         for site in sites {
             match site {
                 Site::Node(e, Node::Delay(d), args) => self.make_cell(*e, *d, args)?,
+                Site::Node(e, Node::Gather { frames, per }, _) => self.make_gather(*e, *frames, *per)?,
                 Site::Node(e, Node::Instance(def, rate), _) => self.make_child(*e, *def, *rate)?,
                 Site::Par(e, inner) => drop(self.replicate(*e, |_| 0, |f| f.build(inner))?),
             }
@@ -337,6 +368,22 @@ impl<'a> Frame<'a> {
         let store = if d == Delay::Prev { Store::Last(init) } else { Store::Ring { buf: vec![init; n], w: 0 } };
         let key = self.key(e);
         let run = self.run.as_mut().ok_or(here(Fault::Unavailable("a delay outside an instance of a flow")))?;
+        run.state.cells.insert(key, Cell { initial: store.clone(), current: store });
+        Ok(())
+    }
+
+    /// The node of the argument `e` that an input of `sample * N` gathers: a ring of `frames` values of it (an array of `per` of its type for a `sample * per`), `T.default()` at first (§11.9:
+    /// position 0 has no sample before it).
+    fn make_gather(&mut self, e: ExprId, frames: usize, per: usize) -> Result<(), Stop> {
+        let at = self.body.ast.expr(e).span;
+        let here = |fault| Stop { fault, at };
+        let shape = self.shape(self.body.ty(e).map_err(here)?, at)?;
+        self.hold(frames.checked_mul(per).and_then(|n| n.checked_mul(shape.places())), at)?;
+        let one = shape.default_value().ok_or(here(Internal("a gathered type with no default")))?;
+        let init = if per > 1 { Value::Array(vec![one; per]) } else { one };
+        let store = Store::Ring { buf: vec![init; frames], w: 0 };
+        let key = NodeKey::gathered(e, &self.key(e).replicas);
+        let run = self.run.as_mut().ok_or(here(Internal("no run")))?;
         run.state.cells.insert(key, Cell { initial: store.clone(), current: store });
         Ok(())
     }
@@ -411,9 +458,23 @@ impl<'a> Frame<'a> {
         kept.map(|()| value)
     }
 
-    /// A call of a flow (§11.5): its instance runs a frame on the `sample` arguments, and its output is the value.
+    /// A call of a flow (§11.5): its instance runs a frame on the `sample` arguments, and its output is the value. One whose output is a tick (`-> F32 at (sample / 4)`)
+    /// is read at that tick: the call is evaluated there, its stage of the tick runs here with its inputs (the `sample` stage of the instance runs at each frame, `sample_nodes`).
     fn instance(&mut self, e: ExprId, def: DefId, at: Span) -> Eval {
-        let decl = self.body.view.flow(def).map_err(|fault| Stop { fault, at })?;
+        let here = |fault| Stop { fault, at };
+        let decl = self.body.view.flow(def).map_err(here)?;
+        let m = out_ratio(decl).map_err(here)?;
+        if m < 0 {
+            let on = on_tick(self.time(at)?, m);
+            let ticks = if on { self.inputs_of(e, decl, Stage::Tick(m))? } else { Vec::new() };
+            let ticks: Vec<(&str, &Value)> = ticks.iter().map(|(n, v)| (*n, v)).collect();
+            return self.in_child(&self.key(e), |f, inst, decl| {
+                if on {
+                    enter(f, inst, decl, Stage::Tick(m), &ticks)?;
+                }
+                Ok(inst.out.clone())
+            });
+        }
         let given = self.inputs_of(e, decl, Stage::Sample)?;
         let given: Vec<(&str, &Value)> = given.iter().map(|(n, v)| (*n, v)).collect();
         self.in_child(&self.key(e), |f, inst, decl| {
@@ -422,9 +483,11 @@ impl<'a> Frame<'a> {
         })
     }
 
-    /// A chain of modifiers called (§11.9): the instance of its head runs at the rate of the chain (its arguments are evaluated here, once, at the time of
-    /// this stage), in the time `times` gives it: one frame at 1/N for `.down~(N)`, N frames for `.up~(N)`. The value is its output: the last one of the
-    /// N frames, for `.up~(N)` (a value of `sample * N` is read only by a conversion flow, which takes the array of them, U2b).
+    /// A chain of modifiers called (§11.9): the instance of its head runs at the rate of the chain, in the time `time_of` gives it: one frame at 1/N for `.down~(N)`
+    /// (when the tick is on), N frames for `.up~(N)`. The arguments are read in the frame of the call: an input of `sample * N` of a `.down~` chain takes the values its
+    /// caller's frames had before this tick (the ring), one of `sample` of `.up~(N)` the j-th of the array its argument is at the j-th run. The value is the output of the
+    /// run, an array of the N of them for `.up~(N)`, and for an output of `sample * N` of a `.down~` chain the elements of the array of the last tick that this frame of the caller reads.
+    /// An output at a tick (`sample / N`) is read at its tick: the ticks of the instance up to it run here, and the rest of its frames at each frame of the chain (`sample_nodes`).
     fn chained(&mut self, chain: Chain, at: Span) -> Eval {
         let here = |fault| Stop { fault, at };
         let Called::Flow(def) = self.body.called(chain.head).map_err(here)? else {
@@ -433,23 +496,174 @@ impl<'a> Frame<'a> {
         if at_callers_time(chain.ratio) {
             return self.instance(chain.head, def, at);
         }
-        let decl = self.body.view.flow(def).map_err(here)?;
-        let given = self.inputs_of(chain.head, decl, Stage::Sample)?;
-        let given: Vec<(&str, &Value)> = given.iter().map(|(n, v)| (*n, v)).collect();
-        let caller = self.time(at)?;
-        self.in_child(&self.key(chain.head), |f, inst, decl| {
-            for j in 0..frames(chain.ratio) {
-                f.run.as_mut().ok_or(Stop { fault: Internal("no run"), at })?.ctx = time_of(caller, chain.ratio, j);
-                run_frame(f, inst, decl, &given)?;
+        let (decl, r, caller, key) =
+            (self.body.view.flow(def).map_err(here)?, chain.ratio, self.time(at)?, self.key(chain.head));
+        let m = out_ratio(decl).map_err(here)?;
+        let out = out_of(m, r).map_err(here)?;
+        if m < 0 {
+            if on_tick(caller, m + r) {
+                self.chain_part(&key, def, r, |x| x <= m, false)?;
             }
-            Ok(inst.out.clone())
+            return self.held(&key, out, caller, at);
+        }
+        if r < 0 && !on_tick(caller, r) {
+            return self.held(&key, out, caller, at);
+        }
+        let (sample, ticks) = self.chain_inputs(&key, decl, r, |_| true, true)?;
+        let mut outs = Vec::new();
+        for j in 0..frames(r) {
+            let given: Vec<(&str, Value)> = sample
+                .iter()
+                .map(|(n, how, v)| match (how, v) {
+                    (Feed::Each, Value::Array(vs)) => vs.get(j as usize).map(|v| (*n, v.clone())),
+                    _ => Some((*n, v.clone())),
+                })
+                .collect::<Option<_>>()
+                .ok_or(here(Internal("an array of `sample * N` that is not N long")))?;
+            outs.push(self.in_child(&key, |f, inst, decl| {
+                f.run.as_mut().ok_or(Stop { fault: Internal("no run"), at })?.ctx = time_of(caller, r, j);
+                run_frame(f, inst, decl, &ticks, &given)?;
+                Ok(inst.out.clone())
+            })?);
+        }
+        match out {
+            Out::All => Ok(Value::Array(outs)),
+            _ => self.held(&key, out, caller, at),
+        }
+    }
+
+    /// The values the arguments of the chain at `key` (ratio `r`) give to the inputs of `decl`: for `sample` (when `sample`) with how each one is fed, and for the stage of each
+    /// tick that `ticks` takes, by name. They are read here, in the frame of the call.
+    fn chain_inputs(
+        &mut self,
+        key: &NodeKey,
+        decl: &'a FlowDef,
+        r: i32,
+        ticks: impl Fn(i32) -> bool,
+        sample: bool,
+    ) -> Result<ChainInputs<'a>, Stop> {
+        let (ast, at) = (self.body.ast, self.body.ast.expr(key.call).span);
+        let here = |fault| Stop { fault, at };
+        let ExprKind::Call { args, .. } = &ast.expr(key.call).kind else {
+            return Err(here(Internal("a chain with no head call")));
+        };
+        let (mut given, mut slow) = (Vec::new(), Vec::new());
+        for (i, a) in decl.inputs.iter().zip(args) {
+            let (stage, k) = (input_stage(i).map_err(here)?, input_ratio(i));
+            let how = k.map_or(Ok(Feed::Plain), |k| feed(k, r)).map_err(here)?;
+            let name = i.name.as_str();
+            match (stage, how) {
+                (Stage::Sample, _) if !sample => {}
+                (Stage::Sample, Feed::Gather { per, .. }) => given.push((name, how, self.ring(key, a.expr, per, at)?)),
+                (Stage::Sample, _) => given.push((name, how, self.eval_staged(key.call, a.expr, stage)?)),
+                (Stage::Tick(x), _) if ticks(x) => slow.push((name, self.eval_staged(key.call, a.expr, stage)?)),
+                _ => {}
+            }
+        }
+        Ok((given, slow))
+    }
+
+    /// The part of one frame of the instance of the chain `.down~` at `key` (ratio `r`) that the ticks `ticks` say, and its `sample` stage when `sample`, read at this time of its caller.
+    fn chain_part(
+        &mut self,
+        key: &NodeKey,
+        def: DefId,
+        r: i32,
+        ticks: impl Fn(i32) -> bool + Copy,
+        sample: bool,
+    ) -> Result<(), Stop> {
+        let at = self.body.ast.expr(key.call).span;
+        let decl = self.body.view.flow(def).map_err(|fault| Stop { fault, at })?;
+        let (given, slow) = self.chain_inputs(key, decl, r, ticks, sample)?;
+        let given: Vec<(&str, &Value)> = given.iter().map(|(n, _, v)| (*n, v)).collect();
+        self.in_child(key, |f, inst, decl| {
+            run_ticks(f, inst, decl, &slow, ticks)?;
+            if sample {
+                enter(f, inst, decl, Stage::Sample, &given)?;
+            }
+            Ok(())
         })
+    }
+
+    /// What the chain at `key` gives between its runs: the output of the last one, or for an output dealt to the frames after a tick, the elements of this frame (§11.9).
+    fn held(&self, key: &NodeKey, out: Out, caller: Ctx, at: Span) -> Eval {
+        let here = |fault| Stop { fault, at };
+        let run = self.run.as_ref().ok_or(here(Internal("no run")))?;
+        let last = &run.state.children.get(key).ok_or(here(Internal("an instance with no state")))?.out;
+        match (out, last) {
+            (Out::Dealt { r, per }, Value::Array(vs)) => {
+                let from = phase(caller, r) as usize * per;
+                match vs.get(from..from + per) {
+                    Some([one]) => Ok(one.clone()),
+                    Some(part) => Ok(Value::Array(part.to_vec())),
+                    None => Err(here(Internal("a dealt array that is not `sample * N` long"))),
+                }
+            }
+            (Out::Dealt { .. }, _) => Err(here(Internal("a dealt output that no tick has made"))),
+            (_, v) => Ok(v.clone()),
+        }
+    }
+
+    /// The values the gather of the argument `arg` of the chain at `key` holds, the oldest first (the last is the one of the frame before): each frame's `per` elements in a row.
+    fn ring(&self, key: &NodeKey, arg: ExprId, per: usize, at: Span) -> Eval {
+        let here = |fault| Stop { fault, at };
+        let at_arg = NodeKey::gathered(arg, &key.replicas);
+        let run = self.run.as_ref().ok_or(here(Internal("no run")))?;
+        let Some(Store::Ring { buf, w }) = run.state.cells.get(&at_arg).map(|c| &c.current) else {
+            return Err(here(Internal("a gather with no ring")));
+        };
+        let mut all = Vec::with_capacity(buf.len() * per);
+        for v in (0..buf.len()).map(|i| &buf[(w + i) % buf.len()]) {
+            match v {
+                Value::Array(vs) if per > 1 => all.extend_from_slice(vs),
+                v if per == 1 => all.push(v.clone()),
+                _ => return Err(here(Internal("a gathered value that is not `sample * N` long"))),
+            }
+        }
+        Ok(Value::Array(all))
+    }
+
+    /// What the instances this one calls do at each `sample` frame of it, after its own stage (§11.9): the argument that a gather takes is stored at the end of the frame (the
+    /// frame after a tick reads it, the position's own value is not in), and an instance with an output at a tick runs its `sample` stage (its tick is read where the call is).
+    pub(super) fn sample_nodes(&mut self, whole: Span) -> Result<(), Stop> {
+        let run = self.run.as_ref().ok_or(Stop { fault: Internal("a sample stage with no run"), at: whole })?;
+        let calls: Vec<_> =
+            run.state.children.iter().map(|(k, c)| (k.clone(), c.def, c.rate, c.scope.clone())).collect();
+        for (key, def, rate, scope) in calls {
+            let at = self.body.ast.expr(key.call).span;
+            let here = |fault| Stop { fault, at };
+            let decl = self.body.view.flow(def).map_err(here)?;
+            let ExprKind::Call { args, .. } = &self.body.ast.expr(key.call).kind else { continue };
+            if at_callers_time(rate) {
+                if out_ratio(decl).map_err(here)? < 0 {
+                    self.with_bindings(&key.replicas, scope, |f| {
+                        let given = f.inputs_of(key.call, decl, Stage::Sample)?;
+                        let given: Vec<(&str, &Value)> = given.iter().map(|(n, v)| (*n, v)).collect();
+                        f.in_child(&key, |f, inst, decl| enter(f, inst, decl, Stage::Sample, &given))
+                    })?;
+                }
+                continue;
+            }
+            for (i, a) in decl.inputs.iter().zip(args) {
+                if let Some(Feed::Gather { .. }) = input_ratio(i).map(|k| feed(k, rate)).transpose().map_err(here)? {
+                    let run = self.run.as_mut().ok_or(here(Internal("no run")))?;
+                    let key = NodeKey::gathered(a.expr, &key.replicas);
+                    run.saves.push(Save { key, expr: a.expr, scope: scope.clone() });
+                }
+            }
+            // The rest of the frame of a chain whose output is a tick (read at it, `chained`): the faster ticks, and `sample`.
+            let m = out_ratio(decl).map_err(here)?;
+            if m < 0 && on_tick(self.time(at)?, rate) {
+                self.with_bindings(&key.replicas, scope, |f| f.chain_part(&key, def, rate, |x| x > m, true))?;
+            }
+        }
+        Ok(())
     }
 
     /// The stage of the slower tick `r` of the instances this one calls at its own time (a call with no modifier, or a chain of ratio 0): their ticks
     /// are in the stage of this one (S-1088: `ctl` of `lin_up32~(ctl~(avg_down32~(x)).down~(32))` reads the new average at the same position). They
-    /// run after the steps of this stage: what they make is no input of a step of a tick, which has only the parameter kinds to read (a panic
-    /// is the one thing whose order shows, the place of the call being the order of the spec).
+    /// run after the steps of this stage, with the inputs of the tick that their arguments have (a panic is the one thing whose order shows, the place of the call
+    /// being the order of the spec). The tick that is the output of an instance is run where the call is read (`instance`).
     pub(super) fn tick_children(&mut self, r: i32, whole: Span) -> Result<(), Stop> {
         let run = self.run.as_ref().ok_or(Stop { fault: Internal("a tick stage with no run"), at: whole })?;
         let calls: Vec<_> = run
@@ -457,10 +671,19 @@ impl<'a> Frame<'a> {
             .children
             .iter()
             .filter(|(_, c)| at_callers_time(c.rate) && c.slow.contains(&r))
-            .map(|(k, _)| k.clone())
+            .map(|(k, c)| (k.clone(), c.def, c.scope.clone()))
             .collect();
-        for key in calls {
-            self.in_child(&key, |f, inst, decl| enter(f, inst, decl, Stage::Tick(r), &[] as &[(&str, Value)]))?;
+        for (key, def, scope) in calls {
+            let at = self.body.ast.expr(key.call).span;
+            let decl = self.body.view.flow(def).map_err(|fault| Stop { fault, at })?;
+            if out_ratio(decl).map_err(|fault| Stop { fault, at })? == r {
+                continue;
+            }
+            self.with_bindings(&key.replicas, scope, |f| {
+                let given = f.inputs_of(key.call, decl, Stage::Tick(r))?;
+                let given: Vec<(&str, &Value)> = given.iter().map(|(n, v)| (*n, v)).collect();
+                f.in_child(&key, |f, inst, decl| enter(f, inst, decl, Stage::Tick(r), &given))
+            })?;
         }
         Ok(())
     }

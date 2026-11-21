@@ -72,6 +72,8 @@ mod branch_tests;
 #[cfg(test)]
 mod call_tests;
 #[cfg(test)]
+mod conversion_tests;
+#[cfg(test)]
 mod data_tests;
 #[cfg(test)]
 mod expr_tests;

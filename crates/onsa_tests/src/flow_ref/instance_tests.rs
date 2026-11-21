@@ -264,10 +264,9 @@ flow given(x: F32 at sample) -> F32 at sample { scale~(x, sample_rate()) }";
 #[test]
 fn sample_tick_counts_the_frames_since_init_and_reset_and_a_child_reads_the_same() {
     // §11.4: `sample_tick()` is the time since `reset` in ticks, a `U32` that goes round at 2^32, 0 at `init` and at `reset`
-    // and not touched by anything else; in a child it is the time of the instance that calls (no `.down~` yet). The first
+    // and not touched by anything else; in a child it is the time of the instance that calls (`.down~` and `.up~` give it their own, `multirate_tests`). The first
     // frame reads 0 (a gap of the spec, reported with this unit). A call of 3 frames reads 0, 1, 2, the next of 2 reads
     // 3, 4, a call of 0 frames none; after `reset` 0, 1. From 2^32 - 1 the frames read 4294967295, 0, 1. `sample_tick()` is of `sample`.
-    // The check of this version gives it E0200 and the call no type: the tables are not whole, so this waits for W7-09.
     let src = "flow t(x: F32 at sample) -> U32 at sample { sample_tick() }
 flow c(x: F32 at sample) -> U32 at sample { t~(x) }
 flow clk(x: F32 at sample) -> U32 at sample {

@@ -369,20 +369,24 @@ fn a_panic_of_a_part_of_a_tick_is_of_the_frame_of_the_tick() {
 }
 
 #[test]
-fn a_loop_whose_clock_is_a_tick_is_not_evaluated_and_says_so() {
-    // §11.3: a loop has the clock that enters from outside, and one that a tick enters through no `at` ticks with `sample / 4`: c = 0, 4, ... The evaluator has not
-    // that form and stops with `Unavailable` at `init` (the plan), where a delay that ticked with `sample` would give another series without saying so. The tick may
-    // enter as the second operand, as a name, or as the delay's own argument.
+fn a_loop_whose_clock_is_a_tick_ticks_with_it() {
+    // §11.3: a loop has the clock that enters from outside, and one that a tick enters through no `at` ticks with `sample / 4`: c = 0, 4, 8, and its delay counts those ticks. The tick may
+    // enter as the second operand, as a name, or as the delay's own argument. `lf` (`prev~(p at (sample / 4))`, init 0) is 0 at c = 0, then the p of the tick before: p = 2, 5, 7 for calls of
+    // 4 frames gives 0, 2, 5. `s = prev~(^s) + lf` adds it to the `s` of the tick before: 0, 2, 7, each held 4 frames (`s at sample`). `s = prev~(lf + ^s)` is the `lf + s` of the tick before: 0
+    // (nothing before), 0 (c = 0 stored 0 + 0), 2 (c = 4 stored 2 + 0): 0 0 0 0 0 0 0 0 2 2 2 2.
     let loops = [
-        "let s = prev~(^s) + (prev~(p at (sample / 4)))",
-        "let lf = prev~(p at (sample / 4))\n  let s = prev~(^s) + lf",
-        "let lf = prev~(p at (sample / 4))\n  let s = prev~(lf + ^s)",
+        ("let s = prev~(^s) + (prev~(p at (sample / 4)))", [0.0, 2.0, 7.0]),
+        ("let lf = prev~(p at (sample / 4))\n  let s = prev~(^s) + lf", [0.0, 2.0, 7.0]),
+        ("let lf = prev~(p at (sample / 4))\n  let s = prev~(lf + ^s)", [0.0, 0.0, 2.0]),
     ];
-    for body in loops {
+    for (body, ticks) in loops {
         let src = format!("flow lp(p: F32 at block) -> F32 at sample {{\n  {body}\n  s at sample\n}}");
-        let stopped =
-            with_checked(&src, true, |a| Instance::init(View::new(a), def_named(a, "lp"), 48000.0, &[], None).err());
-        assert!(matches!(stopped.map(|s| s.fault), Some(Fault::Unavailable(_))), "{body}");
+        let given = vec![(p(2.0), 4), (p(5.0), 4), (p(7.0), 4)];
+        let want: Vec<f32> = ticks.iter().flat_map(|v| [*v; 4]).collect();
+        same(&f32s(&calls(&src, "lp", vec![], given)), &want);
+        // §13.4: not what the calls are cut at.
+        let given = vec![(p(2.0), 3), (p(2.0), 1), (p(5.0), 4), (p(7.0), 4)];
+        same(&f32s(&calls(&src, "lp", vec![], given)), &want);
     }
 }
 
