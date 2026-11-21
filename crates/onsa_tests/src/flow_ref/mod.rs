@@ -90,6 +90,8 @@ mod multirate_tests;
 #[cfg(test)]
 mod pattern_tests;
 #[cfg(test)]
+mod port_table_tests;
+#[cfg(test)]
 mod probe_tests;
 #[cfg(test)]
 mod render_tests;
