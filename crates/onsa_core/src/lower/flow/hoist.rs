@@ -104,7 +104,7 @@ pub(super) fn writes(
             let done = writes(lw, cx, info, *body, s, &elem, &mut b);
             cx.flow.as_mut().unwrap().scopes.pop();
             done?;
-            out.push(r.each(span, b));
+            out.push(r.each(cx, span, b));
         }
         AK::Par { .. } => {}
         _ => {

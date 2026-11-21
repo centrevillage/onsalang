@@ -78,7 +78,7 @@ pub(crate) fn lower_flow_expr(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId) -> R<O
             let v = lower_expr(lw, cx, *body)?;
             assign(&mut loop_body, &index(arr_e.clone(), idx)?, v)?;
             cx.flow.as_mut().unwrap().scopes.pop();
-            stmts.push(r.each(span, loop_body));
+            stmts.push(r.each(cx, span, loop_body));
             arr_e
         }
     };

@@ -126,14 +126,14 @@ impl Replicas {
     }
 
     /// The loop over them, of the variable of the `par~`, with the body `stmts`.
-    pub(super) fn each(&self, span: Span, mut stmts: Vec<Stmt>) -> Stmt {
+    pub(super) fn each(&self, cx: &FnCx, span: Span, mut stmts: Vec<Stmt>) -> Stmt {
         let var = LocalId(self.var.0);
         // With no `k`, `from + count` fits in `U32` ([`replica_loop`], the one maker).
         let Some(k) = self.k else {
             let (from, to) = (u32_lit(span, self.from), u32_lit(span, self.from + self.count));
             return stmt(span, StmtKind::ForRange(var, from, to, Block { stmts, value: None }));
         };
-        let at = checked_binary(BinOp::Add, u32_lit(span, self.from), Expr::new(Ty::u32(), span, ExprKind::Local(k)));
+        let at = checked_binary(BinOp::Add, u32_lit(span, self.from), self.index(cx, span));
         stmts.insert(0, stmt(span, StmtKind::Let(var, at)));
         let (zero, count) = (u32_lit(span, 0), u32_lit(span, self.count));
         stmt(span, StmtKind::ForRange(k, zero, count, Block { stmts, value: None }))
