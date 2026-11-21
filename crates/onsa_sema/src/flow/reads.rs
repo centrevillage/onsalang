@@ -46,9 +46,8 @@ struct Marker<'a> {
     body: &'a BodyInfo,
     clocks: &'a Walked,
     choose: Choose<'a>,
-    /// The walk had a diagnostic or did not go into a chain of modifiers:
-    /// it did not record the nodes it did not reach (in a branch, in
-    /// `match~`, in the chain).
+    /// The walk had a diagnostic: it did not record the nodes it did not
+    /// reach (in a branch, in `match~`).
     partial: bool,
     non_rt: &'a HashMap<ExprId, bool>,
     /// The number of the `let`s, the `consumer` of the output.
@@ -111,7 +110,7 @@ pub(super) fn mark_all(
     walked: &Walked,
     lets: &[FlowLet],
 ) -> Marked {
-    let nodes: HashSet<ExprId> = cx.calls.iter().map(|c| c.expr).collect();
+    let nodes = cx.node_exprs();
     let sample_rate: HashSet<ExprId> = cx.sample_rate_calls.iter().copied().collect();
     let choose = Choose { a, ast, body, clocks: &walked.info, nodes: &nodes, sample_rate: &sample_rate };
     let recorded = walked.recorded.iter().enumerate();
@@ -123,7 +122,7 @@ pub(super) fn mark_all(
         body,
         clocks: walked,
         choose,
-        partial: walked.diag.is_some() || walked.skipped,
+        partial: walked.diag.is_some(),
         non_rt: &walked.non_rt,
         lets: lets.len(),
         consumer: lets.len(),
@@ -329,7 +328,10 @@ impl Marker<'_> {
                 }
             }
             ExprKind::Call { callee, args, .. } => {
-                if self.choose.nodes.contains(&e) {
+                // A modifier: its chain is its head's node (§11.9).
+                if let Some(&Some(receiver)) = self.choose.nodes.get(&e) {
+                    self.mark(receiver, at, g);
+                } else if self.choose.nodes.contains_key(&e) {
                     let clocks = self.clocks;
                     let Some(&k) = clocks.node_of.get(&e) else {
                         if self.partial {

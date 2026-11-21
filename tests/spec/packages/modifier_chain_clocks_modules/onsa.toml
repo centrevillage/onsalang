@@ -1,0 +1,3 @@
+[package]
+name = "modifier_chain_clocks_modules"
+edition = "2026"

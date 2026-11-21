@@ -194,3 +194,25 @@ pub flow f(x: F32 at sample, c: Bool at sample) -> F32 at sample {\n  if c { foo
     let after = lifted(src, Code::E0811);
     assert!(after.contains("let foo_0 = foo_~(x)"), "{after}");
 }
+
+/// The lift of a chain out of a branch computes it on the ticks of its
+/// frame (§11.9), which its title names; of the `sample` of the body, as
+/// of a call with no modifier, `every sample`.
+#[test]
+fn the_lift_of_a_chain_names_the_tick_it_runs_on() {
+    for (chain, per) in [
+        ("lp~(p).down~(2) at sample", "tick of `sample / 2`"),
+        ("lp~(p).up~(2).down~(4) at sample", "tick of `sample / 2`"),
+        ("lp~(p).down~(2).up~(2)", "sample"),
+        ("lp~(p)", "sample"),
+    ] {
+        let src = format!(
+            "pub flow lp(x: F32 at sample) -> F32 at sample {{\n  x\n}}\n\n\
+pub flow f(p: F32 at block, c: Bool at sample) -> F32 at sample {{\n  if c {{ {chain} }} else {{ 0.0 }}\n}}\n"
+        );
+        let (d, _) = the_error(&src);
+        assert_eq!(d.code, Code::E0811, "{chain}");
+        let title = format!("compute it on every {per} in a new `let lp_0`");
+        assert!(d.fixes.iter().any(|f| f.title().starts_with(&title)), "{chain}: {:?}", d.fixes);
+    }
+}

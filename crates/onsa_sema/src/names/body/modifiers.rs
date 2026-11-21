@@ -20,6 +20,9 @@ pub(crate) struct ModifierCall {
     pub modifier: Modifier,
     /// The call before the `.` (`lp~(x)`).
     pub receiver: ExprId,
+    /// The first call of its chain (§11.9), made once of the record of its
+    /// receiver: the one place that finds it (D-15).
+    pub head: ExprId,
     /// The name of the modifier, the place of its E0200 of this version.
     pub name: Span,
 }
@@ -44,7 +47,8 @@ impl Walker<'_> {
         // SPEC-GAP(S-1201): with type arguments (`.when::[I32]~(c)`) the
         // rows of §2.6, as before (provisional (1)).
         let ExprKind::Field { base, name } = &self.ast.expr(callee).kind else { return None };
-        let (receiver, listed) = (self.receiver_of(*base), Modifier::named(&name.name));
+        let head = self.out.modifiers.get(base).map_or(*base, |m| m.head);
+        let (receiver, listed) = (self.receiver_of(head), Modifier::named(&name.name));
         let (span, end) = (self.ast.expr(e).span, self.ast.expr(callee).span.end);
         let shown = &name.name;
         // An instance takes any; a delay `when~` and `reset_if~`, which keep
@@ -58,7 +62,7 @@ impl Walker<'_> {
         };
         let d = match (kind, listed, receiver) {
             (CallKind::Flow, Some(m), _) if takes(m) => {
-                self.out.modifiers.insert(e, ModifierCall { modifier: m, receiver: *base, name: name.span });
+                self.out.modifiers.insert(e, ModifierCall { modifier: m, receiver: *base, head, name: name.span });
                 return Some(Ok(()));
             }
             (CallKind::Flow, Some(_), Receiver::Delay(d)) => {
@@ -105,12 +109,9 @@ impl Walker<'_> {
         Some(Err(self.fail(Fail::Report(d.with_found(self.src(span))))))
     }
 
-    /// What the receiver `base` of a member is, by the records of the walk
-    /// of it, which came first: of a chain of modifiers, what its head is.
-    fn receiver_of(&self, mut base: ExprId) -> Receiver {
-        while let Some(m) = self.out.modifiers.get(&base) {
-            base = m.receiver;
-        }
+    /// What the head `base` of a chain (a receiver that is no modifier) is,
+    /// by the records of the walk of it, which came first.
+    fn receiver_of(&self, base: ExprId) -> Receiver {
         match &self.ast.expr(base).kind {
             _ if self.out.instance_of.contains_key(&base) => Receiver::Instance,
             ExprKind::Call { callee, kind: CallKind::Flow, .. } => {

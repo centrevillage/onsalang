@@ -212,3 +212,47 @@ pub flow f(x: F32 at sample, k: U32 at sample) -> F32 at sample {
     // `n` is read in the first argument of a delay, `v` in that of an instance.
     assert_eq!(f.store_bindings.iter().copied().collect::<Vec<_>>(), [i.arms[1][0]]);
 }
+
+/// The head of a chain of modifiers is the node of the chain (§11.9,
+/// S-1088): its frame is the sum of the ratios, its chain the modifiers in
+/// the order they are written, its clock the output in that frame, and a
+/// whole `let` names it through the chain (S-148) unless the `let` is a
+/// tick of a ratio (S-1139 (a)). Its value read at `sample` is hoisted to a
+/// field of its tick (S-1185). A chain stops the Core until W7-16, its ratio
+/// one too.
+#[test]
+fn the_head_of_a_chain_has_its_frame_and_its_modifiers() {
+    use crate::clock::{ClockStage, Ratio};
+    use crate::flow_names::Modifier;
+    let src = "pub flow lp(x: F32 at sample) -> F32 at sample {
+  x
+}
+pub flow f(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  let d = lp~(x).down~(2).up~(2)
+  let b = lp~(p).down~(4).down~(2)
+  d + (b at sample) + (lp~(p).down~(4) at sample)
+}
+pub flow g(x: F32 at sample) -> F32 at sample {
+  lp~(x).down~(2).up~(2)
+}
+";
+    let a = check(src);
+    assert!(a.diagnostics.is_empty(), "{:?}", a.diagnostics);
+    let f = flow(&a, "f");
+    let d = f.node(named(f, "d"));
+    assert_eq!((d.frame, d.clock), (Ratio(0), Clock::SAMPLE));
+    let mods: Vec<_> = d.chain.iter().map(|m| (m.modifier, m.ratio)).collect();
+    assert_eq!(mods, [(Modifier::Down, Some(Ratio(-1))), (Modifier::Up, Some(Ratio(1)))]);
+    let b = f.node(named(f, "b.lp_0"));
+    assert_eq!((b.frame, b.clock, b.chain.len()), (Ratio(-3), Clock::Tick(Ratio(-3)), 2));
+    assert_eq!(b.args.iter().map(|r| r.at).collect::<Vec<_>>(), [Clock::Tick(Ratio(-3))]);
+    let out = f.node(named(f, "_out.lp_0"));
+    let hoisted: Vec<_> = f.hoists.iter().map(|h| (h.span, h.stage)).collect();
+    let chain = src.find("lp~(p).down~(4) at").unwrap();
+    assert_eq!(hoisted.len(), 1, "{hoisted:?}");
+    assert_eq!((hoisted[0].0.start as usize, hoisted[0].1), (chain, ClockStage::Tick(Ratio(-2))));
+    assert_eq!(out.frame, Ratio(-2));
+    assert!(f.multirate_at().is_some());
+    let g = flow(&a, "g");
+    assert_eq!(g.multirate_at(), Some(g.nodes[0].span), "a chain of the ratio one stops the Core too");
+}

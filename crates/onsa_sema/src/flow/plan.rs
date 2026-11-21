@@ -8,6 +8,8 @@
 use super::clocks::Walked;
 use super::nodes::Recorded;
 use super::*;
+use crate::clock::Ratio;
+use crate::flow_names::Modifier;
 
 mod fields;
 pub(super) mod names;
@@ -139,6 +141,24 @@ pub struct PlanNode {
     pub field: Option<u32>,
     /// The arms of the `match~`s around it, the outermost first (S-1131).
     pub arms: Vec<(ExprId, u32)>,
+    /// The ratio of the frame it runs in over the `sample` of the body: of
+    /// the head of a chain, the sum of the ratios of the chain (§11.9), else
+    /// 0. The mark of the stage of the caller it is of (S-1088).
+    pub frame: Ratio,
+    /// The modifiers after its call, in the order they are written (§11.9,
+    /// §11.10): its chain, none of a node with no modifier.
+    pub chain: Vec<PlanModifier>,
+}
+
+/// A modifier of the chain of a node (§11.10).
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+pub struct PlanModifier {
+    pub modifier: Modifier,
+    /// The ratio of `.down~(N)` and `.up~(N)` (S-1077), none of `.when~`
+    /// and `.reset_if~`.
+    pub ratio: Option<Ratio>,
+    /// The name of the modifier (`down`).
+    pub name: Span,
 }
 
 /// A value of the body the state may keep beside its nodes (S-05).
@@ -256,6 +276,8 @@ pub(super) fn build(
             span: r.span,
             field: None,
             arms: r.arms,
+            frame: r.frame,
+            chain: r.chain,
         }
     });
     info.nodes = nodes.collect();

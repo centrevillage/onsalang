@@ -939,17 +939,10 @@ note = "ガードに at sample を書いた値の match（Some(v) if (v != 0) at
 
 [[pending]]
 kind = "test-case"
-target = "tests/spec/flow_clock/modifier_down_forms.onsa"
-reasons = ["S-556", "S-566"]
-until = "W7-09"
-note = "`.down~(N)` の連鎖のクロックは U3a の後も flow の段の仮の門 E0200（ModifierRates）で止まる。U3b で門を外す"
-
-[[pending]]
-kind = "test-case"
 target = "tests/spec/flow_clock/modifier_up_forms.onsa"
 reasons = ["S-556", "S-566", "S-567"]
 until = "W7-09"
-note = "`.up~(N)` は U3a の後も flow の段の仮の門 E0200（ModifierRates）で止まり、変換の flow の宣言 `at (sample * N)` は名前の段の仮の門 E0200（DerivedClockRatios）で止まる。U3b と U4a で門を外す"
+note = "U4a の変換の flow の宣言 `at (sample * N)` で止まる（名前の段の仮の門 E0200（DerivedClockRatios））。U4a で門を外す"
 
 [[pending]]
 kind = "test-case"
@@ -957,24 +950,3 @@ target = "tests/spec/flow_clock/modifier_n_const_expressions_w9_03.onsa"
 reasons = ["S-1077"]
 until = "W9-03"
 note = "修飾子の N の算術は W9-03 まで E0200（FlowConstExprs）"
-
-[[pending]]
-kind = "fix-contract"
-target = "tests/spec/flow_clock/modifier_down_forms.onsa:63:10 E0811 fix1"
-reasons = ["S-556", "S-566"]
-until = "W7-09"
-note = "修飾子の連鎖の E0811・E0806 の候補の後に `.down~` の仮の門 E0200（ModifierRates、flow の段）が残る。U3b で門を外す"
-
-[[pending]]
-kind = "fix-contract"
-target = "tests/spec/flow_clock/modifier_down_forms.onsa:63:10 E0811 fix2"
-reasons = ["S-556", "S-566"]
-until = "W7-09"
-note = "修飾子の連鎖の E0811・E0806 の候補の後に `.down~` の仮の門 E0200（ModifierRates、flow の段）が残る。U3b で門を外す"
-
-[[pending]]
-kind = "fix-contract"
-target = "tests/spec/flow_clock/modifier_down_forms.onsa:67:9 E0806 fix1"
-reasons = ["S-556", "S-566"]
-until = "W7-09"
-note = "修飾子の連鎖の E0811・E0806 の候補の後に `.down~` の仮の門 E0200（ModifierRates、flow の段）が残る。U3b で門を外す"

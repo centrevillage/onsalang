@@ -162,6 +162,11 @@ impl Ratio {
         self.0 > 0
     }
 
+    /// The N of the ratio (`sample / N`, `.down~(N)`), none past `u64`.
+    pub fn n(self) -> Option<u64> {
+        2u64.checked_pow(self.0.unsigned_abs())
+    }
+
     /// The ratio of `(sample / n)` (`op` `/`) or `(sample * n)` (`*`), and
     /// of `.down~(n)` and `.up~(n)` (S-1077): `n` a power of 2 that is 2 or
     /// more, else none (E0808). The one test of an N (D-15).
@@ -248,7 +253,7 @@ impl Clock {
             }
         };
         let sample = ClockName::Sample.name();
-        let Some(n) = 2u64.checked_pow(k.unsigned_abs()) else {
+        let Some(n) = Ratio(k).n() else {
             onsa_diag::internal::bug(Some(at), format!("the ratio of the clock {self:?} out of the text"))
         };
         match k {
@@ -265,6 +270,15 @@ impl Clock {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ClockFrame {
     pub ratio: Ratio,
+}
+
+impl ClockFrame {
+    pub const BODY: ClockFrame = ClockFrame { ratio: Ratio(0) };
+    /// The tick of the frame, a callee's `sample` [`rebase`]d as the walk of
+    /// an instance does, which E0813 and the lift of a chain read (D-15).
+    pub fn tick(self) -> Clock {
+        rebase(Clock::SAMPLE, self)
+    }
 }
 
 /// Two operands whose clocks do not meet (E0815; a loop of W7-09 too): each

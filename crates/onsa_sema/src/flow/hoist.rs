@@ -109,8 +109,9 @@ pub(super) struct Choose<'a> {
     pub(super) ast: &'a Ast,
     pub(super) body: &'a BodyInfo,
     pub(super) clocks: &'a ClockInfo,
-    /// The calls of the delays and the instances.
-    pub(super) nodes: &'a HashSet<ExprId>,
+    /// The calls of the delays and the instances, and of the modifiers of
+    /// their chains with their receivers ([`FlowCx::node_exprs`]).
+    pub(super) nodes: &'a HashMap<ExprId, Option<ExprId>>,
     pub(super) sample_rate: &'a HashSet<ExprId>,
 }
 
@@ -184,7 +185,7 @@ impl Choose<'_> {
     /// field written at the tick: a [`Choose::part`] or a node, whose value
     /// is kept there with no name (§11.3, §11.6).
     fn tick_field(&self, e: ExprId) -> bool {
-        self.part(e) || self.nodes.contains(&e)
+        self.part(e) || self.nodes.contains_key(&e)
     }
 
     /// Whether `e` is a computed part: none of a name (an input, a `let`,
@@ -201,7 +202,7 @@ impl Choose<'_> {
         !(name
             || matches!(kind, ExprKind::At { .. } | ExprKind::Par { .. })
             || value_of(kind).is_some()
-            || self.nodes.contains(&e)
+            || self.nodes.contains_key(&e)
             || self.sample_rate.contains(&e))
     }
 

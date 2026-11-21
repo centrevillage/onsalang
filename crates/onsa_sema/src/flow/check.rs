@@ -51,10 +51,21 @@ impl<'a> Checker<'a> {
             Ok(())
         })();
         let _ = r;
-        // The E0200 of this version is of a form with no other error: it
-        // waits for the N of the whole chain (§11.9).
-        let gates = std::mem::take(&mut self.fcx().chains).into_values().flatten();
-        gates.for_each(|d| self.flow_hold(d));
+        // SPEC-GAP(S-1089): a chain whose ratio no clock names (past 2^63, so
+        // past the 2^24 of §11.9 in either reading) is E0808 at its last
+        // modifier, and in error (provisional). The E0200 of this version is
+        // of a chain with no N in error (§11.9).
+        let (mut past, mut gates) = (Vec::new(), Vec::new());
+        for c in self.fcx().chains.values_mut() {
+            if c.ratio.is_some_and(|r| r.n().is_none()) {
+                c.ratio = None;
+                past.extend(c.mods.last().map(|m| m.plan.name));
+            }
+            gates.extend(c.gate.clone().filter(|_| c.ratio.is_some()));
+        }
+        let msg = "the ratio of this chain is past 2^63, and that of a chain is 2^24 or less (§11.9)";
+        past.into_iter().for_each(|at| self.flow_hold_at(Code::E0808, at, msg));
+        gates.into_iter().for_each(|d| self.flow_hold(d));
         self.frames.pop();
     }
 
@@ -427,44 +438,44 @@ impl<'a> Checker<'a> {
     /// receiver, and one argument, the N of `.down~` and `.up~` (a constant
     /// expression of type `U32`, a power of 2 that is 2 or more, else the
     /// E0808 of the flow stage, S-969, S-1077) or the `Bool` condition of
-    /// `.when~` and `.reset_if~`. The flow stage holds the E0200 of what
-    /// this version has not: the meaning of `when~` and `reset_if~`
-    /// (W7-10), the clocks of a chain (U3b), when no N of the chain is in
-    /// error ([`FlowCx::chains`]).
+    /// `.when~` and `.reset_if~`, whose meaning is W7-10's (E0200). Each is
+    /// recorded once in the chain of its head ([`ModifierChain`]).
     fn check_modifier(&mut self, e: ExprId, m: ModifierCall, args: &[Arg], expected: Option<TyId>) -> R<TyId> {
         let t = self.check_expr(m.receiver, expected)?;
-        let inner = self.fcx().chains.remove(&m.receiver);
         // SPEC-GAP(S-1090): the number of the arguments is E0412, as of a
         // delay (provisional (1)).
         let [arg] = args else {
             let msg = format!("the modifier `{}~` takes 1 argument but {} were given", m.modifier.name(), args.len());
             return Err(self.err(Code::E0412, self.expr(e).span, msg));
         };
-        let feature = match m.modifier.ratio_op() {
+        // Its ratio (none of `when~` and `reset_if~`, whose meaning is the
+        // E0200 of W7-10), `Err` of an N in error.
+        let (ratio, gate) = match m.modifier.ratio_op() {
             Some(op) => match self.flow_const_u32(arg.expr)?.map(|n| Ratio::of_n(op, n)) {
-                Some(Some(_)) => Some(Feature::ModifierRates),
+                Some(Some(r)) => (Ok(Some(r)), None),
                 Some(None) => {
                     let msg =
                         format!("the N of `.{}~(N)` is a power of 2 that is 2 or more (§11.9)", m.modifier.name());
                     self.flow_hold_at(Code::E0808, self.expr(arg.expr).span, msg);
-                    None
+                    (Err(()), None)
                 }
                 // A failed constant (§18.1) or a gate of its own.
-                None => None,
+                None => (Err(()), None),
             },
             None => {
                 let bool = self.bool_();
                 self.check_expr(arg.expr, Some(bool))?;
-                Some(Feature::InstanceModifiers)
+                let gate = Feature::InstanceModifiers.diagnostic(Stage::Flow, m.name, &[]);
+                (Ok(None), Some(gate.with_found(self.src(m.name))))
             }
         };
-        let own = feature.map(|f| f.diagnostic(Stage::Flow, m.name, &[]).with_found(self.src(m.name)));
-        // The first of the chain, inner first by position.
-        let gate = match inner {
-            Some(inner) => own.and(inner),
-            None => own,
-        };
-        self.fcx().chains.insert(e, gate);
+        let fresh = ModifierChain { ratio: Some(Ratio(0)), mods: Vec::new(), gate: None };
+        let chain = self.fcx().chains.entry(m.head).or_insert(fresh);
+        // Past `i32` is past 2^63, the E0808 of the chain (`check_flow_body`).
+        chain.ratio = chain.ratio.zip(ratio.ok()).map(|(a, r)| Ratio(a.0.saturating_add(r.map_or(0, |r| r.0))));
+        chain.gate = chain.gate.take().or(gate);
+        let plan = PlanModifier { modifier: m.modifier, ratio: ratio.ok().flatten(), name: m.name };
+        chain.mods.push(ChainModifier { call: e, receiver: m.receiver, plan });
         Ok(t)
     }
 

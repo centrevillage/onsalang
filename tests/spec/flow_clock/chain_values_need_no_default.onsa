@@ -1,0 +1,39 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§11.9", "§18.1"]
+
+// W7-09 U3b/t, S-1185, S-1186 (1a) (spec §11.3: "速い段で読まない刻みの値には要らない"): the value of a chain whose type has no `Default` (`NoDef`, Copy, as in e0816_chain_value_without_default.onsa) is accepted
+// where no faster stage reads it: it is read at its own tick (a field of it, a computed part of its tick, a delay of it), and the part that a faster stage reads is of a type that has `Default`
+// (`m.f` is `F32`, so `(m.f * 2.0) at sample` has the field of an `F32`). A chain whose ratio is the call position's (`sample`) is no tick that a faster stage reads. No diagnostic. `x` is the `sample`
+// input, `p` is a `block` input.
+
+pub struct NoDef {
+  f: F32,
+}
+
+pub flow mk(c: F32 at sample) -> NoDef at sample {
+  NoDef { f: c }
+}
+
+pub flow read_at_its_own_tick(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  let m = mk~(p).down~(4)
+  let n = m.f * 2.0
+  x * (n at sample)
+}
+
+pub flow part_of_the_value_read_at_a_faster_stage(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  let m = mk~(p).down~(4)
+  x * ((m.f * 2.0) at sample)
+}
+
+pub flow delay_of_the_value_with_an_init(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  let m = mk~(p).down~(4)
+  let g = prev~(m, NoDef { f: 0.0 })
+  let h = g.f + 1.0
+  x * (h at sample)
+}
+
+pub flow node_with_its_field_read_at_its_tick(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  let r = mk~(p).down~(2).down~(2).f
+  x * (r at sample)
+}

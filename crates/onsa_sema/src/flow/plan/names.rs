@@ -13,6 +13,7 @@ use super::super::nodes::holds_state;
 use super::{Owner, Part, PlanNode};
 use crate::body::{BodyInfo, LocalId};
 use crate::flow_names::OUTPUT_SCOPE;
+use crate::names::body::BodyNames;
 
 /// `<kind>_<n>`: the name of the node `n` of a kind in a scope (`prev_0`,
 /// `lp_1`, `par_0`), and of the hoisted field `n` (`_hoist_0` of
@@ -93,9 +94,9 @@ pub(in crate::flow) struct Namer {
 }
 
 impl Namer {
-    pub(in crate::flow) fn new(pending: &[PendingLet], ast: &Ast, body: &BodyInfo) -> Namer {
+    pub(in crate::flow) fn new(pending: &[PendingLet], ast: &Ast, body: &BodyInfo, of: &BodyNames) -> Namer {
         let named = |e: ExprId| !matches!(ast.expr(e).kind, ExprKind::Par { body, .. } if !holds_state(ast, body));
-        let lets = pending.iter().map(|p| (ast.without_parens(p.init), p.name.clone()));
+        let lets = pending.iter().map(|p| (value_call(ast, of, p.init), p.name.clone()));
         let whole = lets.filter_map(|(e, n)| Some((e, n?))).filter(|&(e, _)| named(e)).collect();
         let scopes = scopes(pending.iter().map(|p| p.locals.as_slice()), body);
         Namer { numbers: HashMap::default(), scopes, whole }
@@ -138,6 +139,14 @@ impl Namer {
         let path = qualify(scope, &name);
         Some((name, path))
     }
+}
+
+/// What the initializer `init` of a `let` is the value of, its node if it
+/// is a call of one: past its parentheses and the modifiers of a chain, the
+/// head (§11.9: the value of a chain is the output of its head).
+pub(in crate::flow) fn value_call(ast: &Ast, names: &BodyNames, init: ExprId) -> ExprId {
+    let e = ast.without_parens(init);
+    names.modifier(e).map_or(e, |m| m.head)
 }
 
 /// The kind of a node of a delay or an instance (§11.6): the name of the

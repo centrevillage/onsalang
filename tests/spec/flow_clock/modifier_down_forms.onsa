@@ -8,8 +8,8 @@
 // §11.3), so a faster stage reads it with `at sample` and an argument is read at the clock of the chain rate (a value of the
 // parameter kinds, or `sample / N` here). The modifiers wrap everything on their left (S-557), so a chain is a composition of
 // the ratios, and the call with no modifier next to it is an instance of its own. The modifier is stateful as the call is: in a
-// branch it is E0811 and in the right operand of `&&` and `||` it is E0806 (§11.10). This version stops at the flow stage with
-// E0200 until the chain clocks are read (W7-09 U3b), so the cases wait for it. One error per flow.
+// branch it is E0811 and in the right operand of `&&` and `||` it is E0806 (§11.10). The clocks of the chains are read as
+// flow_clock/modifier_chain_clocks.onsa has them (W7-09 U3b), so the forms here are read with no diagnostic but the two marked. One error per flow.
 
 const K: U32 = 4
 

@@ -6,8 +6,8 @@
 //!   candidates; the text after the candidate is here, and no column is fixed).
 //! - The note of the E0812 of a modifier shows the closed list when the receiver is a value or an instance with a name that is not in it
 //!   (S-1085, S-1086: provisional readings, an open detail), and names the modifier for a delay that takes `down` or `up` (S-1091).
-//! - The stop of `.down~` and `.up~` at the flow stage with E0200 until the clocks of the chain are read (W7-09 U3b): the last test, which
-//!   U3b removes with the gate.
+//! - The modifiers `.down~` and `.up~` pass the flow stage with no diagnostic when the clocks of the chain are read right (W7-09 U3b: the last
+//!   test; the clocks and their errors are in `tests/spec/flow_clock/modifier_chain_clocks.onsa` and the files beside it).
 //!
 //! The texts are written from the spec; none is taken from the output of the compiler. The checks run in this process, with no file written.
 
@@ -118,19 +118,20 @@ fn a_down_or_up_on_a_builtin_delay_is_the_e0812_with_the_note_of_the_delays() {
     }
 }
 
-/// W7-09 U3a to U3b: the modifiers `.down~` and `.up~` pass the names stage and the type stage, and the flow stage stops at them with
-/// E0200 (Q-09: the spec has them, the clocks of the chain are not read yet), and with nothing else. U3b removes the gate with this test.
+/// W7-09 U3b (S-566, §11.9): the modifiers `.down~` and `.up~` pass the names stage, the type stage and the flow stage with no diagnostic (the
+/// gate of the flow stage that U3a put at them is gone): a head of the parameter kinds, the value read at `sample` by `at`, a chain of two
+/// modifiers whose ratio is `sample / 4` and `sample`, and a value held by a `let`. The forms that the clocks make an error are in the cases.
 #[test]
-fn a_down_or_up_modifier_stops_at_the_flow_stage_with_e0200_until_u3b() {
+fn a_down_or_up_modifier_passes_the_flow_stage_with_no_diagnostic() {
     let bodies = [
         "lp~(p).down~(4) at sample",
         "lp~(p).down~(2).down~(2) at sample",
         "lp~(p).down~(4).up~(2) at sample",
         "let y = lp~(p).down~(4)\n  y at sample",
+        "lp~(x).down~(2).up~(2)",
     ];
     for body in bodies {
         let ds = diags(&flow(body));
-        assert_eq!(ds.len(), 1, "{body}: one error: {ds:?}");
-        assert_eq!(code_of(&ds[0]), "E0200", "{body}: {}", ds[0]);
+        assert!(ds.is_empty(), "{body}: no diagnostic (§11.9), got {ds:?}");
     }
 }

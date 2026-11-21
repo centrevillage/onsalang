@@ -1,0 +1,70 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§11.9", "§18.1"]
+
+// W7-09 U3b/t, S-566, S-567 (spec §11.9, §11.3): the value of `.up~(N)` is a value at `sample * N` that a conversion flow takes (§11.9: "`.up~(N)` の出力は `sample * N` の値で、変換の flow が配列で受ける"),
+// so every other reading is E0815 until then: it meets no value of `sample` (an operation, the output of the flow, the argument of a call that takes a `sample` input), `at sample` and `at (sample / 2)`
+// make it slower, which `at` does not do (§11.3: "`k` が `e` の推論したクロックより遅ければ E0815"), and the arguments of a chain that is faster than `sample` are read at its rate: a call side value
+// of `sample` is slower than `sample * N` and goes to it by a conversion flow (§11.3: "`sample * N` へは変換の flow"). The call side operation on the value (`ovs2~(x) * d`, which §11.9 calls a
+// form that is an error for now) is in e0815_up_chain_pointwise_s1083.onsa. The error is at the expression that is read wrong. One error per flow, so each form is a flow of its own, and a
+// `let` that reads the error has no mark. `x` is the `sample` input, `p` is a `block` input.
+
+pub flow lp(x: F32 at sample) -> F32 at sample {
+  x * 0.5 + prev~(x) * 0.5
+}
+
+// ---------------------------------------------------------------- the value is read at `sample` or slower
+
+pub flow value_as_the_output(p: F32 at block) -> F32 at sample {
+  lp~(p).up~(2)                                               //~ E0815
+}
+
+pub flow value_at_sample(p: F32 at block) -> F32 at sample {
+  lp~(p).up~(2) at sample                                     //~ E0815
+}
+
+pub flow value_with_a_sample_value(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  x + lp~(p).up~(2)                                           //~ E0815
+}
+
+pub flow value_by_its_name_at_sample(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  let y = lp~(p).up~(2)
+  x * (y at sample)                                           //~ E0815
+}
+
+pub flow value_at_a_slower_ratio(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  let y = lp~(p).up~(4)
+  let m = y at (sample / 2)                                   //~ E0815
+  x * (m at sample)
+}
+
+pub flow value_for_the_input_of_a_call(p: F32 at block) -> F32 at sample {
+  lp~(lp~(p).up~(2))                                          //~ E0815
+}
+
+pub flow value_of_a_chain_that_goes_up_twice(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  x + lp~(p).up~(2).up~(2)                                    //~ E0815
+}
+
+// ---------------------------------------------------------------- the argument is slower than the chain rate
+
+pub flow head_of_the_sample_for_up(x: F32 at sample) -> F32 at sample {
+  let s = lp~(x).up~(2)                                       //~ E0815
+  x
+}
+
+pub flow head_of_the_sample_for_two_ups(x: F32 at sample) -> F32 at sample {
+  let s = lp~(x * 0.5).up~(2).up~(2)                          //~ E0815
+  x
+}
+
+pub flow head_of_the_sample_when_the_chain_goes_up_and_down(x: F32 at sample) -> F32 at sample {
+  let s = lp~(x).up~(4).down~(2)                              //~ E0815
+  x
+}
+
+pub flow head_of_a_tick_for_up(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  let a = p at (sample / 2)
+  let s = lp~(a).up~(2)                                       //~ E0815
+  x
+}

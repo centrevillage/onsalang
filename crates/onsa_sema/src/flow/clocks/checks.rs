@@ -26,6 +26,12 @@ fn promotable(c: Clock, k: Clock) -> bool {
     promote(c, k).is_ok()
 }
 
+/// The tick `tick` as a title names it: `sample`, ``tick of `sample / 2` ``.
+pub(super) fn per_tick(tick: Clock, at: Span) -> String {
+    let shown = tick.shown(at);
+    if tick == Clock::SAMPLE { shown } else { format!("tick of `{shown}`") }
+}
+
 /// What the rules of a flow body find wrong with the value of an
 /// expression, by its type ([`Walk::fault`]).
 #[derive(Debug, Clone, Copy)]
@@ -207,7 +213,13 @@ impl Walk<'_> {
         let span = self.ast.expr(e).span;
         let [a, b] = ops.map(|(_, c)| c.shown(span));
         let what = if looped { "operands that enter a loop of `let`s, which has one clock," } else { "operands" };
-        let msg = format!("the {what} are at the clocks `{a}` and `{b}`, which do not meet (§11.3, §11.9)");
+        let msg = match ops.iter().find(|(_, c)| matches!(c, Clock::Tick(k) if k.faster_than_body())) {
+            Some((_, c)) => format!(
+                "a value at `{}` takes no operation at the call side for now; a conversion flow takes it (§11.9)",
+                c.shown(span)
+            ),
+            None => format!("the {what} are at the clocks `{a}` and `{b}`, which do not meet (§11.3, §11.9)"),
+        };
         let mut d = Diagnostic::new(Stage::Flow, Code::E0815, span, msg).with_found(self.src(span));
         for (x, c) in ops.iter().filter_map(|&(x, c)| Some((x?, c))) {
             d = d.with_note(self.ast.expr(x).span, format!("this operand is at `{}`", c.shown(span)));
@@ -301,8 +313,9 @@ impl Walk<'_> {
         self.report(Diagnostic::new(Stage::Flow, code, head, msg).with_found(found).with_fix(fix));
     }
 
-    /// Whether a node or a `par~` at `e`, of the kind `kind` (§11.6), may be
-    /// here: in no place that is not evaluated on every sample (§11.5).
+    /// Whether a node or a `par~` at `e`, of the kind `kind` (§11.6), in the
+    /// frame `frame` (§11.9), may be here: in no place that is not evaluated
+    /// on every sample (§11.5).
     /// Else, at `Check`, the E0811 of a branch, a guard or a later condition
     /// of a chain, or the E0806 of the right of `&&` / `||`, of the innermost
     /// place, at `e` (S-392), with the candidates that can be made (§2.6,
@@ -316,7 +329,7 @@ impl Walk<'_> {
     // SPEC-GAP(S-1189): the thing in error has the error clock (its callers
     // give `Clock::Error` on false), so an `at` around it reports nothing
     // (provisional).
-    pub(super) fn stateful_here(&mut self, e: ExprId, kind: &str) -> bool {
+    pub(super) fn stateful_here(&mut self, e: ExprId, kind: &str, frame: ClockFrame) -> bool {
         let Some(&site) = self.sites.last().filter(|_| self.checking()) else { return true };
         let span = self.ast.expr(e).span;
         if self.diag.as_ref().is_some_and(|d| Diagnostic::place_before(d.span, span)) {
@@ -339,7 +352,7 @@ impl Walk<'_> {
             let title = format!("write `{word}~`, which evaluates every branch");
             d = d.with_fix(Fix::insert(title, at.file, at.start + word.len() as u32, "~"));
         }
-        if let Some(fix) = self.lift(e, kind) {
+        if let Some(fix) = self.lift(e, kind, frame) {
             d = d.with_fix(fix);
         }
         self.report(d);
@@ -412,8 +425,10 @@ impl Walk<'_> {
         }
         let span = self.ast.expr(x).span;
         let (shown, to, name) = (c.shown(span), at.shown(span), &self.a.def(g).name);
+        let never = "a value is never made slower".to_string();
+        let how = if promotable(c, at) { format!("read it at `{to}` with `at`") } else { never };
         let msg = format!(
-            "this argument is at the clock `{shown}` but the input `{}` of `{name}` is at `{to}`; a value is never made slower (§11.3)",
+            "this argument is at the clock `{shown}` but the input `{}` of `{name}` is at `{to}`; {how} (§11.3)",
             input.name
         );
         self.err(Code::E0815, span, msg);
@@ -449,9 +464,9 @@ impl Walk<'_> {
     }
 
     /// Whether the first argument `first` of a delay, at the clock `c`,
-    /// holds its state (§11.4, E0813); one `at` makes `sample`
-    /// ([`promotable`]) has the candidate `first at sample` (S-102, S-152),
-    /// in parentheses where `at` takes them (§3.1: `(p * 2.0) at sample`),
+    /// holds its state (§11.4, E0813); one `at` makes `sample` (in the head
+    /// of a chain, the tick of its frame, §11.9) ([`promotable`]) has the
+    /// candidate `first at sample` (S-102, S-152), in parentheses where `at` takes them (§3.1: `(p * 2.0) at sample`),
     /// unless the walk found an error in it, which the candidate would
     /// leave (§18.1), or it is a `^name`.
     pub(super) fn check_first(&mut self, delay: Delay, first: ExprId, c: Clock) -> bool {
@@ -460,12 +475,15 @@ impl Walk<'_> {
         }
         let span = self.ast.expr(first).span;
         let d = delay.name();
+        // Of a `.up~` frame, whose ticks keep no state (S-1097), the `sample`.
+        let to = self.frame.tick();
+        let must = if keeps_delay_state(to) { to } else { Clock::SAMPLE }.shown(span);
         let msg = match c {
             Clock::Const => {
-                format!("the first argument of `{d}~` must be at the clock `sample`; this one is a constant (§11.4)")
+                format!("the first argument of `{d}~` must be at the clock `{must}`; this one is a constant (§11.4)")
             }
             c => format!(
-                "the first argument of `{d}~` must be at the clock `sample`; this one is at `{}` (§11.4)",
+                "the first argument of `{d}~` must be at the clock `{must}`; this one is at `{}` (§11.4)",
                 c.shown(span)
             ),
         };
@@ -483,11 +501,13 @@ impl Walk<'_> {
             bare = *x;
         }
         let feedback = matches!(self.ast.expr(bare).kind, ExprKind::Feedback(_));
-        if promotable(c, Clock::SAMPLE) && !inside && !feedback {
+        if promotable(c, to) && !inside && !feedback {
             let wrap = Slot::Operand(OperandPlace::AsAtLeft).wraps(Form::of(self.ast, first));
             let (open, close) = if wrap { ("(", ")") } else { ("", "") };
-            let title = format!("write `{open}{src}{close} at sample` to delay it per sample");
-            let mut edits = vec![Edit::insert(span.file, span.end, format!("{close} at sample"))];
+            let (shown, per) = (to.shown(span), per_tick(to, span));
+            let at = if to == Clock::SAMPLE { shown } else { format!("({shown})") };
+            let title = format!("write `{open}{src}{close} at {at}` to delay it per {per}");
+            let mut edits = vec![Edit::insert(span.file, span.end, format!("{close} at {at}"))];
             if wrap {
                 edits.insert(0, Edit::insert(span.file, span.start, open));
             }

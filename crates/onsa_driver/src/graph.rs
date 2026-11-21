@@ -190,7 +190,15 @@ impl Graph<'_> {
         let what = match (&node.kind, node.kind.delay()) {
             // SPEC-GAP(S-397): a delay is its kind, with no length.
             (_, Some(d)) => format!("{}~", d.name()),
-            (PlanKind::Instance { callee, .. }, None) => format!("{}~", self.a.def(*callee).name),
+            // SPEC-GAP(S-1084): with the modifiers of its chain, the N as a
+            // value (`lp~.down~(4)`), of the plan (provisional (2)).
+            (PlanKind::Instance { callee, .. }, None) => {
+                let chain = node.chain.iter().map(|m| match m.ratio.and_then(|r| r.n()) {
+                    Some(n) => format!(".{}~({n})", m.modifier.name()),
+                    None => format!(".{}~(…)", m.modifier.name()),
+                });
+                format!("{}~{}", self.a.def(*callee).name, chain.collect::<String>())
+            }
             // SPEC-GAP(S-1170): as written and with its range, as the heading
             // of its frame.
             (PlanKind::Par { .. }, None) => format!("{} {}", spelling(self.ast, node.expr), range(node)),

@@ -410,3 +410,99 @@ fn a_loop_of_two_ratios_is_one_e0815_at_the_let_the_second_enters() {
     let paths: Vec<&str> = g.a.flows[&g.flow].nodes.iter().map(|n| n.path.as_str()).collect();
     assert_eq!(paths, ["d.prev_0"]);
 }
+
+/// A chain whose ratio no clock names (past 2^63) is E0808 at its last
+/// modifier, and in error, so its readers and its head arguments report
+/// nothing (S-1089, provisional): no internal error of a clock with no
+/// text. One that comes back within it is no error.
+#[test]
+fn a_chain_past_the_ratios_a_clock_names_is_e0808_and_quiet() {
+    let lp = "pub flow lp(x: F32 at sample) -> F32 at sample { x }\n";
+    for (chain, code) in [
+        ("up~(2147483648).up~(2147483648).up~(2147483648)", Some(("E0808", "up"))),
+        ("down~(2147483648).down~(2147483648).down~(2147483648)", Some(("E0808", "down"))),
+        ("up~(2147483648).up~(2147483648).down~(2147483648).down~(2147483648)", None),
+    ] {
+        let src = format!("{lp}pub flow f(x: F32 at sample) -> F32 at sample {{\n  x + lp~(x).{chain}\n}}\n");
+        let got = reported(&src);
+        match code {
+            Some((c, at)) => {
+                assert_eq!(got.len(), 1, "{chain}: {got:?}");
+                assert_eq!((format!("{:?}", got[0].0), got[0].1.as_str()), (c.to_string(), at), "{chain}");
+                let last = src.rfind(at).unwrap();
+                assert_eq!(check(&src).diagnostics[0].span.start as usize, last, "{chain}: at its last modifier");
+            }
+            None => assert!(got.is_empty(), "{chain}: {got:?}"),
+        }
+    }
+}
+
+/// The one diagnostic of the flow `f` of `body` after the `lp` of the
+/// `sample` input `x` (`p` at `block`, `c` a `Bool` at `sample`): its code,
+/// its text and the titles of its candidates.
+fn the_text(body: &str) -> (String, String, Vec<String>) {
+    let lp = "pub flow lp(x: F32 at sample) -> F32 at sample { x * 0.5 + prev~(x) * 0.5 }\n";
+    let src = format!(
+        "{lp}pub flow f(p: F32 at block, x: F32 at sample, c: Bool at sample) -> F32 at sample {{\n{body}\n}}\n"
+    );
+    let a = check(&src);
+    let [d] = &a.diagnostics[..] else { panic!("one diagnostic expected: {:?}\n{src}", a.diagnostics) };
+    (format!("{:?}", d.code), d.message.clone(), d.fixes.iter().map(|f| f.title().to_string()).collect())
+}
+
+/// A delay in the argument of the head of a chain keeps its state at the
+/// tick of the frame (§11.9), which the text of its E0813 names as its
+/// candidate does; of a `.up~` frame, whose ticks keep none (S-1097), the
+/// `sample` of the body.
+#[test]
+fn the_e0813_in_the_head_of_a_chain_names_the_tick_of_its_frame() {
+    for (body, must) in [
+        ("  lp~(prev~(p)).down~(2) at sample", "must be at the clock `sample / 2`; this one is at `block`"),
+        ("  lp~(prev~(5.0)).down~(2).down~(2) at sample", "must be at the clock `sample / 4`; this one is a constant"),
+        ("  prev~(p) + x", "must be at the clock `sample`; this one is at `block`"),
+        ("  let y = lp~(prev~(p)).up~(2)\n  x", "must be at the clock `sample`; this one is at `block`"),
+    ] {
+        let (code, msg, _) = the_text(body);
+        assert_eq!(code, "E0813", "{body}");
+        assert!(msg.contains(must), "{body}: {msg}");
+    }
+}
+
+/// An operation of a value at `sample * N` of the call side is E0815 for
+/// now (S-1083, provisional (1)), whose text says so, not that two equal
+/// clocks do not meet; two ticks of other ratios keep the text of a clash.
+#[test]
+fn the_e0815_of_an_operation_of_an_up_value_says_it_takes_none_for_now() {
+    let none = "a value at `sample * 2` takes no operation at the call side for now";
+    for (body, text) in [
+        ("  let y = lp~(p).up~(2)\n  let z = lp~(p).up~(2)\n  (y + z) * x", none),
+        ("  let y = lp~(p).up~(2)\n  (-y) * x", none),
+        ("  let y = lp~(p).up~(2)\n  (y + x) * x", none),
+        (
+            "  let a = lp~(p).down~(2)\n  let b = lp~(p).down~(4)\n  (a + b) at sample",
+            "the operands are at the clocks `sample / 2` and `sample / 4`, which do not meet",
+        ),
+    ] {
+        let (code, msg, _) = the_text(body);
+        assert_eq!(code, "E0815", "{body}");
+        assert!(msg.contains(text), "{body}: {msg}");
+    }
+}
+
+/// An argument slower than its input is read at it with `at` (§11.3),
+/// which the text of its E0815 says; one faster is never made slower.
+#[test]
+fn the_e0815_of_a_slower_argument_says_to_read_it_with_at() {
+    for (body, text) in [
+        (
+            "  let s = lp~(p).down~(8)\n  lp~(s).down~(4) at sample",
+            "is at `sample / 4`; read it at `sample / 4` with `at`",
+        ),
+        ("  let s = lp~(p).down~(8)\n  lp~(s) at sample", "is at `sample`; read it at `sample` with `at`"),
+        ("  lp~(x).down~(2) at sample", "is at `sample / 2`; a value is never made slower"),
+    ] {
+        let (code, msg, _) = the_text(body);
+        assert_eq!(code, "E0815", "{body}");
+        assert!(msg.contains(text), "{body}: {msg}");
+    }
+}

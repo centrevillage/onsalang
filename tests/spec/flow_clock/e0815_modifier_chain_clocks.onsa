@@ -1,0 +1,181 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§11.5", "§11.9", "§18.1"]
+
+// W7-09 U3b/t, S-566, S-567, S-1077, S-1079 (spec §11.9, §11.3): the rule of the ratios for a chain of modifiers, with the clock of the chain read as modifier_chain_clocks.onsa has it.
+// An argument of the first call is read at the chain rate, so a value that is faster (a `sample` value into `.down~(4)`, a value of `sample / 2`, a call that runs at the position of its
+// caller) and a slower tick with no `at` are E0815 (§11.3: "速い→遅いと、`sample * N` へは、変換の flow（速い側を配列で受ける）で書く。`at` の無い形は E0815"; the same ratio only, as the arguments of a
+// call are, §11.9: "`sample / N` の値は `at` なしに `sample` の入力へ読めない"). The value of the chain is a tick of its ratio, never a value of the parameter kinds although its arguments are (the
+// output is a node, §11.9): so it meets a faster value, a `block` input, an `init` position and `at block` with no `at` that promotes it, and two chains of two ratios (also a chain of the ratio one
+// and one of `sample / 2`) do not meet. The error is at the expression that is read wrong. The notes and the candidates are not fixed (the spec promises no candidate). One error per flow, so
+// each form is a flow of its own, and a `let` that reads the error has no mark. `x` is the `sample` input, `p` and `q` are `block` inputs.
+
+pub flow lp(x: F32 at sample) -> F32 at sample {
+  x * 0.5 + prev~(x) * 0.5
+}
+
+pub flow to_block(c: F32 at block) -> F32 at sample {
+  c
+}
+
+// ---------------------------------------------------------------- the argument is faster than the chain rate
+
+pub flow head_of_the_sample(x: F32 at sample) -> F32 at sample {
+  lp~(x).down~(4) at sample                                   //~ E0815
+}
+
+pub flow head_of_a_computed_sample_value(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  lp~(x * 0.5 + p).down~(4) at sample                         //~ E0815
+}
+
+pub flow head_of_a_faster_tick(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  let a = p at (sample / 2)
+  lp~(a).down~(4) at sample                                   //~ E0815
+}
+
+pub flow head_of_a_call_at_a_faster_ratio(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  lp~(lp~(p).down~(2)).down~(4) at sample                     //~ E0815
+}
+
+pub flow head_of_a_call_that_runs_at_the_position(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  lp~(lp~(p)).down~(2) at sample                              //~ E0815
+}
+
+pub flow head_of_a_chain_of_two_downs(x: F32 at sample) -> F32 at sample {
+  lp~(x).down~(2).down~(2) at sample                          //~ E0815
+}
+
+pub flow head_of_a_chain_that_goes_up_and_down(x: F32 at sample) -> F32 at sample {
+  lp~(x).down~(4).up~(2) at sample                            //~ E0815
+}
+
+pub flow head_in_an_arm_of_if_tilde(c: Bool at sample, x: F32 at sample) -> F32 at sample {
+  if~ c { lp~(x).down~(2) at sample } else { 0.0 }            //~ E0815
+}
+
+pub flow head_in_an_arm_of_match_tilde(n: U32 at block, x: F32 at sample) -> F32 at sample {
+  match~ n {
+    0 => x,
+    _ => lp~(x).down~(2) at sample,                           //~ E0815
+  }
+}
+
+pub flow head_in_a_par_tilde(x: F32 at sample) -> F32 at sample {
+  let ys = par~ i in 0 ..< 2 { lp~(x).down~(4) at sample }    //~ E0815
+  ys[0] + ys[1]
+}
+
+// ---------------------------------------------------------------- the argument is a slower tick with no `at`
+
+pub flow head_of_a_slower_tick(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  let s = p at (sample / 8)
+  lp~(s).down~(4) at sample                                   //~ E0815
+}
+
+pub flow head_of_a_chain_value_that_is_slower(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  lp~(lp~(p).down~(8)).down~(4) at sample                     //~ E0815
+}
+
+pub flow head_of_a_slower_tick_for_two_downs(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  let s = p at (sample / 8)
+  lp~(s).down~(2).down~(2) at sample                          //~ E0815
+}
+
+pub flow head_of_a_slower_tick_for_a_chain_that_goes_up(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  let a = p at (sample / 4)
+  lp~(a).up~(4).down~(8) at sample                            //~ E0815
+}
+
+// ---------------------------------------------------------------- the value of the chain is read at a faster clock with no `at`
+
+pub flow value_as_the_output(p: F32 at block) -> F32 at sample {
+  lp~(p).down~(4)                                             //~ E0815
+}
+
+pub flow value_with_a_sample_value(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  x + lp~(p).down~(4)                                         //~ E0815
+}
+
+pub flow value_by_its_name(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  let y = lp~(p).down~(4)
+  x * y                                                       //~ E0815
+}
+
+pub flow value_as_a_condition(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  if lp~(p).down~(4) > 0.0 { x } else { 0.0 }                 //~ E0815
+}
+
+pub flow value_of_a_delay_with_a_sample_value(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  prev~(lp~(p).down~(4)) * x                                  //~ E0815
+}
+
+pub flow value_as_the_argument_of_a_call_at_sample(p: F32 at block) -> F32 at sample {
+  lp~(lp~(p).down~(4))                                        //~ E0815
+}
+
+pub flow value_with_a_chain_of_the_ratio_one_that_is_the_sample(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  x * lp~(p).down~(2).up~(2) + lp~(p).down~(4)                //~ E0815
+}
+
+// ---------------------------------------------------------------- the value of the chain is not a value of the parameter kinds
+
+pub flow value_for_a_block_input(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  to_block~(lp~(p).down~(4)) * x                              //~ E0815
+}
+
+pub flow value_for_the_init_of_a_delay(q: F32 at init, x: F32 at sample) -> F32 at sample {
+  prev~(x, lp~(q).down~(4))                                   //~ E0815
+}
+
+pub flow value_that_at_block_does_not_slow(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  (lp~(p).down~(4) at block) * x                              //~ E0815
+}
+
+pub flow value_of_a_head_of_the_init_kind(q: F32 at init, x: F32 at sample) -> F32 at sample {
+  x * lp~(q).down~(4)                                         //~ E0815
+}
+
+pub flow value_of_a_head_that_is_a_constant(x: F32 at sample) -> F32 at sample {
+  x + lp~(1.0).down~(4)                                       //~ E0815
+}
+
+// ---------------------------------------------------------------- two ratios do not meet
+
+pub flow two_chains_of_two_ratios(p: F32 at block) -> F32 at sample {
+  let z = lp~(p).down~(4) + lp~(p).down~(2)                   //~ E0815
+  z at sample
+}
+
+pub flow two_chains_by_their_names(p: F32 at block, q: F32 at block, x: F32 at sample) -> F32 at sample {
+  let a = lp~(p).down~(4)
+  let b = lp~(q).down~(2)
+  let z = a * b                                               //~ E0815
+  x * (z at sample)
+}
+
+pub flow a_chain_and_a_tick_of_another_ratio(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  let z = lp~(p).down~(4) + (p at (sample / 2))               //~ E0815
+  x * (z at sample)
+}
+
+pub flow a_chain_of_two_downs_and_a_chain_of_one(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  let z = lp~(p).down~(2).down~(2) + lp~(p).down~(2)          //~ E0815
+  x * (z at sample)
+}
+
+pub flow a_chain_of_the_ratio_one_and_a_chain_of_two(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  let z = lp~(p).down~(2).up~(2) + lp~(p).down~(2)            //~ E0815
+  x * (z at sample)
+}
+
+pub flow a_call_and_a_chain(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  let z = lp~(p) + lp~(p).down~(4)                            //~ E0815
+  x * (z at sample)
+}
+
+// ---------------------------------------------------------------- the loop of a name through the head
+
+pub flow loop_that_reads_the_chain_at_sample(x: F32 at sample) -> F32 at sample {
+  let y = lp~(prev~(^y at sample)).down~(4)                   //~ E0815
+  x * (y at sample)
+}

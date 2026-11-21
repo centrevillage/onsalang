@@ -1,0 +1,10 @@
+// The flows of the module that main.onsa runs with a chain of modifiers.
+
+pub flow lp(x: F32 at sample) -> F32 at sample {
+  x * 0.5 + prev~(x) * 0.5
+}
+
+// A flow that has a chain in its own body: the chain that runs it sets the clock of its `sample`.
+pub flow smooth_slow(c: F32 at block) -> F32 at sample {
+  lp~(c).down~(2) at sample
+}

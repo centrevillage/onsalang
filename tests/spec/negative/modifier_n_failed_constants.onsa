@@ -6,7 +6,7 @@
 // (a name not found, E0302; a cycle, E0312; a literal of another type, E0401) is an error with no diagnostic (§18.1:
 // "読めなかった部分は誤りの型として扱い、それを使う側には診断を出さない", R-499), at the head of the body, in a `par~`, in a
 // branch of `if~` and in an argument of an instance: only the errors of the constants are reported, no error of the flow
-// stage (no E0808, no E0200 of this version for the chain, whose N is in error) and no internal error.
+// stage (no E0808, and no E0815 of the clock of the chain, whose rate is an error although the argument `x` is the `sample` input, flow_clock/modifier_chain_n_errors.onsa) and no internal error.
 
 const BAD: U32 = nope                                        //~ E0302
 const CYC: U32 = CYC                                         //~ E0312

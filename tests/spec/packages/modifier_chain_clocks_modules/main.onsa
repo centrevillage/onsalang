@@ -1,0 +1,33 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§11.9", "§15.1", "§18.1"]
+
+// W7-09 U3b/t, S-566, S-818 (spec §11.9, §11.10, §15.1: "頭がモジュールか flow の名前空間なら、今の flow の呼び出し"): the head of a chain is a flow of another module (`dsp.lp~(p).down~(4)`), and the chain is read as
+// one of a flow of this file is (modifier_chain_clocks.onsa): the value is a tick of the ratio, `at sample` promotes it, a module flow that has a chain in its own body runs at the ratio of the chain that
+// calls it, a chain is the head argument of another, and the arguments are read at the chain rate (the last flow: a `sample` value into `dsp.lp~(x).down~(4)` is E0815). `x` is the `sample` input, `p` is a
+// `block` input.
+
+use dsp
+
+pub flow head_of_a_module(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  x * (dsp.lp~(p).down~(4) at sample)
+}
+
+pub flow a_module_flow_with_a_chain_inside(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  let y = dsp.smooth_slow~(p).down~(4)
+  x * (y at sample)
+}
+
+pub flow chains_of_a_module_in_the_arguments(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  let a = dsp.lp~(dsp.lp~(p).down~(4)).down~(4)
+  let b = lp~(dsp.lp~(p).down~(2)).down~(2)
+  x * (a at sample) + (b at sample)
+}
+
+flow lp(x: F32 at sample) -> F32 at sample {
+  x * 0.25
+}
+
+pub flow head_of_a_module_is_faster(x: F32 at sample) -> F32 at sample {
+  dsp.lp~(x).down~(4) at sample                               //~ E0815
+}

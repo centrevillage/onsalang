@@ -52,11 +52,12 @@ impl FlowInfo {
     }
 
     /// The first `let` or node (by its place) whose stage is a periodic
-    /// tick of a ratio (`sample / N`, §11.3): the Core lowers no stage of it
-    /// until W7-16, which stops at it (E0200, R-91 (1)).
+    /// tick of a ratio (`sample / N`, §11.3), or a node with a chain of
+    /// modifiers, whose ratio may be one (§11.9): the Core lowers no stage
+    /// of them until W7-16, which stops at it (E0200, R-91 (1)).
     pub fn multirate_at(&self) -> Option<Span> {
         let lets = self.lets.iter().filter(|l| l.stage.of_ratio()).map(|l| l.span);
-        let nodes = self.nodes.iter().filter(|n| n.clock.of_ratio()).map(|n| n.span);
+        let nodes = self.nodes.iter().filter(|n| n.clock.of_ratio() || !n.chain.is_empty()).map(|n| n.span);
         lets.chain(nodes).min_by_key(|s| (s.start, s.end))
     }
 

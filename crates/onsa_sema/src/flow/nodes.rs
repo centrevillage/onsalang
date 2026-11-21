@@ -7,9 +7,11 @@
 use onsa_diag::hash::HashSet;
 use onsa_syntax::ast::Ast;
 
-use super::plan::{Edge, NodeId, Owner, PlanKind, Vertex, names};
+use super::plan::{Edge, NodeId, Owner, PlanKind, PlanModifier, Vertex, names};
 use super::*;
+use crate::clock::Ratio;
 use crate::flow_names::PAR;
+use crate::names::body::BodyNames;
 
 /// A node the walk recorded: a [`super::PlanNode`] before its clock, in the
 /// order of its [`NodeId`].
@@ -23,6 +25,8 @@ pub(super) struct Recorded {
     pub(super) path: String,
     pub(super) whole: bool,
     pub(super) arms: Vec<(ExprId, u32)>,
+    pub(super) frame: Ratio,
+    pub(super) chain: Vec<PlanModifier>,
 }
 
 /// The record of the nodes of a flow body while a walk goes through it. It
@@ -59,8 +63,8 @@ pub(super) struct NodeBuilder {
 }
 
 impl NodeBuilder {
-    pub(super) fn new(pending: &[PendingLet], ast: &Ast, body: &BodyInfo) -> NodeBuilder {
-        let namer = names::Namer::new(pending, ast, body);
+    pub(super) fn new(pending: &[PendingLet], ast: &Ast, body: &BodyInfo, of: &BodyNames) -> NodeBuilder {
+        let namer = names::Namer::new(pending, ast, body, of);
         let (readers, edges, seen) = (Vec::new(), Vec::new(), HashSet::default());
         NodeBuilder { nodes: Vec::new(), owners: Vec::new(), namer, readers, edges, seen, arms: Vec::new() }
     }
@@ -154,20 +158,22 @@ impl NodeBuilder {
         let id = NodeId(self.nodes.len() as u32);
         let whole = self.namer.whole(e);
         let arms = self.arms.clone();
-        self.nodes.push(Recorded { expr: e, span, kind, owner, name, path, whole, arms });
+        let (frame, chain) = (Ratio(0), Vec::new());
+        self.nodes.push(Recorded { expr: e, span, kind, owner, name, path, whole, arms, frame, chain });
         self.enter(id, whole, span);
         id
     }
 
-    /// The node of the delay or the instance call `e` at `span`. The `init`
-    /// of a delay is the written one, else the [`default_init`] of its type,
-    /// whose E0816 is the error.
+    /// The node of the delay or the instance call `e` at `span`, the head
+    /// of the chain `chain` if it is one (its frame and its modifiers). The
+    /// `init` of a delay is the written one, else the [`default_init`] of
+    /// its type, whose E0816 is the error.
     pub(super) fn node(
         &mut self,
-        a: &Analysis,
-        body: &BodyInfo,
+        (a, body): (&Analysis, &BodyInfo),
         e: ExprId,
         call: &NodeCall,
+        chain: Option<&ModifierChain>,
         span: Span,
     ) -> Result<(), Diagnostic> {
         let kind = match call.kind {
@@ -191,7 +197,11 @@ impl NodeBuilder {
             }
         };
         let of = names::kind(a, &call.kind).to_string();
-        self.push(e, span, kind, &of);
+        let id = self.push(e, span, kind, &of);
+        if let Some(c) = chain {
+            let n = &mut self.nodes[id.0 as usize];
+            (n.frame, n.chain) = (c.ratio.unwrap_or(Ratio(0)), c.mods.iter().map(|m| m.plan).collect());
+        }
         Ok(())
     }
 

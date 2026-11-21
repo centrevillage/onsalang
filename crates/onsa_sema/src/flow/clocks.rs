@@ -148,9 +148,6 @@ pub(super) struct Walked {
     pub(super) node_of: HashMap<ExprId, usize>,
     /// Stage 2: the first diagnostic in the order of the file.
     pub(super) diag: Option<Diagnostic>,
-    /// The walk did not go into a chain of modifiers (U3b): it did not
-    /// record the nodes in it.
-    pub(super) skipped: bool,
     /// Stage 2: the first call of an `inout self` method (E0713, §5.2),
     /// reported when the flow checks find no error.
     pub(super) inout_call: Option<Diagnostic>,
@@ -219,8 +216,10 @@ pub(super) struct Walk<'a> {
     sites: Vec<Site>,
     /// At `Check`: the statement walked.
     stmt: Option<Stmt>,
+    /// The frame of the instance whose argument is walked now (§11.9), of
+    /// the clock a delay there keeps its state at.
+    frame: ClockFrame,
     diag: Option<Diagnostic>,
-    skipped: bool,
     inout_call: Option<Diagnostic>,
     non_rt: HashMap<ExprId, bool>,
     recorder: NodeBuilder,
@@ -289,11 +288,11 @@ pub(super) fn walk(
         node_of: HashMap::default(),
         sites: Vec::new(),
         stmt: None,
+        frame: ClockFrame::BODY,
         diag: None,
-        skipped: false,
         inout_call: None,
         non_rt: HashMap::default(),
-        recorder: NodeBuilder::new(&cx.pending, ast, body),
+        recorder: NodeBuilder::new(&cx.pending, ast, body, names),
         dup_drops: HashMap::default(),
         tilde: BTreeMap::new(),
         store: HashSet::default(),
@@ -308,7 +307,7 @@ pub(super) fn walk(
     // S-1139 (a): of the clocks of stage 1, before the nodes are named.
     for (p, c) in cx.pending.iter().zip(&w.lets) {
         if c.is_some_and(Clock::of_ratio) {
-            w.recorder.apart(ast.without_parens(p.init));
+            w.recorder.apart(super::plan::names::value_call(ast, names, p.init));
         }
     }
     w.check();
@@ -322,7 +321,6 @@ pub(super) fn walk(
         stages,
         info: w.out,
         diag: w.diag,
-        skipped: w.skipped,
         inout_call: w.inout_call,
         non_rt: w.non_rt,
         nodes: w.node_clocks,
@@ -445,10 +443,10 @@ impl Walk<'_> {
     }
 
     /// The candidate that lifts the thing with state `e` of the kind `kind`
-    /// out of its place into a `let` before its statement ([`lift::lift`]).
-    fn lift(&self, e: ExprId, kind: &str) -> Option<Fix> {
+    /// in the frame `frame` into a `let` before its statement ([`lift::lift`]).
+    fn lift(&self, e: ExprId, kind: &str, frame: ClockFrame) -> Option<Fix> {
         let body = lift::Body { a: self.a, def: self.def, ast: self.ast, text: self.text, names: self.names };
-        lift::lift(&body, e, kind, self.stmt?)
+        lift::lift(&body, e, kind, self.stmt?, &checks::per_tick(frame.tick(), self.ast.expr(e).span))
     }
 
     /// The join of the clocks of the operands `ops` of `e` (a constant of
@@ -490,14 +488,19 @@ impl Walk<'_> {
             ExprKind::Field { base, .. } if !self.body.targets.contains_key(&e) => self.expr(*base),
             ExprKind::Field { .. } => self.name(e),
             ExprKind::Paren(x)
-            | ExprKind::Cast { expr: x, .. }
-            | ExprKind::Unary { expr: x, .. }
             | ExprKind::Move(x)
             | ExprKind::Try(x)
             | ExprKind::Unsafe(x)
             | ExprKind::TupleIndex { base: x, .. }
             | ExprKind::TypeArgs { base: x, .. }
             | ExprKind::Repeat { elem: x, .. } => self.expr(*x),
+            // SPEC-GAP(S-1083): an operation of a value of the `sample * N`
+            // of the caller is E0815 (provisional (1)), as of the operands of
+            // a join.
+            ExprKind::Cast { expr: x, .. } | ExprKind::Unary { expr: x, .. } => match self.expr(*x) {
+                Some(c) => self.join(e, &[(Some(*x), Some(c)), (None, Some(Clock::Const))]),
+                None => None,
+            },
             ExprKind::At { expr, .. } => {
                 let c = self.cut(*expr);
                 let Some(&k) = self.cx.at_clocks.get(&e) else {
@@ -666,7 +669,7 @@ impl Walk<'_> {
         let holds = check && super::nodes::holds_state(self.ast, body);
         if check {
             self.par_mark(e, tilde, holds);
-            if holds && !self.stateful_here(e, crate::flow_names::PAR) {
+            if holds && !self.stateful_here(e, crate::flow_names::PAR, ClockFrame::BODY) {
                 return Some(Clock::Error);
             }
         }
@@ -700,24 +703,8 @@ impl Walk<'_> {
         if self.sample_rate.contains(&e) {
             return Some(Clock::Init);
         }
-        // A modifier, at the E0200 the check of the types held (U3b, W7-10):
-        // in error, so that no later check reads a clock it has not. The
-        // chain is the thing with state (§11.10); its receiver and argument
-        // are walked apart, with no join, but in a chain of a rate, whose
-        // clocks U3b reads.
         if let Some(m) = self.names.modifier(e) {
-            let (mut head, mut rated) = (m.receiver, m.modifier.ratio_op().is_some());
-            while let Some(inner) = self.names.modifier(head) {
-                (head, rated) = (inner.receiver, rated || inner.modifier.ratio_op().is_some());
-            }
-            // A flow whose heading a syntax error cut has no node (S-59).
-            let kind = self.calls.get(&head).map(|&i| super::plan::names::kind(self.a, &self.cx.calls[i].kind));
-            if kind.is_some_and(|kind| self.stateful_here(e, kind)) && !rated {
-                std::iter::once(m.receiver).chain(args.iter().map(|x| x.expr)).for_each(|x| _ = self.expr(x));
-            } else {
-                self.skipped = true;
-            }
-            return Some(Clock::Error);
+            return self.modifier(e, m.receiver, m.head, args);
         }
         // The check of the types held the E0200 of `sample_tick()` (W7-09):
         // in error, so that no later check reads a clock it has not.
@@ -745,19 +732,37 @@ impl Walk<'_> {
         }
     }
 
+    /// The modifier `e` of the receiver `receiver` of the chain of the head
+    /// `head` (§11.9, §11.10): the value of the chain, the output of its
+    /// head ([`Walk::instance`]). The chain is the thing with state, of the
+    /// kind of its head (S-392). A head with no node (S-59) is walked as a
+    /// call, and the chain is in error. Its argument, the N or the condition
+    /// of W7-10, is read with no rule.
+    fn modifier(&mut self, e: ExprId, receiver: ExprId, head: ExprId, args: &[Arg]) -> Option<Clock> {
+        let kind = self.calls.get(&head).map(|&i| super::plan::names::kind(self.a, &self.cx.calls[i].kind));
+        let frame = self.frame_of(head).unwrap_or(ClockFrame::BODY);
+        if kind.is_some_and(|kind| !self.stateful_here(e, kind, frame)) {
+            return Some(Clock::Error);
+        }
+        let c = self.expr(receiver);
+        args.iter().for_each(|x| _ = self.cut(x.expr));
+        if kind.is_some() { c } else { Some(Clock::Error) }
+    }
+
     /// A delay or an instance call `call` at `e` (§11.4, §11.5): its clock,
     /// its checks, and at `Check` its node and the clocks its arguments are
     /// read at, in the order of the text (its slot and its node before its
     /// arguments', §11.6; the error of its node after theirs, §18.1).
     fn node(&mut self, e: ExprId, call: &NodeCall) -> Option<Clock> {
-        if !self.stateful_here(e, super::plan::names::kind(self.a, &call.kind)) {
+        if !self.stateful_here(e, super::plan::names::kind(self.a, &call.kind), ClockFrame::BODY) {
             return Some(Clock::Error);
         }
         let span = self.ast.expr(e).span;
         let slot = (self.mode == Mode::Check).then(|| {
             self.node_of.insert(e, self.node_clocks.len());
             self.node_clocks.push(NodeClock { clock: Clock::Error, args: Vec::new() });
-            (self.node_clocks.len() - 1, self.recorder.node(self.a, self.body, e, call, span))
+            let chain = self.cx.chains.get(&e);
+            (self.node_clocks.len() - 1, self.recorder.node((self.a, self.body), e, call, chain, span))
         });
         // Its node is the innermost reader of its arguments (none of an E0816).
         let own = slot.as_ref().is_some_and(|(_, recorded)| recorded.is_ok());
@@ -784,22 +789,34 @@ impl Walk<'_> {
     }
 
     /// `g~(args)` (§11.5): each argument read at the clock of its input in
-    /// the frame of the call, and the output of `g` in it.
+    /// the frame of the call, and the output of `g` in it. The head of a
+    /// chain runs in the frame of the sum of its ratios (§11.9), which a
+    /// chain with an N in error has not: its arguments and its output are
+    /// then in error (§18.1).
     fn instance(&mut self, e: ExprId, g: DefId, call: &NodeCall) -> (Option<Clock>, Vec<ArgRead>) {
         let Some(f) = self.a.def(g).as_flow() else { onsa_diag::internal::bug(self.span(e), "an instance of no flow") };
         if f.inputs.len() != call.args.len() {
             onsa_diag::internal::bug(self.span(e), "an instance with other arguments than its inputs");
         }
-        let frame = ClockFrame { ratio: Ratio(0) };
+        let frame = self.frame_of(e);
+        let rebased = |c: Clock| frame.map_or(Clock::Error, |frame| rebase(c, frame));
         let mut reads = Vec::new();
+        let outer = std::mem::replace(&mut self.frame, frame.unwrap_or(ClockFrame::BODY));
         for (&x, input) in call.args.iter().zip(&f.inputs) {
-            let at = rebase(input.api_clock(), frame);
+            let at = rebased(input.api_clock());
             if let Some(c) = self.cut(x) {
                 self.check_arg(x, c, at, input, g);
                 reads.push(ArgRead { expr: x, at });
             }
         }
-        (Some(rebase(f.out_clock, frame)), reads)
+        self.frame = outer;
+        (Some(rebased(f.out_clock)), reads)
+    }
+
+    /// The frame an instance call `e` runs in: of the sum of the ratios of
+    /// the chain it heads (§11.9), none when an N of it is in error.
+    fn frame_of(&self, e: ExprId) -> Option<ClockFrame> {
+        self.cx.chains.get(&e).map_or(Some(Ratio(0)), |c| c.ratio).map(|ratio| ClockFrame { ratio })
     }
 
     /// A delay (§11.4): its first argument, the `d` of `vdelay~` and its

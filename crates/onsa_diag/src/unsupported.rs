@@ -122,11 +122,8 @@ features! {
     NonCopyTickParts: Language, "a value that is not Copy computed at the clock `{}` and read at a faster clock",
         Some("write `at` on the names it reads, so that it is computed where it is read (`(a at sample) > 0.0`)");
     /// §11.3, §11.9: the Core of a flow with a periodic clock of a ratio
-    /// (`sample / N`), which W7-16 lowers.
-    MultirateFlows: Language, "building a flow with the clock `sample / N`", None;
-    /// §11.9: the rates of `.down~(N)` and `.up~(N)`, the clocks of their
-    /// chains (W7-09 U3b).
-    ModifierRates: Language, "the rates of the modifiers `.down~(N)` and `.up~(N)` of an instance", None;
+    /// (`sample / N`) or a chain of modifiers, which W7-16 lowers.
+    MultirateFlows: Language, "building a flow with the clock `sample / N` or a chain of `.down~(N)` and `.up~(N)`", None;
     /// §11.10: the meaning of `.when~(c)` and `.reset_if~(r)` (W7-10).
     InstanceModifiers: Language, "the modifiers `.when~(c)` and `.reset_if~(r)` of an instance", None;
     /// §11.4, S-565: the time since `reset` in ticks (W7-09, R-288).

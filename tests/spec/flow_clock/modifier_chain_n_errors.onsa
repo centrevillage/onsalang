@@ -1,0 +1,41 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§11.9", "§18.1"]
+
+// W7-09 U3b/t, S-566, S-1077 (spec §11.9, §18.1): the N in error in a chain is the error of the chain, wherever it stands in it (modifier_n_errors.onsa has the value, the type and the constant
+// forms with one or two modifiers). Where the chain rate is an error, the chain has no rate to read the arguments or its value by, so what reads it reports nothing (§18.1: "読めなかった部分は誤りの型として扱い、
+// それを使う側には診断を出さない"): the head argument that is faster than the rate that the N would give, and the value that no `at` promotes, are no E0815 beside the E0808. The error is at
+// the N. One error per flow (§18.1), so each form is a flow of its own. `x` is the `sample` input, `p` is a `block` input.
+
+pub flow lp(x: F32 at sample) -> F32 at sample {
+  x * 0.5 + prev~(x) * 0.5
+}
+
+pub flow first_of_two_is_three(p: F32 at block) -> F32 at sample {
+  lp~(p).down~(3).down~(2) at sample                          //~ E0808
+}
+
+pub flow middle_of_three_is_six(p: F32 at block) -> F32 at sample {
+  lp~(p).down~(2).up~(6).down~(2) at sample                   //~ E0808
+}
+
+pub flow last_of_two_ups_is_three(p: F32 at block) -> F32 at sample {
+  let y = lp~(p).up~(4).up~(3)                                //~ E0808
+  y at sample
+}
+
+pub flow a_head_that_is_faster_than_the_rate(x: F32 at sample) -> F32 at sample {
+  lp~(x).down~(3) at sample                                   //~ E0808
+}
+
+pub flow a_head_that_is_faster_in_a_chain_of_two(x: F32 at sample) -> F32 at sample {
+  lp~(x).down~(2).down~(3) at sample                          //~ E0808
+}
+
+pub flow a_value_read_with_no_at(p: F32 at block) -> F32 at sample {
+  lp~(p).down~(3)                                             //~ E0808
+}
+
+pub flow a_value_met_with_a_sample_value(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  x + lp~(p).down~(2).down~(5)                                //~ E0808
+}

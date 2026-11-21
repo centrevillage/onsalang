@@ -1,0 +1,64 @@
+// onsa.toml
+// [test]
+// spec = ["§11.5", "§11.9", "§11.10", "§18.1"]
+
+// W7-09 U3b/t, S-555, S-566, S-110 (spec §11.5, §11.9, §11.10, §18.1): the arguments of the first call of a chain with a ratio are read as the arguments of a call are, so the rules of the body that are
+// not of the clock stand there as well: a call that holds a state in a branch of `if` or `match` (E0811, §11.5), in the first argument of a delay of a value of the parameter kinds (E0813, §11.4), and a
+// call that holds a state on the right of `&&` and `||` (E0806, §11.5). The arguments of the cases are read at
+// the chain rate, so no error of the clocks stands beside them (the branches hold chains of the same ratio, `b` and `p` are `block`). The call with no modifier gives the same
+// diagnostic (the controls are head_errors_of_a_call_with_no_modifier.onsa, which pass without the clocks of a chain). The error is on the line of the call that is wrong. One error per flow (§18.1), so each form is a
+// flow of its own. `x` is the `sample` input.
+
+pub flow lp(x: F32 at sample) -> F32 at sample {
+  x * 0.5 + prev~(x) * 0.5
+}
+
+pub flow gate(c: Bool at sample) -> Bool at sample {
+  c
+}
+
+// ---------------------------------------------------------------- a state in a branch (E0811)
+
+pub flow if_in_the_head(b: Bool at block, p: F32 at block) -> F32 at sample {
+  lp~(if b { lp~(p).down~(2) } else { 0.0 }).down~(2) at sample             //~ E0811
+}
+
+pub flow match_in_the_head(n: U32 at block, p: F32 at block) -> F32 at sample {
+  lp~(match n { 0 => lp~(p).down~(2), _ => 0.0 }).down~(2) at sample        //~ E0811
+}
+
+pub flow if_in_the_head_of_a_chain_of_two_modifiers(b: Bool at block, p: F32 at block) -> F32 at sample {
+  lp~(if b { lp~(p).down~(4) } else { 0.0 }).down~(2).down~(2) at sample    //~ E0811
+}
+
+// ---------------------------------------------------------------- the delay of a value of the parameter kinds (E0813)
+
+pub flow prev_in_the_head(p: F32 at block) -> F32 at sample {
+  lp~(prev~(p)).down~(2) at sample                                          //~ E0813
+}
+
+pub flow delay_in_the_head(p: F32 at block) -> F32 at sample {
+  lp~(delay~(p, 2)).down~(2) at sample                                      //~ E0813
+}
+
+pub flow vdelay_in_the_head_of_a_chain_of_two_modifiers(p: F32 at block) -> F32 at sample {
+  lp~(vdelay~(p, p, 4)).down~(2).down~(2) at sample                         //~ E0813
+}
+
+// ---------------------------------------------------------------- a state on the right of `&&` and `||` (E0806)
+
+pub flow and_in_the_head(b: Bool at block, p: F32 at block, x: F32 at sample) -> F32 at sample {
+  let g = gate~(b && (lp~(p).down~(2) > 0.0)).down~(2)                      //~ E0806
+  if (g at sample) { x } else { 0.0 }
+}
+
+pub flow or_in_the_head(b: Bool at block, p: F32 at block, x: F32 at sample) -> F32 at sample {
+  let g = gate~(b || (lp~(p).down~(2) > 0.0)).down~(2)                      //~ E0806
+  if (g at sample) { x } else { 0.0 }
+}
+
+pub flow and_with_a_delay_in_the_head_of_a_chain_of_two_modifiers(b: Bool at block, p: F32 at block, x: F32 at sample) -> F32 at sample {
+  let g = gate~(b && (prev~(p at (sample / 4)) > 0.0)).down~(2).down~(2)    //~ E0806
+  if (g at sample) { x } else { 0.0 }
+}
+

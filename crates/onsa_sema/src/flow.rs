@@ -95,7 +95,7 @@ use onsa_syntax::ast::{Arg, CallKind, ExprId, ExprKind, Ident, PatId, PatKind, R
 use serde::{Deserialize, Serialize};
 
 use crate::body::{BodyInfo, Checker, Frame, LocalId, R, Target};
-use crate::clock::{Clock, ClockStage};
+use crate::clock::{Clock, ClockStage, Ratio};
 use crate::consteval::{self, ConstValue};
 use crate::def::FlowInput;
 use crate::ty::{FloatKind, Len, Ty, TyId};
@@ -117,7 +117,7 @@ mod tests;
 
 pub use branching::{Chain, Link, chain};
 pub use hoist::{Cond, Hoist, HoistId};
-pub use plan::{Edge, Field, FieldOf, Kept, NodeId, Owner, Part, PlanKind, PlanNode, Vertex};
+pub use plan::{Edge, Field, FieldOf, Kept, NodeId, Owner, Part, PlanKind, PlanModifier, PlanNode, Vertex};
 
 pub(crate) use clocks::finish_flow;
 
@@ -363,8 +363,47 @@ pub(crate) struct FlowCx {
     /// A constant expression read a constant whose unit failed (§18.1,
     /// R-499): no plan is made, with no diagnostic.
     unread: bool,
-    /// A chain of modifiers by its outer modifier, while the check has not
-    /// reached a modifier around it: the E0200 of its first modifier, none
-    /// when an N of the chain is in error (U3b, W7-10).
-    chains: HashMap<ExprId, Option<Diagnostic>>,
+    /// The chains of modifiers by their heads ([`ModifierChain`]).
+    chains: HashMap<ExprId, ModifierChain>,
+}
+
+/// A chain of modifiers (§11.9) as the check of the types read it, by the
+/// call of its head (`ModifierCall::head`): the one record of its rate and
+/// its modifiers, which the walk, the marking and the plan read (D-15).
+#[derive(Debug)]
+pub(crate) struct ModifierChain {
+    /// The sum of the ratios of its `.down~(N)` and `.up~(N)`, the frame its
+    /// head runs in; none when an N is in error (§18.1: its rate is not
+    /// known, so what reads it reports nothing).
+    ratio: Option<Ratio>,
+    /// Its modifiers in the order they are written (the check reads the
+    /// receiver first).
+    mods: Vec<ChainModifier>,
+    /// The E0200 of its first `.when~` or `.reset_if~` (W7-10), held when
+    /// no N of it is in error.
+    gate: Option<Diagnostic>,
+}
+
+/// A modifier of a [`ModifierChain`]: its call, its receiver, and what the
+/// plan keeps of it.
+#[derive(Debug)]
+pub(crate) struct ChainModifier {
+    call: ExprId,
+    receiver: ExprId,
+    plan: PlanModifier,
+}
+
+impl FlowCx {
+    /// The calls of the nodes, and the calls of the modifiers of a chain
+    /// whose head is one, each with its receiver (§11.9: the value of the
+    /// chain is the output of its head, a node): the one set of the
+    /// expressions that are nodes (D-15), which the marking and the
+    /// hoisting read.
+    fn node_exprs(&self) -> HashMap<ExprId, Option<ExprId>> {
+        let mut out: HashMap<ExprId, Option<ExprId>> = self.calls.iter().map(|c| (c.expr, None)).collect();
+        let chains = self.chains.iter().filter(|(h, _)| out.contains_key(h)).flat_map(|(_, c)| &c.mods);
+        let mods: Vec<_> = chains.map(|m| (m.call, Some(m.receiver))).collect();
+        out.extend(mods);
+        out
+    }
 }

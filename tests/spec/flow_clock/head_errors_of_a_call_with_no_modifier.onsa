@@ -1,0 +1,28 @@
+// onsa.toml
+// [test]
+// spec = ["§11.4", "§11.5", "§18.1"]
+
+// W7-09 U3b/t (the controls of modifier_chain_head_errors.onsa, which reads the same rules in the head of a chain with a ratio): a call with no modifier that holds a state in a branch of `if` (E0811, §11.5), the
+// first argument of a delay that is a value of the parameter kinds (E0813, §11.4) and a call that holds a state on the right of `&&` (E0806, §11.5), each in the argument of a call. They pass now and keep passing
+// when the chains are read. One error per flow (§18.1), so each form is a flow of its own. `x` is the `sample` input.
+
+pub flow lp(x: F32 at sample) -> F32 at sample {
+  x * 0.5 + prev~(x) * 0.5
+}
+
+pub flow gate(c: Bool at sample) -> Bool at sample {
+  c
+}
+
+pub flow if_in_the_argument(b: Bool at block, p: F32 at block) -> F32 at sample {
+  lp~(if b { lp~(p) } else { 0.0 })                                         //~ E0811
+}
+
+pub flow prev_in_the_argument(p: F32 at block) -> F32 at sample {
+  lp~(prev~(p))                                                             //~ E0813
+}
+
+pub flow and_in_the_argument(b: Bool at sample, x: F32 at sample) -> F32 at sample {
+  let g = gate~(b && (lp~(x) > 0.0))                                        //~ E0806
+  if g { x } else { 0.0 }
+}
