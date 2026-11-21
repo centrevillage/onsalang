@@ -1,0 +1,149 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§11.4", "§11.9", "§2.2"]
+
+// W7-09 U4b/t, S-565, S-567 (K6), S-1180 (1) (spec §11.4: "`sample_tick()`: `reset` からの時間を、書いた場所の `sample_rate()` の刻みの数で表した `U32`", "クロックの推論では、
+// `sample_rate()` と同じく式のクロックを引き上げず、使う所の刻みのクロックに合わせる。下限は刻みのクロックで、他に刻みのクロックが無ければ本体の `sample`"): the forms of `sample_tick()`
+// that are no error. Its value is a `U32` and it is read where it is written: with a `sample` value (the clock `sample`), with the value of a slow tick in the same expression (that tick), and
+// as an argument that is passed straight to an input of `sample / N` (the tick of that input); a `let` of it alone is the `sample` of the body (S-1180 (1), so `let t = sample_tick()` passed
+// to an input of `sample / N` is in e0815_sample_tick_clocks.onsa). It stands in the places a value of `sample` stands: the output, a `let`, an operation of `U32` and its conversions
+// (§3.3), the condition of an `if` and the target of a `match`, `if~` and `match~`, a `par` and a `par~`, the first argument of a delay, a loop through `^`, the head of a chain, and the
+// body of a conversion flow (§11.9: the `sample` of the body). The value of the counter is not asked here (it is of the evaluator and of the Core, S-1127, W7-16). No diagnostic. `x` is
+// the `sample` input. The errors are in e0412_sample_tick_arguments.onsa and e0815_sample_tick_clocks.onsa.
+
+pub flow lp(x: F32 at sample) -> F32 at sample {
+  x * 0.5 + prev~(x) * 0.5
+}
+
+pub flow hold4(g: U32 at (sample / 4)) -> U32 at sample {
+  g at sample
+}
+
+pub flow pass_u32(g: U32 at sample) -> U32 at sample {
+  g
+}
+
+// ---------------------------------------------------------------- the value and its type
+
+pub flow as_the_output(x: F32 at sample) -> U32 at sample {
+  sample_tick()
+}
+
+pub flow in_a_let(x: F32 at sample) -> F32 at sample {
+  let t = sample_tick()
+  x * F32.round_from(t)
+}
+
+pub flow with_a_value_of_sample(x: F32 at sample, n: U32 at sample) -> U32 at sample {
+  sample_tick() + n
+}
+
+pub flow arithmetic_of_u32(x: F32 at sample) -> U32 at sample {
+  (sample_tick() * 3 + 1) % 48000
+}
+
+pub flow wrapping_difference_with_the_last(x: F32 at sample) -> U32 at sample {
+  sample_tick() -% prev~(sample_tick())
+}
+
+pub flow widened_with_as(x: F32 at sample) -> F64 at sample {
+  (sample_tick() as F64) * 0.5
+}
+
+pub flow compared_in_a_let(x: F32 at sample) -> Bool at sample {
+  let t = sample_tick()
+  t > 100
+}
+
+// ---------------------------------------------------------------- branches, a `par`, delays, a loop
+
+pub flow in_the_condition_of_an_if(x: F32 at sample) -> F32 at sample {
+  if sample_tick() % 2 == 0 { x } else { -x }
+}
+
+pub flow in_the_target_of_a_match(x: F32 at sample) -> F32 at sample {
+  match sample_tick() % 3 {
+    0 => x,
+    1 => -x,
+    _ => 0.0,
+  }
+}
+
+pub flow in_if_tilde_and_match_tilde(x: F32 at sample) -> F32 at sample {
+  let a = if~ sample_tick() % 2 == 0 { lp~(x) } else { x }
+  match~ sample_tick() % 4 {
+    0 => a,
+    _ => lp~(a),
+  }
+}
+
+pub flow in_the_arm_of_an_if_tilde(c: Bool at sample, x: F32 at sample) -> F32 at sample {
+  if~ c { lp~(x) } else { x * F32.round_from(sample_tick()) }
+}
+
+pub flow in_a_par_and_a_par_tilde(x: F32 at sample) -> F32 at sample {
+  let ys = par i in 0 ..< 2 { x * F32.round_from(sample_tick() + i) }
+  let zs = par~ j in 0 ..< 2 { lp~(x * F32.round_from(sample_tick() + j)) }
+  ys[0] + ys[1] + zs[0] + zs[1]
+}
+
+pub flow in_the_first_argument_of_a_delay(x: F32 at sample) -> U32 at sample {
+  let a = prev~(sample_tick())
+  let b = delay~(sample_tick(), 3)
+  a + b
+}
+
+pub flow in_an_argument_of_an_instance(x: F32 at sample) -> F32 at sample {
+  lp~(x * F32.round_from(sample_tick()))
+}
+
+pub flow in_a_loop_through_a_caret(x: F32 at sample) -> F32 at sample {
+  let a = prev~(^a + F32.round_from(sample_tick()))
+  a
+}
+
+pub flow in_a_loop_of_two_lets(x: F32 at sample) -> F32 at sample {
+  let a = prev~(^b)
+  let b = a + F32.round_from(sample_tick())
+  b
+}
+
+// ---------------------------------------------------------------- the tick of the place it is used at
+
+pub flow straight_to_an_input_of_a_slow_tick(x: F32 at sample) -> U32 at sample {
+  hold4~(sample_tick())
+}
+
+pub flow with_a_value_of_a_slow_tick(lf: F32 at (sample / 4)) -> F32 at (sample / 4) {
+  lf + F32.round_from(sample_tick())
+}
+
+pub flow straight_to_the_head_of_a_chain(x: F32 at sample) -> U32 at sample {
+  pass_u32~(sample_tick()).down~(4) at sample
+}
+
+// ---------------------------------------------------------------- the body of a conversion flow
+
+pub flow in_a_gather_of_sample_times(x: F32 at (sample * 4)) -> F32 at sample {
+  x[3] * F32.round_from(sample_tick() % 4)
+}
+
+pub flow in_a_deal_of_sample_times(x: F32 at sample) -> F32 at (sample * 2) {
+  [x, x * F32.round_from(sample_tick())]
+}
+
+pub flow in_an_output_of_sample_with_a_slow_input(lf: F32 at (sample / 4)) -> F32 at sample {
+  (lf at sample) + F32.round_from(sample_tick() % 4)
+}
+
+// The parent added the two below (W7-09 U4b, spec §11.4: "使う所の刻みのクロックに合わせる"): the output of a flow whose output is at `sample / 4` is used at `sample / 4`, and `at (sample / 4)`
+// is the clock it is used at, so `sample_tick()` alone is at `sample / 4` there. S-1180 (1) is for a `let` of it alone, which has no clock to be used at and is the `sample` of the body.
+
+pub flow alone_in_an_output_of_a_slow_tick(lf: F32 at (sample / 4)) -> U32 at (sample / 4) {
+  sample_tick()
+}
+
+pub flow alone_at_a_slow_tick(x: F32 at sample) -> F32 at sample {
+  let a = sample_tick() at (sample / 4)
+  x + F32.round_from(a at sample)
+}

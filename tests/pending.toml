@@ -548,13 +548,6 @@ note = "イベントの入出力の見出し。`at event` のクロックが読�
 # --- W4-03 U5b/t: prelude の trait の名前を境界に書く形のうち、境界の意味を入れる作業で通るもの（2026-10-26）。
 [[pending]]
 kind = "test-case"
-target = "tests/spec/flow/builtin_sample_tick_call.onsa"
-reasons = ["S-565"]
-until = "W7-09"
-note = "`sample_tick()` は W7-09 で実装する（位相のカウンタ）。今は E0200 `Feature::SampleTick`（R-288、W4-04 U3b で E0302 から変えた）"
-
-[[pending]]
-kind = "test-case"
 target = "tests/spec/self/const_exprs_arith.onsa"
 reasons = ["S-50", "S-595"]
 until = "W9-03"
@@ -880,13 +873,6 @@ target = "tests/spec/negative/flow_const_neg_until_w9_03.onsa"
 reasons = ["S-228", "S-132", "R-195"]
 until = "W9-03"
 note = "flow の定数式の評価: ONE - 2 は E0419、ONE - 1 は E0808、計算した長さは W9-03 まで E0200（FlowConstExprs）"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/flow_clock/feedback_to_a_let_in_error_until_w7_09.onsa"
-reasons = ["S-1133", "R-496"]
-until = "W7-09"
-note = "^名前 の先が誤りの let のとき、^ で読む側に診断を出さない（今は段 1 のクロックで読む）"
 
 [[pending]]
 kind = "test-case"

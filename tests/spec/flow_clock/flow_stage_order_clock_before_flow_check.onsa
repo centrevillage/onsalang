@@ -85,7 +85,7 @@
 // an error of the clock rules (E0813 on the first argument of a delay, E0815 on a value that is too
 // fast) is reported when it is written before an error of the other flow checks: the length of a
 // delay (E0807 for 1, E0808 for 0 and for the `MAX` of `vdelay~`), the bounds of a `par~` (E0808),
-// and the feature this version does not take (E0200 for `sample_tick()`, W7-09; a delay inside a delay
+// and the meaning this version does not take (E0200 for a `.when~(c)`, W7-10; a delay inside a delay
 // is no error since W7-07, so the two `nested_delay` flows have the first error alone). They are all of
 // the flow stage, and none of them hides another by the way the compiler walks the body. One error per
 // flow, so each form is a flow of its own: the first line has the reported error, the second the other.
@@ -95,7 +95,7 @@
 // line (the clock error starts first). The forms with the error of the length first are in
 // `flow_stage_order_flow_check_first.onsa`. The candidate of E0813 leaves the later error.
 // Since W7-14 (R-495) the walk of the types holds the errors of the lengths and goes on, so they do
-// not win. The E0200 of `sample_tick()` goes when W7-09 takes the feature; the error that is
+// not win. The E0200 of the `when~` goes when W7-10 takes the modifier; the error that is
 // reported (the first one) does not change, and it is only after E0815, which has no candidate (the
 // candidate of E0813 would leave an E0200 that goes).
 
@@ -180,9 +180,9 @@ pub flow pass_then_nested_delay(x: F32 at sample, p: F32 at block, d: F32 at sam
   x
 }
 
-pub flow pass_then_sample_tick(x: F32 at sample, p: F32 at block, d: F32 at sample) -> F32 at sample {
+pub flow pass_then_a_when(x: F32 at sample, p: F32 at block, d: F32 at sample) -> F32 at sample {
   let a = pass~(x)                                          //~ E0815
-  let t = sample_tick()
+  let t = same~(x).when~(true)
   x
 }
 
@@ -216,9 +216,9 @@ pub flow at_then_nested_delay(x: F32 at sample, p: F32 at block, d: F32 at sampl
   x
 }
 
-pub flow at_then_sample_tick(x: F32 at sample, p: F32 at block, d: F32 at sample) -> F32 at sample {
+pub flow at_then_a_when(x: F32 at sample, p: F32 at block, d: F32 at sample) -> F32 at sample {
   let a = x at block                                        //~ E0815
-  let t = sample_tick()
+  let t = same~(x).when~(true)
   x
 }
 
@@ -245,12 +245,14 @@ pub flow block_in_a_par_body_then_delay_one(x: F32 at sample, p: F32 at block, d
   x
 }
 
-pub flow pass_in_a_par_body_then_sample_tick(x: F32 at sample, p: F32 at block, d: F32 at sample) -> F32 at sample {
+pub flow pass_in_a_par_body_then_a_when(x: F32 at sample, p: F32 at block, d: F32 at sample) -> F32 at sample {
   let a = par~ i in 0 ..< 2 { pass~(x) }                    //~ E0815
-  let t = sample_tick()
+  let t = same~(x).when~(true)
   x
 }
 
 pub flow block_then_delay_one_in_one_line(x: F32 at sample, p: F32 at block, d: F32 at sample) -> F32 at sample {
   prev~(p) + delay~(x, 1)                                   //~ E0813
 }
+
+pub flow same(x: F32 at sample) -> F32 at sample { x }

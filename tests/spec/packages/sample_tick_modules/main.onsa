@@ -1,0 +1,25 @@
+// onsa.toml
+// [test]
+// spec = ["§11.4", "§11.3", "§15.1"]
+
+// W7-09 U4b/t, S-565, S-567 (K6) (spec §11.4: `sample_tick()` is the name of a flow builtin, seen in the body of every flow, whichever module the flow is in; §11.3: the result of a call of a flow is at the clock of its
+// output, the clock of the call position, whatever clock the body reads `sample_tick()` at): the flows of the module `ticks` read `sample_tick()` (the output, an operation of `U32`, an input of `sample / 4`
+// that reads the call straight), and the flows here call them as the flows of one file are called, with the builtin of their own in the same expression. No diagnostic. `x` is the `sample` input.
+
+use ticks
+
+pub flow a_flow_of_a_module(x: F32 at sample) -> F32 at sample {
+  ticks.timed~(x) + F32.round_from(ticks.elapsed~(x))
+}
+
+pub flow the_builtin_of_its_own_with_the_one_of_a_module(x: F32 at sample) -> U32 at sample {
+  sample_tick() + ticks.elapsed~(x)
+}
+
+pub flow straight_to_an_input_of_a_slow_tick_of_a_module(x: F32 at sample) -> U32 at sample {
+  ticks.hold4~(sample_tick())
+}
+
+pub flow a_flow_of_a_module_in_a_branch(c: Bool at sample, x: F32 at sample) -> F32 at sample {
+  if~ c { ticks.timed~(x) } else { x }
+}

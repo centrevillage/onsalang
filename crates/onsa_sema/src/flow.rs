@@ -98,10 +98,10 @@ use crate::body::{BodyInfo, Checker, Frame, LocalId, R, Target};
 use crate::clock::{Clock, ClockStage, Ratio};
 use crate::consteval::{self, ConstValue};
 use crate::def::FlowInput;
-use crate::ty::{FloatKind, Len, Ty, TyId};
+use crate::ty::{FloatKind, IntKind, Len, Ty, TyId};
 use crate::{Analysis, DefId, Module};
 
-use crate::flow_names::{Delay, SAMPLE_RATE};
+use crate::flow_names::Delay;
 mod branching;
 mod check;
 mod clocks;
@@ -264,6 +264,9 @@ pub struct FlowInfo {
     pub(crate) derived_port: Option<Span>,
     pub sample_rate_at: Option<ClockStage>,
     pub sample_rate_calls: Vec<ExprId>,
+    /// The first call of `sample_tick()` (§11.4) by its place, which the
+    /// Core stops at until W7-16 ([`FlowInfo::multirate_at`]).
+    pub(crate) sample_tick_at: Option<Span>,
     pub read_at: HashMap<LocalId, BTreeSet<ClockStage>>,
     /// The stages each binding of an arm of `match~` is read at in a body,
     /// not its guard (S-1131): where it has a place, which its arm chosen
@@ -352,6 +355,7 @@ pub(crate) struct FlowCx {
     /// instances, the end of its range), §11.5.
     pars: HashMap<ExprId, (LocalId, u32, u32, RangeEnd)>,
     sample_rate_calls: Vec<ExprId>,
+    sample_tick_calls: Vec<ExprId>,
     /// The clock of each `e at k` (§11.3), the N of a derived clock
     /// evaluated: what the walk of the clocks reads.
     at_clocks: HashMap<ExprId, Clock>,

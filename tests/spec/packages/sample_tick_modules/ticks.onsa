@@ -1,0 +1,13 @@
+// The flows of this module read `sample_tick()`; main.onsa calls them.
+
+pub flow elapsed(x: F32 at sample) -> U32 at sample {
+  sample_tick()
+}
+
+pub flow timed(x: F32 at sample) -> F32 at sample {
+  x * F32.round_from(sample_tick() % 100)
+}
+
+pub flow hold4(g: U32 at (sample / 4)) -> U32 at sample {
+  g at sample
+}

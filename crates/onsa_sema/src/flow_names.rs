@@ -8,12 +8,9 @@
 use onsa_diag::{Code, Diagnostic, Span, Stage};
 use serde::{Deserialize, Serialize};
 
-/// The builtin of a flow that is no delay and is checked (§11.4).
+/// The builtins of a flow that are no delay (§11.4): the rate and the
+/// time since `reset` in ticks, whose counter the Core of W7-16 lowers.
 pub(crate) const SAMPLE_RATE: &str = "sample_rate";
-
-/// The builtin of a flow that is no delay and that this version does not
-/// have yet (E0200 `Feature::SampleTick`, W7-09); its name is reserved as
-/// the others (§11.4).
 const SAMPLE_TICK: &str = "sample_tick";
 
 /// The names the processor gives the state of a flow (§11.6, S-1138), all

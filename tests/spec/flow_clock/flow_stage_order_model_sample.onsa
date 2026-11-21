@@ -1,12 +1,6 @@
 // onsa.toml
 // [test]
 // spec = ["§11.4", "§11.5", "§18.1"]
-//
-// [[test.fix]]
-// at = "127:12"
-// code = "E0807"
-// candidate = 1
-// leaves = ["128:3 E0200"]
 
 // Sample of the model of the order of the stages in a flow body (names, types, flow check; the first by position in a stage). One error is reported per flow; the line of it is marked.
 
@@ -125,7 +119,7 @@ pub flow m14(x: F32 at sample, p: F32 at block, k: I32 at sample, n: U32 at samp
 
 pub flow m15(x: F32 at sample, p: F32 at block, k: I32 at sample, n: U32 at sample, c: Bool at sample) -> F32 at sample {
   let v0 = delay~(x, 1)  //~ E0807
-  sample_tick()
+  x
 
 }
 

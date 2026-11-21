@@ -36,14 +36,15 @@ pub(in crate::flow) struct Stmt {
 /// name of that `let` in its place. The name is `<kind>_<n>` (`kind` the kind
 /// of its node, §11.6), the first `n` that no binding of the body, parameter
 /// of the heading or name of the module has (§5.1), and `per` the tick it is
-/// computed on (§11.9). None when the thing is
+/// computed on (§11.9; none of a delay, of the tick of its first argument).
+/// None when the thing is
 /// in the body of a replication or reads a binding of an arm (§11.5: the
 /// `let` would be outside them), or any binding the statement does not see.
 /// Linear in the statement and the names of the body.
 // SPEC-GAP(S-1190): of two things with state side by side, the one at the
 // place of the diagnostic only is moved; the other stays, the error of the
 // next round (provisional).
-pub(in crate::flow) fn lift(b: &Body, thing: ExprId, kind: &str, stmt: Stmt, per: &str) -> Option<Fix> {
+pub(in crate::flow) fn lift(b: &Body, thing: ExprId, kind: &str, stmt: Stmt, per: Option<&str>) -> Option<Fix> {
     let (ast, span) = (b.ast, b.ast.expr(thing).span);
     if under_par(ast, stmt.root, thing)? || !reads_seen(b, thing) {
         return None;
@@ -58,7 +59,8 @@ pub(in crate::flow) fn lift(b: &Body, thing: ExprId, kind: &str, stmt: Stmt, per
         Edit::insert(span.file, stmt.start, format!("{head}{src}\n{indent}")).with_writers(&[moved]),
         Edit::replace(span, name.as_str()),
     ];
-    Some(Fix::new(format!("compute it on every {per} in a new `let {name}` before this statement"), edits))
+    let on = per.map_or(String::new(), |per| format!(" on every {per}"));
+    Some(Fix::new(format!("compute it{on} in a new `let {name}` before this statement"), edits))
 }
 
 /// Whether `thing` is in the body of a `par` / `par~` under `root` (its

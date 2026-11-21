@@ -127,14 +127,12 @@ features! {
     /// of a type that is not Copy read at a faster stage (provisional).
     NonCopyTickParts: Language, "a value that is not Copy computed at the clock `{}` and read at a faster clock",
         Some("write `at` on the names it reads, so that it is computed where it is read (`(a at sample) > 0.0`)");
-    /// §11.3, §11.9: the Core of a flow with a periodic clock of a ratio
-    /// (`sample / N`), a chain of modifiers or a port of a derived clock,
-    /// which W7-16 lowers.
-    MultirateFlows: Language, "building a flow with the clock `sample / N`, a chain of `.down~(N)` and `.up~(N)` or a port at `(sample / N)` or `(sample * N)`", None;
+    /// §11.3, §11.4, §11.9: the Core of a flow with a periodic clock of a
+    /// ratio (`sample / N`), a chain of modifiers, a port of a derived clock
+    /// or `sample_tick()`, which W7-16 lowers.
+    MultirateFlows: Language, "building a flow with the clock `sample / N`, a chain of `.down~(N)` and `.up~(N)`, a port at `(sample / N)` or `(sample * N)` or `sample_tick()`", None;
     /// §11.10: the meaning of `.when~(c)` and `.reset_if~(r)` (W7-10).
     InstanceModifiers: Language, "the modifiers `.when~(c)` and `.reset_if~(r)` of an instance", None;
-    /// §11.4, S-565: the time since `reset` in ticks (W7-09, R-288).
-    SampleTick: Language, "the builtin `sample_tick()` of a flow", None;
     Iteration: Language, "iteration over types other than arrays, `Span`, `Buf` and `Array`", None;
     Equality: Language, "equality on this type", None;
     OrderingAggregates: Language, "ordering comparisons of aggregate values", None;

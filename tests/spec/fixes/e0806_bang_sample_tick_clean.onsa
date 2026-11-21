@@ -1,0 +1,17 @@
+// onsa.toml
+// [test]
+// spec = ["§2.6", "§11.2", "§11.4", "§18.1"]
+//
+// [[test.fix]]
+// at = "16:3"
+// code = "E0806"
+// candidate = 1
+// clean = true
+
+// W7-09 U4b/t, S-811, S-817, S-565: the candidate of `sample_tick!()`, the name of a flow that is called without `~` (§11.4), removes the `!` (§11.2: "`f(x)` で呼ぶ項目なら `!` を消す候補"), and
+// the file has no error after it (`clean`): `sample_tick()` is a `U32` of the `sample` of the body that the flow returns (§11.4). One candidate unit in the file, as `clean` asks
+// (fixes/e0806_bang_sample_builtins.onsa has the other forms; fixes/e0806_bang_sample_rate_clean.onsa is the form of `sample_rate`).
+
+pub flow call(x: F32 at sample) -> U32 at sample {
+  sample_tick!()                                    //~ E0806
+}

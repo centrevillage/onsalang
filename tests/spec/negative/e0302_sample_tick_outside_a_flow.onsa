@@ -1,0 +1,32 @@
+// onsa.toml
+// [test]
+// spec = ["§11.4", "§15.1", "§18.1"]
+// fixes = 0
+
+// W7-09 U4b/t, S-565, R-288 (spec §11.4: "flow の外（fn の本体、`test`、`const` の初期化式）では見えない名前なので、`sample_rate()`・`prev(1.0)` は E0302 である"): `sample_tick()` is a name of the body of a flow only, so
+// when this version takes it in a flow (W7-09 U4b) it is still E0302 in every place outside one, and has no fix candidate (`fixes = 0`): an `rt fn`, a closure in a fn, a `test`, a method, a `const` that is
+// not the first of flow_builtin_outside_flow.onsa. The forms with a `~` are E0821 (e0821_callee_not_looked_up.onsa). One error per unit.
+
+pub rt fn in_an_rt_fn(x: U32) -> U32 {
+  x + sample_tick()                                 //~ E0302
+}
+
+pub fn in_a_closure(x: U32) -> U32 {
+  let f = fn(y: U32) -> U32 { y + sample_tick() }   //~ E0302
+  f.(x)
+}
+
+pub struct Counter { n: U32 }
+
+impl Counter {
+  pub fn next(self) -> U32 {
+    self.n + sample_tick()                          //~ E0302
+  }
+}
+
+test "in a test body" {
+  let t = sample_tick()                             //~ E0302
+  assert t == 0
+}
+
+pub const NEXT: U32 = 1 + sample_tick()             //~ E0302

@@ -1,6 +1,7 @@
 //! The checks of the flow rules at stage 2 of the walk (§11.3–§11.5): each
 //! at its place in the walk, which goes on past an error and keeps the first
-//! diagnostic in the order of the file (§18.1). A clock in error is no error
+//! diagnostic in the order of the file (§18.1). Those that give a clock in
+//! error decide it in every mode too (R-496). A clock in error is no error
 //! of a check (§18.1): the comparisons of [`crate::clock`] pass it. The
 //! checks on which the rule of the clock of their expression rests give it
 //! in error when they fail: the E0813 of a delay, the E0805 and the E0815 of
@@ -14,7 +15,7 @@ use onsa_syntax::ast::{Lit, OperandPlace};
 
 use super::*;
 use crate::binding::{aggregate, unit_variant};
-use crate::clock::{keeps_delay_state, promote, readable_at};
+use crate::clock::{grounded, keeps_delay_state, promote, readable_at};
 use crate::kind::kind_in_body;
 use crate::slot::{Form, Slot};
 
@@ -24,6 +25,12 @@ use crate::slot::{Form, Slot};
 /// ([`Walk::check_first`]), which so passes the check of its `at`.
 fn promotable(c: Clock, k: Clock) -> bool {
     promote(c, k).is_ok()
+}
+
+/// The clock `c` of a value as a diagnostic writes it: `sample_tick()`
+/// [`grounded`] (§11.4).
+fn shown(c: Clock, at: Span) -> String {
+    grounded(c).shown(at)
 }
 
 /// The tick `tick` as a title names it: `sample`, ``tick of `sample / 2` ``.
@@ -193,7 +200,7 @@ impl Walk<'_> {
         let Some(c) = c.filter(|_| self.checking()) else { return };
         let span = self.ast.expr(e).span;
         if !promotable(c, k) {
-            let (shown, to) = (c.shown(span), k.shown(span));
+            let (shown, to) = (shown(c, span), k.shown(span));
             let msg = format!(
                 "this expression is at the clock `{shown}`, faster than `{to}`; `at` cannot make a value slower (§11.3)"
             );
@@ -211,7 +218,7 @@ impl Walk<'_> {
     // this E0815 (provisional).
     pub(super) fn report_clash(&mut self, e: ExprId, ops: Clashed, looped: bool) {
         let span = self.ast.expr(e).span;
-        let [a, b] = ops.map(|(_, c)| c.shown(span));
+        let [a, b] = ops.map(|(_, c)| shown(c, span));
         let what = if looped { "operands that enter a loop of `let`s, which has one clock," } else { "operands" };
         let msg = match ops.iter().find(|(_, c)| matches!(c, Clock::Tick(k) if k.faster_than_body())) {
             Some((_, c)) => format!(
@@ -222,7 +229,7 @@ impl Walk<'_> {
         };
         let mut d = Diagnostic::new(Stage::Flow, Code::E0815, span, msg).with_found(self.src(span));
         for (x, c) in ops.iter().filter_map(|&(x, c)| Some((x?, c))) {
-            d = d.with_note(self.ast.expr(x).span, format!("this operand is at `{}`", c.shown(span)));
+            d = d.with_note(self.ast.expr(x).span, format!("this operand is at `{}`", shown(c, span)));
         }
         let rule = "a slower value is read at a faster clock with `at` (`a at sample`), and a value at `sample * N` meets no other for now (§11.3, §11.9)";
         self.report(d.with_rule(rule));
@@ -314,8 +321,8 @@ impl Walk<'_> {
     }
 
     /// Whether a node or a `par~` at `e`, of the kind `kind` (§11.6), in the
-    /// frame `frame` (§11.9), may be here: in no place that is not evaluated
-    /// on every sample (§11.5).
+    /// frame `frame` (§11.9; none of a delay), may be here: in no place that
+    /// is not evaluated on every sample (§11.5), in every mode (R-496).
     /// Else, at `Check`, the E0811 of a branch, a guard or a later condition
     /// of a chain, or the E0806 of the right of `&&` / `||`, of the innermost
     /// place, at `e` (S-392), with the candidates that can be made (§2.6,
@@ -329,10 +336,10 @@ impl Walk<'_> {
     // SPEC-GAP(S-1189): the thing in error has the error clock (its callers
     // give `Clock::Error` on false), so an `at` around it reports nothing
     // (provisional).
-    pub(super) fn stateful_here(&mut self, e: ExprId, kind: &str, frame: ClockFrame) -> bool {
-        let Some(&site) = self.sites.last().filter(|_| self.checking()) else { return true };
+    pub(super) fn stateful_here(&mut self, e: ExprId, kind: &str, frame: Option<ClockFrame>) -> bool {
+        let Some(&site) = self.sites.last() else { return true };
         let span = self.ast.expr(e).span;
-        if self.diag.as_ref().is_some_and(|d| Diagnostic::place_before(d.span, span)) {
+        if !self.checking() || self.diag.as_ref().is_some_and(|d| Diagnostic::place_before(d.span, span)) {
             return false;
         }
         let (code, place) = match site {
@@ -371,9 +378,11 @@ impl Walk<'_> {
 
     /// Whether a call at `e` of the function `def`, `ops` the clocks of its
     /// receiver (`receiver`) and arguments and `r` their join, has a clock
-    /// (§11.5): the first `inout self` call held (E0713, §5.2), no effects
-    /// (E0805), and a function that is not `rt` takes values at `init` or
-    /// constants only (E0815, S-147); one that does is recorded for the
+    /// (§11.5), in every mode (R-496): no effects (E0805), and a function
+    /// that is not `rt` takes values at `init` or constants only (E0815,
+    /// S-147), which `ops` that read a ⊥ (`partial`, [`Walk::bottoms`]) do
+    /// not decide. At `Check`, those reported, the first `inout self` call held
+    /// (E0713, §5.2), and a call of a function not `rt` recorded for the
     /// marking. With E0805 or that E0815 the rule of its clock fails, and the
     /// call is in error (§18.1).
     pub(super) fn check_fn_call(
@@ -381,35 +390,42 @@ impl Walk<'_> {
         e: ExprId,
         def: DefId,
         receiver: bool,
-        ops: &[Op],
+        ops: (&[Op], bool),
         r: Option<Clock>,
     ) -> bool {
-        let Some(f) = self.a.def(def).as_fn().filter(|_| self.checking()) else { return true };
-        let span = self.ast.expr(e).span;
+        let (Some(f), (ops, partial)) = (self.a.def(def).as_fn(), ops) else { return true };
+        let (check, span) = (self.checking(), self.ast.expr(e).span);
         let name = &self.a.def(def).name;
-        if f.takes_inout_self() {
+        if check && f.takes_inout_self() {
             let msg = format!("`{name}` takes `inout self`, and a flow body cannot call it (§5.2, §11.2)");
             let d = Diagnostic::new(Stage::Flow, Code::E0713, span, msg).with_found(self.src(span));
             Diagnostic::keep_first(&mut self.inout_call, d);
         }
         if !f.effects.effects().is_empty() {
-            let msg = format!("`{name}` has effects; a flow calls effect-free functions only (§11.5)");
-            self.err(Code::E0805, span, msg);
+            if check {
+                let msg = format!("`{name}` has effects; a flow calls effect-free functions only (§11.5)");
+                self.err(Code::E0805, span, msg);
+            }
             return false;
         }
-        if f.rt || r == Some(Clock::Error) {
+        if f.rt || r == Some(Clock::Error) || partial {
             return true;
         }
         let fast = |o: &Op| readable_at(o.1.unwrap_or(Clock::Const), Clock::Init).is_err();
         let Some(k) = ops.iter().position(fast) else {
-            self.non_rt.insert(e, ops.iter().any(|o| o.1.is_some_and(|c| c != Clock::Const)));
+            if check {
+                self.non_rt.insert(e, ops.iter().any(|o| o.1.is_some_and(|c| c != Clock::Const)));
+            }
             return true;
         };
+        if !check {
+            return false;
+        }
         let place = match k.checked_sub(usize::from(receiver)) {
             None => "its receiver".to_string(),
             Some(k) => format!("its argument {}", k + 1),
         };
-        let shown = ops[k].1.unwrap_or(Clock::Const).shown(span);
+        let shown = shown(ops[k].1.unwrap_or(Clock::Const), span);
         let msg = format!(
             "`{name}` is not `rt` and takes values at the clock `init` or constants only, but {place} is at `{shown}`; mark it `rt` or pass values at `init` (§11.5)"
         );
@@ -424,7 +440,7 @@ impl Walk<'_> {
             return;
         }
         let span = self.ast.expr(x).span;
-        let (shown, to, name) = (c.shown(span), at.shown(span), &self.a.def(g).name);
+        let (shown, to, name) = (shown(c, span), at.shown(span), &self.a.def(g).name);
         let never = "a value is never made slower".to_string();
         let how = if promotable(c, at) { format!("read it at `{to}` with `at`") } else { never };
         let msg = format!(
@@ -470,7 +486,7 @@ impl Walk<'_> {
             return;
         }
         let span = self.ast.expr(out).span;
-        let (shown, to) = (c.shown(span), at.shown(span));
+        let (shown, to) = (shown(c, span), at.shown(span));
         let how = if promotable(c, at) {
             format!("read it at `{to}` with `at`")
         } else {
@@ -488,23 +504,28 @@ impl Walk<'_> {
             return;
         }
         let span = self.ast.expr(d).span;
-        let (shown, to) = (c.shown(span), at.shown(span));
+        let (shown, to) = (shown(c, span), at.shown(span));
         let msg = format!(
             "the `d` of `vdelay~` is at the clock `{shown}` but the delay is at `{to}`; read it at `{to}` with `at` (§11.3, §11.4)"
         );
         self.err(Code::E0815, span, msg);
     }
 
-    /// Whether the first argument `first` of a delay, at the clock `c`,
-    /// holds its state (§11.4, E0813); one `at` makes `sample` (in the head
+    /// The clock of the first argument of a delay, `c`, when it holds no
+    /// state of the delay (§11.4, E0813): in every mode (R-496), but of one
+    /// that reads a ⊥ (`partial`, [`Walk::bottoms`]), whose clock is not
+    /// known until its loop is solved ([`delay_out`]).
+    pub(super) fn first_fails(c: Option<Clock>, partial: bool) -> Option<Clock> {
+        c.filter(|&c| !keeps_delay_state(c) && !partial)
+    }
+
+    /// The E0813 of the first argument `first` of a delay, at the clock `c`
+    /// ([`Self::first_fails`]); one `at` makes `sample` (in the head
     /// of a chain, the tick of its frame, §11.9) ([`promotable`]) has the
     /// candidate `first at sample` (S-102, S-152), in parentheses where `at` takes them (§3.1: `(p * 2.0) at sample`),
     /// unless the walk found an error in it, which the candidate would
     /// leave (§18.1), or it is a `^name`.
-    pub(super) fn check_first(&mut self, delay: Delay, first: ExprId, c: Clock) -> bool {
-        if keeps_delay_state(c) {
-            return true;
-        }
+    pub(super) fn report_first(&mut self, delay: Delay, first: ExprId, c: Clock) {
         let span = self.ast.expr(first).span;
         let d = delay.name();
         // Of a `.up~` frame, whose ticks keep no state (S-1097), the `sample`.
@@ -546,7 +567,6 @@ impl Walk<'_> {
             diag = diag.with_fix(Fix::new(title, edits));
         }
         self.report(diag);
-        false
     }
 
     /// The `init` `i` of a delay, at the clock `c`, is at `init` or a
@@ -559,7 +579,7 @@ impl Walk<'_> {
         let msg = format!(
             "the `init` of `{}~` must be at the clock `init` or a constant; this one is at `{}` (§11.4)",
             delay.name(),
-            c.shown(span)
+            shown(c, span)
         );
         self.err(Code::E0815, span, msg);
     }

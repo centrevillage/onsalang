@@ -182,6 +182,8 @@ impl FlowInfo {
     /// that is not its own (the `let`s of a constant have none and are
     /// defined in each phase that reads them). The one place of the
     /// judgement: [`FlowLet::state`] and the fields of the plan read it.
+    /// "Read at a stage not its own" is "read at a later stage": a value is
+    /// never read at a slower stage (E0815; ticks at the same ratio only).
     pub fn stored(&self, v: Kept) -> bool {
         match v {
             Kept::Local(l) => {

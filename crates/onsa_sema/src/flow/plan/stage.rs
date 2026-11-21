@@ -56,13 +56,16 @@ impl FlowInfo {
     /// a port of a derived clock, a `let` of one, a node of one, a node that
     /// reads an argument at one (an input of a derived clock of its callee,
     /// in `if~` and `par~` too) or a node with a chain of modifiers, whose
-    /// ratio may be one. The Core lowers no such stage until W7-16, which
-    /// stops at it (E0200, R-91 (1)). The one gate of them (D-15).
+    /// ratio may be one, and a call of `sample_tick()`, whose counter of the
+    /// phase (`_tick`, §11.6) is of the ticks. The Core lowers none of them
+    /// until W7-16, which stops at it (E0200, R-91 (1)). The one gate of
+    /// them (D-15).
     pub fn multirate_at(&self) -> Option<Span> {
         let lets = self.lets.iter().filter(|l| l.stage.of_ratio()).map(|l| l.span);
         let reads = |n: &PlanNode| n.args.iter().any(|a| a.at.of_ratio());
         let nodes = self.nodes.iter().filter(|n| n.clock.of_ratio() || reads(n) || !n.chain.is_empty());
-        self.derived_port.into_iter().chain(lets).chain(nodes.map(|n| n.span)).min_by_key(|s| (s.start, s.end))
+        let all = self.derived_port.into_iter().chain(lets).chain(nodes.map(|n| n.span)).chain(self.sample_tick_at);
+        all.min_by_key(|s| (s.start, s.end))
     }
 
     /// The `let`s of the stage `stage`, in their order (§11.4).

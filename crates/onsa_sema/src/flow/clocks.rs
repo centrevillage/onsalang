@@ -7,12 +7,16 @@
 //!   a user's flow, the operand of `at`, the `d` and the `init` of a delay,
 //!   §11.3 "読み方"), [`loops::components`] orders their loops, and `Solve`
 //!   walks each component once, a loop with its own `let`s as ⊥, which gets
-//!   the [`loop_clock`] of the join of its `let`s (§11.3, S-567 P3).
+//!   the [`loop_clock`] of the join of its `let`s (§11.3, S-567 P3). The
+//!   checks that give a clock in error decide it in every mode and report at
+//!   `Check` only (R-496), so a `^y` of a `let` in error is in error; of
+//!   operands that read a ⊥ they decide nothing in stage 1 ([`Walk::bottoms`]).
 //! - Stage 2 (`Check`) walks the `let`s in their order and the output, with
 //!   `^y` the value of stage 1, records every clock, checks the flow rules
 //!   ([`checks`]) all through, keeping the first diagnostic in the order of
 //!   the file (§18.1), and records the nodes and their owners
-//!   ([`NodeBuilder`]).
+//!   ([`NodeBuilder`]), and gives each value of `sample_tick()` the clock of
+//!   the place that uses it ([`Walk::settle`]).
 //!
 //! Each expression is walked at most three times; the components are linear
 //! in the reads (Tarjan), so the walk is linear in the body, with no bound of
@@ -29,9 +33,8 @@ use super::nodes::{NodeBuilder, Recorded};
 use super::plan::{Edge, Owner};
 use super::*;
 use crate::body::LocalKind;
-use crate::clock::{self, ClockFrame, Ratio, delay_out, loop_clock, rebase};
-use crate::flow_names::FlowBuiltin;
-use crate::names::body::{BodyNames, PathRes, named};
+use crate::clock::{self, ClockFrame, Ratio, delay_out, grounded, loop_clock, rebase, rooted};
+use crate::names::body::BodyNames;
 
 mod checks;
 mod stages;
@@ -52,6 +55,7 @@ pub(crate) fn finish_flow(a: &mut Analysis, module: &Module, id: DefId, body: Bo
     let mut info = FlowInfo {
         inputs: fcx.inputs.clone(),
         sample_rate_calls: fcx.sample_rate_calls.clone(),
+        sample_tick_at: fcx.sample_tick_calls.iter().map(|&e| module.parsed.ast.expr(e).span).min_by_key(|s| s.start),
         output: fcx.output,
         derived_port: a.def(id).as_flow().and_then(|f| f.derived_port(a.def(id).name_span)),
         complete: false,
@@ -72,7 +76,7 @@ pub(crate) fn finish_flow(a: &mut Analysis, module: &Module, id: DefId, body: Bo
     let (ast, text) = (&module.parsed.ast, module.text.as_str());
     let mut w = walk(a, ast, text, id, &body, &fcx, error);
     if w.diag.is_none() {
-        w.post_check(&fcx);
+        w.post_check(&fcx, ast, a.diagnostics.is_empty() && fcx.held.is_none());
     }
     let ty = |p: &PendingLet| body.expr_types.get(&p.init).copied().unwrap_or(error);
     let lets = fcx.pending.iter().zip(&w.checked);
@@ -196,15 +200,17 @@ pub(super) struct Walk<'a> {
     cx: &'a FlowCx,
     names: &'a BodyNames,
     calls: HashMap<ExprId, usize>,
-    sample_rate: HashSet<ExprId>,
+    /// The calls of `sample_rate()`, at `init`, and of `sample_tick()`, of
+    /// the clock of the place that reads them (S-567 K6), as the check of
+    /// the types found them.
+    time: HashMap<ExprId, Clock>,
     mode: Mode,
-    /// Stage 1: the clock of each `let`, ⊥ until its component is solved.
+    /// Stage 1: the clock of each `let`, ⊥ until its component is solved:
+    /// in `Solve`, a `let` of the loop being solved (the reads not through a
+    /// cut place are of its component or an earlier one).
     lets: Vec<Option<Clock>>,
-    /// The `let`s of the loop being solved, read as ⊥.
-    solving: Vec<bool>,
-    /// The `let`s in a loop, and whether the `let` walked now is one.
-    looped: Vec<bool>,
-    in_loop: bool,
+    /// `Solve`: a ⊥ was read ([`Self::bottoms`]).
+    bottom: bool,
     /// `Deps`: the `let`s read.
     deps: Vec<usize>,
     /// The clocks of the bindings of a `match` arm and of a `par~` index.
@@ -247,6 +253,13 @@ type Op = (Option<ExprId>, Option<Clock>);
 /// expression and its clock, the one the join held first.
 pub(super) type Clashed = [(Option<ExprId>, Clock); 2];
 
+/// The frame whose tick the candidate that lifts the node `call` names
+/// ([`Walk::lift`]): of an instance, `frame`; of a delay, none (it counts
+/// the ticks of its first argument, not walked yet, S-1189).
+fn lift_frame(call: &NodeCall, frame: ClockFrame) -> Option<ClockFrame> {
+    matches!(call.kind, NodeKind::Instance(_)).then_some(frame)
+}
+
 /// Runs the two stages over the body of the flow `id` of the module of
 /// `ast` and `text`; `error` is the error type.
 pub(super) fn walk(
@@ -276,12 +289,15 @@ pub(super) fn walk(
         cx,
         names,
         calls: cx.calls.iter().enumerate().map(|(i, c)| (c.expr, i)).collect(),
-        sample_rate: cx.sample_rate_calls.iter().copied().collect(),
+        time: cx
+            .sample_rate_calls
+            .iter()
+            .map(|&e| (e, Clock::Init))
+            .chain(cx.sample_tick_calls.iter().map(|&e| (e, Clock::Ambient)))
+            .collect(),
         mode: Mode::Deps,
         lets: vec![None; n],
-        solving: vec![false; n],
-        looped: vec![false; n],
-        in_loop: false,
+        bottom: false,
         deps: Vec::new(),
         scoped: HashMap::default(),
         checked: vec![None; n],
@@ -347,10 +363,6 @@ impl Walk<'_> {
         }
         self.mode = Mode::Solve;
         for scc in loops::components(&deps) {
-            for &k in &scc.lets {
-                (self.looped[k], self.solving[k]) = (scc.looped, scc.looped);
-            }
-            self.in_loop = scc.looped;
             // The first clash in a loop, in the order of its `let`s, then of
             // their clocks: of the `let` the second operand enters (S-1198).
             let mut clashed = None;
@@ -364,13 +376,14 @@ impl Walk<'_> {
             let first = self.cx.pending[scc.lets[0]].init;
             self.clash = None;
             let c = if scc.looped { loop_clock(self.join(first, &ops)) } else { ops[0].1.unwrap_or(Clock::Const) };
+            let c = grounded(c);
             let second = |x: &Clashed| scc.lets.iter().copied().find(|&k| Some(self.cx.pending[k].init) == x[1].0);
             clashed = clashed.or(self.clash.and_then(|x| Some((second(&x)?, x))));
             if let Some((k, x)) = clashed.filter(|_| scc.looped) {
                 self.loop_clash[k] = Some(x);
             }
             for &k in &scc.lets {
-                (self.lets[k], self.solving[k]) = (Some(c), false);
+                self.lets[k] = Some(c);
             }
         }
     }
@@ -383,8 +396,8 @@ impl Walk<'_> {
         for (k, p) in cx.pending.iter().enumerate() {
             self.recorder.owner(Owner::Let(k as u32));
             self.stmt = Some(Stmt { root: p.init, start: p.span.start });
-            self.in_loop = self.looped[k];
-            let c = self.expr(p.init).unwrap_or(Clock::Const);
+            let c = grounded(self.expr(p.init).unwrap_or(Clock::Const));
+            self.settle(p.init, c);
             self.checked[k] = Some(c);
             for &l in &p.locals {
                 self.out.locals.insert(l, c);
@@ -397,11 +410,51 @@ impl Walk<'_> {
         if let Some(out) = self.cx.output {
             self.recorder.owner(Owner::Output);
             self.stmt = Some(Stmt { root: out, start: self.ast.expr(out).span.start });
-            self.in_loop = false;
             if let (Some(c), Some(f)) = (self.expr(out), self.a.def(self.def).as_flow()) {
-                self.check_out(out, c, f.body_out_clock());
+                let at = f.body_out_clock();
+                let c = rooted(c, at);
+                self.settle(out, c);
+                self.check_out(out, c, at);
             }
         }
+    }
+
+    /// At `Check`, `e`, used at the clock `at`, and its parts: each recorded
+    /// at the clock of `sample_tick()` takes the clock of the place that
+    /// uses it ([`rooted`], §11.4), a part that of its expression, an
+    /// argument of a node the clock it is read at, so no table keeps that
+    /// clock (the stages, the plan, `onsa graph`). Of a body that calls no
+    /// `sample_tick()`, nothing; else linear in the body.
+    fn settle(&mut self, e: ExprId, at: Clock) {
+        if self.cx.sample_tick_calls.is_empty() {
+            return;
+        }
+        let at = match self.out.exprs.get_mut(&e) {
+            Some(c) => {
+                *c = rooted(*c, at);
+                *c
+            }
+            None => at,
+        };
+        match self.node_of.get(&e) {
+            Some(&k) => (0..self.node_clocks[k].args.len()).for_each(|i| {
+                let ArgRead { expr, at } = self.node_clocks[k].args[i];
+                self.settle(expr, at);
+            }),
+            None => self.ast.sub_exprs(e).into_iter().for_each(|x| self.settle(x, at)),
+        }
+    }
+
+    /// `f` and whether it read a ⊥ (in `Solve`, a `let` of the loop being
+    /// solved): of a check of its clock, decided when the loop is (§11.3,
+    /// R-496: the E0813 and the E0815 of a function not `rt`, which so give
+    /// no clock in error to the loop that reads them at `Check`).
+    fn bottoms<T>(&mut self, f: impl FnOnce(&mut Self) -> T) -> (T, bool) {
+        let outer = std::mem::replace(&mut self.bottom, false);
+        let r = f(self);
+        let read = self.bottom;
+        self.bottom |= outer;
+        (r, read)
     }
 
     fn span(&self, e: ExprId) -> Option<Span> {
@@ -445,10 +498,12 @@ impl Walk<'_> {
     }
 
     /// The candidate that lifts the thing with state `e` of the kind `kind`
-    /// in the frame `frame` into a `let` before its statement ([`lift::lift`]).
-    fn lift(&self, e: ExprId, kind: &str, frame: ClockFrame) -> Option<Fix> {
+    /// in the frame `frame` (none of a delay: its tick is not named) into a
+    /// `let` before its statement ([`lift::lift`]).
+    fn lift(&self, e: ExprId, kind: &str, frame: Option<ClockFrame>) -> Option<Fix> {
         let body = lift::Body { a: self.a, def: self.def, ast: self.ast, text: self.text, names: self.names };
-        lift::lift(&body, e, kind, self.stmt?, &checks::per_tick(frame.tick(), self.ast.expr(e).span))
+        let per = frame.map(|f| checks::per_tick(f.tick(), self.ast.expr(e).span));
+        lift::lift(&body, e, kind, self.stmt?, per.as_deref())
     }
 
     /// The join of the clocks of the operands `ops` of `e` (a constant of
@@ -560,9 +615,11 @@ impl Walk<'_> {
                     self.deps.push(k);
                     None
                 }
-                Mode::Solve if self.solving[k] => None,
                 Mode::Check if !feedback => self.checked[k].or(self.lets[k]),
-                Mode::Solve | Mode::Check => self.lets[k],
+                Mode::Solve | Mode::Check => {
+                    self.bottom |= self.lets[k].is_none();
+                    self.lets[k]
+                }
             };
         }
         if let Some(&c) = self.scoped.get(&id) {
@@ -668,12 +725,12 @@ impl Walk<'_> {
             onsa_diag::internal::bug(self.span(e), "a `par~` the check did not record")
         };
         let (check, span) = (self.checking(), self.ast.expr(e).span);
-        let holds = check && super::nodes::holds_state(self.ast, body);
+        let holds = super::nodes::holds_state(self.ast, body);
         if check {
             self.par_mark(e, tilde, holds);
-            if holds && !self.stateful_here(e, crate::flow_names::PAR, ClockFrame::BODY) {
-                return Some(Clock::Error);
-            }
+        }
+        if holds && !self.stateful_here(e, crate::flow_names::PAR, Some(ClockFrame::BODY)) {
+            return Some(Clock::Error);
         }
         self.bind_local(var, Some(Clock::Init));
         if check {
@@ -702,26 +759,20 @@ impl Walk<'_> {
             let cx = self.cx;
             return self.node(e, &cx.calls[i]);
         }
-        if self.sample_rate.contains(&e) {
-            return Some(Clock::Init);
+        if let Some(&c) = self.time.get(&e) {
+            return Some(c);
         }
         if let Some(m) = self.names.modifier(e) {
             return self.modifier(e, m.receiver, m.head, args);
         }
-        // The check of the types held the E0200 of `sample_tick()` (W7-09):
-        // in error, so that no later check reads a clock it has not.
-        if let Some(PathRes::FlowBuiltin(FlowBuiltin::SampleTick)) = self.names.paths.get(&named(self.ast, callee)) {
-            self.join_of(e, args.iter().map(|x| x.expr));
-            return Some(Clock::Error);
-        }
         let target = self.body.targets.get(&e);
         let receiver = crate::names::body::receiver(self.ast, callee)
             .filter(|b| self.body.expr_types.contains_key(b) && !matches!(target, Some(Target::Fn { .. })));
-        let ops: Vec<Op> =
-            receiver.into_iter().chain(args.iter().map(|x| x.expr)).map(|x| (Some(x), self.expr(x))).collect();
+        let parts = receiver.into_iter().chain(args.iter().map(|x| x.expr));
+        let (ops, partial) = self.bottoms(|w| parts.map(|x| (Some(x), w.expr(x))).collect::<Vec<Op>>());
         let r = self.join(e, &ops);
         if let Some(Target::Fn { def, .. } | Target::Method { def, .. }) = target
-            && (self.signature_failed(*def) || !self.check_fn_call(e, *def, receiver.is_some(), &ops, r))
+            && (self.signature_failed(*def) || !self.check_fn_call(e, *def, receiver.is_some(), (&ops, partial), r))
         {
             return Some(Clock::Error);
         }
@@ -738,17 +789,26 @@ impl Walk<'_> {
     /// `head` (§11.9, §11.10): the value of the chain, the output of its
     /// head ([`Walk::instance`]). The chain is the thing with state, of the
     /// kind of its head (S-392). A head with no node (S-59) is walked as a
-    /// call, and the chain is in error. Its argument, the N or the condition
-    /// of W7-10, is read with no rule.
+    /// call, and the chain is in error, as one with no frame ([`Self::frame_of`])
+    /// and one held by the E0200 of `.when~` / `.reset_if~`, whose value is
+    /// W7-10's (§18.1; its head runs in its frame). Its argument, the N or
+    /// the condition of W7-10, is read with no rule.
     fn modifier(&mut self, e: ExprId, receiver: ExprId, head: ExprId, args: &[Arg]) -> Option<Clock> {
-        let kind = self.calls.get(&head).map(|&i| super::plan::names::kind(self.a, &self.cx.calls[i].kind));
-        let frame = self.frame_of(head).unwrap_or(ClockFrame::BODY);
-        if kind.is_some_and(|kind| !self.stateful_here(e, kind, frame)) {
+        let call = self.calls.get(&head).map(|&i| &self.cx.calls[i]);
+        let frame = self.frame_of(head);
+        if let Some(call) = call
+            && !self.stateful_here(
+                e,
+                super::plan::names::kind(self.a, &call.kind),
+                lift_frame(call, frame.unwrap_or(ClockFrame::BODY)),
+            )
+        {
             return Some(Clock::Error);
         }
         let c = self.expr(receiver);
         args.iter().for_each(|x| _ = self.cut(x.expr));
-        if kind.is_some() { c } else { Some(Clock::Error) }
+        let held = self.cx.chains.get(&head).is_some_and(|c| c.gate.is_some());
+        if call.is_some() && frame.is_some() && !held { c } else { Some(Clock::Error) }
     }
 
     /// A delay or an instance call `call` at `e` (§11.4, §11.5): its clock,
@@ -756,7 +816,7 @@ impl Walk<'_> {
     /// read at, in the order of the text (its slot and its node before its
     /// arguments', §11.6; the error of its node after theirs, §18.1).
     fn node(&mut self, e: ExprId, call: &NodeCall) -> Option<Clock> {
-        if !self.stateful_here(e, super::plan::names::kind(self.a, &call.kind), ClockFrame::BODY) {
+        if !self.stateful_here(e, super::plan::names::kind(self.a, &call.kind), lift_frame(call, ClockFrame::BODY)) {
             return Some(Clock::Error);
         }
         let span = self.ast.expr(e).span;
@@ -835,13 +895,16 @@ impl Walk<'_> {
             self.recorder.lookback(true);
         }
         self.first += 1;
-        let c = self.expr(first);
+        let (c, partial) = self.bottoms(|w| w.expr(first));
         self.first -= 1;
         if own {
             self.recorder.lookback(false);
         }
-        let held = c.filter(|_| self.checking()).is_none_or(|c| self.check_first(delay, first, c));
-        let out = if held { delay_out(c, self.in_loop) } else { Some(Clock::Error) };
+        let failed = Self::first_fails(c, partial);
+        if let Some(c) = failed.filter(|_| self.checking()) {
+            self.report_first(delay, first, c);
+        }
+        let out = if failed.is_none() { delay_out(c, partial) } else { Some(Clock::Error) };
         let at = out.unwrap_or(Clock::Const);
         if let Some(d) = d
             && let Some(c) = self.cut(d)
@@ -861,13 +924,18 @@ impl Walk<'_> {
 
 impl Walked {
     /// After stage 2 with no error: each `let` has the clock of stage 1,
-    /// past one in error.
-    pub(super) fn post_check(&self, cx: &FlowCx) {
+    /// past one in error, and no expression the clock of `sample_tick()`
+    /// ([`Walk::settle`]). `quiet`: no diagnostic was made before (a clock in
+    /// error has one, §18.1), so no `let` is in error.
+    pub(super) fn post_check(&self, cx: &FlowCx, ast: &Ast, quiet: bool) {
         let lets = self.lets.iter().zip(&self.checked).zip(&cx.pending);
-        for ((&l, &c), p) in lets.filter(|((l, _), _)| **l != Clock::Error) {
-            if l != c {
+        for ((&l, &c), p) in lets {
+            if (l != Clock::Error && l != c) || (quiet && (l == Clock::Error || c == Clock::Error)) {
                 onsa_diag::internal::bug(Some(p.span), format!("the `let` is {l:?} in stage 1 and {c:?} in stage 2"));
             }
+        }
+        if let Some(&e) = self.info.exprs.iter().find_map(|(e, &c)| (c == Clock::Ambient).then_some(e)) {
+            onsa_diag::internal::bug(Some(ast.expr(e).span), "an expression left at the clock of `sample_tick()`");
         }
     }
 }

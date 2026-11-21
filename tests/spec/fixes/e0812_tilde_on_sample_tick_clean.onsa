@@ -1,0 +1,20 @@
+// onsa.toml
+// [test]
+// spec = ["§2.6", "§11.4", "§18.1"]
+//
+// [[test.fix]]
+// at = "16:11"
+// code = "E0812"
+// candidate = 1
+// clean = true
+
+// W7-09 U4b/t, S-817, R-285, S-565: `sample_tick~()` is E0812 (§2.6: "flow でないものに `~` を付けると E0812"; the built-in name `sample_tick` is called without `~`, §11.4), the one candidate removes the
+// `~` (§2.6), and the file has no error after it (`clean`): `sample_tick()` is a `U32` of the `sample` of the body that the flow returns (§11.4), no error of a later stage. The line comment between the
+// parentheses stays outside the edit (S-251). One candidate unit in the file, as `clean` asks (fixes/e0812_tilde_on_sample_tick.onsa has the other forms).
+
+pub flow tick_with_a_tilde(x: F32 at sample) -> U32 at sample {
+  let t = sample_tick~(                             //~ E0812 @11
+    // the tick
+  )
+  t
+}

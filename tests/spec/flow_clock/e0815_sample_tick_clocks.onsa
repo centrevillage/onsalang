@@ -1,0 +1,88 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§11.4", "§11.9", "§18.1"]
+
+// W7-09 U4b/t, S-565, S-567 (K6), S-1180 (1), S-1083 (spec §11.4: "下限は刻みのクロックで、他に刻みのクロックが無ければ本体の `sample`（`block` の段で読むと、ホストの区切りに依る値になるため）"; §11.3: "`e at k` は、
+// … `k` が `e` の推論したクロックより遅ければ E0815", "値は `let` に分けても分けなくても同じである"): the clock errors of `sample_tick()`. With no tick beside it the clock is the `sample` of the body, so it is too
+// fast for an input at `block` or `init`, and for an `at` that makes it slower (the reason of the parenthesis of §11.4). S-1180 (1), provisional: a `let` of it alone is the `sample` of the body, so the
+// name is too fast for an input of `sample / N` and for an `at` to `sample / N`, as a value of `sample` is, while the call written straight in that argument takes the tick of the input (it
+// is in sample_tick_forms.onsa); S-1180 is open and this file follows the file if (2) is decided. S-1083, provisional (1): an operation on the value of `.up~(N)` on the call side is E0815
+// (flow_clock/e0815_up_chain_pointwise_s1083.onsa) whatever the other operand is, `sample_tick()` as well; it is an error and no internal error. The error is on the line of the operation.
+// One error per flow (P-01), so each form is a flow of its own. `x` is the `sample` input, `p` a `block` input.
+
+pub flow gate(x: F32 at sample, k: F32 at block) -> F32 at sample {
+  x * k
+}
+
+pub flow offset(x: F32 at sample, c: F32 at init) -> F32 at sample {
+  x + c
+}
+
+pub flow hold4(g: U32 at (sample / 4)) -> U32 at sample {
+  g at sample
+}
+
+pub flow lp(x: F32 at sample) -> F32 at sample {
+  x * 0.5 + prev~(x) * 0.5
+}
+
+// ---------------------------------------------------------------- too fast for `block` and `init`
+
+pub flow to_an_input_of_block(x: F32 at sample) -> F32 at sample {
+  gate~(x, F32.round_from(sample_tick()))           //~ E0815
+}
+
+pub flow to_an_input_of_init(x: F32 at sample) -> F32 at sample {
+  offset~(x, F32.round_from(sample_tick()))         //~ E0815
+}
+
+pub flow at_block(x: F32 at sample) -> F32 at sample {
+  let a = (sample_tick() + 1) at block              //~ E0815
+  x
+}
+
+pub flow at_init(x: F32 at sample) -> F32 at sample {
+  let a = sample_tick() at init                     //~ E0815
+  x
+}
+
+pub flow a_let_to_an_input_of_block(x: F32 at sample) -> F32 at sample {
+  let t = F32.round_from(sample_tick())
+  gate~(x, t)                                       //~ E0815
+}
+
+// ---------------------------------------------------------------- a `let` of it alone is the `sample` of the body (S-1180 (1))
+
+pub flow a_let_to_an_input_of_a_slow_tick(x: F32 at sample) -> U32 at sample {
+  let t = sample_tick()
+  hold4~(t)                                         //~ E0815
+}
+
+pub flow a_let_of_an_expression_to_an_input_of_a_slow_tick(x: F32 at sample) -> U32 at sample {
+  let t = sample_tick() + 1
+  hold4~(t)                                         //~ E0815
+}
+
+pub flow a_let_at_a_slow_tick(x: F32 at sample) -> F32 at sample {
+  let t = sample_tick()
+  let u = t at (sample / 4)                         //~ E0815
+  x
+}
+
+// ---------------------------------------------------------------- `sample_tick()` and the value of `.up~(N)` (S-1083)
+
+pub flow plus_the_value_of_an_up_chain(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  let y = lp~(p).up~(2) + F32.round_from(sample_tick())   //~ E0815
+  x
+}
+
+pub flow the_value_of_an_up_chain_after_it(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  let y = F32.round_from(sample_tick()) + lp~(p).up~(2)   //~ E0815
+  x
+}
+
+pub flow the_name_of_a_tick_times_an_up_chain(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  let t = F32.round_from(sample_tick())
+  let y = lp~(p).up~(2) * t                         //~ E0815
+  x
+}

@@ -92,15 +92,15 @@ fn a_feedback_to_a_later_let_with_no_loop_reads_its_clock() {
     );
     assert!(f.complete);
     assert_eq!((f.let_("a"), f.let_("b"), f.let_("c")), (S, S, Clock::Block));
-    // A `block` read by `^` (E0813): the delay goes on at `sample` in stage
-    // 1; in stage 2 it is in error (§18.1), and `b` after it is walked.
+    // A `block` read by `^` (E0813): the delay is in error in stage 1 too
+    // (R-496), and in stage 2 (§18.1), and `b` after it is walked.
     let f = walk_of(
         "pub flow f(g: F32 at block) -> F32 at sample {\n  let a = prev~(^b)\n  let b = g * 2.0\n  a\n}\n",
         "f",
     );
     assert!(!f.complete);
     assert_eq!(f.code(), Some(onsa_diag::Code::E0813));
-    assert_eq!((f.walked.lets[0], f.walked.lets[1]), (S, Clock::Block));
+    assert_eq!((f.walked.lets[0], f.walked.lets[1]), (Clock::Error, Clock::Block));
     assert_eq!((f.local("a"), f.local("b"), f.expr("^b")), (Clock::Error, Clock::Block, Clock::Block));
 }
 
@@ -543,4 +543,56 @@ fn a_port_of_a_derived_clock_in_error_is_quiet_to_its_callers() {
     let slow = "pub flow o(l8: F32 at (sample / 8)) -> F32 at (sample / 4) {\n  l8\n}\n";
     let got = reported(slow);
     assert_eq!(got.iter().map(|(c, t)| (*c, t.as_str())).collect::<Vec<_>>(), [(onsa_diag::Code::E0815, "l8")]);
+}
+
+/// R-496: stage 1 knows each check that gives a clock in error (the E0813
+/// of a delay, the E0805 and the non-`rt` E0815 of a call, a node in a
+/// branch), so `^b` of a `let` in error is in error and reports nothing
+/// (§18.1), and the error reported is the one of `b`. A parameter kind in
+/// the first argument of a delay that reads a ⊥ of the loop being solved is
+/// ⊥ there, not an error: the loop is the `sample` of the body (S-567 P3).
+#[test]
+fn stage_one_knows_a_let_in_error() {
+    let head = "pub fn slow(v: F32) -> F32 { v * 0.5 }\npub fn noisy(v: F32) -> F32 uses {Alloc} { v }\n\
+                pub flow lp(x: F32 at sample) -> F32 at sample {\n  prev~(x)\n}\n";
+    for (b, code) in [
+        ("prev~(p * 2.0)", onsa_diag::Code::E0813),
+        ("noisy(p)", onsa_diag::Code::E0805),
+        ("slow(p)", onsa_diag::Code::E0815),
+        ("if c { lp~(x) } else { x }", onsa_diag::Code::E0811),
+    ] {
+        let src = format!(
+            "{head}pub flow f(x: F32 at sample, p: F32 at block, c: Bool at sample) -> F32 at sample {{\n  let a = prev~(slow(^b))\n  let b = {b}\n  a + x\n}}\n"
+        );
+        let f = walk_of(&src, "f");
+        assert_eq!(f.code(), Some(code), "{b}: {:?}", f.walked.diag);
+        assert_eq!((f.walked.lets[0], f.walked.lets[1]), (Clock::Error, Clock::Error), "{b}");
+    }
+    let f = walk_of(
+        "pub flow f(x: F32 at sample, k: F32 at block) -> F32 at sample {\n  let y = prev~(^y * k)\n  y + x\n}\n",
+        "f",
+    );
+    assert!(f.complete, "{:?}", f.walked.diag);
+    assert_eq!(f.let_("y"), S);
+}
+
+/// `sample_tick()` (§11.4, S-567 K6) takes the clock of the place it is used
+/// at: the tick beside it, the input it is passed to, in the table of the
+/// expressions too; a `let` of it alone is the `sample` of the body (S-1180
+/// (1)), and the output of it alone the clock the body writes the output at.
+#[test]
+fn sample_tick_takes_the_clock_of_its_place() {
+    let src = "flow hold4(g: U32 at (sample / 4)) -> U32 at sample {\n  g at sample\n}\n\
+               pub flow f(x: F32 at sample, lf: F32 at (sample / 4)) -> F32 at sample {\n  let t = sample_tick()\n  let u = lf + F32.round_from(sample_tick() + 1)\n  let v = hold4~(sample_tick() * 2)\n  x * F32.round_from(t + v) + (u at sample)\n}\n\
+               pub flow o(lf: F32 at (sample / 4)) -> U32 at (sample / 4) {\n  sample_tick()\n}\n";
+    let f = walk_of(src, "f");
+    assert!(f.complete, "{:?}", f.walked.diag);
+    assert_eq!((f.let_("t"), f.let_("u")), (S, Clock::Tick(Ratio(-2))));
+    let l4 = Clock::Tick(Ratio(-2));
+    assert_eq!((f.expr("sample_tick() + 1"), f.expr("sample_tick() * 2")), (l4, l4));
+    assert!(f.a.flows[&f.flow].multirate_at().is_some(), "the Core stops at `sample_tick()` until W7-16");
+    let o = walk_of(src, "o");
+    assert!(o.complete, "{:?}", o.walked.diag);
+    let out = o.a.flows[&o.flow].output.expect("the output");
+    assert_eq!(o.walked.info.exprs[&out], Clock::Tick(Ratio(-2)));
 }

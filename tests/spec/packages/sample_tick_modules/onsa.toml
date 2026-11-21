@@ -1,0 +1,3 @@
+[package]
+name = "sample_tick_modules"
+edition = "2026"

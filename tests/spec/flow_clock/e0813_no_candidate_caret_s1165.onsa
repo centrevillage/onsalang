@@ -5,7 +5,7 @@
 
 // W7-05 U2, S-1165 (a detail, provisional (1); §11.4, §11.3, §18.1): E0813 has no candidate when the first argument of the delay is a
 // caret name (`^b`, also in parentheses or under `at`). The error of `^b` may sit in the `let b` below it rather than in the argument
-// (feedback_to_a_let_in_error_until_w7_09.onsa, negative/flow_fn_value_clock_forms.onsa), where `prev~(^b at sample)` would leave
+// (feedback_to_a_let_in_error_quiet.onsa, negative/flow_fn_value_clock_forms.onsa), where `prev~(^b at sample)` would leave
 // it and break the promise of a candidate; this version gives no candidate to any caret name, as before W7-05. The promoted form
 // `prev~(^b at sample)` (§11.3) checks: e0813_candidate_computed.onsa, `promoted_caret_name`.
 

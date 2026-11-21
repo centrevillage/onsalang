@@ -1,0 +1,28 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§11.4"]
+
+// W7-09 U4b/i2, S-567 (K6), S-1158 (spec §11.3: "刻みの値（組込みの遅延とインスタンスの結果、刻みのクロックの入力、`sample_tick()`）を一つでも読む式は、その式のクロックの段の式である"; §11.4: `sample_tick()`
+// takes the clock of the place that uses it): `(sample_tick() % 4) at (sample / 4)` is a computed part of the tick `sample / 4`, as `(l * 2) at (sample / 4)` of an `l` at `sample / 4` is. Read at
+// `sample`, it has a field of its tick; in a branch whose condition is decided at `sample` it is E0815, as the same form of `l` (flow_clock/tick_fields_computed_parts.onsa). `sample_tick()` alone is read where it is
+// used, as a name. One error per flow.
+
+pub flow read_faster(x: U32 at sample) -> U32 at sample {
+  x + (((sample_tick() % 4) at (sample / 4)) at sample)
+}
+
+pub flow read_faster_alone(x: U32 at sample) -> U32 at sample {
+  x + ((sample_tick() at (sample / 4)) at sample)
+}
+
+pub flow in_a_branch_of_a_sample_condition(x: U32 at sample, c: Bool at sample) -> U32 at sample {
+  if c { ((sample_tick() % 4) at (sample / 4)) at sample } else { x }         //~ E0815
+}
+
+pub flow alone_in_a_branch_of_a_sample_condition(x: U32 at sample, c: Bool at sample) -> U32 at sample {
+  if c { (sample_tick() at (sample / 4)) at sample } else { x }
+}
+
+pub flow in_a_branch_of_an_init_condition(x: U32 at sample, c: Bool at init) -> U32 at sample {
+  if c { ((sample_tick() % 4) at (sample / 4)) at sample } else { x }
+}

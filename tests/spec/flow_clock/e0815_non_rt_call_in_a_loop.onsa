@@ -1,0 +1,68 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§11.5", "§18.1"]
+
+// W7-09 U4b/i2, R-496, S-1133 (1) (spec §11.5: "flow の中から呼べる関数は効果の無いものだけで、`rt` でない関数は `init` のクロックの値か定数だけを引数に取る"; §18.1): a call of a function that is
+// not `rt` in a loop of `let`s whose argument reads the loop (`^a`) and a value of `block` or of a tick is E0815 at the call, as out of a loop. Stage 1 reads the `let`s of the loop it solves as
+// unknown, so it decides no such error of an argument that reads them, and the error is not lost to the loop it would give an error clock to (the regression of U4b/i: these flows passed `check`
+// and the commands after it ended with an internal error). One error per flow, so each form is a flow of its own. `p` is a `block` input, `l` a `sample / 4` input.
+
+pub fn slow(v: F32) -> F32 {
+  v * 0.5
+}
+
+pub struct Box1 {
+  v: F32,
+}
+
+impl Box1 {
+  pub fn get(self) -> F32 {
+    self.v
+  }
+}
+
+pub flow with_a_block_value(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let a = slow(prev~(^a) + p)                       //~ E0815
+  a
+}
+
+pub flow with_a_slow_tick(x: F32 at sample, l: F32 at (sample / 4)) -> F32 at (sample / 4) {
+  let a = slow(prev~(^a) + l)                       //~ E0815
+  a
+}
+
+pub flow in_a_loop_of_two_lets(x: F32 at sample) -> F32 at sample {
+  let a = prev~(^b)
+  let b = slow(a + x)                               //~ E0815
+  b
+}
+
+pub flow a_method(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let a = Box1 { v: prev~(^a) + p }.get()           //~ E0815
+  a
+}
+
+pub flow in_the_first_argument_of_a_delay(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let a = prev~(slow(p + ^b))                       //~ E0815
+  let b = a + x
+  b
+}
+
+pub fn slow2(v: F32, w: F32) -> F32 {
+  v + w
+}
+
+pub flow one_argument_reads_the_loop(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let a = slow2(prev~(^a), p)                       //~ E0815
+  a
+}
+
+// An `rt` function takes the values of any clock: the loop is the `sample` of the body.
+pub rt fn fast(v: F32) -> F32 {
+  v * 0.5
+}
+
+pub flow an_rt_function(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let a = fast(prev~(^a) + p)
+  a + x
+}

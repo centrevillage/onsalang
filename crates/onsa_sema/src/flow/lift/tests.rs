@@ -216,3 +216,14 @@ pub flow f(p: F32 at block, c: Bool at sample) -> F32 at sample {{\n  if c {{ {c
         assert!(d.fixes.iter().any(|f| f.title().starts_with(&title)), "{chain}: {:?}", d.fixes);
     }
 }
+
+/// A delay counts the ticks of its first argument (§11.4), not walked when
+/// it is in error (S-1189): its lift names no tick.
+#[test]
+fn the_lift_of_a_delay_names_no_tick() {
+    let src = "pub flow f(p: F32 at block, c: Bool at sample) -> F32 at sample {\n  if c { prev~(p at (sample / 4)) at sample } else { 0.0 }\n}\n";
+    let (d, _) = the_error(src);
+    assert_eq!(d.code, Code::E0811);
+    let title = "compute it in a new `let prev_0` before this statement";
+    assert!(d.fixes.iter().any(|f| f.title() == title), "{:?}", d.fixes);
+}

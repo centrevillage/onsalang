@@ -113,6 +113,7 @@ pub(super) struct Choose<'a> {
     /// their chains with their receivers ([`FlowCx::node_exprs`]).
     pub(super) nodes: &'a HashMap<ExprId, Option<ExprId>>,
     pub(super) sample_rate: &'a HashSet<ExprId>,
+    pub(super) sample_tick: &'a HashSet<ExprId>,
 }
 
 impl Choose<'_> {
@@ -189,8 +190,8 @@ impl Choose<'_> {
     }
 
     /// Whether `e` is a computed part: none of a name (an input, a `let`,
-    /// the index of a `par~`, a binding of an arm, `^y`), `sample_rate()`
-    /// and a node (§11.3), nor parentheses or `at`, whose operand is the
+    /// the index of a `par~`, a binding of an arm, `^y`), `sample_rate()`,
+    /// `sample_tick()` and a node (§11.3), nor parentheses or `at`, whose operand is the
     /// same value (§11.3: `at` changes no value), nor a
     /// block of a value only, whose value the lowering makes of its tail in
     /// place: the operand or the tail is chosen instead.
@@ -203,7 +204,8 @@ impl Choose<'_> {
             || matches!(kind, ExprKind::At { .. } | ExprKind::Par { .. })
             || value_of(kind).is_some()
             || self.nodes.contains_key(&e)
-            || self.sample_rate.contains(&e))
+            || self.sample_rate.contains(&e)
+            || self.sample_tick.contains(&e))
     }
 
     /// A constant expression that is computed: one [`Choose::hoistable`]

@@ -8,8 +8,8 @@
 // declaration of the first flow of the collection (§18.1: "位置は、集まりの宣言のうち診断の並べ方で
 // 最初のものの名前"). This is apart from instance_cycle_forms.onsa because the construct is the `if~`
 // (W7-06 U2 checks it), whose branches hold the instances. The E0817 is one report for the collection (§18.1), so the other flow of it,
-// `branch_b`, is a unit of its own (§18.1: "単位どうしは独立に検査し") and reports its own error: the E0200 of a builtin that this version does not take
-// (`sample_tick()`, W7-09), which is not the E0817 of the unit that the first flow of the collection hides.
+// `branch_b`, is a unit of its own (§18.1: "単位どうしは独立に検査し") and reports its own error: the E0200 of a modifier that this version does not take
+// (`.when~(c)`, W7-10), which is not the E0817 of the unit that the first flow of the collection hides.
 
 pub flow in_branch(x: F32 at sample) -> F32 at sample {       //~ E0817
   let big = x > 1.0
@@ -27,6 +27,10 @@ pub flow branch_a(x: F32 at sample) -> F32 at sample {        //~ E0817
 }
 
 pub flow branch_b(x: F32 at sample) -> F32 at sample {
-  let small = x < F32.round_from(sample_tick())            //~ E0200
+  let small = x < same~(x).when~(true)                     //~ E0200
   if~ small { x } else { branch_a~(x) }
+}
+
+pub flow same(x: F32 at sample) -> F32 at sample {
+  x
 }

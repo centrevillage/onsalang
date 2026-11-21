@@ -1,0 +1,37 @@
+// onsa.toml
+// [test]
+// spec = ["§11.4", "§4.5", "§18.1"]
+// fixes = 0
+
+// W7-09 U4b/t, S-565, R-288 (spec §11.4: "引数の数が表の形と合わなければ、関数と利用者の flow の呼び出しと同じ E0412 である（§4.5。位置は呼び出しの全体で、修正候補は無い）"): `sample_tick()` takes
+// no argument (§11.4: the form of the table is `sample_tick()`), so a call with an argument is E0412 as the call of `sample_rate()` with one is. The error is at the call and has no candidate
+// (`fixes = 0`). A `let` that reads the call has no diagnostic of its own (§18.1). One error per flow (P-01), so each form is a flow of its own.
+
+pub flow one_argument_in_a_let(x: F32 at sample) -> F32 at sample {
+  let t = sample_tick(1)                            //~ E0412
+  x
+}
+
+pub flow one_argument_as_the_output(x: F32 at sample) -> U32 at sample {
+  sample_tick(x)                                    //~ E0412
+}
+
+pub flow two_arguments_in_a_par_body(x: F32 at sample) -> F32 at sample {
+  let ys = par i in 0 ..< 2 {
+    x * F32.round_from(sample_tick(1, 2))           //~ E0412
+  }
+  ys[0] + ys[1]
+}
+
+pub flow an_argument_in_a_delay(x: F32 at sample) -> U32 at sample {
+  prev~(sample_tick(0))                             //~ E0412
+}
+
+pub flow a_let_that_reads_the_call(x: F32 at sample) -> F32 at sample {
+  let t = sample_tick(1)                            //~ E0412
+  x * F32.round_from(t)
+}
+
+pub flow an_argument_in_a_conversion_flow(x: F32 at (sample * 2)) -> U32 at sample {
+  sample_tick(x[0])                                 //~ E0412
+}

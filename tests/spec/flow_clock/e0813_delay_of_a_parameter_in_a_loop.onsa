@@ -1,0 +1,52 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§11.4", "§18.1"]
+//
+// [[test.fix]]
+// at = "32:29"
+// code = "E0813"
+// candidate = 1
+// leaves = ["31:17 E0815"]
+// [[test.fix]]
+// at = "37:29"
+// code = "E0813"
+// candidate = 1
+// leaves = ["38:17 E0815"]
+// [[test.fix]]
+// at = "44:29"
+// code = "E0813"
+// candidate = 1
+// leaves = ["43:17 E0815"]
+// # the candidate puts `a` at `sample`, so the `slow` of `c` that §18.1 kept quiet is the E0815 of §11.5 then
+
+// W7-09 U4b/i2, R-496, S-1133 (1) (spec §11.4: the first argument of a delay is at a tick; §18.1): in a loop of `let`s, a delay whose first argument is of a parameter kind and does not read the loop
+// is E0813 in stage 1 too, so the loop is in error and a `let` that reads it with `^a`, written above it, reports nothing: the error reported is the E0813 of the delay. A first argument that reads
+// the loop (`prev~(^y * k)`) is not known until the loop is solved, and it is no error (the loop is the `sample` of the body). `p` is a `block` input, `k` one of `block`.
+
+pub fn slow(v: U32) -> U32 {
+  v
+}
+
+pub flow the_reader_above(x: U32 at sample, p: U32 at block) -> U32 at sample {
+  let c = prev~(slow(^a))
+  let a = prev~(^a) + prev~(p)                      //~ E0813
+  x + c + a
+}
+
+pub flow the_reader_below(x: U32 at sample, p: U32 at block) -> U32 at sample {
+  let a = prev~(^a) + prev~(p)                      //~ E0813
+  let c = prev~(slow(a))
+  x + c + a
+}
+
+pub flow through_a_second_let(x: U32 at sample, p: U32 at block) -> U32 at sample {
+  let c = prev~(slow(^b))
+  let a = prev~(^a) + prev~(p)                      //~ E0813
+  let b = a + 1
+  x + c + b
+}
+
+pub flow a_first_argument_that_reads_the_loop(x: F32 at sample, k: F32 at block) -> F32 at sample {
+  let y = prev~(^y * k)
+  y + x
+}

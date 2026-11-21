@@ -5,10 +5,8 @@
 
 // `sample_tick` is one of the flow builtins (§11.4), so a use that is not its call form
 // `sample_tick()` is E0308 (§15.1, S-720) in a flow, with no fix candidate, as for `sample_rate`
-// (flow_builtin_not_a_call.onsa). These forms are apart from that file because the current
-// implementation does not find `sample_tick` in a flow at all (its call `sample_tick()` is E0302
-// too, builtin_sample_tick_call.onsa), so they wait for the work that implements the name
-// (tests/pending.toml). One error per unit.
+// (flow_builtin_not_a_call.onsa). These forms are in a file of their own since the name was
+// found before its call was (W7-09 U4b, builtin_sample_tick_call.onsa). One error per unit.
 
 pub flow let_of_sample_tick(x: F32 at sample) -> F32 at sample {
   let t = sample_tick   //~ E0308

@@ -6,9 +6,9 @@
 // W7-04 U1b/t, S-811, S-817, R-285: `sample_rate` and `sample_tick` are the names of flows that are called without `~` (§11.4: "flow の組込み名は
 // `prev` `delay` `vdelay` `sample_rate` `sample_tick` だけ", `sample_rate()`), so a call with `!` is E0806 in a flow body (§11.2), and the one
 // candidate removes the `!` (§11.2: "`f(x)` で呼ぶ項目なら `!` を消す候補"; the E0812 of `sample_rate~()` also removes the `~`, §2.6). It is not
-// the replacement of the whole call (`sample_rate()` keeps its name, S-251). `sample_tick()` is the E0200 of the flow stage in this version
-// (negative/flow_sample_tick_unsupported.onsa, until W7-09), a stage after the names stage that the candidate of an earlier-stage error may leave
-// behind (§18.1), so this file has no `clean` (fixes/e0806_bang_sample_rate_clean.onsa has it for `sample_rate`). One error per flow (P-01).
+// the replacement of the whole call (`sample_rate()` keeps its name, S-251). `sample_tick()` is accepted (§11.4, W7-09 U4b), so a unit is clean after
+// the candidate; a file has one candidate unit for `clean`, so it is in fixes/e0806_bang_sample_rate_clean.onsa for `sample_rate` and in
+// fixes/e0806_bang_sample_tick_clean.onsa for `sample_tick`. One error per flow (P-01).
 
 pub flow rate_in_a_let(x: F32 at sample) -> F32 at sample {
   let r = sample_rate()                            //~ E0806

@@ -146,7 +146,8 @@ pub enum Clock {
     Event(EventSrc),
     /// The `sample` of the body times 2 to the power of the ratio (S-1077).
     Tick(Ratio),
-    /// The clock of `sample_tick()` (W7-09); none is made in this version.
+    /// The clock of `sample_tick()` (§11.4, S-567 K6): of the place that
+    /// reads it ([`rooted`]).
     Ambient,
     /// A clock in error (an input whose clock has a diagnostic).
     Error,
@@ -415,15 +416,14 @@ pub fn keeps_delay_state(c: Clock) -> bool {
 }
 
 /// The clock of a delay by the clock of its first argument (§11.3, §11.4):
-/// a tick or an event itself, `sample_tick()` the `sample` of the body
-/// (S-567 K6). A parameter kind, which E0813 rejects at the check, is ⊥ in
-/// a loop being solved (`looped`) and else the `sample` of the body to go on
-/// with. ⊥ gives ⊥.
-pub fn delay_out(first: Option<Clock>, looped: bool) -> Option<Clock> {
+/// a tick or an event itself, `sample_tick()` [`grounded`] (S-567 K6). A
+/// parameter kind, which E0813 rejects at the check, is ⊥ when it reads a ⊥
+/// (`partial`, in a loop being solved) and else the `sample` of the body to
+/// go on with. ⊥ gives ⊥.
+pub fn delay_out(first: Option<Clock>, partial: bool) -> Option<Clock> {
     match first? {
-        c @ (Clock::Tick(_) | Clock::Event(_) | Clock::Error) => Some(c),
-        Clock::Ambient => Some(Clock::SAMPLE),
-        Clock::Const | Clock::Init | Clock::Block => (!looped).then_some(Clock::SAMPLE),
+        c @ (Clock::Tick(_) | Clock::Event(_) | Clock::Error | Clock::Ambient) => Some(grounded(c)),
+        Clock::Const | Clock::Init | Clock::Block => (!partial).then_some(Clock::SAMPLE),
     }
 }
 
@@ -442,11 +442,29 @@ pub fn rebase(decl: Clock, frame: ClockFrame) -> Clock {
     }
 }
 
+/// The clock of a value at `c` used at a place of the clock `root` (§11.4):
+/// `sample_tick()` with no tick beside it takes the clock of the place it
+/// is used at; any other clock is its own. The one place of the rule
+/// (D-15).
+pub fn rooted(c: Clock, root: Clock) -> Clock {
+    if c == Clock::Ambient { root } else { c }
+}
+
+/// [`rooted`] at a place of no tick of its own (a `let`, a loop, a delay, the
+/// text of a diagnostic): the lowest clock `sample_tick()` takes, the
+/// `sample` of the body (§11.4). The one place of that clock (D-15).
+// SPEC-GAP(S-1180): a `let` of `sample_tick()` alone is the `sample` of the
+// body (provisional (1)).
+pub fn grounded(c: Clock) -> Clock {
+    rooted(c, Clock::SAMPLE)
+}
+
 /// The clock of every `let` of a loop by the join `t` of its operands (§11.3
-/// "読み方", S-567 P3): a tick, an event or a clock in error itself, else (a
-/// parameter kind, `sample_tick()`, ⊥) the `sample` of the body.
+/// "読み方", S-567 P3): a tick, an event or a clock in error itself,
+/// `sample_tick()` [`grounded`], else (a parameter kind, ⊥) the `sample` of
+/// the body.
 pub fn loop_clock(t: Option<Clock>) -> Clock {
-    match t {
+    match t.map(grounded) {
         Some(c @ (Clock::Tick(_) | Clock::Event(_) | Clock::Error)) => c,
         Some(Clock::Const | Clock::Init | Clock::Block | Clock::Ambient) | None => Clock::SAMPLE,
     }

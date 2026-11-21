@@ -112,8 +112,10 @@ pub(super) fn mark_all(
     out: Clock,
 ) -> Marked {
     let nodes = cx.node_exprs();
-    let sample_rate: HashSet<ExprId> = cx.sample_rate_calls.iter().copied().collect();
-    let choose = Choose { a, ast, body, clocks: &walked.info, nodes: &nodes, sample_rate: &sample_rate };
+    let [sample_rate, sample_tick] =
+        [&cx.sample_rate_calls, &cx.sample_tick_calls].map(|x| x.iter().copied().collect());
+    let (sample_rate, sample_tick) = (&sample_rate, &sample_tick);
+    let choose = Choose { a, ast, body, clocks: &walked.info, nodes: &nodes, sample_rate, sample_tick };
     let recorded = walked.recorded.iter().enumerate();
     let par_of = recorded.filter(|(_, r)| matches!(r.kind, PlanKind::Par { .. }));
     let par_of = par_of.map(|(i, r)| (r.expr, NodeId(i as u32))).collect();

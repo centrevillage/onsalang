@@ -80,8 +80,8 @@ impl Stages<'_, '_> {
             ExprKind::Path(_) | ExprKind::Feedback(_) => return self.name(e, c),
             ExprKind::Field { .. } if w.body.targets.contains_key(&e) => return self.name(e, c),
             ExprKind::At { expr, .. } => return self.of(*expr).filter(|&s| param(s).is_some()).unwrap_or(c),
-            // A node and `sample_rate()` have the clock of what they make.
-            ExprKind::Call { .. } if w.calls.contains_key(&e) || w.sample_rate.contains(&e) => return c,
+            // A node, `sample_rate()` and `sample_tick()` have the clock of what they make.
+            ExprKind::Call { .. } if w.calls.contains_key(&e) || w.time.contains_key(&e) => return c,
             ExprKind::Call { callee, args, .. } => {
                 parts.extend(crate::names::body::receiver(ast, *callee));
                 parts.extend(args.iter().map(|x| x.expr));

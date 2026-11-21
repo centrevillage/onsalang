@@ -367,12 +367,8 @@ impl<'a> Checker<'a> {
         };
         match (builtin, kind) {
             (Some(FlowBuiltin::Delay(d)), CallKind::Flow) => self.check_delay(e, d, args, expected).map(Some),
-            (Some(FlowBuiltin::SampleRate), CallKind::Plain) => self.check_sample_rate(e, args).map(Some),
-            // Held: the call is of the error type, and its clock is in error
-            // in the walk (`clocks.rs`).
-            (Some(FlowBuiltin::SampleTick), CallKind::Plain) => {
-                self.flow_hold_gate(Feature::SampleTick, span);
-                self.args_of_unknown_callee(args).map(Some)
+            (Some(b @ (FlowBuiltin::SampleRate | FlowBuiltin::SampleTick)), CallKind::Plain) => {
+                self.check_time(e, b, args).map(Some)
             }
             // The names stage stopped in the callee of an instance with no
             // diagnostic (a name held as an error, §18.1, S-675), where the
@@ -481,19 +477,21 @@ impl<'a> Checker<'a> {
         Ok(t)
     }
 
-    /// `sample_rate()` (§11.4).
-    fn check_sample_rate(&mut self, e: ExprId, args: &[Arg]) -> R<TyId> {
+    /// `sample_rate()`, an `F32`, and `sample_tick()`, a `U32` (§11.4), of
+    /// no argument (E0412): each call recorded, the one place that finds
+    /// them (D-15), which the walk of the clocks reads.
+    fn check_time(&mut self, e: ExprId, b: FlowBuiltin, args: &[Arg]) -> R<TyId> {
         if !args.is_empty() {
             let span = self.expr(e).span;
-            return Err(self.err(
-                Code::E0412,
-                span,
-                format!("`{SAMPLE_RATE}` takes 0 argument(s) but {} were given", args.len()),
-            ));
+            let msg = format!("`{}` takes 0 argument(s) but {} were given", b.name(), args.len());
+            return Err(self.err(Code::E0412, span, msg));
         }
-        let f32 = self.a.types.float(FloatKind::F32);
+        if b == FlowBuiltin::SampleTick {
+            self.fcx().sample_tick_calls.push(e);
+            return Ok(self.a.types.int(IntKind::U32));
+        }
         self.fcx().sample_rate_calls.push(e);
-        Ok(f32)
+        Ok(self.a.types.float(FloatKind::F32))
     }
 
     /// `prev~(e)`, `delay~(e, N)`, `vdelay~(e, d, MAX)`, each with an
