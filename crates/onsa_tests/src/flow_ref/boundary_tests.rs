@@ -98,7 +98,7 @@ fn a_panic_zeroes_the_outputs_of_the_whole_call_and_poisons_the_instance_until_r
         assert_eq!(why(&b, &text), None);
         assert_eq!(call(&mut b, &[50, 25]), (Status::Ok, vec![12, 16]));
         assert_eq!(counts(), [1, 3, 6]);
-        assert_eq!(b.ctx(), Some(Ctx { sample_rate: 48000.0, tick: 2 }));
+        assert_eq!(b.ctx(), Some(Ctx { sample_rate: 48000.0, tick: 2, rounds: 0 }));
     });
 }
 

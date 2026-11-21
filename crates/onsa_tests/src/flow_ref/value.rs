@@ -102,16 +102,23 @@ pub enum Shape {
     Given(Value),
 }
 
+/// The places of an aggregate: the sum of those of its parts, one when it has none (saturating: 10^12 places are a number). The one count (a value, a
+/// row of a constant and the default of a type are the three that have parts).
+pub fn sum_places(parts: impl Iterator<Item = usize>) -> usize {
+    parts.fold(0usize, usize::saturating_add).max(1)
+}
+
 impl Shape {
     /// The places the default holds, as [`Value::places`] counts them (saturating: 10^12 places are a number).
     pub fn places(&self) -> usize {
-        let sum = |ps: &mut dyn Iterator<Item = usize>| ps.fold(0usize, usize::saturating_add).max(1);
         match self {
             Shape::Scalar(_) => 1,
             Shape::Given(v) => v.places(),
-            Shape::Tuple(fs) => sum(&mut fs.iter().map(Shape::places)),
+            Shape::Tuple(fs) => sum_places(fs.iter().map(Shape::places)),
             Shape::Array(e, n) => e.places().saturating_mul(*n).max(1),
-            Shape::Struct(fs) => sum(&mut fs.iter().map(|(d, t)| d.as_ref().map_or_else(|| t.places(), Value::places))),
+            Shape::Struct(fs) => {
+                sum_places(fs.iter().map(|(d, t)| d.as_ref().map_or_else(|| t.places(), Value::places)))
+            }
         }
     }
 
@@ -180,7 +187,7 @@ impl Value {
     pub fn places(&self) -> usize {
         match self {
             Value::Tuple(vs, _) | Value::Array(vs) | Value::Struct(vs) | Value::Enum { fields: vs, .. } => {
-                vs.iter().map(Value::places).sum::<usize>().max(1)
+                sum_places(vs.iter().map(Value::places))
             }
             _ => 1,
         }

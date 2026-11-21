@@ -29,12 +29,14 @@
 //! - [`interp_host`]: the host that runs the functions of the user's package in the interpreter (W7-19).
 //! - [`pattern`]: `match` and the `let` that takes a value apart, and the patterns they use (a guard is tried for
 //!   each way a `|` lets a pattern match).
-//! - [`flow`]: an instance of a flow: the clock of each `let`, the stages `init` and `process` run them in, `reset`,
+//! - [`flow`]: an instance of a flow: the clock of each `let`, the stages `init`, `block` and the ticks (`sample / N`, `sample`) of `process` run them in, `reset`,
 //!   and `render` and `Outcome` (a panic with the stage it is at: `init`, `block`, the frame `n`).
 //! - [`branch`]: `par~` (a replica of its body for each value of its index, a state for each) and `if~` and `match~`
 //!   (every branch is evaluated, one is taken, an arm not taken has the default of its bindings).
 //! - [`boundary`]: an exported flow as the C API has it (§9.2, §14.2): `init`, `process` and `reset` with the status, a panic that
 //!   zeroes the outputs of a call and poisons the instance, and one that leaves it uninitialized.
+//! - [`rate`]: the rates (W7-09): the chain of `.down~(N)` and `.up~(N)` and its ratio, the ticks slower than `sample` a flow has stages for, and the time
+//!   an instance of a chain runs in (§11.4, §11.9).
 //! - [`state`]: the state of an instance, a tree of cells and instances made for each place a delay or a flow is called,
 //!   the delays (`prev~`, `delay~`, `vdelay~`) with the two phases of a tick that `^` needs, the time (`sample_rate()`, `sample_tick()`).
 //! - [`walk`]: the `test` blocks of a case taken apart and run on the evaluator: the calls of `render` and the asserts (W7-19).
@@ -52,6 +54,7 @@ mod hoist;
 pub mod host;
 pub mod interp_host;
 pub mod pattern;
+mod rate;
 mod reads;
 pub mod scalar;
 pub mod sema_view;
@@ -80,6 +83,8 @@ mod hoist_tests;
 mod instance_tests;
 #[cfg(test)]
 mod limits_tests;
+#[cfg(test)]
+mod multirate_tests;
 #[cfg(test)]
 mod pattern_tests;
 #[cfg(test)]

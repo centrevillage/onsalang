@@ -317,7 +317,7 @@ fn a_panic_is_compared_by_its_stage_too_whichever_frame_it_is_at() {
     // Any other stage the evaluator names for the same call is a failure that says both.
     let all = [PanicAt::Init, PanicAt::Start, PanicAt::Block, PanicAt::Sample(0)];
     let cases = [
-        ("at a frame", 3, "Some(Sample)"),
+        ("at a frame", 3, "Some(Tick(0))"),
         ("at a block", 2, "Some(Block)"),
         ("at init", 0, "Some(Init)"),
         ("at the start", 1, "None"),

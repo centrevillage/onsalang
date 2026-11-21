@@ -262,7 +262,6 @@ flow given(x: F32 at sample) -> F32 at sample { scale~(x, sample_rate()) }";
 }
 
 #[test]
-#[ignore = "W7-09: the check gives `sample_tick()` E0200 (R-288) and no type, so the tables are not whole"]
 fn sample_tick_counts_the_frames_since_init_and_reset_and_a_child_reads_the_same() {
     // §11.4: `sample_tick()` is the time since `reset` in ticks, a `U32` that goes round at 2^32, 0 at `init` and at `reset`
     // and not touched by anything else; in a child it is the time of the instance that calls (no `.down~` yet). The first

@@ -21,7 +21,7 @@ use super::host::FnHost;
 use super::scalar::{Bin, Fault, Un, binary, cast, unary};
 use super::sema_view::{Body, View};
 use super::state::Run;
-use super::value::{Scalar, Value};
+use super::value::{Scalar, Value, sum_places};
 
 /// A fault and where it came from.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -54,6 +54,14 @@ pub struct Limits {
 /// a `par~` (its key, its two stores, its entry in a map), some 3.7 KB for an instance, so that a tree at the limit is some
 /// 700 MB of nodes, or 130 000 instances (some 500 MB), and not the 150 MB a place of a value would make it.
 pub const LIMITS: Limits = Limits { reserve: 4 << 20, most: 1 << 20 };
+
+impl Limits {
+    /// Does the evaluator hold this many places? The one judgment of the limit (a row of a constant, `[e; N]`, an array of the default, the replicas of a
+    /// `par~` and their values, the places of a tree).
+    pub fn holds(self, places: usize) -> bool {
+        places <= self.most
+    }
+}
 
 /// The parts a stage made: by expression, then by the replicas it is in (empty outside a `par~`).
 pub(super) type Hoisted = HashMap<ExprId, HashMap<Vec<u32>, Value>>;
@@ -203,7 +211,7 @@ impl<'a> Frame<'a> {
         let v = self.form(e, at)?;
         match self.body.ty(e).and_then(|ty| v.agrees(ty, self.body.view)) {
             Ok(true) => Ok(v),
-            // A type the checker did not make (`Ty::Error`: an E0200 form, as `sample_tick()` of a flow is, W7-09) is a body with tables that are not whole.
+            // A type the checker did not make (`Ty::Error`: a form the check gave an error, such as a modifier `when~`, E0200 until W7-10) is a body with tables that are not whole.
             Ok(false) if matches!(self.body.ty(e), Ok(Ty::Error)) => {
                 Err(Stop { fault: Fault::Unavailable("a body whose tables are not whole"), at })
             }
@@ -355,7 +363,7 @@ impl<'a> Frame<'a> {
     /// it cannot read falls to the initializer, which is evaluated here).
     pub(super) fn const_def(&mut self, def: DefId, ty: &Ty, at: Span) -> Eval {
         let here = |fault| Stop { fault, at };
-        if let Some(c) = self.body.view.const_value(def).filter(|c| places(c) <= self.limits.most) {
+        if let Some(c) = self.body.view.const_value(def).filter(|c| self.limits.holds(places(c))) {
             match from_const(self.body.view, c, ty) {
                 Err(Fault::Unavailable(_)) => {}
                 v => return v.map_err(here),
@@ -377,9 +385,7 @@ impl<'a> Frame<'a> {
 /// The places a row holds, as [`Value::places`] counts them.
 fn places(c: &ConstValue) -> usize {
     match c {
-        ConstValue::Array(cs) | ConstValue::Tuple(cs) | ConstValue::Struct(cs) => {
-            cs.iter().map(places).sum::<usize>().max(1)
-        }
+        ConstValue::Array(cs) | ConstValue::Tuple(cs) | ConstValue::Struct(cs) => sum_places(cs.iter().map(places)),
         _ => 1,
     }
 }

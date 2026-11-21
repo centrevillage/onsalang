@@ -77,7 +77,7 @@ fn a_let_is_made_at_the_stage_of_its_clock() {
         assert_eq!(me.clocks(), [Clock::Init, Clock::Block, Clock::Sample, Clock::Sample]);
         // After `init`: the `init` one has been made, the others not.
         assert_eq!(counts([&N_I, &N_B, &N_S]), [1, 0, 0]);
-        assert_eq!(me.ctx, Ctx { sample_rate: 48000.0, tick: 0 });
+        assert_eq!(me.ctx, Ctx { sample_rate: 48000.0, tick: 0, rounds: 0 });
         // Three frames, `p = 100`: 1000 + 100 + x for x = 1, 2, 3; the `block` one once, the `sample` one three times.
         let xs = [i32v(1), i32v(2), i32v(3)];
         let outs = me.process(&[("p", i32v(100))], &[("x", &xs[..])], 3, host(&mut table)).expect("process");
@@ -92,7 +92,7 @@ fn a_let_is_made_at_the_stage_of_its_clock() {
         let outs = me.process(&[("p", i32v(300))], &[("x", &[])], 0, host(&mut table)).expect("process");
         assert!(outs.is_empty());
         assert_eq!(counts([&N_I, &N_B, &N_S]), [1, 3, 4]);
-        assert_eq!(me.ctx, Ctx { sample_rate: 48000.0, tick: 4 });
+        assert_eq!(me.ctx, Ctx { sample_rate: 48000.0, tick: 4, rounds: 0 });
     });
 }
 
@@ -381,16 +381,11 @@ fn the_counter_goes_up_for_each_frame_and_the_sample_rate_is_the_one_init_was_gi
 
 #[test]
 fn the_clock_of_two_operands_is_the_faster_of_them() {
-    // §11.3: constant < init < block < sample, and an expression of two clocks has the faster; the same clock twice is
-    // that clock. The ranks are written out here, and not read from the order of the type.
+    // §11.3: constant < init < block < sample / N < sample < sample * N, the `sample / N` of the larger N below, and an expression of two clocks has
+    // the faster; the same clock twice is that clock. The ranks are written out here, and not read from the order of the type.
     use Clock::*;
-    let all = [Const, Init, Block, Sample];
-    let rank = |c: Clock| match c {
-        Const => 0,
-        Init => 1,
-        Block => 2,
-        Sample => 3,
-    };
+    let all = [Const, Init, Block, Tick(-3), Tick(-1), Clock::Sample, Tick(2)];
+    let rank = |c: Clock| all.iter().position(|x| *x == c).expect("a clock of the list");
     for a in all {
         for b in all {
             let want = all[rank(a).max(rank(b))];

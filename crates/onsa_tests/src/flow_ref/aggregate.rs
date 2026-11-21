@@ -52,7 +52,7 @@ impl Frame<'_> {
     pub(super) fn repeat(&mut self, e: ExprId, elem: ExprId, at: Span) -> Eval {
         let v = self.eval(elem)?;
         match self.body.ty(e).map_err(|fault| Stop { fault, at })? {
-            Ty::Array(_, Len::Const(n)) if (*n as usize).saturating_mul(v.places()) <= self.limits.most => {
+            Ty::Array(_, Len::Const(n)) if self.limits.holds((*n as usize).saturating_mul(v.places())) => {
                 Ok(Value::Array(vec![v; *n as usize]))
             }
             _ => Err(Stop { fault: Fault::Unavailable("an array that is not of a size the evaluator builds"), at }),

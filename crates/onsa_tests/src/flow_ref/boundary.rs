@@ -41,7 +41,7 @@ fn zero(view: View, ty: &Ty) -> Result<Value, Fault> {
         return Ok(s.default_value().unwrap_or(Value::Char('\0')));
     }
     Ok(match ty {
-        Ty::Array(t, Len::Const(n)) if *n as usize <= LIMITS.most => {
+        Ty::Array(t, Len::Const(n)) if LIMITS.holds(*n as usize) => {
             Value::Array(vec![zero(view, view.ty(*t))?; *n as usize])
         }
         Ty::Named(def, _) => Value::Struct(

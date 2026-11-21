@@ -33,7 +33,7 @@ impl<'a> Frame<'a> {
         let (lo, hi) = (bound(self, range.lo)?, bound(self, range.hi)?);
         let n = hi - lo + i128::from(range.end == RangeEnd::Included);
         let n = usize::try_from(n).ok().filter(|n| *n > 0).ok_or(here(Internal("an empty range of a `par~`")))?;
-        if n > self.limits.most {
+        if !self.limits.holds(n) {
             return Err(here(Unavailable("a `par~` of more replicas than the evaluator holds")));
         }
         self.run.as_ref().ok_or(here(Unavailable("a `par~` outside an instance of a flow")))?;
@@ -43,7 +43,7 @@ impl<'a> Frame<'a> {
             let value = self.with_bindings(&[k as u32], vec![(var, i)], |f| go(f))?;
             // The values of all the replicas are as many places as the first has, n times (as `[e; N]` is held, `aggregate.rs`):
             // the nest of `par~`s is stopped at its first row, before the product is made.
-            if k == 0 && n.saturating_mul(places(&value)) > self.limits.most {
+            if k == 0 && !self.limits.holds(n.saturating_mul(places(&value))) {
                 return Err(here(Unavailable("the values of a `par~` are more places than the evaluator holds")));
             }
             out.push(value);

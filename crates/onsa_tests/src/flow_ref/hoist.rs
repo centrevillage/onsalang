@@ -31,6 +31,7 @@ use onsa_syntax::ast::{BinOp, CallKind, ExprId, ExprKind, StmtKind};
 
 use super::expr::{Frame, LOW_STACK, Stop};
 use super::flow::{Clock, Known, Seen, clock_of};
+use super::rate::{args_of, chain_of};
 use super::scalar::Fault;
 use super::sema_view::{Body, Stage};
 
@@ -48,7 +49,7 @@ fn atom(body: &Body, e: ExprId) -> bool {
     }
 }
 
-fn feedback(body: &Body, e: ExprId) -> bool {
+pub(super) fn feedback(body: &Body, e: ExprId) -> bool {
     matches!(body.ast.expr(e).kind, ExprKind::Feedback(_))
         || body.ast.sub_exprs(e).into_iter().any(|x| feedback(body, x))
 }
@@ -84,8 +85,9 @@ pub(super) fn stage_of(body: &Body, known: &Known, root: ExprId, e: ExprId) -> R
             let inside = with_index(body, known, var.span)?;
             stage_of(body, &inside, root, *inner)
         }
+        // A tick is read at the clock `at` gives (`(lf at sample) * 2.0` is of `sample`); a value of the parameter kinds is made at its own stage.
         K::At { expr, .. } => match stage_of(body, known, root, *expr)? {
-            Clock::Sample => clock_of(body, known, root, e),
+            Clock::Tick(_) => clock_of(body, known, root, e),
             parameter => Ok(parameter),
         },
         K::Path(_) | K::Field { .. } if body.names(e) => match body.target(e)? {
@@ -215,6 +217,10 @@ fn operands(body: &Body, e: ExprId) -> Vec<ExprId> {
         K::Tuple(xs) | K::Array(xs) => xs.clone(),
         K::Repeat { elem, len } => vec![*elem, *len],
         K::Struct { fields, .. } => fields.iter().map(|(_, x)| *x).collect(),
+        // A chain of modifiers is made by its head's arguments: the head is no part that a stage makes (it runs in a frame of its own, `rate.rs`).
+        K::Call { .. } if matches!(chain_of(body, e), Ok(Some(_))) => {
+            chain_of(body, e).ok().flatten().map(|c| args_of(body, c.head)).unwrap_or_default()
+        }
         K::Call { callee, args, .. } => {
             let mut out = Vec::new();
             if let K::Field { base, .. } = &ast.expr(*callee).kind {
@@ -581,8 +587,8 @@ fn descend(f: &mut Frame, known: &Known, root: ExprId, e: ExprId, here: Clock, g
 /// What a name that stands for `e` is (a `let` of it, an arm binding of it as an object): the stage its value is made in (S-1196) and the clock
 /// it is read at. A derived clock has no read clock here (an error only where a condition reads it).
 pub(super) fn seen_of(body: &Body, known: &Known, root: ExprId, e: ExprId) -> Result<Seen, Fault> {
-    let stage = stage_of(body, known, root, e)?;
-    let read = match clock_of(body, known, root, e) {
+    let stage = stage_of(body, known, root, e)?.rooted();
+    let read = match clock_of(body, known, root, e).map(Clock::rooted) {
         Ok(c) => Some(c),
         Err(Fault::Unavailable(_)) => None,
         Err(fault) => return Err(fault),

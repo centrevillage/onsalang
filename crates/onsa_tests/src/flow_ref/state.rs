@@ -16,13 +16,19 @@ use onsa_syntax::ast::{Arg, CallKind, ExprId, ExprKind};
 
 use super::call::parts;
 use super::expr::{Eval, Frame, LOW_STACK, Stop, evaluates};
-use super::flow::{Ctx, Inst, Plans, enter};
+use super::flow::{Ctx, Inst, Plans, enter, run_frame};
+use super::rate::{Chain, at_callers_time, chain_of, frames, time_of};
 use super::scalar::{Fault, Fault::Internal};
 use super::sema_view::{Called, Stage, input_stage};
 use super::value::{IntKind, Scalar, Shape, Value};
 
 /// The places an instance takes in the limit of the tree (`Limits::most`): some 100 thousand instances, not 2^20.
 const INSTANCE: usize = 8;
+
+/// The positions of the arguments of a delay that the evaluator reads by place: the value it saves (the first, whose clock is the clock of the delay, §11.4)
+/// and the `d` of `vdelay~(e, d, MAX)`. The registry (`Delay`) has the positions of the constant and of `init` only.
+pub(super) const SAVED: usize = 0;
+const D: usize = 1;
 
 /// Where a node of the state is: the call that makes it, and the replica of each `par~` it is in (U2).
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -92,7 +98,8 @@ impl Run {
 
 enum Node {
     Delay(Delay),
-    Instance(DefId),
+    /// The flow, and the ratio of the chain of modifiers it is the head of (0 for none).
+    Instance(DefId, i32),
 }
 
 /// What an expression makes at `init`: the node of a call, or the nodes of the body of a `par~`, each made for every replica.
@@ -126,6 +133,9 @@ impl<'a> Frame<'a> {
     #[inline(never)]
     pub(super) fn stateful(&mut self, e: ExprId, at: Span) -> Eval {
         let here = |fault| Stop { fault, at };
+        if let Some(chain) = chain_of(&self.body, e).map_err(here)? {
+            return self.chained(chain, at);
+        }
         match &self.body.ast.expr(e).kind {
             ExprKind::Feedback(_) => self.name(e, at),
             ExprKind::Call { args, .. } => match self.body.called(e).map_err(here)? {
@@ -179,7 +189,7 @@ impl<'a> Frame<'a> {
     fn delay(&mut self, e: ExprId, d: Delay, args: &[Arg], at: Span) -> Eval {
         let here = |fault| Stop { fault, at };
         let arg = |i: usize| args.get(i).map(|a| a.expr).ok_or(here(Internal("a delay with too few arguments")));
-        let dc = if d == Delay::Variable { Some(self.eval(arg(1)?)?) } else { None };
+        let dc = if d == Delay::Variable { Some(self.eval(arg(D)?)?) } else { None };
         let key = self.key(e);
         let run = self.run.as_mut().ok_or(here(Fault::Unavailable("a delay outside an instance of a flow")))?;
         let cell = run.state.cells.get(&key).ok_or(here(Internal("a delay with no state")))?;
@@ -188,7 +198,7 @@ impl<'a> Frame<'a> {
             (Store::Ring { buf, w }, None) => buf[*w].clone(),
             (Store::Ring { buf, w }, Some(dc)) => interpolate(buf, *w, dc).map_err(here)?,
         };
-        run.saves.push(Save { key, expr: arg(0)?, scope: run.scope.clone() });
+        run.saves.push(Save { key, expr: arg(SAVED)?, scope: run.scope.clone() });
         Ok(out)
     }
 
@@ -226,6 +236,18 @@ impl<'a> Frame<'a> {
         if !evaluates(&self.body, e) {
             return Err(here(Fault::Unavailable("a form of a later unit")));
         }
+        // A chain of modifiers is one node, the instance of its head, which the ratio of the chain says the time of: its arguments are the parts.
+        if let Some(chain) = chain_of(&self.body, e).map_err(here)? {
+            let ExprKind::Call { args, .. } = &ast.expr(chain.head).kind else {
+                return Err(here(Internal("a chain with no head call")));
+            };
+            let Called::Flow(def) = self.body.called(chain.head).map_err(here)? else {
+                return Err(here(Fault::Unavailable("a modifier of a delay")));
+            };
+            args.iter().try_for_each(|a| self.nodes(a.expr, out))?;
+            out.push(Site::Node(chain.head, Node::Instance(def, chain.ratio), args.as_slice()));
+            return Ok(());
+        }
         let node = match &ast.expr(e).kind {
             ExprKind::Par { body, .. } => {
                 let mut inner = Vec::new();
@@ -238,7 +260,7 @@ impl<'a> Frame<'a> {
             ExprKind::Call { args, kind: CallKind::Flow, .. } => match self.body.called(e).map_err(here)? {
                 Called::Builtin(FlowBuiltin::Delay(d)) => Some(Site::Node(e, Node::Delay(d), args.as_slice())),
                 Called::Builtin(_) => None,
-                Called::Flow(def) => Some(Site::Node(e, Node::Instance(def), args.as_slice())),
+                Called::Flow(def) => Some(Site::Node(e, Node::Instance(def, 0), args.as_slice())),
             },
             _ => None,
         };
@@ -261,7 +283,7 @@ impl<'a> Frame<'a> {
         for site in sites {
             match site {
                 Site::Node(e, Node::Delay(d), args) => self.make_cell(*e, *d, args)?,
-                Site::Node(e, Node::Instance(def), _) => self.make_child(*e, *def)?,
+                Site::Node(e, Node::Instance(def, rate), _) => self.make_child(*e, *def, *rate)?,
                 Site::Par(e, inner) => drop(self.replicate(*e, |_| 0, |f| f.build(inner))?),
             }
         }
@@ -288,8 +310,8 @@ impl<'a> Frame<'a> {
     /// Adds `places` (none: more than a count holds) to those of the whole tree, which `Limits::most` holds.
     fn hold(&mut self, places: Option<usize>, at: Span) -> Result<(), Stop> {
         let more = Stop { fault: Fault::Unavailable("the delays and instances are more than the evaluator holds"), at };
-        let (most, run) = (self.limits.most, self.run.as_mut().ok_or(more)?);
-        run.used = places.and_then(|p| p.checked_add(run.used)).filter(|u| *u <= most).ok_or(more)?;
+        let (limits, run) = (self.limits, self.run.as_mut().ok_or(more)?);
+        run.used = places.and_then(|p| p.checked_add(run.used)).filter(|u| limits.holds(*u)).ok_or(more)?;
         Ok(())
     }
 
@@ -329,9 +351,10 @@ impl<'a> Frame<'a> {
     }
 
     /// The instance of the flow `def` that the call `e` makes: kept in the state, then its `init` (the arguments of that clock).
-    fn make_child(&mut self, e: ExprId, def: DefId) -> Result<(), Stop> {
+    fn make_child(&mut self, e: ExprId, def: DefId, rate: i32) -> Result<(), Stop> {
         let at = self.body.ast.expr(e).span;
         let (mut inst, decl) = self.new_child(def, at)?;
+        inst.rate = rate;
         let config = self.inputs_of(e, decl, Stage::Init)?;
         let key = self.key(e);
         inst.scope = self.run.as_ref().map(|r| r.scope.clone()).unwrap_or_default();
@@ -368,8 +391,11 @@ impl<'a> Frame<'a> {
         }
         let view = self.body.view;
         let run = self.run.as_mut().ok_or(here(Fault::Unavailable("an instance outside an instance of a flow")))?;
-        let (ctx, used, plans) = (run.ctx, run.used, run.plans.clone());
-        let def = run.state.children.get(key).map(|c| c.def).ok_or(here(Internal("an instance with no state")))?;
+        let (used, plans) = (run.used, run.plans.clone());
+        let (def, rate) =
+            run.state.children.get(key).map(|c| (c.def, c.rate)).ok_or(here(Internal("an instance with no state")))?;
+        // The instance reads the time of its rate (`sample_rate()` of `init` and of `block` too): its caller's for no modifier, 1/N and N times for a chain.
+        let ctx = time_of(run.ctx, rate, 0);
         let (body, decl) = (view.body(def).map_err(here)?, view.flow(def).map_err(here)?);
         let mut inst = run.state.children.remove(key).ok_or(here(Internal("an instance with no state")))?;
         let mut f = inst.frame(body, ctx, used, plans, self.host.take());
@@ -396,6 +422,49 @@ impl<'a> Frame<'a> {
         })
     }
 
+    /// A chain of modifiers called (§11.9): the instance of its head runs at the rate of the chain (its arguments are evaluated here, once, at the time of
+    /// this stage), in the time `times` gives it: one frame at 1/N for `.down~(N)`, N frames for `.up~(N)`. The value is its output: the last one of the
+    /// N frames, for `.up~(N)` (a value of `sample * N` is read only by a conversion flow, which takes the array of them, U2b).
+    fn chained(&mut self, chain: Chain, at: Span) -> Eval {
+        let here = |fault| Stop { fault, at };
+        let Called::Flow(def) = self.body.called(chain.head).map_err(here)? else {
+            return Err(here(Fault::Unavailable("a modifier of a delay")));
+        };
+        if at_callers_time(chain.ratio) {
+            return self.instance(chain.head, def, at);
+        }
+        let decl = self.body.view.flow(def).map_err(here)?;
+        let given = self.inputs_of(chain.head, decl, Stage::Sample)?;
+        let given: Vec<(&str, &Value)> = given.iter().map(|(n, v)| (*n, v)).collect();
+        let caller = self.time(at)?;
+        self.in_child(&self.key(chain.head), |f, inst, decl| {
+            for j in 0..frames(chain.ratio) {
+                f.run.as_mut().ok_or(Stop { fault: Internal("no run"), at })?.ctx = time_of(caller, chain.ratio, j);
+                run_frame(f, inst, decl, &given)?;
+            }
+            Ok(inst.out.clone())
+        })
+    }
+
+    /// The stage of the slower tick `r` of the instances this one calls at its own time (a call with no modifier, or a chain of ratio 0): their ticks
+    /// are in the stage of this one (S-1088: `ctl` of `lin_up32~(ctl~(avg_down32~(x)).down~(32))` reads the new average at the same position). They
+    /// run after the steps of this stage: what they make is no input of a step of a tick, which has only the parameter kinds to read (a panic
+    /// is the one thing whose order shows, the place of the call being the order of the spec).
+    pub(super) fn tick_children(&mut self, r: i32, whole: Span) -> Result<(), Stop> {
+        let run = self.run.as_ref().ok_or(Stop { fault: Internal("a tick stage with no run"), at: whole })?;
+        let calls: Vec<_> = run
+            .state
+            .children
+            .iter()
+            .filter(|(_, c)| at_callers_time(c.rate) && c.slow.contains(&r))
+            .map(|(k, _)| k.clone())
+            .collect();
+        for key in calls {
+            self.in_child(&key, |f, inst, decl| enter(f, inst, decl, Stage::Tick(r), &[] as &[(&str, Value)]))?;
+        }
+        Ok(())
+    }
+
     /// The `block` stage of the instances this one calls (§11.3, a call of 0 frames too), on the `block` arguments.
     // SPEC-GAP(S-1128): the `block` stages of the instances a flow calls run after its own `block` `let`s, in the order of
     // their places; the spec does not say the order, which only the place of a panic shows.
@@ -419,7 +488,7 @@ impl<'a> Frame<'a> {
         let view = self.body.view;
         Ok(match ty {
             Ty::Tuple(ts) => Shape::Tuple(ts.iter().map(|t| self.shape(view.ty(*t), at)).collect::<Result<_, _>>()?),
-            Ty::Array(t, Len::Const(n)) if *n as usize <= self.limits.most => {
+            Ty::Array(t, Len::Const(n)) if self.limits.holds(*n as usize) => {
                 Shape::Array(Box::new(self.shape(view.ty(*t), at)?), *n as usize)
             }
             // A `Default` written by hand: its `default()` is called (§6.4).

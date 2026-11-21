@@ -9,7 +9,7 @@ use onsa_diag::Span;
 use onsa_driver::Analyzed;
 use onsa_sema::clock::{Clock, ClockName};
 use onsa_sema::def::{FieldDef, Fields, FlowDef, FlowFn, FlowInput, FlowTy, FnDef, StructDef, VariantDef};
-use onsa_sema::flow_names::FlowBuiltin;
+use onsa_sema::flow_names::{FlowBuiltin, Modifier};
 use onsa_sema::prim::PrimRow;
 use onsa_sema::{Analysis, BodyInfo, ConstValue, DefId, DefKind, LocalId, LocalInfo, LocalKind, ModId, Package};
 use onsa_sema::{Target, Ty, TyId};
@@ -244,6 +244,15 @@ impl<'a> Body<'a> {
         }
     }
 
+    /// The modifier the call `e` is and its receiver (`lp~(x).down~(2)` is `down` of `lp~(x)`, §11.10): the names stage records no flow for it, and its
+    /// callee is a field of the closed list of the modifiers. A call of a flow of a module (`util.down~(x)`) has a flow recorded: not one.
+    pub fn modifier(&self, e: ExprId) -> Option<(Modifier, ExprId)> {
+        let ExprKind::Call { callee, kind: CallKind::Flow, .. } = &self.ast.expr(e).kind else { return None };
+        let ExprKind::Field { base, name } = &self.ast.expr(*callee).kind else { return None };
+        let listed = Modifier::named(&name.name)?;
+        (self.builtin(e).is_none() && self.view.analysis.instance_of(self.def, e).is_none()).then_some((listed, *base))
+    }
+
     /// Is `e` the call `sample_rate()` or `sample_tick()`? They are written with no `~`, and the table has no target for them.
     #[inline(never)]
     pub fn time_call(&self, e: ExprId) -> bool {
@@ -393,13 +402,19 @@ impl Callee<'_> {
     }
 }
 
-/// The clock of an input of a flow, as the evaluator tells the stages apart (§11.3): the three
-/// clocks of a declaration today; the others come with W7-09 and W7-17.
+/// A stage of a flow (§11.3): `init`, `block`, and a tick of the ratio `2^r` of `sample` (`Tick(0)` is `sample`, a slower tick `r < 0`, §11.9). The inputs
+/// of a declaration are at the first three today; W7-17 has the others.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Stage {
     Init,
     Block,
-    Sample,
+    Tick(i32),
+}
+
+impl Stage {
+    /// The stage of the `sample` of the body: a const of the type, so that it is written as a variant and matched as one.
+    #[allow(non_upper_case_globals)]
+    pub const Sample: Stage = Stage::Tick(0);
 }
 
 /// The stage a clock is made in; the clocks no declaration makes today (W7-09, W7-11, W7-17) are `Unavailable`.
