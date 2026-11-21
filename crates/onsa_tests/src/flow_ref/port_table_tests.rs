@@ -1,8 +1,8 @@
 //! The table of the ports of a conversion flow (W7-09 U2c): what a flow with an input at `sample * 2^k` (k = -2 .. 2, `sample / 4` to `sample * 4`) reads of the argument it is given, and what the
 //! caller reads of an output at `sample * 2^m`, when the flow is run by a chain of the ratio `2^r` (r = -2 .. 2: `.down~(4)`, `.down~(2)`, none, `.up~(2)`, `.up~(4)`), for every pair (k, r) and (m, r).
 //! The expected values are those of a small model of time written here from §11.3, §11.4, §11.9 and S-566, S-567, S-578, S-1079, S-1088 (the model below, not the evaluator and not a copy of its tables), and the model is held
-//! to the values worked out by hand in the comments of the tests of the representative rows. A row that the evaluator does not take yet is marked in [`STOPS_NOW`]: it must stop with `Unavailable` or an
-//! internal error and give no value, and U2e takes the mark off when the row gets its value (the row is then held to the model).
+//! to the values worked out by hand in the comments of the tests of the representative rows. Every row gives its values (W7-09 U2e took the last mark off): a row that stops, with `Unavailable`
+//! or an internal error, fails.
 //!
 //! The rule of the model (the frame of the caller is c, the chain runs the body at the ratio `2^r`: r = 0 at each c, r < 0 at the c that are multiples of `2^-r` (position c, n = c / 2^-r), r > 0 `2^r`
 //! times in each c, n = c * 2^r + j; the counter n is the `sample` of the instance, §11.9 "位相のカウンタ"):
@@ -21,20 +21,6 @@ use super::sema_view::View;
 use super::value::Value;
 use onsa_driver::Analyzed;
 use onsa_sema::DefId;
-
-/// The rows that the evaluator stops at now (`Unavailable` or an internal error, never a value): the names of the flows of the table and the repeated forms below. U2e takes a name off when the row gets its value
-/// (the row is then held to the model); a row that gives a value and is here, or one that stops and is not, fails.
-#[rustfmt::skip]
-const STOPS_NOW: &[&str] = &[
-    // Inputs: `k > 0` run slower than a stream that is a tick (`sum2~(p at (sample / 2)).down~(4)`), `k > 0` with `r > 0`, `k < 0` with `r > 0` that takes a bundle (`k + r > 0`), and a `block` value for
-    // an input at `sample * 2^k` that is read in a frame of the caller (`fold2~(p)`, with `r <= 0`).
-    "in_d1_u2_s", "in_d1_u2_p", "in_u1_d2_s", "in_u1_d2_p", "in_u1_z_p", "in_u1_u1_s", "in_u1_u1_p", "in_u1_u2_s", "in_u1_u2_p", "in_u2_d1_p", "in_u2_z_p", "in_u2_u1_s", "in_u2_u1_p", "in_u2_u2_s", "in_u2_u2_p",
-    // Outputs: at `sample / 2^-m` with a chain that makes it faster (`m < 0`, `r > 0`), a bundle that a chain makes faster (`m > 0`, `r > 0`), and at `sample * 2^m` run slower than a tick (`m > 0`, `m + r < 0`).
-    "out_d2_u1", "out_d2_u2", "out_d1_u1", "out_d1_u2", "out_u1_d2", "out_u1_u1", "out_u1_u2", "out_u2_u1", "out_u2_u2",
-    // The forms of W7-09 U2b that are not rows of the table: a `block` array given to a `.up~(2)` part, and a call at `sample * N` kept in a `let` or in parentheses (the call with an output at a tick in the argument
-    // of a gather and the flow whose output is `sample_tick()` alone at a tick gave their values in U2d, and are held to them).
-    "repro_up_array_param", "repro_h01", "repro_h02", "repro_h08", "repro_f09",
-];
 
 fn two(k: i32) -> usize {
     1 << k.unsigned_abs()
@@ -322,59 +308,16 @@ fn same_values(row: &str, got: &[f32], want: &[f32]) {
     );
 }
 
-/// The outcome of the row `row` against its model: a row in [`STOPS_NOW`] stops, any other row gives the values of the model.
+/// The outcome of the row `row` against its model: the values of the model (a row that stops fails).
 fn hold(row: &str, got: &Got, want: &[f32]) {
-    match (STOPS_NOW.contains(&row), got) {
-        (false, Got::Values(g)) => same_values(row, g, want),
-        (true, Got::Unavailable | Got::Internal) => {}
-        (stops, got) => panic!(
-            "{row}: the mark says it {}, but the evaluator gave {got:?}",
-            if stops { "stops" } else { "gives its values" }
-        ),
+    match got {
+        Got::Values(g) => same_values(row, g, want),
+        got => panic!("{row}: the evaluator gave {got:?}, not the values of the model"),
     }
 }
 
-/// The names of the repeated forms below that hold a row (the ones of [`STOPS_NOW`] and the ones that give their values).
-#[rustfmt::skip]
-const FORMS: &[&str] = &[
-    "repro_up_array_param",
-    "repro_up_array_stream",
-    "repro_j01",
-    "repro_j02",
-    "repro_j03",
-    "repro_j04",
-    "repro_j05",
-    "repro_k01",
-    "repro_h01",
-    "repro_h02",
-    "repro_h08",
-    "repro_f09",
-    "repro_h03",
-    "repro_h04",
-    "par_branch", "survivor_ring3",
-    "survivor_up_hold",
-    "survivor_acc2_cut",
-];
-
 #[test]
-fn every_mark_of_the_list_names_a_row_that_there_is() {
-    // A name that is not a row would never be held to anything: a typo would leave the row to give its value only, and U2e would find a mark that is not one.
-    let mut names: Vec<String> = FORMS.iter().map(|s| s.to_string()).collect();
-    for k in RANGE {
-        for r in RANGE {
-            names.push(in_name(k, r, Arg::Stream));
-            names.push(in_name(k, r, Arg::Param));
-            names.push(out_name(k, r));
-        }
-    }
-    let unknown: Vec<&&str> = STOPS_NOW.iter().filter(|m| !names.iter().any(|n| n == **m)).collect();
-    assert!(unknown.is_empty(), "no such row: {unknown:?}");
-    let mut seen = std::collections::BTreeSet::new();
-    assert!(STOPS_NOW.iter().all(|m| seen.insert(*m)), "a mark twice");
-}
-
-#[test]
-fn the_input_ports_of_the_table_read_the_stream_the_way_the_model_does_or_stop_where_marked() {
+fn the_input_ports_of_the_table_read_the_stream_the_way_the_model_does() {
     // The 50 rows (k, r) in {-2 .. 2}^2 with a stream that is exactly at the clock q = k + r, and with `p` of `block`, which a call of `process` changes (the cuts at the frames 5, 12 and 16 are inside the windows
     // and the ticks of the rows, and the elements are read in the frame they are in, §11.3 "使う所のクロックで変換なしに読める").
     let mut jobs = Vec::new();
@@ -398,7 +341,7 @@ fn the_input_ports_of_the_table_read_the_stream_the_way_the_model_does_or_stop_w
 }
 
 #[test]
-fn the_output_ports_of_the_table_are_read_the_way_the_model_does_or_stop_where_marked() {
+fn the_output_ports_of_the_table_are_read_the_way_the_model_does() {
     // The 25 rows (m, r): the body makes the elements e (`e + 1 + 1000 w`, `w` read where the element is made) and the caller reads them at the clock m + r. `w` is 1, 2, 3, 4 in the calls of 5, 7, 4 and 8 frames.
     let mut jobs = Vec::new();
     for m in RANGE {
@@ -590,7 +533,8 @@ fn the_model_of_the_output_ports_gives_the_numbers_worked_out_by_hand() {
 }
 
 // ---------------------------------------------------------------------------------------------------------
-// The forms of W7-09 U2b that stop and are not rows of the table, and the changes the tests of U2b let through.
+// The forms of W7-09 U2b that are not rows of the table (an array of the parameter kinds for a `.up~` part, a call at `sample * N` in a `let` or in parentheses, an output of `sample_tick()` alone at a tick), and the
+// changes the tests of U2b let through.
 
 type Block = Vec<(&'static str, f32)>;
 

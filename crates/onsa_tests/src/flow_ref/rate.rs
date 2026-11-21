@@ -29,7 +29,7 @@ pub(super) struct Chain {
 /// The exponent of the N of a modifier or of a derived clock: a power of two that is 2 or more (E0808 stops the others in the checker).
 fn exponent(body: &Body, n: ExprId) -> Result<i32, Fault> {
     match Frame::new(*body).eval(n).map_err(|stop| stop.fault)? {
-        Value::Int(_, n, _) if n >= 2 && n.count_ones() == 1 => Ok(n.trailing_zeros() as i32),
+        Value::Int(_, n, _) if (2..=1 << 31).contains(&n) && n.count_ones() == 1 => Ok(n.trailing_zeros() as i32),
         _ => Err(Fault::Unavailable("an N that is not a power of 2 of 2 or more")),
     }
 }
@@ -50,43 +50,59 @@ pub(super) fn out_ratio(decl: &FlowDef) -> Result<i32, Fault> {
     }
 }
 
-/// How the argument of an input declared at the ratio `k` reaches an instance that runs at the ratio `r` of its chain (§11.9: a port is read in the frame of the call, `k + r`).
-/// An input of `sample * 2^k` that a `.down~` chain runs gathers, from the 2^-r frames of its caller before the tick, their `2^(k + r)` values each (`per`: one for `sample`,
-/// an array of them for `sample * 2^(k + r)`), in the order of time; one that no chain runs (`k + r > 0`) takes the array of `sample * N` the argument is; an input of `sample` of
-/// `.up~(N)` takes one element of such an array at each run. Another form has no value in the spec.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub(super) enum Feed {
-    Plain,
-    Gather { frames: usize, per: usize },
-    Each,
+/// The most the exponent of a ratio of a chain, and of the product of the ratios of the chains around a call, is for the evaluator: the product is 2^24 at most (§11.9, which the lowering checks), and the
+/// evaluator stops (`Unavailable`) at a larger one and does not round it.
+// SPEC-GAP(S-1089): the product is 2^24 at most, and the spec does not say whether it is of the size of the ratio (a product of 2^-26, `.down~(8192)` twice, is over too) or of the one it makes a faster time;
+// the evaluator takes the size, in both directions, as the most conservative reading.
+pub(super) const MOST_RATIO: i32 = 24;
+
+/// Does an input declared at the ratio `k` (`sample * 2^k`) gather its values at an instance run by a chain of the ratio `r`? When `k > 0` and the chain is slower (§11.9): the body reads the `2^k` elements of the
+/// stream of its argument (at the clock `q = k + r`) that came before the position of its tick, a window that the caller's ring keeps (S-578, S-1079). Any other input reads the stream where the run is in time.
+pub(super) fn gathers(k: i32, r: i32) -> bool {
+    k > 0 && r < 0
 }
 
-pub(super) fn feed(k: i32, r: i32) -> Result<Feed, Fault> {
-    match (k, r) {
-        (_, 0) | (..=0, ..0) => Ok(Feed::Plain),
-        (1.., ..0) if k + r >= 0 => Ok(Feed::Gather { frames: n_of(r) as usize, per: n_of(k + r) as usize }),
-        (0, 1..) => Ok(Feed::Each),
-        (..0, 1..) if k + r <= 0 => Ok(Feed::Plain),
-        _ => Err(Fault::Unavailable("an input of sample * N that the chain does not read at the sample of its caller")),
+/// The one check of the length of a burst (§11.9): the stream of an input or output at the clock `q > 0` of a frame is `2^q` elements, wherever a boundary makes a burst or takes one apart (the input, the output, the
+/// ring a gather stores). Another length is a fault of the evaluator, not of the program.
+pub(super) fn counted(es: &[Value], q: i32) -> Result<(), Fault> {
+    match q > 0 && es.len() as u64 == n_of(q) {
+        true => Ok(()),
+        false => Err(Fault::Internal("a burst that is not as long as the stream at its clock")),
     }
 }
 
-/// What a call at the chain ratio `r` makes of an output declared at `m` (§11.9): the value itself (`sample * N` of no chain is the array the body made, and the output of a tick
-/// of a `.down~` chain is the one the last tick made), the array that a `.up~(N)` chain makes of the N outputs of its runs, or the one that a `.down~` chain deals out, `per` elements
-/// at a time, to the 2^-r frames after the tick (`Dealt`: the output of 2^m is a value of `sample * 2^(m + r)` in the frame of the call).
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub(super) enum Out {
-    Plain,
-    All,
-    Dealt { r: i32, per: usize },
+/// What the run `j` of a frame of the caller takes of the argument `v` of an input at `sample * 2^k` that is not gathered, when the chain is of the ratio `r` (§11.9: the argument is a stream at the clock `q = k + r` of
+/// the caller, and the runs of its frame take its elements in time order): a burst (a stream of `q > 0`) gives the `2^k` elements from `j * 2^k` of a `sample * 2^k` (an array), or the element `j / 2^-k` of a tick of
+/// `sample / 2^-k` (when the run is on it) or `j`; any other value is the one value that is read at the position.
+pub(super) fn take(k: i32, r: i32, j: u32, v: &Value) -> Result<Value, Fault> {
+    let Value::Burst(es) = v else { return Ok(v.clone()) };
+    counted(es, k + r)?;
+    let (from, n) = if k > 0 { ((j as usize) << k, 1usize << k) } else { ((j as usize) >> -k, 1) };
+    match (es.get(from..from + n), k > 0) {
+        (Some(part), true) => Ok(Value::Array(part.to_vec())),
+        (Some([one]), false) => Ok(one.clone()),
+        _ => Err(Fault::Internal("a run that is not of the frame it takes from")),
+    }
 }
 
-pub(super) fn out_of(m: i32, r: i32) -> Result<Out, Fault> {
-    match (m, r) {
-        (1.., ..0) if m + r >= 0 => Ok(Out::Dealt { r, per: n_of(m + r) as usize }),
-        (_, 0) | (..=0, ..0) => Ok(Out::Plain),
-        (0, 1..) => Ok(Out::All),
-        _ => Err(Fault::Unavailable("an output that the chain does not read at the sample of its caller")),
+/// Does a call of an output declared at the ratio `m` deal its `2^m` elements to the frames after the tick of its chain of the ratio `r`? When `m > 0` and the chain is slower: the array of the tick is the caller's, and the
+/// frames from the tick read it in order (§11.9, "配る出力は位置 c 〜 c + N − 1 の `sample` の刻みが順に読む").
+pub(super) fn deals(m: i32, r: i32) -> bool {
+    m > 0 && r < 0
+}
+
+/// The elements that the frame `phase` frames after the tick of a chain (the ratio `r` < 0) reads of the `2^m` it dealt (m > 0): `2^o` from `phase * 2^o` for `o = m + r >= 0`, and the one that the tick of
+/// `sample / 2^-o` it is in has, `phase / 2^-o`, for `o < 0`.
+pub(super) fn dealt(m: i32, r: i32, phase: u64) -> (usize, usize) {
+    (((phase << m) >> -r) as usize, n_of((m + r).max(0)) as usize)
+}
+
+/// The elements of the output `v` of a body for an output declared at `m`: its `2^m` values for `sample * 2^m` (the array of the body), the one for another.
+pub(super) fn elements(m: i32, v: &Value) -> Result<Vec<Value>, Fault> {
+    match (m > 0, v) {
+        (false, v) => Ok(vec![v.clone()]),
+        (true, Value::Array(vs)) => Ok(vs.clone()),
+        _ => Err(Fault::Internal("an output at `sample * N` that is not an array")),
     }
 }
 
@@ -104,6 +120,10 @@ pub(super) fn chain_of(body: &Body, e: ExprId) -> Result<Option<Chain>, Fault> {
         };
         (at, seen) = (receiver, true);
     }
+    // SPEC-GAP(S-1089): the size of the ratio of a chain, `.down~(N)` too, is held to `MOST_RATIO`.
+    if ratio.abs() > MOST_RATIO {
+        return Err(Fault::Unavailable("a chain of modifiers of a ratio over 2^24"));
+    }
     Ok(seen.then_some(Chain { head: at, ratio }))
 }
 
@@ -116,9 +136,9 @@ pub(super) fn args_of(body: &Body, e: ExprId) -> Vec<ExprId> {
 }
 
 /// The N of the ratio `2^r` of a clock, `.down~(N)` or `.up~(N)` or `sample / N` (`r` is the sign of the direction and `log2 N` of the size): the one place of the
-/// division of the time that every rate reads. A ratio over 40 is not told apart from 40 (the counter is 2^64 at most).
+/// division of the time that every rate reads. `|r|` is 55 at most (a chain is 24 at most, `chain_of`; a clock of a port 31, `exponent`; the clock of a call is the sum of the two), so that the shift is whole.
 pub(super) fn n_of(ratio: i32) -> u64 {
-    1u64 << ratio.unsigned_abs().min(40)
+    1u64 << ratio.unsigned_abs()
 }
 
 /// How many frames the time `ctx` is after the last tick of `sample / N` (the ratio `r` < 0): the counter modulo N, 0 on the tick (§11.9).
@@ -131,25 +151,10 @@ pub(super) fn on_tick(ctx: Ctx, r: i32) -> bool {
     phase(ctx, r) == 0
 }
 
-/// The ratio `2^m` of the clock a call of a flow reads at (the output's `m` and the chain's `r`, §11.9); `None` for what is not a call of a flow.
-pub(super) fn call_ratio(body: &Body, e: ExprId) -> Result<Option<i32>, Fault> {
-    let (head, r) = match chain_of(body, e)? {
-        Some(chain) => (chain.head, chain.ratio),
-        None => (e, 0),
-    };
-    if !matches!(body.ast.expr(head).kind, ExprKind::Call { kind: CallKind::Flow, .. }) {
-        return Ok(None);
-    }
-    match body.called(head)? {
-        Called::Flow(def) => Ok(Some(out_ratio(body.view.flow(def)?)? + r)),
-        Called::Builtin(_) => Ok(None),
-    }
-}
-
-/// The frames an instance of the rate `ratio` of the chain runs for a frame of its caller: one for `.down~(N)` (when the caller's tick is a multiple of N) and
-/// none of the chain (ratio 0), N for `.up~(N)` (§11.9).
+/// The frames an instance of the rate `ratio` of the chain runs for a frame of its caller: one for none of the chain (ratio 0), N for `.up~(N)` (§11.9). A `.down~(N)` is
+/// run in the ticks of its caller and not in its `sample` (the stage 0 of a caller has the runs of a ratio of 0 or more only), so it asks for none.
 pub(super) fn frames(ratio: i32) -> u32 {
-    if ratio > 0 { u32::try_from(n_of(ratio)).unwrap_or(0) } else { 1 }
+    1 << ratio.max(0)
 }
 
 /// The time the j-th frame of an instance of the rate `ratio` runs in, for the time `ctx` of its caller (§11.4): at 1/N of the rate and of the counter for
@@ -170,9 +175,14 @@ pub(super) fn caller_stage(x: i32, r: i32) -> i32 {
     (x + r).min(0)
 }
 
-/// The stage of the caller that makes the output at `m` of an instance of the ratio `r`: the body makes it at its `sample` for a `sample * N`.
+/// The stage of the body of an instance that makes its output at `m`: its `sample` for a `sample * N`, the tick of the output for a slower one.
+pub(super) fn body_out_stage(m: i32) -> i32 {
+    m.min(0)
+}
+
+/// The stage of the caller that makes the output at `m` of an instance of the ratio `r`: the stage of the body that makes it, in the caller (`caller_stage`).
 pub(super) fn out_stage(m: i32, r: i32) -> i32 {
-    caller_stage(m.min(0), r)
+    caller_stage(body_out_stage(m), r)
 }
 
 /// The ticks slower than `sample` that the stages of a body are of, in the order they run: the larger N (the slower tick) first (§11.9, S-1079): the clock of each step, the clocks of its parts,

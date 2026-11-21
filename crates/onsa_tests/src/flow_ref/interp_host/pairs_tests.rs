@@ -22,6 +22,7 @@ fn shown(v: &Value) -> String {
         Value::Unit => "()".into(),
         Value::Tuple(xs, _) => format!("T({})", all(xs)),
         Value::Array(xs) => format!("A[{}]", all(xs)),
+        Value::Burst(xs) => format!("Burst[{}]", all(xs)),
         Value::Struct(xs) => format!("S{{{}}}", all(xs)),
         Value::Enum { tag, fields } => format!("E{tag}({})", all(fields)),
     }

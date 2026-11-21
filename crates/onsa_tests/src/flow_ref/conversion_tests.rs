@@ -4,11 +4,12 @@
 //! hand from the spec, in the comment of each test. In every flow of a column `x` the frame c has the value `c + 1` unless said otherwise, so the values a tick gathers
 //! are the ones of the frames before it (the frame c = 0 has 0 for all of them: `T.default()`).
 
-use super::expr::Frame;
-use super::expr_tests::{def_named, with_checked};
+use super::boundary::{Boundary, Status};
+use super::expr_tests::{def_named, i32v, with_checked};
 use super::flow::Instance;
 use super::scalar::Fault;
 use super::sema_view::View;
+use super::state::Role;
 use super::state_tests::{f32s, same};
 use super::value::{IntKind, Value};
 use onsa_syntax::ast::{ExprKind, StmtKind};
@@ -395,9 +396,10 @@ flow i2(p: F32 at block) -> F32 at sample {{ w4~(ramp4~(p).down~(2)).down~(2) at
 }
 
 #[test]
-fn a_call_at_sample_times_n_has_n_values_of_the_type_of_one_and_nothing_else_is_taken_for_it() {
-    // §11.9: the table gives the call `ramp4~(p).down~(2)`, a value of `sample * 2` in the caller's frame, the type of one value (`F32`), and its value is the array of its 2 values, each an `F32`. An array
-    // of another length or of elements of another type, one value that is no array, and an array for a call whose clock is `sample` (`sum2~(...)`) are not the value of such a call.
+fn a_burst_is_of_the_type_of_the_table_when_each_of_its_values_is_and_an_array_of_them_is_not() {
+    // §11.9: the table gives the call `ramp4~(p).down~(2)`, a value of `sample * 2` in the caller's frame, the type of one value (`F32`), and the value that the caller reads of it is a burst (`Value::Burst`) of its 2 values:
+    // it is of that type when each of its values is (the length is the input boundary's to check, `unit_inputs`), and an array of them is not (the `[F32; 2]` of the body of a flow is another value). A value of another
+    // type in it is not. One value of the type is (a value of the parameter kinds is read at any clock).
     let src = format!(
         "{CONV}flow sum2(x: F32 at (sample * 2)) -> F32 at sample {{ x[0] + x[1] }}
 flow t(p: F32 at block) -> F32 at sample {{
@@ -407,7 +409,6 @@ flow t(p: F32 at block) -> F32 at sample {{
 }}"
     );
     let (f, b) = (|x: f32| Value::F32(x), Value::Bool(true));
-    let arr = |vs: Vec<Value>| Value::Array(vs);
     let got = with_checked(&src, true, move |a| {
         let (view, def) = (View::new(a), def_named(a, "t"));
         let body = view.body(def).expect("the body");
@@ -418,41 +419,54 @@ flow t(p: F32 at block) -> F32 at sample {{
             StmtKind::Let { init, .. } => *init,
             _ => panic!("a let"),
         };
-        let frame = Frame::new(body);
-        let ask = |n: usize, v: &Value| frame.sample_times(init(n), v).expect("the table is whole");
+        let ask =
+            |n: usize, v: &Value| v.agrees(body.ty(init(n)).expect("the table"), view).expect("the table is whole");
         [
-            ask(0, &arr(vec![f(1.0), f(2.0)])),
-            ask(0, &arr(vec![f(1.0), f(2.0), f(3.0)])),
-            ask(0, &arr(vec![f(1.0)])),
-            ask(0, &arr(vec![f(1.0), b])),
+            ask(0, &Value::Burst(vec![f(1.0), f(2.0)])),
+            ask(0, &Value::Burst(vec![f(1.0), f(2.0), f(3.0)])),
+            ask(0, &Value::Burst(vec![f(1.0), b])),
+            ask(0, &Value::Array(vec![f(1.0), f(2.0)])),
             ask(0, &f(1.0)),
-            ask(1, &arr(vec![f(1.0), f(2.0)])),
-            ask(1, &arr(vec![f(1.0)])),
+            ask(1, &Value::Burst(vec![f(1.0), f(2.0)])),
+            ask(1, &Value::Array(vec![f(1.0), f(2.0)])),
         ]
     });
-    assert_eq!(got, [true, false, false, false, false, false, false]);
+    assert_eq!(got, [true, true, false, false, true, true, false]);
 }
 
 #[test]
-fn a_port_that_no_chain_reads_in_the_frame_of_its_caller_has_no_value_here() {
-    // §11.9 says no frame of the caller to read an input of `sample * 2` of `.down~(4)` (the caller's `sample / 2`: one value in two frames, which is no sample of the instance's `sample * 2`)
-    // nor an output of `sample * 2` of `.down~(4)` (the same), so the evaluator stops with `Unavailable` at `init` and does not guess.
+fn a_port_that_the_caller_reads_at_a_tick_slower_than_its_sample_has_a_value_for_each_tick_of_that_tick() {
+    // §11.9: the output at `sample * 2` of `hold2~(p).down~(4)` is dealt to the frames from the tick of the chain (c = 0, 4), 2 elements `[p, p + 1]` over 4 frames, so the caller reads it at its `sample / 2`: the element 0 for the
+    // frames c, c + 1 and the element 1 for c + 2, c + 3 (the tick at c + 2 reads the next element). p is read at the tick of the chain, 10 and then 20: 10 10 11 11 | 20 20 21 21, for any cut of the calls that keeps the p of each frame (§13.4).
+    // The input at `sample * 2` of `sum2~(p at (sample / 2)).down~(4)`, whose stream ticks at the frames 0, 2, 4, ..: S-1079 "入力のクロックの直前の M 刻み", the tick of the chain at c takes the M = 2 values of the ticks of
+    // the stream before c (those at c - 4 and c - 2, `T.default()` where there are none), the position's own tick (c) is not in. p = 1, 2, 5, 7 over the frames 0 .. 3, 4 .. 7, .. : c = 0 has 0 + 0 = 0, c = 4 the p of the
+    // frames 0 and 2, 1 + 1 = 2, c = 8 the p of 4 and 6, 2 + 2 = 4, c = 12 the p of 8 and 10, 5 + 5 = 10; each held for the 4 frames of the tick.
     let src = format!(
         "{CONV}flow sum2(x: F32 at (sample * 2)) -> F32 at sample {{ x[0] + x[1] }}
 flow hold2(q: F32 at sample) -> F32 at (sample * 2) {{ [q, q + 1.0] }}
-flow out(p: F32 at block) -> F32 at sample {{
-  let _ = hold2~(p).down~(4)
-  0.0
-}}
-flow inp(p: F32 at block) -> F32 at sample {{
-  let _ = sum2~(p at (sample / 2)).down~(4)
-  0.0
-}}"
+flow out(p: F32 at block) -> F32 at sample {{ hold2~(p).down~(4) at sample }}
+flow inp(p: F32 at block) -> F32 at sample {{ sum2~(p at (sample / 2)).down~(4) at sample }}"
     );
-    for name in ["out", "inp"] {
-        let stopped =
-            with_checked(&src, true, |a| Instance::init(View::new(a), def_named(a, name), 48000.0, &[], None).err());
-        assert!(matches!(stopped.map(|s| s.fault), Some(Fault::Unavailable(_))), "{name}");
+    let calls = |cuts: &[(usize, f32)]| cuts.iter().map(|(n, v)| (p(*v), *n)).collect::<Vec<_>>();
+    let out = [10.0, 10.0, 11.0, 11.0, 20.0, 20.0, 21.0, 21.0];
+    for cuts in
+        [&[(4, 10.0), (4, 20.0)][..], &[(1, 10.0), (3, 10.0), (2, 20.0), (2, 20.0)], &[(3, 10.0), (1, 10.0), (4, 20.0)]]
+    {
+        same(&f32s(&run(&src, "out", calls(cuts), &[], &[])), &out);
+    }
+    // The tick at c = 4 reads the p of its own frame: with the cut at 5 that is 10 (the value of the call of 5 frames), not the 20 of the next call.
+    same(
+        &f32s(&run(&src, "out", calls(&[(5, 10.0), (3, 20.0)]), &[], &[])),
+        &[10.0, 10.0, 11.0, 11.0, 10.0, 10.0, 11.0, 11.0],
+    );
+    let (a, b, c, d) = ([0.0; 4], [2.0; 4], [4.0; 4], [10.0; 4]);
+    let inp: Vec<f32> = [a, b, c, d].concat();
+    for cuts in [
+        &[(4, 1.0), (4, 2.0), (4, 5.0), (4, 7.0)][..],
+        &[(2, 1.0), (2, 1.0), (3, 2.0), (1, 2.0), (4, 5.0), (1, 7.0), (3, 7.0)],
+        &[(1, 1.0), (3, 1.0), (4, 2.0), (3, 5.0), (1, 5.0), (4, 7.0)],
+    ] {
+        same(&f32s(&run(&src, "inp", calls(cuts), &[], &[])), &inp);
     }
 }
 
@@ -515,4 +529,330 @@ flow t3(p: F32 at block) -> F32 at sample {
     // A ring of two `let`s that nothing from outside enters ticks with `sample` too (§11.3): `c` is always 0, the `b` outside it is `lf at sample`: 1 1 1 1 2 2 2 2 5 5 5 5.
     let calls = vec![(p(2.0), 4), (p(5.0), 4), (p(7.0), 4)];
     same(&f32s(&run(src, "t3", calls, &[], &[])), &rep(&[(1.0, 4), (2.0, 4), (5.0, 4)]));
+}
+
+#[test]
+fn a_value_of_the_parameter_kinds_that_is_an_array_is_read_whole_by_each_of_the_values_of_an_input_at_sample_times_n() {
+    // §11.3: a value of the parameter kinds is read at the clock where it is used, with no conversion; §11.9: the input at `sample * 2` of `f~([p, p + 1.0])` is 2 elements of `[F32; 2]` (the body sees `[[F32; 2]; 2]`), each the
+    // array `[p, p + 1]`: it is no burst of 2 values (a burst of the 2 values `p` and `p + 1` would be a `F32` for the element of the type `[F32; 2]`). `x[0][0] + 10 x[1][1]` is p + 10 (p + 1) = 11 p + 10: 21 for p = 1,
+    // 32 for p = 2. The input of the same kind that a chain gathers (`.down~(2)`: the elements of the 2 frames before the tick, `x[0][0] + 10 x[1][1]` of the arrays of the frames 0 and 1) is 0 at c = 0 and, at c = 2,
+    // the p of the frames before: 1 for the first two frames of p = 1, 2: 1 + 10 (1 + 1) = 21, then (the frames 2 and 3 have p = 2) at c = 4: 2 + 10 (2 + 1) = 32, held for the 2 frames of a tick.
+    let src = "flow f(x: [F32; 2] at (sample * 2)) -> F32 at sample { x[0][0] + 10.0 * x[1][1] }
+flow whole(p: F32 at block) -> F32 at sample { f~([p, p + 1.0]) }
+flow gathered(p: F32 at block) -> F32 at sample { f~([p, p + 1.0]).down~(2) at sample }";
+    let calls = |cuts: &[(usize, f32)]| cuts.iter().map(|(n, v)| (p(*v), *n)).collect::<Vec<_>>();
+    same(&f32s(&run(src, "whole", calls(&[(3, 1.0), (3, 2.0)]), &[], &[])), &[21.0, 21.0, 21.0, 32.0, 32.0, 32.0]);
+    for cuts in [&[(2, 1.0), (2, 2.0), (2, 2.0)][..], &[(1, 1.0), (1, 1.0), (4, 2.0)]] {
+        same(&f32s(&run(src, "gathered", calls(cuts), &[], &[])), &[0.0, 0.0, 21.0, 21.0, 32.0, 32.0]);
+    }
+}
+
+#[test]
+fn the_nodes_of_a_chain_that_gathers_and_deals_are_nodes_of_the_call_and_not_of_the_instance_or_of_its_arguments() {
+    // §11.9: "集めた値は呼び出し側の値"、"配った値は呼び出し側の `sample` の値". In `mix~(prev~(x), x).down~(2)` the call keeps a ring for each of its two inputs at `sample * 2` (the second is the stream `x`, the first
+    // the output of a delay, which has a node of its own that the ring does not meet), and the instance that the call makes has no node: its state is empty. The values (x = 1 .. 8; the window before the tick c = 2 t
+    // is the frames c - 2, c - 1): the first input is the delay, `[x[c - 3], x[c - 2]]` (0 for the frames before the first), the second `[x[c - 2], x[c - 1]]`; `a[0] 1000 + a[1] 100 + b[0] 10 + b[1]` is
+    // 0 at c = 0 (no frame before), 0 100 + 1 100 + 1 10 + 2 = 112 at c = 2 (a = 0 1, b = 1 2), 2334 at c = 4 (a = 2 3, b = 3 4) and 4556 at c = 6, each held for the 2 frames of a tick. A call that deals
+    // (`twice~(p).down~(2)`, whose output is the array `[c, c + 1]` at `sample * 2`) has the array it deals as its node, and no ring (its input is at `sample`).
+    let src = "flow mix(a: F32 at (sample * 2), b: F32 at (sample * 2)) -> F32 at sample { a[0] * 1000.0 + a[1] * 100.0 + b[0] * 10.0 + b[1] }
+flow twice(c: F32 at sample) -> F32 at (sample * 2) { [c, c + 1.0] }
+flow t(x: F32 at sample) -> F32 at sample { mix~(prev~(x), x).down~(2) at sample }
+flow d(p: F32 at block) -> F32 at sample { twice~(p).down~(2) at sample }";
+    let x: Vec<Value> = ramp(8);
+    same(
+        &f32s(&run(src, "t", vec![(vec![], 8)], &[("x", x.clone())], &[])),
+        &[0.0, 0.0, 112.0, 112.0, 2334.0, 2334.0, 4556.0, 4556.0],
+    );
+    let nodes = with_checked(src, true, |a| {
+        ["t", "d"].map(|name| {
+            let me = Instance::init(View::new(a), def_named(a, name), 48000.0, &[], None).expect("init");
+            let roles = me.me.state.cells.keys().map(|k| (k.call, k.replicas.clone(), k.role)).collect::<Vec<_>>();
+            let child: Vec<usize> = me.me.state.children.values().map(|c| c.state.cells.len()).collect();
+            (
+                roles.iter().map(|r| r.2).collect::<Vec<_>>(),
+                roles.windows(2).all(|w| w[0].0 != w[1].0 || w[0].2 != w[1].2),
+                child,
+            )
+        })
+    });
+    assert_eq!(nodes[0], (vec![Role::Delay, Role::Gather(0), Role::Gather(1)], true, vec![0]));
+    assert_eq!(nodes[1], (vec![Role::Deal], true, vec![0]));
+    // The output of `d`: the tick at c reads the `p` of its frame, 10, 20, 30 for the calls of 2 frames, and deals `[p, p + 1]` to the frames c and c + 1, one element each: 10 11 20 21 30 31.
+    let calls = vec![(p(10.0), 2), (p(20.0), 2), (p(30.0), 2)];
+    same(&f32s(&run(src, "d", calls, &[], &[])), &[10.0, 11.0, 20.0, 21.0, 30.0, 31.0]);
+}
+
+#[test]
+fn a_product_of_ratios_over_2_to_the_24_is_unavailable_at_init_and_one_at_the_limit_is_made() {
+    // §11.9: "入れ子の比の積は 2^24 以内" (the lowering checks it, the check does not). The evaluator does not round a ratio it cannot hold: a chain of 2^25 (and one of 2^62: two of `.up~(2147483648)`, the largest N of a `U32`; the check stops one past 2^63, E0808; and one of 2^-62 over a part with a tick of `sample / 2^31`, whose stage in the caller would be 2^-93), and a chain of 2^14 in a part that a chain of 2^11
+    // runs (2^25 in all) are `Unavailable` at `init` (the instance is not made), and the products 2^24 (2^11 inside 2^13) and a chain `.down~(16777216)` (2^24) are made. A frame of the instance of the
+    // second kind (the slow chain: one tick at c = 0, and the value of `p` read there, 5) gives the 5 that the tick made, held; the 2^24 runs a frame of the first would make are not run here.
+    let src = "flow leaf(q: F32 at sample) -> F32 at sample { q }
+flow mid(p: F32 at block) -> F32 at sample { let _ = leaf~(p).up~(2048)
+  0.0 }
+flow within(p: F32 at block) -> F32 at sample { let _ = mid~(p).up~(8192)
+  0.0 }
+flow over(p: F32 at block) -> F32 at sample { let _ = mid~(p).up~(16384)
+  0.0 }
+flow single(p: F32 at block) -> F32 at sample { let _ = leaf~(p).up~(33554432)
+  0.0 }
+flow deep(p: F32 at block) -> F32 at sample { let _ = leaf~(p).up~(2147483648).up~(2147483648)
+  0.0 }
+flow slowb(p: F32 at block) -> F32 at sample {
+  let n = prev~(p at (sample / 2147483648), 0.0) + 1.0
+  n at sample
+}
+flow huge(p: F32 at block) -> F32 at sample { let _ = slowb~(p).down~(2147483648).down~(2147483648)
+  0.0 }
+flow slow(p: F32 at block) -> F32 at sample { leaf~(p).down~(16777216) at sample }";
+    let made = |name: &'static str| {
+        with_checked(src, true, move |a| {
+            Instance::init(View::new(a), def_named(a, name), 48000.0, &[], None).map(|_| ()).map_err(|s| s.fault)
+        })
+    };
+    assert!(made("within").is_ok());
+    for name in ["over", "single", "deep", "huge"] {
+        assert!(matches!(made(name), Err(Fault::Unavailable(_))), "{name}: {:?}", made(name));
+    }
+    same(&f32s(&run(src, "slow", vec![(p(5.0), 3)], &[], &[])), &[5.0, 5.0, 5.0]);
+}
+
+#[test]
+fn a_panic_after_a_chain_stage_that_ran_in_the_frame_poisons_until_reset_which_runs_both_again() {
+    // §9.2: a panic of a `process` poisons the instance, and the calls after it are zeros that evaluate nothing until `reset`; §11.6: `reset` puts every delay and the time back to the start, the instances inside too. The
+    // part of `t` is run by `.down~(2)`: its `sample / 2` stage (the delay `prev~(p at (sample / 2), 0)`, whose tick is every 2 runs of the part, the frames c = 0, 4, 8, ..: the `p` that the tick before stored, 0 at the first)
+    // is in the caller's stage of those frames, and its `sample` stage, which counts its runs (`c` = 1, 2, .. at the frames 0, 2, 4, ..) and has the `100 / ((p - 1) c)`, after it. p = 1: the frame 0 runs the first stage and panics in
+    // the second (`100 / 0`): the outputs are 0 and the instance is poisoned, a call after it is 0 and stays so. After `reset`, p = 2: the frame 0 runs the first stage again (n = 0 + 1 = 1, the delay stores p = 2) and the second
+    // gives 1 + 100 / 1 = 101 for the frames 0 and 1; the run at 2 has c = 2: 1 + 100 / 2 = 51 for 2 and 3; the tick at 4 has n = 2 + 1 = 3 and c = 3: 3 + 100 / 3 = 36 (33) for 4 and 5. It is the output of a new instance (a stage
+    // that was not run again after `reset` would not have stored the 2: n = 1 and 34).
+    let src = "flow dz(p: I32 at block) -> I32 at sample {
+  let n = prev~(p at (sample / 2), 0) + 1
+  let c = prev~(^c) + 1
+  (n at sample) + 100 / ((p - 1) * c)
+}
+flow t(p: I32 at block) -> I32 at sample { dz~(p).down~(2) at sample }";
+    let ints = |vs: Vec<Value>| {
+        vs.iter().map(|v| if let Value::Int(_, n, _) = v { *n } else { panic!("{v:?}") }).collect::<Vec<_>>()
+    };
+    let got = with_checked(src, true, move |a| {
+        let mut b = Boundary::new(View::new(a), def_named(a, "t"), 48000.0);
+        assert_eq!(b.init(&[], None).expect("init"), Status::Ok);
+        let call = |b: &mut Boundary, p: i128, frames: usize| {
+            let (status, outs) = b.process(&[("p", i32v(p))], &[], frames, None).expect("process");
+            (status, ints(outs))
+        };
+        let (first, after) = (call(&mut b, 1, 4), call(&mut b, 2, 2));
+        b.reset();
+        let again = call(&mut b, 2, 6);
+        (first, after, again, b.last_panic().is_none())
+    });
+    assert_eq!(got.0, (Status::Poisoned, vec![0; 4]));
+    assert_eq!(got.1, (Status::Poisoned, vec![0; 2]));
+    assert_eq!((got.2, got.3), ((Status::Ok, vec![101, 101, 51, 51, 36, 36]), true));
+}
+
+#[test]
+fn the_array_a_chain_deals_is_counted_in_the_places_of_the_tree_for_each_of_its_elements() {
+    // §11.9: the dealt array is the caller's (a node of its tree), `2^m` elements. The evaluator holds `Limits::most` (2^20) places for the whole tree: `bigd~(p).down~(262144)` deals the 2^18 elements of its output at
+    // `sample * 262144` (262 144 places and the 8 of an instance and one for each step). Three of them (786 459) are made, and the first frame is the elements of the 3 arrays at the tick c = 0, `[p; 262144]` read at
+    // the frame 0: p + 2 p + 3 p = 6 for p = 1; four (1 048 612) are over the limit: `Unavailable`. (An array that was not counted, 2^18 elements for nothing, would be made.)
+    let src = "flow bigd(q: F32 at sample) -> F32 at (sample * 262144) { [q; 262144] }
+flow deal3(p: F32 at block) -> F32 at sample {
+  (bigd~(p).down~(262144) at sample) + (bigd~(p * 2.0).down~(262144) at sample) + (bigd~(p * 3.0).down~(262144) at sample)
+}
+flow deal4(p: F32 at block) -> F32 at sample {
+  (bigd~(p).down~(262144) at sample) + (bigd~(p * 2.0).down~(262144) at sample) + (bigd~(p * 3.0).down~(262144) at sample) + (bigd~(p * 4.0).down~(262144) at sample)
+}";
+    same(&f32s(&run(src, "deal3", vec![(p(1.0), 1)], &[], &[])), &[6.0]);
+    let stopped = with_checked(src, true, |a| {
+        Instance::init(View::new(a), def_named(a, "deal4"), 48000.0, &[], None).map(|_| ()).map_err(|s| s.fault)
+    });
+    assert!(matches!(stopped, Err(Fault::Unavailable(_))), "{stopped:?}");
+}
+
+#[test]
+fn an_array_that_is_the_value_of_a_plain_input_is_read_whole_with_a_chain_that_does_not_make_it_a_stream_of_them() {
+    // §11.9, §11.3: an input at `sample` of the type `[F32; 2]` takes one array in each run, whatever it is run by; an array of `F32` is a value of the type of the input, not the burst of `F32`s that a call at `sample * 2` is.
+    // `st` is `x[0] 10 + x[1]`: `st~([x, x + 1.0])` is 11 x + 1 (12, 23, 34 for x = 1, 2, 3), and `st~([p, p + 1.0]).down~(2)` (the array of the parameter kinds, read at the tick) is 11 p + 1 at the ticks c = 0, 2: p = 1
+    // for the frames 0 and 1, 2 for 2 and 3: 12 12 23 23.
+    let src = "flow st(x: [F32; 2] at sample) -> F32 at sample { x[0] * 10.0 + x[1] }
+flow plain(x: F32 at sample) -> F32 at sample { st~([x, x + 1.0]) }
+flow slow(p: F32 at block) -> F32 at sample { st~([p, p + 1.0]).down~(2) at sample }";
+    same(&f32s(&run(src, "plain", vec![(vec![], 3)], &[("x", ramp(3))], &[])), &[12.0, 23.0, 34.0]);
+    for cuts in [&[(2, 1.0), (2, 2.0)][..], &[(1, 1.0), (1, 1.0), (1, 2.0), (1, 2.0)]] {
+        let calls = cuts.iter().map(|(n, v)| (p(*v), *n)).collect();
+        same(&f32s(&run(src, "slow", calls, &[], &[])), &[12.0, 12.0, 23.0, 23.0]);
+    }
+}
+
+/// The `[F32; 2]` outputs of a flow, flat: the two of each frame one after the other.
+fn pairs(vs: &[Value]) -> Vec<f32> {
+    vs.iter()
+        .flat_map(|v| match v {
+            Value::Array(es) => f32s(es),
+            other => panic!("not an array of F32: {other:?}"),
+        })
+        .collect()
+}
+
+#[test]
+fn a_gather_whose_argument_reads_an_arm_binding_keeps_the_ring_of_each_replica_with_the_binding_it_has_there() {
+    // §11.9: the instance `sum2~(n).down~(2)` at the tick c gathers the values the argument had at c - 2 and c - 1 (`x[0] + 10 x[1]`), and §11.5: the replica `i` of a `par~` binds `n` of the arm of its `match~` to
+    // `x + ks[i]` (`ks = [0, 1]`), so its ring is the stream `x + i`, not that of the replica that was run last. x[c] = c + 1: the tick c = 2 has frames 0, 1 (1 + k, 2 + k): 21 + 11 k = 21, 32; c = 4 frames 2, 3
+    // (3 + k, 4 + k): 43 + 11 k = 43, 54; c = 6: 65 + 11 k = 65, 76; the tick c = 0 has no frame before: 0. Each is held for the 2 frames of a tick. The delay of the same form (`prev~(n)` is the `n` of the frame before:
+    // x[c - 1] + k, 0 at the first frame) is 0 0 | 1 2 | 2 3 | 3 4 .. The part that is stateful in the object of the `match~` (`delay~(x, 2)` is `x[c - 2]`, 0 for the first two frames: with the arm bound to it the tick c = 4 has
+    // the frames 2, 3 of it, 1 and 2: 1 + 20 = 21, and c = 6: 3 + 40 = 43) is saved once for each frame, or its ring would take two values for each: in a `par~` (+ k: 21, 32 and 43, 54) and alone. An arm with a guard
+    // (`m` of the second, taken, arm is x: 0 0 21 21 43 43 65 65) and two arms inside one another (`m + n` = 2 x + 1: 3, 5 | 7, 9 | 11, 13: 3 + 50 = 53, 7 + 90 = 97, 141) are read with the arms around the call.
+    let src = "flow sum2(x: F32 at (sample * 2)) -> F32 at sample { x[0] + x[1] * 10.0 }
+flow plain(x: F32 at sample) -> [F32; 2] at sample {
+  let ks = [0.0, 1.0]
+  par~ i in 0 ..< 2 { match~ x + ks[i] { n => sum2~(n).down~(2) at sample } }
+}
+flow last(x: F32 at sample) -> [F32; 2] at sample {
+  let ks = [0.0, 1.0]
+  par~ i in 0 ..< 2 { match~ x + ks[i] { n => prev~(n) } }
+}
+flow staged(x: F32 at sample) -> [F32; 2] at sample {
+  let ks = [0.0, 1.0]
+  par~ i in 0 ..< 2 { match~ delay~(x + ks[i], 2) { n => sum2~(n).down~(2) at sample } }
+}
+flow single(x: F32 at sample) -> F32 at sample { match~ delay~(x, 2) { n => sum2~(n).down~(2) at sample } }
+flow guarded(x: F32 at sample) -> F32 at sample { match~ x { n if n > 100.0 => 0.0, m => sum2~(m).down~(2) at sample } }
+flow nested(x: F32 at sample) -> F32 at sample { match~ x { n => match~ n + 1.0 { m => sum2~(m + n).down~(2) at sample } } }";
+    let held = |ps: &[[f32; 2]], n: usize| ps.iter().flat_map(|p| p.repeat(n)).collect::<Vec<f32>>();
+    for sizes in [&[8][..], &[3, 5], &[1; 8], &[2, 0, 6]] {
+        let calls = || sizes.iter().map(|n| (vec![], *n)).collect::<Vec<_>>();
+        let out = |name: &'static str| run(src, name, calls(), &[("x", ramp(8))], &[]);
+        same(&pairs(&out("plain")), &held(&[[0.0, 0.0], [21.0, 32.0], [43.0, 54.0], [65.0, 76.0]], 2));
+        let delays = [[0.0, 0.0], [1.0, 2.0], [2.0, 3.0], [3.0, 4.0], [4.0, 5.0], [5.0, 6.0], [6.0, 7.0], [7.0, 8.0]];
+        same(&pairs(&out("last")), &held(&delays, 1));
+        same(&pairs(&out("staged")), &held(&[[0.0, 0.0], [0.0, 0.0], [21.0, 32.0], [43.0, 54.0]], 2));
+        same(&f32s(&out("single")), &[0.0, 0.0, 0.0, 0.0, 21.0, 21.0, 43.0, 43.0]);
+        same(&f32s(&out("guarded")), &[0.0, 0.0, 21.0, 21.0, 43.0, 43.0, 65.0, 65.0]);
+        same(&f32s(&out("nested")), &[0.0, 0.0, 53.0, 53.0, 97.0, 97.0, 141.0, 141.0]);
+    }
+}
+
+#[test]
+fn an_input_at_sample_times_n_of_more_elements_than_the_evaluator_holds_is_unavailable_before_its_elements_are_made() {
+    // §11.9: the input at `sample * N` of a call that no chain slows is N elements of the argument in each frame. The evaluator holds `Limits::most` (2^20) places and stops (`Unavailable`) at more, and does not make the
+    // 2^21 or the 2^31 elements first (`x: F32 at (sample * 2147483648)` is a declaration the check passes: S-1089). One at the limit is made: the 2^20 elements of `p`, `x[0]` is `p` = 1. The ring that a gathering chain
+    // keeps for the same declaration (`.down~(2)`: 2^31 elements of a window) is stopped at `init`, as it is made there.
+    let src = "flow at_20(x: F32 at (sample * 1048576)) -> F32 at sample { x[0] }
+flow at_21(x: F32 at (sample * 2097152)) -> F32 at sample { x[0] }
+flow at_31(x: F32 at (sample * 2147483648)) -> F32 at sample { x[0] }
+flow t20(p: F32 at block) -> F32 at sample { at_20~(p) }
+flow t21(p: F32 at block) -> F32 at sample { at_21~(p) }
+flow t31(p: F32 at block) -> F32 at sample { at_31~(p) }
+flow g31(p: F32 at block) -> F32 at sample { at_31~(p).down~(2) at sample }";
+    same(&f32s(&run(src, "t20", vec![(p(1.0), 2)], &[], &[])), &[1.0, 1.0]);
+    let stopped = |name: &'static str| {
+        with_checked(src, true, move |a| {
+            let mut me = Instance::init(View::new(a), def_named(a, name), 48000.0, &[], None).map_err(|s| s.fault)?;
+            me.process(&p(1.0), &[], 1, None).map(|_| ()).map_err(|s| s.fault)
+        })
+    };
+    for name in ["t21", "t31", "g31"] {
+        assert!(matches!(stopped(name), Err(Fault::Unavailable(_))), "{name}: {:?}", stopped(name));
+    }
+}
+
+#[test]
+fn a_chain_that_deals_in_a_par_deals_the_array_of_each_replica_to_the_frames_after_its_tick() {
+    // §11.9, §11.5: the output at `sample * 2` of `dl~(ks[i]).down~(2)` is the array `[2 n + 1 + w, 2 n + 2 + w]` of the run n (the counter `cnt` of the instance is n + 1 at its n-th run), the frames 2 n and 2 n + 1 read its
+    // elements 0 and 1, and each replica of the `par~` has the array it dealt, with `w = ks[i]` (0, 100) its own: the frame e reads `e + 1 + w`: [1, 101], [2, 102], .. [8, 108].
+    let src = "flow dl(w: F32 at block) -> F32 at (sample * 2) {
+  let cnt = prev~(^cnt) + 1.0
+  [cnt * 2.0 - 1.0 + w, cnt * 2.0 + w]
+}
+flow t(x: F32 at sample) -> [F32; 2] at sample {
+  let ks = [0.0, 100.0]
+  par~ i in 0 ..< 2 { dl~(ks[i]).down~(2) }
+}";
+    let want: Vec<f32> = (1..=8).flat_map(|e| [e as f32, e as f32 + 100.0]).collect();
+    for sizes in [&[8][..], &[3, 5], &[1; 8], &[2, 0, 6]] {
+        let calls = sizes.iter().map(|n| (vec![], *n)).collect();
+        same(&pairs(&run(src, "t", calls, &[("x", ramp(8))], &[])), &want);
+    }
+}
+
+#[test]
+fn the_product_of_three_nested_chains_is_the_product_of_all_three_and_not_of_the_last_two() {
+    // §11.9: "入れ子の比の積は 2^24 以内". `.up~(512)` three deep is 2^27 (each two of them 2^18 are within), `.up~(4096)` three deep 2^36: the evaluator stops them at `init` (`Unavailable`), where the instance that
+    // makes the third is made, and does not round the product; `.up~(256)` three deep is 2^24 and is made (the same product of 2^11 inside 2^13 is made in the test of the limit). `.down~(4096)` inside `.down~(4096)`, a product of
+    // 2^-24 and no more (S-1089: the evaluator holds the size of the product, a slower one too), is made too, and its tick at c = 0 reads `p`: 1 1.
+    let up = |n: u32| {
+        format!(
+            "flow leaf(q: F32 at sample) -> F32 at sample {{ q }}
+flow mid(p: F32 at block) -> F32 at sample {{ let _ = leaf~(p).up~({n})
+  0.0 }}
+flow top(p: F32 at block) -> F32 at sample {{ let _ = mid~(p).up~({n})
+  0.0 }}
+flow t(p: F32 at block) -> F32 at sample {{ let _ = top~(p).up~({n})
+  0.0 }}"
+        )
+    };
+    let made = |src: String| {
+        with_checked(&src, true, move |a| {
+            Instance::init(View::new(a), def_named(a, "t"), 48000.0, &[], None).map(|_| ()).map_err(|s| s.fault)
+        })
+    };
+    assert!(made(up(256)).is_ok());
+    for n in [512, 4096] {
+        let got = made(up(n));
+        assert!(matches!(got, Err(Fault::Unavailable(_))), "{n}: {got:?}");
+    }
+    let src = "flow leaf(x: F32 at sample) -> F32 at sample { x }
+flow mid(x: F32 at (sample / 4096)) -> F32 at sample { leaf~(x).down~(4096) at sample }
+flow t(p: F32 at block) -> F32 at sample { mid~(p).down~(4096) at sample }";
+    same(&f32s(&run(src, "t", vec![(p(1.0), 2)], &[], &[])), &[1.0, 1.0]);
+}
+
+#[test]
+fn the_clock_of_the_largest_power_of_two_of_a_u32_is_made_and_ticks_once_in_the_frames_of_a_run() {
+    // §11.3: `p at (sample / 2147483648)` ticks once in 2^31 frames, the first at the frame 0 (the counter is 0, §11.9). Its delay `prev~(.., 0.0)` has the `0.0` it starts from there, so `n` is 1 and holds for
+    // the frames that follow: 1 1 1. The N is the largest power of 2 a `U32` holds (2^31); one smaller has the same value, with a tick of its own.
+    // SPEC-GAP(S-1089): the spec does not say the most of the N of a clock `sample / N`; the evaluator takes the one of a `U32` (the ratio is held in an `i32`).
+    let src = "flow big(p: F32 at block) -> F32 at sample {
+  let n = prev~(p at (sample / 2147483648), 0.0) + 1.0
+  n at sample
+}
+flow less(p: F32 at block) -> F32 at sample {
+  let n = prev~(p at (sample / 1073741824), 0.0) + 1.0
+  n at sample
+}";
+    for name in ["big", "less"] {
+        same(&f32s(&run(src, name, vec![(p(5.0), 3)], &[], &[])), &[1.0, 1.0, 1.0]);
+    }
+}
+
+#[test]
+fn the_index_of_a_par_is_the_index_of_the_replica_in_the_block_input_and_in_the_ring_of_a_gather_that_read_it_by_name()
+{
+    // §11.5: in the replica `i` of a `par~` the name `i` is its index (0, 1), for the call that reads it at `block` (`g~(i)` is `i + 5`: 5, 6 in every frame) and for the ring a `.down~(2)` call keeps of the stream `i`, a
+    // value of the parameter kinds that the call gathers as it is (`s~(i).down~(2)` sums `x[0] + 10 x[1]` of the 2 elements before the tick: 0 for the first tick c = 0, then 11 i, and the next ticks are the same
+    // 11 i): [0, 0] for the frames 0 and 1, [0, 11] for the others. `match~ i { j => .. }` gives the arm the index too: the same.
+    let src = "flow g(w: U32 at block) -> U32 at sample { w + 5 }
+flow s(x: U32 at (sample * 2)) -> U32 at sample { x[0] + x[1] * 10 }
+flow block_index(x: F32 at sample) -> [U32; 2] at sample { par~ i in 0 ..< 2 { g~(i) } }
+flow ring_index(x: F32 at sample) -> [U32; 2] at sample { par~ i in 0 ..< 2 { s~(i).down~(2) at sample } }
+flow arm_index(x: F32 at sample) -> [U32; 2] at sample { par~ i in 0 ..< 2 { match~ i { j => s~(j).down~(2) at sample } } }";
+    let ints = |name: &'static str| -> Vec<i128> {
+        let calls = vec![(vec![], 3), (vec![], 5)];
+        let out = run(src, name, calls, &[("x", ramp(8))], &[]);
+        let one = |v: &Value| match v {
+            Value::Int(_, n, _) => *n,
+            other => panic!("not an integer: {other:?}"),
+        };
+        out.iter()
+            .flat_map(|v| match v {
+                Value::Array(es) => es.iter().map(one).collect::<Vec<_>>(),
+                other => panic!("not an array: {other:?}"),
+            })
+            .collect()
+    };
+    assert_eq!(ints("block_index"), [5, 6].repeat(8));
+    let rings: Vec<i128> = [[0, 0]; 2].into_iter().chain([[0, 11]; 6]).flatten().collect();
+    assert_eq!(ints("ring_index"), rings);
+    assert_eq!(ints("arm_index"), rings);
 }

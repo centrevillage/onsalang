@@ -155,6 +155,10 @@ pub enum Value {
     Unit,
     Tuple(Vec<Value>, Seal),
     Array(Vec<Value>),
+    /// The values a caller reads of a call at `sample * N` (§11.9): its N values of one frame, in the order of time, each of the type of the call (not an array of the type, whatever
+    /// the values an `[T; N]` of the `sample` of a body is). Only the output boundary of a call makes one (the clock of the output `m + r` over 0, `Frame::held`), and only the input boundary
+    /// of a call takes one apart (`rate::take`), so that a value of the parameter kinds that is an array is not taken for one.
+    Burst(Vec<Value>),
     /// The fields in the order of the declaration.
     Struct(Vec<Value>),
     /// The variant by its number in the declaration, and its elements.
@@ -186,9 +190,11 @@ impl Value {
     /// `[e; N]` makes is bounded by it (`Limits::most`).
     pub fn places(&self) -> usize {
         match self {
-            Value::Tuple(vs, _) | Value::Array(vs) | Value::Struct(vs) | Value::Enum { fields: vs, .. } => {
-                sum_places(vs.iter().map(Value::places))
-            }
+            Value::Tuple(vs, _)
+            | Value::Array(vs)
+            | Value::Burst(vs)
+            | Value::Struct(vs)
+            | Value::Enum { fields: vs, .. } => sum_places(vs.iter().map(Value::places)),
             _ => 1,
         }
     }
@@ -204,6 +210,15 @@ impl Value {
     /// parameter is not checked (a flow has no generic type).
     fn agrees_in(&self, ty: &Ty, view: View, env: Option<&Env>) -> Result<bool, Fault> {
         let (ty, env) = Env::follow(view, ty, env);
+        // A burst is each of its values against the type (the table gives a call at `sample * N` the type of one value, §11.9).
+        if let Value::Burst(vs) = self {
+            for v in vs {
+                if !v.agrees_in(ty, view, env)? {
+                    return Ok(false);
+                }
+            }
+            return Ok(true);
+        }
         if let Some(s) = Scalar::of(ty) {
             return Ok(match (self, s) {
                 (Value::Int(k, ..), Scalar::Int(t)) => *k == t,
@@ -248,6 +263,7 @@ impl Value {
             (Value::Unit, Value::Unit) => true,
             (Value::Tuple(x, _), Value::Tuple(y, _))
             | (Value::Array(x), Value::Array(y))
+            | (Value::Burst(x), Value::Burst(y))
             | (Value::Struct(x), Value::Struct(y)) => all(x, y),
             (Value::Enum { tag: s, fields: x }, Value::Enum { tag: t, fields: y }) => s == t && all(x, y),
             _ => false,

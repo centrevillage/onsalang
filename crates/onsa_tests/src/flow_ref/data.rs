@@ -171,6 +171,8 @@ fn val(v: &Value, result: bool) -> String {
         Value::Unit => "()".into(),
         Value::Tuple(vs, _) => format!("({})", list(vs, result)),
         Value::Array(vs) => format!("[{}]", list(vs, result)),
+        // No data holds a call at `sample * N` (an outermost flow has none, §11.9): written apart from an array so that it is not taken for one.
+        Value::Burst(vs) => format!("burst[{}]", list(vs, result)),
         Value::Struct(vs) => format!("{{{}}}", list(vs, result)),
         Value::Enum { tag, fields } => format!("#{tag}({})", list(fields, result)),
     }

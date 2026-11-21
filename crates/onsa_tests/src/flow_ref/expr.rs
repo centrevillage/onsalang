@@ -18,7 +18,6 @@ use onsa_syntax::ast::{BinOp, Block, CallKind, ExprId, ExprKind, Lit, PatId, Stm
 use onsa_syntax::{FloatWidth, float_value};
 
 use super::host::FnHost;
-use super::rate::{call_ratio, n_of};
 use super::scalar::{Bin, Fault, Un, binary, cast, unary};
 use super::sema_view::{Body, View};
 use super::state::Run;
@@ -216,21 +215,9 @@ impl<'a> Frame<'a> {
             Ok(false) if matches!(self.body.ty(e), Ok(Ty::Error)) => {
                 Err(Stop { fault: Fault::Unavailable("a body whose tables are not whole"), at })
             }
-            // The value of a call of a flow at `sample * N` is the array of its N values (§11.9), whatever the type the table has for it (the one of a value).
-            Ok(false) if self.sample_times(e, &v).map_err(|fault| Stop { fault, at })? => Ok(v),
             Ok(false) => Err(Stop { fault: Fault::Internal("the value is not of the type of the table"), at }),
             Err(fault) => Err(Stop { fault, at }),
         }
-    }
-
-    /// Is `v` the N values of the call `e` of a flow whose clock is `sample * N` (§11.9): N long, each of the type the table gives the call?
-    pub(super) fn sample_times(&self, e: ExprId, v: &Value) -> Result<bool, Fault> {
-        let (Some(m), Value::Array(vs)) = (call_ratio(&self.body, e)?, v) else { return Ok(false) };
-        let ty = self.body.ty(e)?;
-        if m <= 0 || vs.len() as u64 != n_of(m) {
-            return Ok(false);
-        }
-        vs.iter().try_fold(true, |all, x| Ok(all && x.agrees(ty, self.body.view)?))
     }
 
     /// The form of `e`: each one with work to do is its own function, so that the frame of a deep recursion is small.

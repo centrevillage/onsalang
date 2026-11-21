@@ -221,14 +221,14 @@ pub struct Inst {
     pub(super) rate: i32,
     /// The time of its caller and the stage of it that this instance last ran the stages of (`Frame::run_unit`): each stage of it runs once for each, whoever asks first.
     pub(super) done: Option<(u64, Stage)>,
-    /// The outputs of the runs of the last frame of a `.up~(N)` chain, the N of them: what its call reads (`Out::All`).
+    /// The elements of the outputs of the runs of the last frame of a `.up~(N)` chain, in the order of time: what its call reads as a burst (`Frame::held`).
     pub(super) runs: Vec<Value>,
     locals: HashMap<LocalId, Value>,
     /// The parts of the body that a slower stage made (`Frame::hoisted`).
     hoisted: Hoisted,
     pub(super) out: Value,
     pub(super) state: InstState,
-    /// The index of each `par~` around the call that made it, which the arguments of its `block` stage may read.
+    /// The index of each `par~` around the call that made it, which the arguments of its `block` stage and what a ring gathers of them may read (the bindings of an arm they read are made by `Frame::eval_in_arms`).
     pub(super) scope: Vec<(LocalId, Value)>,
 }
 

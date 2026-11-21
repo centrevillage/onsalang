@@ -184,7 +184,16 @@ impl<'a> Frame<'a> {
         arg: ExprId,
         stage: super::sema_view::Stage,
     ) -> Result<Value, Stop> {
-        if stage == super::sema_view::Stage::Sample || !self.body.reads_arm_binding(arg, arg) {
+        match stage {
+            super::sema_view::Stage::Sample => self.eval(arg),
+            _ => self.eval_in_arms(call, arg),
+        }
+    }
+
+    /// The argument `arg` of the call `call` with the bindings of the arms of the `match~`s around the call that it reads, as `eval_staged` has them at a stage that is not `sample`: what a frame of a `par~` with an arm
+    /// binding in it is, which the locals the last replica left do not say (a ring that gathers `arg` saves it so, `Frame::commit`).
+    pub(super) fn eval_in_arms(&mut self, call: ExprId, arg: ExprId) -> Result<Value, Stop> {
+        if !self.body.reads_arm_binding(arg, arg) {
             return self.eval(arg);
         }
         let at = self.body.ast.expr(call).span;
