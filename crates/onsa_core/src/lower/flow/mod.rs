@@ -71,7 +71,6 @@
 //! fields, [`boundary`] `process` /
 //! `process_inplace` / `render` / `params_default`.
 
-use std::cell::Cell;
 use std::collections::{BTreeSet, HashMap, HashSet};
 
 use onsa_diag::Span;
@@ -263,8 +262,8 @@ fn inputs(info: &FlowInfo, fd: &FlowDef, span: Span) -> R<Vec<Input>> {
 }
 
 /// Every stage of the plan is of a function: those its locals are read at
-/// and those of what the state keeps and of the hoisted fields (the
-/// functions of the phases ask the plan of no other) are of `init`,
+/// and those of what the state keeps, of the hoisted fields and of the time
+/// (the functions of the phases ask the plan of no other) are of `init`,
 /// `ctl`, `tick` or a slower tick of `FlowInfo::stages`. Another is an
 /// internal error.
 fn check_stages(info: &FlowInfo, span: Span) -> R<()> {
@@ -273,7 +272,9 @@ fn check_stages(info: &FlowInfo, span: Span) -> R<()> {
         _ => None,
     });
     let hoisted = info.hoists.iter().map(|h| Some(h.stage));
-    let stages: BTreeSet<Option<ClockStage>> = kept.chain(hoisted).chain(info.read_stages().map(Some)).collect();
+    let time = info.time.keys().map(|&s| Some(s));
+    let stages: BTreeSet<Option<ClockStage>> =
+        kept.chain(hoisted).chain(time).chain(info.read_stages().map(Some)).collect();
     for s in stages {
         let s = info.run_stage(s.ok_or_else(|| internal(span, "a stored local with no stage"))?);
         if s.tick_slower_than(ClockStage::SAMPLE) && !info.stages.contains(&s) {
@@ -312,9 +313,6 @@ pub struct FlowLowerCx<'b> {
     /// the count of the outermost `sample` from `process`, which a caller
     /// passes to its callees ([`chain::child_time`]); empty elsewhere.
     time: Vec<Expr>,
-    /// Whether the function read `time` (a `sample_tick()` or the time of
-    /// a callee): the check that the table and the Core agree (S-1217).
-    time_read: Cell<bool>,
     /// Innermost scope last.
     scopes: Vec<Scope>,
 }

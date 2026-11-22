@@ -1,5 +1,7 @@
 //! The state marking (S-05): the stages at which each local is read
-//! (`FlowInfo::read_at`) and the stage at which `sample_rate()` is read,
+//! (`FlowInfo::read_at`), the stages it evaluates at and those of
+//! `sample_tick()` (`FlowInfo::eval_at`, `FlowInfo::time_at`) and the
+//! stage at which `sample_rate()` is read,
 //! from the clocks of the walk ([`Walked`], the `let`s), which tell what
 //! the state keeps ([`FlowInfo::stored`]); and, in the same walk, the
 //! subexpressions hoisted to a slower stage, whose parts are read there
@@ -25,6 +27,10 @@ pub(super) struct Marked {
     /// `FlowInfo::bound_at`.
     pub(super) bound_at: HashMap<LocalId, BTreeSet<ClockStage>>,
     pub(super) sample_rate_at: Option<ClockStage>,
+    /// `FlowInfo::eval_at`, `FlowInfo::time_at` and `FlowInfo::writes`.
+    pub(super) eval_at: BTreeSet<ClockStage>,
+    pub(super) time_at: BTreeSet<ClockStage>,
+    pub(super) writes: HashSet<(u32, ClockStage)>,
     /// The first call (in the order of the file) of a function that is not
     /// `rt` evaluated at a stage after `init` (R-17): E0815 in a
     /// conditional position a condition decided after `init` selects
@@ -142,6 +148,9 @@ pub(super) fn mark_all(
             read_at: HashMap::default(),
             bound_at: HashMap::default(),
             sample_rate_at: None,
+            eval_at: BTreeSet::new(),
+            time_at: BTreeSet::new(),
+            writes: HashSet::default(),
             diag: None,
             hoisted: Vec::new(),
             checks: HashMap::default(),
@@ -288,6 +297,7 @@ impl Marker<'_> {
                     (None, _) => Owner::Output,
                 };
                 self.out.hoisted.push((e, s, owner, g != Cond::None));
+                self.out.writes.insert((self.consumer as u32, s));
                 if g != Cond::None {
                     self.read_conds(s);
                 }
@@ -300,6 +310,7 @@ impl Marker<'_> {
                 self.out.const_conds.insert(e, g);
                 if let Place::Check(s) = place {
                     self.out.checks.insert(e, s);
+                    self.out.writes.insert((self.consumer as u32, s));
                     self.read_conds(s);
                     self.konst_parts(e, s, g);
                 }
@@ -311,6 +322,7 @@ impl Marker<'_> {
             Place::Refuse(s) => return self.refuse(e, s, Some(if g == Cond::Block { ClockStage::Block } else { at })),
             Place::NotCopy(s) => return self.refuse(e, s, None),
         };
+        self.out.eval_at.insert(at);
         let ast = self.ast;
         let expr = ast.expr(e);
         match &expr.kind {
@@ -351,6 +363,8 @@ impl Marker<'_> {
                     }
                 } else if self.choose.sample_rate.contains(&e) {
                     self.out.sample_rate_at = Some(self.out.sample_rate_at.map_or(at, |s| s.max(at)));
+                } else if self.choose.sample_tick.contains(&e) {
+                    self.out.time_at.insert(at);
                 } else {
                     self.non_rt_here(e, *callee, at, g);
                     if let Some(base) = crate::names::body::receiver(ast, *callee)

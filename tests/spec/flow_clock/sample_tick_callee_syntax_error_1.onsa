@@ -1,0 +1,15 @@
+// onsa.toml
+// [test]
+// spec = ["§11.4", "§11.9", "§18.1"]
+// fixes = 0
+
+// W7-16 U6a4, S-1217 (spec §18.1: a part that could not be read is an error that nothing reads): a callee whose body has a syntax error, run by a caller that passes it `sample_tick()` as an argument at `sample / 4`, reports
+// the syntax error alone. The stage of `sample_tick()` stands only through the runs of the callee, which has no table; from the review before U6b, this was an internal error of the table of the time.
+
+flow g(a: U32 at (sample / 4)) -> U32 at sample {
+  a +
+}   //~ E0002
+
+pub flow f() -> U32 at sample {
+  g~(sample_tick() at (sample / 4))
+}

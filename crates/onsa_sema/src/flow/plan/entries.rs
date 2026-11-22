@@ -78,10 +78,7 @@ pub(crate) fn walk(pkg: &Package, a: &mut Analysis) {
 /// flows (by the place of the modifier, §18.1), and gives its count.
 fn close(pkg: &Package, a: &mut Analysis, f: DefId, marks: &HashMap<DefId, Mark>, most: &HashMap<DefId, Most>) -> Most {
     let info = a.flows.get(&f)?;
-    // A diagnostic before (a clock in error, a callee in error, §18.1) leaves
-    // the stages partial: the guards of the time hold with none (`post_check`).
-    let quiet = a.diagnostics.is_empty();
-    let mut time = own_time(info, a.def(f).span, quiet);
+    let mut time = own_time(info);
     if !info.complete {
         if let Some(info) = a.flows.get_mut(&f) {
             info.time = time;
@@ -131,11 +128,6 @@ fn close(pkg: &Package, a: &mut Analysis, f: DefId, marks: &HashMap<DefId, Mark>
     }
     let Some(flow) = a.flows.get_mut(&f) else { onsa_diag::internal::bug(None, "a flow closed out of the table") };
     flow.nodes.iter_mut().zip(runs).for_each(|(n, r)| r.into_iter().for_each(|r| (n.runs, n.bounds) = r));
-    let stray = |s: &ClockStage| *s != ClockStage::SAMPLE && !stages.contains(s);
-    if let Some(s) = time.keys().find(|s| quiet && stray(s)) {
-        onsa_diag::internal::bug(Some(a.def(f).span), format!("the time of {s:?}, a stage of no function"));
-    }
-    time.retain(|s, _| !stray(s));
     (flow.stages, flow.time) = (stages.into_iter().collect(), time);
     fields::build(flow);
     if let Some(p) = past_at {
@@ -145,16 +137,11 @@ fn close(pkg: &Package, a: &mut Analysis, f: DefId, marks: &HashMap<DefId, Mark>
 }
 
 /// The time of the stages of `info` that read `sample_tick()` (§11.4,
-/// S-1217): `t` at the [`FlowInfo::run_stage`] of the clock of each call;
-/// of no clock, an internal error at `span` but in a flow in error or
-/// after a diagnostic (not `quiet`).
-fn own_time(info: &FlowInfo, span: Span, quiet: bool) -> BTreeMap<ClockStage, Words> {
-    let stage = |e: &ExprId| match info.clocks.stage(*e).and_then(Clock::stage) {
-        Some(s) => info.run_stage(s),
-        None if !info.complete || !quiet => ClockStage::SAMPLE,
-        None => onsa_diag::internal::bug(Some(span), "a `sample_tick()` of no stage"),
-    };
-    info.sample_tick_calls.iter().map(|e| (stage(e), Words::One)).collect()
+/// S-1217): `t` at the [`FlowInfo::run_stage`] of each stage the marking
+/// evaluates one at ([`FlowInfo::time_at`]), a slower one of its
+/// [`FlowInfo::stages`], which have the stages it evaluates at.
+fn own_time(info: &FlowInfo) -> BTreeMap<ClockStage, Words> {
+    info.time_at.iter().map(|&s| (info.run_stage(s), Words::One)).collect()
 }
 
 /// The time the runs `runs` of the instance `n` of the callee `g` take in

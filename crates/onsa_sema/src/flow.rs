@@ -68,6 +68,10 @@
 //! - `sample_rate_at: Option<ClockStage>` — the latest stage at which
 //!   `sample_rate()` is read (`None`: never; `Init`: no state field needed;
 //!   `Block` / `Tick`: store it, S-05). `sample_rate_calls` lists the calls.
+//! - `eval_at`, `time_at`, `writes` — of the same walk: the stages it
+//!   evaluates a part of the body at (the `stages` come of them), those of
+//!   `sample_tick()` (the `time` comes of them), and the `let`s that hold a
+//!   hoisted field or a check of a stage ([`FlowInfo::writes_in`]).
 //! - `read_at: HashMap<LocalId, BTreeSet<ClockStage>>` — the stages at which
 //!   each local is read (inputs, `let`s, `par` variables, match bindings;
 //!   S-05): each argument of a node at the stage of its clock
@@ -283,11 +287,22 @@ pub struct FlowInfo {
     /// The calls of `sample_tick()` (§11.4), which the Core reads from the
     /// time its function takes ([`FlowInfo::time`]).
     pub sample_tick_calls: Vec<ExprId>,
+    /// The stages the marking evaluates a part of the body at (S-05): of
+    /// the `let`s, the output, the arguments of the nodes and the hoisted
+    /// fields, the one record of the stages where an evaluation starts
+    /// (`reads`, D-15).
+    pub eval_at: BTreeSet<ClockStage>,
+    /// The stages the marking evaluates a `sample_tick()` at (§11.4): those
+    /// whose functions read the time ([`FlowInfo::time`]).
+    pub time_at: BTreeSet<ClockStage>,
+    /// The `let`s (by index, the output by `lets.len()`) that hold a hoisted
+    /// field or a check of a stage, with that stage ([`FlowInfo::writes_in`]).
+    pub(crate) writes: HashSet<(u32, ClockStage)>,
     /// The ticks of the body slower than its `sample` (§11.9), slowest
-    /// first: of its inputs, `let`s, nodes and hoisted fields, and the slow
-    /// stages its instances run the stages of their callees in
-    /// ([`PlanNode::runs`], S-1088). The Core makes a function of each
-    /// ([`FlowInfo::run_stage`]).
+    /// first: of its inputs, its output and those the marking evaluates at
+    /// ([`FlowInfo::eval_at`]), and the slow stages its instances run the
+    /// stages of their callees in ([`PlanNode::runs`], S-1088). The Core
+    /// makes a function of each ([`FlowInfo::run_stage`]).
     pub stages: Vec<ClockStage>,
     /// The words of the time the function of each stage that reads it or
     /// runs a callee that does takes (§11.4, §12.4, S-1217, S-1211), made

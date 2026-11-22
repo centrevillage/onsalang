@@ -137,6 +137,13 @@ impl FlowInfo {
         self.nodes.iter().filter(stops).map(|n| n.span).min_by_key(|s| (s.start, s.end))
     }
 
+    /// Whether the `let` k (the output by `lets.len()`) holds a hoisted
+    /// field or a check of the stage `s` (`FlowInfo::writes`): the
+    /// function of `s` walks it for them (§11.3).
+    pub fn writes_in(&self, k: usize, s: ClockStage) -> bool {
+        u32::try_from(k).is_ok_and(|k| self.writes.contains(&(k, s)))
+    }
+
     /// The `let`s of the stage `stage`, in their order (§11.4).
     pub fn lets_at(&self, stage: ClockStage) -> impl Iterator<Item = &FlowLet> {
         self.lets.iter().filter(move |l| l.stage.stage() == Some(stage))
@@ -193,15 +200,13 @@ impl PlanNode {
 }
 
 /// The ticks of the body of `info` slower than its `sample`, slowest
-/// first ([`FlowInfo::stages`]): of its inputs, `let`s, nodes and hoisted
-/// fields, and of its output.
+/// first ([`FlowInfo::stages`]): of its inputs and its output, and those
+/// the marking evaluates at ([`FlowInfo::eval_at`]).
 pub(super) fn slow_stages(info: &FlowInfo) -> Vec<ClockStage> {
     // S-1213: an output at `sample / N` is made at its own tick, so a
     // value of a parameter kind it reads is the one of that tick until the next.
     let inputs = info.inputs.iter().filter_map(|&l| info.own_stage(l)).chain(info.out_stage);
-    let lets = info.lets.iter().filter_map(|l| l.stage.stage());
-    let nodes = info.nodes.iter().filter_map(|n| n.clock.stage());
-    let all = inputs.chain(lets).chain(nodes).chain(info.hoists.iter().map(|h| h.stage));
+    let all = inputs.chain(info.eval_at.iter().copied());
     let slow: BTreeSet<ClockStage> = all.filter(|s| s.tick_slower_than(ClockStage::SAMPLE)).collect();
     slow.into_iter().collect()
 }

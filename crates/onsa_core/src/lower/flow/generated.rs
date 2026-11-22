@@ -173,7 +173,6 @@ impl<'b> Gen<'b> {
             sample_rate_calls: info.sample_rate_calls.iter().copied().collect(),
             sample_tick_calls: info.sample_tick_calls.iter().copied().collect(),
             time: Vec::new(),
-            time_read: Cell::new(false),
             scopes: Vec::new(),
         });
         Ok(Gen { cx, params: Vec::new(), stmts: Vec::new(), span: shape.span })
@@ -301,17 +300,17 @@ impl<'b> Gen<'b> {
     /// The `let`s of the stage of this phase in order, those the state
     /// keeps also stored, and the fields of this stage hoisted in the
     /// `let`s at their places, before a `let` of this stage, and in the
-    /// output last (§11.3, §12.4; [`super::hoist::writes`]): of a faster
-    /// `let`, and of the arguments the chains of one of this stage or a
-    /// slower one gather (§11.9, lowered in the functions of their rings).
+    /// output last (§11.3, §12.4; [`super::hoist::writes`]): of each `let`
+    /// that holds one or a check of this stage (`FlowInfo::writes_in`),
+    /// in the arguments its chains gather too (§11.9).
     // SPEC-GAP(S-1159): in the order of the text, a field at the place of
     // the `let` that holds it.
     pub(super) fn stage_lets(&mut self, lw: &mut Lowerer, info: &FlowInfo, state: &Expr) -> R<()> {
         let stage = self.flow().phase.stage();
-        for l in &info.lets {
+        for (k, l) in info.lets.iter().enumerate() {
             let Some(at) = l.stage.stage() else { continue };
             let run = info.run_stage(at);
-            if run > stage || at <= stage {
+            if info.writes_in(k, stage) {
                 super::hoist::writes(lw, &mut self.cx, info, l.init, stage, state, &mut self.stmts)?;
             }
             if run != stage {

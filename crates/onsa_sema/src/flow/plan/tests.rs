@@ -679,6 +679,42 @@ fn the_table_gives_the_words_of_the_time_of_each_stage() {
     assert!(flow(&a, "top").fields.iter().all(|x| x.name != "_tick_hi"));
 }
 
+/// The stages the marking evaluates at and those of `sample_tick()` (S-05,
+/// §11.4, §11.9, W7-16 U6a4; worked out by hand): an argument of a node is
+/// a root at the stage it is read at (`sample / 4`), so the caller has that
+/// stage and reads the time there whether or not the table of its callee
+/// (here in error) has it; an output at `sample / 2` with nothing else
+/// there has that stage (S-1213); `h + 1` of `sample / 2` in the argument
+/// a chain gathers at `sample` is hoisted to `sample / 2` (as the output of
+/// the chain, of `sample / 2`, read at `sample`, §11.3), a write of that
+/// stage held by the `let` `r` (index 1), not by `h` nor at `sample`.
+#[test]
+fn the_marking_records_the_stages_it_evaluates_at() {
+    let src = "flow bad(a: U32 at (sample / 4)) -> U32 at sample {\n  (a at sample) + true\n}\n\
+               pub flow arg() -> U32 at sample {\n  bad~(sample_tick() at (sample / 4))\n}\n\
+               pub flow out() -> U32 at (sample / 2) {\n  7\n}\n\
+               flow cnt(i0: U32 at block) -> U32 at sample {\n  let n = (i0 + prev~(^n)) % 997\n  n\n}\n\
+               flow g2(a: U32 at (sample * 2)) -> U32 at sample {\n  a[0] * 10 + a[1]\n}\n\
+               pub flow gat(p: U32 at block) -> U32 at sample {\n  let h = cnt~(p).down~(2)\n  \
+               let r = g2~((h + 1) at sample).down~(2) at sample\n  r + 1\n}\n";
+    let a = check(src);
+    let codes: Vec<String> = a.diagnostics.iter().map(|d| format!("{:?}", d.code)).collect();
+    assert_eq!(codes.len(), 1, "{codes:?}");
+    let tick = |k| crate::clock::ClockStage::Tick(crate::clock::Ratio(k));
+    let set = |s: &std::collections::BTreeSet<_>| s.iter().copied().collect::<Vec<_>>();
+    let (arg, out, gat) = (flow(&a, "arg"), flow(&a, "out"), flow(&a, "gat"));
+    assert!(arg.complete && out.complete && gat.complete && !flow(&a, "bad").complete);
+    assert_eq!([set(&arg.eval_at), set(&arg.time_at)], [vec![tick(-2), tick(0)], vec![tick(-2)]]);
+    assert_eq!(arg.stages, [tick(-2)]);
+    assert_eq!(arg.time.iter().map(|(&s, &w)| (s, w)).collect::<Vec<_>>(), [(tick(-2), super::Words::One)]);
+    assert_eq!([set(&out.eval_at), out.stages.clone()], [vec![tick(-1)], vec![tick(-1)]]);
+    let hoists: Vec<_> = gat.hoists.iter().map(|h| (h.stage, h.owner)).collect();
+    assert_eq!(hoists, [(tick(-1), Owner::Let(1)); 2], "`h + 1` and the output of the chain, read at `sample`");
+    assert_eq!(gat.stages, [tick(-1)]);
+    assert!(gat.writes_in(1, tick(-1)) && !gat.writes_in(0, tick(-1)) && !gat.writes_in(1, tick(0)));
+    assert!(!gat.writes_in(2, tick(-1)), "the output holds no write");
+}
+
 /// The Core lowers the slower ticks of one flow and `sample_tick()` (W7-16
 /// U5a): the gate passes a flow with a `let`, a node and a hoisted field
 /// at `sample / 4` or `sample / 2` and one that reads `sample_tick()`,

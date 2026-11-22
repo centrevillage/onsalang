@@ -365,11 +365,6 @@ pub(super) fn gen_tick<'b>(
         let t = sfield(lw, info, &s, FieldOf::Tick, span)?;
         assign(&mut g.stmts, &t, wrap_add(t.clone(), span))?;
     }
-    // S-1217: a function takes the time if and only if it reads it (but in
-    // a placeholder of an unsupported feature, whose Core is dropped).
-    if lw.hole_spans.is_empty() && g.flow().time_read.get() == g.flow().time.is_empty() {
-        return Err(internal(span, format!("the function of {stage:?} takes the time or reads it, not both")));
-    }
     g.finish(lw, fid, out_ty, true, out);
     Ok(())
 }
@@ -445,7 +440,6 @@ pub(super) fn run_child(lw: &mut Lowerer, cx: &mut FnCx, id: NodeId, state: &Exp
     let mut cargs = vec![inout(sfield(lw, info, state, FieldOf::Node(id, Part::Own), span)?)];
     let (words, mut lets) = (lw.a.flows.get(&callee).map_or(0, |g| g.time_words(run.body)), Vec::new());
     if words > 0 {
-        cx.flow.as_ref().expect("flow context").time_read.set(true);
         cargs.extend(super::chain::child_time(cx, &mut lets, n, words, span)?.into_iter().map(borrow));
     }
     let rings = super::chain::rings(lw, info, id, state, span)?;

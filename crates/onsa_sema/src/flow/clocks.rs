@@ -96,6 +96,7 @@ pub(crate) fn finish_flow(a: &mut Analysis, module: &Module, id: DefId, body: Bo
     let out = a.def(id).as_flow().map_or(Clock::SAMPLE, |f| f.body_out_clock());
     let mut m = super::reads::mark_all(a, (ast, text), &body, &fcx, &w, &info.lets, out);
     (info.read_at, info.bound_at, info.sample_rate_at) = (m.read_at, m.bound_at, m.sample_rate_at);
+    (info.eval_at, info.time_at, info.writes) = (m.eval_at, m.time_at, m.writes);
     info.complete = w.diag.is_none() && m.diag.is_none() && w.inout_call.is_none() && fcx.held.is_none() && !fcx.unread;
     #[cfg(test)]
     WALKED.with(|x| x.borrow_mut().push((id, w.clone(), info.complete)));
