@@ -23,12 +23,17 @@
 //! flow with a slower output whose head is the time (`pass~(sample_tick()).down~(4)`), and a callee in error (with a slow port, or whose caller passes the time at a slower tick or as the head under a chain) that a caller
 //! passes the time to (the findings of the review before U6b). The inputs of those findings are also run as they are (`the_inputs_of_the_findings...`). The seed was chosen from those that reach every form and, in the
 //! second group, an input that is an internal error of the table of the time (so the sweep holds the form it was made for); a change of the changes or of the files asks for a new seed.
+//!
+//! A third group (W7-16 U7c/t; chains and bursts): 40 mutants of 5 files (`bursts_values`, `up_chain_values`, `down_two_boundaries_values`, `down_chain_time_values`, `chain_blocks_ports`), 8 of each, 1 to 3 changes
+//! each, of nine kinds: a number (a modifier's N, a clock's N), an `at` left out, a clock put in place of another, a `sample_tick()` put at another clock, an `.up~` for a `.down~`, a modifier added after a call, two
+//! modifiers swapped, a bundle element repeated, a line deleted (a third keep their `test` blocks). Where `check` ends clean, `dump --core`, `interface`, `graph` of the first `pub flow` and `test` end with 0 or 1 and no
+//! internal error. The reach test counts each kind and the time handed to a flow with a burst port by a change of the chain (S-1218: an E0200 of `check` until it is decided), the high finding of U6b2.
 
 use std::path::{Path, PathBuf};
 
 use crate::slow_written_forms::run_texts;
-use crate::test_support::doc_of;
 use crate::test_support::sweep::Rng;
+use crate::test_support::{doc_of, tests_of};
 
 const SEED: u64 = 1338;
 /// How many mutants of each file.
@@ -107,13 +112,18 @@ fn flows(text: &str) -> Vec<(usize, usize, usize)> {
     items(text, &["flow ", "pub flow "])
 }
 
-/// The text without its `test` blocks and its comments (a change that lands in a comment is no change; the strings of the seeds hold no `//`).
+/// The text without its comments (a change that lands in a comment is no change; the strings of the seeds hold no `//`).
+fn strip_comments(text: &str) -> String {
+    text.lines().map(|l| l.find("//").map_or(l, |i| l[..i].trim_end())).collect::<Vec<_>>().join("\n") + "\n"
+}
+
+/// The text without its `test` blocks and its comments.
 fn strip_tests(text: &str) -> String {
     let mut out = text.to_string();
     for (start, _, close) in items(text, &["test \""]).into_iter().rev() {
         out.replace_range(start..=close, "");
     }
-    out.lines().map(|l| l.find("//").map_or(l, |i| l[..i].trim_end())).collect::<Vec<_>>().join("\n") + "\n"
+    strip_comments(&out)
 }
 
 /// The offsets of the numbers that follow each of `prefixes` in the text.
@@ -199,6 +209,9 @@ fn prefer_callee_headers(rng: &mut Rng, text: &str, places: Vec<usize>) -> Vec<u
     if !near.is_empty() && rng.chance(50) { near } else { places }
 }
 
+const MODIFIERS: &[&str] =
+    &[".down~(2)", ".down~(4)", ".up~(2)", ".up~(4)", ".down~(2).up~(2)", ".when~(true)", ".reset_if~(false)"];
+
 /// Apply one change to the mutant, if it has a place for it; false when the text has none.
 fn change(rng: &mut Rng, m: &mut Mutant, kind: usize) -> bool {
     let text = &mut m.text;
@@ -243,6 +256,68 @@ fn change(rng: &mut Rng, m: &mut Mutant, kind: usize) -> bool {
             let t = *rng.pick(TICKS);
             m.changes.push(format!("`sample_tick()` -> `{t}` at byte {i}"));
             text.replace_range(i..i + "sample_tick()".len(), t);
+        }
+        5 => {
+            let places: Vec<(usize, &str)> =
+                [".down~(", ".up~("].iter().flat_map(|p| text.match_indices(p).map(move |(i, _)| (i, *p))).collect();
+            if places.is_empty() {
+                return false;
+            }
+            let &(i, p) = rng.pick(&places);
+            let (from, to) = if p == ".down~(" { ("down", "up") } else { ("up", "down") };
+            m.changes.push(format!("up/down swapped: `{from}~` -> `{to}~` at byte {i}"));
+            text.replace_range(i + 1..i + 1 + from.len(), to);
+        }
+        6 => {
+            // After a modifier or an instance that has no argument.
+            let mut places: Vec<usize> = numbers_after(text, &[".down~(", ".up~("]).iter().map(|p| p.1 + 1).collect();
+            places.extend(text.match_indices("~()").map(|(i, _)| i + 3));
+            if places.is_empty() {
+                return false;
+            }
+            let (at, add) = (*rng.pick(&places), *rng.pick(MODIFIERS));
+            m.changes.push(format!("modifier added: `{add}` at byte {at}"));
+            text.insert_str(at, add);
+        }
+        7 => {
+            let mut mods: Vec<(usize, usize)> = [".down~(", ".up~("]
+                .iter()
+                .flat_map(|p| text.match_indices(p).map(|(i, _)| (i, i + text[i..].find(')').map_or(0, |c| c + 1))))
+                .collect();
+            mods.sort();
+            let pairs: Vec<&[(usize, usize)]> = mods.windows(2).filter(|w| w[0].1 == w[1].0).collect();
+            if pairs.is_empty() {
+                return false;
+            }
+            let w = *rng.pick(&pairs);
+            let (a, b) = (text[w[0].0..w[0].1].to_string(), text[w[1].0..w[1].1].to_string());
+            m.changes.push(format!("modifiers swapped: `{a}{b}` at byte {}", w[0].0));
+            text.replace_range(w[0].0..w[1].1, &(b + &a));
+        }
+        8 => {
+            // A literal of a bundle or an array (not a type `[T; N]`, nor an index).
+            let places: Vec<(usize, usize)> = text
+                .match_indices('[')
+                .filter_map(|(i, _)| text[i..].find(']').map(|c| (i + 1, i + c)))
+                .filter(|&(s, e)| text[s..e].contains(',') && !text[s..e].contains(['[', ';', '\n']))
+                .collect();
+            if places.is_empty() {
+                return false;
+            }
+            let (s, e) = *rng.pick(&places);
+            let first = text[s..e].split(',').next().unwrap_or("").trim().to_string();
+            m.changes.push(format!("bundle element repeated: `{first}` at byte {s}"));
+            text.insert_str(e, &format!(", {first}"));
+        }
+        9 => {
+            let lines: Vec<&str> = text.lines().collect();
+            let i = rng.below(lines.len());
+            if lines[i].trim().is_empty() {
+                return false;
+            }
+            m.changes.push(format!("line deleted: `{}`", lines[i].trim()));
+            *text = lines.iter().enumerate().filter(|&(j, _)| j != i).map(|(_, l)| *l).collect::<Vec<_>>().join("\n")
+                + "\n";
         }
         _ => {
             let fs = flows(text);
@@ -415,8 +490,8 @@ fn made_forms(m: &Mutant) -> Vec<&'static str> {
     w
 }
 
-fn describe(i: usize, m: &Mutant) -> String {
-    format!("mutant {i} of {} (seed {SEED:#x}): {}\n{}", m.file, m.changes.join("; "), m.text)
+fn describe(i: usize, m: &Mutant, seed: u64) -> String {
+    format!("mutant {i} of {} (seed {seed:#x}): {}\n{}", m.file, m.changes.join("; "), m.text)
 }
 
 /// `check` of the text ends with 0 or 1, no internal error, and the codes of the diagnostics are error codes; where it ends with 0, `dump --core` ends with 0 or 1 and no internal error. `what` names the input in a
@@ -451,7 +526,7 @@ fn assert_ends_as_a_check_does(text: &str, what: &str) -> i32 {
 
 /// Run each mutant of the group; how many of them pass the check with no diagnostic (they went on to `dump --core`).
 fn run_group(group: &[(usize, Mutant)]) -> usize {
-    group.iter().filter(|(i, m)| assert_ends_as_a_check_does(&m.text, &describe(*i, m)) == 0).count()
+    group.iter().filter(|(i, m)| assert_ends_as_a_check_does(&m.text, &describe(*i, m, SEED)) == 0).count()
 }
 
 fn grouped(cut_callees: bool) -> Vec<(usize, Mutant)> {
@@ -511,4 +586,129 @@ fn the_inputs_of_the_findings_of_the_review_with_a_callee_in_error_end_as_a_chec
     for text in inputs {
         assert_eq!(assert_ends_as_a_check_does(text, text), 1, "an error: {text}");
     }
+}
+
+// ---- the third group: chains and bursts (W7-16 U7c/t; spec §11.9, §11.10, §18.1, §18.2; S-1207, S-1214, S-1218)
+
+/// The seed files of the third group: chains with an `.up~`, bursts, two boundaries, the time under a chain, a chain of blocks.
+const CHAIN_FILES: &[&str] = &[
+    "flow_semantics/bursts_values.onsa",
+    "flow_semantics/up_chain_values.onsa",
+    "flow_semantics/down_two_boundaries_values.onsa",
+    "flow_semantics/down_chain_time_values.onsa",
+    "flow_semantics/chain_blocks_ports.onsa",
+];
+const CHAIN_SEED: u64 = 56;
+const CHAIN_PER_FILE: usize = 8;
+/// The kinds of change of the third group: a number, an `at` left out, a clock, a `sample_tick()`, an `.up~` for a `.down~`, a modifier added, two modifiers swapped, a bundle element repeated, a line deleted.
+const CHAIN_KINDS: &[usize] = &[0, 1, 2, 3, 5, 6, 7, 8, 9];
+/// How the changes are named, one for each kind.
+const CHAIN_NAMES: &[&str] = &[
+    "number ",
+    " left out at",
+    "clock `",
+    "`sample_tick()` ->",
+    "up/down swapped",
+    "modifier added",
+    "modifiers swapped",
+    "bundle element repeated",
+    "line deleted",
+];
+
+/// 40 mutants, 8 of each file (a third of them keep their `test` blocks, so that `test` runs something), 1 to 3 changes each.
+fn chain_mutants(seed: u64) -> Vec<Mutant> {
+    let mut rng = Rng::new(seed);
+    let mut out = Vec::new();
+    for file in CHAIN_FILES {
+        let full = std::fs::read_to_string(spec_dir().join(file)).unwrap_or_else(|e| panic!("read {file}: {e}"));
+        for j in 0..CHAIN_PER_FILE {
+            let seed_text = if j % 3 == 0 { strip_comments(&full) } else { strip_tests(&full) };
+            let mut m =
+                Mutant { file, seed_text: seed_text.clone(), text: seed_text, changes: Vec::new(), cut: Vec::new() };
+            let wanted = *rng.pick(&[1, 1, 1, 2, 3]);
+            for _ in 0..20 {
+                if m.changes.len() == wanted {
+                    break;
+                }
+                let kind = *rng.pick(CHAIN_KINDS);
+                change(&mut rng, &mut m, kind);
+            }
+            out.push(m);
+        }
+    }
+    out
+}
+
+/// Whether the text hands `sample_tick()` to a flow whose port is `at (sample * N)` and the chain after the call does not take the N back (the caller then meets a burst, S-1218).
+fn time_to_a_burst(text: &str) -> bool {
+    parts(text).iter().any(|(name, header, _)| {
+        let Some(&(s, e)) = numbers_after(header, &["at (sample * "]).first() else { return false };
+        let k = header[s..e].parse::<u32>().map_or(0, u32::trailing_zeros) as i32;
+        text.match_indices(&format!("{name}~(sample_tick()")).any(|(i, call)| {
+            let from = i + call.len();
+            let Some(close) = text[from..].find(')').map(|c| from + c + 1) else { return false };
+            let (mut net, mut rest) = (0, &text[close..]);
+            while let Some((n, tail)) = [(".down~(", -1), (".up~(", 1)].iter().find_map(|&(p, sign)| {
+                let tail = rest.strip_prefix(p)?;
+                let digits = tail.bytes().take_while(u8::is_ascii_digit).count();
+                Some((sign * tail[..digits].parse::<u32>().ok()?.trailing_zeros() as i32, &tail[digits + 1..]))
+            }) {
+                (net, rest) = (net + n, tail);
+            }
+            k + net > 0
+        })
+    })
+}
+
+/// The name of the first `pub flow` of the text.
+fn first_pub_flow(text: &str) -> Option<String> {
+    flows(text).into_iter().find(|&(s, _, _)| text[s..].starts_with("pub ")).map(|(s, o, _)| name_of(&text[s..o]))
+}
+
+/// `check` of the mutant ends as a check does (and `dump --core` where it is clean); where it is clean, `interface`, `graph` of its first `pub flow` and `test` end with 0 or 1 and no internal error. The result is
+/// the number of tests `test` ran, or none where the check was not clean.
+fn assert_chain_commands_end_well(text: &str, what: &str) -> Option<usize> {
+    if assert_ends_as_a_check_does(text, what) != 0 {
+        return None;
+    }
+    let mut commands = vec![vec!["interface"], vec!["test", "--json"]];
+    let name = first_pub_flow(text);
+    commands.extend(name.as_deref().map(|name| vec!["graph", name]));
+    let mut ran = 0;
+    for words in commands {
+        let out = run_texts(&words, text);
+        let both = format!("{}{}", out.stdout, out.stderr);
+        let well = (out.code == 0 || out.code == 1) && !both.contains("internal error");
+        assert!(well, "{words:?} ended with {}: {both}\n{what}", out.code);
+        if words[0] == "test" {
+            ran = tests_of(&doc_of(&out)).len();
+        }
+    }
+    Some(ran)
+}
+
+/// The mutants of the chains and the bursts end well in `check`, `dump --core`, `interface`, `graph` and `test` (no internal error, no exit by a signal; the commands run in this process, no file written), and
+/// some of them reach `test` with tests to run.
+#[test]
+fn mutants_of_chains_and_bursts_end_as_the_commands_do() {
+    let ms = chain_mutants(CHAIN_SEED);
+    let ran: Vec<usize> = ms
+        .iter()
+        .enumerate()
+        .filter_map(|(i, m)| assert_chain_commands_end_well(&m.text, &describe(i, m, CHAIN_SEED)))
+        .collect();
+    assert!(!ran.is_empty() && ran.len() < ms.len(), "{} of {} mutants pass the check", ran.len(), ms.len());
+    assert!(ran.iter().sum::<usize>() > 0, "no mutant that passes the check has a test to run");
+}
+
+/// The mutants have each kind of change, and the form of U6b2's high finding: the time handed to a flow whose port is a burst by a change of the chain (S-1218, an E0200 of `check` until it is decided).
+#[test]
+fn the_chain_mutants_have_every_kind_of_change_and_the_time_that_reaches_a_burst() {
+    let ms = chain_mutants(CHAIN_SEED);
+    for name in CHAIN_NAMES {
+        let found = ms.iter().any(|m| m.changes.iter().any(|c| c.contains(name)));
+        assert!(found, "no mutant has the change `{name}`; the seed {CHAIN_SEED:#x} must be revised");
+    }
+    let time = ms.iter().any(|m| time_to_a_burst(&m.text) && !time_to_a_burst(&m.seed_text));
+    assert!(time, "no mutant hands the time to a burst; the seed {CHAIN_SEED:#x} must be revised");
 }

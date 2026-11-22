@@ -15,6 +15,7 @@ mod bursts_c_commands;
 mod call_forms_syntax;
 mod candidate_headings;
 mod candidate_shapes;
+mod chain_model;
 mod check_json_document;
 mod clock_mutations;
 mod command_paths;
