@@ -6,9 +6,9 @@
 //! | `init(cfg, sample_rate) -> State` | `_tick = 0` and the fields of a tick read faster at `T.default()`, `Init`-rate `let`s in order (state ones stored) and the `Init` hoisted fields (below), node initialisation, sub `init`s, `_poisoned = false`, `_initialized = true` last |
 //! | `reset(inout s)` | `_tick = 0` and the fields of a tick read faster at `T.default()`, `prev` / `delay` / `vdelay` back to their `init` values, `w = 0`, sub `reset`s, `_poisoned = false` |
 //! | `ctl(inout s, p: Params)` | `Ctl`-rate `let`s in order (those read at `Sig` stored) and the `Ctl` hoisted fields, sub `ctl`s with the sub's `Params` |
-//! | `tick(inout s, <Sig inputs>) -> out` | `Sig`-rate `let`s in order, the output, then the stores of §11.4 in node order, the counter of the phase advanced last |
-//! | `tick_<N>(inout s)` | of each tick `sample / N` of the body (`FlowInfo::stages`): its `let`s in order, then the stores of its nodes |
-//! | `process(inout s, p, [input], inout output)` | `input` and `output` one `Span` (planar `[Span; N]`) or the `In` and `Out` of more (§11.6); length check, `ctl` once, per sample: the slower ticks due ([`phases::drive`]), read all inputs, `tick`, write all outputs |
+//! | `tick(inout s, [t], <Sig inputs>) -> out` | `Sig`-rate `let`s in order, the output, the stages of the callees run there ([`phases::run_child`]), then the stores of §11.4 in node order, the counter of the phase advanced last; the time `t` of a flow that reads it (`FlowInfo::reads_time`) |
+//! | `tick_<N>(inout s, [t], <its inputs>)` | of each tick `sample / N` of the body (`FlowInfo::stages`, those of its callees too): as `tick`, the output of an output at `sample / N` (§11.9) |
+//! | `process(inout s, p, [input], inout output)` | none of a port of a derived clock; `input` and `output` one `Span` (planar `[Span; N]`) or the `In` and `Out` of more (§11.6); length check, `ctl` once, per sample: the time `t = s._tick`, the slower ticks due ([`phases::drive`]), read all inputs, `tick`, write all outputs |
 //! | `process_inplace(inout s, p, inout output)` | `process` with the input made of the signals of `output` (they pair up) |
 //! | `render` | `init`, `Buf.zeroed` outputs, one `process`, `Rendered` (interpreter only, D-08) |
 //! | `params_default() -> Params` | the `@param` defaults, of the C API alone (§11.6, S-625) |
@@ -78,7 +78,7 @@ use onsa_diag::unsupported::Feature;
 use onsa_sema::DefId;
 use onsa_sema::clock::{Clock, ClockStage, Ratio};
 use onsa_sema::def::{DefKind, Fields, FlowDef, FlowFn, FlowInput, FlowTy, ParamInfo, ParamKey, ParamNumber};
-use onsa_sema::flow::{Field, FieldOf, FlowInfo, InitArg, Kept, NodeId, Part, PlanKind};
+use onsa_sema::flow::{Field, FieldOf, FlowInfo, InitArg, Kept, NodeId, Part, PlanKind, PlanNode, Run};
 use onsa_sema::ty::{BuiltinTy, Len, Ty as STy};
 use onsa_syntax::ast::ExprId;
 
@@ -124,17 +124,22 @@ pub struct FlowFns {
     /// The function of each tick of the body slower than its `sample`
     /// (`FlowInfo::stages`), slowest first.
     pub stages: Vec<(ClockStage, FnId)>,
-    pub process: FnId,
+    /// `process`, `process_inplace` and `render`: none of a flow with a
+    /// port of a derived clock (`FlowInfo::derived_port`), which runs as an
+    /// instance only (§11.9).
+    pub process: Option<FnId>,
     pub process_inplace: Option<FnId>,
-    pub render: FnId,
+    pub render: Option<FnId>,
     pub params_default: Option<FnId>,
 }
 
 impl FlowFns {
     /// Every function generated for the flow.
     pub fn generated(&self) -> impl Iterator<Item = FnId> {
-        [self.init, self.reset, self.ctl, self.tick, self.process, self.render]
+        [self.init, self.reset, self.ctl, self.tick]
             .into_iter()
+            .chain(self.process)
+            .chain(self.render)
             .chain(self.stages.iter().map(|s| s.1))
             .chain(self.process_inplace)
             .chain(self.params_default)
@@ -150,12 +155,13 @@ impl FlowFns {
     /// them as any call.
     pub fn entries(&self) -> impl Iterator<Item = FnId> {
         let ticks = self.stages.iter().map(|s| s.1);
-        [self.init, self.reset, self.ctl, self.tick, self.process].into_iter().chain(ticks).chain(self.params_default)
+        let fns = [self.init, self.reset, self.ctl, self.tick].into_iter().chain(self.process);
+        fns.chain(ticks).chain(self.params_default)
     }
 
     /// The function of the stage `s`: `tick` of the `sample` of the body,
     /// or that of a slower tick.
-    fn stage_fn(&self, s: ClockStage) -> Option<FnId> {
+    pub(crate) fn stage_fn(&self, s: ClockStage) -> Option<FnId> {
         if s == ClockStage::SAMPLE {
             return Some(self.tick);
         }
@@ -228,9 +234,9 @@ struct Input {
 }
 
 /// The inputs of the flow `fd` of the plan `info`: the one place the
-/// lowering reads their stages and their places. One of no stage, or of a
-/// tick other than the `sample` of the body (a port of a derived clock,
-/// which [`FlowInfo::multirate_at`] stops at), is an internal error.
+/// lowering reads their stages and their places. An input at `sample / N`
+/// (a port of a derived clock, §11.9) is of the function of its tick; one
+/// of no stage is an internal error.
 fn inputs(info: &FlowInfo, fd: &FlowDef, span: Span) -> R<Vec<Input>> {
     if info.inputs.len() != fd.inputs.len() {
         return Err(internal(span, "a plan of another number of inputs than its flow"));
@@ -242,8 +248,8 @@ fn inputs(info: &FlowInfo, fd: &FlowDef, span: Span) -> R<Vec<Input>> {
         let k = match phase {
             Some(Phase::Init) => 0,
             Some(Phase::Ctl) => 1,
-            Some(Phase::SAMPLE) => 2,
-            _ => return Err(internal(decl.span, format!("an input of the stage {stage:?}"))),
+            Some(Phase::Tick(_)) => 2,
+            None => return Err(internal(decl.span, format!("an input of the stage {stage:?}"))),
         };
         let (at, phase) = (count[k], phase.unwrap_or(Phase::SAMPLE));
         count[k] += 1;
@@ -297,6 +303,11 @@ pub struct FlowLowerCx<'b> {
     sample_rate_calls: HashSet<ExprId>,
     /// The calls of `sample_tick()` (`FlowInfo::sample_tick_calls`).
     sample_tick_calls: HashSet<ExprId>,
+    /// The time of the function (§11.4, S-1129 (1)): its parameter `t` of a
+    /// stage of a flow that reads it (`FlowInfo::reads_time`), the count of
+    /// the root from `process`, which a caller passes to its callees
+    /// ([`child_time`]); empty elsewhere.
+    time: Vec<Expr>,
     /// Innermost scope last.
     scopes: Vec<Scope>,
 }
@@ -343,6 +354,16 @@ impl<'a> Lowerer<'a> {
         let fns = r?;
         self.flow_fns.insert(flow, fns.clone());
         Ok(fns)
+    }
+}
+
+/// The time a callee of the frame `r` reads from the time `time` of its
+/// caller (§11.4): the one place of it. The same of a callee of no
+/// modifier (W7-16 U6a and U6b write those of `.down~` and `.up~`).
+fn child_time(time: &[Expr], r: Ratio, span: Span) -> R<Vec<Expr>> {
+    match r {
+        Ratio(0) => Ok(time.to_vec()),
+        _ => Err(internal(span, format!("the time of a callee of the frame {r:?}"))),
     }
 }
 
@@ -412,7 +433,7 @@ fn lower_flow<'b>(lw: &mut Lowerer<'b>, flow: DefId, fd: FlowDef, span: Span) ->
     if !info.complete {
         return Err(internal(span, "flow body has errors"));
     }
-    if let Some(at) = info.multirate_at(&a.flows) {
+    if let Some(at) = info.multirate_at() {
         return Err(unsupported(at, Feature::MultirateFlows, &[]));
     }
     let need = |f: FlowFn| generated_fn(a, &fd, f).ok_or_else(|| internal(span, format!("flow without {f:?}")));
@@ -475,18 +496,20 @@ fn lower_flow<'b>(lw: &mut Lowerer<'b>, flow: DefId, fd: FlowDef, span: Span) ->
     }
     let init = lw.fn_id(need(FlowFn::Init)?, Vec::new(), span)?;
     let reset = lw.fn_id(need(FlowFn::Reset)?, Vec::new(), span)?;
-    let process = lw.fn_id(need(FlowFn::Process)?, Vec::new(), span)?;
-    let inplace = generated_fn(a, &fd, FlowFn::ProcessInplace);
-    let process_inplace = inplace.map(|d| lw.fn_id(d, Vec::new(), span)).transpose()?;
-    let render = lw.fn_id(need(FlowFn::Render)?, Vec::new(), span)?;
+    // None of a flow with a port of a derived clock: their uses are an E0200 (E0810 from W10-01).
+    let made = |f: FlowFn| info.derived_port.is_none().then(|| need(f)).transpose();
+    let mut id = |d: Option<DefId>| d.map(|d| lw.fn_id(d, Vec::new(), span)).transpose();
+    let process = id(made(FlowFn::Process)?)?;
+    let process_inplace = id(generated_fn(a, &fd, FlowFn::ProcessInplace).filter(|_| process.is_some()))?;
+    let render = id(made(FlowFn::Render)?)?;
     // The values of `@param`, read from the analysis in this one place (§11.7).
     let (mut params, mut sig_inputs) = (Vec::new(), Vec::new());
     for Input { decl: i, phase, .. } in &shape.inputs {
         let ty = lw.core_ty(i.ty, &[], i.span)?;
         match phase {
             Phase::Ctl => params.push((i.name.clone(), ty, a.param_info(i))),
-            Phase::Tick(_) => sig_inputs.push((i.name.clone(), ty)),
-            Phase::Init => {}
+            &Phase::SAMPLE => sig_inputs.push((i.name.clone(), ty)),
+            Phase::Init | Phase::Tick(_) => {}
         }
     }
     // Of the C API alone, when every `block` input has a `default` (§11.7, §14.2, S-625).
@@ -516,9 +539,11 @@ fn lower_flow<'b>(lw: &mut Lowerer<'b>, flow: DefId, fd: FlowDef, span: Span) ->
     for s in [ClockStage::SAMPLE].into_iter().chain(info.stages.iter().copied()) {
         gen_tick(lw, &shape, info, &fns, s)?;
     }
-    gen_process(lw, &shape, info, &fns)?;
-    gen_process_inplace(lw, &shape, info, &fns)?;
-    gen_render(lw, &shape, info, &fns)?;
+    if fns.process.is_some() {
+        gen_process(lw, &shape, info, &fns)?;
+        gen_process_inplace(lw, &shape, info, &fns)?;
+        gen_render(lw, &shape, info, &fns)?;
+    }
     gen_params_default(lw, &shape, info, &fns, defaults)?;
 
     // Layout and the `SIZE` / `BULK_SIZE` consts (T3-6).

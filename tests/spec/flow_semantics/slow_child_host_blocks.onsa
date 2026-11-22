@@ -1,0 +1,113 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.9", "§11.6", "§11.10", "§13.4", "§11.4"]
+
+// W7-16 U5b2/t, S-565, S-1088, S-1127, S-1129 (spec §11.9: "`sample / N` の刻みはカウンタが N の倍数の刻みで、最初の刻みで動く。ホストの区切りに依らない"; §11.6: "呼び出しを位置 k で分けると … 出力は分けない呼び出しとビットで同じである"、
+// "長さが 0 の呼び出しも正しい呼び出しで"、生成する `reset`: "位相のカウンタ（§11.9）を 0 にする"): the output of a flow with children is the same wherever the host cuts the run (a block of any length, one of 0 frames, one of 1 frame) and after a
+// `reset` at any position (the next frame is the frame 0 of a run). The children are two with delays at `sample / 4` and `sample / 2`, one that reads `sample_tick()`, a flow with a slow input and a slow output and one with a
+// slow output (called with no modifier). Worked out by hand: for x = 1 .. 7 and p = 1,
+//   a (sample / 4, delay of p): 0 0 0 0 1 1 1       b (sample / 2, delay of 2 p): 0 0 2 2 2 2 2       t = 0 1 2 3 4 5 6
+//   l (a delay of the input of the ticks of sample / 4, init 100): 100 100 100 100 1 1 1       s (the time of the tick of sample / 4): 0 0 0 0 4 4 4
+//   out = x t + 10 a + 100 b + 1000 l + 10000 s = 100000, 100002, 100206, 100212, 41230, 41240, 41252.
+
+flow quarter(p: F32 at block) -> F32 at sample {
+  prev~(p at (sample / 4)) at sample
+}
+
+flow half(p: F32 at block) -> F32 at sample {
+  prev~((p * 2.0) at (sample / 2)) at sample
+}
+
+flow elapsed() -> U32 at sample {
+  sample_tick()
+}
+
+flow lag4(x: F32 at (sample / 4)) -> F32 at (sample / 4) {
+  prev~(x, 100.0)
+}
+
+flow ticks4() -> U32 at (sample / 4) {
+  sample_tick()
+}
+
+pub flow mix(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  x * F32.round_from(elapsed~()) + quarter~(p) * 10.0 + half~(p) * 100.0 + (lag4~(p) at sample) * 1000.0 + F32.round_from(ticks4~() at sample) * 10000.0
+}
+
+fn is_mix(o: [F32; 7]) -> Bool {
+  o == [100000.0, 100002.0, 100206.0, 100212.0, 41230.0, 41240.0, 41252.0]
+}
+
+// The run of 7 frames in three calls: [0, a), [a, b) and [b, 7) (a call of 0 frames when two cuts are at the same place).
+fn run_cut(a: U32, b: U32) -> [F32; 7] {
+  let xs: [F32; 7] = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0]
+  var out: [F32; 7] = [-1.0; 7]
+  var st = mix.init(8.0)
+  mix.process(inout st, mix.Params { p: 1.0 }, xs.slice(0, a), inout out.slice(0, a))
+  mix.process(inout st, mix.Params { p: 1.0 }, xs.slice(a, b), inout out.slice(a, b))
+  mix.process(inout st, mix.Params { p: 1.0 }, xs.slice(b, 7), inout out.slice(b, 7))
+  out
+}
+
+// The run of 7 frames after `k` frames of another run (with p = 5) and a `reset`.
+fn run_after_reset(k: U32) -> [F32; 7] {
+  let junk: [F32; 10] = [3.0; 10]
+  let xs: [F32; 7] = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0]
+  var scratch: [F32; 10] = [0.0; 10]
+  var out: [F32; 7] = [-1.0; 7]
+  var st = mix.init(8.0)
+  mix.process(inout st, mix.Params { p: 5.0 }, junk.slice(0, k), inout scratch.slice(0, k))
+  mix.reset(inout st)
+  mix.process(inout st, mix.Params { p: 1.0 }, xs, inout out)
+  out
+}
+
+test "one call of 7 frames gives the values worked out" {
+  let xs: [F32; 7] = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0]
+  var out: [F32; 7] = [-1.0; 7]
+  var st = mix.init(8.0)
+  mix.process(inout st, mix.Params { p: 1.0 }, xs, inout out)
+  assert is_mix(out)
+}
+
+test "3 frames and then 4 give the same: the second call holds the tick of the frame 4 at its 2nd frame" {
+  assert is_mix(run_cut(3, 7))
+}
+
+test "a call of 0 frames before the first frame does not use the tick of the frame 0" {
+  assert is_mix(run_cut(0, 0))
+}
+
+test "calls of 3, 0 and 4 frames give the same" {
+  assert is_mix(run_cut(3, 3))
+}
+
+test "every cut of the run in three calls gives the same, the cuts at the ticks of sample / 4 and of sample / 2 and between" {
+  for a in 0 ..< 8 {
+    for b in a ..< 8 {
+      assert is_mix(run_cut(a, b))
+    }
+  }
+}
+
+test "seven calls of one frame give the same" {
+  let xs: [F32; 7] = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0]
+  var out: [F32; 7] = [-1.0; 7]
+  var st = mix.init(8.0)
+  for i in 0 ..< 7 {
+    mix.process(inout st, mix.Params { p: 1.0 }, xs.slice(i, i + 1), inout out.slice(i, i + 1))
+  }
+  assert is_mix(out)
+}
+
+test "a reset after 5 frames, in the middle of a phase, makes the next frame the frame 0 of a new run" {
+  // The next frame would be the frame 5, with no tick of sample / 4 or of sample / 2; the count would be 5 and not 0. The first run has p = 5 and the second p = 1: every state of the children is at its init.
+  assert is_mix(run_after_reset(5))
+}
+
+test "a reset after any number of frames, at a tick or between, gives the run of a state just made" {
+  for k in 0 ..< 11 {
+    assert is_mix(run_after_reset(k))
+  }
+}

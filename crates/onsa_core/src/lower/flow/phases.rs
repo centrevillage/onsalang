@@ -289,14 +289,18 @@ fn ctl_node(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, id: NodeId, st
     Ok(())
 }
 
-/// The function of the tick `stage` (§11.4, §11.9): `tick(inout s, <Sig
-/// inputs>) -> out` of the `sample` of the body, `tick_<N>(inout s)` of a
-/// slower one, which [`drive`] calls. In order: the `let`s of the tick and
-/// the fields hoisted to it ([`Gen::stage_lets`]), the output of `tick`,
-/// the stores of the nodes of the tick, and last in `tick` the counter of
-/// the phase advanced.
+/// The function of the tick `stage` (§11.4, §11.9): `tick(inout s, [t],
+/// <Sig inputs>)` of the `sample` of the body, `tick_<N>(inout s, [t],
+/// <its inputs>)` of a slower one, which [`drive`] or a caller
+/// ([`run_child`]) calls; the time `t` of a flow that reads it
+/// (`FlowInfo::reads_time`). In order: its inputs the state keeps stored,
+/// its `let`s and the fields hoisted to it ([`Gen::stage_lets`]), the
+/// output of the stage that makes it (`FlowInfo::out_stage`), the stages
+/// of the callees that run in it ([`child_runs`]), the stores of its
+/// nodes, and last in `tick` the counter of the phase advanced.
 // SPEC-GAP(S-1206): the order in a stage is that of the reference
-// evaluator (S-1159 provisional): its `let`s, then the stores.
+// evaluator (S-1159 provisional): its `let`s, then the stages of the
+// callees, then the stores.
 pub(super) fn gen_tick<'b>(
     lw: &mut Lowerer<'b>,
     shape: &FlowShape,
@@ -309,19 +313,33 @@ pub(super) fn gen_tick<'b>(
         return Err(internal(span, format!("no function of the tick {stage:?}")));
     };
     let phase = Phase::Tick(k);
-    let out_ty = if phase == Phase::SAMPLE { shape.out_val.clone() } else { Ty::Unit };
+    let makes_out = info.out_stage == Some(stage);
+    let out_ty = if makes_out { shape.out_val.clone() } else { Ty::Unit };
     let mut g = Gen::new(lw, shape, info, phase, out_ty.clone())?;
     let s = g.param("s", Mode::Inout, Ty::Struct(shape.state_ty));
-    for i in shape.inputs.iter().filter(|i| i.phase == phase) {
+    if info.reads_time {
+        let t = g.param("t", Mode::Borrow, Ty::u32());
+        g.flow().time.push(t);
+    }
+    let inputs: Vec<&Input> = shape.inputs.iter().filter(|i| i.phase == phase).collect();
+    for i in &inputs {
         g.param_local(LocalId(i.local.0), Mode::Borrow);
     }
     g.flow().push_scope(s.clone());
+    // S-1213: an input at `sample / N` is the argument of its tick,
+    // kept until the next (an argument of a parameter kind too).
+    for i in inputs {
+        if let Some(of) = info.kept_field(i.local) {
+            let v = local_expr(&g.cx, LocalId(i.local.0), i.decl.span);
+            assign(&mut g.stmts, &sfield(lw, info, &s, of, i.decl.span)?, v)?;
+        }
+    }
     g.slots(info)?;
     g.state_overrides(lw, info, &s)?;
     g.const_lets(lw, info)?;
     g.stage_lets(lw, info, &s)?;
     let mut out = None;
-    if phase == Phase::SAMPLE {
+    if makes_out {
         let output = info.output.ok_or_else(|| internal(span, "flow without an output expression"))?;
         let v = lower_expr(lw, &mut g.cx, output)?;
         let v = of_type(v, &out_ty)?;
@@ -329,9 +347,11 @@ pub(super) fn gen_tick<'b>(
         out = Some(g.let_("__out", v));
     }
     let nodes: Vec<NodeId> = info.top().collect();
+    let walk = Walk { arms: None, loops: |info, children, _, s| runs_in(info, children, s) };
+    each_node(lw, &mut g.cx, &mut g.stmts, &nodes, &s, walk, &mut child_runs)?;
     let walk = Walk { arms: None, loops: |info, children, _, s| stores(info, children, s) };
     each_node(lw, &mut g.cx, &mut g.stmts, &nodes, &s, walk, &mut store_node)?;
-    if out.is_some() && info.counts_time() {
+    if phase == Phase::SAMPLE && info.counts_time() {
         let t = sfield(lw, info, &s, FieldOf::Tick, span)?;
         let one = Box::new(u32_lit(span, 1));
         let next = ExprKind::Binary { op: BinOp::Add, overflow: Overflow::Wrap, lhs: Box::new(t.clone()), rhs: one };
@@ -341,13 +361,80 @@ pub(super) fn gen_tick<'b>(
     Ok(())
 }
 
+/// The runs of the stages of the callee of the instance `id` in the
+/// function of the stage lowered that do not make its output (§11.9,
+/// S-1088: those that do run where it is read, [`super::nodes`]), in the
+/// order of its runs, the arms around it chosen for the arguments that
+/// read their bindings.
+fn child_runs(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, id: NodeId, state: &Expr) -> R<()> {
+    let (info, stage) = (plan(cx), phase(cx).stage());
+    let n = info.node(id);
+    for &run in runs_at(n, stage, false) {
+        super::branches::choose_arms(lw, cx, &n.arms, stage, state, out)?;
+        let v = run_child(lw, cx, id, state, run)?;
+        expr_stmt(out, v);
+    }
+    Ok(())
+}
+
+/// Whether one of the nodes `ids` runs a stage of its callee in the
+/// function of the stage `s` ([`child_runs`]), in a `par~` of them too.
+fn runs_in(info: &FlowInfo, ids: &[NodeId], s: ClockStage) -> bool {
+    ids.iter().any(|&id| match &info.node(id).kind {
+        PlanKind::Par { children, .. } => runs_in(info, children, s),
+        _ => runs_at(info.node(id), s, false).next().is_some(),
+    })
+}
+
+/// The runs of the node `n` in the function of the stage `s` that make
+/// its output (`read`, where it is read, [`super::nodes`]) or not
+/// ([`child_runs`], [`runs_in`]): the one test of them.
+pub(super) fn runs_at(n: &PlanNode, s: ClockStage, read: bool) -> impl Iterator<Item = &Run> {
+    n.runs.iter().filter(move |r| r.caller == s && r.at_read == read)
+}
+
+/// The call of the function of the stage `run.body` of the callee of the
+/// instance `id`, in the scope of `state` (§11.9, S-1088): its state, the
+/// time of a callee that reads it ([`child_time`]) and its inputs of that
+/// stage, lowered here; the output of the stage that makes it, else `()`.
+/// The one place a caller runs a stage of a callee (the loop of `.up~`
+/// and the `when~` of later works are of it).
+pub(super) fn run_child(lw: &mut Lowerer, cx: &mut FnCx, id: NodeId, state: &Expr, run: Run) -> R<Expr> {
+    let info = plan(cx);
+    let n = info.node(id);
+    let span = cx.ast.expr(n.expr).span;
+    // A node with a chain (`.when~`, `.reset_if~` of frame 0 too) runs no stage here until the work that lowers it.
+    let (&PlanKind::Instance { callee, ref args, .. }, ClockStage::Tick(k), true) =
+        (&n.kind, run.body, n.chain.is_empty())
+    else {
+        return Err(internal(span, format!("a run of {:?} of no instance, or of one with a chain", run.body)));
+    };
+    let sub = lw.ensure_flow(callee)?;
+    let f = sub.stage_fn(run.body).ok_or_else(|| internal(span, format!("a callee with no stage {k:?}")))?;
+    let mut cargs = vec![inout(sfield(lw, info, state, FieldOf::Node(id, Part::Own), span)?)];
+    if lw.a.flows.get(&callee).is_some_and(|g| g.reads_time) {
+        let time = &cx.flow.as_ref().expect("flow context").time;
+        cargs.extend(child_time(time, n.frame, span)?.into_iter().map(borrow));
+    }
+    cargs.extend(instance_args(lw, cx, callee, args, Phase::Tick(k), span)?.into_iter().map(borrow));
+    Ok(call(f, lw.m.fn_(f).ret.clone(), span, cargs))
+}
+
 /// The calls of the functions of the ticks slower than the `sample` of the
 /// body (`FlowFns::stages`), slowest first (S-578, S-1079), each at its
 /// ticks: when the counter of the phase of the state `s` is a multiple of
 /// its N, so the first frame runs it and the tick does not depend on how
-/// the host splits the frames (§11.9). The one driver of them: `process`
-/// runs it before `tick` (a slower loop of W7-16 does too).
-pub(super) fn drive(lw: &Lowerer, info: &FlowInfo, fns: &FlowFns, s: &Expr, span: Span, out: &mut Vec<Stmt>) -> R<()> {
+/// the host splits the frames (§11.9); with the time `time` of a flow that
+/// reads it. The one driver of them: `process` runs it before `tick` (a
+/// slower loop of W7-16 does too).
+pub(super) fn drive(
+    lw: &Lowerer,
+    info: &FlowInfo,
+    fns: &FlowFns,
+    (s, time): (&Expr, &[Expr]),
+    span: Span,
+    out: &mut Vec<Stmt>,
+) -> R<()> {
     for &(stage, f) in &fns.stages {
         let mask = match stage {
             ClockStage::Tick(k) => k.n().and_then(|n| u32::try_from(n - 1).ok()),
@@ -355,7 +442,8 @@ pub(super) fn drive(lw: &Lowerer, info: &FlowInfo, fns: &FlowFns, s: &Expr, span
         };
         let mask = mask.ok_or_else(|| internal(span, format!("no counter of the tick {stage:?}")))?;
         let low = checked_binary(BinOp::BitAnd, sfield(lw, info, s, FieldOf::Tick, span)?, u32_lit(span, mask));
-        let run = vec![stmt(span, StmtKind::Expr(call(f, Ty::Unit, span, vec![inout(s.clone())])))];
+        let args = [inout(s.clone())].into_iter().chain(time.iter().cloned().map(borrow)).collect();
+        let run = vec![stmt(span, StmtKind::Expr(call(f, Ty::Unit, span, args)))];
         let due = cmp(CmpOp::Eq, low, u32_lit(span, 0));
         out.push(stmt(span, StmtKind::If(due, Block { stmts: run, value: None }, Block::default())));
     }

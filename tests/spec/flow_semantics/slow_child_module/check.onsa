@@ -1,0 +1,63 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.9", "§11.4", "§15.1"]
+
+// W7-16 U5b2/t, S-1088, S-1129 (1) (spec §11.9: a stage of a child with no modifier is a stage of the caller at the place of the call; §11.4: `sample_tick()` is the time of the program; §15.1): the flows of the module
+// parts.onsa are the children of the flows here. The stages of a child of a module and of the private child of that module (a grandchild here) run in the stages of the caller, the time a child reads is the caller's, and
+// the slow ports of a flow of a module are read at the ticks of the caller. Worked out by hand, with the values of the same flows in one file (slow_child_values.onsa, slow_port_values.onsa).
+
+use parts.{held, elapsed, lag4, outer}
+
+pub flow from_a_module(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  x * held~(p)
+}
+
+pub flow time_from_a_module() -> U32 at sample {
+  elapsed~()
+}
+
+pub flow slow_ports_of_a_module(p: F32 at block) -> F32 at sample {
+  lag4~(p) at sample
+}
+
+pub flow grandchild_of_a_module(p: F32 at block) -> F32 at sample {
+  outer~(p)
+}
+
+test "a delay at sample / 4 of a child of a module gives its value at the ticks of the caller" {
+  // The calls of 4 and 5 frames with p = 1, 2: tick 0 gives 0 and stores 1, tick 4 gives 1 and stores 2, tick 8 gives 2. held = 0 0 0 0 1 1 1 1 2, times x = 1 .. 9.
+  let xs: [F32; 9] = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0]
+  var out: [F32; 9] = [-1.0; 9]
+  var st = from_a_module.init(8.0)
+  from_a_module.process(inout st, from_a_module.Params { p: 1.0 }, xs.slice(0, 4), inout out.slice(0, 4))
+  from_a_module.process(inout st, from_a_module.Params { p: 2.0 }, xs.slice(4, 9), inout out.slice(4, 9))
+  assert out == [0.0, 0.0, 0.0, 0.0, 5.0, 6.0, 7.0, 8.0, 18.0]
+}
+
+test "a child of a module that reads sample_tick() reads the time of the caller" {
+  var out: [U32; 5] = [9; 5]
+  var st = time_from_a_module.init(8.0)
+  time_from_a_module.process(inout st, inout out.slice(0, 2))
+  time_from_a_module.process(inout st, inout out.slice(2, 5))
+  assert out == [0, 1, 2, 3, 4]
+}
+
+test "a flow of a module with a slow input and a slow output is read at the ticks of the caller" {
+  // The inputs of the ticks 0, 4, 8 are 1, 1, 2 (the cut at the frame 5 is inside the window of the tick 4): the outputs are 100, 1, 1.
+  var out: [F32; 9] = [-1.0; 9]
+  var st = slow_ports_of_a_module.init(8.0)
+  slow_ports_of_a_module.process(inout st, slow_ports_of_a_module.Params { p: 1.0 }, inout out.slice(0, 5))
+  slow_ports_of_a_module.process(inout st, slow_ports_of_a_module.Params { p: 2.0 }, inout out.slice(5, 9))
+  assert out == [100.0, 100.0, 100.0, 100.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+}
+
+test "the private child of a module is a stage of the caller too" {
+  // 8 frames in the calls of 3 and 5 with p = 1, 2: the delay of `inner` at sample / 2 (the frames 0, 2, 4, 6 hold p = 1, 1, 2, 2) gives 0 1 1 2, each for two frames; the delay of `held` gives 0 at the frame 0 and 1 at
+  // the frame 4. The output is 10 inner + held.
+  var out: [F32; 8] = [-1.0; 8]
+  var st = grandchild_of_a_module.init(8.0)
+  grandchild_of_a_module.process(inout st, grandchild_of_a_module.Params { p: 1.0 }, inout out.slice(0, 3))
+  grandchild_of_a_module.process(inout st, grandchild_of_a_module.Params { p: 2.0 }, inout out.slice(3, 8))
+  assert out == [0.0, 0.0, 10.0, 10.0, 11.0, 11.0, 21.0, 21.0]
+}

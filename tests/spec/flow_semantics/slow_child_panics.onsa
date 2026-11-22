@@ -1,0 +1,93 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.3", "§11.6", "§11.9", "§9.2"]
+
+// W7-16 U5b2/t, S-565, S-1088, S-1196 (spec §11.3: "panic は、評価する段が動けば起きる"; §11.6: "長さが 0 の呼び出し … `sample` の段は評価しない"; §11.9: a stage of a child with no modifier is a stage of the parent): the division of a
+// stage of `sample / 4` of a child panics when the tick reads the 0, at the frame of that tick of the parent and not at the frames between the ticks, and not in a call that holds no frame of a tick; it is the
+// same for a grandchild and for a child in the arm of an `if~`. Which of two panics at the same position is reported is not here (the case cannot tell the lines of the inside): it is in the CLI test
+// `slow_stage_commands.rs`. Worked out by hand: `d` is the delay of p at `sample / 4` with the init 1; the part `(100 / d) at sample` is computed at the ticks 0, 4, 8, …
+
+flow inv(p: I32 at block) -> I32 at sample {
+  let d = prev~(p at (sample / 4), 1)
+  (100 / d) at sample
+}
+
+flow layer(p: I32 at block) -> I32 at sample {
+  inv~(p) + 1
+}
+
+pub flow via_child(p: I32 at block) -> I32 at sample {
+  inv~(p)
+}
+
+pub flow via_grandchild(p: I32 at block) -> I32 at sample {
+  layer~(p)
+}
+
+pub flow in_an_arm(c: Bool at block, p: I32 at block) -> I32 at sample {
+  if~ c { inv~(p) } else { 7 }
+}
+
+test "the division of a tick of a child does not panic between the ticks, whatever the 0 that is stored" {
+  // Frame 0 (tick 0) gives d = 1 and stores 0; the frames 1 to 3 hold no tick: 100 is read from the field.
+  var out: [I32; 4] = [-1; 4]
+  var st = via_child.init(8.0)
+  via_child.process(inout st, via_child.Params { p: 0 }, inout out.slice(0, 1))
+  via_child.process(inout st, via_child.Params { p: 0 }, inout out.slice(1, 4))
+  assert out == [100, 100, 100, 100]
+}
+
+test "the division of a tick of a child panics at the tick that reads the 0, in the call that holds it" {
+  // The frame 4 is the first frame of the second call: tick 4 gives d = 0 (stored at the tick 0 from p = 0).
+  var out: [I32; 5] = [-1; 5]
+  var st = via_child.init(8.0)
+  via_child.process(inout st, via_child.Params { p: 0 }, inout out.slice(0, 4))
+  assert out[3] == 100
+  via_child.process(inout st, via_child.Params { p: 0 }, inout out.slice(4, 5)) //~ PANIC "the division of a tick of a child panics at the tick that reads the 0, in the call that holds it"
+  assert out[4] == 100
+}
+
+test "a call of 0 frames at the position of a tick does not evaluate the tick of the child" {
+  var out: [I32; 5] = [-1; 5]
+  var st = via_child.init(8.0)
+  via_child.process(inout st, via_child.Params { p: 0 }, inout out.slice(0, 4))
+  via_child.process(inout st, via_child.Params { p: 0 }, inout out.slice(4, 4))
+  assert out == [100, 100, 100, 100, -1]
+}
+
+test "a call of 5 frames that holds the tick 4 panics at it" {
+  let o = via_child.render(via_child.Params { p: 0 }, 5, 8.0) //~ PANIC "a call of 5 frames that holds the tick 4 panics at it"
+  assert o.out[0] == 100
+}
+
+test "the same call does not panic with 4 frames: the tick 4 is not in it" {
+  let o = via_child.render(via_child.Params { p: 0 }, 4, 8.0)
+  assert o.out[0] == 100
+  assert o.out[3] == 100
+}
+
+test "a value that is not 0 is divided at each tick of the child" {
+  // p = 4 stored at tick 0 and read at tick 4: 100 / 4 = 25.
+  var out: [I32; 8] = [-1; 8]
+  var st = via_child.init(8.0)
+  via_child.process(inout st, via_child.Params { p: 4 }, inout out)
+  assert out == [100, 100, 100, 100, 25, 25, 25, 25]
+}
+
+test "the tick of a grandchild panics in the call that holds it" {
+  let o = via_grandchild.render(via_grandchild.Params { p: 0 }, 5, 8.0) //~ PANIC "the tick of a grandchild panics in the call that holds it"
+  assert o.out[0] == 101
+}
+
+test "the tick of a child in an arm that is not chosen panics too: the arm is run" {
+  // c is false: the value is 7, and the child of the arm that is not chosen divides by the 0 it stored at the tick 0.
+  let o = in_an_arm.render(in_an_arm.Params { c: false, p: 0 }, 5, 8.0) //~ PANIC "the tick of a child in an arm that is not chosen panics too: the arm is run"
+  assert o.out[0] == 7
+}
+
+test "the child in an arm that is not chosen does not panic where its tick does not" {
+  let o = in_an_arm.render(in_an_arm.Params { c: false, p: 0 }, 4, 8.0)
+  assert o.out[0] == 7
+  assert o.out[3] == 7
+}

@@ -1,0 +1,94 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.5", "§11.9", "§11.3"]
+
+// W7-16 U5b2/t, S-1088, S-565, S-578 (spec §11.5: all the arms of an `if~` / `match~` and all the replicas of a `par~` run, the one that is chosen is the value that is read; "`match~` の取られない腕の束縛は、値型の既定値
+// `T.default()` になり"; "束縛を読む式は、他の式と同じく、そのクロックの段で評価する"; §11.9: a stage of a child is a stage of the parent at the place of the call): a child with a delay at `sample / 4` in the arms of an `if~`
+// and a `match~`, in the replicas of a `par~`, in a `par~` in an arm, and fed by the binding of an arm. The child of an arm that is not chosen goes on ticking, and an instance that is in an arm that is not taken is fed
+// the default of the binding. The values are those of the same delays written in the parent (`flow_semantics/slow_tick_branches.onsa`). Worked out by hand.
+
+flow held(p: F32 at block) -> F32 at sample {
+  prev~(p at (sample / 4)) at sample
+}
+
+pub flow in_arms(c: Bool at block, p: F32 at block) -> F32 at sample {
+  if~ c { held~(p) } else { held~(p * 2.0) }
+}
+
+pub flow in_match(n: U32 at block, p: F32 at block) -> F32 at sample {
+  match~ n {
+    0 => held~(p),
+    _ => held~(p * 2.0),
+  }
+}
+
+pub flow in_replicas(p: F32 at block) -> F32 at sample {
+  let zs = par~ i in 0 ..< 2 { held~(p * F32.round_from(i + 1)) }
+  zs[0] + zs[1] * 10.0
+}
+
+pub flow replicas_in_an_arm(c: Bool at block, p: F32 at block) -> F32 at sample {
+  if~ c {
+    (par~ i in 0 ..< 2 { held~(p * F32.round_from(i + 1)) })[1]
+  } else {
+    held~(p * 100.0)
+  }
+}
+
+pub flow arm_binding(k: U32 at block) -> F32 at sample {
+  let o: Option[U32] = if k > 0 { Some(k) } else { None }
+  match~ o {
+    Some(n) => held~(F32.round_from(n)),
+    None => -1.0,
+  }
+}
+
+test "an if~ keeps the child of the arm that is not chosen ticking" {
+  // p = 3. Call 1 (c true, frames 0 to 3): tick 0 gives 0 from both children and stores 3 and 6. Call 2 (c false, frames 4 to 7): tick 4 gives 6 (the child of the arm p * 2 stored 6 at the tick 0). Call 3 (c true,
+  // frames 8 to 11): tick 8 gives 3 (the child of the arm p stored 3 at the tick 4).
+  var out: [F32; 12] = [-1.0; 12]
+  var st = in_arms.init(8.0)
+  in_arms.process(inout st, in_arms.Params { c: true, p: 3.0 }, inout out.slice(0, 4))
+  in_arms.process(inout st, in_arms.Params { c: false, p: 3.0 }, inout out.slice(4, 8))
+  in_arms.process(inout st, in_arms.Params { c: true, p: 3.0 }, inout out.slice(8, 12))
+  assert out == [0.0, 0.0, 0.0, 0.0, 6.0, 6.0, 6.0, 6.0, 3.0, 3.0, 3.0, 3.0]
+}
+
+test "a match~ keeps the child of the arm that is not chosen ticking" {
+  var out: [F32; 12] = [-1.0; 12]
+  var st = in_match.init(8.0)
+  in_match.process(inout st, in_match.Params { n: 0, p: 3.0 }, inout out.slice(0, 4))
+  in_match.process(inout st, in_match.Params { n: 1, p: 3.0 }, inout out.slice(4, 8))
+  in_match.process(inout st, in_match.Params { n: 0, p: 3.0 }, inout out.slice(8, 12))
+  assert out == [0.0, 0.0, 0.0, 0.0, 6.0, 6.0, 6.0, 6.0, 3.0, 3.0, 3.0, 3.0]
+}
+
+test "the replicas of a par~ have a child each, with its own delay" {
+  // The replica 0 stores 3 and the replica 1 stores 6: from the frame 4, 3 + 6 * 10 = 63.
+  var out: [F32; 8] = [-1.0; 8]
+  var st = in_replicas.init(8.0)
+  in_replicas.process(inout st, in_replicas.Params { p: 3.0 }, inout out)
+  assert out == [0.0, 0.0, 0.0, 0.0, 63.0, 63.0, 63.0, 63.0]
+}
+
+test "the replicas of a par~ in an arm tick when the arm is not chosen" {
+  // c true in call 1: the replica 1 gives 0 at the tick 0 and stores 6. c false in call 2: the other arm stored 300 at the tick 0 and gives it at the tick 4. Call 3 (c true): the replica 1 stored 6 at the tick 4.
+  var out: [F32; 12] = [-1.0; 12]
+  var st = replicas_in_an_arm.init(8.0)
+  replicas_in_an_arm.process(inout st, replicas_in_an_arm.Params { c: true, p: 3.0 }, inout out.slice(0, 4))
+  replicas_in_an_arm.process(inout st, replicas_in_an_arm.Params { c: false, p: 3.0 }, inout out.slice(4, 8))
+  replicas_in_an_arm.process(inout st, replicas_in_an_arm.Params { c: true, p: 3.0 }, inout out.slice(8, 12))
+  assert out == [0.0, 0.0, 0.0, 0.0, 300.0, 300.0, 300.0, 300.0, 6.0, 6.0, 6.0, 6.0]
+}
+
+test "a child in an arm that is not taken is fed the default of the binding at its ticks" {
+  // The calls of 4, 4 and 5 frames with k = 2, 0, 3 (o is Some(2), None, Some(3)). The child stores 2 at the tick 0, and at the tick 4 it is fed the default of n (0) since the arm is not taken: it gives 2 and stores
+  // 0; at the tick 8 it gives 0 (a binding that kept the 2 would give 2) and stores 3; at the tick 12 it gives 3. The frames 4 to 7 are the arm None.
+  var out: [F32; 13] = [-9.0; 13]
+  var st = arm_binding.init(8.0)
+  arm_binding.process(inout st, arm_binding.Params { k: 2 }, inout out.slice(0, 4))
+  arm_binding.process(inout st, arm_binding.Params { k: 0 }, inout out.slice(4, 8))
+  arm_binding.process(inout st, arm_binding.Params { k: 3 }, inout out.slice(8, 13))
+  assert out == [0.0, 0.0, 0.0, 0.0, -1.0, -1.0, -1.0, -1.0, 0.0, 0.0, 0.0, 0.0, 3.0]
+}

@@ -465,7 +465,7 @@ fn the_verifier_rejects_an_index_known_in_range_outside_the_sample_loop() {
         let e = Expr::new(Ty::u32(), span, ExprKind::Index { base: Box::new(base), index: Box::new(zero), bounds });
         Stmt { span, kind: StmtKind::Expr(e) }
     };
-    let process = m.flows[0].fns.process.0 as usize;
+    let process = m.flows[0].fns.process.expect("a `process`").0 as usize;
     fn body(m: &mut Module, f: usize) -> &mut Vec<Stmt> {
         &mut m.fns[f].body.as_mut().expect("a body").stmts
     }
@@ -1081,4 +1081,84 @@ fn has_return_walks_a_deep_nesting_once() {
     assert!(!crate::walk::has_return(&nested(st(StmtKind::Expr(zero())))));
     assert!(crate::walk::has_return(&nested(ret())));
     assert!(crate::walk::has_return(&nested(st(StmtKind::Assign(place, zero())))));
+}
+
+/// A flow with a port of a derived clock runs as an instance only (§11.9,
+/// the review's M3 of W7-16): its Core has no `process`, `process_inplace`
+/// and `render`; its output at `sample / 4` is that of its `tick_4`, whose
+/// parameter is its input, and its `tick` gives nothing. Its caller has them.
+#[test]
+fn a_flow_with_a_port_at_sample_over_n_has_no_process() {
+    let m = core(
+        "flow sl(x: F32 at (sample / 4)) -> F32 at (sample / 4) {\n  prev~(x) * 2.0\n}\n\
+         pub flow k(p: F32 at block) -> F32 at sample {\n  sl~(p at (sample / 4)) at sample\n}\n",
+    );
+    let fl = |name: &str| m.flows.iter().find(|f| f.name.ends_with(name)).expect("the flow");
+    let sl = &fl(".sl").fns;
+    assert_eq!((sl.process, sl.process_inplace, sl.render), (None, None, None));
+    assert!(!m.fns.iter().any(|f| f.name.ends_with("sl.process") || f.name.ends_with("sl.render")), "{}", dump(&m));
+    let tick4 = m.fn_(sl.stages[0].1);
+    assert_eq!((tick4.params.len(), &tick4.ret), (2, &Ty::Float(FloatKind::F32)));
+    assert_eq!(m.fn_(sl.tick).ret, Ty::Unit);
+    assert!(fl(".k").fns.process.is_some() && fl(".k").fns.render.is_some());
+}
+
+/// The time (§11.4, S-1129 (1), W7-16 U5b2): the stages of a flow that
+/// reads `sample_tick()`, or whose callee does, take it after the state;
+/// `process` passes the counter of the phase, a caller its own; a flow
+/// that does not read it takes none.
+#[test]
+fn the_time_is_a_parameter_of_the_stages_of_a_flow_that_reads_it() {
+    let m = core(
+        "flow tk(x: F32 at sample) -> U32 at sample {\n  sample_tick()\n}\n\
+         pub flow top(x: F32 at sample) -> F32 at sample {\n  x + F32.round_from(tk~(x))\n}\n\
+         pub flow plain(x: F32 at sample) -> F32 at sample {\n  x\n}\n",
+    );
+    let fl = |name: &str| m.flows.iter().find(|f| f.name.ends_with(name)).expect("the flow");
+    let params = |name: &str| m.fn_(fl(name).fns.tick).params.iter().map(|p| p.ty.clone()).collect::<Vec<_>>();
+    let st = |name: &str| Ty::Struct(fl(name).fns.state);
+    let f32 = Ty::Float(FloatKind::F32);
+    assert_eq!(params(".tk"), [st(".tk"), Ty::u32(), f32.clone()]);
+    assert_eq!(params(".top"), [st(".top"), Ty::u32(), f32.clone()]);
+    assert_eq!(params(".plain"), [st(".plain"), f32]);
+}
+
+/// The counter of the phase of a flow whose output is at `sample / 4`
+/// advances at the end of its `tick` alone (§11.4, §11.9, W7-16 U5b2):
+/// `tick_4` makes the output and leaves it; and `sample_tick()` of a child
+/// reads the time its function takes (`t`), not the `_tick` of its state,
+/// which a caller passes on (S-1129 (1); at a frame 0 of the two they are
+/// equal, so the values of a case cannot tell them apart).
+#[test]
+fn the_counter_advances_in_tick_alone_and_sample_tick_reads_the_time_passed() {
+    let m = core(
+        "flow so(p: F32 at block) -> F32 at (sample / 4) {\n  prev~(p at (sample / 4))\n}\n\
+         flow tk(x: F32 at sample) -> U32 at sample {\n  sample_tick()\n}\n\
+         pub flow top(p: F32 at block, x: F32 at sample) -> F32 at sample {\n  (so~(p) at sample) + F32.round_from(tk~(x))\n}\n",
+    );
+    let text = |end: &str| {
+        let f = m.fns.iter().find(|f| f.name.ends_with(end)).unwrap_or_else(|| panic!("no {end}\n{}", dump(&m)));
+        crate::dump::dump_item(&m, &f.name)
+    };
+    assert!(text(".so.tick").contains("+% 1:U32"), "{}", text(".so.tick"));
+    assert!(!text(".so.tick_4").contains("+% 1:U32"), "{}", text(".so.tick_4"));
+    let tick = m.fns.iter().find(|f| f.name.ends_with(".tk.tick")).expect("tk.tick");
+    let t = tick.params[1].local;
+    let reads_t = |s: &Stmt| matches!(&s.kind, StmtKind::Let(_, e) if matches!(e.kind, ExprKind::Local(l) if l == t));
+    assert!(tick.body.as_ref().expect("a body").stmts.iter().any(reads_t), "{}", text(".tk.tick"));
+    let top = m.fns.iter().find(|f| f.name.ends_with(".top.tick")).expect("top.tick");
+    let passed = |e: &Expr| matches!(e.kind, ExprKind::Local(l) if l == top.params[1].local);
+    let (mut calls, tk) = (Vec::new(), tick_id(&m, ".tk.tick"));
+    crate::walk::walk_block(top.body.as_ref().expect("a body"), &mut |e: &Expr| {
+        if let ExprKind::Call { fn_, args } = &e.kind
+            && *fn_ == tk
+        {
+            calls.push(args.get(1).is_some_and(|a| passed(&a.expr)));
+        }
+    });
+    assert_eq!(calls, [true], "{}", text(".top.tick"));
+}
+
+fn tick_id(m: &Module, end: &str) -> FnId {
+    FnId(m.fns.iter().position(|f| f.name.ends_with(end)).expect("the function") as u32)
 }

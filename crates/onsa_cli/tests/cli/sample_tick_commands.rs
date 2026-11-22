@@ -1,11 +1,11 @@
-//! `sample_tick()` in the commands of `onsa` (W7-09 U4b/t, W7-16 U5a/t; spec §11.4, §11.3, §11.9, §18.1, `spec/tools.md` §1.1; S-565, S-567 (K6), Q-09):
+//! `sample_tick()` in the commands of `onsa` (W7-09 U4b/t, W7-16 U5a/t, U5b2/t; spec §11.4, §11.3, §11.9, §18.1, `spec/tools.md` §1.1; S-565, S-567 (K6), S-1129 (1), Q-09):
 //! what the case files in `tests/spec/flow_clock/` and `tests/spec/flow_semantics/` cannot pin.
 //!
-//! - A flow that reads `sample_tick()` with no modifier and no child (in a `let`, the output, a `par`, the first argument of a delay) is lowered by `build`, `dump --core` and
-//!   `test` (W7-16 U5a: the counter of the phase is a field of the state); `check` reads it with no diagnostic and `onsa interface` ends with 0.
-//! - What stays E0200 after U5a is the work of the later units: the head of a chain (U6a, U6b), a body of a conversion flow (U5b, U6a, U6b) and a child instance that
-//!   reads it (U5b). `build`, `dump --core` and `test` stop at them with E0200 and with nothing else (no internal error); the first diagnostic is at the first place
-//!   of the file that has such a form (§18.1: the order of the diagnostics).
+//! - A flow that reads `sample_tick()` with no modifier (in a `let`, the output, a `par`, the first argument of a delay), and a child instance with no modifier that reads it (in the flow of the
+//!   package or of a module, in its output or in a stage of `sample / N`, in a grandchild), is lowered by `build`, `dump --core` and `test` (W7-16 U5a, U5b2: the counter of the phase is a field of
+//!   the state and the time is the time of the parent); `check` reads it with no diagnostic and `onsa interface` ends with 0.
+//! - What stays E0200 after U5b2 is the work of the later units: the head of a chain (U6a, U6b) and a body of a conversion flow with a port at `sample * N` (U6b). `build`, `dump --core` and `test`
+//!   stop at them with E0200 and with nothing else (no internal error); the first diagnostic is at the first place of the file that has such a form (§18.1: the order of the diagnostics).
 //!
 //! The texts are written from the spec; none is taken from the output of the compiler.
 
@@ -29,13 +29,40 @@ fn a_package_that_reads_sample_tick_is_lowered_by_build_dump_core_and_test() {
     }
 }
 
-/// The forms that stay E0200 after U5a, each with the line of its first form: the head of a chain (line 6), a conversion flow that reads it in its body (the flow `g` and its call,
-/// line 1 is the first place of a form), and a child instance of a module that reads it (U5b). The chain and the conversion flow are the later units (U6a, U6b).
+/// A child instance that reads `sample_tick()` (S-1129 (1): the time of the child is the time of the parent): in its output, in a stage of `sample / 4`, in its grandchild, and in a flow of a module.
+const CHILDREN: [(&str, &[(&str, &str)]); 4] = [
+    (
+        "flow tk(x: F32 at sample) -> U32 at sample {\n  sample_tick()\n}\n\npub flow f(x: F32 at sample) -> U32 at sample {\n  tk~(x)\n}\n",
+        &[],
+    ),
+    (
+        "flow tk(x: F32 at sample) -> U32 at sample {\n  let t4 = sample_tick() at (sample / 4)\n  t4 at sample\n}\n\npub flow f(x: F32 at sample) -> U32 at sample {\n  tk~(x) + sample_tick()\n}\n",
+        &[],
+    ),
+    (
+        "flow tk(x: F32 at sample) -> U32 at sample {\n  sample_tick()\n}\n\nflow mid(x: F32 at sample) -> U32 at sample {\n  tk~(x) * 2\n}\n\npub flow f(x: F32 at sample) -> U32 at sample {\n  mid~(x)\n}\n",
+        &[],
+    ),
+    (
+        "use ticks\n\npub flow f(x: F32 at sample) -> U32 at sample {\n  ticks.elapsed~(x)\n}\n",
+        &[("ticks.onsa", "pub flow elapsed(x: F32 at sample) -> U32 at sample {\n  sample_tick()\n}\n")],
+    ),
+];
+
 #[test]
-fn a_chain_a_conversion_flow_and_a_child_that_read_sample_tick_are_e0200_until_the_later_units() {
+fn a_child_that_reads_sample_tick_is_lowered_by_build_dump_core_and_test() {
+    for (k, (flows, others)) in CHILDREN.iter().enumerate() {
+        assert_lowers(&format!("sample_tick_child_{k}"), flows, others);
+    }
+}
+
+/// The forms that stay E0200 after U5b2, each with the line of its first form: the head of a chain (line 6) and a conversion flow that reads it in its body (the flow `g` and its call, line 1 is
+/// the first place of a form). The chain and the conversion flow are the later units (U6a, U6b).
+#[test]
+fn a_chain_and_a_conversion_flow_that_read_sample_tick_are_e0200_until_the_later_units() {
     /// The main file, the other files and the line of the first form.
     type Source<'a> = (&'a str, &'a [(&'a str, &'a str)], Option<u64>);
-    let sources: [Source; 3] = [
+    let sources: [Source; 2] = [
         (
             "flow pass_u32(g: U32 at sample) -> U32 at sample {\n  g\n}\n\npub flow f(x: F32 at sample) -> U32 at sample {\n  pass_u32~(sample_tick()).down~(4) at sample\n}\n",
             &[],
@@ -45,11 +72,6 @@ fn a_chain_a_conversion_flow_and_a_child_that_read_sample_tick_are_e0200_until_t
             "flow g(x: F32 at (sample * 2)) -> F32 at sample {\n  x[1] * F32.round_from(sample_tick())\n}\n\npub flow f(x: F32 at sample) -> F32 at sample {\n  g~(x).down~(2) at sample\n}\n",
             &[],
             Some(1),
-        ),
-        (
-            "use ticks\n\npub flow f(x: F32 at sample) -> U32 at sample {\n  ticks.elapsed~(x)\n}\n",
-            &[("ticks.onsa", "pub flow elapsed(x: F32 at sample) -> U32 at sample {\n  sample_tick()\n}\n")],
-            None,
         ),
     ];
     for (k, (flows, others, first)) in sources.iter().enumerate() {

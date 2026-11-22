@@ -1,0 +1,73 @@
+# flow_ref 1 source=tests/spec/flow_semantics/sample_tick_child_values.onsa tests=11 evaluated=11 unavailable=0 skipped=0 waiting=0
+@ a child that reads sample_tick() gives 0, 1, 2, … across the calls, and a call of 0 frames does not count
+init 0 sample_tick_child_values.child_time sr=0x41000000
+process 0 frames=3
+out=[0 1 2]
+process 0 frames=0
+out=[]
+process 0 frames=4
+out=[3 4 5 6]
+@ the time of the child is the time of the parent at every frame
+init 0 sample_tick_child_values.both_times sr=0x41000000
+process 0 frames=2
+out=[100 201]
+process 0 frames=2
+out=[302 403]
+@ a child that reads sample_tick() in its stage of sample / 4 reads the number of frames, not of ticks
+init 0 sample_tick_child_values.slow_stage_time sr=0x41000000
+process 0 frames=5
+out=[0 0 0 0 4]
+process 0 frames=4
+out=[4 4 4 8]
+@ the difference of the times of two ticks in a child is 4
+init 0 sample_tick_child_values.gap_of_ticks sr=0x41000000
+process 0 frames=9
+out=[0 0 0 0 4 4 4 4 4]
+@ the time in the argument of a delay of the child is the time of the parent before it
+init 0 sample_tick_child_values.delayed_time sr=0x41000000
+process 0 frames=7
+out=[0 0 1 2 4 6 8]
+@ a grandchild reads the time of the program
+init 0 sample_tick_child_values.grandchild_time sr=0x41000000
+process 0 frames=2
+out=[0 1]
+process 0 frames=3
+out=[2 3 4]
+@ a child that multiplies its input by the time
+init 0 sample_tick_child_values.gain_by_time sr=0x41000000
+process 0 frames=4 in x=[0x3f800000 0x40000000 0x40400000 0x40800000]
+out=[0x00000000 0x40000000 0x40c00000 0x00000000]
+process 0 frames=2 in x=[0x40a00000 0x40c00000]
+out=[0x40a00000 0x41400000]
+@ a child in an arm that is not chosen is run: when the arm is chosen the time is the time of the program, not the frames it was chosen
+init 0 sample_tick_child_values.in_arms sr=0x41000000
+process 0 params c=false frames=3
+out=[0 0 0]
+process 0 params c=true frames=3
+out=[3 4 5]
+@ the replicas of a par~ read the same time, each with its own instance
+init 0 sample_tick_child_values.in_replicas sr=0x41000000
+process 0 frames=6
+out=[1 3 5 7 9 11]
+@ a reset makes the next frame the frame 0 for the child, between the ticks too
+init 0 sample_tick_child_values.child_time sr=0x41000000
+process 0 frames=5
+out=[0 1 2 3 4]
+reset 0
+process 0 frames=3
+out=[0 1 2]
+init 1 sample_tick_child_values.slow_stage_time sr=0x41000000
+process 1 frames=6
+out=[0 0 0 0 4 4]
+reset 1
+process 1 frames=6
+out=[0 0 0 0 4 4]
+@ a state of its own starts at 0 whatever the count of the other state
+init 0 sample_tick_child_values.child_time sr=0x41000000
+process 0 frames=2
+out=[0 1]
+init 1 sample_tick_child_values.child_time sr=0x41000000
+process 1 frames=2
+out=[0 1]
+process 0 frames=2
+out=[2 3]

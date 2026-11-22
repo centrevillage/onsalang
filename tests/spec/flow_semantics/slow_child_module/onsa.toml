@@ -1,0 +1,3 @@
+[package]
+name = "slow_child_module"
+edition = "2026"

@@ -37,6 +37,12 @@
 //!   that part (`a.prev_0`, `_out.lp_0`, `m.par_0.lp_0`). [`FlowInfo::roots`] gives the nodes
 //!   of an owner (of a `par~`, its `children`), [`FlowInfo::top`] those of
 //!   the `let`s and the output. Empty when the flow is not `complete`.
+//!   The walk of the table of the entries of the stages ([`plan`]'s
+//!   `entries`, after every body) gives each instance its `runs` (the stages
+//!   of its callee and the stage of the flow each runs in, S-1088), each flow
+//!   its `stages` (its slow ticks and those of its callees) and `reads_time`
+//!   (it or a callee reads `sample_tick()`); `out_stage` is the stage that
+//!   makes the output.
 //! - `node_of` — a call or `par~` expression → its node.
 //! - `edges: Vec<Edge>` — who reads what, recorded with the nodes: a local
 //!   or a node ([`Vertex`]) read by the innermost node, `let` or output
@@ -117,7 +123,7 @@ mod tests;
 
 pub use branching::{Chain, Link, chain};
 pub use hoist::{Cond, Hoist, HoistId};
-pub use plan::{Edge, Field, FieldOf, Kept, NodeId, Owner, Part, PlanKind, PlanModifier, PlanNode, Vertex};
+pub use plan::{Edge, Field, FieldOf, Kept, NodeId, Owner, Part, PlanKind, PlanModifier, PlanNode, Run, Vertex};
 
 pub(crate) use clocks::finish_flow;
 pub(crate) use plan::entries::walk as walk_entries;
@@ -260,9 +266,13 @@ pub struct FlowInfo {
     /// the fields ([`FlowInfo::field_at`]).
     pub(crate) places: HashMap<FieldOf, u32>,
     /// The first port of the flow of a derived clock (§11.9,
-    /// [`crate::def::FlowDef::derived_port`]), which the Core lowers in W7-16
-    /// ([`FlowInfo::multirate_at`]).
-    pub(crate) derived_port: Option<Span>,
+    /// [`crate::def::FlowDef::derived_port`]): the Core makes no `process`,
+    /// `process_inplace` and `render` of it, whose uses the check stops
+    /// (E0200, E0810 from W10-01).
+    pub derived_port: Option<Span>,
+    /// The first port at `sample * N` ([`crate::def::FlowDef::burst_port`]),
+    /// which the Core lowers in W7-16 U6b ([`FlowInfo::multirate_at`]).
+    pub(crate) burst_port: Option<Span>,
     pub sample_rate_at: Option<ClockStage>,
     pub sample_rate_calls: Vec<ExprId>,
     /// The calls of `sample_tick()` (§11.4), which the Core reads from the

@@ -1,0 +1,137 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.9", "§11.3", "§11.6", "§9.2"]
+
+// W7-16 U5b2 (the parent, from the review of the design of U5b2), S-1088, S-1079, S-1185 (spec §11.9: "`sample / N` の入力は遅い値"、"同じ位置では、… 遅い刻み、`sample` の刻みの順に並ぶ"、
+// "修飾子の無い部品の中の遅い刻みは、呼び出し側の同じ比の段に呼び出しの位置で入る"; §11.3: 遅いクロックの値を速い式で使うのは、次に変わるまで同じ値): a flow the output of which is the only thing at its
+// slow clock (a constant, a value of a slower tick, a value of `block`), a slow output read at a tick of another ratio, a slow input read at a tick of another ratio, and the `sample` stage of a flow
+// with a slow output, which runs at every frame. The ticks of `sample / 4` are at the frames 0, 4, 8, …, those of `sample / 2` at 0, 2, 4, …, those of `sample / 8` at 0, 8, …; at a frame that holds
+// ticks of more than one ratio, the slowest runs first (S-1079). Worked out by hand.
+
+flow oc() -> F32 at (sample / 4) {
+  1.5
+}
+
+pub flow const_out(x: F32 at sample) -> F32 at sample {
+  x + (oc~() at sample)
+}
+
+// The constant is made at the tick 0, the first frame, and held.
+test "a slow output that is a constant is read at the first frame and held" {
+  var out: [F32; 5] = [-1.0; 5]
+  var st = const_out.init(8.0)
+  const_out.process(inout st, [10.0; 5].slice(0, 5), inout out.slice(0, 5))
+  assert out[0] == 11.5
+  assert out[3] == 11.5
+  assert out[4] == 11.5
+}
+
+flow o8(p: F32 at block) -> F32 at (sample / 4) {
+  let l8 = prev~(p at (sample / 8), 7.0)
+  l8 at (sample / 4)
+}
+
+pub flow slower_out(w: F32 at block) -> F32 at sample {
+  o8~(w) at sample
+}
+
+// `l8` is 7.0 from the tick 0 of `sample / 8` and 3.0 (the `p` of the tick 0) from the tick 8; the output of `sample / 4` reads it at the frames 0, 4 (7.0) and 8 (3.0: the tick of `sample / 8`
+// runs first at the frame 8).
+test "a slow output that reads a slower value reads it at its own ticks" {
+  var out: [F32; 10] = [-1.0; 10]
+  var st = slower_out.init(8.0)
+  slower_out.process(inout st, slower_out.Params { w: 3.0 }, inout out.slice(0, 10))
+  assert out[0] == 7.0
+  assert out[7] == 7.0
+  assert out[8] == 3.0
+  assert out[9] == 3.0
+}
+
+flow cnt4(one: F32 at block) -> F32 at (sample / 4) {
+  let lf = prev~(one at (sample / 4), 1.0)
+  let cnt = prev~(^cnt) + lf
+  cnt
+}
+
+pub flow out_at_half(one: F32 at block) -> F32 at sample {
+  let d = prev~(cnt4~(one) at (sample / 2))
+  d at sample
+}
+
+// `cnt4` makes 1 at the frame 0 and 2 at the frame 4. `d` is, at the ticks 0, 2, 4, 6 of `sample / 2`, the value the call had at the tick before: 0 (the first), 1, 1 (the tick 4 of `sample / 4` runs
+// first and the call is 2 at the frame 4, but `prev~` gives the one of the frame 2), 2.
+test "a slow output read at a tick of another ratio" {
+  var out: [F32; 8] = [-1.0; 8]
+  var st = out_at_half.init(8.0)
+  out_at_half.process(inout st, out_at_half.Params { one: 1.0 }, inout out.slice(0, 8))
+  assert out[0] == 0.0
+  assert out[1] == 0.0
+  assert out[2] == 1.0
+  assert out[4] == 1.0
+  assert out[6] == 2.0
+  assert out[7] == 2.0
+}
+
+flow s4(x: F32 at (sample / 4)) -> F32 at sample {
+  let h = prev~(x at (sample / 2))
+  h at sample
+}
+
+pub flow in_at_half(one: F32 at block) -> F32 at sample {
+  let lf = prev~(one at (sample / 4), 1.0)
+  let cnt = prev~(^cnt) + lf
+  s4~(cnt)
+}
+
+// `cnt` is 1 at the frame 0 and 2 at the frame 4; the input of `s4` takes it at the ticks of `sample / 4`, and `h` at the ticks 0, 2, 4, 6 of `sample / 2` is the input at the tick before: 0, 1, 1, 2.
+test "a slow input read at a tick of another ratio" {
+  var out: [F32; 8] = [-1.0; 8]
+  var st = in_at_half.init(8.0)
+  in_at_half.process(inout st, in_at_half.Params { one: 1.0 }, inout out.slice(0, 8))
+  assert out[0] == 0.0
+  assert out[2] == 1.0
+  assert out[4] == 1.0
+  assert out[6] == 2.0
+}
+
+flow mark4(w: F32 at block) -> F32 at (sample / 4) {
+  w
+}
+
+flow twice4(p: F32 at block) -> F32 at (sample / 4) {
+  p * 2.0
+}
+
+pub flow param_out(w: F32 at block) -> F32 at sample {
+  (mark4~(w) at sample) + (twice4~(w) at sample) * 10.0
+}
+
+// S-1213: a value of `block` that is the output of a slow port is the one taken at the tick of the port, held until the next tick. The calls have 3 frames with w = 1 and 2 frames with w = 2:
+// the frame 3 is not a tick and reads the values of the tick 0 (1 and 2), the frame 4 is a tick (2 and 4).
+test "a value of block made as a slow output is the one of its tick" {
+  var out: [F32; 5] = [-1.0; 5]
+  var st = param_out.init(8.0)
+  param_out.process(inout st, param_out.Params { w: 1.0 }, inout out.slice(0, 3))
+  param_out.process(inout st, param_out.Params { w: 2.0 }, inout out.slice(3, 5))
+  assert out[0] == 21.0
+  assert out[2] == 21.0
+  assert out[3] == 21.0
+  assert out[4] == 42.0
+}
+
+flow so(n: U32 at sample, p: F32 at block) -> F32 at (sample / 4) {
+  let _ = 10 / n
+  prev~(p at (sample / 4), 5.0)
+}
+
+pub flow sample_stage_runs(n: U32 at sample, w: F32 at block) -> F32 at sample {
+  so~(n, w) at sample
+}
+
+// The `sample` stage of `so` runs at every frame (§11.9: its `let` of `sample` is of the caller's `sample`), so the division by the 0 of the frame 2, not a tick of `sample / 4`, panics (§9.2).
+test "the sample stage of a flow with a slow output runs at every frame" {
+  var out: [F32; 3] = [-1.0; 3]
+  var st = sample_stage_runs.init(8.0)
+  sample_stage_runs.process(inout st, sample_stage_runs.Params { w: 1.0 }, [1, 1, 0].slice(0, 3), inout out.slice(0, 3)) //~ PANIC "the sample stage of a flow with a slow output runs at every frame"
+}

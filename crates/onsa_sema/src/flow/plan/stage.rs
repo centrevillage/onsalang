@@ -87,20 +87,16 @@ impl FlowInfo {
 
     /// The first place of the plan (by its place) the Core does not lower
     /// until a later unit of W7-16, which stops at it (E0200, R-91 (1)): a
-    /// port of a derived clock (§11.9); a node with a chain of modifiers
-    /// (`.down~(2).up~(2)` of the ratio one too); a call of a conversion
-    /// flow (an instance of a ratio, or that reads an argument at one); and
-    /// an instance of a flow of `flows` that counts the time
-    /// ([`FlowInfo::counts_time`]), whose ticks and time no caller gives
-    /// yet. The one gate of them (D-15).
-    pub fn multirate_at(&self, flows: &HashMap<DefId, FlowInfo>) -> Option<Span> {
-        let reads = |n: &PlanNode| n.args.iter().any(|a| a.at.of_ratio());
-        let times = |callee: &DefId| flows.get(callee).is_some_and(FlowInfo::counts_time);
+    /// port at `sample * N` (a burst, §11.9); a node with a chain of
+    /// modifiers (`.down~(2).up~(2)` of the ratio one too); and an instance
+    /// that gathers or deals a burst (its clock, or that of an argument it
+    /// reads, at `sample * N`). The one gate of them (D-15).
+    pub fn multirate_at(&self) -> Option<Span> {
         let stops = |n: &&PlanNode| match &n.kind {
-            PlanKind::Instance { callee, .. } => n.clock.of_ratio() || reads(n) || times(callee),
+            PlanKind::Instance { .. } => n.clock.burst() || n.args.iter().any(|a| a.at.burst()),
             _ => false,
         } || !n.chain.is_empty();
-        let all = self.derived_port.into_iter().chain(self.nodes.iter().filter(stops).map(|n| n.span));
+        let all = self.burst_port.into_iter().chain(self.nodes.iter().filter(stops).map(|n| n.span));
         all.min_by_key(|s| (s.start, s.end))
     }
 
@@ -121,9 +117,11 @@ impl FlowInfo {
 
 /// The ticks of the body of `info` slower than its `sample`, slowest
 /// first ([`FlowInfo::stages`]): of its inputs, `let`s, nodes and hoisted
-/// fields.
+/// fields, and of its output.
 pub(super) fn slow_stages(info: &FlowInfo) -> Vec<ClockStage> {
-    let inputs = info.inputs.iter().filter_map(|&l| info.own_stage(l));
+    // S-1213: an output at `sample / N` is made at its own tick, so a
+    // value of a parameter kind it reads is the one of that tick until the next.
+    let inputs = info.inputs.iter().filter_map(|&l| info.own_stage(l)).chain(info.out_stage);
     let lets = info.lets.iter().filter_map(|l| l.stage.stage());
     let nodes = info.nodes.iter().filter_map(|n| n.clock.stage());
     let all = inputs.chain(lets).chain(nodes).chain(info.hoists.iter().map(|h| h.stage));

@@ -114,6 +114,14 @@ pub fn binary(op: Bin, a: &Value, b: &Value) -> Result<Value, Fault> {
         (Value::Bool(x), Value::Bool(y)) if matches!(op, Bin::Eq | Bin::Ne) => compare(op, x, y),
         (Value::Char(x), Value::Char(y)) => compare(op, x, y),
         (Value::Unit, Value::Unit) if matches!(op, Bin::Eq | Bin::Ne) => compare(op, &(), &()),
+        // Two arrays of one length are equal when every element is (`==` and `!=` of an array are those of its elements, the order of the elements; a NaN makes them unequal, as it does for a scalar).
+        (Value::Array(xs), Value::Array(ys)) if matches!(op, Bin::Eq | Bin::Ne) && xs.len() == ys.len() => {
+            let mut same = true;
+            for (x, y) in xs.iter().zip(ys) {
+                same &= matches!(binary(Bin::Eq, x, y)?, Value::Bool(true));
+            }
+            Ok(Value::Bool(same == (op == Bin::Eq)))
+        }
         _ => internal("the operands of an operator do not agree"),
     }
 }

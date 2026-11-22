@@ -1,0 +1,180 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.4", "§11.9", "§11.5", "§11.6"]
+
+// W7-16 U5b2/t, S-1129 (1), S-1127, S-565, S-1088 (spec §11.4: "`sample_tick()` … `reset` からの時間を、書いた場所の `sample_rate()` の刻みの数で表した `U32`。`init` と生成する `reset` で 0 になり
+// （その後の最初の刻みで読む値は 0 で、`sample_rate()` の刻みごとに 1 上がる。`sample / N` の段で読んでも同じ数）"; S-1129 (1): the number of the outer ticks, not a count of the child): the value of
+// `sample_tick()` read inside a child instance with no modifier (§11.9: its `sample` is the one of the parent, so its time is the time of the parent) in the output, in a stage of `sample / 4`, in the
+// argument of a delay, in a grandchild, in the arms of an `if~` and the replicas of a `par~`. It is the same number as the parent's own `sample_tick()` at every frame, 0 at the first frame after `init`
+// and after `reset` and 1 more at each frame (a call of 0 frames does not count); a child in an arm that is not chosen has the same time when it is chosen. Worked out by hand.
+
+flow tk() -> U32 at sample {
+  sample_tick()
+}
+
+flow tk_slow() -> U32 at sample {
+  let t4 = sample_tick() at (sample / 4)
+  t4 at sample
+}
+
+flow gap() -> U32 at sample {
+  let t4 = sample_tick() at (sample / 4)
+  let d = t4 -% prev~(t4)
+  d at sample
+}
+
+flow lagged() -> U32 at sample {
+  prev~(sample_tick()) + delay~(sample_tick(), 3)
+}
+
+flow stamped(x: F32 at sample) -> F32 at sample {
+  x * F32.round_from(sample_tick() % 3)
+}
+
+flow relay() -> U32 at sample {
+  tk~()
+}
+
+pub flow child_time() -> U32 at sample {
+  tk~()
+}
+
+pub flow both_times() -> U32 at sample {
+  (sample_tick() + 1) * 100 + tk~()
+}
+
+pub flow slow_stage_time() -> U32 at sample {
+  tk_slow~()
+}
+
+pub flow gap_of_ticks() -> U32 at sample {
+  gap~()
+}
+
+pub flow delayed_time() -> U32 at sample {
+  lagged~()
+}
+
+pub flow grandchild_time() -> U32 at sample {
+  relay~()
+}
+
+pub flow gain_by_time(x: F32 at sample) -> F32 at sample {
+  stamped~(x)
+}
+
+pub flow in_arms(c: Bool at block) -> U32 at sample {
+  if~ c { tk~() } else { 0 }
+}
+
+pub flow in_replicas() -> U32 at sample {
+  let zs = par~ i in 0 ..< 2 { tk~() + i }
+  zs[0] + zs[1]
+}
+
+test "a child that reads sample_tick() gives 0, 1, 2, … across the calls, and a call of 0 frames does not count" {
+  var out: [U32; 7] = [9; 7]
+  var st = child_time.init(8.0)
+  child_time.process(inout st, inout out.slice(0, 3))
+  child_time.process(inout st, inout out.slice(3, 3))
+  child_time.process(inout st, inout out.slice(3, 7))
+  assert out == [0, 1, 2, 3, 4, 5, 6]
+}
+
+test "the time of the child is the time of the parent at every frame" {
+  // (t + 1) * 100 + t for t = 0 .. 3.
+  var out: [U32; 4] = [9; 4]
+  var st = both_times.init(8.0)
+  both_times.process(inout st, inout out.slice(0, 2))
+  both_times.process(inout st, inout out.slice(2, 4))
+  assert out == [100, 201, 302, 403]
+}
+
+test "a child that reads sample_tick() in its stage of sample / 4 reads the number of frames, not of ticks" {
+  // The ticks are at the frames 0, 4, 8: 0, 4, 8 each for four frames.
+  var out: [U32; 9] = [9; 9]
+  var st = slow_stage_time.init(8.0)
+  slow_stage_time.process(inout st, inout out.slice(0, 5))
+  slow_stage_time.process(inout st, inout out.slice(5, 9))
+  assert out == [0, 0, 0, 0, 4, 4, 4, 4, 8]
+}
+
+test "the difference of the times of two ticks in a child is 4" {
+  // The tick 0 has t4 = 0 and the delay's first value 0: 0. The ticks 4 and 8 give 4 - 0 and 8 - 4.
+  var out: [U32; 9] = [9; 9]
+  var st = gap_of_ticks.init(8.0)
+  gap_of_ticks.process(inout st, inout out)
+  assert out == [0, 0, 0, 0, 4, 4, 4, 4, 4]
+}
+
+test "the time in the argument of a delay of the child is the time of the parent before it" {
+  // prev~ gives 0 at the frame 0 and t - 1 after; delay~(·, 3) gives 0 for the frames 0 to 2 and t - 3 after.
+  var out: [U32; 7] = [9; 7]
+  var st = delayed_time.init(8.0)
+  delayed_time.process(inout st, inout out)
+  assert out == [0, 0, 1, 2, 4, 6, 8]
+}
+
+test "a grandchild reads the time of the program" {
+  var out: [U32; 5] = [9; 5]
+  var st = grandchild_time.init(8.0)
+  grandchild_time.process(inout st, inout out.slice(0, 2))
+  grandchild_time.process(inout st, inout out.slice(2, 5))
+  assert out == [0, 1, 2, 3, 4]
+}
+
+test "a child that multiplies its input by the time" {
+  // The time % 3 is 0 1 2 0 1 2: x = 1 .. 6 gives 0 2 6 0 5 12.
+  let xs: [F32; 6] = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]
+  var out: [F32; 6] = [-1.0; 6]
+  var st = gain_by_time.init(8.0)
+  gain_by_time.process(inout st, xs.slice(0, 4), inout out.slice(0, 4))
+  gain_by_time.process(inout st, xs.slice(4, 6), inout out.slice(4, 6))
+  assert out == [0.0, 2.0, 6.0, 0.0, 5.0, 12.0]
+}
+
+test "a child in an arm that is not chosen is run: when the arm is chosen the time is the time of the program, not the frames it was chosen" {
+  // c is false for the frames 0 to 2 (0) and true for the frames 3 to 5: the child gives 3, 4, 5 and not 0, 1, 2.
+  var out: [U32; 6] = [9; 6]
+  var st = in_arms.init(8.0)
+  in_arms.process(inout st, in_arms.Params { c: false }, inout out.slice(0, 3))
+  in_arms.process(inout st, in_arms.Params { c: true }, inout out.slice(3, 6))
+  assert out == [0, 0, 0, 3, 4, 5]
+}
+
+test "the replicas of a par~ read the same time, each with its own instance" {
+  // t + (t + 1) = 2 t + 1.
+  var out: [U32; 6] = [9; 6]
+  var st = in_replicas.init(8.0)
+  in_replicas.process(inout st, inout out)
+  assert out == [1, 3, 5, 7, 9, 11]
+}
+
+test "a reset makes the next frame the frame 0 for the child, between the ticks too" {
+  // After 5 frames the next frame would be the frame 5, with no tick; the time and the ticks of the child start again: 0 1 2 for the time, and the stage of sample / 4 gives 0 at the first frame again.
+  var a: [U32; 8] = [9; 8]
+  var b: [U32; 12] = [9; 12]
+  var sa = child_time.init(8.0)
+  child_time.process(inout sa, inout a.slice(0, 5))
+  child_time.reset(inout sa)
+  child_time.process(inout sa, inout a.slice(5, 8))
+  assert a == [0, 1, 2, 3, 4, 0, 1, 2]
+  var sb = slow_stage_time.init(8.0)
+  slow_stage_time.process(inout sb, inout b.slice(0, 6))
+  slow_stage_time.reset(inout sb)
+  slow_stage_time.process(inout sb, inout b.slice(6, 12))
+  assert b == [0, 0, 0, 0, 4, 4, 0, 0, 0, 0, 4, 4]
+}
+
+test "a state of its own starts at 0 whatever the count of the other state" {
+  var a: [U32; 2] = [9; 2]
+  var b: [U32; 2] = [9; 2]
+  var sa = child_time.init(8.0)
+  child_time.process(inout sa, inout a.slice(0, 2))
+  var sb = child_time.init(8.0)
+  child_time.process(inout sb, inout b.slice(0, 2))
+  child_time.process(inout sa, inout a.slice(0, 2))
+  assert a == [2, 3]
+  assert b == [0, 1]
+}

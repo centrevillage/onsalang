@@ -24,14 +24,11 @@ pub(crate) fn lower_flow_expr(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId) -> R<O
             let scope = f.scopes.last().ok_or_else(|| internal(span, "a hoisted field outside the state"))?;
             return sfield(lw, f.info, &scope.state, FieldOf::Hoist(h), span).map(Some);
         }
-        // The counter of the phase of the state of the flow, at every
-        // stage (§11.4, S-1127). It is the time of an outermost instance
-        // alone: an instance of a flow that counts the time stops at
-        // `FlowInfo::multirate_at` until its caller gives it its time from
-        // the root (W7-16 U5b, S-1129 (1)).
+        // The time of the root its caller passes to the function (§11.4,
+        // S-1129 (1)), at every stage.
         if f.sample_tick_calls.contains(&e) {
-            let root = f.scopes.first().ok_or_else(|| internal(span, "`sample_tick()` outside the state"))?;
-            return sfield(lw, f.info, &root.state, FieldOf::Tick, span).map(Some);
+            let t = f.time.first().cloned();
+            return t.map(Some).ok_or_else(|| internal(span, "`sample_tick()` in a function with no time"));
         }
         let Some(&id) = f.info.node_of.get(&e) else { return Ok(None) };
         let state = f.scopes.last().ok_or_else(|| internal(span, "node outside a state scope"))?.state.clone();
@@ -56,12 +53,11 @@ pub(crate) fn lower_flow_expr(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId) -> R<O
             index(buf, w)?
         }
         PlanKind::Vdelay { d, max, ty, .. } => vdelay_read(lw, cx, &mut stmts, &state, id, *d, *max, *ty, span)?,
-        PlanKind::Instance { callee, args, .. } => {
-            let sub = lw.ensure_flow(*callee)?;
-            let ret = lw.m.fn_(sub.tick).ret.clone();
-            let mut cargs = vec![inout(sfield(lw, info, &state, at(Part::Own), span)?)];
-            cargs.extend(instance_args(lw, cx, *callee, args, Phase::SAMPLE, span)?.into_iter().map(borrow));
-            call(sub.tick, ret, span, cargs)
+        // Read where the stage of its callee that makes the output runs (S-1088).
+        PlanKind::Instance { .. } => {
+            let run = super::phases::runs_at(info.node(id), phase.stage(), true).next();
+            let run = run.ok_or_else(|| internal(span, format!("`{name}` read where its output is not made")))?;
+            super::phases::run_child(lw, cx, id, &state, *run)?
         }
         PlanKind::Par { body, .. } => {
             let r = replica_loop(cx, &info.node(id).kind, span)?;

@@ -542,8 +542,19 @@ impl FlowDef {
     /// N`), of the clock read, by its ratio, as of the output: the span of an
     /// input, or `out` of the output.
     pub fn derived_port(&self, out: Span) -> Option<Span> {
-        let input = self.inputs.iter().find(|i| i.clock.of_ratio());
-        input.map(|i| i.span).or_else(|| self.out_clock.of_ratio().then_some(out))
+        self.port_where(out, Clock::of_ratio)
+    }
+
+    /// The first port at `sample * N` (§11.9, a burst the body sees as an
+    /// array, [`body_view`]), as [`FlowDef::derived_port`] finds it.
+    pub fn burst_port(&self, out: Span) -> Option<Span> {
+        self.port_where(out, Clock::burst)
+    }
+
+    /// The first input whose clock is `of`, else `out` of an output of one.
+    fn port_where(&self, out: Span, of: impl Fn(Clock) -> bool) -> Option<Span> {
+        let input = self.inputs.iter().find(|i| of(i.clock));
+        input.map(|i| i.span).or_else(|| of(self.out_clock).then_some(out))
     }
 
     /// Whether the generated item `item` of a flow (of its `members` or

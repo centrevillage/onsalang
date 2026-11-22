@@ -38,7 +38,7 @@ pub fn verify(m: &Module) -> Result<(), VerifyError> {
     // The generated `process` of each flow, marked once (V-19).
     let mut process = vec![false; m.fns.len()];
     for fl in &m.flows {
-        if let Some(p) = process.get_mut(fl.fns.process.0 as usize) {
+        if let Some(p) = fl.fns.process.and_then(|f| process.get_mut(f.0 as usize)) {
             *p = true;
         }
     }

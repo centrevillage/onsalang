@@ -1,0 +1,25 @@
+# flow_ref 1 source=tests/spec/flow_semantics/slow_child_module tests=4 evaluated=4 unavailable=0 skipped=0 waiting=0
+@ a delay at sample / 4 of a child of a module gives its value at the ticks of the caller
+init 0 check.from_a_module sr=0x41000000
+process 0 params p=0x3f800000 frames=4 in x=[0x3f800000 0x40000000 0x40400000 0x40800000]
+out=[0x00000000 0x00000000 0x00000000 0x00000000]
+process 0 params p=0x40000000 frames=5 in x=[0x40a00000 0x40c00000 0x40e00000 0x41000000 0x41100000]
+out=[0x40a00000 0x40c00000 0x40e00000 0x41000000 0x41900000]
+@ a child of a module that reads sample_tick() reads the time of the caller
+init 0 check.time_from_a_module sr=0x41000000
+process 0 frames=2
+out=[0 1]
+process 0 frames=3
+out=[2 3 4]
+@ a flow of a module with a slow input and a slow output is read at the ticks of the caller
+init 0 check.slow_ports_of_a_module sr=0x41000000
+process 0 params p=0x3f800000 frames=5
+out=[0x42c80000 0x42c80000 0x42c80000 0x42c80000 0x3f800000]
+process 0 params p=0x40000000 frames=4
+out=[0x3f800000 0x3f800000 0x3f800000 0x3f800000]
+@ the private child of a module is a stage of the caller too
+init 0 check.grandchild_of_a_module sr=0x41000000
+process 0 params p=0x3f800000 frames=3
+out=[0x00000000 0x00000000 0x41200000]
+process 0 params p=0x40000000 frames=5
+out=[0x41200000 0x41300000 0x41300000 0x41a80000 0x41a80000]

@@ -101,7 +101,7 @@ pub(crate) fn emit_unit(m: &Module, opts: &EmitOptions) -> Result<CUnit, Vec<Dia
         let mut called: Vec<FnId> = export_fns.clone();
         for e in &cx.exports {
             let f = &m.flows[e.meta_index].fns;
-            called.extend([f.init, f.process]);
+            called.extend([f.init].into_iter().chain(f.process));
         }
         let mut taken: HashSet<String> = cx.fn_names.values().chain(cx.const_names.values()).cloned().collect();
         taken.extend(m.types.iter().map(|t| qualified(&t.name)));

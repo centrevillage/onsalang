@@ -1,0 +1,38 @@
+# flow_ref 1 source=tests/spec/flow_semantics/slow_child_panics.onsa tests=9 evaluated=9 unavailable=0 skipped=0 waiting=0
+@ the division of a tick of a child does not panic between the ticks, whatever the 0 that is stored
+init 0 slow_child_panics.via_child sr=0x41000000
+process 0 params p=0 frames=1
+out=[100]
+process 0 params p=0 frames=3
+out=[100 100 100]
+@ the division of a tick of a child panics at the tick that reads the 0, in the call that holds it
+init 0 slow_child_panics.via_child sr=0x41000000
+process 0 params p=0 frames=4
+out=[100 100 100 100]
+process 0 params p=0 frames=1
+panic sample 0
+@ a call of 0 frames at the position of a tick does not evaluate the tick of the child
+init 0 slow_child_panics.via_child sr=0x41000000
+process 0 params p=0 frames=4
+out=[100 100 100 100]
+process 0 params p=0 frames=0
+out=[]
+@ a call of 5 frames that holds the tick 4 panics at it
+render slow_child_panics.via_child sr=0x41000000 params p=0 frames=5
+panic sample 4
+@ the same call does not panic with 4 frames: the tick 4 is not in it
+render slow_child_panics.via_child sr=0x41000000 params p=0 frames=4
+out=[100 100 100 100]
+@ a value that is not 0 is divided at each tick of the child
+init 0 slow_child_panics.via_child sr=0x41000000
+process 0 params p=4 frames=8
+out=[100 100 100 100 25 25 25 25]
+@ the tick of a grandchild panics in the call that holds it
+render slow_child_panics.via_grandchild sr=0x41000000 params p=0 frames=5
+panic sample 4
+@ the tick of a child in an arm that is not chosen panics too: the arm is run
+render slow_child_panics.in_an_arm sr=0x41000000 params c=false p=0 frames=5
+panic sample 4
+@ the child in an arm that is not chosen does not panic where its tick does not
+render slow_child_panics.in_an_arm sr=0x41000000 params c=false p=0 frames=4
+out=[7 7 7 7]

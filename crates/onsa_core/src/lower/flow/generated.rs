@@ -167,6 +167,7 @@ impl<'b> Gen<'b> {
             sample_rate: lit(Ty::Float(FloatKind::F32), shape.span, Lit::F32(0.0)),
             sample_rate_calls: info.sample_rate_calls.iter().copied().collect(),
             sample_tick_calls: info.sample_tick_calls.iter().copied().collect(),
+            time: Vec::new(),
             scopes: Vec::new(),
         });
         Ok(Gen { cx, params: Vec::new(), stmts: Vec::new(), span: shape.span })

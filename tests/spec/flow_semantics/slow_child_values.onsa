@@ -1,0 +1,178 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.9", "§11.3", "§11.5", "§11.6"]
+
+// W7-16 U5b2/t, S-1088, S-565, S-578, S-1079 (spec §11.9: "修飾子の無い部品の中の遅い刻みは、呼び出し側の同じ比の段に呼び出しの位置で入る"、"比の違う遅い刻みどうしは遅い方から並び、同じ比の刻みは本体の
+// 式の順である"; §11.3: 刻みの段、`block` の値は呼び出しごと): the values of a child instance with no modifier whose body has a stage of `sample / N` (a delay, a part computed at the tick, an `init`
+// argument), also in a grandchild and next to ticks of the parent. The stage of the child is a stage of the parent at the place of the call, so the value is that of the same body written in the parent
+// (`inline_one`), the ticks are at the frames 0, N, 2N, … of the parent's run across its calls, and there is no delay of its own (no extra frames: the first tick gives the `init`). Worked out by hand.
+
+flow held(p: F32 at block) -> F32 at sample {
+  prev~(p at (sample / 4)) at sample
+}
+
+flow held_from(p: F32 at block, start: F32 at init) -> F32 at sample {
+  prev~(p at (sample / 4), start) at sample
+}
+
+flow scaled(p: F32 at block) -> F32 at sample {
+  let lf = prev~(p at (sample / 4), 2.0)
+  (lf * p) at sample
+}
+
+flow every2(p: F32 at block) -> F32 at sample {
+  prev~(p at (sample / 2)) at sample
+}
+
+flow layer(p: F32 at block) -> F32 at sample {
+  held~(p) * 2.0
+}
+
+flow mid(p: F32 at block) -> F32 at sample {
+  let m = prev~(p at (sample / 2))
+  (m at sample) * 100.0 + held~(p)
+}
+
+pub flow one_child(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  x * held~(p)
+}
+
+pub flow inline_one(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  x * (prev~(p at (sample / 4)) at sample)
+}
+
+pub flow two_sites(p: F32 at block, q: F32 at block) -> F32 at sample {
+  held~(p) + held~(q) * 10.0
+}
+
+pub flow with_start(p: F32 at block, start: F32 at init) -> F32 at sample {
+  held_from~(p, start)
+}
+
+pub flow computed_part(p: F32 at block) -> F32 at sample {
+  scaled~(p)
+}
+
+pub flow same_ratio(p: F32 at block) -> F32 at sample {
+  let q = prev~(p at (sample / 4))
+  (q at sample) * 10.0 + held~(p)
+}
+
+pub flow two_ratios(p: F32 at block) -> F32 at sample {
+  let q = prev~(p at (sample / 4))
+  (q at sample) * 10.0 + every2~(p)
+}
+
+pub flow grandchild(p: F32 at block) -> F32 at sample {
+  mid~(p)
+}
+
+pub flow two_levels(p: F32 at block) -> F32 at sample {
+  layer~(p)
+}
+
+// The two flows run in the calls [0, a), [a, b) and [b, 9) with p = 1, 2, 3 and x = 1 .. 9; true when the outputs are the same.
+fn alike(a: U32, b: U32) -> Bool {
+  let xs: [F32; 9] = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0]
+  var o1: [F32; 9] = [-1.0; 9]
+  var o2: [F32; 9] = [-2.0; 9]
+  var s1 = one_child.init(8.0)
+  var s2 = inline_one.init(8.0)
+  one_child.process(inout s1, one_child.Params { p: 1.0 }, xs.slice(0, a), inout o1.slice(0, a))
+  inline_one.process(inout s2, inline_one.Params { p: 1.0 }, xs.slice(0, a), inout o2.slice(0, a))
+  one_child.process(inout s1, one_child.Params { p: 2.0 }, xs.slice(a, b), inout o1.slice(a, b))
+  inline_one.process(inout s2, inline_one.Params { p: 2.0 }, xs.slice(a, b), inout o2.slice(a, b))
+  one_child.process(inout s1, one_child.Params { p: 3.0 }, xs.slice(b, 9), inout o1.slice(b, 9))
+  inline_one.process(inout s2, inline_one.Params { p: 3.0 }, xs.slice(b, 9), inout o2.slice(b, 9))
+  o1 == o2
+}
+
+test "a child with a delay at sample / 4 gives its value at the ticks of the parent, across the calls" {
+  // 13 frames in the calls of 4, 4 and 5 with p = 1, 2, 3: tick 0 gives the init 0 and stores 1; tick 4 gives 1 and stores 2; tick 8 gives 2 and stores 3; tick 12 gives 3.
+  // held = 0 0 0 0 1 1 1 1 2 2 2 2 3, times x = 1 .. 13.
+  let xs: [F32; 13] = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0]
+  var out: [F32; 13] = [-1.0; 13]
+  var st = one_child.init(8.0)
+  one_child.process(inout st, one_child.Params { p: 1.0 }, xs.slice(0, 4), inout out.slice(0, 4))
+  one_child.process(inout st, one_child.Params { p: 2.0 }, xs.slice(4, 8), inout out.slice(4, 8))
+  one_child.process(inout st, one_child.Params { p: 3.0 }, xs.slice(8, 13), inout out.slice(8, 13))
+  assert out == [0.0, 0.0, 0.0, 0.0, 5.0, 6.0, 7.0, 8.0, 18.0, 20.0, 22.0, 24.0, 39.0]
+}
+
+test "the value of a child is the value of its body written in the parent, whatever the cuts of the run" {
+  for a in 0 ..< 10 {
+    for b in a ..< 10 {
+      assert alike(a, b)
+    }
+  }
+}
+
+test "two instances of one child keep their own delays" {
+  // The calls of 4, 4 and 1 frames with (p, q) = (1, 5), (2, 6), (3, 7): tick 4 gives 1 and 5 (1 + 50), tick 8 gives 2 and 6 (2 + 60).
+  var out: [F32; 9] = [-1.0; 9]
+  var st = two_sites.init(8.0)
+  two_sites.process(inout st, two_sites.Params { p: 1.0, q: 5.0 }, inout out.slice(0, 4))
+  two_sites.process(inout st, two_sites.Params { p: 2.0, q: 6.0 }, inout out.slice(4, 8))
+  two_sites.process(inout st, two_sites.Params { p: 3.0, q: 7.0 }, inout out.slice(8, 9))
+  assert out == [0.0, 0.0, 0.0, 0.0, 51.0, 51.0, 51.0, 51.0, 62.0]
+}
+
+test "the init argument of a child is the first value of its delay, and a reset gives it again" {
+  // start = 7: tick 0 gives 7 and stores 2, tick 4 gives 2. After the reset the frame is the frame 0 of a new run: 7 for four frames (p = 9).
+  var out: [F32; 10] = [-1.0; 10]
+  var st = with_start.init(with_start.Config { start: 7.0 }, 8.0)
+  with_start.process(inout st, with_start.Params { p: 2.0 }, inout out.slice(0, 6))
+  with_start.reset(inout st)
+  with_start.process(inout st, with_start.Params { p: 9.0 }, inout out.slice(6, 10))
+  assert out == [7.0, 7.0, 7.0, 7.0, 2.0, 2.0, 7.0, 7.0, 7.0, 7.0]
+}
+
+test "a part computed at the tick of a child is computed at the tick: the frames between read its field" {
+  // The delay has the init 2 and stores p. Call 1 (p = 1, 6 frames): tick 0 gives 2 * 1, tick 4 gives 1 * 1. Call 2 (p = 10, 4 frames): the frames 6 and 7 read the field of the tick 4 (1, not 10 * 1),
+  // tick 8 gives 1 * 10 (the delay stored 1 at the tick 4), and the frame 9 reads it.
+  var out: [F32; 10] = [-1.0; 10]
+  var st = computed_part.init(8.0)
+  computed_part.process(inout st, computed_part.Params { p: 1.0 }, inout out.slice(0, 6))
+  computed_part.process(inout st, computed_part.Params { p: 10.0 }, inout out.slice(6, 10))
+  assert out == [2.0, 2.0, 2.0, 2.0, 1.0, 1.0, 1.0, 1.0, 10.0, 10.0]
+}
+
+test "a child and its parent tick at the same ratio, at the same frames" {
+  // 4, 4, 5 frames with p = 1, 2, 3: the delay of the parent and the one of the child are both 0 0 0 0 1 1 1 1 2 2 2 2 3, so q * 10 + held = 11 * held.
+  var out: [F32; 13] = [-1.0; 13]
+  var st = same_ratio.init(8.0)
+  same_ratio.process(inout st, same_ratio.Params { p: 1.0 }, inout out.slice(0, 4))
+  same_ratio.process(inout st, same_ratio.Params { p: 2.0 }, inout out.slice(4, 8))
+  same_ratio.process(inout st, same_ratio.Params { p: 3.0 }, inout out.slice(8, 13))
+  assert out == [0.0, 0.0, 0.0, 0.0, 11.0, 11.0, 11.0, 11.0, 22.0, 22.0, 22.0, 22.0, 33.0]
+}
+
+test "a child that ticks at sample / 2 beside a parent that ticks at sample / 4" {
+  // p = 3 in one call of 8 frames: the parent's q is 0 0 0 0 3 3 3 3, the child's delay at sample / 2 is 0 0 3 3 3 3 3 3: 10 q + that.
+  var out: [F32; 8] = [-1.0; 8]
+  var st = two_ratios.init(8.0)
+  two_ratios.process(inout st, two_ratios.Params { p: 3.0 }, inout out)
+  assert out == [0.0, 0.0, 3.0, 3.0, 33.0, 33.0, 33.0, 33.0]
+}
+
+test "a grandchild is in the stages of the parent too, with the stage of its parent" {
+  // 10 frames in the calls of 3, 3 and 4 with p = 1, 2, 3. The delay m of `mid` at sample / 2 (the frames 0, 2, 4, 6, 8 hold p = 1, 1, 2, 3, 3) gives 0 1 1 2 3, each for two frames: 0 0 1 1 1 1 2 2 3 3.
+  // The delay of the grandchild at sample / 4 (the frames 0, 4, 8 hold p = 1, 2, 3) gives 0, 1, 2: 0 0 0 0 1 1 1 1 2 2. The output is 100 m + that.
+  var out: [F32; 10] = [-1.0; 10]
+  var st = grandchild.init(8.0)
+  grandchild.process(inout st, grandchild.Params { p: 1.0 }, inout out.slice(0, 3))
+  grandchild.process(inout st, grandchild.Params { p: 2.0 }, inout out.slice(3, 6))
+  grandchild.process(inout st, grandchild.Params { p: 3.0 }, inout out.slice(6, 10))
+  assert out == [0.0, 0.0, 100.0, 100.0, 101.0, 101.0, 201.0, 201.0, 302.0, 302.0]
+}
+
+test "a stage that two levels of children below the parent have is in the parent too" {
+  // `layer` doubles what its child `held` gives: 2 * (0 0 0 0 1 1 1 1 2 2 2 2 3).
+  var out: [F32; 13] = [-1.0; 13]
+  var st = two_levels.init(8.0)
+  two_levels.process(inout st, two_levels.Params { p: 1.0 }, inout out.slice(0, 4))
+  two_levels.process(inout st, two_levels.Params { p: 2.0 }, inout out.slice(4, 8))
+  two_levels.process(inout st, two_levels.Params { p: 3.0 }, inout out.slice(8, 13))
+  assert out == [0.0, 0.0, 0.0, 0.0, 2.0, 2.0, 2.0, 2.0, 4.0, 4.0, 4.0, 4.0, 6.0]
+}

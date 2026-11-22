@@ -1,0 +1,219 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.9", "§11.3", "§11.5", "§11.6"]
+
+// W7-16 U5b2/t, S-566, S-567, S-578, S-1079, S-1088 (spec §11.9: "変換の flow: 入出力の宣言に `at (sample / N)` を書ける（基準はインスタンスの本体の `sample`）。… `sample / N` の入力は遅い値（速い式で使うには
+// `at sample`）"、"同じ位置では、… 遅い刻み、`sample` の刻みの順に並ぶ"、"修飾子の無い部品の中の遅い刻みは、呼び出し側の同じ比の段に呼び出しの位置で入る（… `ctl` は、同じ位置で新しい平均を読む）"; §11.3: 遅いクロックの値を速い式で
+// 使うのは、次に変わるまで同じ値): a flow with an input at `sample / 2` or `sample / 4`, an output at those clocks, or both, called with no modifier (its `sample` is the one of the caller). The argument of a slow
+// input is read at the ticks of the input (a value of `block` is the one of the call that holds the frame of the tick), the body sees it as a slow value, and the caller reads a slow output at `sample` as the
+// last value made, the value of the tick at the frame of the tick (the new value at the same position). The model is the one of the rows (k, 0) and (m, 0) of the table of the ports (k, m = -1, -2) of
+// the evaluator's tests. Every run is 13 frames in the calls of 5, 4 and 4 frames with the `block` input 1, 2, 3 (the cut at the frame 5 is inside the window of a tick, so a value read between two ticks shows):
+// the ticks of `sample / 4` are at the frames 0, 4, 8, 12 and read 1, 1, 2, 3; those of `sample / 2` are at the frames 0, 2, …, 12 and read 1, 1, 1, 2, 2, 3, 3. Worked out by hand.
+
+flow keep4(x: F32 at (sample / 4)) -> F32 at sample {
+  x at sample
+}
+
+flow keep2(x: F32 at (sample / 2)) -> F32 at sample {
+  x at sample
+}
+
+flow lag4(x: F32 at (sample / 4)) -> F32 at (sample / 4) {
+  prev~(x, 100.0)
+}
+
+flow lag2(x: F32 at (sample / 2)) -> F32 at (sample / 2) {
+  prev~(x, 100.0)
+}
+
+flow ticks4() -> U32 at (sample / 4) {
+  sample_tick()
+}
+
+// The output of the tick n is n + 1 + 100 w, `w` of `block` read where the output is made.
+flow made4(one: F32 at block, w: F32 at block) -> F32 at (sample / 4) {
+  let lf = prev~(one at (sample / 4), 1.0)
+  let cnt = prev~(^cnt) + lf
+  cnt + w * 100.0
+}
+
+flow made2(one: F32 at block, w: F32 at block) -> F32 at (sample / 2) {
+  let lf = prev~(one at (sample / 2), 1.0)
+  let cnt = prev~(^cnt) + lf
+  cnt + w * 100.0
+}
+
+flow plus_one(x: F32 at (sample / 4)) -> F32 at sample {
+  let b = (x at (sample / 2)) + 1.0
+  b at sample
+}
+
+pub flow param_in4(p: F32 at block) -> F32 at sample {
+  keep4~(p)
+}
+
+pub flow param_in2(p: F32 at block) -> F32 at sample {
+  keep2~(p)
+}
+
+pub flow slow_in4(p: F32 at block) -> F32 at sample {
+  let a = prev~(p at (sample / 4))
+  keep4~(a)
+}
+
+pub flow stream_in4(one: F32 at block) -> F32 at sample {
+  let lf = prev~(one at (sample / 4), 1.0)
+  let cnt = prev~(^cnt) + lf
+  keep4~(cnt)
+}
+
+pub flow both4(p: F32 at block) -> F32 at sample {
+  lag4~(p) at sample
+}
+
+pub flow both2(p: F32 at block) -> F32 at sample {
+  lag2~(p) at sample
+}
+
+pub flow chain4(p: F32 at block) -> F32 at sample {
+  lag4~(lag4~(p)) at sample
+}
+
+pub flow time4() -> U32 at sample {
+  ticks4~() at sample
+}
+
+pub flow out4(one: F32 at block, w: F32 at block) -> F32 at sample {
+  made4~(one, w) at sample
+}
+
+pub flow out2(one: F32 at block, w: F32 at block) -> F32 at sample {
+  made2~(one, w) at sample
+}
+
+pub flow read_by_a_slower_stage() -> U32 at sample {
+  let t = ticks4~()
+  let u = (t at (sample / 2)) + 1
+  u at sample
+}
+
+pub flow feeds_a_stage(p: F32 at block) -> F32 at sample {
+  plus_one~(prev~(p at (sample / 4)))
+}
+
+test "a slow input of sample / 4 given a value of block reads it at the ticks and holds it between" {
+  // The ticks read 1, 1, 2, 3, so the frames 5 to 7 (p = 2) read the value of the tick 4 (1).
+  var out: [F32; 13] = [-1.0; 13]
+  var st = param_in4.init(8.0)
+  param_in4.process(inout st, param_in4.Params { p: 1.0 }, inout out.slice(0, 5))
+  param_in4.process(inout st, param_in4.Params { p: 2.0 }, inout out.slice(5, 9))
+  param_in4.process(inout st, param_in4.Params { p: 3.0 }, inout out.slice(9, 13))
+  assert out == [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 2.0, 2.0, 2.0, 2.0, 3.0]
+}
+
+test "a slow input of sample / 2 given a value of block" {
+  // The ticks at 0, 2, …, 12 read 1, 1, 1, 2, 2, 3, 3, each held for two frames.
+  var out: [F32; 13] = [-1.0; 13]
+  var st = param_in2.init(8.0)
+  param_in2.process(inout st, param_in2.Params { p: 1.0 }, inout out.slice(0, 5))
+  param_in2.process(inout st, param_in2.Params { p: 2.0 }, inout out.slice(5, 9))
+  param_in2.process(inout st, param_in2.Params { p: 3.0 }, inout out.slice(9, 13))
+  assert out == [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 2.0, 2.0, 2.0, 2.0, 3.0, 3.0, 3.0]
+}
+
+test "a slow input given a tick of the caller that is made at the same tick" {
+  // a is the delay of p at sample / 4: 0, 1, 1, 2 at the ticks, and the child reads the value of its tick (0 at the frame 0, not before it).
+  var out: [F32; 13] = [-1.0; 13]
+  var st = slow_in4.init(8.0)
+  slow_in4.process(inout st, slow_in4.Params { p: 1.0 }, inout out.slice(0, 5))
+  slow_in4.process(inout st, slow_in4.Params { p: 2.0 }, inout out.slice(5, 9))
+  slow_in4.process(inout st, slow_in4.Params { p: 3.0 }, inout out.slice(9, 13))
+  assert out == [0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 2.0]
+}
+
+test "a slow input given a counter of the same ticks reads the value made at its own tick" {
+  // cnt is 1, 2, 3, 4 at the ticks 0, 4, 8, 12 (the table row (k = -2, r = 0) of the stream): the new value at the position, not the one before.
+  var out: [F32; 13] = [-1.0; 13]
+  var st = stream_in4.init(8.0)
+  stream_in4.process(inout st, stream_in4.Params { one: 1.0 }, inout out.slice(0, 5))
+  stream_in4.process(inout st, stream_in4.Params { one: 1.0 }, inout out.slice(5, 9))
+  stream_in4.process(inout st, stream_in4.Params { one: 1.0 }, inout out.slice(9, 13))
+  assert out == [1.0, 1.0, 1.0, 1.0, 2.0, 2.0, 2.0, 2.0, 3.0, 3.0, 3.0, 3.0, 4.0]
+}
+
+test "a flow with a slow input and a slow output of sample / 4, called with no modifier" {
+  // The delay at the ticks gives its init 100 at the tick 0 and the value the input had at the tick before: 100, 1, 1, 2 (the inputs of the ticks are 1, 1, 2, 3).
+  var out: [F32; 13] = [-1.0; 13]
+  var st = both4.init(8.0)
+  both4.process(inout st, both4.Params { p: 1.0 }, inout out.slice(0, 5))
+  both4.process(inout st, both4.Params { p: 2.0 }, inout out.slice(5, 9))
+  both4.process(inout st, both4.Params { p: 3.0 }, inout out.slice(9, 13))
+  assert out == [100.0, 100.0, 100.0, 100.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 2.0]
+}
+
+test "a flow with a slow input and a slow output of sample / 2" {
+  // The inputs of the ticks are 1, 1, 1, 2, 2, 3, 3: the outputs are 100, 1, 1, 1, 2, 2, 3, each for two frames.
+  var out: [F32; 13] = [-1.0; 13]
+  var st = both2.init(8.0)
+  both2.process(inout st, both2.Params { p: 1.0 }, inout out.slice(0, 5))
+  both2.process(inout st, both2.Params { p: 2.0 }, inout out.slice(5, 9))
+  both2.process(inout st, both2.Params { p: 3.0 }, inout out.slice(9, 13))
+  assert out == [100.0, 100.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 2.0, 2.0, 2.0, 2.0, 3.0]
+}
+
+test "the slow output of a call is the slow input of the next at the same position" {
+  // The first gives 100, 1, 1, 2 at the ticks and the second the same one tick later: 100, 100, 1, 1. The first is run before the second at the position of the tick.
+  var out: [F32; 13] = [-1.0; 13]
+  var st = chain4.init(8.0)
+  chain4.process(inout st, chain4.Params { p: 1.0 }, inout out.slice(0, 5))
+  chain4.process(inout st, chain4.Params { p: 2.0 }, inout out.slice(5, 9))
+  chain4.process(inout st, chain4.Params { p: 3.0 }, inout out.slice(9, 13))
+  assert out == [100.0, 100.0, 100.0, 100.0, 100.0, 100.0, 100.0, 100.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+}
+
+test "a slow output reads the new value at its tick: sample_tick() of the tick, not of the tick before" {
+  // The output at the ticks 0, 4, 8, 12 is the time 0, 4, 8, 12 and the frames between hold it.
+  var out: [U32; 13] = [9; 13]
+  var st = time4.init(8.0)
+  time4.process(inout st, inout out)
+  assert out == [0, 0, 0, 0, 4, 4, 4, 4, 8, 8, 8, 8, 12]
+}
+
+test "a slow output made of a counter and a value of block: block is read at the tick" {
+  // made4 is n + 1 + 100 w at the tick n with w = 1, 1, 2, 3 at the ticks: 101, 102, 203, 304 (the frames 5 to 7, p = 2, hold 102).
+  var out: [F32; 13] = [-1.0; 13]
+  var st = out4.init(8.0)
+  out4.process(inout st, out4.Params { one: 1.0, w: 1.0 }, inout out.slice(0, 5))
+  out4.process(inout st, out4.Params { one: 1.0, w: 2.0 }, inout out.slice(5, 9))
+  out4.process(inout st, out4.Params { one: 1.0, w: 3.0 }, inout out.slice(9, 13))
+  assert out == [101.0, 101.0, 101.0, 101.0, 102.0, 102.0, 102.0, 102.0, 203.0, 203.0, 203.0, 203.0, 304.0]
+}
+
+test "a slow output of sample / 2 made of a counter and a value of block" {
+  // The ticks at 0, 2, …, 12 give n + 1 + 100 w with w = 1, 1, 1, 2, 2, 3, 3: 101, 102, 103, 204, 205, 306, 307, each for two frames.
+  var out: [F32; 13] = [-1.0; 13]
+  var st = out2.init(8.0)
+  out2.process(inout st, out2.Params { one: 1.0, w: 1.0 }, inout out.slice(0, 5))
+  out2.process(inout st, out2.Params { one: 1.0, w: 2.0 }, inout out.slice(5, 9))
+  out2.process(inout st, out2.Params { one: 1.0, w: 3.0 }, inout out.slice(9, 13))
+  assert out == [101.0, 101.0, 102.0, 102.0, 103.0, 103.0, 204.0, 204.0, 205.0, 205.0, 306.0, 306.0, 307.0]
+}
+
+test "a slower stage of the caller reads the new value of a slow output at the same position" {
+  // t is 0, 4, 8, 12 at the ticks of sample / 4. u = t + 1 is computed at the ticks of sample / 2 (the frames 0, 2, 4, …): at the frame 4 the tick of sample / 4 is first and u is 5 (a stale t gives 1).
+  var out: [U32; 13] = [9; 13]
+  var st = read_by_a_slower_stage.init(8.0)
+  read_by_a_slower_stage.process(inout st, inout out)
+  assert out == [1, 1, 1, 1, 5, 5, 5, 5, 9, 9, 9, 9, 13]
+}
+
+test "a stage of the child at sample / 2 reads the slow input that the caller made at the same position" {
+  // The delay a of the caller at sample / 4 is 0, 1, 1, 2 at the ticks (p = 1, 1, 2 stored); the child computes b = a + 1 at the frames 0, 2, 4, …: 1 at the frame 0, 2 at the frame 4 (the new a, first).
+  var out: [F32; 13] = [-1.0; 13]
+  var st = feeds_a_stage.init(8.0)
+  feeds_a_stage.process(inout st, feeds_a_stage.Params { p: 1.0 }, inout out.slice(0, 5))
+  feeds_a_stage.process(inout st, feeds_a_stage.Params { p: 2.0 }, inout out.slice(5, 9))
+  feeds_a_stage.process(inout st, feeds_a_stage.Params { p: 3.0 }, inout out.slice(9, 13))
+  assert out == [1.0, 1.0, 1.0, 1.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 3.0]
+}

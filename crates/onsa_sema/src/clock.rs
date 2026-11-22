@@ -228,6 +228,12 @@ impl Clock {
         matches!(self, Clock::Tick(k) if k != Ratio(0))
     }
 
+    /// A burst: a tick faster than the `sample` of the body (`sample * N`,
+    /// §11.9), which the body sees as an array. The one test of it (D-15).
+    pub fn burst(self) -> bool {
+        matches!(self, Clock::Tick(k) if k.faster_than_body())
+    }
+
     /// The stage the values of the clock are evaluated at. `None` of a
     /// constant, `sample_tick()` and a clock in error, whose stage is the
     /// stage of the place that reads them.

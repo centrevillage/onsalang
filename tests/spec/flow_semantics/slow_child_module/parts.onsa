@@ -1,0 +1,22 @@
+// Flows of a module that are children of the flows of check.onsa (W7-16 U5b2/t, spec §11.9, §11.4, §15.1): a child with a delay at `sample / 4`, one that reads `sample_tick()`, a flow with a slow input and a
+// slow output, and a child that is built of a private child of the module (a grandchild of the caller). The case is in check.onsa.
+
+pub flow held(p: F32 at block) -> F32 at sample {
+  prev~(p at (sample / 4)) at sample
+}
+
+pub flow elapsed() -> U32 at sample {
+  sample_tick()
+}
+
+pub flow lag4(x: F32 at (sample / 4)) -> F32 at (sample / 4) {
+  prev~(x, 100.0)
+}
+
+flow inner(p: F32 at block) -> F32 at sample {
+  prev~(p at (sample / 2)) at sample
+}
+
+pub flow outer(p: F32 at block) -> F32 at sample {
+  inner~(p) * 10.0 + held~(p)
+}

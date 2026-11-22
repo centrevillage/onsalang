@@ -1,0 +1,27 @@
+# flow_ref 1 source=tests/spec/flow_semantics/slow_out_stage_values.onsa tests=6 evaluated=6 unavailable=0 skipped=0 waiting=0
+@ a slow output that is a constant is read at the first frame and held
+init 0 slow_out_stage_values.const_out sr=0x41000000
+process 0 frames=5 in x=[0x41200000 0x41200000 0x41200000 0x41200000 0x41200000]
+out=[0x41380000 0x41380000 0x41380000 0x41380000 0x41380000]
+@ a slow output that reads a slower value reads it at its own ticks
+init 0 slow_out_stage_values.slower_out sr=0x41000000
+process 0 params w=0x40400000 frames=10
+out=[0x40e00000 0x40e00000 0x40e00000 0x40e00000 0x40e00000 0x40e00000 0x40e00000 0x40e00000 0x40400000 0x40400000]
+@ a slow output read at a tick of another ratio
+init 0 slow_out_stage_values.out_at_half sr=0x41000000
+process 0 params one=0x3f800000 frames=8
+out=[0x00000000 0x00000000 0x3f800000 0x3f800000 0x3f800000 0x3f800000 0x40000000 0x40000000]
+@ a slow input read at a tick of another ratio
+init 0 slow_out_stage_values.in_at_half sr=0x41000000
+process 0 params one=0x3f800000 frames=8
+out=[0x00000000 0x00000000 0x3f800000 0x3f800000 0x3f800000 0x3f800000 0x40000000 0x40000000]
+@ a value of block made as a slow output is the one of its tick
+init 0 slow_out_stage_values.param_out sr=0x41000000
+process 0 params w=0x3f800000 frames=3
+out=[0x41a80000 0x41a80000 0x41a80000]
+process 0 params w=0x40000000 frames=2
+out=[0x41a80000 0x42280000]
+@ the sample stage of a flow with a slow output runs at every frame
+init 0 slow_out_stage_values.sample_stage_runs sr=0x41000000
+process 0 params w=0x3f800000 frames=3 in n=[1 1 0]
+panic sample 2

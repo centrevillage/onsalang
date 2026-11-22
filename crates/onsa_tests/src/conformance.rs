@@ -316,6 +316,7 @@ fn interp_run(module: &Module, meta: &FlowMeta, shape: &Shape, stimuli: Vec<Vec<
     }
     let interp = Interp::new(module);
     let fns = &meta.fns;
+    let process = fns.process.ok_or("an exported flow with no `process`")?;
     let state = match interp.call(fns.init, vec![Value::Struct(shape.config_values()), Value::F32(SAMPLE_RATE)]) {
         Ok(s) => slot(s),
         Err(onsa_interp::Failure::Panic(p)) => return Ok(Run::Panicked(Panic { at: At::Init, message: p.message })),
@@ -341,7 +342,7 @@ fn interp_run(module: &Module, meta: &FlowMeta, shape: &Shape, stimuli: Vec<Vec<
         .map(|s| (0..s.channels()).map(|_| slot(Value::Array(zero_array(module, &s.scalar.ty(), FRAMES)))).collect())
         .collect();
     // The number of the signals of each `In` or `Out` the Core `process` takes.
-    let groups: Vec<Option<usize>> = (module.fn_(fns.process).params.iter().skip(2))
+    let groups: Vec<Option<usize>> = (module.fn_(process).params.iter().skip(2))
         .map(|p| match &p.ty {
             Ty::Struct(id) => match &module.ty(*id).kind {
                 TypeDefKind::Struct { fields } => Some(fields.len()),
@@ -367,7 +368,7 @@ fn interp_run(module: &Module, meta: &FlowMeta, shape: &Shape, stimuli: Vec<Vec<
                 None => signals.next(),
             });
         }
-        match interp.call_inout(fns.process, &state, args) {
+        match interp.call_inout(process, &state, args) {
             Ok(_) => {}
             Err(onsa_interp::Failure::Panic(p)) => {
                 return Ok(Run::Panicked(Panic { at: At::Block(b), message: p.message }));

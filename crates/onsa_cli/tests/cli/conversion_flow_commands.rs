@@ -1,8 +1,8 @@
-//! A conversion flow in the commands of `onsa` (W7-09 U4a/t; spec §11.9, §11.6, §11.3, §18.1, `spec/tools.md` §1.1; S-566, S-567,
-//! S-1078, Q-09): what the case files in `tests/spec/flow_clock/` cannot pin.
+//! A conversion flow in the commands of `onsa` (W7-09 U4a/t, W7-16 U5b2/t; spec §11.9, §11.6, §11.3, §18.1, `spec/tools.md` §1.1; S-566, S-567,
+//! S-1078, S-1088, Q-09): what the case files in `tests/spec/flow_clock/` cannot pin.
 //!
-//! - The Core of the ticks is W7-16, so `build`, `dump --core` and `test` stop at a package that has a flow with a derived clock
-//!   in a port with E0200 and with nothing else (no internal error), on the file of the flow, while `check` reads it with no
+//! - The Core of the ticks is W7-16. A flow with an input or an output at `sample / N` is lowered, and so is a call of it with no modifier (U5b2); `build`, `dump --core` and `test` stop at a package
+//!   that has a flow with a port at `sample * N`, a call of one, or a chain (U6a, U6b) with E0200 and with nothing else (no internal error), on the file of the flow, while `check` reads it with no
 //!   diagnostic and `onsa interface` ends with 0.
 //! - `onsa interface` writes the heading of the flow with the clock of each port as the ratio (`sample / 4`, `sample * 2`): the
 //!   text of the declaration, not the type that the body sees (the array of a port at `sample * N`).
@@ -11,6 +11,7 @@
 //!
 //! The texts are written from the spec; none is taken from the output of the compiler.
 
+use crate::slow_stage_commands::assert_lowers;
 use crate::test_support::{Dir, code_of, diagnostics, doc_of, run, span_of, test_json, tests_of};
 
 const BUILD_MANIFEST: &str = "[package]\nname = \"demo\"\nedition = \"2026\"\n\n[targets.host]\nkind = \"source\"\nlang = \"c\"\nplatform = \"host\"\nprovides = []\n";
@@ -114,15 +115,18 @@ flow fast2(g: F32 at (sample * 2)) -> F32 at sample {
 /// A flow with no port, `let` or node of a derived clock of its own that calls a flow with an input of a derived clock (a value
 /// of `block`, of `init`, a constant or of `sample`, with no chain and in `.down~(2)`, and in `if~` and `par~`), each a flow of
 /// its own: its node reads the argument at the tick of that input (§11.9). A `sample` value is not passed where it would be
-/// made slower (E0815, §11.3).
+/// made slower (E0815, §11.3). Returns the source and the number of flows that stay E0200 (U5b2): the callee `fast2` (a port at
+/// `sample * 2`), each call of it, and each call of `slow4` with a chain. The callee `slow4` and the calls of it with no chain are lowered.
 fn callers_of_derived_inputs() -> (String, usize) {
     let mut calls = Vec::new();
+    let mut stay = 1;
     for callee in ["slow4", "fast2"] {
         for arg in ["p", "i", "1.0", "x"] {
             for down in [false, true] {
                 if arg == "x" && (callee == "slow4" || !down) {
                     continue;
                 }
+                stay += usize::from(callee == "fast2" || down);
                 calls.push(if down {
                     format!("x + ({callee}~({arg}).down~(2) at sample)")
                 } else {
@@ -130,21 +134,22 @@ fn callers_of_derived_inputs() -> (String, usize) {
                 });
             }
         }
+        stay += if callee == "fast2" { 2 } else { 0 };
         calls.push(format!("if~ (p > 0.0) {{ {callee}~(p) }} else {{ x }}"));
         calls.push(format!("let ys = par~ k in 0..<2 {{ {callee}~(p) }}\n  ys[0] + ys[1]"));
     }
     let flows = calls.iter().enumerate().map(|(k, body)| {
         format!("flow c{k}(p: F32 at block, i: F32 at init, x: F32 at sample) -> F32 at sample {{\n  {body}\n}}\n")
     });
-    (format!("{CALLEES}\n{}", flows.collect::<Vec<_>>().join("\n")), calls.len() + 2)
+    (format!("{CALLEES}\n{}", flows.collect::<Vec<_>>().join("\n")), stay)
 }
 
-/// A flow that calls a flow with an input of a derived clock reads the argument at that tick, so that it stops at the gate of the
-/// Core too (E0200 until W7-16, Q-09), as its callee does: `build`, `dump --core` and `test` report one E0200 for each flow of
+/// A flow that calls a flow with an input at `sample * 2` or with a chain reads the argument at that tick, so that it stops at the gate of the
+/// Core too (E0200 until W7-16 U6a and U6b, Q-09), as its callee `fast2` does: `build`, `dump --core` and `test` report one E0200 for each of those flows of
 /// the package and no internal error (W7-09 U4a/b #1: the gate saw the ports, `let`s and nodes of a flow and not the ticks its
-/// nodes read their arguments at), and `check` reads the package with no diagnostic.
+/// nodes read their arguments at), and `check` reads the package with no diagnostic. The callee `slow4`, an input at `sample / 4`, and the calls of it with no chain have no E0200 (W7-16 U5b2).
 #[test]
-fn a_caller_of_an_input_of_a_derived_clock_is_e0200_for_build_dump_core_and_test() {
+fn a_caller_of_an_input_at_sample_times_or_with_a_chain_is_e0200_for_build_dump_core_and_test() {
     let (src, flows) = callers_of_derived_inputs();
     let d = Dir::bare("conversion_core_gate_callers");
     d.write("onsa.toml", BUILD_MANIFEST);
@@ -165,8 +170,28 @@ fn a_caller_of_an_input_of_a_derived_clock_is_e0200_for_build_dump_core_and_test
         assert!(!both.contains("internal error"), "{name}: {both}");
         let lines = error_lines(&both);
         assert!(lines.iter().all(|l| l.contains("error[E0200]")), "{name}: only E0200: {both}");
-        assert_eq!(lines.len(), flows, "{name}: one E0200 for each flow: {both}");
+        assert_eq!(lines.len(), flows, "{name}: one E0200 for each flow that stays: {both}");
     }
+}
+
+/// The calls of a flow with an input at `sample / 4` with no chain (a value of `block`, of `init`, a constant, in `if~` and `par~`), with the callee, make a package that is lowered (W7-16 U5b2: the
+/// argument is read at the tick of the input, a stage of the caller, §11.9) and runs its test.
+#[test]
+fn a_caller_of_an_input_at_sample_over_n_with_no_chain_is_lowered() {
+    let mut calls = Vec::new();
+    for arg in ["p", "i", "1.0"] {
+        calls.push(format!("x + slow4~({arg})"));
+    }
+    calls.push("if~ (p > 0.0) { slow4~(p) } else { x }".to_string());
+    calls.push("let ys = par~ k in 0..<2 { slow4~(p) }\n  ys[0] + ys[1]".to_string());
+    let flows = calls.iter().enumerate().map(|(k, body)| {
+        format!("flow c{k}(p: F32 at block, i: F32 at init, x: F32 at sample) -> F32 at sample {{\n  {body}\n}}\n")
+    });
+    let src = format!(
+        "flow slow4(g: F32 at (sample / 4)) -> F32 at sample {{\n  g at sample\n}}\n\n{}",
+        flows.collect::<Vec<_>>().join("\n")
+    );
+    assert_lowers("conversion_core_slow_callers", &src, &[]);
 }
 
 // ----------------------------------------------------------------------------- the interface

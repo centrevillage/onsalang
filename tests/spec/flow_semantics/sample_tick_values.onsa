@@ -7,7 +7,7 @@
 // `init` と生成する `reset` で 0 になり（その後の最初の刻みで読む値は 0 で、`sample_rate()` の刻みごとに 1 上がる。`sample / N` の段で読んでも同じ数）、`reset_if~` は触れない"; §11.9: 位相のカウンタは
 // ホストの区切りに依らない): the value of `sample_tick()` of one flow with no modifier. It is 0 at the first frame after `init` and after `reset`, and 1 more at each frame after it, across the calls of
 // `process` (a call of 0 frames does not count); read in a stage of `sample / 4` it is the same number (the number of frames, not of the ticks of that stage); the difference `t -% last` is 1 at `sample`
-// and N at `sample / N`. Worked out by hand. A `sample_tick()` read inside a child instance is the work of U5b, and the one under a modifier is of U6a and U6b: none is here.
+// and N at `sample / N`. Worked out by hand. A `sample_tick()` read inside a child instance is in sample_tick_child_values.onsa (U5b2), and the one under a modifier is of U6a and U6b: none is here.
 
 pub flow count() -> U32 at sample {
   sample_tick()

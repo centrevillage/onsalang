@@ -510,6 +510,25 @@ fn comparisons_of_the_other_scalars() {
 }
 
 #[test]
+fn arrays_of_one_length_are_equal_when_every_element_is() {
+    // W7-16 U5b2/t: `assert out == [0.0, 1.0]` of a case compares an array of a call with a literal. The elements are compared as scalars: a NaN is not equal to itself, `-0.0 == 0.0`, a length that
+    // differs is not a comparison of the operator (the checker makes the types agree).
+    let t = |b: bool| Ok(Value::Bool(b));
+    let arr = |xs: &[f32]| Value::Array(xs.iter().map(|x| Value::F32(*x)).collect());
+    check(&[
+        (Bin::Eq, arr(&[0.0, 1.5]), arr(&[0.0, 1.5]), t(true)),
+        (Bin::Eq, arr(&[0.0, 1.5]), arr(&[0.0, 2.5]), t(false)),
+        (Bin::Ne, arr(&[0.0, 1.5]), arr(&[0.0, 2.5]), t(true)),
+        (Bin::Ne, arr(&[0.0, 1.5]), arr(&[0.0, 1.5]), t(false)),
+        (Bin::Eq, arr(&[-0.0]), arr(&[0.0]), t(true)),
+        (Bin::Eq, arr(&[f32::NAN]), arr(&[f32::NAN]), t(false)),
+        (Bin::Eq, Value::Array(vec![]), Value::Array(vec![]), t(true)),
+    ]);
+    assert!(matches!(binary(Bin::Eq, &arr(&[0.0]), &arr(&[0.0, 0.0])), Err(Fault::Internal(_))));
+    assert!(matches!(binary(Bin::Lt, &arr(&[0.0]), &arr(&[1.0])), Err(Fault::Internal(_))));
+}
+
+#[test]
 fn the_ranges_of_the_integer_kinds() {
     use IntKind::*;
     // 2^(bits-1) and 2^bits, worked out: the same table the vectors' `MIN` and `MAX` rows give.

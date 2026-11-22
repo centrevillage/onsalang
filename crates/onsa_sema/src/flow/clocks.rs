@@ -58,6 +58,7 @@ pub(crate) fn finish_flow(a: &mut Analysis, module: &Module, id: DefId, body: Bo
         sample_tick_calls: fcx.sample_tick_calls.clone(),
         output: fcx.output,
         derived_port: a.def(id).as_flow().and_then(|f| f.derived_port(a.def(id).name_span)),
+        burst_port: a.def(id).as_flow().and_then(|f| f.burst_port(a.def(id).name_span)),
         complete: false,
         ..Default::default()
     };
@@ -106,12 +107,12 @@ pub(crate) fn finish_flow(a: &mut Analysis, module: &Module, id: DefId, body: Bo
         let recorded = std::mem::take(&mut w.recorded);
         info.edges = std::mem::take(&mut w.edges);
         (info.tilde_matches, info.store_bindings) = (std::mem::take(&mut w.tilde), std::mem::take(&mut w.store));
-        super::plan::build(&mut info, recorded, &w, ast, std::mem::take(&mut m.hoisted));
         let out = match out {
             Clock::Tick(k) => ClockStage::Tick(k),
             _ => ClockStage::SAMPLE,
         };
         info.out_stage = Some(info.run_stage(out));
+        super::plan::build(&mut info, recorded, &w, ast, std::mem::take(&mut m.hoisted));
         (info.checks, info.const_conds) = (std::mem::take(&mut m.checks), std::mem::take(&mut m.const_conds));
         let unused = super::reads::unused(a, id, ast, &info, &fcx);
         a.diagnostics.extend(unused);

@@ -218,6 +218,12 @@ fn own_names(e: &Export, at: onsa_diag::Span, of: &[&str], bulk: bool, user: Vec
     Ok(())
 }
 
+/// The `process` of an exported flow, which has one (no port of a derived
+/// clock, which the check stops at its `@export`).
+fn process_of(fns: &onsa_core::FlowFns) -> R<FnId> {
+    fns.process.ok_or_else(|| crate::emit::internal("an exported flow with no `process`"))
+}
+
 /// The local of the channels of the planar signal `p` in the wrapper.
 fn spans_local(p: &IoParam) -> String {
     format!("{}_spans", p.name)
@@ -230,7 +236,7 @@ fn spans_local(p: &IoParam) -> String {
 fn process_io(cx: &mut Cx, e: &Export) -> R<ProcessIo> {
     let m = cx.m;
     let meta = &m.flows[e.meta_index];
-    let def = m.fn_(meta.fns.process);
+    let def = m.fn_(process_of(&meta.fns)?);
     let names = signal_names(meta);
     let mut names = names.iter();
     let (mut params, mut groups, mut decls) = (Vec::new(), Vec::new(), String::new());
@@ -498,7 +504,7 @@ pub(crate) fn wrappers(cx: &mut Cx, e: &Export) -> R<String> {
     }
     let args = process_args(cx, &io, &mut s);
     // Under poison the call follows the `setjmp`: the guarded twin (R-167).
-    let _ = writeln!(s, "  {}({});", cx.after_setjmp(fns.process), args.join(", "));
+    let _ = writeln!(s, "  {}({});", cx.after_setjmp(process_of(&fns)?), args.join(", "));
     if cx.opts.panic == PanicMode::Poison {
         let _ = writeln!(s, "  onsa_current_jmp = onsa_prev;");
     }

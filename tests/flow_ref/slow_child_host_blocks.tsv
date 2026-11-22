@@ -1,0 +1,12 @@
+# flow_ref 1 source=tests/spec/flow_semantics/slow_child_host_blocks.onsa tests=8 evaluated=1 unavailable=0 skipped=7 waiting=0
+@ one call of 7 frames gives the values worked out
+init 0 slow_child_host_blocks.mix sr=0x41000000
+process 0 params p=0x3f800000 frames=7 in x=[0x3f800000 0x40000000 0x40400000 0x40800000 0x40a00000 0x40c00000 0x40e00000]
+out=[0x47c35000 0x47c35100 0x47c3b700 0x47c3ba00 0x47210e00 0x47211800 0x47212400]
+- 3 frames and then 4 give the same: the second call holds the tick of the frame 4 at its 2nd frame	skipped nocall
+- a call of 0 frames before the first frame does not use the tick of the frame 0	skipped nocall
+- calls of 3, 0 and 4 frames give the same	skipped nocall
+- every cut of the run in three calls gives the same, the cuts at the ticks of sample / 4 and of sample / 2 and between	skipped statement
+- seven calls of one frame give the same	skipped statement
+- a reset after 5 frames, in the middle of a phase, makes the next frame the frame 0 of a new run	skipped nocall
+- a reset after any number of frames, at a tick or between, gives the run of a state just made	skipped statement
