@@ -51,7 +51,8 @@ fn lower_expr_at(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId) -> R<Expr> {
     {
         return Ok(v);
     }
-    let ty = lw.core_ty(cx.value_ty(e)?, &cx.args, span)?;
+    let clock = cx.flow.as_ref().and_then(|f| f.info.clocks.exprs.get(&e).copied());
+    let ty = super::flow::burst_ty(clock, lw.core_ty(cx.value_ty(e)?, &cx.args, span)?);
     match cx.expr(e).kind {
         AK::If { tilde: Some(_), .. } => return super::flow::tilde_if(lw, cx, e, ty),
         AK::Match { tilde: Some(_), .. } => return super::flow::tilde_match(lw, cx, e, ty),

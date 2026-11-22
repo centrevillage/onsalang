@@ -49,8 +49,9 @@ pub(super) fn init_value(
 
 /// Arguments of an instance call for the callee inputs of the stage of
 /// `phase`, in their places, lowered in the current function: of the input
-/// value types, which are no views (§11.3), so with no conversion; of an
-/// input among `rings` (by its index), the ring a chain gathers it in.
+/// value types, which are no views (§11.3), so with no conversion, of a
+/// burst its array ([`burst_ty`], [`spread`]); of an input among `rings`
+/// (by its index), the ring a chain gathers it in.
 pub(super) fn instance_args(
     lw: &mut Lowerer,
     cx: &mut FnCx,
@@ -72,11 +73,38 @@ pub(super) fn instance_args(
             out.push(ring.clone());
             continue;
         }
-        let want = lw.core_ty(input.decl.ty, &[], input.decl.span)?;
+        let port = input.decl.caller_clock();
+        let want = burst_ty(Some(port), lw.core_ty(input.decl.ty, &[], input.decl.span)?);
         let e = lower_expr(lw, cx, *arg)?;
-        out.push(of_type(e, &want)?);
+        out.push(of_type(spread(cx, *arg, port, e), &want)?);
     }
     Ok(out)
+}
+
+/// The Core type of a value of the clock `c` and the value type `ty` in a
+/// flow body: `[ty; N]` of a burst of the caller (§11.9,
+/// [`Clock::burst_len`]), else `ty`. The one place of it: the locals, the
+/// expressions and the arguments of a port of a burst.
+pub(crate) fn burst_ty(c: Option<Clock>, ty: Ty) -> Ty {
+    match c.and_then(Clock::burst_len) {
+        Some(n) => Ty::Array(Box::new(ty), n),
+        None => ty,
+    }
+}
+
+/// The value `v` of the argument `arg` of a port at the clock `port` in
+/// the frame of the call: of a port of a burst and an argument at a clock
+/// of none (of `block`, `init`, a constant), its N copies, each element the
+/// value read (§11.9, S-1214 (3)); else `v`. The one place of it: the
+/// inputs of a head and the rings of a chain.
+pub(super) fn spread(cx: &FnCx, arg: ExprId, port: Clock, v: Expr) -> Expr {
+    let clocks = &cx.flow.as_ref().expect("flow context").info.clocks;
+    match (port.burst_len(), clocks.exprs.get(&arg).copied().and_then(Clock::burst_len)) {
+        (Some(n), None) => {
+            Expr::new(burst_ty(Some(port), v.ty.clone()), v.span, ExprKind::Repeat { elem: Box::new(v), n })
+        }
+        _ => v,
+    }
 }
 
 /// The length of the ring of a `delay~` (`N`) or a `vdelay~` (`MAX + 1`,
@@ -164,6 +192,10 @@ impl<'b> Gen<'b> {
         ret: Ty,
     ) -> R<Gen<'b>> {
         let mut cx = FnCx::new(lw, shape.def, Vec::new(), &info.body, ret)?;
+        for (l, &c) in &info.clocks.locals {
+            let local = cx.locals.get_mut(l.0 as usize).ok_or_else(|| internal(shape.span, "a clock of no local"))?;
+            local.ty = burst_ty(Some(c), local.ty.clone());
+        }
         cx.flow = Some(FlowLowerCx {
             local_override: HashMap::new(),
             expr_override: HashMap::new(),

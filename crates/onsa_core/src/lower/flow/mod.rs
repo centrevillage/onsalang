@@ -108,7 +108,8 @@ mod tests;
 
 use boundary::{gen_params_default, gen_process, gen_process_inplace, gen_render};
 pub(crate) use branches::{tilde_if, tilde_match};
-use generated::{Gen, init_value, instance_args, replica_loop, ring_len, sfield};
+pub(crate) use generated::burst_ty;
+use generated::{Gen, init_value, instance_args, replica_loop, ring_len, sfield, spread};
 pub(crate) use hoist::HoistUses;
 pub(crate) use nodes::lower_flow_expr;
 use phases::{StageRun, call_stage, drive, gen_ctl, gen_init, gen_reset, gen_tick};
@@ -302,7 +303,7 @@ pub struct FlowLowerCx<'b> {
     pub local_override: HashMap<u32, Expr>,
     /// Node expression → its value once computed (a temporary).
     pub expr_override: HashMap<ExprId, Expr>,
-    info: &'b FlowInfo,
+    pub(crate) info: &'b FlowInfo,
     phase: Phase,
     /// `sample_rate()`: the parameter in `init`, the state field elsewhere.
     sample_rate: Expr,

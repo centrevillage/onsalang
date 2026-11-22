@@ -3,7 +3,7 @@
 //!
 //! - `build`, `dump --core` and `test` end with 0 and no internal error for a head with a port at `sample * M` under `.down~(N)` (the input gathered, the output dealt), for a conversion flow that is only declared, and for
 //!   the forms in `par~`, `if~`, `match~` and inside a part under `.down~`. A chain whose boundary past the first one gathers or deals (`g4~(p).down~(2).down~(2)`, S-1214) is lowered from U6b1 (the last two tests;
-//!   the values are in `down_two_boundaries_values.onsa`). What stays E0200 is a chain with an up (U6b3) and a call of a conversion flow with no chain that takes or gives a burst (U6b2). A head that reads `sample_tick()` under such a chain is lowered (U6a3, S-1217; `sample_tick_commands.rs` and `down_chain_time_values.onsa`).
+//!   the values are in `down_two_boundaries_values.onsa`). What stays E0200 is a chain with an up (U6b3); a call of a conversion flow with no chain that takes or gives a bundle is lowered from U6b2 (`conversion_flow_commands.rs`, `bursts_values.onsa`). A head that reads `sample_tick()` under such a chain is lowered (U6a3, S-1217; `sample_tick_commands.rs` and `down_chain_time_values.onsa`).
 //! - `onsa interface` of the parent has the ring of each gathered input as `<node>._gather_<boundary>_<input>` and the array of the dealt output as `<node>._deal_<boundary>`, after the state of the child, the boundary
 //!   counted over the `.down~` and `.up~` of the chain and the input by its place in the declaration of the head (S-1208, §11.6); the state of a conversion flow has a known size (§12.4).
 //!

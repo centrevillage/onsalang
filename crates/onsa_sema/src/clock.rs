@@ -235,9 +235,21 @@ impl Clock {
     }
 
     /// A burst: a tick faster than the `sample` of the body (`sample * N`,
-    /// §11.9), which the body sees as an array. The one test of it (D-15).
+    /// §11.9), whose values the body sees as `[T; N]`. The one test of a
+    /// clock of a burst (D-15), of any N (a chain with an `.up~(N)` makes one
+    /// past `U32` at the call side); a join, `at` and a delay test the ratio
+    /// ([`Ratio::faster_than_body`]).
     pub fn burst(self) -> bool {
         matches!(self, Clock::Tick(k) if k.faster_than_body())
+    }
+
+    /// The N of a [`Clock::burst`], none of another clock: the view of the
+    /// ports of a body and the Core's type of the values of the caller read
+    /// it. An N past `U32` is an internal error.
+    pub fn burst_len(self) -> Option<u32> {
+        let Clock::Tick(k) = self else { return None };
+        let n = self.burst().then(|| k.n().and_then(|n| u32::try_from(n).ok()))?;
+        Some(n.unwrap_or_else(|| onsa_diag::internal::bug(None, format!("a burst at {self:?}, past `U32`"))))
     }
 
     /// The stage the values of the clock are evaluated at. `None` of a

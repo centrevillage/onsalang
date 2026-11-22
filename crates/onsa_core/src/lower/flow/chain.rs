@@ -131,8 +131,18 @@ pub(super) fn entry(
                 let (dst, pos) = (field(lw, part)?, at(lw, cx, n, f, x, k, span)?);
                 let src = match from {
                     Feed::Arg => {
-                        let arg = args.get(input as usize).ok_or_else(|| internal(span, "a ring of no argument"))?;
-                        Src::Value(lower_expr(lw, cx, *arg)?)
+                        let arg = *args.get(input as usize).ok_or_else(|| internal(span, "a ring of no argument"))?;
+                        let port = n.args.iter().find(|a| a.expr == arg).map(|a| a.at);
+                        let port = port.ok_or_else(|| internal(span, "a ring of an argument read at no clock"))?;
+                        let v = lower_expr(lw, cx, arg)?;
+                        match port {
+                            // A burst of 2^q of a frame of this flow (§11.9).
+                            Clock::Tick(q) if port.burst() => {
+                                let v = spread(cx, arg, port, v);
+                                Src::At(materialize(cx, v, out, "__arg"), at(lw, cx, n, f, x, q, span)?)
+                            }
+                            _ => Src::Value(v),
+                        }
                     }
                     Feed::Ring(o) => {
                         let part = Part::Gather { bound: o, input };
@@ -241,13 +251,35 @@ fn run(lw: &mut Lowerer, cx: &mut FnCx, id: NodeId, state: &Expr, body: ClockSta
 
 /// The value of the instance `id` of a chain that deals, in the scope of
 /// `state` (§11.9): the array of its boundary `b` ([`Read::Array`]) at the
-/// place of the frame of this flow, the element of the tick of its output.
-pub(super) fn dealt(lw: &Lowerer, cx: &FnCx, id: NodeId, state: &Expr, b: u32, span: Span) -> R<Expr> {
+/// place of the frame of this flow, the elements of the tick of its output:
+/// one, the whole array, or a burst of 2^o of it copied into an array of
+/// its own (made `Zeroed`, every element written).
+pub(super) fn dealt(
+    lw: &Lowerer,
+    cx: &mut FnCx,
+    out: &mut Vec<Stmt>,
+    id: NodeId,
+    state: &Expr,
+    b: u32,
+    span: Span,
+) -> R<Expr> {
     let info = cx.flow.as_ref().expect("flow context").info;
     let n = info.node(id);
     let part = Part::Deal(b);
     let o = n.bounds.last().and_then(|l| l.out.map(|e| l.outside(e)));
     let o = o.ok_or_else(|| internal(span, "a value of no output"))?;
+    let (arr, count) = (sfield(lw, info, state, FieldOf::Node(id, part), span)?, count(o, span)?);
     let at = at(lw, cx, n, n.bounds.len(), o, exp(n, part, span)?, span)?;
-    index(sfield(lw, info, state, FieldOf::Node(id, part), span)?, at)
+    match arr.ty.clone() {
+        _ if count == 1 => index(arr, at),
+        Ty::Array(_, len) if len == count => Ok(arr),
+        Ty::Array(t, _) => {
+            let ty = Ty::Array(t, count);
+            let l = cx.temp("__dealt", ty.clone());
+            out.push(stmt(span, StmtKind::Let(l, Expr::new(ty, span, ExprKind::Zeroed))));
+            copy(cx, out, local_expr(cx, l, span), u32_lit(span, 0), Src::At(arr, at), count, span)?;
+            Ok(local_expr(cx, l, span))
+        }
+        t => Err(internal(span, format!("an array of a boundary of the type {t:?}"))),
+    }
 }

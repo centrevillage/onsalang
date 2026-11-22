@@ -1000,13 +1000,13 @@ fn made_at(n: &super::PlanNode) -> crate::clock::ClockStage {
 }
 
 /// The Core lowers the body of a flow with a port at `sample * N` (W7-16
-/// U6a2, §11.9) and stops until U6b at an instance that gathers or deals
-/// one in its caller (its value or an argument at `sample * N`). A port at
-/// `sample / N` and an instance of a flow with one do not stop it (W7-16
-/// U5b2), and the flow with one is known by its `derived_port` (no
-/// `process`, the review's M3).
+/// U6a2, §11.9) and an instance that gathers or deals one in its caller
+/// (its value or an argument at `sample * N`, U6b2). A port at `sample /
+/// N` and an instance of a flow with one do not stop it (W7-16 U5b2), and
+/// the flow with one is known by its `derived_port` (no `process`, the
+/// review's M3).
 #[test]
-fn a_burst_in_the_caller_stops_the_core() {
+fn a_burst_in_the_caller_passes_the_gate() {
     let src = "pub flow f(p: F32 at block, x: F32 at (sample * 2)) -> F32 at sample {\n  x[0] * p\n}\n\
                pub flow g(x: F32 at sample) -> F32 at (sample * 2) {\n  [x, x]\n}\n\
                pub flow h(x: F32 at sample) -> F32 at sample {\n  x\n}\n\
@@ -1016,8 +1016,7 @@ fn a_burst_in_the_caller_stops_the_core() {
     let a = check(src);
     assert!(a.diagnostics.is_empty(), "{:?}", a.diagnostics);
     let at = |name: &str| flow(&a, name).multirate_at().map(|s| &src[s.start as usize..s.end as usize]);
-    assert_eq!([at("f"), at("g"), at("h"), at("sl"), at("k")], [None, None, None, None, None]);
-    assert_eq!(at("m"), Some("f~(p, g~(x))"), "an instance of a port at `sample * N`");
+    assert_eq!([at("f"), at("g"), at("h"), at("sl"), at("k"), at("m")], [None, None, None, None, None, None]);
     let port = |name: &str| flow(&a, name).derived_port.map(|s| &src[s.start as usize..s.end as usize]);
     assert_eq!([port("sl"), port("h"), port("k")], [Some("x: F32 at (sample / 4)"), None, None]);
 }
@@ -1025,9 +1024,9 @@ fn a_burst_in_the_caller_stops_the_core() {
 /// The gate passes a chain of `.down~(N)` alone (W7-16 U6a1, §11.9),
 /// nested too, of a callee that reads the time through a flow (U6a3,
 /// S-1217), one whose innermost boundary alone gathers or deals (U6a2) and
-/// one that gathers at two boundaries (U6b1); and stops, at the node, one
-/// with an `.up~(N)` and one that gathers or deals a burst in its caller
-/// (U6b2, U6b3). Each modifier of a chain has its receiver.
+/// one that gathers at two boundaries (U6b1), one that gathers or deals a
+/// burst in its caller (U6b2); and stops, at the node, one with an
+/// `.up~(N)` (U6b3). Each modifier of a chain has its receiver.
 #[test]
 fn the_gate_passes_a_chain_of_downs() {
     let src = "flow lp(x: F32 at sample) -> F32 at sample {\n  x + prev~(x)\n}\n\
@@ -1048,10 +1047,7 @@ fn the_gate_passes_a_chain_of_downs() {
     assert!(a.diagnostics.is_empty(), "{:?}", a.diagnostics);
     let at = |name: &str| flow(&a, name).multirate_at().map(|s| &src[s.start as usize..s.end as usize]);
     assert_eq!([at("down"), at("timed"), at("gathers"), at("deals")], [None, None, None, None]);
-    assert_eq!(
-        [at("up"), at("twice"), at("burst_in"), at("burst_out")],
-        [Some("lp~(p)"), None, Some("g4~(p)"), Some("g2~(mk4~(p).down~(2))")]
-    );
+    assert_eq!([at("up"), at("twice"), at("burst_in"), at("burst_out")], [Some("lp~(p)"), None, None, None]);
     let lowered = |name: &str| flow(&a, name).nodes.iter().all(|n| n.lowered_chain());
     assert_eq!(
         ["gathers", "deals", "twice", "burst_in", "burst_out", "up"].map(lowered),

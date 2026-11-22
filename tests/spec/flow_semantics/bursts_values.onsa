@@ -1,0 +1,326 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.9", "§11.6", "§11.3", "§13.4"]
+
+// The bundle of the caller: a call of a flow whose output is at `sample * N` (`pair~(x)`) passed to a port at `sample * N` of another call (W7-16 U6b2/t; §11.9, S-1204, S-1214 (3), S-1207, S-578). Neither call has a chain, so
+// the caller's `sample` is the `sample` of both: the N elements of the output of the first call at a frame are the N elements of the port of the second at the same frame, in order, with no delay (the delay of N frames
+// is of the gather by a `.down~(N)`, not of a bundle that goes by). The body of the callee sees `x[N - 1]` as the latest (a stereo `[F32; 2] at (sample * 2)` is `[[F32; 2]; 2]`). A port at `sample * N` given a value that is
+// no bundle (a constant, a `block` or `init` value) has N elements that are all that value, the value of the frame (S-1214 (3)); a `sample` value is no argument of such a port (E0815, e0815_conversion_flow_call_clocks.onsa).
+// The elements of a bundle are no gather: a type with no `Default` (`Char`) passes. Each value is worked out by hand from these rules; `x` is 1 2 3 ... (`x = c + 1` at the frame c).
+// A chain makes a bundle of the caller as well: an output at `sample * 8` under `.down~(2)` is dealt over the 2 frames of the caller, 4 elements to each in order (`mk8~(p).down~(2)` is a value at `sample * 4`), and under
+// two `.down~(2)` over 4 frames, 2 to each; a bundle given to a port at `sample * 8` under `.down~(2)` is gathered from the 2 frames before the tick, 4 elements of each, the latest of the frame c - 1 last (`T.default()` before the first frame).
+
+flow g2(x: F32 at (sample * 2)) -> F32 at sample { x[0] + x[1] * 10.0 }
+flow g4(x: F32 at (sample * 4)) -> F32 at sample { x[0] + x[1] * 10.0 + x[2] * 100.0 + x[3] * 1000.0 }
+// The weights 1 2 4 ... 128, so that each element of the window is told from the others.
+flow g8(x: F32 at (sample * 8)) -> F32 at sample {
+  x[0] + x[1] * 2.0 + x[2] * 4.0 + x[3] * 8.0 + x[4] * 16.0 + x[5] * 32.0 + x[6] * 64.0 + x[7] * 128.0
+}
+flow g24(a: F32 at (sample * 2), b: F32 at (sample * 4)) -> F32 at sample { a[0] + a[1] * 10.0 + b[0] * 100.0 + b[3] * 1000.0 }
+flow pair(x: F32 at sample) -> F32 at (sample * 2) { [x * 2.0 - 1.0, x * 2.0] }
+flow pair4(x: F32 at sample) -> F32 at (sample * 4) { [x, x + 0.25, x + 0.5, x + 0.75] }
+flow mk8(p: F32 at block) -> F32 at (sample * 8) { [p, p + 1.0, p + 2.0, p + 3.0, p + 4.0, p + 5.0, p + 6.0, p + 7.0] }
+flow rev2(x: F32 at (sample * 2)) -> F32 at (sample * 2) { [x[1], x[0]] }
+// A bundle with a state: the n-th frame (from 1) has n * f.
+flow ramp2(f: F32 at block) -> F32 at (sample * 2) {
+  let n = f + prev~(^n)
+  [n, n + 0.5]
+}
+flow acc(f: F32 at block) -> F32 at sample {
+  let n = f + prev~(^n)
+  n
+}
+flow part(h: F32 at sample) -> F32 at sample { g2~(pair~(h)) }
+
+// Elements of a type with no `Default`.
+flow gc(c: Char at (sample * 2)) -> F32 at sample { (if c[0] == 'a' { 1.0 } else { 2.0 }) + (if c[1] == 'a' { 10.0 } else { 20.0 }) }
+flow mkc(x: F32 at sample) -> Char at (sample * 2) { [if x > 2.0 { 'b' } else { 'a' }, 'a'] }
+flow st2(x: [F32; 2] at (sample * 2)) -> F32 at sample { x[0][0] + x[0][1] * 10.0 + x[1][0] * 100.0 + x[1][1] * 1000.0 }
+flow mkst(x: F32 at sample) -> [F32; 2] at (sample * 2) { [[x, x + 1.0], [x + 2.0, x + 3.0]] }
+// The time of the call that gives the bundle (§11.4, S-1217): its frame number k, the elements 2 k and 2 k + 1.
+flow mkt() -> U32 at (sample * 2) {
+  let t = sample_tick()
+  [t * 2, t * 2 + 1]
+}
+flow gt(x: U32 at (sample * 2)) -> U32 at sample { x[0] * 100 + x[1] }
+
+pub flow direct(x: F32 at sample) -> F32 at sample { g2~(pair~(x)) }
+pub flow in_parens(x: F32 at sample) -> F32 at sample { g2~((pair~(x))) }
+pub flow in_block(x: F32 at sample) -> F32 at sample {
+  let b = { pair~(x) }
+  g2~((b))
+}
+pub flow in_let(x: F32 at sample) -> F32 at sample {
+  let b = pair~(x)
+  g2~(b)
+}
+pub flow alias(x: F32 at sample) -> F32 at sample {
+  let b = pair~(x)
+  let d = b
+  g2~(d)
+}
+pub flow twice(x: F32 at sample) -> F32 at sample {
+  let b = pair~(x)
+  g2~(b) + g2~(b)
+}
+pub flow through(x: F32 at sample) -> F32 at sample { g2~(rev2~(pair~(x))) }
+pub flow two_bursts(x: F32 at sample) -> F32 at sample { g24~(pair~(x), pair4~(x)) }
+pub flow burst_and_constant(x: F32 at sample) -> F32 at sample { g24~(pair~(x), 3.0) }
+pub flow from_block(p: F32 at block) -> F32 at sample { g2~(p) }
+pub flow from_const() -> F32 at sample { g2~(1.0) }
+pub flow from_init(i: F32 at init) -> F32 at sample { g2~(i) }
+pub flow from_block_expr(p: F32 at block) -> F32 at sample { g4~(p * 2.0) }
+pub flow char_burst(x: F32 at sample) -> F32 at sample { gc~(mkc~(x)) }
+pub flow char_const() -> F32 at sample { gc~('b') }
+pub flow stereo(x: F32 at sample) -> F32 at sample { st2~(mkst~(x)) }
+pub flow stateful() -> F32 at sample { g2~(ramp2~(1.0)) }
+pub flow in_if(x: F32 at sample) -> F32 at sample { if~ (x > 3.0) { g2~(ramp2~(1.0)) } else { 7.0 } }
+pub flow in_par(x: F32 at sample) -> F32 at sample {
+  let ys = par~ i in 0 ..< 2 { g2~(pair~(x * F32.round_from(i + 1))) }
+  ys[0] + ys[1] * 1000.0
+}
+pub flow in_par_state() -> F32 at sample {
+  let ys = par~ i in 0 ..< 2 { g2~(ramp2~(F32.round_from(i + 1))) }
+  ys[0] + ys[1] * 1000.0
+}
+pub flow in_par_outer(x: F32 at sample) -> F32 at sample {
+  let b = pair~(x)
+  let ys = par~ i in 0 ..< 2 { g2~(b) * F32.round_from(i + 1) }
+  ys[0] + ys[1] * 1000.0
+}
+pub flow in_part(f: F32 at block) -> F32 at sample {
+  let h = acc~(f).down~(2)
+  part~(h).down~(2) at sample
+}
+pub flow time_burst() -> U32 at sample { gt~(mkt~()) }
+pub flow deal_into_g4(p: F32 at block) -> F32 at sample { g4~(mk8~(p).down~(2)) }
+pub flow gather_a_burst(x: F32 at sample) -> F32 at sample { g8~(pair4~(x)).down~(2) at sample }
+pub flow deal_into_g2(p: F32 at block) -> F32 at sample { g2~(mk8~(p).down~(2).down~(2)) }
+pub flow combo(p: F32 at block) -> F32 at sample {
+  let a = g2~(ramp2~(1.0))
+  let d = g4~(mk8~(p).down~(2))
+  a + d * 1000.0
+}
+
+fn ramp() -> [F32; 8] {
+  [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]
+}
+
+test "a bundle given to a port at sample * 2 is its two elements of the frame: 2 x - 1 + 10 (2 x) = 22 x - 1, in any of the forms that pass it" {
+  // x = 1 .. 8: 21, 43, 65, 87, 109, 131, 153, 175 for the direct call, in parentheses, as the tail of a block, in a `let`, through an alias `let d = b`; the same bundle read twice is the double.
+  let want: [F32; 8] = [21.0, 43.0, 65.0, 87.0, 109.0, 131.0, 153.0, 175.0]
+  var a: [F32; 8] = [-1.0; 8]
+  var b: [F32; 8] = [-1.0; 8]
+  var c: [F32; 8] = [-1.0; 8]
+  var d: [F32; 8] = [-1.0; 8]
+  var e: [F32; 8] = [-1.0; 8]
+  var f: [F32; 8] = [-1.0; 8]
+  var sa = direct.init(8.0)
+  var sb = in_parens.init(8.0)
+  var sc = in_block.init(8.0)
+  var sd = in_let.init(8.0)
+  var se = alias.init(8.0)
+  var sf = twice.init(8.0)
+  direct.process(inout sa, ramp(), inout a)
+  in_parens.process(inout sb, ramp(), inout b)
+  in_block.process(inout sc, ramp(), inout c)
+  in_let.process(inout sd, ramp(), inout d)
+  alias.process(inout se, ramp(), inout e)
+  twice.process(inout sf, ramp(), inout f)
+  assert a == want
+  assert b == want
+  assert c == want
+  assert d == want
+  assert e == want
+  assert f == [42.0, 86.0, 130.0, 174.0, 218.0, 262.0, 306.0, 350.0]
+}
+
+test "the elements of a bundle keep their order through a flow that takes and gives one, and two ports of two sizes are two bundles" {
+  // rev2 swaps the elements: the pair (2 x - 1, 2 x) comes back as (2 x, 2 x - 1), g2 = 2 x + 10 (2 x - 1) = 22 x - 10: 12, 34, 56, 78, 100, 122.
+  // g24 takes a = (2 x - 1, 2 x) and b = (x, x + 0.25, x + 0.5, x + 0.75): (2 x - 1) + 20 x + 100 x + 1000 (x + 0.75) = 1122 x + 749: 1871, 2993, 4115, 5237, 6359, 7481. A constant for b has the 4 elements 3: 22 x - 1 + 300 + 3000:
+  // 3321, 3343, 3365, 3387, 3409, 3431.
+  var a: [F32; 6] = [-1.0; 6]
+  var b: [F32; 6] = [-1.0; 6]
+  var c: [F32; 6] = [-1.0; 6]
+  var sa = through.init(8.0)
+  var sb = two_bursts.init(8.0)
+  var sc = burst_and_constant.init(8.0)
+  through.process(inout sa, ramp().slice(0, 6), inout a)
+  two_bursts.process(inout sb, ramp().slice(0, 6), inout b)
+  burst_and_constant.process(inout sc, ramp().slice(0, 6), inout c)
+  assert a == [12.0, 34.0, 56.0, 78.0, 100.0, 122.0]
+  assert b == [1871.0, 2993.0, 4115.0, 5237.0, 6359.0, 7481.0]
+  assert c == [3321.0, 3343.0, 3365.0, 3387.0, 3409.0, 3431.0]
+}
+
+test "a value that is no bundle given to a port at sample * N is N elements of that value, the value of the frame (S-1214 (3))" {
+  // from_block: p = 1 in the frames 0 .. 2 and 2 from the frame 3: g2 of two equal elements = 11 p: 11 11 11 22 22 22. A constant 1.0: 11. An `init` value 3: 33. `p * 2.0` has 4 elements: 1111 (2 p): 2222, then 4444.
+  var a: [F32; 6] = [-1.0; 6]
+  var sa = from_block.init(8.0)
+  from_block.process(inout sa, from_block.Params { p: 1.0 }, inout a.slice(0, 3))
+  from_block.process(inout sa, from_block.Params { p: 2.0 }, inout a.slice(3, 6))
+  assert a == [11.0, 11.0, 11.0, 22.0, 22.0, 22.0]
+  var b: [F32; 4] = [-1.0; 4]
+  var sb = from_const.init(8.0)
+  from_const.process(inout sb, inout b)
+  assert b == [11.0, 11.0, 11.0, 11.0]
+  var c: [F32; 4] = [-1.0; 4]
+  var sc = from_init.init(from_init.Config { i: 3.0 }, 8.0)
+  from_init.process(inout sc, inout c)
+  assert c == [33.0, 33.0, 33.0, 33.0]
+  var d: [F32; 6] = [-1.0; 6]
+  var sd = from_block_expr.init(8.0)
+  from_block_expr.process(inout sd, from_block_expr.Params { p: 1.0 }, inout d.slice(0, 3))
+  from_block_expr.process(inout sd, from_block_expr.Params { p: 2.0 }, inout d.slice(3, 6))
+  assert d == [2222.0, 2222.0, 2222.0, 4444.0, 4444.0, 4444.0]
+}
+
+test "the elements of a bundle need no Default: a Char bundle, a Char constant and a stereo bundle pass" {
+  // mkc gives ('b' if x > 2 else 'a', 'a'); gc = (1 if the first is 'a' else 2) + (10 if the second is 'a' else 20): x = 1, 2: 11, x >= 3: 12. The constant 'b' is two elements 'b': 2 + 20 = 22.
+  // mkst gives ((x, x + 1), (x + 2, x + 3)); st2 = x + 10 (x + 1) + 100 (x + 2) + 1000 (x + 3) = 1111 x + 3210: 4321, 5432, 6543, 7654, 8765, 9876.
+  var a: [F32; 6] = [-1.0; 6]
+  var sa = char_burst.init(8.0)
+  char_burst.process(inout sa, ramp().slice(0, 6), inout a)
+  assert a == [11.0, 11.0, 12.0, 12.0, 12.0, 12.0]
+  var b: [F32; 3] = [-1.0; 3]
+  var sb = char_const.init(8.0)
+  char_const.process(inout sb, inout b)
+  assert b == [22.0, 22.0, 22.0]
+  var c: [F32; 6] = [-1.0; 6]
+  var sc = stereo.init(8.0)
+  stereo.process(inout sc, ramp().slice(0, 6), inout c)
+  assert c == [4321.0, 5432.0, 6543.0, 7654.0, 8765.0, 9876.0]
+}
+
+test "a call that takes a bundle in an if~ arm, in a par~ body and in a part of a .down~ is read as everywhere else, and the arm that is not taken goes on" {
+  // in_if: ramp2 has (n, n + 0.5) with n = k + 1 at the frame k, g2 = 11 n + 5 (16, 27, 38, 49 ...); the arm is taken where x > 3, from the frame 3: 7 7 7 49 60 71 82 93 (the arm advances in the frames 0 .. 2 too, §11.5).
+  var a: [F32; 8] = [-1.0; 8]
+  var sa = in_if.init(8.0)
+  in_if.process(inout sa, ramp(), inout a)
+  assert a == [7.0, 7.0, 7.0, 49.0, 60.0, 71.0, 82.0, 93.0]
+  // in_par: the replica i has the bundle of (i + 1) x: (22 x - 1) + 1000 (44 x - 1): 43021, 87043, 131065, 175087, 219109, 263131. With a state in each replica: n = (i + 1) (k + 1), (11 (k + 1) + 5) + 1000 (22 (k + 1) + 5):
+  // 27016, 49027, 71038, 93049, 115060, 137071. A bundle of the caller read in both: (22 x - 1) (1 + 2000): 42021, 86043, 130065, 174087, 218109, 262131.
+  var b: [F32; 6] = [-1.0; 6]
+  var sb = in_par.init(8.0)
+  in_par.process(inout sb, ramp().slice(0, 6), inout b)
+  assert b == [43021.0, 87043.0, 131065.0, 175087.0, 219109.0, 263131.0]
+  var c: [F32; 6] = [-1.0; 6]
+  var sc = in_par_state.init(8.0)
+  in_par_state.process(inout sc, inout c)
+  assert c == [27016.0, 49027.0, 71038.0, 93049.0, 115060.0, 137071.0]
+  var d: [F32; 6] = [-1.0; 6]
+  var sd = in_par_outer.init(8.0)
+  in_par_outer.process(inout sd, ramp().slice(0, 6), inout d)
+  assert d == [42021.0, 86043.0, 130065.0, 174087.0, 218109.0, 262131.0]
+  // in_part: the part runs at the even frames, its frame q reads h = q + 1 (acc ticks in the same part, so h is a value of the part's `sample`): 22 (q + 1) - 1 = 21, 43, 65, 87, each held 2 frames.
+  var e: [F32; 8] = [-1.0; 8]
+  var se = in_part.init(8.0)
+  in_part.process(inout se, in_part.Params { f: 1.0 }, inout e)
+  assert e == [21.0, 21.0, 43.0, 43.0, 65.0, 65.0, 87.0, 87.0]
+}
+
+test "the time of the call that gives the bundle is the frame number: its elements are 2 k and 2 k + 1" {
+  // gt = 100 (2 k) + (2 k + 1) = 202 k + 1.
+  var out: [U32; 6] = [9; 6]
+  var st = time_burst.init(8.0)
+  time_burst.process(inout st, inout out)
+  assert out == [1, 203, 405, 607, 809, 1011]
+}
+
+test "an output at sample * 8 under .down~(2) is a bundle at sample * 4: the first 4 elements go to the frame of the tick and the next 4 to the frame after it" {
+  // The head runs at the frames 0, 2, 4, 6 and reads p of its frame: p = 10 in the frames 0 .. 2, 20 from the frame 3, so the runs at 0 and 2 have p = 10 and those at 4 and 6 have p = 20; the frame 3 reads the elements
+  // of the run at 2, not those of its own p. g4 of (p, p + 1, p + 2, p + 3) = 1111 p + 3210, of (p + 4 .. p + 7) = 1111 p + 7654: 14320 18764 | 14320 18764 | 25430 29874 | 25430 29874.
+  var out: [F32; 8] = [-1.0; 8]
+  var st = deal_into_g4.init(8.0)
+  deal_into_g4.process(inout st, deal_into_g4.Params { p: 10.0 }, inout out.slice(0, 3))
+  deal_into_g4.process(inout st, deal_into_g4.Params { p: 20.0 }, inout out.slice(3, 8))
+  assert out == [14320.0, 18764.0, 14320.0, 18764.0, 25430.0, 29874.0, 25430.0, 29874.0]
+}
+
+test "an output at sample * 8 under two .down~(2) is a bundle at sample * 2: two elements to each of the 4 frames of the run" {
+  // The head runs at the frames 0, 4, 8 and reads p of its frame (p = 1 in the frames 0 .. 4, 2 from the frame 5, so the runs at 0 and 4 have 1 and the run at 8 has 2). The frame j of a run has the elements 2 j and 2 j + 1,
+  // g2 = (p + 2 j) + 10 (p + 2 j + 1) = 11 p + 22 j + 10: 21 43 65 87 for p = 1, 32 54 76 98 for p = 2.
+  var out: [F32; 12] = [-1.0; 12]
+  var st = deal_into_g2.init(8.0)
+  deal_into_g2.process(inout st, deal_into_g2.Params { p: 1.0 }, inout out.slice(0, 5))
+  deal_into_g2.process(inout st, deal_into_g2.Params { p: 2.0 }, inout out.slice(5, 12))
+  assert out == [21.0, 43.0, 65.0, 87.0, 21.0, 43.0, 65.0, 87.0, 32.0, 54.0, 76.0, 98.0]
+}
+
+test "a bundle of 4 elements a frame given to a port at sample * 8 under .down~(2) is gathered from the 2 frames before the tick" {
+  // The tick at the frame c has the elements of the frames c - 2 and c - 1, x(f) = f + 1 and (x, x + 0.25, x + 0.5, x + 0.75) at the frame f; the first tick (c = 0) has 8 elements of T.default(): 0. g8 is the sum of 2^i e_i:
+  // 15 x + 8.5 over the first 4 and 240 x' + 136 over the last 4, with x = c - 1 and x' = c: 255 c + 129.5 for c = 2, 4, 6: 639.5, 1149.5, 1659.5. Each is held 2 frames.
+  var out: [F32; 8] = [-1.0; 8]
+  var st = gather_a_burst.init(8.0)
+  gather_a_burst.process(inout st, ramp(), inout out)
+  assert out == [0.0, 0.0, 639.5, 639.5, 1149.5, 1149.5, 1659.5, 1659.5]
+}
+
+// p = 1 and the bundle with a state: A(k) = 16 + 11 k (g2 of (k + 1, k + 1.5)), D(k) = 4321 at the even frames and 8765 at the odd (g4 of the 4 elements of the run at the even frame: p .. p + 3 then p + 4 .. p + 7);
+// the output is A + 1000 D.
+fn is_combo(o: [F32; 12]) -> Bool {
+  o == [4321016.0, 8765027.0, 4321038.0, 8765049.0, 4321060.0, 8765071.0, 4321082.0, 8765093.0, 4321104.0, 8765115.0, 4321126.0, 8765137.0]
+}
+
+test "a bundle that goes by and a bundle that a .down~(2) deals, in one call and after a reset at a frame between two ticks of the head" {
+  // A(k) + 1000 D(k), see is_combo. After 3 frames of another run (p = 5: the run of the head at the frame 2 dealt 5 .. 12) the reset puts back the counter of ramp2 and the next frame is a tick that deals again, from p = 1.
+  var one: [F32; 12] = [-1.0; 12]
+  var s1 = combo.init(8.0)
+  combo.process(inout s1, combo.Params { p: 1.0 }, inout one)
+  assert is_combo(one)
+  var scratch: [F32; 3] = [-1.0; 3]
+  var out: [F32; 12] = [-1.0; 12]
+  var s2 = combo.init(8.0)
+  combo.process(inout s2, combo.Params { p: 5.0 }, inout scratch)
+  combo.reset(inout s2)
+  combo.process(inout s2, combo.Params { p: 1.0 }, inout out)
+  assert is_combo(out)
+}
+
+fn run_cut(a: U32, b: U32) -> [F32; 12] {
+  var out: [F32; 12] = [-1.0; 12]
+  var st = combo.init(8.0)
+  combo.process(inout st, combo.Params { p: 1.0 }, inout out.slice(0, a))
+  combo.process(inout st, combo.Params { p: 1.0 }, inout out.slice(a, b))
+  combo.process(inout st, combo.Params { p: 1.0 }, inout out.slice(b, 12))
+  out
+}
+
+test "the calls of process cut the run anywhere, a call of 0 frames too: the same values for a bundle that goes by and one that is dealt by a .down~(2) (§13.4)" {
+  assert is_combo(run_cut(12, 12))
+  for a in 0 ..< 13 {
+    for b in a ..< 13 {
+      assert is_combo(run_cut(a, b))
+    }
+  }
+}
+
+test "twelve calls of one frame give the same" {
+  var out: [F32; 12] = [-1.0; 12]
+  var st = combo.init(8.0)
+  for i in 0 ..< 12 {
+    combo.process(inout st, combo.Params { p: 1.0 }, inout out.slice(i, i + 1))
+  }
+  assert is_combo(out)
+}
+
+test "reset after any number of frames, at a tick of the head or between: the state of the bundle, the dealt array and the time are those of a state just made" {
+  // k frames of another run (p = 5) leave the counter of ramp2 at k, the dealt array of the run at the frame 2 (k / 2) and the time at k; after the reset the next frame is the frame 0 and a tick (S-1186).
+  for k in 0 ..< 8 {
+    var scratch: [F32; 8] = [-1.0; 8]
+    var out: [F32; 12] = [-1.0; 12]
+    var st = combo.init(8.0)
+    combo.process(inout st, combo.Params { p: 5.0 }, inout scratch.slice(0, k))
+    combo.reset(inout st)
+    combo.process(inout st, combo.Params { p: 1.0 }, inout out)
+    assert is_combo(out)
+    var t: [U32; 4] = [9; 4]
+    var junk: [U32; 8] = [9; 8]
+    var stt = time_burst.init(8.0)
+    time_burst.process(inout stt, inout junk.slice(0, k))
+    time_burst.reset(inout stt)
+    time_burst.process(inout stt, inout t)
+    assert t == [1, 203, 405, 607]
+  }
+}

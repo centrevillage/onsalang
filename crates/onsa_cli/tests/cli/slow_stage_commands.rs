@@ -5,7 +5,7 @@
 //!   `build`, `dump --core` and `test` end with 0 and with no internal error, and the tests of the package are run (U5a).
 //! - A child instance with no modifier that has a stage of its own or reads `sample_tick()` (S-1088, S-1129 (1)), a grandchild, and a flow with an input or an output at `sample / N` called with no
 //!   modifier (§11.9), are lowered the same way (U5b2).
-//! - What stays E0200 after U6a2 is the work of the later units: a chain with an `.up~(N)` in it or one that gathers or deals past its first boundary (U6b), the call of a flow with a port at `sample * N` with no chain (U6b), and the border of the
+//! - What stays E0200 after U6b2 is the work of the later units: a chain with an `.up~(N)` in it (U6b3) and the border of the
 //!   outermost flow (W10-01). The commands report E0200 and nothing else, no internal error, run no test (Q-09: what the spec has and this version does not carry is E0200, not a wrong output), and the
 //!   E0200 is in the flows that have such a form and in no flow that has only what is lowered (§18.1: a unit is checked alone; the first is the first of the file).
 //! - Of two ticks at one position that both panic, the slower one is the one that is reported (§11.9: "遅い方から並ぶ", S-1079), whether the two are of one flow or of the parent and a child (S-1088).
@@ -243,14 +243,14 @@ fn what_is_left_of_the_ticks_is_e0200_in_its_own_flows_and_the_others_are_lowere
     assert_e0200_in("slow_stage_left_chain", &chain, &["chained"]);
 }
 
-/// A call of a conversion flow with a port at `sample * N` with no chain takes or gives a burst at the caller (U6b); the bodies of the two flows with the ports are lowered (W7-16 U6a2, S-1207: only the flow that
-/// calls them is E0200), beside `ok` and the child `ch`, which are lowered too (§18.1).
+/// A call of a conversion flow with a port at `sample * N` with no chain takes or gives a bundle at the caller (§11.9; W7-16 U6b2, it was E0200 until then): the package with `ok` and the child `ch`, the flows `dup2`
+/// and `fold2` and the flow `burst` that passes the output of the first to the second is read by `check` with no diagnostic and lowered, and its test runs. The values are in `bursts_values.onsa`.
 #[test]
-fn a_burst_at_the_caller_is_e0200_in_its_own_flow_and_the_bodies_of_the_conversion_flows_are_lowered() {
+fn a_burst_at_the_caller_is_lowered_with_the_conversion_flows_and_the_flows_beside_it() {
     let burst = format!(
         "{SLOW_CHILD}flow dup2(x: F32 at sample) -> F32 at (sample * 2) {{\n  [x, x]\n}}\n\nflow fold2(x: F32 at (sample * 2)) -> F32 at sample {{\n  (x[0] + x[1]) * 0.5\n}}\n\npub flow ok(p: F32 at block, x: F32 at sample) -> F32 at sample {{\n  x * ch~(p)\n}}\n\npub flow burst(x: F32 at sample) -> F32 at sample {{\n  fold2~(dup2~(x))\n}}\n"
     );
-    assert_e0200_in("slow_stage_left_burst", &burst, &["burst"]);
+    assert_lowers("slow_stage_burst", &burst, &[]);
 }
 
 // ----------------------------------------------------------------------------- the slower tick first

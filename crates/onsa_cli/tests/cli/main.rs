@@ -11,6 +11,7 @@ mod block_operands;
 mod body_paths;
 mod bound_list_model;
 mod boundary_channels;
+mod bursts_c_commands;
 mod call_forms_syntax;
 mod candidate_headings;
 mod candidate_shapes;

@@ -1,10 +1,11 @@
 //! A conversion flow in the commands of `onsa` (W7-09 U4a/t, W7-16 U5b2/t; spec §11.9, §11.6, §11.3, §18.1, `spec/tools.md` §1.1; S-566, S-567,
 //! S-1078, S-1088, Q-09): what the case files in `tests/spec/flow_clock/` cannot pin.
 //!
-//! - The Core of the ticks is W7-16. A flow with an input or an output at `sample / N` is lowered, and so is a call of it with no modifier (U5b2); so are the body of a conversion flow with a port at `sample * N` and a chain
-//!   of `.down~(N)` that gathers or deals at its first boundary over it (U6a2, S-1207, S-1214: `build`, `dump --core` and `test` end with 0, and `onsa interface` writes the size of its state). `build`, `dump --core` and `test`
-//!   stop at a package that has a call of a flow with a port at `sample * N` with no chain (a burst at the caller), a chain that gathers or deals past its first boundary or has an up (U6b), with E0200 and with nothing
-//!   else (no internal error), on the file of the flow, while `check` reads it with no diagnostic. A chain of `.down~(N)` over a flow with an input at `sample / N` gathers and deals nothing and is lowered (W7-16 U6a1/t).
+//! - The Core of the ticks is W7-16. A flow with an input or an output at `sample / N` is lowered, and so is a call of it with no modifier (U5b2); so are the body of a conversion flow with a port at `sample * N`, a chain
+//!   of `.down~(N)` that gathers or deals over it (U6a2, U6b1, S-1207, S-1214: `build`, `dump --core` and `test` end with 0, and `onsa interface` writes the size of its state) and a call of a flow with a port or an output
+//!   at `sample * N` with no chain, whose argument is a bundle of the caller, a `block` or `init` value or a constant (U6b2, S-1214 (3)). `build`, `dump --core` and `test` stop at a package that has a chain with an `.up~(N)` or a
+//!   bundle that an `.up~(N)` makes (U6b3) with E0200 and with nothing else (no internal error), on the file of the flow, while `check` reads it with no diagnostic. A chain of `.down~(N)` over a flow with an input at
+//!   `sample / N` gathers and deals nothing and is lowered (W7-16 U6a1/t).
 //! - `onsa interface` writes the heading of the flow with the clock of each port as the ratio (`sample / 4`, `sample * 2`): the
 //!   text of the declaration, not the type that the body sees (the array of a port at `sample * N`).
 //! - `onsa graph` of such a flow has a vertex for each port with the ratio in its label, the colours of the three clocks, and the
@@ -12,10 +13,8 @@
 //!
 //! The texts are written from the spec; none is taken from the output of the compiler.
 
-use crate::slow_stage_commands::assert_lowers;
-use crate::test_support::{Dir, diagnostics, doc_of, run};
-
-const BUILD_MANIFEST: &str = "[package]\nname = \"demo\"\nedition = \"2026\"\n\n[targets.host]\nkind = \"source\"\nlang = \"c\"\nplatform = \"host\"\nprovides = []\n";
+use crate::slow_stage_commands::{assert_e0200_in, assert_lowers};
+use crate::test_support::{Dir, run};
 
 const FLOWS: &str = "\
 flow dup2(x: F32 at sample) -> F32 at (sample * 2) {
@@ -44,10 +43,6 @@ const BODIES: [&str; 4] = [
     "pub flow f(x: F32 at sample) -> F32 at sample {\n  x\n}\n",
 ];
 
-fn error_lines(text: &str) -> Vec<&str> {
-    text.lines().filter(|l| l.contains("error[")).collect()
-}
-
 // ----------------------------------------------------------------------------- the Core of the ports
 
 /// A package whose flows have a derived clock in a port is read by `check` with no diagnostic (the declarations, the calls and the chains are right, W7-09 U4a), and since W7-16 U6a2 `build`, `dump --core` and `test`
@@ -69,17 +64,20 @@ flow slow4(g: F32 at (sample / 4)) -> F32 at sample {
 flow fast2(g: F32 at (sample * 2)) -> F32 at sample {
   g[0] + g[1]
 }
+
+flow dup2(x: F32 at sample) -> F32 at (sample * 2) {
+  [x, x + 1.0]
+}
 ";
 
 /// A flow with no port, `let` or node of a derived clock of its own that calls a flow with an input of a derived clock (a value
 /// of `block`, of `init`, a constant or of `sample`, with no chain and in `.down~(2)`, and in `if~` and `par~`), each a flow of
 /// its own: its node reads the argument at the tick of that input (§11.9). A `sample` value is not passed where it would be
-/// made slower (E0815, §11.3). Returns the source and the number of flows that stay E0200 (after U6a2): each call of the callee `fast2` (a port at `sample * 2`) with no chain, which takes a burst at the caller (U6b), and in `if~`
-/// and `par~`. The callee `fast2` itself and the calls of it in a `.down~(2)` (which gather its port at the caller's `sample`, W7-16 U6a2) are lowered, and so are the calls of `slow4` with no chain (U5b2); the calls of `slow4`
-/// in a chain are not in this package (they are in the case of `a_caller_of_an_input_at_sample_over_n_with_a_down_chain_is_lowered`).
-fn callers_of_derived_inputs() -> (String, usize) {
+/// made slower (E0815, §11.3). The callee `fast2` has a port at `sample * 2`: a call of it with no chain takes a bundle of the caller (U6b2; the 2 elements of a `block` or `init` value
+/// or a constant are that value, S-1214 (3)), and so does the call with the output of `dup2` (a bundle) as the argument, in a `let`, through an alias and twice. The calls of it in a `.down~(2)` gather its port at the caller's `sample`
+/// (W7-16 U6a2); the calls of `slow4` with no chain are lowered (U5b2) and the calls of `slow4` in a chain are in the case of `a_caller_of_an_input_at_sample_over_n_with_a_down_chain_is_lowered`.
+fn callers_of_derived_inputs() -> String {
     let mut calls = Vec::new();
-    let mut stay = 0;
     for callee in ["slow4", "fast2"] {
         for arg in ["p", "i", "1.0", "x"] {
             for down in [false, true] {
@@ -87,7 +85,6 @@ fn callers_of_derived_inputs() -> (String, usize) {
                 if skip {
                     continue;
                 }
-                stay += usize::from(callee == "fast2" && !down);
                 calls.push(if down {
                     format!("x + ({callee}~({arg}).down~(2) at sample)")
                 } else {
@@ -95,44 +92,35 @@ fn callers_of_derived_inputs() -> (String, usize) {
                 });
             }
         }
-        stay += if callee == "fast2" { 2 } else { 0 };
         calls.push(format!("if~ (p > 0.0) {{ {callee}~(p) }} else {{ x }}"));
         calls.push(format!("let ys = par~ k in 0..<2 {{ {callee}~(p) }}\n  ys[0] + ys[1]"));
     }
+    calls.push("x + fast2~(dup2~(x))".to_string());
+    calls.push("let u = dup2~(x)\n  let v = u\n  fast2~(v) + fast2~(u)".to_string());
+    calls.push("if~ (p > 0.0) { fast2~(dup2~(x)) } else { x }".to_string());
+    calls.push("let ys = par~ k in 0..<2 { fast2~(dup2~(x)) }\n  ys[0] + ys[1]".to_string());
     let flows = calls.iter().enumerate().map(|(k, body)| {
         format!("flow c{k}(p: F32 at block, i: F32 at init, x: F32 at sample) -> F32 at sample {{\n  {body}\n}}\n")
     });
-    (format!("{CALLEES}\n{}", flows.collect::<Vec<_>>().join("\n")), stay)
+    format!("{CALLEES}\n{}", flows.collect::<Vec<_>>().join("\n"))
 }
 
-/// A flow that calls a flow with an input at `sample * 2` with no chain reads the argument at that tick (a burst of the caller), so that it stops at the gate of the Core (E0200 until W7-16 U6b, Q-09): `build`, `dump --core`
-/// and `test` report one E0200 for each of those flows of the package and no internal error (W7-09 U4a/b #1: the gate saw the ports, `let`s and nodes of a flow and not the ticks its nodes read their arguments at), and
-/// `check` reads the package with no diagnostic. The callee `fast2` itself, the calls of it in a `.down~(2)` (the input is gathered at the caller's `sample`, W7-16 U6a2), `slow4`, an input at `sample / 4`, and the
-/// calls of it with no chain have no E0200 (W7-16 U5b2).
+/// A flow that calls a flow with an input at `sample * 2` with no chain takes a bundle of the caller: the argument of a `block` or `init` value or a constant is the 2 elements of that value, and the output of `dup2` is
+/// the 2 elements of its frame (§11.9, S-1214 (3)). `check` reads the package with no diagnostic and `build`, `dump --core` and `test` lower it (W7-16 U6b2; it was E0200 until then: the gate saw the ports, `let`s and nodes of a
+/// flow and not the ticks its nodes read their arguments at, W7-09 U4a/b #1) and run its test. The values are in `tests/spec/flow_semantics/bursts_values.onsa`.
 #[test]
-fn a_caller_of_an_input_at_sample_times_with_no_chain_is_e0200_for_build_dump_core_and_test() {
-    let (src, flows) = callers_of_derived_inputs();
-    let d = Dir::bare("conversion_core_gate_callers");
-    d.write("onsa.toml", BUILD_MANIFEST);
-    d.write("main.onsa", &src);
-    let out = run(d.root(), &["check", "--json"]);
-    assert_eq!(out.code, 0, "check reads the flows: {}{}\n{src}", out.stdout, out.stderr);
-    assert!(diagnostics(&doc_of(&out)).is_empty(), "{}\n{src}", out.stdout);
-    let dir = d.arg();
-    let commands: [(&str, Vec<&str>); 3] = [
-        ("build", vec!["build", "--target", "host"]),
-        ("dump --core", vec!["dump", "--core", dir.as_str()]),
-        ("test", vec!["test"]),
-    ];
-    for (name, args) in commands {
-        let out = run(d.root(), &args);
-        let both = format!("{}{}", out.stdout, out.stderr);
-        assert_eq!(out.code, 1, "{name}: {both}");
-        assert!(!both.contains("internal error"), "{name}: {both}");
-        let lines = error_lines(&both);
-        assert!(lines.iter().all(|l| l.contains("error[E0200]")), "{name}: only E0200: {both}");
-        assert_eq!(lines.len(), flows, "{name}: one E0200 for each flow that stays: {both}");
-    }
+fn a_caller_of_an_input_at_sample_times_with_no_chain_is_lowered_by_build_dump_core_and_test() {
+    assert_lowers("conversion_core_callers", &callers_of_derived_inputs(), &[]);
+}
+
+/// A bundle that an `.up~(N)` makes is the work of U6b3 (the chain with an up): the call of `fast2` with the argument `thru~(p).up~(2)`, the same in a `let`, in `if~`, stop at E0200 in their own flows and nothing else
+/// (no internal error), and the flow `ok`, which calls `slow4` with no chain, is lowered (W7-16 U6b2; §11.9: "`.up~(N)` の出力は `sample * N` の値").
+#[test]
+fn a_bundle_made_by_an_up_is_e0200_until_u6b3_and_the_flow_beside_it_is_lowered() {
+    let src = format!(
+        "{CALLEES}\nflow thru(x: F32 at sample) -> F32 at sample {{\n  x\n}}\n\npub flow ok(p: F32 at block) -> F32 at sample {{\n  slow4~(p)\n}}\n\npub flow direct(p: F32 at block) -> F32 at sample {{\n  fast2~(thru~(p).up~(2))\n}}\n\npub flow in_let(p: F32 at block) -> F32 at sample {{\n  let u = thru~(p).up~(2)\n  fast2~(u)\n}}\n\npub flow in_if(p: F32 at block) -> F32 at sample {{\n  if~ (p > 0.0) {{ fast2~(thru~(p).up~(2)) }} else {{ 0.0 }}\n}}\n"
+    );
+    assert_e0200_in("conversion_core_up_burst", &src, &["direct", "in_let", "in_if"]);
 }
 
 /// The calls of a flow with an input at `sample / 4` with no chain (a value of `block`, of `init`, a constant, in `if~` and `par~`), with the callee, make a package that is lowered (W7-16 U5b2: the

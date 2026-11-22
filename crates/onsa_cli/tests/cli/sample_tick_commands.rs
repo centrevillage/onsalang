@@ -7,10 +7,12 @@
 //! - A chain of `.down~(N)` over a part that does not read `sample_tick()` is lowered even when its argument does (the argument is read in the caller, at the tick of the input; W7-16 U6a1/t).
 //! - A chain of `.down~(N)` over a part that reads `sample_tick()` (the part, a child of it, also a conversion flow) is lowered and gives the number of the outermost flow divided by N, cut to `U32` last (§11.4; W7-16 U6a3/t,
 //!   S-1217). The values of the chains are in `tests/spec/flow_semantics/down_chain_time_values.onsa`; the cases here are the commands: the package is lowered and its test passes.
+//! - `sample_tick()` read at a `sample * N` of the caller (an argument of a port at it, alone, in an operation, a block or an `if`, the head of a chain whose port is one in its frame, the head of an
+//!   `.up~(N)`) is E0200 at `check` (S-1218 open, provisional): every command stops with E0200 and no internal error. Read at a port of `sample / N` it is the time of the caller (§11.4).
 //!
 //! The texts are written from the spec; none is taken from the output of the compiler.
 
-use crate::slow_stage_commands::{assert_e0200, assert_lowers, package};
+use crate::slow_stage_commands::{assert_e0200, assert_lowers, error_lines, package};
 use crate::test_support::{Dir, record, run, str_of, test_json};
 
 /// The bodies of `main.onsa` that read `sample_tick()` in the places of §11.4 (a `let`, the output, a `par`, the first argument of a delay), with no modifier and no child.
@@ -105,6 +107,46 @@ fn a_chain_with_an_up_over_a_part_that_reads_sample_tick_stays_e0200_until_u6b3(
 fn a_chain_with_a_second_gathering_boundary_over_a_part_that_reads_sample_tick_gives_the_time_divided_by_the_product() {
     let flows = "flow g4(x: F32 at (sample * 4)) -> F32 at sample {\n  x[0] + x[3] * F32.round_from(sample_tick())\n}\n\nflow t4(x: F32 at (sample * 4)) -> U32 at sample {\n  sample_tick()\n}\n\npub flow f(x: F32 at sample) -> F32 at sample {\n  g4~(x).down~(2).down~(2) at sample\n}\n\npub flow t(x: F32 at sample) -> U32 at sample {\n  t4~(x).down~(2).down~(2) at sample\n}\n\ntest \"time over 4 with two boundaries\" {\n  let xs: [F32; 16] = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0]\n  var a: [F32; 16] = [-1.0; 16]\n  var b: [U32; 16] = [9; 16]\n  var sa = f.init(8.0)\n  var sb = t.init(8.0)\n  f.process(inout sa, xs.slice(0, 16), inout a)\n  t.process(inout sb, xs.slice(0, 16), inout b)\n  assert a == [0.0, 0.0, 0.0, 0.0, 2.0, 2.0, 2.0, 2.0, 15.0, 15.0, 15.0, 15.0, 37.0, 37.0, 37.0, 37.0]\n  assert b == [0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3]\n}\n";
     assert_lowers_and_passes("sample_tick_gather2_values", flows, "time over 4 with two boundaries");
+}
+
+/// The flows of the forms of S-1218: a port at `sample * 2` (`g2`), at `sample * 8` under `.down~(4)` (`g8`, `sample * 2` in the frame of the call), and a port at `sample` under `.up~(2)`.
+const BURST_PORTS: &str = "flow g2(x: U32 at (sample * 2)) -> U32 at sample {\n  x[0] +% x[1] *% 10\n}\n\nflow g8(x: U32 at (sample * 8)) -> U32 at sample {\n  x[0]\n}\n\nflow pass(x: U32 at sample) -> U32 at sample {\n  x\n}\n\n";
+
+/// `sample_tick()` read at a `sample * N` of the caller, however the argument holds it: its clock and value are open (S-1218), so `check`, `build`, `dump --core` and `test` stop with E0200 and
+/// nothing else (Q-09), and no command ends with an internal error. Only the stop is pinned, no value.
+#[test]
+fn sample_tick_read_at_a_sample_times_n_of_the_caller_is_e0200_at_every_command() {
+    let forms = [
+        "g2~(sample_tick())",
+        "g2~(sample_tick() *% 2)",
+        "g2~({ sample_tick() })",
+        "g2~(if p { sample_tick() } else { 0 })",
+        "g8~(sample_tick()).down~(4) at sample",
+        "g2~(pass~(sample_tick()).up~(2))",
+    ];
+    for (k, form) in forms.iter().enumerate() {
+        let flows = format!("{BURST_PORTS}pub flow f(p: Bool at block) -> U32 at sample {{\n  {form}\n}}\n");
+        let d = package(&format!("sample_tick_burst_{k}"), &flows, &[]);
+        let dir = d.arg();
+        let commands: [Vec<&str>; 4] =
+            [vec!["check"], vec!["build", "--target", "host"], vec!["dump", "--core", dir.as_str()], vec!["test"]];
+        for args in commands {
+            let out = run(d.root(), &args);
+            let both = format!("{}{}", out.stdout, out.stderr);
+            assert_eq!(out.code, 1, "{form}: {args:?}: {both}");
+            assert!(!both.contains("internal error"), "{form}: {args:?}: {both}");
+            let lines = error_lines(&both);
+            assert!(!lines.is_empty() && lines.iter().all(|l| l.contains("error[E0200]")), "{form}: {args:?}: {both}");
+        }
+    }
+}
+
+/// `sample_tick()` passed to a port of `sample / 4` is read at its tick and is the time of the caller (§11.4: "書いた場所の `sample_rate()` の刻みの数", "`sample / N` の段で読んでも同じ数"): 0, 4, 8 at the
+/// ticks, each held 4 frames by `at sample`. It is not a `sample * N` of the caller, so it is lowered as before S-1218.
+#[test]
+fn sample_tick_passed_to_a_slow_port_gives_the_time_of_the_caller() {
+    let flows = "flow hold4(x: U32 at (sample / 4)) -> U32 at (sample / 4) {\n  x\n}\n\npub flow f() -> U32 at sample {\n  hold4~(sample_tick()) at sample\n}\n\ntest \"slow port time\" {\n  var out: [U32; 12] = [9; 12]\n  var st = f.init(8.0)\n  f.process(inout st, inout out)\n  assert out == [0, 0, 0, 0, 4, 4, 4, 4, 8, 8, 8, 8]\n}\n";
+    assert_lowers_and_passes("sample_tick_slow_port_values", flows, "slow port time");
 }
 
 /// The package is lowered by `check`, `build`, `dump --core` and `test` (`assert_lowers`), and the test `name` of `main.onsa` is run and passes (the values of the chain, from §11.4).

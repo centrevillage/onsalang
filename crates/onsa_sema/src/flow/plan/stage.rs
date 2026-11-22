@@ -126,14 +126,9 @@ impl FlowInfo {
     /// The first place of the plan (by its place) the Core does not lower
     /// until a later unit of W7-16, which stops at it (E0200, R-91 (1)): a
     /// node with a chain the Core does not lower yet
-    /// ([`PlanNode::lowered_chain`]), and an instance that gathers or deals
-    /// a burst in this flow (its clock, or that of an argument it reads, at
-    /// `sample * N`, §11.9). The one gate of them (D-15).
+    /// ([`PlanNode::lowered_chain`]). The one gate of them (D-15).
     pub fn multirate_at(&self) -> Option<Span> {
-        let stops = |n: &&PlanNode| match &n.kind {
-            PlanKind::Instance { .. } => n.clock.burst() || n.args.iter().any(|a| a.at.burst()),
-            _ => false,
-        } || !n.lowered_chain();
+        let stops = |n: &&PlanNode| !n.lowered_chain();
         self.nodes.iter().filter(stops).map(|n| n.span).min_by_key(|s| (s.start, s.end))
     }
 
@@ -162,8 +157,7 @@ impl FlowInfo {
 impl PlanNode {
     /// Whether the Core lowers the chain of the node (§11.9, S-1207): none,
     /// or one of an instance whose modifiers are all `.down~(N)` (an `.up~`
-    /// waits for U6b3 of W7-16); a burst it gathers or deals in its caller
-    /// stops the gate on its own. The one test of it (D-15): the gate
+    /// waits for U6b3 of W7-16). The one test of it (D-15): the gate
     /// ([`FlowInfo::multirate_at`]) and the Core, which runs a stage of a
     /// callee of no other chain, read it.
     pub fn lowered_chain(&self) -> bool {

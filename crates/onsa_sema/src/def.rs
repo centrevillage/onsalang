@@ -482,14 +482,9 @@ impl FlowInput {
 /// others are as the caller's. The one place of the body's view of the ports
 /// (D-15).
 fn body_view(c: Clock) -> (Clock, Option<u32>) {
-    match c {
-        Clock::Tick(k) if k.faster_than_body() => {
-            let Some(n) = k.n().and_then(|n| u32::try_from(n).ok()) else {
-                onsa_diag::internal::bug(None, format!("a port at {c:?}, past `U32`"))
-            };
-            (Clock::SAMPLE, Some(n))
-        }
-        c => (c, None),
+    match c.burst_len() {
+        Some(n) => (Clock::SAMPLE, Some(n)),
+        None => (c, None),
     }
 }
 

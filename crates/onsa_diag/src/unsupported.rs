@@ -128,9 +128,12 @@ features! {
     NonCopyTickParts: Language, "a value that is not Copy computed at the clock `{}` and read at a faster clock",
         Some("write `at` on the names it reads, so that it is computed where it is read (`(a at sample) > 0.0`)");
     /// §11.9: the Core of a flow with a chain of modifiers that has an
-    /// `.up~(N)`, a port at `sample * N` or a call that gathers or deals
-    /// one, which the later units of W7-16 lower.
-    MultirateFlows: Language, "building a flow with a chain that has an `.up~(N)`, or a call whose value or argument is at `(sample * N)` in its caller", None;
+    /// `.up~(N)`, which the last unit of W7-16 lowers.
+    MultirateFlows: Language, "building a flow with a chain that has an `.up~(N)`", None;
+    /// §11.4, §11.9, S-1218: `{}`: the clock. `sample_tick()` read at a
+    /// `sample * N` of the caller (an argument of a port at it, the head of
+    /// an `.up~(N)`), whose clock and value are open (provisional).
+    SampleTickAtBursts: Language, "`sample_tick()` read at the clock `{}` of a call", None;
     /// §11.10: the meaning of `.when~(c)` and `.reset_if~(r)` (W7-10).
     InstanceModifiers: Language, "the modifiers `.when~(c)` and `.reset_if~(r)` of an instance", None;
     Iteration: Language, "iteration over types other than arrays, `Span`, `Buf` and `Array`", None;

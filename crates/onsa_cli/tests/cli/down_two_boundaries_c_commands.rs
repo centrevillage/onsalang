@@ -60,11 +60,16 @@ pub flow deal2_22(
 }
 ";
 
-/// The package built for the host (a build that ends with 0 and no internal error).
+/// The package of `FLOWS` built for the host.
 fn build(tag: &str) -> Dir {
+    build_flows(tag, FLOWS)
+}
+
+/// The package of `flows` built for the host (a build that ends with 0 and no internal error).
+pub fn build_flows(tag: &str, flows: &str) -> Dir {
     let dir = Dir::bare(tag);
     dir.write("onsa.toml", MANIFEST);
-    dir.write("main.onsa", FLOWS);
+    dir.write("main.onsa", flows);
     let out = run(dir.root(), &["build", "--target", "host"]);
     assert_eq!(out.code, 0, "build: {}{}", out.stdout, out.stderr);
     assert!(!out.stderr.contains("internal error"), "{}", out.stderr);
@@ -73,7 +78,7 @@ fn build(tag: &str) -> Dir {
 
 /// A C program for `flow` (compiled once). Its arguments are the number of frames of the other run (`junk`) before the `reset`, the number of frames of the run, and the places where the run is cut into calls of `process`
 /// (a place twice is a call of 0 frames). The frames of the junk have `x = 101` and `p = 5`, the run `x = 1, 2, 3 ...` (`x = c + 1`) and `p = 10`; it prints the frames of the run on one line, each as an integer.
-fn driver(dir: &Dir, flow: &str, has_input: bool) -> String {
+pub fn driver(dir: &Dir, flow: &str, has_input: bool) -> String {
     let up = flow.to_uppercase();
     let (xs, set_junk, set_run) = if has_input {
         (
@@ -136,7 +141,7 @@ int main(int argc, char** argv) {{
 }
 
 /// The frames the driver printed for `junk` frames of another run, then a run of `frames` frames cut at `cuts`.
-fn frames_of(exe: &str, junk: u32, frames: u32, cuts: &[u32]) -> Vec<i64> {
+pub fn frames_of(exe: &str, junk: u32, frames: u32, cuts: &[u32]) -> Vec<i64> {
     let mut args = vec![junk.to_string(), frames.to_string()];
     args.extend(cuts.iter().map(u32::to_string));
     let ran = Command::new(exe).args(&args).output().expect("run the driver");

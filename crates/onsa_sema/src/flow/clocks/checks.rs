@@ -220,7 +220,7 @@ impl Walk<'_> {
         let span = self.ast.expr(e).span;
         let [a, b] = ops.map(|(_, c)| shown(c, span));
         let what = if looped { "operands that enter a loop of `let`s, which has one clock," } else { "operands" };
-        let msg = match ops.iter().find(|(_, c)| matches!(c, Clock::Tick(k) if k.faster_than_body())) {
+        let msg = match ops.iter().find(|(_, c)| c.burst()) {
             Some((_, c)) => format!(
                 "a value at `{}` takes no operation at the call side for now; a conversion flow takes it (§11.9)",
                 c.shown(span)
@@ -434,17 +434,33 @@ impl Walk<'_> {
     }
 
     /// The argument `x` at the clock `c` of an instance of `g`, read at
-    /// `at`, the clock of its input `input` (§11.3, E0815).
+    /// `at`, the clock of its input `input` (§11.3, E0815): to a `sample *
+    /// N` of the caller, a value comes through a conversion flow (§11.9).
+    /// `sample_tick()` there is E0200 (S-1218).
     pub(super) fn check_arg(&mut self, x: ExprId, c: Clock, at: Clock, input: &FlowInput, g: DefId) {
-        if !self.checking() || readable_at(c, at).is_ok() {
+        if !self.checking() {
             return;
         }
         let span = self.ast.expr(x).span;
+        // SPEC-GAP(S-1218): `sample_tick()` read at a `sample * N` of the
+        // caller is E0200 (provisional), however the argument holds it.
+        if c == Clock::Ambient && at.burst() {
+            let d =
+                onsa_diag::unsupported::Feature::SampleTickAtBursts.diagnostic(Stage::Flow, span, &[&at.shown(span)]);
+            let found = self.src(span);
+            return self.report(d.with_found(found));
+        }
+        if readable_at(c, at).is_ok() {
+            return;
+        }
         let (shown, to, name) = (shown(c, span), at.shown(span), &self.a.def(g).name);
-        let never = "a value is never made slower".to_string();
-        let how = if promotable(c, at) { format!("read it at `{to}` with `at`") } else { never };
+        let how = match (promotable(c, at), at.burst()) {
+            (true, _) => format!("read it at `{to}` with `at` (§11.3)"),
+            (false, true) => "a conversion flow takes it (§11.9)".into(),
+            (false, false) => "a value is never made slower (§11.3)".into(),
+        };
         let msg = format!(
-            "this argument is at the clock `{shown}` but the input `{}` of `{name}` is at `{to}`; {how} (§11.3)",
+            "this argument is at the clock `{shown}` but the input `{}` of `{name}` is at `{to}`; {how}",
             input.name
         );
         self.err(Code::E0815, span, msg);
