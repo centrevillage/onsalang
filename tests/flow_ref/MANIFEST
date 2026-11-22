@@ -3,9 +3,9 @@ file branches_plain.tsv rows=16 tests=5 evaluated=5 unavailable=0 skipped=0 wait
 file branches_plain_match.tsv rows=4 tests=1 evaluated=1 unavailable=0 skipped=0 waiting=1
 file branches_tilde.tsv rows=34 tests=11 evaluated=11 unavailable=0 skipped=0 waiting=0
 file bursts_values.tsv rows=106 tests=13 evaluated=10 unavailable=0 skipped=3 waiting=0
-file chain_blocks_delay.tsv rows=36 tests=6 evaluated=6 unavailable=0 skipped=0 waiting=1
-file chain_blocks_inputs.tsv rows=18 tests=4 evaluated=4 unavailable=0 skipped=0 waiting=1
-file chain_blocks_ports.tsv rows=29 tests=6 evaluated=6 unavailable=0 skipped=0 waiting=1
+file chain_blocks_delay.tsv rows=36 tests=6 evaluated=6 unavailable=0 skipped=0 waiting=0
+file chain_blocks_inputs.tsv rows=18 tests=4 evaluated=4 unavailable=0 skipped=0 waiting=0
+file chain_blocks_ports.tsv rows=29 tests=6 evaluated=6 unavailable=0 skipped=0 waiting=0
 file default_init_explicit.tsv rows=16 tests=5 evaluated=5 unavailable=0 skipped=0 waiting=0
 file default_init_module.tsv rows=7 tests=2 evaluated=2 unavailable=0 skipped=0 waiting=0
 file default_init_numbers.tsv rows=19 tests=6 evaluated=6 unavailable=0 skipped=0 waiting=0
@@ -136,6 +136,7 @@ file slow_tick_panics.tsv rows=28 tests=6 evaluated=6 unavailable=0 skipped=0 wa
 file slow_tick_same_position.tsv rows=13 tests=4 evaluated=4 unavailable=0 skipped=0 waiting=0
 file struct_pattern_rest_let.tsv rows=7 tests=2 evaluated=2 unavailable=0 skipped=0 waiting=0
 file struct_pattern_rest_match.tsv rows=4 tests=1 evaluated=1 unavailable=0 skipped=0 waiting=0
+file up_chain_values.tsv rows=100 tests=16 evaluated=13 unavailable=0 skipped=3 waiting=0
 file vdelay_edges.tsv rows=64 tests=15 evaluated=14 unavailable=0 skipped=1 waiting=0
 file vdelay_varying_d.tsv rows=2 tests=1 evaluated=0 unavailable=0 skipped=1 waiting=0
-total files=139 rows=4379 tests=1003 evaluated=917 unavailable=1 skipped=85 waiting=9
+total files=140 rows=4479 tests=1019 evaluated=930 unavailable=1 skipped=88 waiting=6

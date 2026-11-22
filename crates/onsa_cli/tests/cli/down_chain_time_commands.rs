@@ -145,10 +145,9 @@ fn a_flow_with_a_down_before_a_read_of_sample_tick_has_the_upper_word_right_afte
     assert_eq!((rate[0].1, rate[1].1, rate[2].1), (0, 4, 8), "{rate:?}");
 }
 
-/// §12.4: "`.up~` と打ち消す形も数える": a `.down~` that is cancelled by an `.up~` (`.down~(2).up~(2)`, `.up~(2).down~(2)`) is a `.down~` on the path, so the flow has `_tick_hi`. The `.up~` is lowered in U6b, so
+/// §12.4: "`.up~` と打ち消す形も数える": a `.down~` that is cancelled by an `.up~` (`.down~(2).up~(2)`, `.up~(2).down~(2)`) is a `.down~` on the path, so the flow has `_tick_hi`. The `.up~` is lowered in U6b3, so
 /// until then the commands stop at E0200 and `onsa interface` has no field list.
 #[test]
-#[ignore = "W7-16 U6b: S-1211"]
 fn a_down_cancelled_by_an_up_still_has_the_upper_word() {
     let src = format!(
         "{PARTS}pub flow down_up() -> U32 at sample {{\n  tk~().down~(2).up~(2) at sample\n}}\n\npub flow up_down() -> U32 at sample {{\n  tk~().up~(2).down~(2) at sample\n}}\n"

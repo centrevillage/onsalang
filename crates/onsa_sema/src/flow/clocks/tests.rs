@@ -606,7 +606,6 @@ fn sample_tick_takes_the_clock_of_its_place() {
     assert_eq!((f.expr("sample_tick() + 1"), f.expr("sample_tick() * 2")), (l4, l4));
     let port = f.a.flows[&f.flow].derived_port.map(|s| &src[s.start as usize..s.end as usize]);
     assert_eq!(port, Some("lf: F32 at (sample / 4)"), "a port of a derived clock");
-    assert_eq!(f.a.flows[&f.flow].multirate_at(), None, "the Core lowers a port at `sample / N`");
     let o = walk_of(src, "o");
     assert!(o.complete, "{:?}", o.walked.diag);
     let out = o.a.flows[&o.flow].output.expect("the output");

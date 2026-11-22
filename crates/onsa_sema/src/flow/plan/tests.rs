@@ -218,8 +218,7 @@ pub flow f(x: F32 at sample, k: U32 at sample) -> F32 at sample {
 /// the order they are written, its boundaries one of each of them, its
 /// clock the output in that frame, and a whole `let` names it through the
 /// chain (S-148) unless the `let` is a tick of a ratio (S-1139 (a)). Its
-/// value read at `sample` is hoisted to a field of its tick (S-1185). A
-/// chain stops the Core until W7-16, its ratio one too. Of an `.up~` in a
+/// value read at `sample` is hoisted to a field of its tick (S-1185). Of an `.up~` in a
 /// `.down~`, the head runs at the tick of the `.down~` though the frame is
 /// 0 (S-1207).
 #[test]
@@ -261,9 +260,7 @@ pub flow u(x: F32 at sample) -> F32 at sample {
     assert_eq!(hoisted.len(), 1, "{hoisted:?}");
     assert_eq!((hoisted[0].0.start as usize, hoisted[0].1), (chain, ClockStage::Tick(Ratio(-2))));
     assert_eq!(out.frame, Ratio(-2));
-    assert!(f.multirate_at().is_some());
     let g = flow(&a, "g");
-    assert_eq!(g.multirate_at(), Some(g.nodes[0].span), "a chain of the ratio one stops the Core too");
     let u = flow(&a, "u");
     // Its `.down~(2)` deals the burst of the `.up~(2)`: read from the array, not where the head runs.
     assert_eq!(u.nodes[0].frame, Ratio(0));
@@ -533,7 +530,6 @@ fn downs_that_gather_and_deal(heads: &str) {
         assert_eq!(dealt, n.bounds.iter().any(|b| b.deals), "{name}");
         let id = super::NodeId(f.nodes.iter().position(|m| m.expr == n.expr).unwrap() as u32);
         assert_eq!(f.node_stage(id), Some(t(read)), "{name}");
-        assert!(n.lowered_chain() && f.multirate_at().is_none(), "{name}");
     }
     // §11.6 (S-1208): after the state of the instance, by boundary, its rings by input, then its array.
     let names = |name: &str| flow(&a, name).fields.iter().map(|x| x.name.clone()).collect::<Vec<_>>();
@@ -999,14 +995,11 @@ fn made_at(n: &super::PlanNode) -> crate::clock::ClockStage {
     n.entries.iter().find(|e| makes(e)).map(|e| e.caller).unwrap_or_else(|| panic!("{}: nothing makes it", n.path))
 }
 
-/// The Core lowers the body of a flow with a port at `sample * N` (W7-16
-/// U6a2, §11.9) and an instance that gathers or deals one in its caller
-/// (its value or an argument at `sample * N`, U6b2). A port at `sample /
-/// N` and an instance of a flow with one do not stop it (W7-16 U5b2), and
-/// the flow with one is known by its `derived_port` (no `process`, the
-/// review's M3).
+/// A flow with a port at `sample / N` is known by its `derived_port` (no
+/// `process`, the review's M3 of W7-16 U5b2), one at `sample * N` too, and
+/// not a caller of one.
 #[test]
-fn a_burst_in_the_caller_passes_the_gate() {
+fn a_port_of_a_derived_clock_is_known() {
     let src = "pub flow f(p: F32 at block, x: F32 at (sample * 2)) -> F32 at sample {\n  x[0] * p\n}\n\
                pub flow g(x: F32 at sample) -> F32 at (sample * 2) {\n  [x, x]\n}\n\
                pub flow h(x: F32 at sample) -> F32 at sample {\n  x\n}\n\
@@ -1015,20 +1008,14 @@ fn a_burst_in_the_caller_passes_the_gate() {
                pub flow m(p: F32 at block, x: F32 at sample) -> F32 at sample {\n  f~(p, g~(x))\n}\n";
     let a = check(src);
     assert!(a.diagnostics.is_empty(), "{:?}", a.diagnostics);
-    let at = |name: &str| flow(&a, name).multirate_at().map(|s| &src[s.start as usize..s.end as usize]);
-    assert_eq!([at("f"), at("g"), at("h"), at("sl"), at("k"), at("m")], [None, None, None, None, None, None]);
     let port = |name: &str| flow(&a, name).derived_port.map(|s| &src[s.start as usize..s.end as usize]);
     assert_eq!([port("sl"), port("h"), port("k")], [Some("x: F32 at (sample / 4)"), None, None]);
 }
 
-/// The gate passes a chain of `.down~(N)` alone (W7-16 U6a1, §11.9),
-/// nested too, of a callee that reads the time through a flow (U6a3,
-/// S-1217), one whose innermost boundary alone gathers or deals (U6a2) and
-/// one that gathers at two boundaries (U6b1), one that gathers or deals a
-/// burst in its caller (U6b2); and stops, at the node, one with an
-/// `.up~(N)` (U6b3). Each modifier of a chain has its receiver.
+/// Each modifier of a chain has its receiver (§11.9), of nested `.down~`
+/// too.
 #[test]
-fn the_gate_passes_a_chain_of_downs() {
+fn each_modifier_of_a_chain_has_its_receiver() {
     let src = "flow lp(x: F32 at sample) -> F32 at sample {\n  x + prev~(x)\n}\n\
                flow tk() -> U32 at sample {\n  sample_tick()\n}\n\
                flow mid() -> U32 at sample {\n  tk~()\n}\n\
@@ -1045,16 +1032,7 @@ fn the_gate_passes_a_chain_of_downs() {
                pub flow burst_out(p: F32 at block) -> F32 at sample {\n  g2~(mk4~(p).down~(2))\n}\n";
     let a = check(src);
     assert!(a.diagnostics.is_empty(), "{:?}", a.diagnostics);
-    let at = |name: &str| flow(&a, name).multirate_at().map(|s| &src[s.start as usize..s.end as usize]);
-    assert_eq!([at("down"), at("timed"), at("gathers"), at("deals")], [None, None, None, None]);
-    assert_eq!([at("up"), at("twice"), at("burst_in"), at("burst_out")], [Some("lp~(p)"), None, None, None]);
-    let lowered = |name: &str| flow(&a, name).nodes.iter().all(|n| n.lowered_chain());
-    assert_eq!(
-        ["gathers", "deals", "twice", "burst_in", "burst_out", "up"].map(lowered),
-        [true, true, true, true, true, false]
-    );
-    let (down, timed) = (flow(&a, "down"), flow(&a, "timed"));
-    assert!(down.nodes[0].lowered_chain() && timed.nodes[0].lowered_chain());
+    let down = flow(&a, "down");
     // `.down~(4)` of the head, then `.down~(2)` of that.
     let of = |r| down.modifiers.iter().find(|&(_, &x)| x == r).map(|(&m, _)| m);
     let inner = of(down.nodes[0].expr);
@@ -1137,14 +1115,14 @@ fn the_marking_records_the_stages_it_evaluates_at() {
     assert!(!gat.writes_in(2, tick(-1)), "the output holds no write");
 }
 
-/// The Core lowers the slower ticks of one flow and `sample_tick()` (W7-16
-/// U5a): the gate passes a flow with a `let`, a node and a hoisted field
-/// at `sample / 4` or `sample / 2` and one that reads `sample_tick()`,
+/// The slower ticks of one flow and `sample_tick()` (W7-16 U5a): a flow
+/// with a `let`, a node and a hoisted field at `sample / 4` or `sample / 2`
+/// and one that reads `sample_tick()`,
 /// whose ticks are slowest first and whose state has the counter of the
 /// phase after `_sample_rate` (S-1179 (2)); and an instance of a flow that
 /// counts the time, whose stages and time its caller gives (W7-16 U5b2).
 #[test]
-fn the_gate_passes_the_slower_ticks_of_one_flow_and_an_instance_of_one() {
+fn the_slower_ticks_of_one_flow_and_an_instance_of_one() {
     let src = "pub flow slow(p: F32 at block, x: F32 at sample) -> F32 at sample {
   let a = prev~(p at (sample / 4)) + 1.0
   let b = prev~(a at (sample / 2))
@@ -1172,7 +1150,6 @@ pub flow calls(x: F32 at sample) -> F32 at sample {
     assert_eq!(names(slow), ["_sample_rate", "_tick"]);
     assert_eq!(names(tk)[0], "_tick");
     assert!(plain.fields.iter().all(|x| x.name != "_tick"));
-    assert_eq!([slow, tk, plain, calls].map(|f| f.multirate_at()), [None, None, None, None]);
     assert_eq!(slow.run_stage(tick(2)), tick(0), "a burst is of the function of the `sample` of the body");
     assert_eq!(slow.run_stage(tick(-2)), tick(-2));
 }

@@ -12,7 +12,7 @@
 //!
 //! The texts are written from the spec; none is taken from the output of the compiler.
 
-use crate::slow_stage_commands::{assert_e0200, assert_lowers, error_lines, package};
+use crate::slow_stage_commands::{assert_lowers, error_lines, package};
 use crate::test_support::{Dir, record, run, str_of, test_json};
 
 /// The bodies of `main.onsa` that read `sample_tick()` in the places of §11.4 (a `let`, the output, a `par`, the first argument of a delay), with no modifier and no child.
@@ -91,12 +91,13 @@ fn a_chain_over_a_child_and_a_chain_inside_a_part_are_lowered_and_give_the_times
     assert_lowers_and_passes("sample_tick_chain_children_values", flows, "times of the parts");
 }
 
-/// What stays E0200 over a part that reads `sample_tick()`: a chain with an `.up~(N)` in it (U6b3: the time of a part inside an up is the number times N plus the step). `build`, `dump --core` and `test` stop with E0200
-/// and nothing else (no internal error) at the line of the chain (§18.1: the first of the file); `check` reads the package with no diagnostic. The chain that gathers past its first boundary is lowered from U6b1 (the next test).
+/// A chain with an `.up~(N)` over a part that reads `sample_tick()` is lowered (W7-16 U6b3, S-1217; it was E0200 until then): the time of the part is the number of the outermost flow, changed from the outermost modifier in
+/// (§11.4: "`.up~(N)` の本体では N 倍して何歩目か（0 から N − 1）を足し、`.down~(N)` の本体では N で割って切り捨て"). `.down~(2).up~(2)`: the up makes 2 t + j in the frame t and the down divides it, the part runs at j = 0:
+/// 0 1 2 3. `.up~(2).down~(4)`: the part of the down reads v at the frame 4 v, the up makes 2 v + j, the 2 outputs are dealt to the frames c and c + 2 and held: 0 0 1 1 2 2 3 3.
 #[test]
-fn a_chain_with_an_up_over_a_part_that_reads_sample_tick_stays_e0200_until_u6b3() {
-    let up = "flow tk() -> U32 at sample {\n  sample_tick()\n}\n\npub flow f() -> U32 at sample {\n  tk~().down~(2).up~(2) at sample\n}\n";
-    assert_e0200("sample_tick_e0200_up", up, &[], Some(6));
+fn a_chain_with_an_up_over_a_part_that_reads_sample_tick_gives_n_times_the_time_plus_the_step() {
+    let flows = "flow tk() -> U32 at sample {\n  sample_tick()\n}\n\npub flow f() -> U32 at sample {\n  tk~().down~(2).up~(2) at sample\n}\n\npub flow g() -> U32 at sample {\n  tk~().up~(2).down~(4) at sample\n}\n\ntest \"time in an up\" {\n  var a: [U32; 4] = [9; 4]\n  var b: [U32; 8] = [9; 8]\n  var sa = f.init(8.0)\n  var sb = g.init(8.0)\n  f.process(inout sa, inout a)\n  g.process(inout sb, inout b)\n  assert a == [0, 1, 2, 3]\n  assert b == [0, 0, 1, 1, 2, 2, 3, 3]\n}\n";
+    assert_lowers_and_passes("sample_tick_up_values", flows, "time in an up");
 }
 
 /// A chain that gathers past its first boundary over a head that reads `sample_tick()` is lowered (W7-16 U6b1; it was E0200 until then, S-1214 (1), S-1217): the head runs at the frames c = 0, 4, 8, 12, reads the number of

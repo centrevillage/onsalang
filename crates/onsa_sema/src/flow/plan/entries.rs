@@ -90,6 +90,7 @@ fn close(pkg: &Package, a: &mut Analysis, f: DefId, marks: &HashMap<DefId, Mark>
     let mut stages: BTreeSet<ClockStage> = info.stages.iter().copied().collect();
     let (mut count, mut counted) = ((0, None), true);
     let mut past_at: Option<Past> = None;
+    let mut unmade_at = Vec::new();
     for (i, n) in info.nodes.iter().enumerate() {
         let id = NodeId(i as u32);
         let PlanKind::Instance { callee, .. } = n.kind else {
@@ -105,6 +106,7 @@ fn close(pkg: &Package, a: &mut Analysis, f: DefId, marks: &HashMap<DefId, Mark>
             continue;
         };
         let (entries, read) = steps::table(n, g);
+        unmade_at.extend(unmade(n, g, &entries));
         stages.extend(entries.iter().map(|e| e.caller).filter(|s| s.tick_slower_than(ClockStage::SAMPLE)));
         callee_time(&mut time, info, n, g, &entries);
         tables.push(Some((entries, read)));
@@ -131,10 +133,37 @@ fn close(pkg: &Package, a: &mut Analysis, f: DefId, marks: &HashMap<DefId, Mark>
     flow.nodes.iter_mut().zip(tables).for_each(|(n, t)| t.into_iter().for_each(|t| set(n, t)));
     (flow.stages, flow.time) = (stages.into_iter().collect(), time);
     fields::build(flow);
+    // The E0808 of the flow first: the E0200 of a clock past the Core is of no limit decided.
     if let Some(p) = past_at {
         a.diagnostics.push(past_path(pkg, a, f, p, most));
+    } else if !unmade_at.is_empty() {
+        let text = crate::module_of_def(pkg, a, f).map(|m| m.text.clone()).unwrap_or_default();
+        for at in unmade_at {
+            let d = onsa_diag::unsupported::Feature::ComposedClocks.diagnostic(Stage::Flow, at, &[]);
+            a.diagnostics.push(d.with_found(at.text_in(&text).to_string()));
+        }
     }
     counted.then_some(count)
+}
+
+/// Where the chain of the instance `n` of the callee `g` makes a clock the
+/// Core does not ([`Ratio::made_n`]), of its entries `entries`: the
+/// modifier of the first boundary out of which a port of the part it wraps
+/// faster than `sample` is past it (an array of a `.down~` outside or the
+/// value is of it), else the call, of a stage of the caller past it that
+/// `g` has not (that of its own chains, told there). A port or a stage
+/// slower than `sample` inside the chain is of no counter: the runs of an
+/// `.up~` at a slower stage are one ([`Op::Each`]).
+// SPEC-GAP(S-1216): no limit of a composed clock is decided (`sample * N`,
+// `sample / N` past `U32`); one the Core does not make is E0200.
+fn unmade(n: &PlanNode, g: &FlowInfo, entries: &[Entry]) -> Option<Span> {
+    let made = |k: Ratio| !k.faster_than_body() || k.made_n().is_some();
+    let port = n.bounds.iter().find(|b| !b.ins.iter().flatten().chain(&b.out).all(|&k| made(b.outside(k))));
+    if let Some(b) = port {
+        return Some(n.chain.get(b.at as usize).map_or(n.span, |m| m.name));
+    }
+    let past = |s: &ClockStage| matches!(*s, ClockStage::Tick(k) if k.made_n().is_none());
+    (entries.iter().any(|e| past(&e.caller)) && !g.stages.iter().any(past)).then_some(n.span)
 }
 
 /// The time of the stages of `info` that read `sample_tick()` (§11.4,

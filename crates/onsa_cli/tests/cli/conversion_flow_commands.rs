@@ -3,9 +3,8 @@
 //!
 //! - The Core of the ticks is W7-16. A flow with an input or an output at `sample / N` is lowered, and so is a call of it with no modifier (U5b2); so are the body of a conversion flow with a port at `sample * N`, a chain
 //!   of `.down~(N)` that gathers or deals over it (U6a2, U6b1, S-1207, S-1214: `build`, `dump --core` and `test` end with 0, and `onsa interface` writes the size of its state) and a call of a flow with a port or an output
-//!   at `sample * N` with no chain, whose argument is a bundle of the caller, a `block` or `init` value or a constant (U6b2, S-1214 (3)). `build`, `dump --core` and `test` stop at a package that has a chain with an `.up~(N)` or a
-//!   bundle that an `.up~(N)` makes (U6b3) with E0200 and with nothing else (no internal error), on the file of the flow, while `check` reads it with no diagnostic. A chain of `.down~(N)` over a flow with an input at
-//!   `sample / N` gathers and deals nothing and is lowered (W7-16 U6a1/t).
+//!   at `sample * N` with no chain, whose argument is a bundle of the caller, a `block` or `init` value or a constant (U6b2, S-1214 (3)), and a chain with an `.up~(N)`, also where its value is a bundle that a port at
+//!   `sample * N` reads (U6b3). A chain of `.down~(N)` over a flow with an input at `sample / N` gathers and deals nothing and is lowered (W7-16 U6a1/t).
 //! - `onsa interface` writes the heading of the flow with the clock of each port as the ratio (`sample / 4`, `sample * 2`): the
 //!   text of the declaration, not the type that the body sees (the array of a port at `sample * N`).
 //! - `onsa graph` of such a flow has a vertex for each port with the ratio in its label, the colours of the three clocks, and the
@@ -13,7 +12,7 @@
 //!
 //! The texts are written from the spec; none is taken from the output of the compiler.
 
-use crate::slow_stage_commands::{assert_e0200_in, assert_lowers};
+use crate::slow_stage_commands::assert_lowers;
 use crate::test_support::{Dir, run};
 
 const FLOWS: &str = "\
@@ -113,14 +112,14 @@ fn a_caller_of_an_input_at_sample_times_with_no_chain_is_lowered_by_build_dump_c
     assert_lowers("conversion_core_callers", &callers_of_derived_inputs(), &[]);
 }
 
-/// A bundle that an `.up~(N)` makes is the work of U6b3 (the chain with an up): the call of `fast2` with the argument `thru~(p).up~(2)`, the same in a `let`, in `if~`, stop at E0200 in their own flows and nothing else
-/// (no internal error), and the flow `ok`, which calls `slow4` with no chain, is lowered (W7-16 U6b2; §11.9: "`.up~(N)` の出力は `sample * N` の値").
+/// A bundle that an `.up~(N)` makes is read by a port at `sample * N` (W7-16 U6b3; it was E0200 until then; §11.9: "`.up~(N)` の出力は `sample * N` の値"): the call of `fast2` with the argument `thru~(p).up~(2)`, the
+/// same in a `let` and in `if~`, are read by `check` with no diagnostic and lowered with the flow `ok` beside them, and the test of the package runs.
 #[test]
-fn a_bundle_made_by_an_up_is_e0200_until_u6b3_and_the_flow_beside_it_is_lowered() {
+fn a_bundle_made_by_an_up_is_lowered_by_build_dump_core_and_test() {
     let src = format!(
         "{CALLEES}\nflow thru(x: F32 at sample) -> F32 at sample {{\n  x\n}}\n\npub flow ok(p: F32 at block) -> F32 at sample {{\n  slow4~(p)\n}}\n\npub flow direct(p: F32 at block) -> F32 at sample {{\n  fast2~(thru~(p).up~(2))\n}}\n\npub flow in_let(p: F32 at block) -> F32 at sample {{\n  let u = thru~(p).up~(2)\n  fast2~(u)\n}}\n\npub flow in_if(p: F32 at block) -> F32 at sample {{\n  if~ (p > 0.0) {{ fast2~(thru~(p).up~(2)) }} else {{ 0.0 }}\n}}\n"
     );
-    assert_e0200_in("conversion_core_up_burst", &src, &["direct", "in_let", "in_if"]);
+    assert_lowers("conversion_core_up_burst", &src, &[]);
 }
 
 /// The calls of a flow with an input at `sample / 4` with no chain (a value of `block`, of `init`, a constant, in `if~` and `par~`), with the callee, make a package that is lowered (W7-16 U5b2: the

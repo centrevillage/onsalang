@@ -1,0 +1,100 @@
+# flow_ref 1 source=tests/spec/flow_semantics/up_chain_values.onsa tests=16 evaluated=13 unavailable=0 skipped=3 waiting=0
+@ an up that widens the window of a down: the output of a part dealt by a down 2 and read by an up 4 is not lost by the next down 4
+init 0 up_chain_values.widen_ud sr=0x41000000
+process 0 frames=8
+out=[0x41200000 0x41300000 0x41a00000 0x41a80000 0x41f00000 0x41f80000 0x42200000 0x42240000]
+@ the bundle of an up that a down 2 deals is read by the caller in the frame it was made, and the same through a down 4 and an up 4
+init 0 up_chain_values.widen_bundle sr=0x41000000
+init 1 up_chain_values.widen_bundle_again sr=0x41000000
+process 0 frames=4
+out=[0x46b4a000 0x47311c00 0x4783f400 0x47af5a00]
+process 1 frames=4
+out=[0x46b4a000 0x47311c00 0x4783f400 0x47af5a00]
+@ a down then an up over an output at sample * N: the array that the down deals is read by the runs of the up in the frame of the run, with no delay
+init 0 up_chain_values.deal_up sr=0x41000000
+process 0 params p=0x3f800000 frames=3
+out=[0x41a80000 0x41a80000 0x41a80000]
+process 0 params p=0x40000000 frames=3
+out=[0x42000000 0x42000000 0x42000000]
+init 1 up_chain_values.cnt_down_up2 sr=0x41000000
+init 2 up_chain_values.cnt_down_up4 sr=0x41000000
+process 1 frames=4
+out=[0x42f00000 0x43660000 0x43aa0000 0x43e10000]
+process 2 frames=4
+out=[0x465fc000 0x46c6ac00 0x470ebc00 0x473a2200]
+@ sample_rate() is divided by the down and multiplied by the up, from the outermost modifier in
+init 0 up_chain_values.rate_up_down sr=0x473b8000
+init 1 up_chain_values.rate_down_up sr=0x473b8000
+process 0 frames=4
+out=[0x46bb8000 0x46bb8000 0x46bb8000 0x46bb8000]
+process 1 frames=4
+out=[0x473b8000 0x473b8000 0x473b8000 0x473b8000]
+@ the time of a part in an up is N times the number of the part outside it plus the run (S-1217)
+init 0 up_chain_values.time_up_down sr=0x41000000
+init 1 up_chain_values.time_down_up sr=0x41000000
+process 0 frames=8
+out=[0 0 1 1 2 2 3 3]
+process 1 frames=4
+out=[0 1 2 3]
+@ the time of a part in an up that a bundle is read from is the same for chains that cancel to the same ratio
+init 0 up_chain_values.time_bundle_up sr=0x41000000
+init 1 up_chain_values.time_bundle_down_up sr=0x41000000
+init 2 up_chain_values.time_bundle_deep sr=0x41000000
+init 3 up_chain_values.time_bundle_up_down sr=0x41000000
+process 0 frames=4
+out=[10 32 54 76]
+process 1 frames=4
+out=[10 32 54 76]
+process 2 frames=4
+out=[10 32 54 76]
+process 3 frames=8
+out=[10 32 54 76 98 120 142 164]
+@ a slow stage of the head runs at the runs of the up whose counter is a multiple of its ratio: only j = 0 for sample / 2 under up 2
+init 0 up_chain_values.slow_head_up_down sr=0x41000000
+init 1 up_chain_values.slow_head_up sr=0x41000000
+process 0 frames=8
+out=[0x00000000 0x41300000 0x41b00000 0x42040000 0x42300000 0x425c0000 0x42840000 0x429a0000]
+process 1 frames=8
+out=[0x00000000 0x00000000 0x41300000 0x41300000 0x41b00000 0x41b00000 0x42040000 0x42040000]
+@ only the outer down gathers: an input at sample / 2 through a down 2, an up 4 and a down 4 is the stream 4 frames late, each element held 2 frames
+init 0 up_chain_values.outer_only sr=0x41000000
+process 0 params one=0x3f800000 frames=12
+out=[0x00000000 0x00000000 0x00000000 0x00000000 0x3f800000 0x3f800000 0x40000000 0x40000000 0x40400000 0x40400000 0x40800000 0x40800000]
+@ an up that cuts the bundle of an input into its runs: x[0] .. x[3] of the 4 elements go 2 and 2 to the runs
+init 0 up_chain_values.cut_up sr=0x41000000
+process 0 frames=4 in x=[0x3f800000 0x40000000 0x40400000 0x40800000]
+out=[0x44ab2000 0x451b0000 0x45607000 0x4592f000]
+@ a value of an up read as a bundle: the runs are in order, and the parameter is the one of the frame
+init 0 up_chain_values.acc_up sr=0x41000000
+process 0 params p=0x3f800000 frames=3
+out=[0x41a80000 0x422c0000 0x42820000]
+process 0 params p=0x40000000 frames=3
+out=[0x42d80000 0x43180000 0x43440000]
+@ an up in par~ and in if~: each copy has its own runs, the arm that is not taken runs too
+init 0 up_chain_values.acc_par sr=0x41000000
+process 0 params p=0x3f800000 frames=3
+out=[0x47242500 0x47a80d80 0x47fe0880]
+init 1 up_chain_values.acc_if sr=0x41000000
+process 1 params c=true p=0x3f800000 frames=2
+out=[0x41a80000 0x422c0000]
+process 1 params c=false p=0x3f800000 frames=2
+out=[0x40e00000 0x40e00000]
+process 1 params c=true p=0x3f800000 frames=2
+out=[0x42da0000 0x43030000]
+@ the delays of the boundaries add in a chain of depth 3: 4 samples for two of up 2 down 2, none for two of down 2 up 2
+init 0 up_chain_values.delay_deep sr=0x41000000
+init 1 up_chain_values.delay_deep_ups sr=0x41000000
+init 2 up_chain_values.identity_deep sr=0x41000000
+process 0 frames=8 in x=[0x3f800000 0x40000000 0x40400000 0x40800000 0x40a00000 0x40c00000 0x40e00000 0x41000000]
+out=[0x00000000 0x00000000 0x00000000 0x00000000 0x3f800000 0x40000000 0x40400000 0x40800000]
+process 1 frames=8 in x=[0x3f800000 0x40000000 0x40400000 0x40800000 0x40a00000 0x40c00000 0x40e00000 0x41000000]
+out=[0x00000000 0x00000000 0x00000000 0x00000000 0x3f800000 0x40000000 0x40400000 0x40800000]
+process 2 frames=8 in x=[0x3f800000 0x40000000 0x40400000 0x40800000 0x40a00000 0x40c00000 0x40e00000 0x41000000]
+out=[0x3f800000 0x40000000 0x40400000 0x40800000 0x40a00000 0x40c00000 0x40e00000 0x41000000]
+@ an output with no Default through a down and an up needs none: it is made by the stage that runs it
+init 0 up_chain_values.nodef_chain sr=0x41000000
+process 0 params p=0x40400000 frames=4
+out=[0x40c00000 0x40c00000 0x40c00000 0x40c00000]
+- the calls of process cut the run anywhere, a call of 0 frames too: the same values for chains with an up (§13.4)	skipped statement
+- eight calls of one frame give the same	skipped statement
+- reset after any number of frames: the runs, the rings, the arrays and the time are those of a state just made (S-1186)	skipped statement

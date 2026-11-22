@@ -5,7 +5,7 @@
 
 // What a chain of modifiers gathers and what it does not (§11.9, S-1207, S-1214): a part with no input at `sample` (the counter of its time, a value of `block`) is not late, its runs are the counters
 // of the block in order; a constant or a parameter that is the argument of an input at `sample` is gathered like any stream, by position (the value read at each frame), the first block having
-// `T.default()`. The body runs `2^N` times in the block at the counters of the block (`sample_tick()` is the counter of the instance, §11.4).
+// `T.default()`. The body runs `2^N` times in the block, and `sample_tick()` in it is the number of the outermost flow changed from the outermost modifier in (S-1217, §11.4): divided by N in a `.down~(N)`, N times it plus the run j (0 .. N - 1) in an `.up~(N)`.
 
 flow tk() -> U32 at sample { sample_tick() }
 

@@ -1,4 +1,4 @@
-# flow_ref 1 source=tests/spec/flow_semantics/chain_blocks_delay.onsa tests=6 evaluated=6 unavailable=0 skipped=0 waiting=1
+# flow_ref 1 source=tests/spec/flow_semantics/chain_blocks_delay.onsa tests=6 evaluated=6 unavailable=0 skipped=0 waiting=0
 @ up 2 down 2 is a block of 2: two samples late
 render chain_blocks_delay.delay2 sr=0x41000000 in x=[0x3f800000 0x40000000 0x40400000 0x40800000 0x40a00000 0x40c00000 0x40e00000 0x41000000 0x41100000 0x41200000 0x41300000 0x41400000]
 out=[0x00000000 0x00000000 0x3f800000 0x40000000 0x40400000 0x40800000 0x40a00000 0x40c00000 0x40e00000 0x41000000 0x41100000 0x41200000]

@@ -366,18 +366,19 @@ impl<'a> Lowerer<'a> {
 }
 
 /// The `sample_rate()` the callee of the node `n` reads from the rate `sr`
-/// of its caller (§11.9: 1/N in the body of `.down~(N)`): divided at each
-/// boundary, the outermost first, as each part runs the one it wraps, so
-/// that a rate below the normal floats rounds at each (once by the product
-/// it would not). The one place of it. A boundary of no `.down~` is an
-/// internal error (W7-16 U6b writes `.up~`).
+/// of its caller (§11.9: 1/N in the body of `.down~(N)`, N times in that of
+/// `.up~(N)`): divided or multiplied at each boundary, the outermost first,
+/// as each part runs the one it wraps, so that a rate below the normal
+/// floats rounds at each (once by the product it would not). The one place
+/// of it.
 fn child_rate(sr: &Expr, n: &PlanNode, span: Span) -> R<Expr> {
     let mut rate = sr.clone();
     for b in n.bounds.iter().rev() {
-        let Some(big) = Some(b.ratio).filter(|r| r.slower_than_body()).and_then(Ratio::n) else {
+        let Some(big) = b.ratio.n() else {
             return Err(internal(span, format!("the rate of a callee under a boundary of the ratio {:?}", b.ratio)));
         };
-        rate = checked_binary(BinOp::Div, rate, float_lit(&sr.ty, big as f64, span)?);
+        let op = if b.ratio.slower_than_body() { BinOp::Div } else { BinOp::Mul };
+        rate = checked_binary(op, rate, float_lit(&sr.ty, big as f64, span)?);
     }
     Ok(rate)
 }
@@ -447,9 +448,6 @@ fn lower_flow<'b>(lw: &mut Lowerer<'b>, flow: DefId, fd: FlowDef, span: Span) ->
     let Some(info) = a.flows.get(&flow) else { return Err(internal(span, "flow body was not checked")) };
     if !info.complete {
         return Err(internal(span, "flow body has errors"));
-    }
-    if let Some(at) = info.multirate_at() {
-        return Err(unsupported(at, Feature::MultirateFlows, &[]));
     }
     let need = |f: FlowFn| generated_fn(a, &fd, f).ok_or_else(|| internal(span, format!("flow without {f:?}")));
     let state_ty = lw.flow_ty(flow, FlowTy::State, span)?;

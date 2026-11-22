@@ -5,9 +5,7 @@
 //!   `build`, `dump --core` and `test` end with 0 and with no internal error, and the tests of the package are run (U5a).
 //! - A child instance with no modifier that has a stage of its own or reads `sample_tick()` (S-1088, S-1129 (1)), a grandchild, and a flow with an input or an output at `sample / N` called with no
 //!   modifier (§11.9), are lowered the same way (U5b2).
-//! - What stays E0200 after U6b2 is the work of the later units: a chain with an `.up~(N)` in it (U6b3) and the border of the
-//!   outermost flow (W10-01). The commands report E0200 and nothing else, no internal error, run no test (Q-09: what the spec has and this version does not carry is E0200, not a wrong output), and the
-//!   E0200 is in the flows that have such a form and in no flow that has only what is lowered (§18.1: a unit is checked alone; the first is the first of the file).
+//! - A chain with an `.up~(N)` in it is lowered beside the flows with ticks (U6b3); what stays E0200 is `when~` and `reset_if~` (W7-10, `check` stops at it) and the border of the outermost flow (W10-01).
 //! - Of two ticks at one position that both panic, the slower one is the one that is reported (§11.9: "遅い方から並ぶ", S-1079), whether the two are of one flow or of the parent and a child (S-1088).
 //!   The order of a `let` of the parent and of a child at one stage, and of two children, is the one of S-1206 and S-1159 (open: the provisional order of the reference evaluator).
 //! - `onsa interface` shows the phase counter of a flow that has a stage of `sample / N`, whose child has one or reads `sample_tick()`, after `_sample_rate` and before the fields of
@@ -15,9 +13,7 @@
 //!
 //! The texts are written from the spec; none is taken from the output of the compiler.
 
-use crate::test_support::{
-    Dir, code_of, diagnostics, doc_of, failure_of, record, run, span_of, str_of, test_json, tests_of,
-};
+use crate::test_support::{Dir, diagnostics, doc_of, failure_of, record, run, span_of, str_of, test_json};
 
 pub const BUILD_MANIFEST: &str = "[package]\nname = \"demo\"\nedition = \"2026\"\n\n[targets.host]\nkind = \"source\"\nlang = \"c\"\nplatform = \"host\"\nprovides = []\n";
 
@@ -60,100 +56,6 @@ pub fn assert_lowers(tag: &str, flows: &str, others: &[(&str, &str)]) {
     assert_eq!(out.code, 0, "{flows}: test: {}{}", out.stdout, out.stderr);
     assert!(diagnostics(&doc).is_empty(), "{flows}: {doc}");
     assert_eq!(str_of(record(&doc, "main", "reads"), "status"), "ok", "{flows}: {doc}");
-}
-
-/// `check` reads the package with no diagnostic, and `build`, `dump --core` and `test` stop at it with E0200 and nothing else (no internal error), on a file of the
-/// package, and `test` runs nothing. When `first_line` is given, the first diagnostic (§18.1: the order of the file, the line and the column) is on that line of `main.onsa`.
-pub fn assert_e0200(tag: &str, flows: &str, others: &[(&str, &str)], first_line: Option<u64>) {
-    let d = package(tag, flows, others);
-    let out = run(d.root(), &["check", "--json"]);
-    assert_eq!(out.code, 0, "{flows}: check reads the flows: {}{}", out.stdout, out.stderr);
-    assert!(diagnostics(&doc_of(&out)).is_empty(), "{flows}: {}", out.stdout);
-
-    let dir = d.arg();
-    let commands: [(&str, Vec<&str>); 3] = [
-        ("build", vec!["build", "--target", "host"]),
-        ("dump --core", vec!["dump", "--core", dir.as_str()]),
-        ("test", vec!["test"]),
-    ];
-    for (name, args) in commands {
-        let out = run(d.root(), &args);
-        assert_eq!(out.code, 1, "{flows}: {name}: {}{}", out.stdout, out.stderr);
-        let both = format!("{}{}", out.stdout, out.stderr);
-        let lines = error_lines(&both);
-        assert!(!lines.is_empty(), "{flows}: {name}: an error line: {both}");
-        for l in &lines {
-            assert!(l.contains("error[E0200]"), "{flows}: {name}: only E0200: {l}");
-            assert!(l.contains(".onsa:"), "{flows}: {name}: E0200 is on a file of the package: {l}");
-        }
-        assert!(!both.contains("internal error"), "{flows}: {name}: {both}");
-    }
-
-    let (out, doc) = test_json(d.root(), &[]);
-    assert_eq!(out.code, 1, "{}{}", out.stdout, out.stderr);
-    let ds = diagnostics(&doc);
-    assert!(!ds.is_empty() && ds.iter().all(|x| code_of(x) == "E0200"), "{flows}: {doc}");
-    assert!(tests_of(&doc).is_empty(), "{flows}: nothing is run: {doc}");
-    if let Some(line) = first_line {
-        let first = span_of(&ds[0]["span"]);
-        assert_eq!((first.file.as_str(), first.line), ("main.onsa", line), "{flows}: the first E0200: {doc}");
-    }
-}
-
-/// The first and the last line (from 1) of the flow `name` in `src`: its heading to the `}` that starts a line.
-fn flow_lines(src: &str, name: &str) -> (u64, u64) {
-    let head = format!("flow {name}(");
-    let lines: Vec<&str> = src.lines().collect();
-    let start = lines.iter().position(|l| l.contains(&head)).unwrap_or_else(|| panic!("no flow {name} in:\n{src}"));
-    let end = (start..lines.len()).find(|&i| lines[i] == "}").unwrap_or_else(|| panic!("the end of {name}"));
-    (start as u64 + 1, end as u64 + 1)
-}
-
-/// `check` reads the package with no diagnostic; `build`, `dump --core` and `test` stop with E0200 and nothing else on `main.onsa`, no internal error, and run no test. The E0200 are in the flows
-/// `stay` (the flows that have a form this version does not carry) and each of them has one; none is in another flow of the package (the flows that are lowered). The first, in the order of the file
-/// (§18.1), is in the first of them.
-pub fn assert_e0200_in(tag: &str, flows: &str, stay: &[&str]) {
-    let d = package(tag, flows, &[]);
-    let out = run(d.root(), &["check", "--json"]);
-    assert_eq!(out.code, 0, "{flows}: check reads the flows: {}{}", out.stdout, out.stderr);
-    assert!(diagnostics(&doc_of(&out)).is_empty(), "{flows}: {}", out.stdout);
-    let ranges: Vec<(u64, u64)> = stay.iter().map(|n| flow_lines(flows, n)).collect();
-    let dir = d.arg();
-    let commands: [(&str, Vec<&str>); 3] = [
-        ("build", vec!["build", "--target", "host"]),
-        ("dump --core", vec!["dump", "--core", dir.as_str()]),
-        ("test", vec!["test"]),
-    ];
-    for (name, args) in commands {
-        let out = run(d.root(), &args);
-        let both = format!("{}{}", out.stdout, out.stderr);
-        assert_eq!(out.code, 1, "{flows}: {name}: {both}");
-        assert!(!both.contains("internal error"), "{flows}: {name}: {both}");
-        let lines = error_lines(&both);
-        assert!(
-            !lines.is_empty() && lines.iter().all(|l| l.contains("error[E0200]")),
-            "{flows}: {name}: only E0200: {both}"
-        );
-    }
-    let (out, doc) = test_json(d.root(), &[]);
-    assert_eq!(out.code, 1, "{}{}", out.stdout, out.stderr);
-    let ds = diagnostics(&doc);
-    assert!(!ds.is_empty() && ds.iter().all(|x| code_of(x) == "E0200"), "{flows}: {doc}");
-    assert!(tests_of(&doc).is_empty(), "{flows}: nothing is run: {doc}");
-    let spans: Vec<_> = ds.iter().map(|x| span_of(&x["span"])).collect();
-    let inside = |line: u64, r: &(u64, u64)| (r.0..=r.1).contains(&line);
-    for at in &spans {
-        assert!(
-            at.file == "main.onsa" && ranges.iter().any(|r| inside(at.line, r)),
-            "{flows}: an E0200 at {}:{} is not in a flow of {stay:?}: {doc}",
-            at.file,
-            at.line
-        );
-    }
-    for (name, r) in stay.iter().zip(&ranges) {
-        assert!(spans.iter().any(|at| inside(at.line, r)), "{flows}: the flow {name} has an E0200: {doc}");
-    }
-    assert!(inside(spans[0].line, &ranges[0]), "{flows}: the first E0200 is in {}: {doc}", stay[0]);
 }
 
 // ----------------------------------------------------------------------------- what U5a lowers
@@ -233,14 +135,14 @@ fn a_flow_with_a_slow_port_called_with_no_modifier_is_lowered_by_build_dump_core
 
 // ----------------------------------------------------------------------------- what stays E0200 after U5b2
 
-/// A flow that is lowered beside a flow that has a form of the later units: a chain with an `.up~(N)` in it (U6b). `build`, `dump --core` and `test` report E0200 in the flow that has such a form (one) and in none of the
-/// flows that are lowered, `ok` and the child `ch` (§18.1).
+/// A chain with an `.up~(N)` beside a child with ticks and a flow that has none of the chain (W7-16 U6b3; it was E0200 in the flow with the chain until then): the package is read by `check` with no diagnostic and lowered,
+/// the flows `ok` and `chained` (the child `ch` called with no chain, and a chain of `.down~(4).up~(2)` over a part with a memory) beside each other, and its test runs.
 #[test]
-fn what_is_left_of_the_ticks_is_e0200_in_its_own_flows_and_the_others_are_lowered() {
+fn a_chain_with_an_up_beside_the_flows_with_ticks_is_lowered() {
     let chain = format!(
         "{SLOW_CHILD}flow lp(x: F32 at sample) -> F32 at sample {{\n  x * 0.5 + prev~(x) * 0.5\n}}\n\npub flow ok(p: F32 at block, x: F32 at sample) -> F32 at sample {{\n  x * ch~(p)\n}}\n\npub flow chained(p: F32 at block, x: F32 at sample) -> F32 at sample {{\n  x * ch~(p) + (lp~(p).down~(4).up~(2) at sample)\n}}\n"
     );
-    assert_e0200_in("slow_stage_left_chain", &chain, &["chained"]);
+    assert_lowers("slow_stage_left_chain", &chain, &[]);
 }
 
 /// A call of a conversion flow with a port at `sample * N` with no chain takes or gives a bundle at the caller (§11.9; W7-16 U6b2, it was E0200 until then): the package with `ok` and the child `ch`, the flows `dup2`

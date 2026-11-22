@@ -1,0 +1,340 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.9", "§11.10", "§11.4", "§13.4"]
+
+// A chain with `.up~(N)` in it (W7-16 U6b3/t; §11.9, §11.10, §11.4, S-1207, S-1214, S-1217, S-578, S-1079, S-1186; the chain has no `when~`, `reset_if~`; no `sample_tick()` is written as the argument of a port at
+// `sample * N`, S-1218). Each modifier wraps the whole of its left as one part (S-1207). Worked out by hand, as in down_two_boundaries_values.onsa:
+// - `x.up~(N)` runs the part N times in each frame of its caller (the runs j = 0 .. N - 1, in order); its output at `sample * K` is the bundle of the N runs (N K elements, `x[N K - 1]` the latest), its
+//   input at `sample * K` is a bundle of N K elements of which the run j takes the K at j K (§11.9 "`.up~(N)` の出力は `sample * N` の値").
+// - `x.down~(N)` runs the part at the frames of its caller that are multiples of N, gathers the elements of the frames before (c - N .. c - 1) and deals its output to the frames from c (§11.9, S-1214).
+// - The time of a part is the number of the outermost flow, changed by the modifiers from the outermost one in (S-1217, §11.4): `.down~(N)` divides it by N (rounded down), `.up~(N)` makes it N times it plus the
+//   step j. `sample_rate()` is divided by N and multiplied by N the same way.
+// - A tick of the head `sample / M` is at the counters of the head that are multiples of M: with the up (the counter is N t + j in the frame t), the runs j with (N t + j) a multiple of M. `x` is 1 2 3 ... at
+//   the frames 0 1 2 ...; the stream before the first sample is `T.default()`.
+
+flow thru(x: F32 at sample) -> F32 at sample { x }
+flow g4(x: F32 at (sample * 4)) -> F32 at sample { x[0] + x[1] * 10.0 + x[2] * 100.0 + x[3] * 1000.0 }
+flow g2(x: F32 at (sample * 2)) -> F32 at sample { x[0] + x[1] * 10.0 }
+flow g2u(x: U32 at (sample * 2)) -> U32 at sample { x[0] + x[1] * 10 }
+flow col2(x: F32 at (sample * 2)) -> F32 at sample { x[0] * 100.0 + x[1] }
+flow pair4(x: F32 at sample) -> F32 at (sample * 4) { [x, x + 0.25, x + 0.5, x + 0.75] }
+flow mk2(p: F32 at block) -> F32 at (sample * 2) { [p, p + 1.0] }
+// n is the number of the runs of the body (1 2 3 ...): the elements 10 n, 10 n + 1 (and + 2, + 3).
+flow cnt2() -> F32 at (sample * 2) {
+  let n = prev~(^n) + 1.0
+  [n * 10.0, n * 10.0 + 1.0]
+}
+flow cnt4() -> F32 at (sample * 4) {
+  let n = prev~(^n) + 1.0
+  [n * 10.0, n * 10.0 + 1.0, n * 10.0 + 2.0, n * 10.0 + 3.0]
+}
+flow acc(f: F32 at block) -> F32 at sample {
+  let n = f + prev~(^n)
+  n
+}
+flow tk() -> U32 at sample { sample_tick() }
+flow tkf() -> F32 at sample { F32.round_from(sample_tick()) }
+flow rate() -> F32 at sample { sample_rate() }
+// The ticks of the head at `sample / 2` and `sample / 4`: the counter k is 0 1 2 ... at its ticks and held between them.
+flow slc2() -> F32 at sample {
+  let c = prev~((^c + 1.0) at (sample / 2))
+  c at sample
+}
+flow slc4() -> F32 at sample {
+  let c = prev~((^c + 1.0) at (sample / 4))
+  c at sample
+}
+pub struct NoDef {
+  f: F32,
+}
+flow mk_nd(p: F32 at block) -> NoDef at sample { NoDef { f: p } }
+
+pub flow widen_ud() -> F32 at sample { cnt2~().down~(2).up~(4).down~(4) }
+pub flow widen_bundle() -> F32 at sample { g4~(cnt2~().down~(2).up~(4)) }
+pub flow widen_bundle_again() -> F32 at sample { g4~(cnt2~().down~(2).up~(4).down~(4).up~(4)) }
+pub flow deal_up(p: F32 at block) -> F32 at sample { g2~(mk2~(p).down~(2).up~(2)) }
+pub flow cnt_down_up2() -> F32 at sample { g2~(cnt2~().down~(2).up~(2)) }
+pub flow cnt_down_up4() -> F32 at sample { g4~(cnt4~().down~(4).up~(4)) }
+pub flow rate_up_down() -> F32 at sample { rate~().up~(2).down~(4) at sample }
+pub flow rate_down_up() -> F32 at sample { rate~().down~(2).up~(2) at sample }
+pub flow time_up_down() -> U32 at sample { tk~().up~(2).down~(4) at sample }
+pub flow time_down_up() -> U32 at sample { tk~().down~(2).up~(2) at sample }
+pub flow time_bundle_up() -> U32 at sample { g2u~(tk~().up~(2)) }
+pub flow time_bundle_down_up() -> U32 at sample { g2u~(tk~().down~(2).up~(4)) }
+pub flow time_bundle_deep() -> U32 at sample { g2u~(tk~().up~(2).down~(2).up~(2)) }
+pub flow time_bundle_up_down() -> U32 at sample { g2u~(tk~().up~(4).down~(2)) }
+pub flow slow_head_up_down() -> F32 at sample { g2~(slc2~().up~(4).down~(2)) }
+pub flow slow_head_up() -> F32 at sample { g2~(slc4~().up~(2)) }
+pub flow outer_only(one: F32 at block) -> F32 at sample {
+  let lf = prev~(one at (sample / 2), 1.0)
+  let s = prev~(^s) + lf
+  thru~(s).down~(2).up~(4).down~(4) at sample
+}
+pub flow cut_up(x: F32 at sample) -> F32 at sample { col2~(g2~(pair4~(x)).up~(2)) }
+pub flow delay_deep(x: F32 at sample) -> F32 at sample { thru~(x).up~(2).down~(2).up~(2).down~(2) }
+pub flow delay_deep_ups(x: F32 at sample) -> F32 at sample { thru~(x).up~(2).up~(2).down~(4) }
+pub flow identity_deep(x: F32 at sample) -> F32 at sample { thru~(x).down~(2).up~(2).down~(2).up~(2) }
+pub flow nodef_chain(p: F32 at block) -> F32 at sample {
+  let m = mk_nd~(p).down~(2).up~(2)
+  m.f * 2.0
+}
+pub flow acc_up(p: F32 at block) -> F32 at sample { g2~(acc~(p).up~(2)) }
+pub flow acc_par(p: F32 at block) -> F32 at sample {
+  let ys = par~ i in 0 ..< 2 { g2~(acc~(p * F32.round_from(i + 1)).up~(2)) }
+  ys[0] + ys[1] * 1000.0
+}
+pub flow acc_if(c: Bool at block, p: F32 at block) -> F32 at sample {
+  if~ c { g2~(acc~(p).up~(2)) } else { 7.0 }
+}
+// a = x(c - 2) (the delay of an up and a down of 2), b = 10 11 20 21 30 31 40 41, c = 0 0 1 1 2 2 3 3 (held), so a + 100 b + 100000 c.
+pub flow combo(x: F32 at sample) -> F32 at sample {
+  let a = thru~(x).up~(2).down~(2)
+  let b = cnt2~().down~(2).up~(4).down~(4)
+  let c = tkf~().up~(2).down~(4)
+  a + b * 100.0 + (c at sample) * 100000.0
+}
+// d = 11 c (c the frame), e = 1111 x + 258, so d + 1000 e.
+pub flow combo2(x: F32 at sample) -> F32 at sample {
+  let d = g2~(slc2~().up~(4).down~(2))
+  let e = col2~(g2~(pair4~(x)).up~(2))
+  d + e * 1000.0
+}
+
+fn ramp() -> [F32; 8] { [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0] }
+
+test "an up that widens the window of a down: the output of a part dealt by a down 2 and read by an up 4 is not lost by the next down 4" {
+  // cnt2 runs at the even counters of the inner part: the up 4 gives 2 runs of it to each frame b of the down 4 (n = 2 b + 1, 2 b + 2), whose 4 elements are 10 n, 10 n + 1, 10 (n + 1), 10 (n + 1) + 1;
+  // the down 4 deals them to the frames 4 b .. 4 b + 3: 10 11 20 21 | 30 31 40 41.
+  var out: [F32; 8] = [-1.0; 8]
+  var st = widen_ud.init(8.0)
+  widen_ud.process(inout st, inout out)
+  assert out == [10.0, 11.0, 20.0, 21.0, 30.0, 31.0, 40.0, 41.0]
+}
+
+test "the bundle of an up that a down 2 deals is read by the caller in the frame it was made, and the same through a down 4 and an up 4" {
+  // The bundle of the frame b is [10 n, 10 n + 1, 10 (n + 1), 10 (n + 1) + 1] with n = 2 b + 1: g4 = 11110 n + 12010 = 23120, 45340, 67560, 89780. The down 4 over it and the up 4 over that give the same.
+  var a: [F32; 4] = [-1.0; 4]
+  var b: [F32; 4] = [-1.0; 4]
+  var sa = widen_bundle.init(8.0)
+  var sb = widen_bundle_again.init(8.0)
+  widen_bundle.process(inout sa, inout a)
+  widen_bundle_again.process(inout sb, inout b)
+  assert a == [23120.0, 45340.0, 67560.0, 89780.0]
+  assert b == [23120.0, 45340.0, 67560.0, 89780.0]
+}
+
+test "a down then an up over an output at sample * N: the array that the down deals is read by the runs of the up in the frame of the run, with no delay" {
+  // `mk2`: the down runs at the run j = 0 of each frame and deals [p, p + 1] to the 2 runs: g2 = 11 p + 10, the p of the frame (1 in the frames 0 .. 2, 2 from 3: 21, 32).
+  var out: [F32; 6] = [-1.0; 6]
+  var st = deal_up.init(8.0)
+  deal_up.process(inout st, deal_up.Params { p: 1.0 }, inout out.slice(0, 3))
+  deal_up.process(inout st, deal_up.Params { p: 2.0 }, inout out.slice(3, 6))
+  assert out == [21.0, 21.0, 21.0, 32.0, 32.0, 32.0]
+  // The value changes at every frame: the run n = t + 1 of cnt2 gives [10 n, 10 n + 1] and g2 = 110 n + 10 (120, 230, 340, 450); with 4 elements (down 4, up 4): 11110 n + 3210 (14320, 25430, 36540, 47650).
+  var a: [F32; 4] = [-1.0; 4]
+  var b: [F32; 4] = [-1.0; 4]
+  var sa = cnt_down_up2.init(8.0)
+  var sb = cnt_down_up4.init(8.0)
+  cnt_down_up2.process(inout sa, inout a)
+  cnt_down_up4.process(inout sb, inout b)
+  assert a == [120.0, 230.0, 340.0, 450.0]
+  assert b == [14320.0, 25430.0, 36540.0, 47650.0]
+}
+
+test "sample_rate() is divided by the down and multiplied by the up, from the outermost modifier in" {
+  // 48000 / 4 * 2 = 24000 in `.up~(2).down~(4)`; 48000 * 2 / 2 = 48000 in `.down~(2).up~(2)`.
+  var a: [F32; 4] = [-1.0; 4]
+  var b: [F32; 4] = [-1.0; 4]
+  var sa = rate_up_down.init(48000.0)
+  var sb = rate_down_up.init(48000.0)
+  rate_up_down.process(inout sa, inout a)
+  rate_down_up.process(inout sb, inout b)
+  assert a == [24000.0, 24000.0, 24000.0, 24000.0]
+  assert b == [48000.0, 48000.0, 48000.0, 48000.0]
+}
+
+test "the time of a part in an up is N times the number of the part outside it plus the run (S-1217)" {
+  // `.up~(2).down~(4)`: the part of the down 4 reads c / 4 = v at the frame c = 4 v, the up makes it 2 v + j: the 2 outputs are dealt to c and c + 2 and held: 0 0 1 1 2 2 3 3.
+  // `.down~(2).up~(2)`: the up makes the time 2 t + j in the frame t, the down 2 divides it (the part runs at j = 0): t.
+  var a: [U32; 8] = [9; 8]
+  var b: [U32; 4] = [9; 4]
+  var sa = time_up_down.init(8.0)
+  var sb = time_down_up.init(8.0)
+  time_up_down.process(inout sa, inout a)
+  time_down_up.process(inout sb, inout b)
+  assert a == [0, 0, 1, 1, 2, 2, 3, 3]
+  assert b == [0, 1, 2, 3]
+}
+
+test "the time of a part in an up that a bundle is read from is the same for chains that cancel to the same ratio" {
+  // `tk~().up~(2)`: the runs of the frame t read 2 t and 2 t + 1: g2u = 2 t + 10 (2 t + 1) = 22 t + 10 (10 32 54 76). `.down~(2).up~(4)` (the time 4 t + j divided by 2 is 2 t + j / 2, the part runs at j = 0 and 2) and
+  // `.up~(2).down~(2).up~(2)` (the time 2 t + j1, divided by 2, doubled again) give the same. `.up~(4).down~(2)`: at the frame c = 2 b the down runs the up 4 whose bundle [4 b .. 4 b + 3] is dealt 2 to each
+  // of the frames c, c + 1: g2u = 44 b + 10 and 44 b + 32.
+  var a: [U32; 4] = [9; 4]
+  var b: [U32; 4] = [9; 4]
+  var c: [U32; 4] = [9; 4]
+  var d: [U32; 8] = [9; 8]
+  var sa = time_bundle_up.init(8.0)
+  var sb = time_bundle_down_up.init(8.0)
+  var sc = time_bundle_deep.init(8.0)
+  var sd = time_bundle_up_down.init(8.0)
+  time_bundle_up.process(inout sa, inout a)
+  time_bundle_down_up.process(inout sb, inout b)
+  time_bundle_deep.process(inout sc, inout c)
+  time_bundle_up_down.process(inout sd, inout d)
+  assert a == [10, 32, 54, 76]
+  assert b == [10, 32, 54, 76]
+  assert c == [10, 32, 54, 76]
+  assert d == [10, 32, 54, 76, 98, 120, 142, 164]
+}
+
+test "a slow stage of the head runs at the runs of the up whose counter is a multiple of its ratio: only j = 0 for sample / 2 under up 2" {
+  // `slc2` under `.up~(4).down~(2)`: the counter of the head is 4 b + j in the frame c = 2 b, so its ticks (the even counters) are at j = 0 and 2: k = 2 b + j / 2, held in between. The 4 outputs
+  // [2 b, 2 b, 2 b + 1, 2 b + 1] are dealt 2 to each of the frames 2 b and 2 b + 1: g2 = 22 b and 11 (2 b + 1): 11 c. `slc4` under `.up~(2)`: the counter is 2 t + j, a multiple of 4 at j = 0 and t even:
+  // k = t / 2, so [k, k] and 11 k: 0 0 11 11 22 22 33 33.
+  var a: [F32; 8] = [-1.0; 8]
+  var b: [F32; 8] = [-1.0; 8]
+  var sa = slow_head_up_down.init(8.0)
+  var sb = slow_head_up.init(8.0)
+  slow_head_up_down.process(inout sa, inout a)
+  slow_head_up.process(inout sb, inout b)
+  assert a == [0.0, 11.0, 22.0, 33.0, 44.0, 55.0, 66.0, 77.0]
+  assert b == [0.0, 0.0, 11.0, 11.0, 22.0, 22.0, 33.0, 33.0]
+}
+
+test "only the outer down gathers: an input at sample / 2 through a down 2, an up 4 and a down 4 is the stream 4 frames late, each element held 2 frames" {
+  // The inner boundary has the port at its own `sample` (it reads the value of its tick), the outer one gathers the 2 elements of `sample / 2` in c - 4 .. c - 1 (s = 1 2 3 ... at the even frames) and the up gives
+  // them to its runs j = 0 and 2: the output is dealt to c and c + 2: 0 0 0 0 1 1 2 2 3 3 4 4.
+  var out: [F32; 12] = [-1.0; 12]
+  var st = outer_only.init(8.0)
+  outer_only.process(inout st, outer_only.Params { one: 1.0 }, inout out)
+  assert out == [0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 2.0, 2.0, 3.0, 3.0, 4.0, 4.0]
+}
+
+test "an up that cuts the bundle of an input into its runs: x[0] .. x[3] of the 4 elements go 2 and 2 to the runs" {
+  // `pair4`: [x, x + .25, x + .5, x + .75]. The runs of `g2`: y0 = x + 10 (x + .25) = 11 x + 2.5, y1 = (x + .5) + 10 (x + .75) = 11 x + 8; `col2` = 100 y0 + y1 = 1111 x + 258: 1369 2480 3591 4702.
+  var out: [F32; 4] = [-1.0; 4]
+  var st = cut_up.init(8.0)
+  cut_up.process(inout st, ramp().slice(0, 4), inout out)
+  assert out == [1369.0, 2480.0, 3591.0, 4702.0]
+}
+
+test "a value of an up read as a bundle: the runs are in order, and the parameter is the one of the frame" {
+  // `acc` adds p at each run; p = 1 in the frames 0 .. 2 (the runs 1 2 | 3 4 | 5 6), 2 from the frame 3 (8 10 | 12 14 | 16 18): g2 = x[0] + 10 x[1] = 21 43 65 108 152 196.
+  var out: [F32; 6] = [-1.0; 6]
+  var st = acc_up.init(8.0)
+  acc_up.process(inout st, acc_up.Params { p: 1.0 }, inout out.slice(0, 3))
+  acc_up.process(inout st, acc_up.Params { p: 2.0 }, inout out.slice(3, 6))
+  assert out == [21.0, 43.0, 65.0, 108.0, 152.0, 196.0]
+}
+
+test "an up in par~ and in if~: each copy has its own runs, the arm that is not taken runs too" {
+  // par~: the copy 0 adds p (runs 1 2, 3 4, 5 6: 21 43 65), the copy 1 adds 2 p (2 4, 6 8, 10 12: 42 86 130): copy 0 + 1000 copy 1. if~: both arms run in every frame, the arm gives 22 f + 21 (21 43 65 87 109 131) and
+  // c is true in the frames 0 1, false in 2 3 and true in 4 5.
+  var a: [F32; 3] = [-1.0; 3]
+  var sa = acc_par.init(8.0)
+  acc_par.process(inout sa, acc_par.Params { p: 1.0 }, inout a)
+  assert a == [42021.0, 86043.0, 130065.0]
+  var o: [F32; 6] = [-1.0; 6]
+  var si = acc_if.init(8.0)
+  acc_if.process(inout si, acc_if.Params { c: true, p: 1.0 }, inout o.slice(0, 2))
+  acc_if.process(inout si, acc_if.Params { c: false, p: 1.0 }, inout o.slice(2, 4))
+  acc_if.process(inout si, acc_if.Params { c: true, p: 1.0 }, inout o.slice(4, 6))
+  assert o == [21.0, 43.0, 7.0, 7.0, 109.0, 131.0]
+}
+
+test "the delays of the boundaries add in a chain of depth 3: 4 samples for two of up 2 down 2, none for two of down 2 up 2" {
+  // `.up~(2).down~(2).up~(2).down~(2)`: each `.up~(2).down~(2)` is 2 samples late and the outer one wraps the inner: 4 (0 0 0 0 1 2 3 4). `.up~(2).up~(2).down~(4)` is a block of 4: 4 late too.
+  // `.down~(2).up~(2)` has no boundary that gathers (the port is at `sample` inside the down): x as it is, also doubled.
+  var a: [F32; 8] = [-1.0; 8]
+  var b: [F32; 8] = [-1.0; 8]
+  var c: [F32; 8] = [-1.0; 8]
+  var sa = delay_deep.init(8.0)
+  var sb = delay_deep_ups.init(8.0)
+  var sc = identity_deep.init(8.0)
+  delay_deep.process(inout sa, ramp().slice(0, 8), inout a)
+  delay_deep_ups.process(inout sb, ramp().slice(0, 8), inout b)
+  identity_deep.process(inout sc, ramp().slice(0, 8), inout c)
+  assert a == [0.0, 0.0, 0.0, 0.0, 1.0, 2.0, 3.0, 4.0]
+  assert b == [0.0, 0.0, 0.0, 0.0, 1.0, 2.0, 3.0, 4.0]
+  assert c == ramp()
+}
+
+test "an output with no Default through a down and an up needs none: it is made by the stage that runs it" {
+  // `NoDef` has no `Default`; the chain `.down~(2).up~(2)` gathers and deals nothing, so the value is the one the part made in the run of the frame: 2 p.
+  var out: [F32; 4] = [-1.0; 4]
+  var st = nodef_chain.init(8.0)
+  nodef_chain.process(inout st, nodef_chain.Params { p: 3.0 }, inout out)
+  assert out == [6.0, 6.0, 6.0, 6.0]
+}
+
+fn is_combo(o: [F32; 8]) -> Bool {
+  o == [1000.0, 1100.0, 102001.0, 102102.0, 203003.0, 203104.0, 304005.0, 304106.0]
+}
+
+fn is_combo2(o: [F32; 8]) -> Bool {
+  o == [1369000.0, 2480011.0, 3591022.0, 4702033.0, 5813044.0, 6924055.0, 8035066.0, 9146077.0]
+}
+
+fn run_cut(a: U32, b: U32) -> [F32; 8] {
+  var out: [F32; 8] = [-1.0; 8]
+  var st = combo.init(8.0)
+  combo.process(inout st, ramp().slice(0, a), inout out.slice(0, a))
+  combo.process(inout st, ramp().slice(a, b), inout out.slice(a, b))
+  combo.process(inout st, ramp().slice(b, 8), inout out.slice(b, 8))
+  out
+}
+
+fn run_cut2(a: U32, b: U32) -> [F32; 8] {
+  var out: [F32; 8] = [-1.0; 8]
+  var st = combo2.init(8.0)
+  combo2.process(inout st, ramp().slice(0, a), inout out.slice(0, a))
+  combo2.process(inout st, ramp().slice(a, b), inout out.slice(a, b))
+  combo2.process(inout st, ramp().slice(b, 8), inout out.slice(b, 8))
+  out
+}
+
+test "the calls of process cut the run anywhere, a call of 0 frames too: the same values for chains with an up (§13.4)" {
+  assert is_combo(run_cut(8, 8))
+  assert is_combo2(run_cut2(8, 8))
+  for a in 0 ..< 9 {
+    for b in a ..< 9 {
+      assert is_combo(run_cut(a, b))
+      assert is_combo2(run_cut2(a, b))
+    }
+  }
+}
+
+test "eight calls of one frame give the same" {
+  var out: [F32; 8] = [-1.0; 8]
+  var out2: [F32; 8] = [-1.0; 8]
+  var st = combo.init(8.0)
+  var st2 = combo2.init(8.0)
+  for i in 0 ..< 8 {
+    combo.process(inout st, ramp().slice(i, i + 1), inout out.slice(i, i + 1))
+    combo2.process(inout st2, ramp().slice(i, i + 1), inout out2.slice(i, i + 1))
+  }
+  assert is_combo(out)
+  assert is_combo2(out2)
+}
+
+test "reset after any number of frames: the runs, the rings, the arrays and the time are those of a state just made (S-1186)" {
+  // k frames of another run (x = 101) and then a reset: the next frame is the frame 0, so the run is the one of a state just made, in the middle of a run of the up or between (k odd and even).
+  let junk: [F32; 8] = [101.0; 8]
+  for k in 0 ..< 9 {
+    var scratch: [F32; 8] = [-1.0; 8]
+    var out: [F32; 8] = [-1.0; 8]
+    var st = combo.init(8.0)
+    combo.process(inout st, junk.slice(0, k), inout scratch.slice(0, k))
+    combo.reset(inout st)
+    combo.process(inout st, ramp().slice(0, 8), inout out)
+    assert is_combo(out)
+    var out2: [F32; 8] = [-1.0; 8]
+    var st2 = combo2.init(8.0)
+    combo2.process(inout st2, junk.slice(0, k), inout scratch.slice(0, k))
+    combo2.reset(inout st2)
+    combo2.process(inout st2, ramp().slice(0, 8), inout out2)
+    assert is_combo2(out2)
+  }
+}

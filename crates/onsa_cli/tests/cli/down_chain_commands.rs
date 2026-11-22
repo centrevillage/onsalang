@@ -117,3 +117,23 @@ fn at_one_stage_the_part_under_a_down_chain_runs_after_the_lets_or_where_its_tic
         assert_eq!(stop_line(tag, &src), line_of(&src, first), "the first in the order of S-1206: {src}");
     }
 }
+
+/// S-1206 and S-1159 (provisional; W7-16 U6b3): the runs of a chain with an `.up~(N)` give the output of the call at the `sample` stage of the caller, so they run where the call is read, in the order of the text: a `let`
+/// written before the call runs before the up (its division is reported), a `let` written after it runs after (the division of the part under the up is reported). Both divide by a value of `sample` (a `prev~`, so not at
+/// `block`, §11.3) that is 0 at the frame 1: the caller by `p` of the frame before, the part by `p` of two of its frames before, at its frame 2, the run j = 0 of the frame 1.
+#[test]
+fn at_one_stage_the_runs_of_an_up_chain_run_where_the_call_is_read_s1206_s1159_provisional() {
+    let part = "flow kidu(p: I32 at block) -> I32 at sample {\n  let d = prev~(prev~(p at sample, 1), 1)\n  100 / d\n}\n\nflow two(x: I32 at (sample * 2)) -> I32 at sample {\n  x[0] + x[1]\n}\n\n";
+    let let_first = format!(
+        "{part}pub flow f(p: I32 at block) -> I32 at sample {{\n  let e = prev~(p at sample, 1)\n  let r = 200 / e\n  r + two~(kidu~(p).up~(2))\n}}\n"
+    );
+    let up_first = format!(
+        "{part}pub flow f(p: I32 at block) -> I32 at sample {{\n  let k = two~(kidu~(p).up~(2))\n  let e = prev~(p at sample, 1)\n  let r = 200 / e\n  r + k\n}}\n"
+    );
+    for (tag, flows, first) in
+        [("up_chain_panic_let_first", &let_first, "200 / e"), ("up_chain_panic_up_first", &up_first, "100 / d")]
+    {
+        let src = stops(flows, 2);
+        assert_eq!(stop_line(tag, &src), line_of(&src, first), "the first in the order of S-1206: {src}");
+    }
+}

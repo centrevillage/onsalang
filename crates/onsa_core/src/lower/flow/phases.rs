@@ -424,12 +424,16 @@ pub(super) fn call_stage(r: StageRun, span: Span) -> R<Expr> {
 /// of its N, so the first frame runs it and the tick does not depend on how
 /// the host splits the frames (§11.9). The one drive of the stages of a
 /// part: of `process` (`c` the counter of the phase of its state, a run of
-/// [`call_stage`] of each stage; the runs j of an `.up~` and the grid of a
-/// `when~` of W7-16 and W7-10 too).
+/// [`call_stage`] of each stage; the runs j of an `.up~`, `c` the j, and
+/// the grid of a `when~` of W7-10 too). The stage of `sample` runs at each.
 pub(super) fn drive(runs: Vec<(ClockStage, Vec<Stmt>)>, c: &Expr, span: Span, out: &mut Vec<Stmt>) -> R<()> {
     for (stage, run) in runs {
+        if stage == ClockStage::SAMPLE {
+            out.extend(run);
+            continue;
+        }
         let mask = match stage {
-            ClockStage::Tick(k) => k.n().and_then(|n| u32::try_from(n - 1).ok()),
+            ClockStage::Tick(k) => k.made_n().and_then(|n| u32::try_from(n - 1).ok()),
             _ => None,
         };
         let mask = mask.ok_or_else(|| internal(span, format!("no counter of the tick {stage:?}")))?;

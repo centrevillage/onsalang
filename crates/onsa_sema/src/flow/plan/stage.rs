@@ -123,15 +123,6 @@ impl FlowInfo {
         }
     }
 
-    /// The first place of the plan (by its place) the Core does not lower
-    /// until a later unit of W7-16, which stops at it (E0200, R-91 (1)): a
-    /// node with a chain the Core does not lower yet
-    /// ([`PlanNode::lowered_chain`]). The one gate of them (D-15).
-    pub fn multirate_at(&self) -> Option<Span> {
-        let stops = |n: &&PlanNode| !n.lowered_chain();
-        self.nodes.iter().filter(stops).map(|n| n.span).min_by_key(|s| (s.start, s.end))
-    }
-
     /// Whether the `let` k (the output by `lets.len()`) holds a hoisted
     /// field or a check of the stage `s` (`FlowInfo::writes`): the
     /// function of `s` walks it for them (§11.3).
@@ -155,16 +146,6 @@ impl FlowInfo {
 }
 
 impl PlanNode {
-    /// Whether the Core lowers the chain of the node (§11.9, S-1207): none,
-    /// or one of an instance whose modifiers are all `.down~(N)` (an `.up~`
-    /// waits for U6b3 of W7-16). The one test of it (D-15): the gate
-    /// ([`FlowInfo::multirate_at`]) and the Core, which runs a stage of a
-    /// callee of no other chain, read it.
-    pub fn lowered_chain(&self) -> bool {
-        let downs = || self.chain.iter().all(|m| m.ratio.is_some_and(Ratio::slower_than_body));
-        self.chain.is_empty() || matches!(self.kind, PlanKind::Instance { .. }) && downs()
-    }
-
     /// Its entry of the stage `s` of this flow whose `read` is `read`
     /// (§11.9, [`Entry`]): the one question the Core asks of its work.
     pub fn entry(&self, s: ClockStage, read: bool) -> Option<&Entry> {

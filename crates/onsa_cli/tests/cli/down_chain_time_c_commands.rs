@@ -249,3 +249,61 @@ fn a_flow_that_only_reads_the_time_turns_over_and_starts_again_after_reset() {
     ];
     assert_eq!(got, want);
 }
+
+/// The flows whose time an up cancels the down of (W7-16 U6b3, S-1211, S-1217): the part reads the time, `.down~(2).up~(2)` and `.up~(2).down~(2)`. A `.down~` on the path is counted though it is cancelled (§12.4), so
+/// each has the upper word, and as the outermost flow it advances both words in the loop of `process`.
+const CANCELLED: &str = "\
+flow tk() -> U32 at sample {
+  sample_tick()
+}
+
+@export
+pub flow down2_up2() -> U32 at sample {
+  tk~().down~(2).up~(2) at sample
+}
+
+@export
+pub flow up2_down2() -> U32 at sample {
+  tk~().up~(2).down~(2) at sample
+}
+";
+
+/// A `.down~(N)` that an `.up~(N)` cancels reads the number of the outermost flow, T = `_tick_hi` * 2^32 + `_tick`, cut to `U32` last, whichever of the two is outside (the up makes 2 T + j and the down divides it, or the down
+/// gives T / 2 = b and the up makes 2 b + j, the run j being the frame's own parity): T itself. From T = 2^32 - 4 (`_tick` is a multiple of the product of the N, 4): 4294967292 at the frame 0, 4294967295 at the frame 3, and 0
+/// at the frame 4 where `_tick` has turned over to 0 and `_tick_hi` is 1; 3 at the frame 7. After 8 frames `_tick` is 4 and `_tick_hi` 1; after `reset` both are 0 and the first frame reads 0.
+#[test]
+fn the_time_of_a_down_that_an_up_cancels_goes_on_where_the_lower_word_turns_over() {
+    let b = build("time_c_cancelled", CANCELLED);
+    for flow in ["down2_up2", "up2_down2"] {
+        let got = Driver::new(&b, flow).run(u32::MAX - 3, 0, 8, &[0, 3, 4, 7]);
+        let want = vec![
+            v(0, 4294967292),
+            v(3, 4294967295),
+            v(4, 0),
+            v(7, 3),
+            "after 4 1".to_string(),
+            "reset 0 0".to_string(),
+            "first 0".to_string(),
+        ];
+        assert_eq!(got, want, "{flow}");
+    }
+}
+
+/// The same from T = 2^34 - 4 (`_tick_hi` 3): the number is cut to 32 bits, so the frames read the same, and `_tick_hi` is 4 after 8 frames.
+#[test]
+fn the_time_of_a_down_that_an_up_cancels_is_cut_to_32_bits_at_the_upper_word_3() {
+    let b = build("time_c_cancelled_hi", CANCELLED);
+    for flow in ["down2_up2", "up2_down2"] {
+        let got = Driver::new(&b, flow).run(u32::MAX - 3, 3, 8, &[0, 3, 4, 7]);
+        let want = vec![
+            v(0, 4294967292),
+            v(3, 4294967295),
+            v(4, 0),
+            v(7, 3),
+            "after 4 4".to_string(),
+            "reset 0 0".to_string(),
+            "first 0".to_string(),
+        ];
+        assert_eq!(got, want, "{flow}");
+    }
+}

@@ -3,20 +3,22 @@
 //!
 //! - The Core of a chain whose modifiers are all `.down~(N)` and whose boundaries gather and deal nothing, over a part that reads no `sample_tick()`, is W7-16 U6a1 (S-1207, S-1214): `build`,
 //!   `dump --core` and `test` end with 0 and no internal error for it (W7-16 U6a1/t; the values are in `tests/spec/flow_semantics/down_chain_values.onsa`).
-//! - The Core of a chain with an `.up~(N)` in it is W7-16 U6b, so `build`, `dump --core` and `test` stop at a flow that has such a chain with E0200 and with nothing else
-//!   (no internal error), on the file of the flow, while `check` reads it with no diagnostic and `onsa interface` ends with 0.
+//! - A chain with an `.up~(N)` in it is lowered too (W7-16 U6b3; S-1207, S-1214, S-1217): `build`, `dump --core` and `test` end with 0 and no internal error, and the values of two of them with a part with a memory
+//!   are those of the part run in time order (a delay of the boundary that gathers, none where none does; the other values are in `tests/spec/flow_semantics/up_chain_values.onsa`).
 //! - `onsa graph` of such a flow: the label of the vertex of an instance with modifiers writes the kind and then the modifiers in the order
 //!   they are written, with the N as a value, and the type and the clock of the value of the chain at the call side (S-1084, provisional
 //!   reading (2): `lp_0 = lp~.down~(4): F32 at (sample / 4)`). No colour is added (the vertices keep the three of §1.1, and a tick has the black
 //!   of `sample`), and the edge of the head argument is the edge of any call. The node whose `let` is a tick has the name of S-1139 (a)
 //!   (`b.lp_0`, a node with no name of §1.1 whose label drops the qualification, drawn into the vertex of the `let` `b`).
 //!
+//! - A clock composed of the N of a port or a stage and those of the chain that the Core does not make (`sample * N` past 2^31, `sample / N` past 2^32) is E0200 at `check` (W7-16 U6b3/i2,
+//!   S-1216 open, provisional): every command stops with E0200 and no internal error. `sample / 2^32` is made and lowered.
+//!
 //! The texts are written from the spec; none is taken from the output of the compiler.
 
-use crate::slow_stage_commands::assert_lowers;
-use crate::test_support::{Dir, code_of, diagnostics, doc_of, run, span_of, test_json, tests_of};
-
-const BUILD_MANIFEST: &str = "[package]\nname = \"demo\"\nedition = \"2026\"\n\n[targets.host]\nkind = \"source\"\nlang = \"c\"\nplatform = \"host\"\nprovides = []\n";
+use crate::sample_tick_commands::assert_lowers_and_passes;
+use crate::slow_stage_commands::{assert_lowers, error_lines, package};
+use crate::test_support::{Dir, run};
 
 const LP: &str = "pub flow lp(x: F32 at sample) -> F32 at sample {\n  x * 0.5 + prev~(x) * 0.5\n}\n\n";
 
@@ -28,27 +30,12 @@ const BODIES: [&str; 3] = [
     "pub flow f(p: F32 at block, x: F32 at sample) -> F32 at sample {\n  let a = p at (sample / 4)\n  let y = lp~(a).down~(4)\n  x * (y at sample)\n}\n",
 ];
 
-/// Flows with an `.up~(N)` in the chain, each in a form that `check` accepts (modifier_rules.rs, the graph test below): the Core of a chain with an up is W7-16 U6b. Each has `.down~(` on the line of its chain.
+/// Flows with an `.up~(N)` in the chain, each in a form that `check` accepts (modifier_rules.rs, the graph test below).
 const UP_BODIES: [&str; 3] = [
     "pub flow f(p: F32 at block, x: F32 at sample) -> F32 at sample {\n  x * (lp~(p).down~(4).up~(2) at sample)\n}\n",
     "pub flow f(x: F32 at sample) -> F32 at sample {\n  lp~(x).down~(2).up~(2)\n}\n",
     "pub flow f(p: F32 at block, x: F32 at sample) -> F32 at sample {\n  let y = lp~(p).up~(2).down~(4)\n  x * (y at sample)\n}\n",
 ];
-
-fn source(body: &str) -> String {
-    format!("{LP}{body}\ntest \"reads\" {{\n  assert 1 + 1 == 2\n}}\n")
-}
-
-fn error_lines(text: &str) -> Vec<&str> {
-    text.lines().filter(|l| l.contains("error[")).collect()
-}
-
-fn package(tag: &str, body: &str) -> Dir {
-    let d = Dir::bare(tag);
-    d.write("onsa.toml", BUILD_MANIFEST);
-    d.write("main.onsa", &source(body));
-    d
-}
 
 // ----------------------------------------------------------------------------- the gate of the Core
 
@@ -61,49 +48,31 @@ fn a_flow_with_a_down_chain_that_gathers_and_deals_nothing_is_lowered_by_build_d
     }
 }
 
-/// W7-09 (the Core of an up is W7-16 U6b): `check` reads the flow with a chain that has an `.up~(N)`, and `build`, `dump --core` and `test` stop at it with E0200
-/// and nothing else, on the file of the flow (Q-09: what the spec has and this version does not carry is E0200, not a wrong output).
+/// W7-16 U6b3 (S-1207, S-1214, S-1217; it was E0200 until then, Q-09): `check` reads the flows with a chain that has an `.up~(N)`, and `build`, `dump --core` and `test` end with 0 and no internal error, the test of
+/// the package runs (the forms of `UP_BODIES`: an up with a down after it, a down with an up after it, and an up over a part with a `block` input).
 #[test]
-fn a_flow_with_an_up_chain_is_e0200_for_build_dump_core_and_test() {
+fn a_flow_with_an_up_chain_is_lowered_by_build_dump_core_and_test() {
     for (k, body) in UP_BODIES.iter().enumerate() {
-        let d = package(&format!("chain_core_gate_{k}"), body);
-
-        let out = run(d.root(), &["check", "--json"]);
-        assert_eq!(out.code, 0, "{body}: check reads the flow: {}{}", out.stdout, out.stderr);
-        assert!(diagnostics(&doc_of(&out)).is_empty(), "{body}: {}", out.stdout);
-
-        let dir = d.arg();
-        let commands: [(&str, Vec<&str>); 3] = [
-            ("build", vec!["build", "--target", "host"]),
-            ("dump --core", vec!["dump", "--core", dir.as_str()]),
-            ("test", vec!["test"]),
-        ];
-        for (name, args) in commands {
-            let out = run(d.root(), &args);
-            assert_eq!(out.code, 1, "{body}: {name}: {}{}", out.stdout, out.stderr);
-            let both = format!("{}{}", out.stdout, out.stderr);
-            let lines = error_lines(&both);
-            assert!(!lines.is_empty(), "{body}: {name}: an error line: {both}");
-            for l in &lines {
-                assert!(l.contains("error[E0200]"), "{body}: {name}: only E0200: {l}");
-                assert!(l.contains("main.onsa:"), "{body}: {name}: E0200 is on the file of the flow: {l}");
-            }
-            assert!(!both.contains("internal error"), "{body}: {name}: {both}");
-        }
-
-        let (out, doc) = test_json(d.root(), &[]);
-        assert_eq!(out.code, 1, "{}{}", out.stdout, out.stderr);
-        let ds = diagnostics(&doc);
-        assert!(!ds.is_empty() && ds.iter().all(|x| code_of(x) == "E0200"), "{body}: {doc}");
-        assert!(ds.iter().all(|x| span_of(&x["span"]).file == "main.onsa"), "{body}: {doc}");
-        assert!(tests_of(&doc).is_empty(), "{body}: nothing is run: {doc}");
-        // The chain with an up is the only form that U6a1 leaves (a `sample / N` stage of the flow and a chain of downs are lowered), so the first diagnostic (§18.1: the order of the
-        // file, the line and the column) is on the line where the chain is written.
-        let chain_line =
-            1 + source(body).lines().position(|l| l.contains(".down~(")).expect("a chain in the body") as u64;
-        let first = span_of(&ds[0]["span"]);
-        assert_eq!(first.line, chain_line, "{body}: the first E0200 is at the chain: {doc}");
+        assert_lowers(&format!("chain_core_up_lowers_{k}"), &format!("{LP}{body}"), &[]);
     }
+}
+
+/// The values of two chains with an up over a part with a memory (`lp`, y = x / 2 + x[-1] / 2 in the frames of the part), with x = 1 2 3 4 5 6 (§11.9, S-1207): `.down~(2).up~(2)` gathers nothing (the part runs
+/// at the run j = 0 of each frame, on the frame's own x): 0.5 1.5 2.5 3.5 4.5 5.5; `.up~(2).down~(2)` runs the part on the stream 2 frames late (0 0 1 2 3 4), in order: 0 0 0.5 1.5 2.5 3.5.
+#[test]
+fn an_up_chain_over_a_part_with_a_memory_gives_the_part_run_in_time_order() {
+    let flows = format!(
+        "{LP}pub flow du(x: F32 at sample) -> F32 at sample {{\n  lp~(x).down~(2).up~(2)\n}}\n\npub flow ud(x: F32 at sample) -> F32 at sample {{\n  lp~(x).up~(2).down~(2)\n}}\n\ntest \"up chains\" {{\n  let xs: [F32; 6] = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]\n  var a: [F32; 6] = [-1.0; 6]\n  var b: [F32; 6] = [-1.0; 6]\n  var sa = du.init(8.0)\n  var sb = ud.init(8.0)\n  du.process(inout sa, xs.slice(0, 6), inout a)\n  ud.process(inout sb, xs.slice(0, 6), inout b)\n  assert a == [0.5, 1.5, 2.5, 3.5, 4.5, 5.5]\n  assert b == [0.0, 0.0, 0.5, 1.5, 2.5, 3.5]\n}}\n"
+    );
+    assert_lowers_and_passes("chain_core_up_values", &flows, "up chains");
+}
+
+/// A type with no `Default` through a chain with an up (§11.9, S-1214 補い, W7-21 U1): a chain `.down~(2).up~(2)` gathers and deals nothing, and an `.up~(N)` alone makes a bundle of the runs, so neither needs the
+/// default of `NoDef` (a struct of a `F32` with no `Default`) or of `Char` (the bundle read by a port at `sample * 2`): `check` reads the package and `build`, `dump --core` and `test` end with 0 (a ring or an array that starts at `T.default()` would have no value to start at).
+#[test]
+fn an_output_with_no_default_through_a_down_and_an_up_and_through_an_up_is_built() {
+    let flows = "pub struct NoDef {\n  f: F32,\n}\n\nflow mk(p: F32 at block) -> NoDef at sample {\n  NoDef { f: p }\n}\n\nflow mkc(c: Char at block) -> Char at sample {\n  c\n}\n\nflow two(x: Char at (sample * 2)) -> F32 at sample {\n  if x[0] == x[1] { 1.0 } else { 0.0 }\n}\n\npub flow through(p: F32 at block) -> F32 at sample {\n  let m = mk~(p).down~(2).up~(2)\n  m.f * 2.0\n}\n\npub flow bundle(c: Char at block) -> F32 at sample {\n  two~(mkc~(c).up~(2))\n}\n";
+    assert_lowers("chain_core_up_nodef", flows, &[]);
 }
 
 /// `onsa interface` reads the signatures and the kinds, not the Core: the flow with a chain is listed, the command ends with 0 and no
@@ -111,7 +80,7 @@ fn a_flow_with_an_up_chain_is_e0200_for_build_dump_core_and_test() {
 #[test]
 fn interface_of_a_flow_with_a_chain_ends_with_zero() {
     for (k, body) in BODIES.iter().chain(UP_BODIES.iter()).enumerate() {
-        let d = package(&format!("chain_interface_{k}"), body);
+        let d = package(&format!("chain_interface_{k}"), &format!("{LP}{body}"), &[]);
         let out = run(d.root(), &["interface"]);
         assert_eq!(out.code, 0, "{body}: {}{}", out.stdout, out.stderr);
         assert!(
@@ -122,6 +91,51 @@ fn interface_of_a_flow_with_a_chain_ends_with_zero() {
         );
         assert!(out.stdout.contains("pub flow f("), "{body}: the flow `f` is listed: {}", out.stdout);
     }
+}
+
+/// The forms of S-1216 (its supplement): a part whose output (`h`, `sample * 2^20`) an `.up~(4096)` makes `sample * 2^32` in the frame of a `.down~` that deals it, and that value itself; a constant given
+/// to an input at `sample * 2^20` under an `.up~(4096)`; a stage of `sample / 512` and a slow input at `sample / 2^31` under a `.down~(2^24)`.
+const PAST_U32: [&str; 5] = [
+    "flow h(x: U32 at sample) -> U32 at (sample * 1048576) {\n  let a: [U32; 1048576] = [x; 1048576]\n  a\n}\n\nflow r(x: U32 at (sample * 1048576)) -> U32 at sample {\n  x[0]\n}\n\n\
+     pub flow f(x: U32 at sample) -> U32 at sample {\n  r~(h~(x).up~(4096).down~(4096))\n}\n",
+    "flow h(x: U32 at sample) -> U32 at (sample * 1048576) {\n  let a: [U32; 1048576] = [x; 1048576]\n  a\n}\n\n\
+     pub flow f(x: U32 at sample) -> U32 at sample {\n  let _ = h~(7).up~(4096)\n  x\n}\n",
+    "flow h(x: U32 at (sample * 1048576)) -> U32 at sample {\n  x[0]\n}\n\npub flow f(x: U32 at sample) -> U32 at sample {\n  let _ = h~(7).up~(4096)\n  x\n}\n",
+    "flow h(x: U32 at sample) -> U32 at sample {\n  let c = prev~(^c at (sample / 512)) + 1\n  x + (c at sample)\n}\n\n\
+     pub flow f(x: U32 at sample) -> U32 at sample {\n  let _ = h~(7).down~(16777216)\n  x\n}\n",
+    "flow h(x: U32 at (sample / 2147483648)) -> U32 at sample {\n  x at sample\n}\n\npub flow f(x: U32 at sample) -> U32 at sample {\n  let _ = h~(7).down~(16777216)\n  x\n}\n",
+];
+
+/// A clock composed in a chain that the Core does not make is E0200 (S-1216 open, provisional): `check`, `build`, `dump --core`, `test` and `interface` end with 1, with E0200 and nothing else
+/// (Q-09), and no command ends with an internal error. Only the stop is pinned, no value.
+#[test]
+fn a_clock_composed_in_a_chain_past_u32_is_e0200_at_every_command() {
+    for (k, flows) in PAST_U32.iter().enumerate() {
+        let d = package(&format!("chain_past_u32_{k}"), flows, &[]);
+        let dir = d.arg();
+        let commands: [Vec<&str>; 5] = [
+            vec!["check"],
+            vec!["build", "--target", "host"],
+            vec!["dump", "--core", dir.as_str()],
+            vec!["test"],
+            vec!["interface"],
+        ];
+        for args in commands {
+            let out = run(d.root(), &args);
+            let both = format!("{}{}", out.stdout, out.stderr);
+            assert_eq!(out.code, 1, "{flows}: {args:?}: {both}");
+            assert!(!both.contains("internal error"), "{flows}: {args:?}: {both}");
+            let lines = error_lines(&both);
+            assert!(!lines.is_empty() && lines.iter().all(|l| l.contains("error[E0200]")), "{flows}: {args:?}: {both}");
+        }
+    }
+}
+
+/// A slow input at `sample / 2^31` under a `.down~(2)` is of `sample / 2^32`, which the Core makes: the package is lowered as before S-1216's supplement.
+#[test]
+fn a_slow_input_of_2_to_the_31_under_a_down_of_2_is_lowered() {
+    let flows = "flow h(x: U32 at (sample / 2147483648)) -> U32 at sample {\n  x at sample\n}\n\npub flow f(x: U32 at sample) -> U32 at sample {\n  let _ = h~(7).down~(2)\n  x\n}\n";
+    assert_lowers("chain_slow_2_to_the_32", flows, &[]);
 }
 
 // ----------------------------------------------------------------------------- the graph

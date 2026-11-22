@@ -50,14 +50,15 @@ pub(super) fn init_value(
 /// Arguments of an instance call for the callee inputs of the stage of
 /// `phase`, in their places, lowered in the current function: of the input
 /// value types, which are no views (§11.3), so with no conversion, of a
-/// burst its array ([`burst_ty`], [`spread`]); of an input among `rings`
-/// (by its index), the ring a chain gathers it in.
+/// burst its array ([`burst_ty`], [`spread`]); of an input among `given`
+/// (by its index), the value given (of a chain, the window of a ring or of
+/// an argument lowered before, `chain::run`).
 pub(super) fn instance_args(
     lw: &mut Lowerer,
     cx: &mut FnCx,
     (callee, args): (DefId, &[ExprId]),
     phase: Phase,
-    rings: &[(u32, Expr)],
+    given: &[(u32, Expr)],
     span: Span,
 ) -> R<Vec<Expr>> {
     let a = lw.a;
@@ -69,8 +70,8 @@ pub(super) fn instance_args(
         if input.phase != phase {
             continue;
         }
-        if let Some((_, ring)) = rings.iter().find(|r| r.0 == i) {
-            out.push(ring.clone());
+        if let Some((_, v)) = given.iter().find(|r| r.0 == i) {
+            out.push(v.clone());
             continue;
         }
         let port = input.decl.caller_clock();

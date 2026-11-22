@@ -131,6 +131,7 @@ mod type_args_syntax;
 mod type_argument_requirements;
 mod type_param_members;
 mod types_holding_themselves;
+mod up_chain_c_commands;
 mod use_clash_edges;
 mod use_cycles;
 mod use_generated_items;

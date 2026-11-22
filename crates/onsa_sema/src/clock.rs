@@ -176,6 +176,15 @@ impl Ratio {
         2u64.checked_pow(self.0.unsigned_abs())
     }
 
+    /// The N of a clock the Core makes, none of one it does not: of
+    /// `sample * N` the length of an array, `U32` (2^31 at most), of
+    /// `sample / N` the period of a counter of one `U32` word (2^32 at
+    /// most). The one test of it (D-15): the check of the composed clocks of
+    /// a chain (E0200 of the flow stage, S-1216) and the Core read it.
+    pub fn made_n(self) -> Option<u64> {
+        self.n().filter(|_| (-32..32).contains(&self.0))
+    }
+
     /// The ratio of `(sample / n)` (`op` `/`) or `(sample * n)` (`*`), and
     /// of `.down~(n)` and `.up~(n)` (S-1077): `n` a power of 2 that is 2 or
     /// more, else none (E0808). The one test of an N (D-15).
@@ -245,10 +254,10 @@ impl Clock {
 
     /// The N of a [`Clock::burst`], none of another clock: the view of the
     /// ports of a body and the Core's type of the values of the caller read
-    /// it. An N past `U32` is an internal error.
+    /// it. An N the Core does not make ([`Ratio::made_n`]) is an internal error.
     pub fn burst_len(self) -> Option<u32> {
         let Clock::Tick(k) = self else { return None };
-        let n = self.burst().then(|| k.n().and_then(|n| u32::try_from(n).ok()))?;
+        let n = self.burst().then(|| k.made_n().and_then(|n| u32::try_from(n).ok()))?;
         Some(n.unwrap_or_else(|| onsa_diag::internal::bug(None, format!("a burst at {self:?}, past `U32`"))))
     }
 
