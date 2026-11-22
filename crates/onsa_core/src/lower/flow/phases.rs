@@ -162,13 +162,16 @@ fn init_node(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, id: NodeId, s
 }
 
 /// The time of `init` and `reset` in the state `s` (§11.6, §11.9): the
-/// counter of the phase at 0, the one place of `init` and `reset` that
+/// counter of the phase and `_tick_hi` at 0, the one place that
 /// writes it (`reset_if~` does not, W7-10), then the fields written at a
 /// tick and read at a faster stage at `T.default()` ([`defaults`]).
 fn restart(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, s: &Expr) -> R<()> {
     let (info, span) = (plan(cx), s.span);
     if info.counts_time() {
         assign(out, &sfield(lw, info, s, FieldOf::Tick, span)?, u32_lit(span, 0))?;
+    }
+    if info.wide() {
+        assign(out, &sfield(lw, info, s, FieldOf::TickHi, span)?, u32_lit(span, 0))?;
     }
     defaults(lw, cx, out, &info.fields, s)
 }
@@ -298,12 +301,13 @@ fn ctl_node(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, id: NodeId, st
 /// The function of the tick `stage` (§11.4, §11.9): `tick(inout s, [t],
 /// <Sig inputs>)` of the `sample` of the body, `tick_<N>(inout s, [t],
 /// <its inputs>)` of a slower one, which [`drive`] or a caller
-/// ([`run_child`]) calls; the time `t` of a flow that reads it
-/// (`FlowInfo::reads_time`). In order: its inputs the state keeps stored,
+/// ([`run_child`]) calls; the words of the time `t`, `t_hi` of a stage that
+/// takes them (`FlowInfo::time_words`). In order: its inputs the state keeps stored,
 /// its `let`s and the fields hoisted to it ([`Gen::stage_lets`]), the
 /// output of the stage that makes it (`FlowInfo::out_stage`), the stages
 /// of the callees that run in it ([`child_runs`]), the stores of its
-/// nodes, and last in `tick` the counter of the phase advanced.
+/// nodes, and last in `tick` the counter of the phase advanced when it is
+/// the grid of the slower stages (`FlowInfo::counter`).
 // SPEC-GAP(S-1206): the order in a stage is that of the reference
 // evaluator (S-1159 provisional): its `let`s, then the stages of the
 // callees, then the stores.
@@ -323,8 +327,8 @@ pub(super) fn gen_tick<'b>(
     let out_ty = if makes_out { shape.out_val.clone() } else { Ty::Unit };
     let mut g = Gen::new(lw, shape, info, phase, out_ty.clone())?;
     let s = g.param("s", Mode::Inout, Ty::Struct(shape.state_ty));
-    if info.reads_time {
-        let t = g.param("t", Mode::Borrow, Ty::u32());
+    for name in ["t", "t_hi"].into_iter().take(info.time_words(stage)) {
+        let t = g.param(name, Mode::Borrow, Ty::u32());
         g.flow().time.push(t);
     }
     let inputs: Vec<&Input> = shape.inputs.iter().filter(|i| i.phase == phase).collect();
@@ -357,11 +361,14 @@ pub(super) fn gen_tick<'b>(
     each_node(lw, &mut g.cx, &mut g.stmts, &nodes, &s, walk, &mut child_runs)?;
     let walk = Walk { arms: None, loops: |info, children, _, s| stores(info, children, s) };
     each_node(lw, &mut g.cx, &mut g.stmts, &nodes, &s, walk, &mut store_node)?;
-    if phase == Phase::SAMPLE && info.counts_time() {
+    if phase == Phase::SAMPLE && info.counter() == Counter::Tick {
         let t = sfield(lw, info, &s, FieldOf::Tick, span)?;
-        let one = Box::new(u32_lit(span, 1));
-        let next = ExprKind::Binary { op: BinOp::Add, overflow: Overflow::Wrap, lhs: Box::new(t.clone()), rhs: one };
-        assign(&mut g.stmts, &t, Expr::new(Ty::u32(), span, next))?;
+        assign(&mut g.stmts, &t, wrap_add(t.clone(), span))?;
+    }
+    // S-1217: a function takes the time if and only if it reads it (but in
+    // a placeholder of an unsupported feature, whose Core is dropped).
+    if lw.hole_spans.is_empty() && g.flow().time_read.get() == g.flow().time.is_empty() {
+        return Err(internal(span, format!("the function of {stage:?} takes the time or reads it, not both")));
     }
     g.finish(lw, fid, out_ty, true, out);
     Ok(())
@@ -415,7 +422,7 @@ pub(super) fn runs_at(n: &PlanNode, s: ClockStage, read: bool) -> impl Iterator<
 
 /// The call of the function of the stage `run.body` of the callee of the
 /// instance `id`, in the scope of `state` (§11.9, S-1088): its state, the
-/// time of a callee that reads it ([`child_time`]) and its inputs of that
+/// time of a stage that takes it ([`super::chain::child_time`]) and its inputs of that
 /// stage, lowered here, those its chain gathers of their rings; the output
 /// of the stage that makes it, else `()`.
 /// The one place a caller runs a stage of a callee (the loop of `.up~`
@@ -436,21 +443,22 @@ pub(super) fn run_child(lw: &mut Lowerer, cx: &mut FnCx, id: NodeId, state: &Exp
     let sub = lw.ensure_flow(callee)?;
     let f = sub.stage_fn(run.body).ok_or_else(|| internal(span, format!("a callee with no stage {k:?}")))?;
     let mut cargs = vec![inout(sfield(lw, info, state, FieldOf::Node(id, Part::Own), span)?)];
-    if lw.a.flows.get(&callee).is_some_and(|g| g.reads_time) {
-        let time = &cx.flow.as_ref().expect("flow context").time;
-        cargs.extend(child_time(time, n.frame, span)?.into_iter().map(borrow));
+    let (words, mut lets) = (lw.a.flows.get(&callee).map_or(0, |g| g.time_words(run.body)), Vec::new());
+    if words > 0 {
+        cx.flow.as_ref().expect("flow context").time_read.set(true);
+        cargs.extend(super::chain::child_time(cx, &mut lets, n, words, span)?.into_iter().map(borrow));
     }
     let rings = super::chain::rings(lw, info, id, state, span)?;
     cargs.extend(instance_args(lw, cx, (callee, args), Phase::Tick(k), &rings, span)?.into_iter().map(borrow));
-    Ok(call(f, lw.m.fn_(f).ret.clone(), span, cargs))
+    Ok(after(lets, call(f, lw.m.fn_(f).ret.clone(), span, cargs)))
 }
 
 /// The calls of the functions of the ticks slower than the `sample` of the
 /// body (`FlowFns::stages`), slowest first (S-578, S-1079), each at its
 /// ticks: when the counter of the phase of the state `s` is a multiple of
 /// its N, so the first frame runs it and the tick does not depend on how
-/// the host splits the frames (§11.9); with the time `time` of a flow that
-/// reads it. The one driver of them: `process` runs it before `tick` (a
+/// the host splits the frames (§11.9); with the words of `time` each takes
+/// (`FlowInfo::time_words`). The one driver of them: `process` runs it before `tick` (a
 /// slower loop of W7-16 does too).
 pub(super) fn drive(
     lw: &Lowerer,
@@ -467,12 +475,36 @@ pub(super) fn drive(
         };
         let mask = mask.ok_or_else(|| internal(span, format!("no counter of the tick {stage:?}")))?;
         let low = checked_binary(BinOp::BitAnd, sfield(lw, info, s, FieldOf::Tick, span)?, u32_lit(span, mask));
+        let time = time.get(..info.time_words(stage)).ok_or_else(|| internal(span, "a stage of more time"))?;
         let args = [inout(s.clone())].into_iter().chain(time.iter().cloned().map(borrow)).collect();
         let run = vec![stmt(span, StmtKind::Expr(call(f, Ty::Unit, span, args)))];
         let due = cmp(CmpOp::Eq, low, u32_lit(span, 0));
         out.push(stmt(span, StmtKind::If(due, Block { stmts: run, value: None }, Block::default())));
     }
     Ok(())
+}
+
+/// The time of the outermost advanced after its `tick` (§11.4, S-1217,
+/// S-1211): the counter of the time alone ([`Counter::Process`]), then
+/// `_tick_hi` when `_tick` goes round. The one place of it.
+pub(super) fn advance(lw: &Lowerer, info: &FlowInfo, s: &Expr, span: Span, out: &mut Vec<Stmt>) -> R<()> {
+    let t = || sfield(lw, info, s, FieldOf::Tick, span);
+    if info.counter() == Counter::Process {
+        assign(out, &t()?, wrap_add(t()?, span))?;
+    }
+    if info.wide() {
+        let (hi, mut carry) = (sfield(lw, info, s, FieldOf::TickHi, span)?, Vec::new());
+        assign(&mut carry, &hi, wrap_add(hi.clone(), span))?;
+        let round = cmp(CmpOp::Eq, t()?, u32_lit(span, 0));
+        out.push(stmt(span, StmtKind::If(round, Block { stmts: carry, value: None }, Block::default())));
+    }
+    Ok(())
+}
+
+/// `x +% 1` of a `U32`.
+fn wrap_add(x: Expr, span: Span) -> Expr {
+    let (lhs, rhs) = (Box::new(x), Box::new(u32_lit(span, 1)));
+    Expr::new(Ty::u32(), span, ExprKind::Binary { op: BinOp::Add, overflow: Overflow::Wrap, lhs, rhs })
 }
 
 /// The end-of-tick store of a node (§11.4) in node order: `prev` saves its

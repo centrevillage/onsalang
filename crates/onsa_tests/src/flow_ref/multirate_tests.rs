@@ -508,8 +508,8 @@ fn an_argument_of_a_chain_that_is_slower_than_the_chain_is_made_at_its_own_tick(
 
 #[test]
 fn the_counter_of_a_down_chain_goes_on_where_its_caller_goes_round() {
-    // §11.4: the counter of `.down~(N)` is 1/N of the whole counter of its caller ("上の桁の `U32` の欄をプログラムに一つ置く"), so it does not go back to 0 where the `U32` of
-    // the caller does. From 2^32 - 4 the caller's counter is 4294967292 .. 4294967295 and then 0 .. 3 (the whole one 2^32 .. 2^32 + 3): `tk~().down~(4)` runs at 2^32 - 4 and at 2^32
+    // §11.4: `sample_tick()` in the body of `.down~(N)` is the number of the outermost flow divided by N, rounded down ("割るのは `U32` に切る前の数なので、`.down~(N)` の本体でも
+    // その刻みの 2^32 で一周し"), so it does not go back to 0 where the `U32` of the caller does. From 2^32 - 4 the caller's counter is 4294967292 .. 4294967295 and then 0 .. 3 (the whole one 2^32 .. 2^32 + 3): `tk~().down~(4)` runs at 2^32 - 4 and at 2^32
     // and reads 2^30 - 1 = 1073741823 for the first four frames and 2^30 = 1073741824 for the next four. `.down~(2).down~(2)` is the same.
     let src = format!(
         "{CNT}flow dt() -> U32 at sample {{

@@ -33,6 +33,8 @@ pub enum FieldOf {
     SampleRate,
     /// The counter of the phase (§11.9, §12.4, S-1179).
     Tick,
+    /// The upper word of the time (§11.4, §12.4, S-1211, [`FlowInfo::wide`]).
+    TickHi,
     Input(LocalId),
     Let(LocalId),
     Node(NodeId, Part),
@@ -80,7 +82,8 @@ impl FlowInfo {
 }
 
 /// The fields of the state of `info` (S-05, §12.4): `_sample_rate` when it
-/// is kept, `_tick` when the flow counts the time (S-1179), the kept inputs in their order, then for each `let` in its
+/// is kept, `_tick` when the flow counts the time (S-1179) and `_tick_hi`
+/// when it takes the upper word of the time (S-1211), the kept inputs in their order, then for each `let` in its
 /// order its kept locals and the fields of its nodes, the fields of the
 /// nodes of the output, the hoisted fields of the `let`s and the output in
 /// their order, `_poisoned` and `_initialized`; and the fields of the
@@ -98,6 +101,9 @@ pub(super) fn build(info: &mut FlowInfo) {
     }
     if p.counts_time() {
         top.push(field(FieldOf::Tick, FixedField::Tick.name()));
+    }
+    if p.wide() {
+        top.push(field(FieldOf::TickHi, FixedField::TickHi.name()));
     }
     top.extend(p.inputs.iter().filter(|&&v| p.stored(Kept::Local(v))).map(|&v| local(FieldOf::Input, v)));
     for (k, l) in p.lets.iter().enumerate() {
@@ -143,7 +149,7 @@ fn unique(info: &FlowInfo, fields: &[Field]) {
         FieldOf::Node(id, _) => Some(info.node(id).span),
         FieldOf::Input(l) | FieldOf::Let(l) => Some(info.body.locals[l.0 as usize].span),
         FieldOf::Hoist(h) => Some(info.hoist(h).span),
-        FieldOf::SampleRate | FieldOf::Tick | FieldOf::Poisoned | FieldOf::Initialized => None,
+        FieldOf::SampleRate | FieldOf::Tick | FieldOf::TickHi | FieldOf::Poisoned | FieldOf::Initialized => None,
     };
     let mut seen: HashMap<&str, FieldOf> = HashMap::default();
     for f in fields {

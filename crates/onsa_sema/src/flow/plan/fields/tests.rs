@@ -29,6 +29,7 @@ fn what(f: &FlowInfo, of: FieldOf) -> String {
     match of {
         FieldOf::SampleRate => "sample_rate".into(),
         FieldOf::Tick => "tick".into(),
+        FieldOf::TickHi => "tick_hi".into(),
         FieldOf::Input(l) => format!("in {}", local(l)),
         FieldOf::Let(l) => format!("let {}", local(l)),
         FieldOf::Node(id, part) => {

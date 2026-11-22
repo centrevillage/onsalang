@@ -2,7 +2,7 @@
 //! S-1206, S-1159, S-1207, Q-09): what the case `tests/spec/flow_semantics/down_chain_values.onsa` cannot pin.
 //!
 //! - `onsa interface` of the parent of such a chain has the state of the child and the counter of the phase (`_tick`) after `_sample_rate` and before the fields of the `let`s (§12.4, S-1179 (2)). That the
-//!   parent has the field is the choice of the implementation (§11.9 "誰が欄を持つかは実装の選択"); where it is, is the spec's. `_tick_hi` is not read (a part that reads the time is U6a3, S-1217).
+//!   parent has the field is the choice of the implementation (§11.9 "誰が欄を持つかは実装の選択"); where it is, is the spec's. A parent of a part that reads no `sample_tick()` has no `_tick_hi` (§12.4: the field of the upper word of the time is only of a flow with a `.down~` before a read of `sample_tick()`, S-1211, S-1217; the flows that have it are in `down_chain_time_commands.rs`).
 //! - Which of two panics at one position is reported (`onsa test`, the `failure` of the test): the slower tick first (§11.9, S-1079), and at one stage a `let` of the parent before the stage of the part under the
 //!   chain (S-1206 and S-1159, open: the provisional order of the reference evaluator, so that test has `provisional` in its name).
 //!

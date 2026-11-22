@@ -13,14 +13,38 @@ fn ratio(n: &PlanNode, b: &PlanBound, span: Span) -> R<Ratio> {
     r.ok_or_else(|| internal(span, "a boundary of no modifier with a ratio"))
 }
 
-/// The count `c` of the frames of the caller of a boundary of the ratio
-/// `r` as the count of the frames of the part it wraps: `c >> s` of a
-/// `.down~(2^s)`. The one step of it (U6b adds `.up~`).
-fn fold(c: Expr, r: Ratio, span: Span) -> R<Expr> {
-    match u32::try_from(-r.0) {
-        Ok(s) if r.slower_than_body() => Ok(checked_binary(BinOp::Shr, c, u32_lit(span, s))),
-        _ => Err(internal(span, format!("the phase under a boundary of the ratio {r:?}"))),
+/// The words of a count of the frames of the caller of a boundary of the
+/// ratio `r` as those of the part it wraps, of a `.down~(2^s)`: `[c >> s]`
+/// of one (the phase, its low word alone), `[(t >> s) | (t_hi << (32 −
+/// s)), t_hi >> s]` of two (the time, divided before it is cut to `U32`,
+/// §11.4). The one step of it (U6b adds `.up~`).
+fn fold(words: &[Expr], r: Ratio, span: Span) -> R<Vec<Expr>> {
+    let s = u32::try_from(-r.0).ok().filter(|&s| r.slower_than_body() && s < 32);
+    let s = s.ok_or_else(|| internal(span, format!("a count under a boundary of the ratio {r:?}")))?;
+    let shift = |op, x: &Expr, by| checked_binary(op, x.clone(), u32_lit(span, by));
+    match words {
+        [c] => Ok(vec![shift(BinOp::Shr, c, s)]),
+        [t, hi] => Ok(vec![
+            checked_binary(BinOp::BitOr, shift(BinOp::Shr, t, s), shift(BinOp::Shl, hi, 32 - s)),
+            shift(BinOp::Shr, hi, s),
+        ]),
+        _ => Err(internal(span, format!("a count of {} words", words.len()))),
     }
+}
+
+/// The time the callee of `n` takes from that of its caller (§11.4,
+/// S-1217): two words folded out of each boundary, the outermost first, in
+/// `let`s `t_in`, `t_hi_in` into `out` that the next shares, cut to `words`.
+pub(super) fn child_time(cx: &mut FnCx, out: &mut Vec<Stmt>, n: &PlanNode, words: usize, span: Span) -> R<Vec<Expr>> {
+    let mut time = cx.flow.as_ref().expect("flow context").time.clone();
+    for (k, b) in n.bounds.iter().enumerate().rev() {
+        // One word divided would lose the upper (S-1211): the table gives two.
+        let two = Some(&time[..]).filter(|t| t.len() == 2).ok_or_else(|| internal(span, "one word of time"))?;
+        let kept = fold(two, ratio(n, b, span)?, span)?.into_iter().take(if k == 0 { words } else { 2 });
+        time = kept.zip(["t_in", "t_hi_in"]).map(|(e, name)| materialize(cx, e, out, name)).collect();
+    }
+    let time = time.get(..words).ok_or_else(|| internal(span, format!("a callee of {words} words of time")))?;
+    Ok(time.to_vec())
 }
 
 /// The phase of the boundary `b` of `n` (§11.9): the counter of the phase
@@ -31,10 +55,15 @@ fn fold(c: Expr, r: Ratio, span: Span) -> R<Expr> {
 fn phase(lw: &Lowerer, cx: &FnCx, n: &PlanNode, b: usize, span: Span) -> R<Expr> {
     let f = cx.flow.as_ref().expect("flow context");
     let root = f.scopes.first().ok_or_else(|| internal(span, "a chain outside the state"))?;
-    let mut c = sfield(lw, f.info, &root.state, FieldOf::Tick, span)?;
-    for o in n.bounds.iter().skip(b + 1).rev() {
-        c = fold(c, ratio(n, o, span)?, span)?;
+    // S-1217: the counter of the time alone advances in `process` only.
+    if f.info.counter() != Counter::Tick {
+        return Err(internal(span, "the phase of a chain of a flow whose `_tick` is not of a grid"));
     }
+    let mut c = vec![sfield(lw, f.info, &root.state, FieldOf::Tick, span)?];
+    for o in n.bounds.iter().skip(b + 1).rev() {
+        c = fold(&c, ratio(n, o, span)?, span)?;
+    }
+    let c = c.pop().ok_or_else(|| internal(span, "a phase of no word"))?;
     let r = n.bounds.get(b).map(|x| ratio(n, x, span)).transpose()?;
     let mask = r.and_then(|r| r.n()).and_then(|m| u32::try_from(m - 1).ok());
     let mask = mask.ok_or_else(|| internal(span, format!("no phase of the boundary {b}")))?;

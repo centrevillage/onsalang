@@ -599,13 +599,12 @@ fn a_burst_in_the_caller_stops_the_core() {
     assert_eq!([port("sl"), port("h"), port("k")], [Some("x: F32 at (sample / 4)"), None, None]);
 }
 
-/// The gate passes a chain of `.down~(N)` alone, of a callee that reads no
-/// time (W7-16 U6a1, §11.9), nested too, and one whose innermost boundary
-/// alone gathers or deals (U6a2); and stops, at the node, one whose callee
-/// reads the time through a flow (U6a3, S-1217), one with an `.up~(N)`,
-/// one that gathers at two boundaries and one that gathers or deals a
-/// burst in its caller (U6b). The walk records the time of the callee
-/// (`timed`), and each modifier of a chain has its receiver.
+/// The gate passes a chain of `.down~(N)` alone (W7-16 U6a1, §11.9),
+/// nested too, of a callee that reads the time through a flow (U6a3,
+/// S-1217), and one whose innermost boundary alone gathers or deals
+/// (U6a2); and stops, at the node, one with an `.up~(N)`, one that gathers
+/// at two boundaries and one that gathers or deals a burst in its caller
+/// (U6b). Each modifier of a chain has its receiver.
 #[test]
 fn the_gate_passes_a_chain_of_downs_that_gathers_and_deals_at_its_innermost_alone() {
     let src = "flow lp(x: F32 at sample) -> F32 at sample {\n  x + prev~(x)\n}\n\
@@ -625,19 +624,59 @@ fn the_gate_passes_a_chain_of_downs_that_gathers_and_deals_at_its_innermost_alon
     let a = check(src);
     assert!(a.diagnostics.is_empty(), "{:?}", a.diagnostics);
     let at = |name: &str| flow(&a, name).multirate_at().map(|s| &src[s.start as usize..s.end as usize]);
-    assert_eq!([at("down"), at("gathers"), at("deals")], [None, None, None]);
+    assert_eq!([at("down"), at("timed"), at("gathers"), at("deals")], [None, None, None, None]);
     assert_eq!(
-        [at("timed"), at("up"), at("twice"), at("burst_in"), at("burst_out")],
-        [Some("mid~()"), Some("lp~(p)"), Some("g4~(x)"), Some("g4~(p)"), Some("g2~(mk4~(p).down~(2))")]
+        [at("up"), at("twice"), at("burst_in"), at("burst_out")],
+        [Some("lp~(p)"), Some("g4~(x)"), Some("g4~(p)"), Some("g2~(mk4~(p).down~(2))")]
     );
     let lowered = |name: &str| flow(&a, name).nodes.iter().all(|n| n.lowered_chain());
     assert_eq!(["gathers", "deals", "twice", "burst_in", "burst_out"].map(lowered), [true, true, false, true, true]);
     let (down, timed) = (flow(&a, "down"), flow(&a, "timed"));
-    assert!(down.nodes[0].lowered_chain() && !down.nodes[0].timed && timed.nodes[0].timed);
+    assert!(down.nodes[0].lowered_chain() && timed.nodes[0].lowered_chain());
     // `.down~(4)` of the head, then `.down~(2)` of that.
     let of = |r| down.modifiers.iter().find(|&(_, &x)| x == r).map(|(&m, _)| m);
     let inner = of(down.nodes[0].expr);
     assert_eq!((down.modifiers.len(), inner.and_then(of).is_some()), (2, true), "{:?}", down.modifiers);
+}
+
+/// The words of the time each stage takes (§11.4, §12.4, S-1217, S-1211,
+/// W7-16 U6a3; worked out by hand from the rules of the table): `t` where
+/// `sample_tick()` is read, at the stage of its clock (a hoisted one at its
+/// tick, one in an argument a chain gathers at the stage of the argument);
+/// where a callee's stage that takes it runs, its words, two under a
+/// `.down~`, through a flow of no modifier too; none where neither. The
+/// counter of a flow with no slower stage advances in `process`, of one
+/// with them in `tick`; `_tick_hi` follows `_tick` (S-1179 (2)).
+#[test]
+fn the_table_gives_the_words_of_the_time_of_each_stage() {
+    let src = "flow tk() -> U32 at sample {\n  sample_tick()\n}\n\
+               flow so() -> U32 at (sample / 4) {\n  sample_tick()\n}\n\
+               flow mid() -> U32 at sample {\n  so~() at sample\n}\n\
+               pub flow top() -> U32 at sample {\n  mid~()\n}\n\
+               pub flow both() -> U32 at sample {\n  tk~() + (tk~().down~(2) at sample)\n}\n\
+               flow mid2() -> U32 at sample {\n  tk~().down~(2) at sample\n}\n\
+               pub flow outer() -> U32 at sample {\n  mid2~().down~(2) at sample\n}\n\
+               pub flow hoisted() -> U32 at sample {\n  (sample_tick() at (sample / 4)) at sample\n}\n\
+               flow g4(v: U32 at (sample * 4)) -> U32 at sample {\n  v[3]\n}\n\
+               pub flow gat() -> U32 at sample {\n  g4~(sample_tick()).down~(4) at sample\n}\n";
+    let a = check(src);
+    assert!(a.diagnostics.is_empty(), "{:?}", a.diagnostics);
+    let tick = |k| crate::clock::ClockStage::Tick(crate::clock::Ratio(k));
+    let time = |name: &str| flow(&a, name).time.iter().map(|(&s, &w)| (s, w)).collect::<Vec<_>>();
+    use super::Words::{One, Two};
+    assert_eq!(time("tk"), [(tick(0), One)]);
+    assert_eq!([time("so"), time("mid"), time("top")], [[(tick(-2), One)], [(tick(-2), One)], [(tick(-2), One)]]);
+    assert_eq!(time("both"), [(tick(-1), Two), (tick(0), One)]);
+    assert_eq!([time("mid2"), time("outer")], [[(tick(-1), Two)], [(tick(-2), Two)]]);
+    assert_eq!([time("hoisted"), time("gat")], [[(tick(-2), One)], [(tick(0), One)]]);
+    assert!(time("g4").is_empty() && !flow(&a, "g4").counts_time());
+    let wide = ["tk", "top", "both", "mid2", "outer", "hoisted", "gat"].map(|f| flow(&a, f).wide());
+    assert_eq!(wide, [false, false, true, true, true, false, false]);
+    let counter = ["tk", "both", "top", "gat"].map(|f| flow(&a, f).counter());
+    assert_eq!(counter, [super::Counter::Process, super::Counter::Tick, super::Counter::Tick, super::Counter::Tick]);
+    let names = |f: &str| flow(&a, f).fields.iter().take(2).map(|x| x.name.clone()).collect::<Vec<_>>();
+    assert_eq!([names("both"), names("outer")], [["_tick", "_tick_hi"], ["_tick", "_tick_hi"]]);
+    assert!(flow(&a, "top").fields.iter().all(|x| x.name != "_tick_hi"));
 }
 
 /// The Core lowers the slower ticks of one flow and `sample_tick()` (W7-16
@@ -716,7 +755,7 @@ pub flow plain(x: F32 at sample) -> F32 at sample {
         assert_eq!(top.node(named(top, path)).runs, [run(-2, -2, false), run(0, 0, true)], "{path}");
     }
     assert!(top.node(named(top, "d.prev_0")).runs.is_empty());
-    assert_eq!([gc.reads_time, ch.reads_time, top.reads_time, plain.reads_time], [false, true, true, false]);
+    assert_eq!([gc.reads_time(), ch.reads_time(), top.reads_time(), plain.reads_time()], [false, true, true, false]);
     assert!(top.counts_time() && !plain.counts_time());
     assert_eq!(top.fields.iter().take(1).map(|f| f.name.as_str()).collect::<Vec<_>>(), ["_tick"]);
     let stage = |path| top.node_stage(named(top, path));

@@ -1,17 +1,17 @@
-//! `sample_tick()` in the commands of `onsa` (W7-09 U4b/t, W7-16 U5a/t, U5b2/t; spec §11.4, §11.3, §11.9, §18.1, `spec/tools.md` §1.1; S-565, S-567 (K6), S-1129 (1), Q-09):
+//! `sample_tick()` in the commands of `onsa` (W7-09 U4b/t, W7-16 U5a/t, U5b2/t, U6a3/t; spec §11.4, §11.3, §11.9, §18.1, `spec/tools.md` §1.1; S-565, S-567 (K6), S-1129 (1), S-1217, Q-09):
 //! what the case files in `tests/spec/flow_clock/` and `tests/spec/flow_semantics/` cannot pin.
 //!
 //! - A flow that reads `sample_tick()` with no modifier (in a `let`, the output, a `par`, the first argument of a delay), and a child instance with no modifier that reads it (in the flow of the
 //!   package or of a module, in its output or in a stage of `sample / N`, in a grandchild), is lowered by `build`, `dump --core` and `test` (W7-16 U5a, U5b2: the counter of the phase is a field of
 //!   the state and the time is the time of the parent); `check` reads it with no diagnostic and `onsa interface` ends with 0.
 //! - A chain of `.down~(N)` over a part that does not read `sample_tick()` is lowered even when its argument does (the argument is read in the caller, at the tick of the input; W7-16 U6a1/t).
-//! - What stays E0200 after U6a2 is the work of the later unit: a chain over a part that reads `sample_tick()` (the part, or a child of it, also a conversion flow; U6a3, S-1217). `build`, `dump --core` and `test` stop
-//!   at it with E0200 and with nothing else (no internal error); the first diagnostic is at the first place of the file that has such a form, the chain (§18.1: the order of the diagnostics).
+//! - A chain of `.down~(N)` over a part that reads `sample_tick()` (the part, a child of it, also a conversion flow) is lowered and gives the number of the outermost flow divided by N, cut to `U32` last (§11.4; W7-16 U6a3/t,
+//!   S-1217). The values of the chains are in `tests/spec/flow_semantics/down_chain_time_values.onsa`; the cases here are the commands: the package is lowered and its test passes.
 //!
 //! The texts are written from the spec; none is taken from the output of the compiler.
 
-use crate::slow_stage_commands::{assert_e0200, assert_lowers};
-use crate::test_support::{Dir, run};
+use crate::slow_stage_commands::{assert_e0200, assert_lowers, package};
+use crate::test_support::{Dir, record, run, str_of, test_json};
 
 /// The bodies of `main.onsa` that read `sample_tick()` in the places of §11.4 (a `let`, the output, a `par`, the first argument of a delay), with no modifier and no child.
 const LOWERING: [&str; 4] = [
@@ -58,26 +58,55 @@ fn a_child_that_reads_sample_tick_is_lowered_by_build_dump_core_and_test() {
 }
 
 /// A chain of `.down~(N)` over a part that does not read `sample_tick()`, with `sample_tick()` in the argument: the argument is an expression of the caller read at the tick of the input (§11.9), so the time
-/// is the time of the caller and nothing of the part (W7-16 U6a1: the time of the part is not read). The package is lowered. The value of the time under a chain is not pinned (S-1217).
+/// is the time of the caller and nothing of the part (W7-16 U6a1: the time of the part is not read). The package is lowered, and the part reads the argument at the ticks of the chain: the time T of the
+/// caller at T = 0, 4, 8, each held for the 4 frames of the chain (§11.4: "書いた場所の `sample_rate()` の刻みの数", the argument is written in the caller).
 #[test]
-fn a_chain_whose_argument_reads_sample_tick_is_lowered_when_the_part_reads_no_time() {
-    let flows = "flow pass_u32(g: U32 at sample) -> U32 at sample {\n  g\n}\n\npub flow f(x: F32 at sample) -> U32 at sample {\n  pass_u32~(sample_tick()).down~(4) at sample\n}\n";
-    assert_lowers("sample_tick_arg_chain_lowers", flows, &[]);
+fn a_chain_whose_argument_reads_sample_tick_gives_the_time_of_the_caller_at_the_ticks_of_the_chain() {
+    let flows = "flow pass_u32(g: U32 at sample) -> U32 at sample {\n  g\n}\n\npub flow f() -> U32 at sample {\n  pass_u32~(sample_tick()).down~(4) at sample\n}\n\ntest \"argument time\" {\n  var out: [U32; 12] = [9; 12]\n  var st = f.init(8.0)\n  f.process(inout st, inout out)\n  assert out == [0, 0, 0, 0, 4, 4, 4, 4, 8, 8, 8, 8]\n}\n";
+    assert_lowers_and_passes("sample_tick_arg_chain_values", flows, "argument time");
 }
 
-/// A chain over a part that reads `sample_tick()` stays E0200 after U6a1 (line 6, the line of the chain; the part is lowered): the time of the part under `.down~(N)` is U6a3 (S-1217).
+/// A chain over a part that reads `sample_tick()` is lowered (W7-16 U6a3, S-1217; it was E0200 until then) and the part reads the number of the outermost flow divided by N, rounded down (§11.4:
+/// "`.down~(N)` の本体では N で割って切り捨て"): the part runs at the frames 0, 4, 8, reads 0, 1, 2 and the output is held for 4 frames.
 #[test]
-fn a_chain_over_a_part_that_reads_sample_tick_is_e0200_until_u6a3() {
-    let flows = "flow tk() -> U32 at sample {\n  sample_tick()\n}\n\npub flow f() -> U32 at sample {\n  tk~().down~(4) at sample\n}\n";
-    assert_e0200("sample_tick_e0200_0", flows, &[], Some(6));
+fn a_chain_over_a_part_that_reads_sample_tick_gives_the_time_divided_by_n() {
+    let flows = "flow tk() -> U32 at sample {\n  sample_tick()\n}\n\npub flow f() -> U32 at sample {\n  tk~().down~(4) at sample\n}\n\ntest \"time over 4\" {\n  var out: [U32; 12] = [9; 12]\n  var st = f.init(8.0)\n  f.process(inout st, inout out)\n  assert out == [0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2]\n}\n";
+    assert_lowers_and_passes("sample_tick_chain_values", flows, "time over 4");
 }
 
-/// A conversion flow that reads `sample_tick()` in its body is lowered (W7-16 U6a2: the flow `g`, line 1, has no E0200), and the chain over it stays E0200 for the time of the part (U6a3, S-1217): the first
-/// diagnostic is at the chain, line 6.
+/// A conversion flow that reads `sample_tick()` in its body, under `.down~(2)` (W7-16 U6a2 lowers its body, U6a3 the chain over it): the body has the time of the part, the number of the caller divided by 2, and
+/// gathers the 2 frames before the tick (`x[1]` is the latest, the first tick has the default 0). x = 1 2 3 ... 8: the tick at T = 0 gives 0 * 0, T = 2 gives x(1) * 1 = 2, T = 4 gives x(3) * 2 = 8, T = 6 gives x(5) * 3 = 18.
 #[test]
-fn a_chain_over_a_conversion_flow_that_reads_sample_tick_is_e0200_at_the_chain_until_u6a3() {
-    let flows = "flow g(x: F32 at (sample * 2)) -> F32 at sample {\n  x[1] * F32.round_from(sample_tick())\n}\n\npub flow f(x: F32 at sample) -> F32 at sample {\n  g~(x).down~(2) at sample\n}\n";
-    assert_e0200("sample_tick_e0200_1", flows, &[], Some(6));
+fn a_chain_over_a_conversion_flow_that_reads_sample_tick_gives_its_time_and_gathers_before_the_tick() {
+    let flows = "flow g(x: F32 at (sample * 2)) -> F32 at sample {\n  x[1] * F32.round_from(sample_tick())\n}\n\npub flow f(x: F32 at sample) -> F32 at sample {\n  g~(x).down~(2) at sample\n}\n\ntest \"conversion time\" {\n  let xs: [F32; 8] = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]\n  var out: [F32; 8] = [-1.0; 8]\n  var st = f.init(8.0)\n  f.process(inout st, xs.slice(0, 8), inout out)\n  assert out == [0.0, 0.0, 2.0, 2.0, 8.0, 8.0, 18.0, 18.0]\n}\n";
+    assert_lowers_and_passes("sample_tick_conversion_values", flows, "conversion time");
+}
+
+/// A child with no modifier that reads `sample_tick()` inside a part under the chain, a chain over a chain, and a time-only flow beside a flow with a stage of its own: the package is lowered and its test passes.
+#[test]
+fn a_chain_over_a_child_and_a_chain_inside_a_part_are_lowered_and_give_the_times_of_their_parts() {
+    let flows = "flow tk() -> U32 at sample {\n  sample_tick()\n}\n\nflow mid() -> U32 at sample {\n  tk~()\n}\n\nflow mid2() -> U32 at sample {\n  tk~().down~(2) at sample\n}\n\npub flow a() -> U32 at sample {\n  mid~().down~(2) at sample\n}\n\npub flow b() -> U32 at sample {\n  mid2~().down~(2) at sample\n}\n\ntest \"times of the parts\" {\n  var x: [U32; 8] = [9; 8]\n  var y: [U32; 8] = [9; 8]\n  var sa = a.init(8.0)\n  var sb = b.init(8.0)\n  a.process(inout sa, inout x)\n  b.process(inout sb, inout y)\n  assert x == [0, 0, 1, 1, 2, 2, 3, 3]\n  assert y == [0, 0, 0, 0, 1, 1, 1, 1]\n}\n";
+    assert_lowers_and_passes("sample_tick_chain_children_values", flows, "times of the parts");
+}
+
+/// What stays E0200 after U6a3 over a part that reads `sample_tick()`: a chain with an `.up~(N)` in it (U6b: the time of a part inside an up is the number times N plus the step) and a chain that gathers past its
+/// first boundary (`g4~(x).down~(2).down~(2)`, S-1214, U6b). `build`, `dump --core` and `test` stop with E0200 and nothing else (no internal error) at the line of the chain (§18.1: the first of the file); `check`
+/// reads the package with no diagnostic.
+#[test]
+fn a_chain_with_an_up_or_a_second_gathering_boundary_over_a_part_that_reads_sample_tick_stays_e0200_until_u6b() {
+    let up = "flow tk() -> U32 at sample {\n  sample_tick()\n}\n\npub flow f() -> U32 at sample {\n  tk~().down~(2).up~(2) at sample\n}\n";
+    assert_e0200("sample_tick_e0200_up", up, &[], Some(6));
+    let gathers = "flow g4(x: F32 at (sample * 4)) -> U32 at sample {\n  sample_tick()\n}\n\npub flow f(x: F32 at sample) -> U32 at sample {\n  g4~(x).down~(2).down~(2) at sample\n}\n";
+    assert_e0200("sample_tick_e0200_gather2", gathers, &[], Some(6));
+}
+
+/// The package is lowered by `check`, `build`, `dump --core` and `test` (`assert_lowers`), and the test `name` of `main.onsa` is run and passes (the values of the chain, from §11.4).
+fn assert_lowers_and_passes(tag: &str, flows: &str, name: &str) {
+    assert_lowers(tag, flows, &[]);
+    let d = package(&format!("{tag}_values"), flows, &[]);
+    let (out, doc) = test_json(d.root(), &[]);
+    assert_eq!(out.code, 0, "{flows}: test: {}{}", out.stdout, out.stderr);
+    assert_eq!(str_of(record(&doc, "main", name), "status"), "ok", "{flows}: {doc}");
 }
 
 /// `onsa interface` reads the signatures only (§18), so a flow that reads `sample_tick()` in its body is listed with its ports and the

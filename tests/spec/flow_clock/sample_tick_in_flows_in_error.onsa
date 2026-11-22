@@ -1,0 +1,40 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§11.4", "§11.9", "§12.4", "§18.1"]
+// fixes = 0
+
+// W7-16 U6a3, S-1217 (spec §18.1: a part that could not be read is an error that nothing reads; §11.4: `sample_tick()` reads the count of the outermost `sample` at the ticks where it is written): a flow
+// that reads `sample_tick()` and whose port is in error, a caller that passes `sample_tick()` to a flow whose input or output is in error, through `.down~` too, report that error alone (the table of the time
+// of the stages is partial and has no error of its own). From the break side of U6a3: these were internal errors of the table of the time before the fix. One error per flow. No candidate (`fixes = 0`).
+
+flow out_div_by_three() -> U32 at (sample / 3) {   //~ E0808
+  sample_tick()
+}
+
+flow out_div_by_zero() -> U32 at (sample / 0) {   //~ E0808
+  sample_tick()
+}
+
+flow input_div_by_three(x: U32 at (sample / 3)) -> U32 at sample {   //~ E0808
+  sample_tick() +% x
+}
+
+pub flow runs_a_flow_in_error() -> U32 at sample {
+  out_div_by_three~() at sample
+}
+
+flow pass_no_clock(g: U32) -> U32 at sample {   //~ E0810
+  g
+}
+
+pub flow time_to_an_input_of_no_clock() -> U32 at sample {
+  pass_no_clock~(sample_tick())
+}
+
+flow pass_slower(g: U32 at sample) -> U32 at (sample / 2) {
+  g   //~ E0815
+}
+
+pub flow time_through_a_down_to_a_flow_in_error() -> U32 at sample {
+  pass_slower~(sample_tick()).down~(4) at sample
+}

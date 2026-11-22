@@ -168,10 +168,6 @@ pub struct PlanNode {
     /// its head runs in: how many times and at which time are of its
     /// `bounds`.
     pub runs: Vec<Run>,
-    /// Of an instance, its callee reads the time ([`FlowInfo::reads_time`]),
-    /// recorded by the walk of the table ([`entries`]) for the gate of a
-    /// chain ([`PlanNode::lowered_chain`]); U6a3 of W7-16 lifts it (S-1217).
-    pub timed: bool,
 }
 
 /// A boundary of a chain (§11.9, §11.10, S-1207): a `.down~(N)` or an
@@ -221,6 +217,24 @@ pub struct Run {
     pub body: ClockStage,
     pub caller: ClockStage,
     pub at_read: bool,
+}
+
+/// The words of the time the function of a stage takes ([`FlowInfo::time`]):
+/// `t`, the low word of the count of the outermost `sample` (§11.4), or `t`
+/// and `t_hi`, its upper word, under a `.down~` (§12.4, S-1211).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+pub enum Words {
+    One = 1,
+    Two = 2,
+}
+
+/// Where the counter of the phase of a flow advances ([`FlowInfo::counter`]):
+/// nowhere (it has none), in its `tick` or in its `process`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Counter {
+    None,
+    Tick,
+    Process,
 }
 
 /// The most of the exponents of the N on a path of `.down~(N)` and
@@ -382,7 +396,6 @@ pub(super) fn build(
             size: r.size,
             bounds: r.bounds,
             runs: Vec::new(),
-            timed: false,
         }
     });
     info.nodes = nodes.collect();

@@ -73,7 +73,42 @@ impl FlowInfo {
     /// too) or reads the time ([`FlowInfo::reads_time`]). Its state has the
     /// counter of the phase (`_tick`).
     pub fn counts_time(&self) -> bool {
-        !self.stages.is_empty() || self.reads_time
+        self.counter() != Counter::None
+    }
+
+    /// Where its counter of the phase advances (§11.9, S-1217): at the end
+    /// of `tick` of the grid of its slower stages (a callee's too, whose
+    /// phase its chains read), else, of the time alone, in the outermost
+    /// `process`. The one test of it (D-15, R-91 (1)).
+    pub fn counter(&self) -> Counter {
+        match (self.stages.is_empty(), self.reads_time()) {
+            (false, _) => Counter::Tick,
+            (true, true) => Counter::Process,
+            (true, false) => Counter::None,
+        }
+    }
+
+    /// The words of the time the function of the stage `s` takes: 0 to 2.
+    pub fn time_words(&self, s: ClockStage) -> usize {
+        self.time.get(&s).map_or(0, |&w| w as usize)
+    }
+
+    /// The most words of the time a function of its stages takes, those the
+    /// outermost `process` reads of its state: 0 to 2.
+    pub fn most_time_words(&self) -> usize {
+        self.time.values().max().map_or(0, |&w| w as usize)
+    }
+
+    /// Whether it or a flow it runs, through flows, reads `sample_tick()`
+    /// (§11.4, S-1129 (1)): a stage of it takes the time.
+    pub fn reads_time(&self) -> bool {
+        !self.time.is_empty()
+    }
+
+    /// Whether a `.down~` is on a path from its body to a reader of
+    /// `sample_tick()` (§12.4, S-1211): its state has `_tick_hi`.
+    pub fn wide(&self) -> bool {
+        self.time.values().any(|&w| w == Words::Two)
     }
 
     /// The stage of the function a node is read in ([`FlowInfo::run_stage`]
@@ -120,16 +155,15 @@ impl FlowInfo {
 impl PlanNode {
     /// Whether the Core lowers the chain of the node (§11.9, S-1207): none,
     /// or one of an instance whose modifiers are all `.down~(N)`, whose
-    /// boundaries but the innermost gather and deal nothing (U6b of W7-16),
-    /// of a callee that reads no time (`timed`: U6a3 of W7-16 lifts it,
-    /// S-1217); a burst it gathers or deals in its caller stops the gate on
+    /// boundaries but the innermost gather and deal nothing (U6b of W7-16);
+    /// a burst it gathers or deals in its caller stops the gate on
     /// its own. The one test of it (D-15): the gate
     /// ([`FlowInfo::multirate_at`]) and the Core, which runs a stage of a
     /// callee of no other chain, read it.
     pub fn lowered_chain(&self) -> bool {
         let downs = || self.chain.iter().all(|m| m.ratio.is_some_and(Ratio::slower_than_body));
         let plain = || self.bounds.iter().skip(1).all(|b| b.gathers.is_empty() && !b.deals);
-        self.chain.is_empty() || matches!(self.kind, PlanKind::Instance { .. }) && !self.timed && downs() && plain()
+        self.chain.is_empty() || matches!(self.kind, PlanKind::Instance { .. }) && downs() && plain()
     }
 
     /// Whether its chain deals the output of its head (§11.9): its value is

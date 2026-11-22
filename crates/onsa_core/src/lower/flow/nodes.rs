@@ -29,6 +29,7 @@ pub(crate) fn lower_flow_expr(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId) -> R<O
         // The time of the root its caller passes to the function (§11.4,
         // S-1129 (1)), at every stage.
         if f.sample_tick_calls.contains(&e) {
+            f.time_read.set(true);
             let t = f.time.first().cloned();
             return t.map(Some).ok_or_else(|| internal(span, "`sample_tick()` in a function with no time"));
         }

@@ -1,0 +1,284 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.4", "§11.9", "§11.10", "§11.5", "§11.6", "§12.4"]
+
+// `sample_tick()` under a chain of `.down~(N)` (W7-16 U6a3/t; S-1217, S-1211, S-1129 (1), S-1127, S-1210, S-1207, S-1214; spec §11.4: "`.down~(N)` の本体では N で割って切り捨て、… 連鎖は外の修飾子から順に当てる（§11.10 の合成）。
+// 割るのは `U32` に切る前の数なので、`.down~(N)` の本体でもその刻みの 2^32 で一周し、間隔は `-%` で取れる"). The number is counted in the outermost flow (T below: 0 at the first frame after `init` or `reset`, 1 more at each
+// frame, whatever the cuts of the calls). A part under a chain whose product of the N is P runs at the frames with T % P == 0 and reads there the quotient T / P (the integer quotient of the number before it is cut to `U32`, so at the
+// 2^32 it wraps; the values here are all far from it, which an Onsa `test` cannot go past because it cannot write `_tick`: `down_chain_time_c_commands.rs` goes past 2^32 and 2^56). The output of a chain is a value of `sample / P`
+// held to the next tick of the part (§11.9). A part with no modifier inside a part under a chain reads the time of the part (S-1129 (1) with §11.9: its `sample` is the sample of the part), and the arguments of the head are
+// expressions of the caller, read at the caller's time. Every value is worked out by hand from these rules, not taken from an output: `quot(T, P)` below is T / P.
+
+flow tk() -> U32 at sample {
+  sample_tick()
+}
+
+// No modifier on the child: it reads the time of its parent, which is the time of the part under the chain.
+flow mid() -> U32 at sample {
+  tk~()
+}
+
+// A chain inside the part: the part runs every second frame of the caller (time T / 2) and the inner part at each second tick of it (T / 4).
+flow mid2() -> U32 at sample {
+  tk~().down~(2) at sample
+}
+
+// Its own stage of `sample / 2` reads the time in a part under down 2: the stage runs when the time of the part is even.
+flow h() -> U32 at sample {
+  let l = sample_tick() at (sample / 2)
+  l at sample
+}
+
+// A slow output that reads the time, below two flows with no modifier.
+flow so() -> U32 at (sample / 4) {
+  sample_tick()
+}
+
+flow mid_so() -> U32 at sample {
+  so~() at sample
+}
+
+flow top_so() -> U32 at sample {
+  mid_so~()
+}
+
+// The head gathers the 4 values of its argument before each tick (the latest is `x[3]`) and reads the time of its body: x[0] * 10000 + x[3] * 100 + the time.
+flow gboth(x: U32 at (sample * 4)) -> U32 at sample {
+  x[0] * 10000 + x[3] * 100 + sample_tick()
+}
+
+flow pass(g: U32 at sample) -> U32 at sample {
+  g
+}
+
+// Deals the 4 frames of its tick: the time of the body times 4, and the next three numbers.
+flow mk() -> U32 at (sample * 4) {
+  let b = sample_tick() * 4
+  [b, b + 1, b + 2, b + 3]
+}
+
+pub flow both() -> U32 at sample {
+  let a1 = tk~()
+  let a2 = tk~().down~(2)
+  a1 * 100 + (a2 at sample)
+}
+
+pub flow down2() -> U32 at sample {
+  tk~().down~(2) at sample
+}
+
+pub flow down4() -> U32 at sample {
+  tk~().down~(4) at sample
+}
+
+pub flow down4k() -> U32 at sample {
+  tk~().down~(4096) at sample
+}
+
+pub flow down4_down2() -> U32 at sample {
+  tk~().down~(4).down~(2) at sample
+}
+
+pub flow down2_down4() -> U32 at sample {
+  tk~().down~(2).down~(4) at sample
+}
+
+pub flow via_mid() -> U32 at sample {
+  mid~().down~(2) at sample
+}
+
+pub flow via_mid2() -> U32 at sample {
+  mid2~().down~(2) at sample
+}
+
+pub flow via_h() -> U32 at sample {
+  h~().down~(2) at sample
+}
+
+pub flow via_so() -> U32 at sample {
+  top_so~().down~(2) at sample
+}
+
+pub flow in_par() -> U32 at sample {
+  let ys = par~ i in 0 ..< 2 { (tk~().down~(2) at sample) + i }
+  ys[0] + ys[1] * 100
+}
+
+pub flow in_if(c: Bool at block) -> U32 at sample {
+  if~ c { tk~().down~(2) at sample } else { 7 }
+}
+
+pub flow in_match(k: U32 at block) -> U32 at sample {
+  match~ k {
+    0 => tk~().down~(2) at sample,
+    _ => (tk~().down~(2) at sample) + 1000,
+  }
+}
+
+pub flow gather_time() -> U32 at sample {
+  gboth~(sample_tick()).down~(4) at sample
+}
+
+pub flow argument_time() -> U32 at sample {
+  pass~(sample_tick()).down~(4) at sample
+}
+
+pub flow deal_time() -> U32 at sample {
+  mk~().down~(4)
+}
+
+test "a call and a call under down 2 in one caller read their own times and do not mix: T * 100 + quot(T, 2)" {
+  // T = 0 .. 7: 0, 100, 200 + 1, 300 + 1, 400 + 2, 500 + 2, 600 + 3, 700 + 3.
+  var out: [U32; 8] = [9; 8]
+  var st = both.init(8.0)
+  both.process(inout st, inout out)
+  assert out == [0, 100, 201, 301, 402, 502, 603, 703]
+}
+
+test "the time under down 2 is quot(T, 2) at the even frames, held: 0 0 1 1 2 2 3 3" {
+  var out: [U32; 8] = [9; 8]
+  var st = down2.init(8.0)
+  down2.process(inout st, inout out)
+  assert out == [0, 0, 1, 1, 2, 2, 3, 3]
+}
+
+test "down 4 down 2 and down 2 down 4 are the quotient by 8, the two orders alike" {
+  // T = 0 .. 19: the part runs at T = 0, 8, 16 and reads 0, 1, 2 there.
+  var a: [U32; 20] = [9; 20]
+  var b: [U32; 20] = [9; 20]
+  var sa = down4_down2.init(8.0)
+  var sb = down2_down4.init(8.0)
+  down4_down2.process(inout sa, inout a)
+  down2_down4.process(inout sb, inout b)
+  let want: [U32; 20] = [0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2]
+  assert a == want
+  assert b == want
+}
+
+test "down 4096: the shift is by 12 bits, the second tick is at the frame 4096" {
+  var out: [U32; 8200] = [9; 8200]
+  var st = down4k.init(8.0)
+  down4k.process(inout st, inout out)
+  assert out[0] == 0
+  assert out[4095] == 0
+  assert out[4096] == 1
+  assert out[8191] == 1
+  assert out[8192] == 2
+  assert out[8199] == 2
+}
+
+test "a part with no modifier under down 2 reads the time of its parent, which is quot(T, 2)" {
+  var out: [U32; 8] = [9; 8]
+  var st = via_mid.init(8.0)
+  via_mid.process(inout st, inout out)
+  assert out == [0, 0, 1, 1, 2, 2, 3, 3]
+}
+
+test "a chain inside a part under down 2 is down 2 down 2: quot(T, 4), the part running every second frame" {
+  // The outer part runs at T = 0, 2, 4 ... (time 0, 1, 2 ...), the inner at its even ticks: T = 0, 4, 8: time of the outer / 2 = 0, 1, 2.
+  var out: [U32; 12] = [9; 12]
+  var st = via_mid2.init(8.0)
+  via_mid2.process(inout st, inout out)
+  assert out == [0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2]
+}
+
+test "a stage of sample / 2 of a part under down 2 reads the time of the part (§11.4: the same number in a slower stage)" {
+  // The part has the time j = quot(T, 2) at T = 0, 2, 4 ...; its stage of `sample / 2` runs at j = 0, 2, 4 (T = 0, 4, 8) and reads j: 0, 2, 4.
+  var out: [U32; 12] = [9; 12]
+  var st = via_h.init(8.0)
+  via_h.process(inout st, inout out)
+  assert out == [0, 0, 0, 0, 2, 2, 2, 2, 4, 4, 4, 4]
+}
+
+test "a slow output that reads the time, under two parents with no modifier and under down 2, reads the time of the part" {
+  // The part runs at T = 0, 2, 4 ... with the time j = quot(T, 2); `so` ticks at j = 0, 4, 8 (T = 0, 8, 16) and reads j: 0, 4, 8; each is held to the next tick of `so`, 8 frames.
+  var out: [U32; 20] = [9; 20]
+  var st = via_so.init(8.0)
+  via_so.process(inout st, inout out)
+  assert out == [0, 0, 0, 0, 0, 0, 0, 0, 4, 4, 4, 4, 4, 4, 4, 4, 8, 8, 8, 8]
+}
+
+test "the replicas of a par~ under down 2 each read quot(T, 2), and the index is added" {
+  // v = quot(T, 2) = 0 0 1 1 2 2: replica 0 is v, replica 1 is v + 1: v + (v + 1) * 100.
+  var out: [U32; 6] = [9; 6]
+  var st = in_par.init(8.0)
+  in_par.process(inout st, inout out)
+  assert out == [100, 100, 201, 201, 302, 302]
+}
+
+test "the arm of an if~ that is not chosen goes on counting under down 2, so it reads the time of the program when it is chosen again" {
+  // The arm reads quot(T, 2) = 0 0 1 1 2 2 3 3 held to the frames. `c` is true at T = 0 .. 2, false at 3 .. 5, true at 6 and 7: 0 0 1, then 7 7 7, then 3 3 (not 0 0 1 1).
+  var out: [U32; 8] = [9; 8]
+  var st = in_if.init(8.0)
+  in_if.process(inout st, in_if.Params { c: true }, inout out.slice(0, 3))
+  in_if.process(inout st, in_if.Params { c: false }, inout out.slice(3, 6))
+  in_if.process(inout st, in_if.Params { c: true }, inout out.slice(6, 8))
+  assert out == [0, 0, 1, 7, 7, 7, 3, 3]
+}
+
+test "the arms of a match~ have a time each under down 2, and both read quot(T, 2)" {
+  // `k` is 0 for T = 0 .. 2 (the first arm: 0 0 1) and 5 for T = 3 .. 7 (the second arm, plus 1000: quot(T, 2) = 1 2 2 3 3).
+  var out: [U32; 8] = [9; 8]
+  var st = in_match.init(8.0)
+  in_match.process(inout st, in_match.Params { k: 0 }, inout out.slice(0, 3))
+  in_match.process(inout st, in_match.Params { k: 5 }, inout out.slice(3, 8))
+  assert out == [0, 0, 1, 1001, 1002, 1002, 1003, 1003]
+}
+
+test "a reset makes the next frame the frame 0 for the part under the chain, in the middle of its tick too" {
+  // down 2: after 3 frames (T = 3 would be the second frame of the tick of T = 2) the reset starts again: 0 0 1 then 0 0 1 1. down 4: after 6 frames: 0 0 0 0 1 1, then 0 0 0 0 1.
+  var a: [U32; 7] = [9; 7]
+  var sa = down2.init(8.0)
+  down2.process(inout sa, inout a.slice(0, 3))
+  down2.reset(inout sa)
+  down2.process(inout sa, inout a.slice(3, 7))
+  assert a == [0, 0, 1, 0, 0, 1, 1]
+  var b: [U32; 11] = [9; 11]
+  var sb = down4.init(8.0)
+  down4.process(inout sb, inout b.slice(0, 6))
+  down4.reset(inout sb)
+  down4.process(inout sb, inout b.slice(6, 11))
+  assert b == [0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 1]
+}
+
+test "the calls of process cut the frames anywhere, 0 frames too: the same time under down 2 and down 4 (§13.4)" {
+  // Cuts at 1, 1 (0 frames), 5, 7: inside a tick of the part, not at its multiples.
+  var a: [U32; 12] = [9; 12]
+  var b: [U32; 12] = [9; 12]
+  var sa = down2.init(8.0)
+  var sb = down4.init(8.0)
+  down2.process(inout sa, inout a.slice(0, 1))
+  down2.process(inout sa, inout a.slice(1, 1))
+  down2.process(inout sa, inout a.slice(1, 5))
+  down2.process(inout sa, inout a.slice(5, 12))
+  down4.process(inout sb, inout b.slice(0, 1))
+  down4.process(inout sb, inout b.slice(1, 1))
+  down4.process(inout sb, inout b.slice(1, 5))
+  down4.process(inout sb, inout b.slice(5, 12))
+  assert a == [0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5]
+  assert b == [0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2]
+}
+
+test "an argument that reads the time is read in the caller: its time T, at the ticks of the part (T = 0, 4, 8)" {
+  var out: [U32; 12] = [9; 12]
+  var st = argument_time.init(8.0)
+  argument_time.process(inout st, inout out)
+  assert out == [0, 0, 0, 0, 4, 4, 4, 4, 8, 8, 8, 8]
+}
+
+test "a gathered argument is the caller's time of the 4 frames before the tick, and the head's own time is quot(T, 4)" {
+  // The tick at T = 4 gathers T = 0 .. 3 (x[0] = 0, x[3] = 3) and reads the time 1: 0 * 10000 + 3 * 100 + 1 = 301; T = 8 gathers 4 .. 7: 40000 + 700 + 2; T = 12 gathers 8 .. 11: 80000 + 1100 + 3.
+  // The first tick has the default 0 in all four: 0 + 0 + 0.
+  var out: [U32; 16] = [9; 16]
+  var st = gather_time.init(8.0)
+  gather_time.process(inout st, inout out)
+  assert out == [0, 0, 0, 0, 301, 301, 301, 301, 40702, 40702, 40702, 40702, 81103, 81103, 81103, 81103]
+}
+
+test "a dealt output made from the time of the head is the frame number: the head at T = 4 c reads c and deals 4 c .. 4 c + 3" {
+  var out: [U32; 12] = [9; 12]
+  var st = deal_time.init(8.0)
+  deal_time.process(inout st, inout out)
+  assert out == [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+}

@@ -105,14 +105,16 @@ pub(super) fn gen_process<'b>(lw: &mut Lowerer<'b>, shape: &FlowShape, info: &'b
     let mut body = Vec::new();
     // The time of the root (§11.4, S-1129 (1)): the counter of the phase, copied before the calls that move it.
     let mut time = Vec::new();
-    if info.reads_time {
-        let t = g.cx.temp("t", Ty::u32());
-        body.push(stmt(span, StmtKind::Let(t, sfield(lw, info, &s, FieldOf::Tick, span)?)));
+    let words = [("t", FieldOf::Tick), ("t_hi", FieldOf::TickHi)];
+    for (name, of) in words.into_iter().take(info.most_time_words()) {
+        let t = g.cx.temp(name, Ty::u32());
+        body.push(stmt(span, StmtKind::Let(t, sfield(lw, info, &s, of, span)?)));
         time.push(local_expr(&g.cx, t, span));
     }
     drive(lw, info, fns, (&s, &time), span, &mut body)?;
     let mut tick_args = vec![inout(s.clone())];
-    tick_args.extend(time.into_iter().map(borrow));
+    let taken = time.get(..info.time_words(ClockStage::SAMPLE)).ok_or_else(|| internal(span, "`tick` of more time"))?;
+    tick_args.extend(taken.iter().cloned().map(borrow));
     for (sp, (name, ty)) in ins.into_iter().zip(&sig_inputs) {
         let v = match ty {
             Ty::Array(_, n) => {
@@ -131,6 +133,7 @@ pub(super) fn gen_process<'b>(lw: &mut Lowerer<'b>, shape: &FlowShape, info: &'b
     let v = call(fns.tick, shape.out_val.clone(), span, tick_args);
     let vl = g.cx.temp("v", shape.out_val.clone());
     body.push(stmt(span, StmtKind::Let(vl, v)));
+    super::phases::advance(lw, info, &s, span, &mut body)?;
     let v_e = local_expr(&g.cx, vl, span);
     for (k, (sp, (_, _, planar))) in outs.into_iter().zip(&shape.outputs).enumerate() {
         let val = if shape.out_is_struct { field(lw, v_e.clone(), k as u32)? } else { v_e.clone() };

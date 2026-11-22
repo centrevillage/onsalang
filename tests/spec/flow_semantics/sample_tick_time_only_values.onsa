@@ -1,0 +1,100 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.4", "§11.9", "§11.6", "§12.4"]
+
+// `sample_tick()` in a flow that has no stage of its own and in the flows around it (W7-16 U6a3/t, S-1217, S-1129 (1), S-1127; spec §11.4: "`reset` からの時間を、書いた場所の `sample_rate()` の刻みの数で表した `U32`。`init` と生成する
+// `reset` で 0 になり（その後の最初の刻みで読む値は 0 で、`sample_rate()` の刻みごとに 1 上がる。`sample / N` の段で読んでも同じ数）"). The time is the number of the ticks of the outermost flow since `init` or `reset` (T below, 0 at the
+// first frame), whatever the flows that read it are (a flow with no stage of its own that only reads the time, two of them in one caller, a flow with a stage whose child reads it at a slower tick) and wherever the calls of `process` are cut
+// (§13.4: "ホストのブロックの長さ" does not leak into the state). S-1217 (b): a flow that reads the time and has no stage of its own does not count it in its own `tick`; the number comes from the outermost flow's `process`, which advances it once
+// for each frame, so two of such flows in one caller read the same T and neither advances it twice. Every value is worked out by hand: `two` is T * 100 + T = 101 T, `time_and_slow` is T * 1000 plus the frame of the last tick of
+// `sample / 4` (T - T % 4, which `so` reads in its stage), `top` is that frame alone.
+
+flow tk() -> U32 at sample {
+  sample_tick()
+}
+
+// A slow output that reads the time at its own tick, read at `sample` by the parent and the grandparent with no modifier (S-1088, S-1129 (1)).
+flow so() -> U32 at (sample / 4) {
+  sample_tick()
+}
+
+flow mid() -> U32 at sample {
+  so~() at sample
+}
+
+pub flow top() -> U32 at sample {
+  mid~()
+}
+
+pub flow alone() -> U32 at sample {
+  sample_tick()
+}
+
+pub flow two() -> U32 at sample {
+  tk~() * 100 + tk~()
+}
+
+pub flow time_and_slow() -> U32 at sample {
+  tk~() * 1000 + top~()
+}
+
+test "a flow that only reads the time gives 0 1 2 ... and the calls cut the frames anywhere, 0 frames too" {
+  var out: [U32; 8] = [9; 8]
+  var st = alone.init(8.0)
+  alone.process(inout st, inout out.slice(0, 1))
+  alone.process(inout st, inout out.slice(1, 1))
+  alone.process(inout st, inout out.slice(1, 4))
+  alone.process(inout st, inout out.slice(4, 8))
+  assert out == [0, 1, 2, 3, 4, 5, 6, 7]
+}
+
+test "two flows that only read the time in one caller read the same number: 101 T, whatever the cuts of the calls" {
+  // 1, 3 and 4 frames: the same as the 8 frames at once.
+  var cut: [U32; 8] = [9; 8]
+  var st = two.init(8.0)
+  two.process(inout st, inout cut.slice(0, 1))
+  two.process(inout st, inout cut.slice(1, 4))
+  two.process(inout st, inout cut.slice(4, 8))
+  var whole: [U32; 8] = [9; 8]
+  var sw = two.init(8.0)
+  two.process(inout sw, inout whole)
+  assert whole == [0, 101, 202, 303, 404, 505, 606, 707]
+  assert cut == whole
+}
+
+test "a slow output that reads the time reads the frame of its tick, with no modifier on the parents" {
+  // The ticks of `sample / 4` are at T = 0, 4, 8: `so` gives 0, 4, 8, each held for 4 frames; `mid` and `top` read it at `sample`.
+  var out: [U32; 12] = [9; 12]
+  var st = top.init(8.0)
+  top.process(inout st, inout out.slice(0, 1))
+  top.process(inout st, inout out.slice(1, 4))
+  top.process(inout st, inout out.slice(4, 8))
+  top.process(inout st, inout out.slice(8, 12))
+  assert out == [0, 0, 0, 0, 4, 4, 4, 4, 8, 8, 8, 8]
+}
+
+test "a time-only child and a caller with a stage of its own read the same number: T * 1000 + the frame of the tick" {
+  // T = 0 .. 9: the tick is at the frames 0, 4, 8: 0 1000 2000 3000, then 4 + 4000, ..., 8 + 8000, 9008.
+  var out: [U32; 10] = [9; 10]
+  var st = time_and_slow.init(8.0)
+  time_and_slow.process(inout st, inout out.slice(0, 3))
+  time_and_slow.process(inout st, inout out.slice(3, 10))
+  assert out == [0, 1000, 2000, 3000, 4004, 5004, 6004, 7004, 8008, 9008]
+}
+
+test "a reset makes the next frame the frame 0 for all of them, in the middle of the ticks of sample / 4 too" {
+  // After 6 frames the next frame would be T = 6 (inside the second tick of `sample / 4`); after the reset it is 0 again, and the tick of `sample / 4` is at the first frame again.
+  var a: [U32; 11] = [9; 11]
+  var sa = two.init(8.0)
+  two.process(inout sa, inout a.slice(0, 6))
+  two.reset(inout sa)
+  two.process(inout sa, inout a.slice(6, 11))
+  assert a == [0, 101, 202, 303, 404, 505, 0, 101, 202, 303, 404]
+  var b: [U32; 11] = [9; 11]
+  var sb = time_and_slow.init(8.0)
+  time_and_slow.process(inout sb, inout b.slice(0, 6))
+  time_and_slow.reset(inout sb)
+  time_and_slow.process(inout sb, inout b.slice(6, 11))
+  assert b == [0, 1000, 2000, 3000, 4004, 5004, 0, 1000, 2000, 3000, 4004]
+}

@@ -29,6 +29,8 @@ pub enum FixedField {
     SampleRate,
     /// The counter of the phase (§11.9, S-1137).
     Tick,
+    /// The upper word of the time (§11.4, §12.4, S-1211).
+    TickHi,
     Poisoned,
     Initialized,
     /// The pointer to the bulk region (§12.4).
@@ -40,6 +42,7 @@ impl FixedField {
         match self {
             FixedField::SampleRate => "_sample_rate",
             FixedField::Tick => "_tick",
+            FixedField::TickHi => "_tick_hi",
             FixedField::Poisoned => "_poisoned",
             FixedField::Initialized => "_initialized",
             FixedField::Bulk => "_bulk",

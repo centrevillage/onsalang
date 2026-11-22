@@ -6,9 +6,9 @@
 //! | `init(cfg, sample_rate) -> State` | `_tick = 0` and the fields of a tick read faster at `T.default()`, `Init`-rate `let`s in order (state ones stored) and the `Init` hoisted fields (below), node initialisation, sub `init`s, `_poisoned = false`, `_initialized = true` last |
 //! | `reset(inout s)` | `_tick = 0` and the fields of a tick read faster at `T.default()`, `prev` / `delay` / `vdelay` back to their `init` values, `w = 0`, sub `reset`s, `_poisoned = false` |
 //! | `ctl(inout s, p: Params)` | `Ctl`-rate `let`s in order (those read at `Sig` stored) and the `Ctl` hoisted fields, sub `ctl`s with the sub's `Params` |
-//! | `tick(inout s, [t], <Sig inputs>) -> out` | `Sig`-rate `let`s in order, the output, the stages of the callees run there ([`phases::run_child`]), then the stores of §11.4 in node order, the counter of the phase advanced last; the time `t` of a flow that reads it (`FlowInfo::reads_time`) |
+//! | `tick(inout s, [t], <Sig inputs>) -> out` | `Sig`-rate `let`s in order, the output, the stages of the callees run there ([`phases::run_child`]), then the stores of §11.4 in node order, the counter of a grid advanced last; the time `t` (and `t_hi`) of a stage that takes it (`FlowInfo::time_words`) |
 //! | `tick_<N>(inout s, [t], <its inputs>)` | of each tick `sample / N` of the body (`FlowInfo::stages`, those of its callees too): as `tick`, the output of an output at `sample / N` (§11.9) |
-//! | `process(inout s, p, [input], inout output)` | none of a port of a derived clock; `input` and `output` one `Span` (planar `[Span; N]`) or the `In` and `Out` of more (§11.6); length check, `ctl` once, per sample: the time `t = s._tick`, the slower ticks due ([`phases::drive`]), read all inputs, `tick`, write all outputs |
+//! | `process(inout s, p, [input], inout output)` | none of a port of a derived clock; `input` and `output` one `Span` (planar `[Span; N]`) or the `In` and `Out` of more (§11.6); length check, `ctl` once, per sample: the time `t = s._tick` (and `t_hi`), the slower ticks due ([`phases::drive`]), read all inputs, `tick`, the time advanced ([`phases::advance`]), write all outputs |
 //! | `process_inplace(inout s, p, inout output)` | `process` with the input made of the signals of `output` (they pair up) |
 //! | `render` | `init`, `Buf.zeroed` outputs, one `process`, `Rendered` (interpreter only, D-08) |
 //! | `params_default() -> Params` | the `@param` defaults, of the C API alone (§11.6, S-625) |
@@ -71,6 +71,7 @@
 //! fields, [`boundary`] `process` /
 //! `process_inplace` / `render` / `params_default`.
 
+use std::cell::Cell;
 use std::collections::{BTreeSet, HashMap, HashSet};
 
 use onsa_diag::Span;
@@ -78,14 +79,15 @@ use onsa_diag::unsupported::Feature;
 use onsa_sema::DefId;
 use onsa_sema::clock::{Clock, ClockStage, Ratio};
 use onsa_sema::def::{DefKind, Fields, FlowDef, FlowFn, FlowInput, FlowTy, ParamInfo, ParamKey, ParamNumber};
+use onsa_sema::flow::Counter;
 use onsa_sema::flow::{Field, FieldOf, FlowInfo, InitArg, Kept, NodeId, Part, PlanBound, PlanKind, PlanNode, Run};
 use onsa_sema::ty::{BuiltinTy, Len, Ty as STy};
 use onsa_syntax::ast::ExprId;
 
 use super::body::{FnCx, bind_irrefutable, lower_expr, of_type, span_of};
 use super::build::{
-    assign, borrow, call, checked_binary, cmp, expr_stmt, field, float_lit, index, index_as, inout, lit, local_expr,
-    materialize, place_of, stmt, u32_lit,
+    after, assign, borrow, call, checked_binary, cmp, expr_stmt, field, float_lit, index, index_as, inout, lit,
+    local_expr, materialize, place_of, stmt, u32_lit,
 };
 use super::{Lowerer, R, core_mode, internal, unsupported};
 use crate::ir::*;
@@ -305,11 +307,14 @@ pub struct FlowLowerCx<'b> {
     sample_rate_calls: HashSet<ExprId>,
     /// The calls of `sample_tick()` (`FlowInfo::sample_tick_calls`).
     sample_tick_calls: HashSet<ExprId>,
-    /// The time of the function (§11.4, S-1129 (1)): its parameter `t` of a
-    /// stage of a flow that reads it (`FlowInfo::reads_time`), the count of
-    /// the root from `process`, which a caller passes to its callees
-    /// ([`child_time`]); empty elsewhere.
+    /// The time of the function (§11.4, S-1129 (1), S-1217): its parameters
+    /// `t` and `t_hi` of a stage that takes them (`FlowInfo::time_words`),
+    /// the count of the outermost `sample` from `process`, which a caller
+    /// passes to its callees ([`chain::child_time`]); empty elsewhere.
     time: Vec<Expr>,
+    /// Whether the function read `time` (a `sample_tick()` or the time of
+    /// a callee): the check that the table and the Core agree (S-1217).
+    time_read: Cell<bool>,
     /// Innermost scope last.
     scopes: Vec<Scope>,
 }
@@ -356,16 +361,6 @@ impl<'a> Lowerer<'a> {
         let fns = r?;
         self.flow_fns.insert(flow, fns.clone());
         Ok(fns)
-    }
-}
-
-/// The time a callee of the frame `r` reads from the time `time` of its
-/// caller (§11.4): the one place of it. The same of a callee of no
-/// modifier (W7-16 U6a and U6b write those of `.down~` and `.up~`).
-fn child_time(time: &[Expr], r: Ratio, span: Span) -> R<Vec<Expr>> {
-    match r {
-        Ratio(0) => Ok(time.to_vec()),
-        _ => Err(internal(span, format!("the time of a callee of the frame {r:?}"))),
     }
 }
 

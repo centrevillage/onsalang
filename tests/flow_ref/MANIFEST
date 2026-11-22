@@ -10,6 +10,7 @@ file default_init_module.tsv rows=7 tests=2 evaluated=2 unavailable=0 skipped=0 
 file default_init_numbers.tsv rows=19 tests=6 evaluated=6 unavailable=0 skipped=0 waiting=0
 file default_init_reset.tsv rows=30 tests=5 evaluated=5 unavailable=0 skipped=0 waiting=0
 file default_init_values.tsv rows=54 tests=19 evaluated=17 unavailable=1 skipped=1 waiting=0
+file down_chain_time_values.tsv rows=98 tests=16 evaluated=16 unavailable=0 skipped=0 waiting=0
 file down_chain_values.tsv rows=115 tests=20 evaluated=20 unavailable=0 skipped=0 waiting=0
 file down_gather_deal_module.tsv rows=15 tests=3 evaluated=3 unavailable=0 skipped=0 waiting=0
 file down_gather_deal_values.tsv rows=133 tests=23 evaluated=20 unavailable=0 skipped=3 waiting=0
@@ -113,6 +114,7 @@ file reset_boundary.tsv rows=30 tests=3 evaluated=3 unavailable=0 skipped=0 wait
 file reset_replay.tsv rows=58 tests=9 evaluated=9 unavailable=0 skipped=0 waiting=0
 file sample_tick_at_a_slower_tick_values.tsv rows=59 tests=10 evaluated=10 unavailable=0 skipped=0 waiting=0
 file sample_tick_child_values.tsv rows=73 tests=11 evaluated=11 unavailable=0 skipped=0 waiting=0
+file sample_tick_time_only_values.tsv rows=51 tests=5 evaluated=5 unavailable=0 skipped=0 waiting=0
 file sample_tick_values.tsv rows=54 tests=10 evaluated=10 unavailable=0 skipped=0 waiting=0
 file scalar_assoc_const_flows.tsv rows=19 tests=6 evaluated=6 unavailable=0 skipped=0 waiting=0
 file scalar_assoc_const_param.tsv rows=10 tests=3 evaluated=3 unavailable=0 skipped=0 waiting=1
@@ -134,4 +136,4 @@ file struct_pattern_rest_let.tsv rows=7 tests=2 evaluated=2 unavailable=0 skippe
 file struct_pattern_rest_match.tsv rows=4 tests=1 evaluated=1 unavailable=0 skipped=0 waiting=0
 file vdelay_edges.tsv rows=64 tests=15 evaluated=14 unavailable=0 skipped=1 waiting=0
 file vdelay_varying_d.tsv rows=2 tests=1 evaluated=0 unavailable=0 skipped=1 waiting=0
-total files=135 rows=4032 tests=951 evaluated=871 unavailable=1 skipped=79 waiting=9
+total files=137 rows=4181 tests=972 evaluated=892 unavailable=1 skipped=79 waiting=9

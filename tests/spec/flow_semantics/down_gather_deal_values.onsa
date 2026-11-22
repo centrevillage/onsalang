@@ -4,7 +4,7 @@
 // spec = ["§11.9", "§11.10", "§11.6", "§11.3", "§13.4"]
 
 // A chain of `.down~(N)` whose first boundary gathers an input at `sample * M` and deals an output at `sample * M` (W7-16 U6a2/t; §11.9, S-566, S-578, S-1079, S-1186, S-1204, S-1207, S-1214). Only the boundary of the head
-// gathers and deals here (an outer `.down~` of the chain gathers nothing: `.down~(4).down~(2)` over a port at `sample * 4`), and no part reads `sample_tick()` (S-1217). Every value is worked out by hand from the rules of §11.9:
+// gathers and deals here (an outer `.down~` of the chain gathers nothing: `.down~(4).down~(2)` over a port at `sample * 4`), and no part reads `sample_tick()` (the heads that read it are in down_chain_time_values.onsa, S-1217). Every value is worked out by hand from the rules of §11.9:
 // the first tick is at the frame 0; the tick at the frame c gathers the frames c - N .. c - 1 (`x[M - 1]` is the latest) of what the caller's clock gives, with `T.default()` before the first sample; the array the part gives is
 // read by the frames c .. c + N - 1 in order (the part runs before the `sample` of its frame, so there is no delay of its own); a port at `sample * M` under `.down~(N)` is read at the caller's `sample / (N / M)`; a gathered value
 // of the kind `block`, `init` or a constant is gathered position by position (S-1214 (3)), a port that is not at `sample * M` is read at the tick; `x` below is 1 2 3 ... (`x = c + 1` at the frame c).

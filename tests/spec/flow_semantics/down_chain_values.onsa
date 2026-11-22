@@ -5,7 +5,7 @@
 
 // A chain of `.down~(N)` that gathers and deals nothing (W7-16 U6a1/t; §11.9, S-566, S-1088, S-1207, S-1214): the part it wraps runs at the frames 0, N, 2N ... (the first tick at the frame 0, "最初の刻みで動く"),
 // its delays count those ticks, its `sample_rate()` is 1/N, and its output is a value of `sample / N` held to the next tick (the tick is before the `sample` of the same frame, S-578). No head has a port at `sample * N`
-// (chain_blocks_ports.onsa) and no part reads `sample_tick()` (S-1217). An argument of a head is a value of `block`, `init`, a constant or one of the clock of the chain. Every value is worked out by hand: `acc` gives
+// (chain_blocks_ports.onsa) and no part reads `sample_tick()` (the parts that read it are in down_chain_time_values.onsa, S-1217). An argument of a head is a value of `block`, `init`, a constant or one of the clock of the chain. Every value is worked out by hand: `acc` gives
 // 1 2 3 ... when `f` is 1.0, so a down 4 gives 1 for the frames 0 .. 3, 2 for the frames 4 .. 7, 3 for the frames 8 .. 11.
 
 flow acc(f: F32 at block) -> F32 at sample {

@@ -1,8 +1,8 @@
 //! The table of the entries of the stages (§11.9, S-1088): of each flow,
 //! the stages of the bodies of its callees each instance runs and in which
 //! of its own stages ([`PlanNode::runs`]), its stages with those
-//! ([`FlowInfo::stages`]), whether it reads the time
-//! ([`FlowInfo::reads_time`]), then the fields of its state, which these
+//! ([`FlowInfo::stages`]), the words of the time each of its stages takes
+//! ([`FlowInfo::time`]), then the fields of its state, which these
 //! decide. The same walk checks the N of `.down~` and `.up~` on the paths
 //! through flows (S-1089, E0808 of the flow stage).
 //!
@@ -14,7 +14,7 @@
 //! caller nothing: no run and no count. Each flow and each node once:
 //! O(flows + nodes + runs), a run per stage of the callee (32 at most).
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use onsa_diag::{Code, Diagnostic, Stage};
 
@@ -73,20 +73,24 @@ pub(crate) fn walk(pkg: &Package, a: &mut Analysis) {
 }
 
 /// Closes the flow `f`, whose callees are done (but those in a loop of
-/// calls): writes its runs, its stages, whether it reads the time and its
+/// calls): writes its runs, its stages, the time they take and its
 /// fields, reports the first of its nodes past 2^24 on a path through
 /// flows (by the place of the modifier, §18.1), and gives its count.
 fn close(pkg: &Package, a: &mut Analysis, f: DefId, marks: &HashMap<DefId, Mark>, most: &HashMap<DefId, Most>) -> Most {
     let info = a.flows.get(&f)?;
-    let own_time = !info.sample_tick_calls.is_empty();
+    // A diagnostic before (a clock in error, a callee in error, §18.1) leaves
+    // the stages partial: the guards of the time hold with none (`post_check`).
+    let quiet = a.diagnostics.is_empty();
+    let mut time = own_time(info, a.def(f).span, quiet);
     if !info.complete {
-        a.flows.get_mut(&f).into_iter().for_each(|info| info.reads_time = own_time);
+        if let Some(info) = a.flows.get_mut(&f) {
+            info.time = time;
+        }
         return None;
     }
     let table = |g: DefId| a.flows.get(&g).filter(|t| marks.get(&g) == Some(&Mark::Done) && t.complete);
     let mut runs = Vec::with_capacity(info.nodes.len());
     let mut stages: BTreeSet<ClockStage> = info.stages.iter().copied().collect();
-    let mut reads_time = own_time;
     let (mut count, mut counted) = ((0, None), true);
     let mut past_at: Option<Past> = None;
     for (i, n) in info.nodes.iter().enumerate() {
@@ -105,8 +109,8 @@ fn close(pkg: &Package, a: &mut Analysis, f: DefId, marks: &HashMap<DefId, Mark>
         };
         let (r, bounds, outer) = node_runs(n, g);
         stages.extend(outer.into_iter().filter(|s| s.tick_slower_than(ClockStage::SAMPLE)));
-        runs.push(Some((r, bounds, g.reads_time)));
-        reads_time |= g.reads_time;
+        callee_time(&mut time, info, n, g, &r);
+        runs.push(Some((r, bounds)));
         let Some((inner, _)) = most.get(&callee).copied().flatten() else {
             counted = false;
             continue;
@@ -126,13 +130,48 @@ fn close(pkg: &Package, a: &mut Analysis, f: DefId, marks: &HashMap<DefId, Mark>
         }
     }
     let Some(flow) = a.flows.get_mut(&f) else { onsa_diag::internal::bug(None, "a flow closed out of the table") };
-    flow.nodes.iter_mut().zip(runs).for_each(|(n, r)| r.into_iter().for_each(|r| (n.runs, n.bounds, n.timed) = r));
-    (flow.stages, flow.reads_time) = (stages.into_iter().collect(), reads_time);
+    flow.nodes.iter_mut().zip(runs).for_each(|(n, r)| r.into_iter().for_each(|r| (n.runs, n.bounds) = r));
+    let stray = |s: &ClockStage| *s != ClockStage::SAMPLE && !stages.contains(s);
+    if let Some(s) = time.keys().find(|s| quiet && stray(s)) {
+        onsa_diag::internal::bug(Some(a.def(f).span), format!("the time of {s:?}, a stage of no function"));
+    }
+    time.retain(|s, _| !stray(s));
+    (flow.stages, flow.time) = (stages.into_iter().collect(), time);
     fields::build(flow);
     if let Some(p) = past_at {
         a.diagnostics.push(past_path(pkg, a, f, p, most));
     }
     counted.then_some(count)
+}
+
+/// The time of the stages of `info` that read `sample_tick()` (§11.4,
+/// S-1217): `t` at the [`FlowInfo::run_stage`] of the clock of each call;
+/// of no clock, an internal error at `span` but in a flow in error or
+/// after a diagnostic (not `quiet`).
+fn own_time(info: &FlowInfo, span: Span, quiet: bool) -> BTreeMap<ClockStage, Words> {
+    let stage = |e: &ExprId| match info.clocks.stage(*e).and_then(Clock::stage) {
+        Some(s) => info.run_stage(s),
+        None if !info.complete || !quiet => ClockStage::SAMPLE,
+        None => onsa_diag::internal::bug(Some(span), "a `sample_tick()` of no stage"),
+    };
+    info.sample_tick_calls.iter().map(|e| (stage(e), Words::One)).collect()
+}
+
+/// The time the runs `runs` of the instance `n` of the callee `g` take in
+/// `info`, into `time` (§11.4, S-1217): of each run of a stage of `g` that
+/// takes it, at its [`FlowInfo::run_stage`] here, its words, two under a
+/// `.down~`, which divides the count before it is cut to `U32` (§12.4).
+fn callee_time(time: &mut BTreeMap<ClockStage, Words>, info: &FlowInfo, n: &PlanNode, g: &FlowInfo, runs: &[Run]) {
+    let down = n.chain.iter().any(|m| m.ratio.is_some_and(Ratio::slower_than_body));
+    for run in runs {
+        let words = match g.time.get(&run.body) {
+            None => continue,
+            Some(_) if down => Words::Two,
+            Some(&w) => w,
+        };
+        let at = time.entry(info.run_stage(run.caller)).or_insert(words);
+        *at = (*at).max(words);
+    }
 }
 
 /// The runs of the instance `n` of the callee whose table is `g` (§11.9,

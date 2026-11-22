@@ -40,8 +40,8 @@
 //!   The walk of the table of the entries of the stages ([`plan`]'s
 //!   `entries`, after every body) gives each instance its `runs` (the stages
 //!   of its callee and the stage of the flow each runs in, S-1088), each flow
-//!   its `stages` (its slow ticks and those of its callees) and `reads_time`
-//!   (it or a callee reads `sample_tick()`); `out_stage` is the stage that
+//!   its `stages` (its slow ticks and those of its callees) and `time`
+//!   (the words of the time each stage takes); `out_stage` is the stage that
 //!   makes the output.
 //! - `node_of` — a call or `par~` expression → its node; `modifiers` — a
 //!   modifier of a chain of a node (`.down~(4)` of `lp~(x).down~(4)`) → its receiver.
@@ -124,6 +124,7 @@ mod tests;
 
 pub use branching::{Chain, Link, chain};
 pub use hoist::{Cond, Hoist, HoistId};
+pub use plan::{Counter, Words};
 pub use plan::{
     Edge, Field, FieldOf, Kept, NodeId, Owner, Part, PlanBound, PlanKind, PlanModifier, PlanNode, Run, Vertex,
 };
@@ -280,7 +281,7 @@ pub struct FlowInfo {
     pub sample_rate_at: Option<ClockStage>,
     pub sample_rate_calls: Vec<ExprId>,
     /// The calls of `sample_tick()` (§11.4), which the Core reads from the
-    /// counter of the phase (`_tick`, [`FlowInfo::counts_time`]).
+    /// time its function takes ([`FlowInfo::time`]).
     pub sample_tick_calls: Vec<ExprId>,
     /// The ticks of the body slower than its `sample` (§11.9), slowest
     /// first: of its inputs, `let`s, nodes and hoisted fields, and the slow
@@ -288,10 +289,10 @@ pub struct FlowInfo {
     /// ([`PlanNode::runs`], S-1088). The Core makes a function of each
     /// ([`FlowInfo::run_stage`]).
     pub stages: Vec<ClockStage>,
-    /// It or a flow it calls, through flows, reads `sample_tick()` (§11.4,
-    /// S-1129 (1)): its stages take the time. Made by the walk of the table
-    /// ([`plan`]'s `entries`).
-    pub reads_time: bool,
+    /// The words of the time the function of each stage that reads it or
+    /// runs a callee that does takes (§11.4, §12.4, S-1217, S-1211), made
+    /// by the walk of the table ([`plan`]'s `entries`, [`FlowInfo::time_words`]).
+    pub time: BTreeMap<ClockStage, Words>,
     /// The stage of the body that makes the output ([`FlowInfo::run_stage`]
     /// of [`crate::def::FlowDef::body_out_clock`], `sample` of one of no
     /// tick); none of a flow with no table.

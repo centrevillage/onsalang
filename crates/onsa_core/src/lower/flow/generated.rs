@@ -173,6 +173,7 @@ impl<'b> Gen<'b> {
             sample_rate_calls: info.sample_rate_calls.iter().copied().collect(),
             sample_tick_calls: info.sample_tick_calls.iter().copied().collect(),
             time: Vec::new(),
+            time_read: Cell::new(false),
             scopes: Vec::new(),
         });
         Ok(Gen { cx, params: Vec::new(), stmts: Vec::new(), span: shape.span })
