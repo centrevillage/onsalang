@@ -1,0 +1,18 @@
+// The flows of util (W7-16 U5b1/t, S-1089): `leaf` is the instance the paths of main.onsa end in, `mid` and `deep` have 2^12 and 2^16 on their own path, and `past` is past the limit by itself (the
+// error is here, once, and the flows that call it in main.onsa report nothing).
+
+pub flow leaf(x: F32 at sample) -> F32 at sample {
+  x * 0.5 + prev~(x) * 0.5
+}
+
+pub flow mid(p: F32 at block) -> F32 at sample {
+  leaf~(p).down~(4096) at sample
+}
+
+pub flow deep(p: F32 at block) -> F32 at sample {
+  mid~(p).down~(16) at sample
+}
+
+pub flow past(p: F32 at block) -> F32 at sample {
+  leaf~(p).down~(8192).down~(8192) at sample                                    //~ E0808 @24
+}

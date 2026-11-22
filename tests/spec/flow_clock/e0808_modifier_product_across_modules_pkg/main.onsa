@@ -1,0 +1,43 @@
+// onsa.toml
+// [test]
+// spec = ["§11.9", "§15.1", "§18.1"]
+
+// W7-16 U5b1/t, S-1089 (spec §11.9: the product of the N on the path from the body of a flow to the instance is counted through the flows, "どの flow もその本体を一番外として確かめる"; the error is "包む側の
+// flow の連鎖の修飾子"): the callee is a flow of another module, through the qualified name and through a name taken in by `use`. `util.mid` has 2^12 and `util.deep` 2^16 on their own paths, so a
+// caller with a chain of 2^13 over `util.mid` and one with 2^9 over `util.deep` are 2^25 on the path, at the modifier of the caller in this file; exactly 2^24 is accepted. `util.past` is past the
+// limit by itself, and the error is in util.onsa only: its callers here report nothing. One error per flow, so each form is a flow of its own. `p` is a `block` input.
+
+use util
+use util.{mid, deep}
+
+pub flow qualified_past(p: F32 at block) -> F32 at sample {
+  util.mid~(p).down~(8192) at sample                                            //~ E0808 @16
+}
+
+pub flow imported_past(p: F32 at block) -> F32 at sample {
+  mid~(p).down~(8192) at sample                                                 //~ E0808 @11
+}
+
+pub flow imported_through_two_levels_past(p: F32 at block) -> F32 at sample {
+  deep~(p).down~(512) at sample                                                 //~ E0808 @12
+}
+
+pub flow in_an_if_tilde_arm_of_another_module(c: Bool at sample, p: F32 at block) -> F32 at sample {
+  if~ c { util.deep~(p).down~(512) at sample } else { 0.0 }                     //~ E0808 @25
+}
+
+pub flow qualified_exactly(p: F32 at block) -> F32 at sample {
+  util.mid~(p).down~(4096) at sample
+}
+
+pub flow imported_through_two_levels_exactly(p: F32 at block) -> F32 at sample {
+  deep~(p).down~(256) at sample
+}
+
+pub flow calls_the_one_past_qualified(p: F32 at block) -> F32 at sample {
+  util.past~(p).down~(2) at sample
+}
+
+pub flow calls_the_one_past_with_no_modifier(p: F32 at block) -> F32 at sample {
+  util.past~(p)
+}

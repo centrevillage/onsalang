@@ -11,6 +11,7 @@ use super::*;
 use crate::clock::Ratio;
 use crate::flow_names::Modifier;
 
+pub(crate) mod entries;
 mod fields;
 pub(super) mod names;
 mod stage;
@@ -148,6 +149,51 @@ pub struct PlanNode {
     /// The modifiers after its call, in the order they are written (§11.9,
     /// §11.10): its chain, none of a node with no modifier.
     pub chain: Vec<PlanModifier>,
+    /// The sum of the exponents of the N of its chain, either way (§11.9,
+    /// S-1089), counted once by the check of the chain.
+    pub size: u32,
+    /// Of an instance, the runs of the stages of the body of its callee
+    /// (§11.9, S-1088), its stages slowest first, then `sample`; none of
+    /// another node, and of an instance whose callee has no table (in
+    /// error, in a loop of calls). Made by the walk of the table
+    /// ([`entries`]).
+    pub runs: Vec<Run>,
+}
+
+/// A run of an instance (§11.9, S-1088): the stage `body` of the body of
+/// its callee runs in the function of the stage `caller` of this flow
+/// (`Tick(min(x + r, 0))` of the stage x of the body and the frame r of
+/// the node); `at_read`: it makes the output of the callee, so it runs
+/// where the call is read.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Run {
+    pub body: ClockStage,
+    pub caller: ClockStage,
+    pub at_read: bool,
+}
+
+/// The most of the exponents of the N on a path of `.down~(N)` and
+/// `.up~(N)` from an outermost body (§11.9: 2^24, S-1089).
+pub const MOST_N_EXP: u32 = 24;
+
+/// The `.down~(N)` and `.up~(N)` of `chain` as written (`.down~(4096).up~(2)`),
+/// for the notes of the E0808 of S-1089.
+pub(super) fn shown<'a>(chain: impl IntoIterator<Item = &'a PlanModifier>) -> String {
+    let n = |m: &PlanModifier| m.ratio.map(|r| format!(".{}~({})", m.modifier.name(), 1u64 << r.0.unsigned_abs()));
+    chain.into_iter().filter_map(n).collect()
+}
+
+/// The modifier of `chain` past which, multiplied in the order they are
+/// written from the exponent `from` (of the path in the callee), the N are
+/// past 2^24 ([`MOST_N_EXP`]): the place of the E0808 of S-1089, of a
+/// chain alone (`from` 0) and of a path through flows. The one test of it
+/// (D-15).
+pub(super) fn past<'a>(chain: impl IntoIterator<Item = &'a PlanModifier>, from: u32) -> Option<&'a PlanModifier> {
+    let mut size = from;
+    chain.into_iter().find(|m| {
+        size = size.saturating_add(m.ratio.map_or(0, |r| r.0.unsigned_abs()));
+        size > MOST_N_EXP
+    })
 }
 
 /// A modifier of the chain of a node (§11.10).
@@ -234,7 +280,9 @@ impl FlowInfo {
 /// The table of the nodes of `info` from the nodes the walk `w` recorded,
 /// in the order of their [`NodeId`]s, with the clocks the walk gave them;
 /// the table of the subexpressions the marking hoisted (`hoisted`, of the
-/// module of `ast`); and the fields of the state.
+/// module of `ast`); and its own slow stages. The walk of the table
+/// ([`entries`]) adds those of its callees and makes the fields of the
+/// state after.
 pub(super) fn build(
     info: &mut FlowInfo,
     recorded: Vec<Recorded>,
@@ -280,6 +328,8 @@ pub(super) fn build(
             arms: r.arms,
             frame: r.frame,
             chain: r.chain,
+            size: r.size,
+            runs: Vec::new(),
         }
     });
     info.nodes = nodes.collect();
@@ -287,7 +337,6 @@ pub(super) fn build(
     info.roots = roots;
     super::hoist::table(info, ast, hoisted);
     info.stages = stage::slow_stages(info);
-    fields::build(info);
 }
 
 #[cfg(test)]

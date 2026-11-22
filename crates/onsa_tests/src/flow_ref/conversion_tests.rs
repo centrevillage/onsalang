@@ -583,26 +583,15 @@ flow d(p: F32 at block) -> F32 at sample { twice~(p).down~(2) at sample }";
 }
 
 #[test]
-fn a_product_of_ratios_over_2_to_the_24_is_unavailable_at_init_and_one_at_the_limit_is_made() {
-    // §11.9: "入れ子の比の積は 2^24 以内" (the lowering checks it, the check does not). The evaluator does not round a ratio it cannot hold: a chain of 2^25 (and one of 2^62: two of `.up~(2147483648)`, the largest N of a `U32`; the check stops one past 2^63, E0808; and one of 2^-62 over a part with a tick of `sample / 2^31`, whose stage in the caller would be 2^-93), and a chain of 2^14 in a part that a chain of 2^11
-    // runs (2^25 in all) are `Unavailable` at `init` (the instance is not made), and the products 2^24 (2^11 inside 2^13) and a chain `.down~(16777216)` (2^24) are made. A frame of the instance of the
-    // second kind (the slow chain: one tick at c = 0, and the value of `p` read there, 5) gives the 5 that the tick made, held; the 2^24 runs a frame of the first would make are not run here.
+fn a_product_of_ratios_of_exactly_2_to_the_24_is_made() {
+    // §11.9: "一番外の本体からインスタンスまでの経路にある `.down~`・`.up~` の N を、向きによらず全て掛けた積は 2^24 以内である" (S-1089): the check stops a product past it with E0808, so the forms past it
+    // (a chain of 2^25, one of 2^62, a chain of 2^14 in a part that a chain of 2^11 runs) are cases of flow_clock/e0808_modifier_product_*.onsa and no input of the evaluator. The products 2^24 (2^11 inside
+    // 2^13) and a chain `.down~(16777216)` (2^24) are made. A frame of the instance of the second kind (the slow chain: one tick at c = 0, and the value of `p` read there, 5) gives the 5 that the tick made, held; the 2^24 runs a
+    // frame of the first would make are not run here.
     let src = "flow leaf(q: F32 at sample) -> F32 at sample { q }
 flow mid(p: F32 at block) -> F32 at sample { let _ = leaf~(p).up~(2048)
   0.0 }
 flow within(p: F32 at block) -> F32 at sample { let _ = mid~(p).up~(8192)
-  0.0 }
-flow over(p: F32 at block) -> F32 at sample { let _ = mid~(p).up~(16384)
-  0.0 }
-flow single(p: F32 at block) -> F32 at sample { let _ = leaf~(p).up~(33554432)
-  0.0 }
-flow deep(p: F32 at block) -> F32 at sample { let _ = leaf~(p).up~(2147483648).up~(2147483648)
-  0.0 }
-flow slowb(p: F32 at block) -> F32 at sample {
-  let n = prev~(p at (sample / 2147483648), 0.0) + 1.0
-  n at sample
-}
-flow huge(p: F32 at block) -> F32 at sample { let _ = slowb~(p).down~(2147483648).down~(2147483648)
   0.0 }
 flow slow(p: F32 at block) -> F32 at sample { leaf~(p).down~(16777216) at sample }";
     let made = |name: &'static str| {
@@ -611,9 +600,6 @@ flow slow(p: F32 at block) -> F32 at sample { leaf~(p).down~(16777216) at sample
         })
     };
     assert!(made("within").is_ok());
-    for name in ["over", "single", "deep", "huge"] {
-        assert!(matches!(made(name), Err(Fault::Unavailable(_))), "{name}: {:?}", made(name));
-    }
     same(&f32s(&run(src, "slow", vec![(p(5.0), 3)], &[], &[])), &[5.0, 5.0, 5.0]);
 }
 
@@ -778,9 +764,9 @@ flow t(x: F32 at sample) -> [F32; 2] at sample {
 
 #[test]
 fn the_product_of_three_nested_chains_is_the_product_of_all_three_and_not_of_the_last_two() {
-    // §11.9: "入れ子の比の積は 2^24 以内". `.up~(512)` three deep is 2^27 (each two of them 2^18 are within), `.up~(4096)` three deep 2^36: the evaluator stops them at `init` (`Unavailable`), where the instance that
-    // makes the third is made, and does not round the product; `.up~(256)` three deep is 2^24 and is made (the same product of 2^11 inside 2^13 is made in the test of the limit). `.down~(4096)` inside `.down~(4096)`, a product of
-    // 2^-24 and no more (S-1089: the evaluator holds the size of the product, a slower one too), is made too, and its tick at c = 0 reads `p`: 1 1.
+    // §11.9: "入れ子の比の積は 2^24 以内" (S-1089: the check counts the product through the flows, and a product past it, `.up~(512)` three deep (2^27) and `.up~(4096)` three deep (2^36), is E0808 of
+    // flow_clock/e0808_modifier_product_across_flows.onsa, no input of the evaluator). `.up~(256)` three deep is 2^24, the product of all three (each two of them, 2^16, are within), and is made (the same product of 2^11
+    // inside 2^13 is made in the test of the limit). `.down~(4096)` inside `.down~(4096)`, a product of 2^-24 and no more, is made too, and its tick at c = 0 reads `p`: 1 1.
     let up = |n: u32| {
         format!(
             "flow leaf(q: F32 at sample) -> F32 at sample {{ q }}
@@ -798,10 +784,6 @@ flow t(p: F32 at block) -> F32 at sample {{ let _ = top~(p).up~({n})
         })
     };
     assert!(made(up(256)).is_ok());
-    for n in [512, 4096] {
-        let got = made(up(n));
-        assert!(matches!(got, Err(Fault::Unavailable(_))), "{n}: {got:?}");
-    }
     let src = "flow leaf(x: F32 at sample) -> F32 at sample { x }
 flow mid(x: F32 at (sample / 4096)) -> F32 at sample { leaf~(x).down~(4096) at sample }
 flow t(p: F32 at block) -> F32 at sample { mid~(p).down~(4096) at sample }";
@@ -812,7 +794,7 @@ flow t(p: F32 at block) -> F32 at sample { mid~(p).down~(4096) at sample }";
 fn the_clock_of_the_largest_power_of_two_of_a_u32_is_made_and_ticks_once_in_the_frames_of_a_run() {
     // §11.3: `p at (sample / 2147483648)` ticks once in 2^31 frames, the first at the frame 0 (the counter is 0, §11.9). Its delay `prev~(.., 0.0)` has the `0.0` it starts from there, so `n` is 1 and holds for
     // the frames that follow: 1 1 1. The N is the largest power of 2 a `U32` holds (2^31); one smaller has the same value, with a tick of its own.
-    // SPEC-GAP(S-1089): the spec does not say the most of the N of a clock `sample / N`; the evaluator takes the one of a `U32` (the ratio is held in an `i32`).
+    // §11.9: the N of a derived clock is not in the product of the N of the modifiers (S-1089), so the largest one is a clock like any other.
     let src = "flow big(p: F32 at block) -> F32 at sample {
   let n = prev~(p at (sample / 2147483648), 0.0) + 1.0
   n at sample

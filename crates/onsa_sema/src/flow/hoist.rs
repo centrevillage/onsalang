@@ -183,15 +183,18 @@ impl Choose<'_> {
     }
 
     /// Whether `e`, of a tick slower than the stage that reads it, has a
-    /// field written at the tick: a [`Choose::part`] or a node, whose value
-    /// is kept there with no name (§11.3, §11.6).
+    /// field written at the tick: a [`Choose::part`], a node, or
+    /// `sample_tick()` under the `at` of the tick, which keeps the time of
+    /// the tick as a `let` of it would (S-1210), whose value is kept there
+    /// with no name (§11.3, §11.6).
     fn tick_field(&self, e: ExprId) -> bool {
-        self.part(e) || self.nodes.contains_key(&e)
+        self.part(e) || self.nodes.contains_key(&e) || self.sample_tick.contains(&e)
     }
 
     /// Whether `e` is a computed part: none of a name (an input, a `let`,
     /// the index of a `par~`, a binding of an arm, `^y`), `sample_rate()`,
-    /// `sample_tick()` and a node (§11.3), nor parentheses or `at`, whose operand is the
+    /// `sample_tick()` (of a slower tick, [`Choose::tick_field`]) and a
+    /// node (§11.3), nor parentheses or `at`, whose operand is the
     /// same value (§11.3: `at` changes no value), nor a
     /// block of a value only, whose value the lowering makes of its tail in
     /// place: the operand or the tail is chosen instead.

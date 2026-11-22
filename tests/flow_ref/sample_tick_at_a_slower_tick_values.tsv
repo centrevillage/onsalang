@@ -1,0 +1,59 @@
+# flow_ref 1 source=tests/spec/flow_semantics/sample_tick_at_a_slower_tick_values.onsa tests=10 evaluated=10 unavailable=0 skipped=0 waiting=0
+@ the let that holds the time of the tick keeps it for the four frames of the tick
+init 0 sample_tick_at_a_slower_tick_values.by_let sr=0x41000000
+process 0 frames=8
+out=[0 0 0 0 4 4 4 4]
+@ the expression in the place of the read is the same value as the let
+init 0 sample_tick_at_a_slower_tick_values.in_an_expression sr=0x41000000
+process 0 frames=8
+out=[0 0 0 0 4 4 4 4]
+@ the computed part is the same value as the let and the expression
+init 0 sample_tick_at_a_slower_tick_values.in_a_computed_part sr=0x41000000
+process 0 frames=8
+out=[0 0 0 0 4 4 4 4]
+@ the three forms are the same value by render too
+render sample_tick_at_a_slower_tick_values.by_let sr=0x41000000 frames=8
+out=[0 0 0 0 4 4 4 4]
+render sample_tick_at_a_slower_tick_values.in_an_expression sr=0x41000000 frames=8
+out=[0 0 0 0 4 4 4 4]
+render sample_tick_at_a_slower_tick_values.in_a_computed_part sr=0x41000000 frames=8
+out=[0 0 0 0 4 4 4 4]
+@ the expression keeps the time of the tick where the host cuts the run, a call of 0 frames too
+init 0 sample_tick_at_a_slower_tick_values.in_an_expression sr=0x41000000
+process 0 frames=0
+out=[]
+process 0 frames=3
+out=[0 0 0]
+process 0 frames=0
+out=[]
+process 0 frames=5
+out=[0 4 4 4 4]
+@ the computed part keeps the time of the tick where the host cuts the run in the middle of a tick
+init 0 sample_tick_at_a_slower_tick_values.in_a_computed_part sr=0x41000000
+process 0 frames=5
+out=[0 0 0 0 4]
+process 0 frames=3
+out=[4 4 4]
+@ after a reset the time starts at 0 again and the first tick is at the next frame
+init 0 sample_tick_at_a_slower_tick_values.in_an_expression sr=0x41000000
+process 0 frames=6
+out=[0 0 0 0 4 4]
+reset 0
+process 0 frames=5
+out=[0 0 0 0 4]
+@ a tick of sample / 2 keeps the time of its tick for two frames
+init 0 sample_tick_at_a_slower_tick_values.every_two sr=0x41000000
+process 0 frames=8
+out=[0 0 2 2 4 4 6 6]
+@ the current time less the time kept is the frame in the tick
+init 0 sample_tick_at_a_slower_tick_values.frame_in_the_tick sr=0x41000000
+process 0 frames=3
+out=[0 1 2]
+process 0 frames=5
+out=[3 0 1 2 3]
+@ the time of the tick mixes with a sample input
+init 0 sample_tick_at_a_slower_tick_values.in_an_expression_with_a_sample_input sr=0x41000000
+process 0 frames=6 in x=[10 10 10 10 10 10]
+out=[10 10 10 10 14 14]
+process 0 frames=2 in x=[10 10]
+out=[14 14]

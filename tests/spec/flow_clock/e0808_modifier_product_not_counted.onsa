@@ -1,0 +1,86 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§11.9", "§18.1"]
+
+// W7-16 U5b1/t, S-1089 (spec §11.9: "導くクロックと変換の flow の入出力の N は数えない"; §11.3: "N は修飾子の N と同じく … 値は 2 以上の 2 のべき乗（違えば E0808、§11.9）。修飾子の N の積の上限（§11.9）には
+// 数えない"): the product of the N of the modifiers on a path counts the `.down~` and `.up~` only. The N of the derived clock of an expression (`p at (sample / 2147483648)`, 2^31) and the N of the port of a
+// conversion flow (`x: F32 at (sample * 2147483648)`, `x: F32 at (sample * 65536)`) are not in it: a flow with these is accepted alone, and a caller that runs it with a chain that makes exactly 2^24 is
+// accepted too (with the 2^31 counted it would be past the limit). A frame flow `x: F32 at (sample * 65536)` run by `.down~(65536)` is 2^16 on the path, not 2^32, so a flow that runs it and is run
+// itself by `.down~(256)` is 2^24, and by `.down~(512)` is 2^25 and E0808 at that modifier. The value of the N is the rule of S-1077 apart from this (a power of two that is 2 or more): the
+// derived clock and the port of 2^31 are fine. One error per flow, so each form is a flow of its own. `p` is a `block` input, `x` a `sample` input.
+
+flow leaf(x: F32 at sample) -> F32 at sample {
+  x * 0.5 + prev~(x) * 0.5
+}
+
+// ---------------------------------------------------------------- the derived clock of an expression
+
+flow derived_n_huge(p: F32 at block) -> F32 at sample {
+  (p at (sample / 2147483648)) at sample
+}
+
+flow derived_n_huge_of_a_tick(p: F32 at block) -> F32 at sample {
+  let l = prev~(p at (sample / 2147483648))
+  l at sample
+}
+
+pub flow a_caller_of_the_derived_n_exactly(p: F32 at block) -> F32 at sample {
+  derived_n_huge~(p).down~(4096).down~(4096) at sample
+}
+
+pub flow a_caller_of_the_tick_of_the_derived_n_exactly(p: F32 at block) -> F32 at sample {
+  derived_n_huge_of_a_tick~(p).down~(16777216) at sample
+}
+
+// ---------------------------------------------------------------- the port of a conversion flow
+
+pub flow gather_of_2_to_the_31(x: F32 at (sample * 2147483648)) -> F32 at sample {
+  x[0]
+}
+
+flow slow_input_of_2_to_the_31(c: F32 at (sample / 2147483648)) -> F32 at sample {
+  c at sample
+}
+
+flow slow_output_of_2_to_the_31(p: F32 at block) -> F32 at (sample / 2147483648) {
+  p
+}
+
+pub flow a_caller_of_the_slow_input_exactly(p: F32 at block) -> F32 at sample {
+  slow_input_of_2_to_the_31~(p).down~(4096).down~(4096) at sample
+}
+
+pub flow a_caller_of_the_slow_output(p: F32 at block) -> F32 at sample {
+  slow_output_of_2_to_the_31~(p) at sample
+}
+
+// ---------------------------------------------------------------- a frame flow run by the modifier of the same N
+
+flow frame_of_65536(x: F32 at (sample * 65536)) -> F32 at sample {
+  x[0]
+}
+
+pub flow the_frame_flow_run_by_its_own_n(x: F32 at sample) -> F32 at sample {
+  frame_of_65536~(x).down~(65536) at sample
+}
+
+// 2^16 on its own path.
+flow analyze(p: F32 at block) -> F32 at sample {
+  frame_of_65536~(p).down~(65536) at sample
+}
+
+pub flow the_frame_flow_run_exactly(p: F32 at block) -> F32 at sample {
+  analyze~(p).down~(256) at sample
+}
+
+pub flow the_frame_flow_run_one_over(p: F32 at block) -> F32 at sample {
+  analyze~(p).down~(512) at sample                                              //~ E0808 @15
+}
+
+pub flow the_frame_flow_run_by_a_chain_with_the_big_one_last(p: F32 at block) -> F32 at sample {
+  analyze~(p).down~(2).down~(512) at sample                                     //~ E0808 @24
+}
+
+pub flow the_frame_flow_run_by_a_chain_of_two_exactly(p: F32 at block) -> F32 at sample {
+  analyze~(p).down~(16).down~(16) at sample
+}

@@ -411,29 +411,43 @@ fn a_loop_of_two_ratios_is_one_e0815_at_the_let_the_second_enters() {
     assert_eq!(paths, ["d.prev_0"]);
 }
 
-/// A chain whose ratio no clock names (past 2^63) is E0808 at its last
-/// modifier, and in error, so its readers and its head arguments report
-/// nothing (S-1089, provisional): no internal error of a clock with no
-/// text. One that comes back within it is no error.
+/// A chain whose modifiers multiply past 2^24 is E0808 at the first modifier that passes it, in the order they are written (S-1089), whatever its ratio is (a ratio of 1 and one that
+/// no clock names, past 2^63, are the same), and in error, so its readers and its head arguments report nothing: no internal error of a clock with no text.
 #[test]
-fn a_chain_past_the_ratios_a_clock_names_is_e0808_and_quiet() {
+fn a_chain_past_2_to_the_24_is_e0808_at_the_first_modifier_that_passes_and_quiet() {
     let lp = "pub flow lp(x: F32 at sample) -> F32 at sample { x }\n";
-    for (chain, code) in [
-        ("up~(2147483648).up~(2147483648).up~(2147483648)", Some(("E0808", "up"))),
-        ("down~(2147483648).down~(2147483648).down~(2147483648)", Some(("E0808", "down"))),
-        ("up~(2147483648).up~(2147483648).down~(2147483648).down~(2147483648)", None),
+    for (chain, at) in [
+        ("up~(2147483648).up~(2147483648).up~(2147483648)", "up"),
+        ("down~(2147483648).down~(2147483648).down~(2147483648)", "down"),
+        ("up~(2147483648).up~(2147483648).down~(2147483648).down~(2147483648)", "up"),
+        ("down~(4096).down~(8192).down~(2)", "down"),
+        ("up~(8192).down~(8192)", "down"),
     ] {
         let src = format!("{lp}pub flow f(x: F32 at sample) -> F32 at sample {{\n  x + lp~(x).{chain}\n}}\n");
         let got = reported(&src);
-        match code {
-            Some((c, at)) => {
-                assert_eq!(got.len(), 1, "{chain}: {got:?}");
-                assert_eq!((format!("{:?}", got[0].0), got[0].1.as_str()), (c.to_string(), at), "{chain}");
-                let last = src.rfind(at).unwrap();
-                assert_eq!(check(&src).diagnostics[0].span.start as usize, last, "{chain}: at its last modifier");
-            }
-            None => assert!(got.is_empty(), "{chain}: {got:?}"),
-        }
+        assert_eq!(got.len(), 1, "{chain}: {got:?}");
+        assert_eq!((format!("{:?}", got[0].0), got[0].1.as_str()), ("E0808".to_string(), at), "{chain}");
+        // The first modifier that passes: the first of the three of 2^31, the second of `.down~(4096).down~(8192).down~(2)` and of `.up~(8192).down~(8192)`.
+        let passes = match chain {
+            "down~(4096).down~(8192).down~(2)" => chain.find(".down~(8192)").unwrap() + 1,
+            "up~(8192).down~(8192)" => chain.find(".down~(8192)").unwrap() + 1,
+            _ => 0,
+        };
+        let start = src.find(chain).unwrap() + passes;
+        assert_eq!(check(&src).diagnostics[0].span.start as usize, start, "{chain}: at the first modifier that passes");
+    }
+}
+
+/// A product of exactly 2^24 is no error, whatever the directions are.
+#[test]
+fn a_chain_of_exactly_2_to_the_24_is_no_error() {
+    let lp = "pub flow lp(x: F32 at sample) -> F32 at sample { x }\n";
+    for chain in
+        ["down~(4096).down~(4096)", "down~(16777216)", "up~(4096).down~(4096)", "down~(1048576).down~(8).down~(2)"]
+    {
+        let src = format!("{lp}pub flow f(p: F32 at block) -> F32 at sample {{\n  lp~(p).{chain} at sample\n}}\n");
+        let got = reported(&src);
+        assert!(got.is_empty(), "{chain}: {got:?}");
     }
 }
 

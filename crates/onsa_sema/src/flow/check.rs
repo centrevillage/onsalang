@@ -51,20 +51,29 @@ impl<'a> Checker<'a> {
             Ok(())
         })();
         let _ = r;
-        // SPEC-GAP(S-1089): a chain whose ratio no clock names (past 2^63, so
-        // past the 2^24 of §11.9 in either reading) is E0808 at its last
-        // modifier, and in error (provisional). The E0200 of this version is
-        // of a chain with no N in error (§11.9).
+        // A chain whose N multiply past 2^24 (§11.9, S-1089) is E0808 at the
+        // modifier past which they are, and in error: before its clock is
+        // shown, whose ratio is then within 2^24 either way. One with an N
+        // in error has that error alone (its ratio is not known, §18.1). The
+        // E0200 of this version is of a chain with no N in error (§11.9).
         let (mut past, mut gates) = (Vec::new(), Vec::new());
         for c in self.fcx().chains.values_mut() {
-            if c.ratio.is_some_and(|r| r.n().is_none()) {
+            let first = c.ratio.and_then(|_| super::plan::past(c.mods.iter().map(|m| &m.plan), 0));
+            if let Some(m) = first {
                 c.ratio = None;
-                past.extend(c.mods.last().map(|m| m.plan.name));
+                let msg = format!(
+                    "the N of the `.down~` and `.up~` of this chain multiply to 2^{}, past 2^24 (§11.9)",
+                    c.size
+                );
+                let note = format!("the N on the path: `{}`", super::plan::shown(c.mods.iter().map(|m| &m.plan)));
+                past.push((m.name, msg, note));
             }
             gates.extend(c.gate.clone().filter(|_| c.ratio.is_some()));
         }
-        let msg = "the ratio of this chain is past 2^63, and that of a chain is 2^24 or less (§11.9)";
-        past.into_iter().for_each(|at| self.flow_hold_at(Code::E0808, at, msg));
+        for (at, msg, note) in past {
+            let d = Diagnostic::new(Stage::Flow, Code::E0808, at, msg).with_found(self.src(at));
+            self.flow_hold(d.with_note(at, note));
+        }
         gates.into_iter().for_each(|d| self.flow_hold(d));
         self.frames.pop();
     }
@@ -467,12 +476,14 @@ impl<'a> Checker<'a> {
                 (Ok(None), Some(gate.with_found(self.src(m.name))))
             }
         };
-        let fresh = ModifierChain { ratio: Some(Ratio(0)), mods: Vec::new(), gate: None };
+        let fresh = ModifierChain { ratio: Some(Ratio(0)), size: 0, mods: Vec::new(), gate: None };
         let chain = self.fcx().chains.entry(m.head).or_insert(fresh);
-        // Past `i32` is past 2^63, the E0808 of the chain (`check_flow_body`).
+        // Past 2^24 is the E0808 of the chain (`check_flow_body`).
+        let r = ratio.ok().flatten();
+        chain.size = chain.size.saturating_add(r.map_or(0, |r| r.0.unsigned_abs()));
         chain.ratio = chain.ratio.zip(ratio.ok()).map(|(a, r)| Ratio(a.0.saturating_add(r.map_or(0, |r| r.0))));
         chain.gate = chain.gate.take().or(gate);
-        let plan = PlanModifier { modifier: m.modifier, ratio: ratio.ok().flatten(), name: m.name };
+        let plan = PlanModifier { modifier: m.modifier, ratio: r, name: m.name };
         chain.mods.push(ChainModifier { call: e, receiver: m.receiver, plan });
         Ok(t)
     }

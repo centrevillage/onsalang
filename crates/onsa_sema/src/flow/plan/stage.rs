@@ -65,11 +65,24 @@ impl FlowInfo {
         }
     }
 
-    /// Whether the flow counts the time (§11.4, §11.9): it has a tick
-    /// slower than its `sample` ([`FlowInfo::stages`]) or reads
-    /// `sample_tick()`. Its state has the counter of the phase (`_tick`).
+    /// Whether the flow counts the time (§11.4, §11.9): it has a stage
+    /// slower than its `sample` ([`FlowInfo::stages`], those of its callees
+    /// too) or reads the time ([`FlowInfo::reads_time`]). Its state has the
+    /// counter of the phase (`_tick`).
     pub fn counts_time(&self) -> bool {
-        !self.stages.is_empty() || !self.sample_tick_calls.is_empty()
+        !self.stages.is_empty() || self.reads_time
+    }
+
+    /// The stage of the function a node is read in ([`FlowInfo::run_stage`]
+    /// of its clock): a delay's stores there too, an instance's value is
+    /// read there; none of a `par~`, whose replicas run where its body is
+    /// read. The one place of it (D-15).
+    pub fn node_stage(&self, id: NodeId) -> Option<ClockStage> {
+        let n = self.node(id);
+        match n.kind {
+            PlanKind::Par { .. } => None,
+            _ => n.clock.stage().map(|s| self.run_stage(s)),
+        }
     }
 
     /// The first place of the plan (by its place) the Core does not lower

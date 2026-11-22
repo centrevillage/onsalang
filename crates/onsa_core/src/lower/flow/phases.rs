@@ -409,7 +409,7 @@ fn stored_arg(info: &FlowInfo, id: NodeId, s: ClockStage) -> Option<ExprId> {
         PlanKind::Prev { arg, .. } | PlanKind::Delay { arg, .. } | PlanKind::Vdelay { arg, .. } => *arg,
         PlanKind::Instance { .. } | PlanKind::Par { .. } => return None,
     };
-    n.clock.stage().is_some_and(|c| info.run_stage(c) == s).then_some(arg)
+    (info.node_stage(id) == Some(s)).then_some(arg)
 }
 
 /// Whether the nodes `ids` store in the function of the stage `s`

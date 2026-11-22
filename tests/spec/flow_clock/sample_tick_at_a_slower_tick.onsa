@@ -2,10 +2,15 @@
 // [test]
 // spec = ["§11.3", "§11.4"]
 
-// W7-09 U4b/i2, S-567 (K6), S-1158 (spec §11.3: "刻みの値（組込みの遅延とインスタンスの結果、刻みのクロックの入力、`sample_tick()`）を一つでも読む式は、その式のクロックの段の式である"; §11.4: `sample_tick()`
-// takes the clock of the place that uses it): `(sample_tick() % 4) at (sample / 4)` is a computed part of the tick `sample / 4`, as `(l * 2) at (sample / 4)` of an `l` at `sample / 4` is. Read at
-// `sample`, it has a field of its tick; in a branch whose condition is decided at `sample` it is E0815, as the same form of `l` (flow_clock/tick_fields_computed_parts.onsa). `sample_tick()` alone is read where it is
-// used, as a name. One error per flow.
+// W7-09 U4b/i2, S-567 (K6), S-1158; W7-16 U5b1/t, S-1210 (spec §11.3: "刻みの値（組込みの遅延とインスタンスの結果、刻みのクロックの入力、`sample_tick()`）を一つでも読む式は、その式のクロックの段の式である";
+// "段が刻みの計算した部分式は、より速い式の中でもその刻みで評価し、値を隠れたフィールドに置く。`sample_tick()` だけに刻みのクロックの `at` を付けた式（`(sample_tick() at (sample / 4)) at sample`）も同じで、
+// その刻みの時間を保つ（`let t4 = sample_tick() at (sample / 4)` と分けた形と同じ値）。条件の位置の中では、その位置を選ぶ条件が全て定数・`init`・その式と同じ刻みで決まるときだけ書け … 条件のどれかが他の段
+// （`block`、別の刻み、`sample`）で決まる位置には書けない（E0815 …）。名前とそのフィールドを読むだけなら書ける"): `(sample_tick() % 4) at (sample / 4)` is a computed part of the tick `sample / 4`, as
+// `(l * 2) at (sample / 4)` of an `l` at `sample / 4` is, and `sample_tick() at (sample / 4)` alone is one too (S-1210): read at `sample` it has a field of its tick, with the time of the tick (the values are
+// flow_semantics/sample_tick_at_a_slower_tick_values.onsa). In a branch whose condition is decided at `sample` or at `block` it is E0815, as the same form of `l` (flow_clock/tick_fields_computed_parts.onsa,
+// e0815_tick_field_in_a_condition.onsa); the condition that is `init` or a constant is accepted, and so is the read of a name (`t4 at sample`). One error per flow.
+
+const ON: Bool = true
 
 pub flow read_faster(x: U32 at sample) -> U32 at sample {
   x + (((sample_tick() % 4) at (sample / 4)) at sample)
@@ -20,9 +25,51 @@ pub flow in_a_branch_of_a_sample_condition(x: U32 at sample, c: Bool at sample) 
 }
 
 pub flow alone_in_a_branch_of_a_sample_condition(x: U32 at sample, c: Bool at sample) -> U32 at sample {
-  if c { (sample_tick() at (sample / 4)) at sample } else { x }
+  if c { (sample_tick() at (sample / 4)) at sample } else { x }               //~ E0815
+}
+
+pub flow alone_in_the_else_branch_of_a_sample_condition(x: U32 at sample, c: Bool at sample) -> U32 at sample {
+  if c { x } else { (sample_tick() at (sample / 4)) at sample }               //~ E0815
+}
+
+pub flow alone_in_an_arm_of_a_match_on_a_sample_value(x: U32 at sample, k: U32 at sample) -> U32 at sample {
+  match k {
+    0 => (sample_tick() at (sample / 4)) at sample,                           //~ E0815
+    _ => x,
+  }
+}
+
+pub flow alone_in_the_right_of_a_sample_condition(x: U32 at sample, c: Bool at sample) -> U32 at sample {
+  if c && ((sample_tick() at (sample / 4)) at sample) > 1 { x } else { 0 }    //~ E0815
+}
+
+pub flow alone_in_a_branch_of_a_block_condition(x: U32 at sample, n: U32 at block) -> U32 at sample {
+  if n > 0 { (sample_tick() at (sample / 4)) at sample } else { x }           //~ E0815
+}
+
+pub flow alone_in_a_branch_of_a_condition_that_at_gives_sample(x: U32 at sample, n: U32 at block) -> U32 at sample {
+  if (n > 0) at sample { (sample_tick() at (sample / 4)) at sample } else { x }   //~ E0815
 }
 
 pub flow in_a_branch_of_an_init_condition(x: U32 at sample, c: Bool at init) -> U32 at sample {
   if c { ((sample_tick() % 4) at (sample / 4)) at sample } else { x }
+}
+
+pub flow alone_in_a_branch_of_an_init_condition(x: U32 at sample, c: Bool at init) -> U32 at sample {
+  if c { (sample_tick() at (sample / 4)) at sample } else { x }
+}
+
+pub flow alone_in_a_branch_of_a_constant_condition(x: U32 at sample) -> U32 at sample {
+  if ON { (sample_tick() at (sample / 4)) at sample } else { x }
+}
+
+pub flow the_name_of_a_let_in_a_branch_of_a_sample_condition(x: U32 at sample, c: Bool at sample) -> U32 at sample {
+  let t4 = sample_tick() at (sample / 4)
+  if c { t4 at sample } else { x }
+}
+
+pub flow alone_split_into_a_let_before_the_branch(x: U32 at sample, c: Bool at sample) -> U32 at sample {
+  let t4 = sample_tick() at (sample / 4)
+  let held = t4 at sample
+  if c { held } else { x }
 }

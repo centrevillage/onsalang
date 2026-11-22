@@ -303,7 +303,8 @@ pub flow calls(x: F32 at sample) -> F32 at sample {
     let tick = |k| crate::clock::ClockStage::Tick(crate::clock::Ratio(k));
     assert_eq!(slow.stages, [tick(-2), tick(-1)]);
     assert!(tk.stages.is_empty() && plain.stages.is_empty());
-    assert!(slow.counts_time() && tk.counts_time() && !plain.counts_time() && !calls.counts_time());
+    // A caller of a flow that reads the time reads it too (S-1129 (1)).
+    assert!(slow.counts_time() && tk.counts_time() && !plain.counts_time() && calls.counts_time());
     let names = |f: &FlowInfo| f.fields.iter().take(2).map(|x| x.name.clone()).collect::<Vec<_>>();
     assert_eq!(names(slow), ["_sample_rate", "_tick"]);
     assert_eq!(names(tk)[0], "_tick");
@@ -313,4 +314,136 @@ pub flow calls(x: F32 at sample) -> F32 at sample {
     assert_eq!(at, Some("tk~(x)"), "an instance of a flow that counts the time stops the Core");
     assert_eq!(slow.run_stage(tick(2)), tick(0), "a burst is of the function of the `sample` of the body");
     assert_eq!(slow.run_stage(tick(-2)), tick(-2));
+}
+
+/// The table of the entries of the stages (S-1088, W7-16 U5b1): an
+/// instance of `sample` (r = 0) runs each stage of the body of its callee
+/// in the same stage of its caller, the slow ones first, and reads it at
+/// the one that makes the output; the caller has those stages too, of a
+/// grandchild through its child and of a child in a `par~`, and reads the
+/// time when a callee does. A node is of the stage of its clock, a `par~`
+/// of none ([`FlowInfo::node_stage`]).
+#[test]
+fn the_table_gives_the_runs_of_the_stages_of_the_callees() {
+    let src = "pub flow gc(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let a = prev~(p at (sample / 4)) + 1.0
+  x + (a at sample)
+}
+pub flow ch(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  gc~(x, p) * F32.round_from(sample_tick())
+}
+pub flow top(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let d = prev~(p at (sample / 2))
+  ch~(x, p) + (par~ i in 0..<2 { ch~(x, p) })[1] + (d at sample)
+}
+pub flow plain(x: F32 at sample) -> F32 at sample {
+  prev~(x)
+}
+";
+    let a = check(src);
+    assert!(a.diagnostics.is_empty(), "{:?}", a.diagnostics);
+    let tick = |k| crate::clock::ClockStage::Tick(crate::clock::Ratio(k));
+    let run = |b, c, at_read| super::Run { body: tick(b), caller: tick(c), at_read };
+    let (gc, ch, top, plain) = (flow(&a, "gc"), flow(&a, "ch"), flow(&a, "top"), flow(&a, "plain"));
+    assert_eq!([&gc.stages, &ch.stages], [&[tick(-2)], &[tick(-2)]]);
+    assert_eq!(top.stages, [tick(-2), tick(-1)]);
+    assert_eq!(ch.node(named(ch, "_out.gc_0")).runs, [run(-2, -2, false), run(0, 0, true)]);
+    for path in ["_out.ch_0", "_out.par_0.ch_0"] {
+        assert_eq!(top.node(named(top, path)).runs, [run(-2, -2, false), run(0, 0, true)], "{path}");
+    }
+    assert!(top.node(named(top, "d.prev_0")).runs.is_empty());
+    assert_eq!([gc.reads_time, ch.reads_time, top.reads_time, plain.reads_time], [false, true, true, false]);
+    assert!(top.counts_time() && !plain.counts_time());
+    assert_eq!(top.fields.iter().take(1).map(|f| f.name.as_str()).collect::<Vec<_>>(), ["_tick"]);
+    let stage = |path| top.node_stage(named(top, path));
+    assert_eq!([stage("d.prev_0"), stage("_out.ch_0"), stage("_out.par_0")], [Some(tick(-1)), Some(tick(0)), None]);
+    assert_eq!(top.out_stage, Some(tick(0)));
+}
+
+/// A loop of calls (E0817 of the names stage) and a callee in error give
+/// the walk of the table nothing to run and nothing to count: it ends, with
+/// no internal error.
+#[test]
+fn the_table_ends_at_a_loop_of_calls_and_a_callee_in_error() {
+    let src = "pub flow f(x: F32 at sample) -> F32 at sample { g~(x) }
+pub flow g(x: F32 at sample) -> F32 at sample { f~(x) }
+pub flow bad(x: F32 at sample) -> F32 at sample { x + true }
+pub flow h(x: F32 at sample) -> F32 at sample { bad~(x).down~(4096) at sample }
+";
+    let a = check(src);
+    let codes: Vec<String> = a.diagnostics.iter().map(|d| format!("{:?}", d.code)).collect();
+    assert!(codes.contains(&"E0817".to_string()), "{codes:?}");
+    assert!(!codes.contains(&"E0808".to_string()), "{codes:?}");
+    for name in ["f", "g", "h"] {
+        assert!(flow(&a, name).nodes.iter().all(|n| n.runs.is_empty()), "{name}");
+    }
+}
+
+/// The N on a path through flows (S-1089): past 2^24, E0808 at the
+/// modifier of the chain of the caller past which they are, with a note at
+/// each step of the path; 2^24 is none; a flow past it alone has its own
+/// E0808 and its callers none; a callee in error is not counted.
+#[test]
+fn the_n_on_a_path_through_flows_are_2_to_the_24_at_most() {
+    let leaf = "pub flow leaf(x: F32 at sample) -> F32 at sample { x }
+pub flow mid(x: F32 at (sample / 4096)) -> F32 at sample { leaf~(x).down~(4096) at sample }
+";
+    let past = |caller: &str| {
+        let src = format!("{leaf}{caller}");
+        let a = check(&src);
+        let at = |s: onsa_diag::Span| src[s.start as usize..s.end as usize].to_string();
+        a.diagnostics.iter().map(|d| (format!("{:?}", d.code), at(d.span), d.notes.len())).collect::<Vec<_>>()
+    };
+    let t = "pub flow t(p: F32 at block) -> F32 at sample { mid~(p).up~(2).down~(4096).down~(4) at sample }\n";
+    let got = past(t);
+    assert_eq!(got, [("E0808".to_string(), "down".to_string(), 2)]);
+    let a = check(&format!("{leaf}{t}"));
+    // Multiplied in the order they are written, the N are past 2^24 at `.down~(4096)`.
+    assert_eq!(a.diagnostics[0].span.start as usize, leaf.len() + t.find("down~(4096)").unwrap());
+    let notes: Vec<&str> = a.diagnostics[0].notes.iter().map(|n| n.message.as_str()).collect();
+    assert!(notes[0].contains("`t`") && notes[0].contains("`mid`") && notes[1].contains("`leaf`"), "{notes:?}");
+    assert!(past("pub flow t(p: F32 at block) -> F32 at sample { mid~(p).down~(4096) at sample }\n").is_empty());
+    let alone = "pub flow m2(p: F32 at block) -> F32 at sample { leaf~(p).down~(1048576).down~(1048576) at sample }
+pub flow t(p: F32 at block) -> F32 at sample { m2~(p).down~(2) at sample }
+";
+    assert_eq!(past(alone).iter().map(|d| d.1.as_str()).collect::<Vec<_>>(), ["down"]);
+    assert!(past(alone)[0].2 == 1, "the E0808 of `m2` alone, with the note of its chain");
+}
+
+/// The places of E0808 the parent read of S-1089 and §18.1 (W7-16 U5b1):
+/// (1) on a path through flows, the modifier of the caller's chain past
+/// which the N are, multiplied from the count of the callee in the order
+/// they are written; (2) a chain with an N in error and N past 2^24 has
+/// the error of its N alone; (3) the callers of a flow past it alone, and
+/// theirs, are quiet.
+#[test]
+fn the_places_of_the_e0808_of_a_path() {
+    let leaf = "pub flow leaf(x: F32 at sample) -> F32 at sample { x }
+pub flow mid(x: F32 at (sample / 4096)) -> F32 at sample { leaf~(x).down~(4096) at sample }
+";
+    let errors = |body: &str| {
+        let src = format!("{leaf}{body}");
+        let a = check(&src);
+        let at = |d: &onsa_diag::Diagnostic| (format!("{:?}", d.code), src[d.span.start as usize..].to_string());
+        a.diagnostics.iter().map(at).collect::<Vec<_>>()
+    };
+    // (1) 2^12 of `mid`, then 2^24 at `.down~(4096)`, past it at `.down~(2)`.
+    let got = errors("pub flow t(p: F32 at block) -> F32 at sample { mid~(p).down~(4096).down~(2) at sample }\n");
+    assert_eq!(got.len(), 1, "{got:?}");
+    assert!(got[0].0 == "E0808" && got[0].1.starts_with("down~(2)"), "{got:?}");
+    // (2) The N of 3 is the error, not the product past 2^24, in either order.
+    for chain in ["down~(3).down~(33554432)", "down~(33554432).down~(3)"] {
+        let got = errors(&format!("pub flow t(p: F32 at block) -> F32 at sample {{ leaf~(p).{chain} at sample }}\n"));
+        assert_eq!(got.len(), 1, "{chain}: {got:?}");
+        assert!(got[0].0 == "E0808" && got[0].1.starts_with("3)"), "{chain}: {got:?}");
+    }
+    // (3) Only `past` has the error: `user` calls it, `outer` calls `user`.
+    let got = errors(
+        "pub flow past(p: F32 at block) -> F32 at sample { leaf~(p).down~(8192).down~(8192) at sample }
+pub flow user(p: F32 at block) -> F32 at sample { past~(p) }
+pub flow outer(p: F32 at block) -> F32 at sample { user~(p).down~(8192) at sample }
+",
+    );
+    assert_eq!(got.len(), 1, "{got:?}");
+    assert!(got[0].1.starts_with("down~(8192) at sample }\npub flow user"), "{got:?}");
 }

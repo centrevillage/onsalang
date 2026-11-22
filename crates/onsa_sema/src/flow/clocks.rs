@@ -107,6 +107,11 @@ pub(crate) fn finish_flow(a: &mut Analysis, module: &Module, id: DefId, body: Bo
         info.edges = std::mem::take(&mut w.edges);
         (info.tilde_matches, info.store_bindings) = (std::mem::take(&mut w.tilde), std::mem::take(&mut w.store));
         super::plan::build(&mut info, recorded, &w, ast, std::mem::take(&mut m.hoisted));
+        let out = match out {
+            Clock::Tick(k) => ClockStage::Tick(k),
+            _ => ClockStage::SAMPLE,
+        };
+        info.out_stage = Some(info.run_stage(out));
         (info.checks, info.const_conds) = (std::mem::take(&mut m.checks), std::mem::take(&mut m.const_conds));
         let unused = super::reads::unused(a, id, ast, &info, &fcx);
         a.diagnostics.extend(unused);

@@ -1,0 +1,156 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.3", "§11.4", "§11.9"]
+
+// W7-16 U5b1/t, S-1210, S-1127, S-565 (spec §11.3: "`sample_tick()` だけに刻みのクロックの `at` を付けた式（`(sample_tick() at (sample / 4)) at sample`）も同じで、その刻みの時間を保つ（`let t4 = sample_tick() at
+// (sample / 4)` と分けた形と同じ値）"; "値は `let` に分けても分けなくても同じである"; §11.4: `sample_tick()` は `reset` からの時間を `sample_rate()` の刻みの数で表した `U32` で、`sample / N` の段で読んでも
+// フレームの数): the three ways to write the time of a tick of `sample / 4` and read it at `sample` are the same value: a `let` that holds `sample_tick() at (sample / 4)` and is read with `at sample`, the
+// expression written in the place of the read, and the computed part `((sample_tick() + 0) at (sample / 4)) at sample`. The value of the frame f is the frame count of the tick that f is in, so the frames 0 to 7
+// read 0 0 0 0 4 4 4 4 (not 0 1 2 3 4 5 6 7, which the current time at each frame would give). It holds where the host cuts the run, and after a `reset`. The N of 2 gives 0 0 2 2 4 4 6 6, and the
+// current time less the time kept gives the frame in the tick (0 1 2 3 0 1 2 3). Worked out by hand. The forms with a condition are flow_clock/sample_tick_at_a_slower_tick.onsa (E0815).
+
+pub flow by_let() -> U32 at sample {
+  let t4 = sample_tick() at (sample / 4)
+  t4 at sample
+}
+
+pub flow in_an_expression() -> U32 at sample {
+  (sample_tick() at (sample / 4)) at sample
+}
+
+pub flow in_a_computed_part() -> U32 at sample {
+  ((sample_tick() + 0) at (sample / 4)) at sample
+}
+
+pub flow every_two() -> U32 at sample {
+  (sample_tick() at (sample / 2)) at sample
+}
+
+pub flow frame_in_the_tick() -> U32 at sample {
+  sample_tick() -% ((sample_tick() at (sample / 4)) at sample)
+}
+
+pub flow in_an_expression_with_a_sample_input(x: U32 at sample) -> U32 at sample {
+  x + ((sample_tick() at (sample / 4)) at sample)
+}
+
+fn is_ticks_of_4(o: [U32; 8]) -> Bool {
+  o[0] == 0 && o[1] == 0 && o[2] == 0 && o[3] == 0 && o[4] == 4 && o[5] == 4 && o[6] == 4 && o[7] == 4
+}
+
+test "the let that holds the time of the tick keeps it for the four frames of the tick" {
+  var out: [U32; 8] = [9; 8]
+  var st = by_let.init(8.0)
+  by_let.process(inout st, inout out)
+  assert is_ticks_of_4(out)
+}
+
+test "the expression in the place of the read is the same value as the let" {
+  var out: [U32; 8] = [9; 8]
+  var st = in_an_expression.init(8.0)
+  in_an_expression.process(inout st, inout out)
+  assert is_ticks_of_4(out)
+}
+
+test "the computed part is the same value as the let and the expression" {
+  var out: [U32; 8] = [9; 8]
+  var st = in_a_computed_part.init(8.0)
+  in_a_computed_part.process(inout st, inout out)
+  assert is_ticks_of_4(out)
+}
+
+test "the three forms are the same value by render too" {
+  let a = by_let.render(8, 8.0)
+  let b = in_an_expression.render(8, 8.0)
+  let c = in_a_computed_part.render(8, 8.0)
+  assert a.out[3] == 0
+  assert a.out[4] == 4
+  assert b.out[3] == 0
+  assert b.out[4] == 4
+  assert c.out[3] == 0
+  assert c.out[4] == 4
+  assert a.out[7] == 4
+  assert b.out[7] == 4
+  assert c.out[7] == 4
+}
+
+test "the expression keeps the time of the tick where the host cuts the run, a call of 0 frames too" {
+  var out: [U32; 8] = [9; 8]
+  var st = in_an_expression.init(8.0)
+  in_an_expression.process(inout st, inout out.slice(0, 0))
+  in_an_expression.process(inout st, inout out.slice(0, 3))
+  in_an_expression.process(inout st, inout out.slice(3, 3))
+  in_an_expression.process(inout st, inout out.slice(3, 8))
+  assert is_ticks_of_4(out)
+}
+
+test "the computed part keeps the time of the tick where the host cuts the run in the middle of a tick" {
+  var out: [U32; 8] = [9; 8]
+  var st = in_a_computed_part.init(8.0)
+  in_a_computed_part.process(inout st, inout out.slice(0, 5))
+  in_a_computed_part.process(inout st, inout out.slice(5, 8))
+  assert is_ticks_of_4(out)
+}
+
+test "after a reset the time starts at 0 again and the first tick is at the next frame" {
+  var out: [U32; 11] = [9; 11]
+  var st = in_an_expression.init(8.0)
+  in_an_expression.process(inout st, inout out.slice(0, 6))
+  in_an_expression.reset(inout st)
+  in_an_expression.process(inout st, inout out.slice(6, 11))
+  // 0 0 0 0 4 4 after the first 6 frames, then the frames 0 to 4 of a new run: 0 0 0 0 4.
+  assert out[0] == 0
+  assert out[3] == 0
+  assert out[4] == 4
+  assert out[5] == 4
+  assert out[6] == 0
+  assert out[7] == 0
+  assert out[8] == 0
+  assert out[9] == 0
+  assert out[10] == 4
+}
+
+test "a tick of sample / 2 keeps the time of its tick for two frames" {
+  var out: [U32; 8] = [9; 8]
+  var st = every_two.init(8.0)
+  every_two.process(inout st, inout out)
+  assert out[0] == 0
+  assert out[1] == 0
+  assert out[2] == 2
+  assert out[3] == 2
+  assert out[4] == 4
+  assert out[5] == 4
+  assert out[6] == 6
+  assert out[7] == 6
+}
+
+test "the current time less the time kept is the frame in the tick" {
+  var out: [U32; 8] = [9; 8]
+  var st = frame_in_the_tick.init(8.0)
+  frame_in_the_tick.process(inout st, inout out.slice(0, 3))
+  frame_in_the_tick.process(inout st, inout out.slice(3, 8))
+  assert out[0] == 0
+  assert out[1] == 1
+  assert out[2] == 2
+  assert out[3] == 3
+  assert out[4] == 0
+  assert out[5] == 1
+  assert out[6] == 2
+  assert out[7] == 3
+}
+
+test "the time of the tick mixes with a sample input" {
+  // x = 10 each: 10 10 10 10 14 14 14 14.
+  let xs: [U32; 8] = [10; 8]
+  var out: [U32; 8] = [9; 8]
+  var st = in_an_expression_with_a_sample_input.init(8.0)
+  in_an_expression_with_a_sample_input.process(inout st, xs.slice(0, 6), inout out.slice(0, 6))
+  in_an_expression_with_a_sample_input.process(inout st, xs.slice(6, 8), inout out.slice(6, 8))
+  assert out[0] == 10
+  assert out[3] == 10
+  assert out[4] == 14
+  assert out[5] == 14
+  assert out[6] == 14
+  assert out[7] == 14
+}

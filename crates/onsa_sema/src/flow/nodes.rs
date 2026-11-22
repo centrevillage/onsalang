@@ -27,6 +27,7 @@ pub(super) struct Recorded {
     pub(super) arms: Vec<(ExprId, u32)>,
     pub(super) frame: Ratio,
     pub(super) chain: Vec<PlanModifier>,
+    pub(super) size: u32,
 }
 
 /// The record of the nodes of a flow body while a walk goes through it. It
@@ -158,8 +159,8 @@ impl NodeBuilder {
         let id = NodeId(self.nodes.len() as u32);
         let whole = self.namer.whole(e);
         let arms = self.arms.clone();
-        let (frame, chain) = (Ratio(0), Vec::new());
-        self.nodes.push(Recorded { expr: e, span, kind, owner, name, path, whole, arms, frame, chain });
+        let (frame, chain, size) = (Ratio(0), Vec::new(), 0);
+        self.nodes.push(Recorded { expr: e, span, kind, owner, name, path, whole, arms, frame, chain, size });
         self.enter(id, whole, span);
         id
     }
@@ -200,7 +201,7 @@ impl NodeBuilder {
         let id = self.push(e, span, kind, &of);
         if let Some(c) = chain {
             let n = &mut self.nodes[id.0 as usize];
-            (n.frame, n.chain) = (c.ratio.unwrap_or(Ratio(0)), c.mods.iter().map(|m| m.plan).collect());
+            (n.frame, n.chain, n.size) = (c.ratio.unwrap_or(Ratio(0)), c.mods.iter().map(|m| m.plan).collect(), c.size);
         }
         Ok(())
     }

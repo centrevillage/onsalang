@@ -27,21 +27,35 @@
 
 use onsa_diag::Span;
 use onsa_sema::Target;
+use onsa_sema::flow_names::FlowBuiltin;
 use onsa_syntax::ast::{BinOp, CallKind, ExprId, ExprKind, StmtKind};
 
 use super::expr::{Frame, LOW_STACK, Stop};
 use super::flow::{Clock, Known, Seen, clock_of};
 use super::rate::{args_of, chain_of};
 use super::scalar::Fault;
-use super::sema_view::{Body, Stage};
+use super::sema_view::{Body, Called, Stage};
+
+/// `sample_tick()` alone, under parentheses and `at`s (S-1210).
+fn tick_alone(body: &Body, e: ExprId) -> bool {
+    match &body.ast.expr(e).kind {
+        ExprKind::Call { .. } => {
+            matches!(body.called(e), Ok(Called::Builtin(FlowBuiltin::SampleTick))) && body.time_call(e)
+        }
+        ExprKind::Paren(x) | ExprKind::At { expr: x, .. } => tick_alone(body, *x),
+        _ => false,
+    }
+}
 
 /// What has a place of its own or none, so it is not hoisted: a literal, a name, `sample_rate()` and `sample_tick()`, and a parenthesis
-/// or an `at` over one.
+/// or an `at` over one. `sample_tick()` alone with the `at` of a derived clock (`sample_tick() at (sample / 4)`) is a computed part of that
+/// tick, as `(sample_tick() + 0) at (sample / 4)` is (S-1210, §11.3): it is hoisted, and keeps the time of its tick where a faster stage reads it.
 fn atom(body: &Body, e: ExprId) -> bool {
     let ast = body.ast;
     match &ast.expr(e).kind {
         ExprKind::Lit(_) | ExprKind::Path(_) => true,
         ExprKind::Field { .. } => body.names(e),
+        ExprKind::At { expr: x, clock } if clock.ratio.is_some() && tick_alone(body, *x) => false,
         ExprKind::Paren(x) | ExprKind::At { expr: x, .. } => atom(body, *x),
         ExprKind::Unary { .. } => ast.negated_literal(e).is_some(),
         ExprKind::Call { .. } => body.time_call(e),

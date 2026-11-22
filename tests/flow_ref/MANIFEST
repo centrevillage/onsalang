@@ -104,6 +104,7 @@ file r242_const_let_chain.tsv rows=4 tests=1 evaluated=1 unavailable=0 skipped=0
 file r242_const_let_three_stages.tsv rows=4 tests=1 evaluated=1 unavailable=0 skipped=0 waiting=0
 file reset_boundary.tsv rows=30 tests=3 evaluated=3 unavailable=0 skipped=0 waiting=0
 file reset_replay.tsv rows=58 tests=9 evaluated=9 unavailable=0 skipped=0 waiting=0
+file sample_tick_at_a_slower_tick_values.tsv rows=59 tests=10 evaluated=10 unavailable=0 skipped=0 waiting=0
 file sample_tick_values.tsv rows=54 tests=10 evaluated=10 unavailable=0 skipped=0 waiting=0
 file scalar_assoc_const_flows.tsv rows=19 tests=6 evaluated=6 unavailable=0 skipped=0 waiting=0
 file scalar_assoc_const_param.tsv rows=10 tests=3 evaluated=3 unavailable=0 skipped=0 waiting=1
@@ -118,4 +119,4 @@ file struct_pattern_rest_let.tsv rows=7 tests=2 evaluated=2 unavailable=0 skippe
 file struct_pattern_rest_match.tsv rows=4 tests=1 evaluated=1 unavailable=0 skipped=0 waiting=0
 file vdelay_edges.tsv rows=64 tests=15 evaluated=14 unavailable=0 skipped=1 waiting=0
 file vdelay_varying_d.tsv rows=2 tests=1 evaluated=0 unavailable=0 skipped=1 waiting=0
-total files=119 rows=3221 tests=812 evaluated=743 unavailable=1 skipped=68 waiting=6
+total files=120 rows=3280 tests=822 evaluated=753 unavailable=1 skipped=68 waiting=6

@@ -1,0 +1,166 @@
+// onsa.toml
+// [test]
+// spec = ["§11.9", "§18.1"]
+
+// W7-16 U5b1/t, S-1089 (spec §11.9: "一番外の本体からインスタンスまでの経路にある `.down~`・`.up~` の N を、向きによらず全て掛けた積は 2^24 以内である（flow をまたいで数える … ）。超えると E0808 で、
+// flow の検査の段で、どの flow もその本体を一番外として確かめる。位置は超えた修飾子の名前（flow をまたいで超えるときは、包む側の flow の連鎖の修飾子）で、note に経路を示す（中の flow が単独で超えるときは、
+// 中の flow にだけ出す）"): the product counts through the flows that call one another. A flow `mid` that runs `leaf~(p).down~(4096)` (2^12) is accepted alone, and a flow that runs `mid` with a chain of
+// 2^13 is 2^25 on the path from its body to `leaf`, so the error is at the modifier of the outer chain (the flow that contains the instance with the chain), not in `mid`. Two levels, three levels, the
+// arms of `if~`, `match~` and `par~` are the same, and exactly 2^24 on the path is accepted. A flow that is past the limit by itself has the error in itself only: the flows that call it report nothing
+// (the callee is read as one with no number, §18.1), and so do the callers of a flow that has another error of its own (a clock error and a type error). The N of a derived clock and of a port
+// is not counted (e0808_modifier_product_not_counted.onsa). One error per flow, so each form is a flow of its own, and a flow in error is no callee of a form that is to report. `p` is a `block`
+// input, `c` and `n` are the input of a condition and of a `match~`. The modules are e0808_modifier_product_across_modules_pkg.
+
+flow leaf(x: F32 at sample) -> F32 at sample {
+  x * 0.5 + prev~(x) * 0.5
+}
+
+// 2^12 on the path from its body to `leaf`, alone.
+flow mid(p: F32 at block) -> F32 at sample {
+  leaf~(p).down~(4096) at sample
+}
+
+flow fold_8192(x: F32 at (sample * 8192)) -> F32 at sample {
+  x[0]
+}
+
+// 2^8 per level: 2^8, 2^16, 2^24 on the paths of `deep_a`, `deep_b` and `deep_c`, each alone.
+flow deep_a(p: F32 at block) -> F32 at sample {
+  leaf~(p).down~(256) at sample
+}
+
+flow deep_b(p: F32 at block) -> F32 at sample {
+  deep_a~(p).down~(256) at sample
+}
+
+flow deep_c(p: F32 at block) -> F32 at sample {
+  deep_b~(p).down~(256) at sample
+}
+
+// ---------------------------------------------------------------- two levels: 2^12 and 2^13 is 2^25, at the modifier of the outer chain
+
+pub flow two_levels_down(p: F32 at block) -> F32 at sample {
+  mid~(p).down~(8192) at sample                                                 //~ E0808 @11
+}
+
+pub flow two_levels_an_up(p: F32 at block) -> F32 at sample {
+  fold_8192~(mid~(p).up~(8192))                                                  //~ E0808 @22
+}
+
+pub flow two_levels_a_chain_of_two_that_pass_in_the_last(p: F32 at block) -> F32 at sample {
+  mid~(p).down~(2).down~(8192) at sample                                        //~ E0808 @20
+}
+
+pub flow two_levels_through_a_value_read_by_name(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  let y = mid~(p).down~(8192)                                                   //~ E0808 @19
+  x * (y at sample)
+}
+
+// ---------------------------------------------------------------- three levels: 2^8 * 3 is 2^24 below, and 2^1 more is 2^25
+
+pub flow three_levels_one_more_modifier(p: F32 at block) -> F32 at sample {
+  deep_c~(p).down~(2) at sample                                                 //~ E0808 @14
+}
+
+pub flow three_levels_a_chain_of_two_that_passes_in_the_first(p: F32 at block) -> F32 at sample {
+  deep_b~(p).down~(65536).down~(2) at sample                                    //~ E0808 @14
+}
+
+// ---------------------------------------------------------------- the arms of `if~`, `match~` and `par~`
+
+pub flow in_an_if_tilde_arm(c: Bool at sample, p: F32 at block) -> F32 at sample {
+  if~ c { mid~(p).down~(8192) at sample } else { 0.0 }                          //~ E0808 @19
+}
+
+pub flow in_an_if_tilde_else_arm(c: Bool at sample, p: F32 at block) -> F32 at sample {
+  if~ c { 0.0 } else { mid~(p).down~(8192) at sample }                          //~ E0808 @32
+}
+
+pub flow in_a_match_tilde_arm(n: U32 at block, p: F32 at block) -> F32 at sample {
+  match~ n {
+    0 => 0.0,
+    _ => mid~(p).down~(8192) at sample,                                         //~ E0808 @18
+  }
+}
+
+pub flow in_a_par_tilde_replica(p: F32 at block) -> F32 at sample {
+  let ys = par~ i in 0 ..< 2 { mid~(p * F32.round_from(i)).down~(8192) at sample }  //~ E0808 @60
+  ys[0] + ys[1]
+}
+
+pub flow in_an_if_tilde_in_a_par_tilde(c: Bool at sample, p: F32 at block) -> F32 at sample {
+  let ys = par~ i in 0 ..< 2 { if~ c { mid~(p).down~(8192) at sample } else { 0.0 } }  //~ E0808 @48
+  ys[0] + ys[1]
+}
+
+// ---------------------------------------------------------------- a flow that is past the limit by itself: the error is in it, and the flows that call it are quiet
+
+pub flow alone_past(p: F32 at block) -> F32 at sample {
+  leaf~(p).down~(8192).down~(8192) at sample                                    //~ E0808 @24
+}
+
+pub flow calls_the_one_past_with_a_modifier(p: F32 at block) -> F32 at sample {
+  alone_past~(p).down~(2) at sample
+}
+
+pub flow calls_the_one_past_with_no_modifier(p: F32 at block) -> F32 at sample {
+  alone_past~(p)
+}
+
+// ---------------------------------------------------------------- a flow with an error of another kind: its callers are quiet, whatever their modifiers
+
+// The 2^12 of its chain would make 2^25 with the `.down~(8192)` of a caller, if the flow were read.
+flow clock_error_inside(p: F32 at block) -> F32 at sample {
+  let y = leaf~(p).down~(4096)
+  y                                                                              //~ E0815
+}
+
+flow type_error_inside(p: F32 at block) -> F32 at sample {
+  let k: Bool = 3                                                                //~ E0401
+  leaf~(p).down~(4096) at sample
+}
+
+pub flow calls_the_clock_error(p: F32 at block) -> F32 at sample {
+  clock_error_inside~(p).down~(8192) at sample
+}
+
+pub flow calls_the_type_error(p: F32 at block) -> F32 at sample {
+  type_error_inside~(p).down~(8192) at sample
+}
+
+// ---------------------------------------------------------------- exactly 2^24 on the path: accepted
+
+pub flow two_levels_exactly(p: F32 at block) -> F32 at sample {
+  mid~(p).down~(4096) at sample
+}
+
+// The N of the path are multiplied whatever their direction (§11.9, S-1089): the 2^12 of `mid` with `.up~(64).down~(64)` is 2^24
+// (with `.up~(4096).down~(4096)` it would be 2^36 and E0808, though the two cancel in the ratio).
+pub flow two_levels_exactly_up_then_down(p: F32 at block) -> F32 at sample {
+  mid~(p).up~(64).down~(64) at sample
+}
+
+pub flow three_levels_exactly(p: F32 at block) -> F32 at sample {
+  deep_c~(p)
+}
+
+pub flow the_arms_of_if_tilde_and_match_tilde_exactly(c: Bool at sample, n: U32 at block, p: F32 at block) -> F32 at sample {
+  let a = if~ c { mid~(p).down~(4096) at sample } else { 0.0 }
+  let b = match~ n {
+    0 => 0.0,
+    _ => mid~(p).down~(4096) at sample,
+  }
+  a + b
+}
+
+pub flow a_par_tilde_replica_exactly(p: F32 at block) -> F32 at sample {
+  let ys = par~ i in 0 ..< 2 { mid~(p * F32.round_from(i)).down~(4096) at sample }
+  ys[0] + ys[1]
+}
+
+// ---------------------------------------------------------------- the callees that are not on one path add up only along a path: accepted
+
+// Two calls of `mid` in the arms of one body are two paths of 2^12 and 2^13 (2^25 would be the sum of the paths).
+pub flow two_calls_of_mid_in_one_body(p: F32 at block) -> F32 at sample {
+  (mid~(p).down~(4096) at sample) + (mid~(p).down~(4096) at sample)
+}

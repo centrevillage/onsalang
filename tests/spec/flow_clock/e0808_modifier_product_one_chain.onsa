@@ -1,0 +1,134 @@
+// onsa.toml
+// [test]
+// spec = ["§11.9", "§18.1"]
+
+// W7-16 U5b1/t, S-1089, S-1077 (spec §11.9: "一番外の本体からインスタンスまでの経路にある `.down~`・`.up~` の N を、向きによらず全て掛けた積は 2^24 以内である（… `x.up~(8192).down~(8192)` も 2^26 で誤り）。
+// 超えると E0808 で、flow の検査の段で、どの flow もその本体を一番外として確かめる。位置は超えた修飾子の名前"): the product of the N of the modifiers of one chain, whatever the directions, is 2^24
+// at most, so a chain of `.down~(8192).down~(8192)` (2^26) and the pair `.up~(8192).down~(8192)` (the ratio 1 but 2^26) are E0808, and so is a single modifier of 2^25. A product of exactly 2^24
+// is accepted, and the N of a derived clock and of a port of a conversion flow is not in the product (e0808_modifier_product_not_counted.onsa). The error is at the name of the modifier at which the
+// product, taken in the order they are written (the first call inward, S-1089), first passes 2^24, so in a chain of three it is the first that passes and not the last. The chain in error has no
+// rate to read, so what reads it (`x * y`, a delay, the argument of another call, an `at` that would make a value slower) reports nothing (§18.1: a part that could not be read). One error per flow,
+// so each form is a flow of its own. `p` is a `block` input. The `.when~(c)` and `.reset_if~(c)` of a chain are E0200 in this version, so no case here has them.
+
+pub flow lp(x: F32 at sample) -> F32 at sample {
+  x * 0.5 + prev~(x) * 0.5
+}
+
+flow fold_to_one(x: F32 at (sample * 16777216)) -> F32 at sample {
+  x[0]
+}
+
+flow fold_to_one_huge(x: F32 at (sample * 33554432)) -> F32 at sample {
+  x[0]
+}
+
+// ---------------------------------------------------------------- a chain of two: 2^13 times 2^13 is 2^26 (the last two: 2^12 times 2^13 is 2^25)
+
+pub flow two_downs_of_8192(p: F32 at block) -> F32 at sample {
+  lp~(p).down~(8192).down~(8192) at sample                                    //~ E0808 @22
+}
+
+pub flow two_ups_of_4096_and_8192(p: F32 at block) -> F32 at sample {
+  fold_to_one_huge~(lp~(p).up~(4096).up~(8192))                               //~ E0808 @38
+}
+
+pub flow up_then_down_of_8192(p: F32 at block) -> F32 at sample {
+  lp~(p).up~(8192).down~(8192) at sample                                      //~ E0808 @20
+}
+
+pub flow down_then_up_of_8192(p: F32 at block) -> F32 at sample {
+  lp~(p).down~(8192).up~(8192) at sample                                      //~ E0808 @22
+}
+
+pub flow up_then_down_with_a_value_read_by_name(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  let y = lp~(p).up~(4096).down~(8192)                                        //~ E0808 @28
+  x * y
+}
+
+// ---------------------------------------------------------------- one modifier: 2^25
+
+pub flow one_down_of_2_to_the_25(p: F32 at block) -> F32 at sample {
+  lp~(p).down~(33554432) at sample                                            //~ E0808 @10
+}
+
+pub flow one_up_of_2_to_the_25(p: F32 at block) -> F32 at sample {
+  fold_to_one_huge~(lp~(p).up~(33554432))                                     //~ E0808 @28
+}
+
+// ---------------------------------------------------------------- the position: the first modifier that passes 2^24, in the order written
+
+pub flow three_downs_the_last_passes(p: F32 at block) -> F32 at sample {
+  lp~(p).down~(1048576).down~(16).down~(2) at sample                          //~ E0808 @35
+}
+
+pub flow three_downs_the_middle_passes(p: F32 at block) -> F32 at sample {
+  lp~(p).down~(4096).down~(8192).down~(2) at sample                           //~ E0808 @22
+}
+
+pub flow three_downs_the_first_passes(p: F32 at block) -> F32 at sample {
+  lp~(p).down~(33554432).down~(2).down~(2) at sample                          //~ E0808 @10
+}
+
+pub flow three_with_up_and_down_the_middle_passes(p: F32 at block) -> F32 at sample {
+  lp~(p).up~(8192).down~(8192).down~(2) at sample                             //~ E0808 @20
+}
+
+pub flow three_with_up_and_down_the_last_passes(p: F32 at block) -> F32 at sample {
+  lp~(p).up~(4096).down~(4096).down~(2) at sample                             //~ E0808 @32
+}
+
+// ---------------------------------------------------------------- the chain in the argument of another call, and the call that reads the chain in error
+
+pub flow a_chain_in_the_argument(p: F32 at block) -> F32 at sample {
+  lp~(lp~(p).down~(8192).down~(8192)) at sample                               //~ E0808 @26
+}
+
+pub flow a_chain_in_error_read_with_no_at(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  x + lp~(p).down~(8192).down~(8192)                                          //~ E0808 @26
+}
+
+pub flow a_chain_in_error_in_a_delay(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  x * (prev~(lp~(p).down~(16777216).down~(2)) at sample)                      //~ E0808 @37
+}
+
+// ---------------------------------------------------------------- the product is exactly 2^24: accepted
+
+pub flow two_downs_of_4096(p: F32 at block) -> F32 at sample {
+  lp~(p).down~(4096).down~(4096) at sample
+}
+
+pub flow one_down_of_2_to_the_24(p: F32 at block) -> F32 at sample {
+  lp~(p).down~(16777216) at sample
+}
+
+pub flow one_up_of_2_to_the_24(p: F32 at block) -> F32 at sample {
+  fold_to_one~(lp~(p).up~(16777216))
+}
+
+pub flow up_then_down_of_4096(p: F32 at block) -> F32 at sample {
+  lp~(p).up~(4096).down~(4096) at sample
+}
+
+pub flow down_then_up_of_4096(p: F32 at block) -> F32 at sample {
+  lp~(p).down~(4096).up~(4096) at sample
+}
+
+pub flow three_modifiers_of_exactly_2_to_the_24(p: F32 at block) -> F32 at sample {
+  lp~(p).down~(1048576).down~(8).down~(2) at sample
+}
+
+pub flow two_chains_of_2_to_the_24_each_in_one_body(p: F32 at block) -> F32 at sample {
+  let a = lp~(p).down~(4096).down~(4096)
+  let b = lp~(p).up~(4096).down~(4096)
+  (a at sample) + b
+}
+
+// ---------------------------------------------------------------- below the limit: accepted
+
+pub flow two_downs_of_8192_and_2(p: F32 at block) -> F32 at sample {
+  lp~(p).down~(8192).down~(2) at sample
+}
+
+pub flow up_then_down_below_the_limit(p: F32 at block) -> F32 at sample {
+  lp~(p).up~(2).down~(2) at sample
+}

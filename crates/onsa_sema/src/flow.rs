@@ -120,6 +120,7 @@ pub use hoist::{Cond, Hoist, HoistId};
 pub use plan::{Edge, Field, FieldOf, Kept, NodeId, Owner, Part, PlanKind, PlanModifier, PlanNode, Vertex};
 
 pub(crate) use clocks::finish_flow;
+pub(crate) use plan::entries::walk as walk_entries;
 
 /// A top-level `let` of a flow body.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -268,9 +269,19 @@ pub struct FlowInfo {
     /// counter of the phase (`_tick`, [`FlowInfo::counts_time`]).
     pub sample_tick_calls: Vec<ExprId>,
     /// The ticks of the body slower than its `sample` (§11.9), slowest
-    /// first: of its inputs, `let`s, nodes and hoisted fields. The Core
-    /// makes a function of each ([`FlowInfo::run_stage`]).
+    /// first: of its inputs, `let`s, nodes and hoisted fields, and the slow
+    /// stages its instances run the stages of their callees in
+    /// ([`PlanNode::runs`], S-1088). The Core makes a function of each
+    /// ([`FlowInfo::run_stage`]).
     pub stages: Vec<ClockStage>,
+    /// It or a flow it calls, through flows, reads `sample_tick()` (§11.4,
+    /// S-1129 (1)): its stages take the time. Made by the walk of the table
+    /// ([`plan`]'s `entries`).
+    pub reads_time: bool,
+    /// The stage of the body that makes the output ([`FlowInfo::run_stage`]
+    /// of [`crate::def::FlowDef::body_out_clock`], `sample` of one of no
+    /// tick); none of a flow with no table.
+    pub out_stage: Option<ClockStage>,
     pub read_at: HashMap<LocalId, BTreeSet<ClockStage>>,
     /// The stages each binding of an arm of `match~` is read at in a body,
     /// not its guard (S-1131): where it has a place, which its arm chosen
@@ -388,6 +399,10 @@ pub(crate) struct ModifierChain {
     /// head runs in; none when an N is in error (§18.1: its rate is not
     /// known, so what reads it reports nothing).
     ratio: Option<Ratio>,
+    /// The sum of the exponents of the N of its `.down~(N)` and `.up~(N)`,
+    /// either way (§11.9, S-1089): counted once, here, and kept in the plan
+    /// ([`PlanNode::size`]).
+    size: u32,
     /// Its modifiers in the order they are written (the check reads the
     /// receiver first).
     mods: Vec<ChainModifier>,
