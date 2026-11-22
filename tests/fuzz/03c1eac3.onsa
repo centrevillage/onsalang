@@ -1,0 +1,5 @@
+flow take_four)
+pub flow ga(c: Char at sample, x: F32 at sample) -> F32 at sample {
+  let m = take_four~(c).down~(4)  //6
+  x * (m at sample)
+}

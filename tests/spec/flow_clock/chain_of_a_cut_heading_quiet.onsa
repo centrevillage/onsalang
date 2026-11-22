@@ -1,0 +1,35 @@
+// onsa.toml
+// [test]
+// spec = ["§11.9", "§18.1"]
+
+// W7-21 U1 (the implementation wrote it; the fuzz input 03c1eac3): an instance of a flow whose heading a
+// syntax error cut (S-59), whose ports are not known, reads what the check does not read, so it and what reads
+// it get no diagnostic (§18.1): as the head of a chain in a `let`, read `at sample` or not, of `.down~` or
+// `.up~`, alone, and with no `let`. The one error is the syntax error of the heading (it was an internal error
+// of the check of the clocks of the `let`s).
+
+flow take_four)                                     //~ E0002
+
+pub flow down_in_a_let(c: Char at sample, x: F32 at sample) -> F32 at sample {
+  let m = take_four~(c).down~(4)
+  x * (m at sample)
+}
+
+pub flow up_in_a_let(c: Char at sample, x: F32 at sample) -> F32 at sample {
+  let m = take_four~(c).up~(2)
+  x
+}
+
+pub flow a_let_not_read(c: Char at sample, x: F32 at sample) -> F32 at sample {
+  let m = take_four~(c).down~(4)
+  x
+}
+
+pub flow no_modifier(c: Char at sample, x: F32 at sample) -> F32 at sample {
+  let m = take_four~(c)
+  x * m
+}
+
+pub flow read_at_sample(c: Char at sample, x: F32 at sample) -> F32 at sample {
+  x * (take_four~(c).down~(4) at sample)
+}

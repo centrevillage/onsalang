@@ -28,6 +28,7 @@ pub(super) struct Recorded {
     pub(super) frame: Ratio,
     pub(super) chain: Vec<PlanModifier>,
     pub(super) size: u32,
+    pub(super) bounds: Vec<super::PlanBound>,
 }
 
 /// The record of the nodes of a flow body while a walk goes through it. It
@@ -159,8 +160,8 @@ impl NodeBuilder {
         let id = NodeId(self.nodes.len() as u32);
         let whole = self.namer.whole(e);
         let arms = self.arms.clone();
-        let (frame, chain, size) = (Ratio(0), Vec::new(), 0);
-        self.nodes.push(Recorded { expr: e, span, kind, owner, name, path, whole, arms, frame, chain, size });
+        let (frame, chain, size, bounds) = (Ratio(0), Vec::new(), 0, Vec::new());
+        self.nodes.push(Recorded { expr: e, span, kind, owner, name, path, whole, arms, frame, chain, size, bounds });
         self.enter(id, whole, span);
         id
     }
@@ -202,6 +203,12 @@ impl NodeBuilder {
         if let Some(c) = chain {
             let n = &mut self.nodes[id.0 as usize];
             (n.frame, n.chain, n.size) = (c.ratio.unwrap_or(Ratio(0)), c.mods.iter().map(|m| m.plan).collect(), c.size);
+            // A chain with an N in error has no boundary (§18.1).
+            if let (Some(_), &NodeKind::Instance(g)) = (c.ratio, &call.kind)
+                && let Some(f) = a.def(g).as_flow()
+            {
+                n.bounds = super::plan::bounds::bounds(&n.chain, f);
+            }
         }
         Ok(())
     }

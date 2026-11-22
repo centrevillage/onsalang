@@ -77,7 +77,7 @@ pub(crate) fn finish_flow(a: &mut Analysis, module: &Module, id: DefId, body: Bo
     let (ast, text) = (&module.parsed.ast, module.text.as_str());
     let mut w = walk(a, ast, text, id, &body, &fcx, error);
     if w.diag.is_none() {
-        w.post_check(&fcx, ast, a.diagnostics.is_empty() && fcx.held.is_none());
+        w.post_check(&fcx, ast, a.diagnostics.is_empty() && fcx.held.is_none() && !fcx.unread);
     }
     let ty = |p: &PendingLet| body.expr_types.get(&p.init).copied().unwrap_or(error);
     let lets = fcx.pending.iter().zip(&w.checked);
@@ -878,7 +878,8 @@ impl Walk<'_> {
             }
         }
         self.frame = outer;
-        if self.checking() && frame.is_some_and(|f| f.ratio < Ratio(0)) {
+        // A chain with an N in error has no boundary (§18.1).
+        if self.checking() && frame.is_some() {
             self.check_gather_deal(e, g, &call.args);
         }
         (Some(rebased(f.out_clock)), reads)
@@ -932,7 +933,9 @@ impl Walked {
     /// After stage 2 with no error: each `let` has the clock of stage 1,
     /// past one in error, and no expression the clock of `sample_tick()`
     /// ([`Walk::settle`]). `quiet`: no diagnostic was made before (a clock in
-    /// error has one, §18.1), so no `let` is in error.
+    /// error has one, §18.1) and the body read nothing a syntax error left
+    /// unread (`FlowCx::unread`, whose clock is in error with none), so no
+    /// `let` is in error.
     pub(super) fn post_check(&self, cx: &FlowCx, ast: &Ast, quiet: bool) {
         let lets = self.lets.iter().zip(&self.checked).zip(&cx.pending);
         for ((&l, &c), p) in lets {

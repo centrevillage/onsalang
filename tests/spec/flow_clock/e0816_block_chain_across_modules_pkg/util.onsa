@@ -1,0 +1,17 @@
+// The flows of util (W7-21 U1/t, S-1207): the types of their ports are what the chains in main.onsa gather and deal (`Char` has no `Default`, `NoDef` neither), and `pass` passes its `Char` on to a flow of the same module.
+
+pub struct NoDef {
+  f: F32,
+}
+
+pub flow take(v: Char at sample) -> F32 at sample {
+  if v == 'a' { 1.0 } else { 0.0 }
+}
+
+pub flow pass(v: Char at sample) -> F32 at sample {
+  take~(v)
+}
+
+pub flow make(c: F32 at sample) -> NoDef at sample {
+  NoDef { f: c }
+}

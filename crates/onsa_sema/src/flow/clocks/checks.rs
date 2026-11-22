@@ -450,26 +450,31 @@ impl Walk<'_> {
         self.err(Code::E0815, span, msg);
     }
 
-    /// The E0816 of the conversion flow `g` run at `e` in a frame slower
-    /// than the call (`.down~`, §11.9, S-578, S-1186): of an input at
-    /// `sample * N`, which its first tick gathers before any sample, at its
-    /// argument in `args`, and of an output at `sample * N`, which is dealt
-    /// before its first tick, at the whole chain (S-1203 (1)), of a value type
-    /// that does not satisfy `Default` ([`crate::signal::no_default_signal`]).
+    /// The E0816 of the part `g` run at `e` heads, gathered and dealt at a
+    /// boundary of its chain (§11.9, S-578, S-1186, S-1207, S-1214,
+    /// [`super::super::plan::bounds::bounds`]): of an input a boundary
+    /// gathers, whose first tick gathers it before any sample, at its
+    /// argument in `args`, and of an output a boundary deals before its
+    /// first tick, at the whole chain (S-1203 (1)), of a value type that
+    /// does not satisfy `Default` ([`crate::signal::no_default_signal`]).
+    /// Its type is the same at every boundary: one of each input and one of
+    /// the output.
     // SPEC-GAP(S-1203): the places, provisional (1).
     pub(super) fn check_gather_deal(&mut self, e: ExprId, g: DefId, args: &[ExprId]) {
         let (a, name) = (self.a, &self.a.def(g).name);
         // Of a flow with a port in error, none (§18.1).
         let Some(f) = a.def(g).as_flow().filter(|f| !f.ports_in_error) else { return };
-        let gathered = |c: Clock| matches!(c, Clock::Tick(k) if k.faster_than_body());
+        let Some(chain) = self.cx.chains.get(&e) else { return };
+        let bounds = super::super::plan::bounds::bounds(chain.mods.iter().map(|m| &m.plan), f);
+        let gathered = |i: usize| bounds.iter().any(|b| b.gathers.iter().any(|g| g.0 as usize == i));
         let mut found = Vec::new();
-        for (&x, input) in args.iter().zip(&f.inputs).filter(|(_, i)| gathered(i.caller_clock())) {
+        for (_, (&x, input)) in args.iter().zip(&f.inputs).enumerate().filter(|&(i, _)| gathered(i)) {
             let what = format!("the part of the input `{}` of `{name}` gathered before the first samples", input.name);
             found.extend(crate::signal::no_default_signal(a, input.ty, self.ast.expr(x).span, &what, "§11.9"));
         }
-        let chain = self.cx.chains.get(&e).and_then(|c| c.mods.last()).map_or(e, |m| m.call);
+        let chain = chain.mods.last().map_or(e, |m| m.call);
         let what = format!("the array `{name}` deals before its first tick");
-        if gathered(f.out_clock) {
+        if bounds.iter().any(|b| b.deals) {
             found.extend(crate::signal::no_default_signal(a, f.out, self.ast.expr(chain).span, &what, "§11.9"));
         }
         for d in found {

@@ -215,11 +215,13 @@ pub flow f(x: F32 at sample, k: U32 at sample) -> F32 at sample {
 
 /// The head of a chain of modifiers is the node of the chain (§11.9,
 /// S-1088): its frame is the sum of the ratios, its chain the modifiers in
-/// the order they are written, its clock the output in that frame, and a
-/// whole `let` names it through the chain (S-148) unless the `let` is a
-/// tick of a ratio (S-1139 (a)). Its value read at `sample` is hoisted to a
-/// field of its tick (S-1185). A chain stops the Core until W7-16, its ratio
-/// one too.
+/// the order they are written, its boundaries one of each of them, its
+/// clock the output in that frame, and a whole `let` names it through the
+/// chain (S-148) unless the `let` is a tick of a ratio (S-1139 (a)). Its
+/// value read at `sample` is hoisted to a field of its tick (S-1185). A
+/// chain stops the Core until W7-16, its ratio one too. Of an `.up~` in a
+/// `.down~`, the head runs at the tick of the `.down~` though the frame is
+/// 0 (S-1207).
 #[test]
 fn the_head_of_a_chain_has_its_frame_and_its_modifiers() {
     use crate::clock::{ClockStage, Ratio};
@@ -235,6 +237,9 @@ pub flow f(p: F32 at block, x: F32 at sample) -> F32 at sample {
 pub flow g(x: F32 at sample) -> F32 at sample {
   lp~(x).down~(2).up~(2)
 }
+pub flow u(x: F32 at sample) -> F32 at sample {
+  lp~(x).up~(2).down~(2)
+}
 ";
     let a = check(src);
     assert!(a.diagnostics.is_empty(), "{:?}", a.diagnostics);
@@ -243,6 +248,9 @@ pub flow g(x: F32 at sample) -> F32 at sample {
     assert_eq!((d.frame, d.clock), (Ratio(0), Clock::SAMPLE));
     let mods: Vec<_> = d.chain.iter().map(|m| (m.modifier, m.ratio)).collect();
     assert_eq!(mods, [(Modifier::Down, Some(Ratio(-1))), (Modifier::Up, Some(Ratio(1)))]);
+    let bounds: Vec<_> = d.bounds.iter().map(|b| (b.at, b.gathers.len(), b.deals, b.made)).collect();
+    let tick = |k| Some(ClockStage::Tick(Ratio(k)));
+    assert_eq!(bounds, [(0, 0, false, tick(-1)), (1, 0, false, tick(0))]);
     let b = f.node(named(f, "b.lp_0"));
     assert_eq!((b.frame, b.clock, b.chain.len()), (Ratio(-3), Clock::Tick(Ratio(-3)), 2));
     assert_eq!(b.args.iter().map(|r| r.at).collect::<Vec<_>>(), [Clock::Tick(Ratio(-3))]);
@@ -255,6 +263,181 @@ pub flow g(x: F32 at sample) -> F32 at sample {
     assert!(f.multirate_at().is_some());
     let g = flow(&a, "g");
     assert_eq!(g.multirate_at(), Some(g.nodes[0].span), "a chain of the ratio one stops the Core too");
+    let u = flow(&a, "u");
+    let run = super::Run { body: ClockStage::SAMPLE, caller: ClockStage::Tick(Ratio(-1)), at_read: true };
+    assert_eq!((u.nodes[0].frame, u.nodes[0].runs.as_slice()), (Ratio(0), &[run][..]));
+    assert_eq!(u.stages, [ClockStage::Tick(Ratio(-1))]);
+    assert_eq!(g.nodes[0].runs[0].caller, ClockStage::SAMPLE, "a `.down~` in an `.up~` runs at `sample`");
+}
+
+/// The boundaries of a chain (§11.9, S-1207, S-1214), each `.down~` and
+/// `.up~` running the part on its left as one part: the stages of the
+/// caller of the outermost (`St_L`, with the tick of a boundary that deals),
+/// the one that makes its output (`made_L`), and the inputs each gathers
+/// and whether it deals, of the forms of the model of the review of W7-21
+/// (`target/notes/176/w721/review/model.py`, its rows 1–13 but 8, and two
+/// with boundaries that deal on and on).
+#[test]
+fn the_boundaries_of_a_chain() {
+    use crate::clock::{ClockStage, Ratio};
+    let heads = "pub flow id(x: F32 at sample) -> F32 at sample { x }
+pub flow osc(f: F32 at block) -> F32 at sample { f }
+pub flow g2(x: F32 at (sample * 2)) -> F32 at sample { x[0] }
+pub flow g4(x: F32 at (sample * 4)) -> F32 at sample { x[0] }
+pub flow sl(p: F32 at (sample / 4)) -> F32 at sample { p at sample }
+pub flow mk2(x: F32 at sample) -> F32 at (sample * 2) { [x, x] }
+pub flow dbl(x: F32 at sample) -> F32 at (sample * 2) { [x, x] }
+pub flow mk4(c: F32 at block) -> F32 at (sample * 4) { [c, c, c, c] }
+pub flow mid(x: F32 at sample) -> F32 at sample { id~(x).up~(2).down~(2) }
+pub flow h1(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let a = prev~(p at (sample / 2))
+  x + (a at sample)
+}
+";
+    // The flow, the ports, the chain; `St_L`, `made_L`, and of each
+    // boundary the inputs it gathers and whether it deals.
+    type Row = (&'static str, &'static str, &'static str, &'static [i32], i32, &'static [(&'static [u32], bool)]);
+    let rows: &[Row] = &[
+        (
+            "r1",
+            "x: F32 at sample) -> F32 at sample",
+            "id~(x).up~(2).down~(2)",
+            &[-1, 0],
+            -1,
+            &[(&[], false), (&[0], true)],
+        ),
+        (
+            "r2",
+            "x: F32 at sample) -> F32 at sample",
+            "id~(x).up~(4).down~(4)",
+            &[-2, 0],
+            -2,
+            &[(&[], false), (&[0], true)],
+        ),
+        (
+            "r3",
+            "x: F32 at sample) -> F32 at sample",
+            "id~(x).up~(4).down~(2).down~(2)",
+            &[-2, -1, 0],
+            -1,
+            &[(&[], false), (&[0], true), (&[0], true)],
+        ),
+        (
+            "r4",
+            "s: F32 at (sample / 2)) -> F32 at (sample / 2)",
+            "id~(s).up~(2).down~(4)",
+            &[-2, -1],
+            -2,
+            &[(&[], false), (&[0], true)],
+        ),
+        ("r5", "x: F32 at sample) -> F32 at sample", "id~(x).down~(2).up~(2)", &[0], 0, &[(&[], false), (&[], false)]),
+        (
+            "r6",
+            "x: F32 at sample) -> F32 at sample",
+            "g2~(dbl~(x)).down~(2).up~(2)",
+            &[0],
+            0,
+            &[(&[0], false), (&[], false)],
+        ),
+        ("r7", "p: F32 at block) -> F32 at sample", "osc~(p).up~(2).down~(2)", &[-1], -1, &[(&[], false), (&[], true)]),
+        (
+            "r9",
+            "x: F32 at sample) -> F32 at (sample / 4)",
+            "g4~(x).down~(2).down~(2)",
+            &[-2, -1, 0],
+            -2,
+            &[(&[0], false), (&[0], false)],
+        ),
+        (
+            "r10",
+            "p: F32 at (sample / 4)) -> F32 at sample",
+            "sl~(p).up~(2).down~(2)",
+            &[-2, -1],
+            -1,
+            &[(&[], false), (&[], true)],
+        ),
+        (
+            "r11",
+            "x: F32 at sample) -> F32 at sample",
+            "g2~(mk2~(x).down~(2).up~(2))",
+            &[0],
+            0,
+            &[(&[], true), (&[], false)],
+        ),
+        (
+            "r12",
+            "x: F32 at sample) -> F32 at sample",
+            "g2~(id~(dbl~(x)).up~(4).down~(2))",
+            &[-1, 0],
+            -1,
+            &[(&[], false), (&[0], true)],
+        ),
+        (
+            "r13",
+            "x: F32 at sample) -> F32 at sample",
+            "mid~(x).up~(2).down~(2)",
+            &[-1, 0],
+            -1,
+            &[(&[], false), (&[0], true)],
+        ),
+        (
+            "ra",
+            "p: F32 at block) -> F32 at sample",
+            "osc~(p).up~(4).down~(2).down~(2)",
+            &[-2, -1],
+            -1,
+            &[(&[], false), (&[], true), (&[], true)],
+        ),
+        (
+            "rb",
+            "p: F32 at block) -> F32 at sample",
+            "mk4~(p).down~(2).down~(2)",
+            &[-2, -1],
+            -1,
+            &[(&[], true), (&[], true)],
+        ),
+        (
+            "rx7",
+            "x: F32 at sample, p: F32 at block) -> F32 at sample",
+            "h1~(x, p).up~(4).down~(4)",
+            &[-2, 0],
+            -2,
+            &[(&[], false), (&[0], true)],
+        ),
+    ];
+    let callers: String = rows.iter().map(|r| format!("pub flow {}({} {{ {} }}\n", r.0, r.1, r.2)).collect();
+    let a = check(&format!("{heads}{callers}"));
+    assert!(a.diagnostics.is_empty(), "{:?}", a.diagnostics);
+    let tick = |k| ClockStage::Tick(Ratio(k));
+    for &(name, _, chain, st, made, bounds) in rows {
+        let f = flow(&a, name);
+        let n = f.nodes.iter().find(|n| !n.bounds.is_empty()).unwrap_or_else(|| panic!("{name}: no chain"));
+        let last = n.bounds.last().unwrap();
+        assert_eq!(last.stages, st.iter().map(|&k| tick(k)).collect::<Vec<_>>(), "{name} {chain}");
+        assert_eq!(last.made, Some(tick(made)), "{name} {chain}");
+        let got: Vec<(Vec<u32>, bool)> =
+            n.bounds.iter().map(|b| (b.gathers.iter().map(|g| g.0).collect(), b.deals)).collect();
+        let want: Vec<(Vec<u32>, bool)> = bounds.iter().map(|(g, d)| (g.to_vec(), *d)).collect();
+        assert_eq!(got, want, "{name} {chain}");
+        // The slow stages of `St_L` are the caller's; the head runs where `maps` take it.
+        assert!(st.iter().filter(|&&k| k < 0).all(|&k| f.stages.contains(&tick(k))), "{name}: {:?}", f.stages);
+        assert!(n.runs.iter().all(|r| st.contains(&match r.caller {
+            ClockStage::Tick(k) => k.0,
+            _ => 1,
+        })));
+    }
+    // Of `id~(x).up~(4).down~(2).down~(2)` (r3): the rings are written at
+    // `sample`, the head runs at `sample / 4` and the stages map one by one.
+    let r3 = &flow(&a, "r3").nodes[0];
+    let rings: Vec<_> = r3.bounds.iter().flat_map(|b| b.gathers.iter().map(|g| g.1)).collect();
+    assert_eq!(rings, [tick(0), tick(0)]);
+    assert_eq!(r3.runs.iter().map(|r| (r.caller, r.at_read)).collect::<Vec<_>>(), [(tick(-2), false)]);
+    let maps: Vec<_> = r3.bounds.iter().map(|b| b.maps.clone()).collect();
+    assert_eq!(
+        maps,
+        [vec![(tick(0), tick(0))], vec![(tick(0), tick(-1))], vec![(tick(-1), tick(-2)), (tick(0), tick(-1))]]
+    );
+    assert_eq!(r3.bounds[2].ins, [Some(Ratio(1))], "the input of the part the outermost wraps is at `sample * 2`");
 }
 
 /// The Core stops at a flow with a port at `sample * N` until W7-16 U6b

@@ -1,0 +1,73 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§11.9", "§11.10"]
+
+// W7-21 U1/t, S-1207, S-1214 (spec §11.9: "集める入力の型が `Default` を満たさなければ E0816"): the chains that gather and deal nothing that has no `Default`, when each modifier wraps the whole of its left as one part
+// and a `.down~` gathers the inputs and deals the output of what it wraps, if they are faster than its own `sample`. `.down~(2).up~(2)` of a part whose ports are at `sample` is gathered at no boundary (the
+// `.down~` wraps a part at `sample`, the `.up~` is no gather), a chain with only `.up~` gathers nothing, a chain with only `.down~` of a part at `sample` gathers nothing (each `.down~` wraps a part that is slower
+// than its own `sample`), `.up~(2).down~(2)` of a port at `sample / 2` is at `sample` inside the `.down~` (not faster), and a type that has `Default` (`F32`) is gathered and dealt after `.up~` and over two `.down~`. The chain `.down~(2).up~(2)` of an output with no `Default` is in e0816_conversion_flow_gather_deal.onsa. The errors of the chains over a type with no `Default` that are gathered or dealt are in e0816_block_chain_gather_deal.onsa. No diagnostic. `Char` is a scalar with no `Default` (§6.4). `c` is a `block` input of `Char`, `x` is the `sample` input.
+
+flow take_char(v: Char at sample) -> F32 at sample {
+  if v == 'a' { 1.0 } else { 0.0 }
+}
+
+flow take_slow_char(p: Char at (sample / 2)) -> F32 at (sample / 2) {
+  if p == 'a' { 1.0 } else { 0.0 }
+}
+
+flow take_fast_float(v: F32 at (sample * 4)) -> F32 at sample {
+  v[3]
+}
+
+flow make_slow_char(x: F32 at (sample / 2)) -> Char at (sample / 2) {
+  if x > 0.0 { 'a' } else { 'b' }
+}
+
+flow count(k: F32 at sample) -> F32 at sample {
+  let n = k + prev~(^n)
+  n
+}
+
+flow lp(x: F32 at sample) -> F32 at sample {
+  x * 0.5 + prev~(x) * 0.5
+}
+
+flow fold2(x: F32 at (sample * 2)) -> F32 at sample {
+  (x[0] + x[1]) * 0.5
+}
+
+pub flow down_then_up_gathers_nothing(c: Char at block, x: F32 at sample) -> F32 at sample {
+  x + take_char~(c).down~(2).up~(2)
+}
+
+pub flow down_then_up_of_a_char_literal(x: F32 at sample) -> F32 at sample {
+  x + take_char~('a').down~(4).up~(4)
+}
+
+pub flow up_only_gathers_nothing(c: Char at block, x: F32 at sample) -> F32 at sample {
+  x + fold2~(take_char~(c).up~(2))
+}
+
+pub flow up_only_of_a_float(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  x + fold2~(lp~(p).up~(2))
+}
+
+pub flow down_only_of_a_port_at_sample_gathers_nothing(c: Char at block, x: F32 at sample) -> F32 at sample {
+  x + (take_char~(c).down~(2).down~(2) at sample)
+}
+
+pub flow up_two_down_two_of_a_slow_port_gathers_nothing(c: Char at block, x: F32 at sample) -> F32 at sample {
+  x + (take_slow_char~(c).up~(2).down~(2) at sample)
+}
+
+pub flow up_two_down_two_of_a_slow_output_deals_nothing(x: F32 at (sample / 2)) -> Char at (sample / 2) {
+  make_slow_char~(x).up~(2).down~(2)
+}
+
+pub flow a_float_is_gathered_and_dealt_after_up(x: F32 at sample) -> F32 at sample {
+  x + count~(1.0).up~(2).down~(2) + lp~(x).up~(4).down~(2).down~(2)
+}
+
+pub flow a_float_port_at_fast_is_gathered_over_two_downs(x: F32 at sample) -> F32 at sample {
+  x + (take_fast_float~(x).down~(2).down~(2) at sample)
+}

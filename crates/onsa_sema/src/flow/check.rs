@@ -411,6 +411,7 @@ impl<'a> Checker<'a> {
         if self.a.heading_failed(d) {
             // A flow whose heading a syntax error cut (S-59): its inputs are
             // not known, and the instance is not checked against them.
+            self.fcx().unread = true;
             return self.args_of_unknown_callee(args);
         }
         let f = self.a.def(d).as_flow().unwrap().clone();

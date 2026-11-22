@@ -123,7 +123,9 @@ mod tests;
 
 pub use branching::{Chain, Link, chain};
 pub use hoist::{Cond, Hoist, HoistId};
-pub use plan::{Edge, Field, FieldOf, Kept, NodeId, Owner, Part, PlanKind, PlanModifier, PlanNode, Run, Vertex};
+pub use plan::{
+    Edge, Field, FieldOf, Kept, NodeId, Owner, Part, PlanBound, PlanKind, PlanModifier, PlanNode, Run, Vertex,
+};
 
 pub(crate) use clocks::finish_flow;
 pub(crate) use plan::entries::walk as walk_entries;
@@ -394,7 +396,9 @@ pub(crate) struct FlowCx {
     /// it, and the check of the types reported an error of the body.
     diags_before: usize,
     /// A constant expression read a constant whose unit failed (§18.1,
-    /// R-499): no plan is made, with no diagnostic.
+    /// R-499), or an instance of a flow whose heading a syntax error cut
+    /// (S-59): no plan is made, with no diagnostic, and a clock may be in
+    /// error with none.
     unread: bool,
     /// The chains of modifiers by their heads ([`ModifierChain`]).
     chains: HashMap<ExprId, ModifierChain>,

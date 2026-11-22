@@ -1,0 +1,27 @@
+// onsa.toml
+// [test]
+// spec = ["§11.9", "§15.1", "§18.1"]
+
+// W7-21 U1/t, S-1207, S-1214 (1)-(3) (spec §11.9: the gather and the deal of the boundaries of a chain, "集める入力の型が `Default` を満たさなければ E0816"): the flows are of another module, through the qualified name and
+// through a name taken in by `use`, and `util.pass` passes its `Char` on to a flow inside util, so the chain over it gathers the `Char` of its input. The gather is at the argument and the deal at the whole chain
+// (S-1203 (1)), in this file. One error per flow, so each form is a flow of its own. `c` is a `block` input.
+
+use util
+use util.{pass, make}
+
+pub flow qualified_gather(c: Char at block, x: F32 at sample) -> F32 at sample {
+  x + util.take~(c).up~(2).down~(2) //~ E0816
+}
+
+pub flow imported_gather_through_a_flow_inside(c: Char at block, x: F32 at sample) -> F32 at sample {
+  x + pass~(c).up~(2).down~(2) //~ E0816
+}
+
+pub flow imported_deal_of_a_struct(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  let r = make~(p).up~(2).down~(2) //~ E0816
+  x * r.f
+}
+
+pub flow qualified_deal_of_a_struct(p: F32 at block) -> util.NoDef at sample {
+  util.make~(p).up~(4).down~(4) //~ E0816
+}

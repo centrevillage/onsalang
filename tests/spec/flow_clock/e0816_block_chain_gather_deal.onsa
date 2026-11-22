@@ -1,0 +1,171 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§11.9", "§11.10", "§18.1"]
+
+// W7-21 U1/t, S-1207, S-1214 (1)-(3), S-1203 (provisional reading (1): the argument for a gather, the whole chain for a deal) (spec §11.9: "`x.up~(M).down~(N)` も、中の部品の入出力を境界で集めて配る形で読む",
+// §11.10: "各修飾子は左の全体を包む（合成）"): each modifier of a chain wraps the whole of its left as one part, and the `.down~(N)` that wraps it gathers the inputs of that part and deals its output at its
+// boundary (§11.9, the one step of a conversion flow), so the type of what is gathered and the type of what is dealt need `Default` (E0816). A boundary gathers an input when it is a `.down~` and the input of
+// the part it wraps is faster than its own `sample` (`x.up~(2).down~(2)` has `sample * 2` inside, so a `Char` input at `sample` is gathered; a part with an input at `sample * 4` is gathered at the first boundary
+// of `.down~(4).up~(4)`, as `.down~(4)` alone gathers it). It deals the output when the output of the part is faster in the same way. A literal and a block input handed to a gathered input are gathered by
+// position, as the argument of `g~('a').down~(2)` is. The error is at the argument of the gathered input and at the whole chain of a dealt output (S-1203 (1)), one for each input or output whatever the number of
+// boundaries that gather it, and one error per flow, so each form is a flow of its own. Every form here was no error when the ratios of a chain were summed (the chain with `.up~` has the sum of the ratio one, or
+// the part with a fast port is `.down~` then `.up~`): the forms that are errors the same before are in e0816_block_chain_kept_forms.onsa, and the values that need no `Default` are in
+// block_chain_values_need_no_default.onsa. `NoDef` is a struct with no `Default` (and Copy, as the field `F32` is), `Char` is a scalar with no `Default` (§6.4). `c` is a `block` input, `x` is the `sample` input.
+
+pub struct NoDef {
+  f: F32,
+}
+
+flow take_char(v: Char at sample) -> F32 at sample {
+  if v == 'a' { 1.0 } else { 0.0 }
+}
+
+flow pass_char(v: Char at sample) -> F32 at sample {
+  take_char~(v)
+}
+
+flow take_char_pair(a: Char at sample, b: Char at sample) -> F32 at sample {
+  if a == b { 1.0 } else { 0.0 }
+}
+
+flow take_slow_char(p: Char at (sample / 2)) -> F32 at (sample / 2) {
+  if p == 'a' { 1.0 } else { 0.0 }
+}
+
+flow take_fast_char(v: Char at (sample * 4)) -> F32 at sample {
+  if v[3] == 'a' { 1.0 } else { 0.0 }
+}
+
+flow take_fast_char2(v: Char at (sample * 2)) -> F32 at sample {
+  if v[1] == 'a' { 1.0 } else { 0.0 }
+}
+
+flow make_char(c: F32 at sample) -> Char at sample {
+  if c > 0.0 { 'a' } else { 'b' }
+}
+
+flow make_nodef(c: F32 at sample) -> NoDef at sample {
+  NoDef { f: c }
+}
+
+flow make_fast_char(c: F32 at sample) -> Char at (sample * 2) {
+  [if c > 0.0 { 'a' } else { 'b' }, 'c']
+}
+
+flow make_slow_char(x: F32 at (sample / 2)) -> Char at (sample / 2) {
+  if x > 0.0 { 'a' } else { 'b' }
+}
+
+// ---------------------------------------------------------------- the gather: `.down~` that wraps what `.up~` made faster (S-1214 (3): a literal and a block input are gathered)
+
+pub flow gather_a_literal_after_up(x: F32 at sample) -> F32 at sample {
+  x + take_char~('a').up~(2).down~(2) //~ E0816
+}
+
+pub flow gather_a_block_input_after_up(c: Char at block, x: F32 at sample) -> F32 at sample {
+  x + take_char~(c).up~(2).down~(2) //~ E0816
+}
+
+pub flow gather_a_sample_input_after_up(v: Char at sample, x: F32 at sample) -> F32 at sample {
+  x + take_char~(v).up~(2).down~(2) //~ E0816
+}
+
+pub flow gather_through_a_flow_that_passes_it_on(c: Char at block, x: F32 at sample) -> F32 at sample {
+  x + pass_char~(c).up~(2).down~(2) //~ E0816
+}
+
+pub flow gather_after_up_four(c: Char at block, x: F32 at sample) -> F32 at sample {
+  x + take_char~(c).up~(4).down~(4) //~ E0816
+}
+
+pub flow gather_at_two_boundaries_is_one_error(c: Char at block, x: F32 at sample) -> F32 at sample {
+  x + take_char~(c).up~(4).down~(2).down~(2) //~ E0816
+}
+
+pub flow gather_of_the_first_input_only(c: Char at block, d: Char at block, x: F32 at sample) -> F32 at sample {
+  x + take_char_pair~(
+    c, //~ E0816
+    d,
+  ).up~(2).down~(2)
+}
+
+pub flow gather_up_two_down_four(s: Char at (sample / 2), x: F32 at sample) -> F32 at sample {
+  let m = take_char~(s).up~(2).down~(4) //~ E0816
+  x + (m at sample)
+}
+
+pub flow gather_of_a_slow_port_lifted_by_up(c: Char at block, x: F32 at sample) -> F32 at sample {
+  let m = take_slow_char~(c).up~(4).down~(4) //~ E0816
+  x + (m at sample)
+}
+
+pub flow gather_of_a_slow_port_lifted_and_down_two(c: Char at block, x: F32 at sample) -> F32 at sample {
+  x + take_slow_char~(c).up~(4).down~(2) //~ E0816
+}
+
+pub flow gather_in_an_arm_of_if_tilde(c: Char at block, b: Bool at sample, x: F32 at sample) -> F32 at sample {
+  if~ b { take_char~(c).up~(2).down~(2) } else { x } //~ E0816
+}
+
+pub flow gather_in_a_par(c: Char at block, x: F32 at sample) -> F32 at sample {
+  let ys = par~ i in 0 ..< 2 { take_char~(c).up~(2).down~(2) } //~ E0816
+  x + ys[0] + ys[1]
+}
+
+// ---------------------------------------------------------------- the deal: the output that `.up~` made faster and `.down~` deals
+
+pub flow deal_a_char_after_up(x: F32 at sample) -> F32 at sample {
+  let r = make_char~(x).up~(2).down~(2) //~ E0816
+  if r == 'a' { x } else { 0.0 }
+}
+
+pub flow deal_a_nodef_after_up(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  let r = make_nodef~(p).up~(2).down~(2) //~ E0816
+  x * r.f
+}
+
+pub flow deal_a_nodef_after_up_four_as_the_output(p: F32 at block) -> NoDef at sample {
+  make_nodef~(p).up~(4).down~(4) //~ E0816
+}
+
+pub flow deal_a_nodef_after_up_four_down_eight(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  let r = make_nodef~(p).up~(4).down~(8).f //~ E0816
+  x * (r at sample)
+}
+
+pub flow deal_after_up_two_down_four(s: F32 at (sample / 2)) -> Char at (sample / 2) {
+  make_char~(s).up~(2).down~(4) //~ E0816
+}
+
+pub flow deal_after_up_at_two_boundaries(x: F32 at sample) -> F32 at sample {
+  let r = make_char~(x).up~(4).down~(2).down~(2) //~ E0816
+  if r == 'a' { x } else { 0.0 }
+}
+
+pub flow deal_of_a_slow_output_lifted_by_up(x: F32 at (sample / 2)) -> Char at (sample / 2) {
+  make_slow_char~(x).up~(4).down~(4) //~ E0816
+}
+
+// ---------------------------------------------------------------- the part that has a fast port: `.down~` then `.up~` gathers and deals at the `.down~` (S-1214 (2))
+
+pub flow gather_of_a_fast_port_down_then_up(c: Char at block, x: F32 at sample) -> F32 at sample {
+  x + take_fast_char~(c).down~(4).up~(4) //~ E0816
+}
+
+pub flow gather_of_a_fast_port_down_two_then_up(c: Char at block, x: F32 at sample) -> F32 at sample {
+  x + take_fast_char2~(c).down~(2).up~(2) //~ E0816
+}
+
+pub flow deal_of_a_fast_output_down_then_up(x: F32 at sample) -> F32 at sample {
+  x + take_fast_char2~(make_fast_char~(x).down~(2).up~(2)) //~ E0816
+}
+
+// ---------------------------------------------------------------- the callee has the error, not the flow that calls it with a chain over it
+
+flow mid_with_a_gather(x: F32 at sample) -> F32 at sample {
+  x + take_char~('a').up~(2).down~(2) //~ E0816
+}
+
+pub flow calls_a_flow_with_the_error(x: F32 at sample) -> F32 at sample {
+  mid_with_a_gather~(x).up~(2).down~(2)
+}

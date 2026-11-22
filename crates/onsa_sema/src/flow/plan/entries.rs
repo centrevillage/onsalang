@@ -92,20 +92,20 @@ fn close(pkg: &Package, a: &mut Analysis, f: DefId, marks: &HashMap<DefId, Mark>
     for (i, n) in info.nodes.iter().enumerate() {
         let id = NodeId(i as u32);
         let PlanKind::Instance { callee, .. } = n.kind else {
-            runs.push(Vec::new());
+            runs.push(None);
             continue;
         };
         let Some(g) = table(callee) else {
-            runs.push(Vec::new());
+            runs.push(None);
             // SPEC-GAP(S-1212): a callee in error leaves the whole flow not
             // counted (its other paths too), so the flows that run it say
             // nothing until the error is mended.
             counted = false;
             continue;
         };
-        let r = node_runs(n, g);
-        stages.extend(r.iter().map(|r| r.caller).filter(|s| s.tick_slower_than(ClockStage::SAMPLE)));
-        runs.push(r);
+        let (r, bounds, outer) = node_runs(n, g);
+        stages.extend(outer.into_iter().filter(|s| s.tick_slower_than(ClockStage::SAMPLE)));
+        runs.push(Some((r, bounds)));
         reads_time |= g.reads_time;
         let Some((inner, _)) = most.get(&callee).copied().flatten() else {
             counted = false;
@@ -126,7 +126,7 @@ fn close(pkg: &Package, a: &mut Analysis, f: DefId, marks: &HashMap<DefId, Mark>
         }
     }
     let Some(flow) = a.flows.get_mut(&f) else { onsa_diag::internal::bug(None, "a flow closed out of the table") };
-    flow.nodes.iter_mut().zip(runs).for_each(|(n, r)| n.runs = r);
+    flow.nodes.iter_mut().zip(runs).for_each(|(n, r)| r.into_iter().for_each(|r| (n.runs, n.bounds) = r));
     (flow.stages, flow.reads_time) = (stages.into_iter().collect(), reads_time);
     fields::build(flow);
     if let Some(p) = past_at {
@@ -136,17 +136,31 @@ fn close(pkg: &Package, a: &mut Analysis, f: DefId, marks: &HashMap<DefId, Mark>
 }
 
 /// The runs of the instance `n` of the callee whose table is `g` (§11.9,
-/// S-1088): each stage x of its body (its slow stages, then `sample`) in
-/// the stage `Tick(min(x + r, 0))` of the frame r of `n`, where the one
-/// that makes the output (`g.out_stage`) is read.
-fn node_runs(n: &PlanNode, g: &FlowInfo) -> Vec<Run> {
-    let caller = |x: ClockStage| match x {
-        ClockStage::Tick(k) => ClockStage::Tick(Ratio(k.0.saturating_add(n.frame.0).min(0))),
-        s => s,
-    };
-    let out = g.out_stage.map(caller);
-    let body = g.stages.iter().copied().chain([ClockStage::SAMPLE]);
-    body.map(|x| Run { body: x, caller: caller(x), at_read: Some(caller(x)) == out }).collect()
+/// S-1088, S-1207), its boundaries with their stages, and the stages of
+/// this flow it has: each stage x of the body of `g` (its slow stages,
+/// then `sample`) is moved out of each boundary of `n`, inner first
+/// ([`bounds::step`]), and the one of the stage that makes the output of
+/// the outermost part is read (`g.out_stage` with no boundary). Each
+/// boundary maps the stages of the caller of the part it wraps, and has
+/// those, the stages of its rings and its tick if it deals. O(boundaries ×
+/// stages), 56 stages at most (S-1089).
+fn node_runs(n: &PlanNode, g: &FlowInfo) -> (Vec<Run>, Vec<PlanBound>, BTreeSet<ClockStage>) {
+    let mut heads: Vec<_> = g.stages.iter().copied().chain([ClockStage::SAMPLE]).map(|x| (x, x)).collect();
+    let mut stages: BTreeSet<ClockStage> = heads.iter().map(|h| h.1).collect();
+    let (mut made, mut bounds) = (g.out_stage, n.bounds.clone());
+    for b in &mut bounds {
+        let Some(r) = n.chain.get(b.at as usize).and_then(|m| m.ratio) else {
+            onsa_diag::internal::bug(Some(n.span), "a boundary of no modifier with a ratio")
+        };
+        b.maps = stages.iter().map(|&y| (y, bounds::step(y, r))).collect();
+        let tick = b.deals.then_some(ClockStage::Tick(r));
+        stages = b.maps.iter().map(|m| m.1).chain(b.gathers.iter().map(|g| g.1)).chain(tick).collect();
+        made = if b.deals { tick } else { made.map(|m| bounds::step(m, r)) };
+        (b.stages, b.made) = (stages.iter().copied().collect(), made);
+        heads.iter_mut().for_each(|h| h.1 = bounds::step(h.1, r));
+    }
+    let runs = heads.into_iter().map(|(body, caller)| Run { body, caller, at_read: Some(caller) == made }).collect();
+    (runs, bounds, stages)
 }
 
 /// The E0808 of the N past 2^24 (`total` the exponent) on the path from
