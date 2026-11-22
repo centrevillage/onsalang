@@ -65,7 +65,7 @@ pub(super) fn checked<'b>(
 /// (c′)). Those of the body of a `par~` are of each replica (S-1140):
 /// written in a loop over them, in the struct of the replica. Every part
 /// is walked, of a field too: the arguments a chain in it gathers are
-/// lowered in the functions of their rings ([`super::chain::write_rings`]),
+/// lowered in the functions of their rings ([`super::chain::entry`]),
 /// not with it, and are roots of their own as in the marking (§11.9).
 pub(super) fn writes(
     lw: &mut Lowerer,

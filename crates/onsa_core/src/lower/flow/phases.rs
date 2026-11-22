@@ -144,10 +144,9 @@ fn init_node(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, id: NodeId, s
             assign(out, &sfield(lw, info, state, at(Part::W), span)?, u32_lit(span, 0))?;
         }
         PlanKind::Instance { callee, args, .. } => {
-            // W7-21 U1: a chain of a callee with no table (in error) has no runs and no stages.
-            let lost = super::chain::gathered(n).any(|g| g.1.is_none());
-            if !n.chain.is_empty() && n.runs.is_empty() || lost {
-                return Err(internal(span, "a chain of an instance with no runs, or a ring of no stage"));
+            // W7-21 U1: a chain of a callee with no table (in error) has no entries.
+            if !n.chain.is_empty() && n.entries.is_empty() {
+                return Err(internal(span, "a chain of an instance with no entries"));
             }
             let sub = lw.ensure_flow(*callee)?;
             let fields = instance_args(lw, cx, (*callee, args), Phase::Init, &[], span)?;
@@ -301,8 +300,9 @@ fn ctl_node(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, id: NodeId, st
 /// The function of the tick `stage` (§11.4, §11.9): `tick(inout s, [t],
 /// <Sig inputs>)` of the `sample` of the body, `tick_<N>(inout s, [t],
 /// <its inputs>)` of a slower one, which [`drive`] or a caller
-/// ([`run_child`]) calls; the words of the time `t`, `t_hi` of a stage that
-/// takes them (`FlowInfo::time_words`). In order: its inputs the state keeps stored,
+/// ([`super::chain::entry`]) calls through [`call_stage`]; the words of the
+/// time `t`, `t_hi` of a stage that takes them (`FlowInfo::time_words`).
+/// In order: its inputs the state keeps stored,
 /// its `let`s and the fields hoisted to it ([`Gen::stage_lets`]), the
 /// output of the stage that makes it (`FlowInfo::out_stage`), the stages
 /// of the callees that run in it ([`child_runs`]), the stores of its
@@ -369,109 +369,71 @@ pub(super) fn gen_tick<'b>(
     Ok(())
 }
 
-/// The rings the instance `id` writes in the function of the stage
-/// lowered ([`super::chain::write_rings`]), then the runs of the stages of
-/// its callee there that do not make its output where it is read (§11.9,
-/// S-1088: those that do run there, [`super::nodes`]), in the order of its
-/// runs, the one that makes the output of a chain that deals into its
-/// array; the arms around it chosen for the arguments that read their
+/// The work of the instance `id` in the function of the stage lowered
+/// that does not make its value where it is read (§11.9, S-1088: that
+/// does, [`super::nodes`]): its entry not read ([`super::chain::entry`]),
+/// the arms around it chosen first for the arguments that read their
 /// bindings.
 fn child_runs(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, id: NodeId, state: &Expr) -> R<()> {
     let (info, stage) = (plan(cx), phase(cx).stage());
     let n = info.node(id);
-    let span = cx.ast.expr(n.expr).span;
-    if super::chain::rings_at(n, stage).next().is_some() {
-        super::branches::choose_arms(lw, cx, &n.arms, stage, state, out)?;
-        super::chain::write_rings(lw, cx, out, id, state)?;
-    }
-    for &run in runs_at(n, stage, false) {
-        super::branches::choose_arms(lw, cx, &n.arms, stage, state, out)?;
-        let v = run_child(lw, cx, id, state, run)?;
-        match super::chain::dealt_by(lw, info, id, state, run, span)? {
-            Some(array) => assign(out, &array, v)?,
-            None => expr_stmt(out, v),
-        }
-    }
+    let Some(e) = n.entry(stage, false) else { return Ok(()) };
+    super::branches::choose_arms(lw, cx, &n.arms, stage, state, out)?;
+    // An entry not read makes no value.
+    super::chain::entry(lw, cx, out, id, state, e)?;
     Ok(())
 }
 
-/// Whether one of the nodes `ids` writes a ring or runs a stage of its
-/// callee in the function of the stage `s` ([`child_runs`]), in a `par~`
-/// of them too.
+/// Whether one of the nodes `ids` has work in the function of the stage
+/// `s` ([`child_runs`]), in a `par~` of them too.
 fn runs_in(info: &FlowInfo, ids: &[NodeId], s: ClockStage) -> bool {
     ids.iter().any(|&id| match &info.node(id).kind {
         PlanKind::Par { children, .. } => runs_in(info, children, s),
-        _ => {
-            let n = info.node(id);
-            runs_at(n, s, false).next().is_some() || super::chain::rings_at(n, s).next().is_some()
-        }
+        _ => info.node(id).entry(s, false).is_some(),
     })
 }
 
-/// The runs of the node `n` in the function of the stage `s` that make
-/// its output (`read`, where it is read, [`super::nodes`]) or not
-/// ([`child_runs`], [`runs_in`]): the one test of them.
-pub(super) fn runs_at(n: &PlanNode, s: ClockStage, read: bool) -> impl Iterator<Item = &Run> {
-    n.runs.iter().filter(move |r| r.caller == s && r.at_read == read)
+/// A run of the stage `x` of a flow whose plan is `g` (§11.9, S-1088):
+/// its function `f` of the result `ret` on `state`, with the words of the
+/// time it takes cut from `time` (made in `lets`) and its inputs of that
+/// stage, lowered.
+pub(super) struct StageRun<'g> {
+    pub g: &'g FlowInfo,
+    pub f: FnId,
+    pub ret: Ty,
+    pub x: ClockStage,
+    pub state: Expr,
+    pub time: Vec<Expr>,
+    pub lets: Vec<Stmt>,
+    pub inputs: Vec<Expr>,
 }
 
-/// The call of the function of the stage `run.body` of the callee of the
-/// instance `id`, in the scope of `state` (§11.9, S-1088): its state, the
-/// time of a stage that takes it ([`super::chain::child_time`]) and its inputs of that
-/// stage, lowered here, those its chain gathers of their rings; the output
-/// of the stage that makes it, else `()`.
-/// The one place a caller runs a stage of a callee (the loop of `.up~`
-/// and the `when~` of later works are of it).
-pub(super) fn run_child(lw: &mut Lowerer, cx: &mut FnCx, id: NodeId, state: &Expr, run: Run) -> R<Expr> {
-    let info = plan(cx);
-    let n = info.node(id);
-    let span = cx.ast.expr(n.expr).span;
-    // A chain the gate stops (`.up~`, `.when~`, `.reset_if~`, one that gathers or deals) runs no stage here.
-    let (&PlanKind::Instance { callee, ref args, .. }, ClockStage::Tick(k), true) =
-        (&n.kind, run.body, n.lowered_chain())
-    else {
-        return Err(internal(
-            span,
-            format!("a run of {:?} of no instance, or of one with a chain not lowered", run.body),
-        ));
-    };
-    let sub = lw.ensure_flow(callee)?;
-    let f = sub.stage_fn(run.body).ok_or_else(|| internal(span, format!("a callee with no stage {k:?}")))?;
-    let mut cargs = vec![inout(sfield(lw, info, state, FieldOf::Node(id, Part::Own), span)?)];
-    let (words, mut lets) = (lw.a.flows.get(&callee).map_or(0, |g| g.time_words(run.body)), Vec::new());
-    if words > 0 {
-        cargs.extend(super::chain::child_time(cx, &mut lets, n, words, span)?.into_iter().map(borrow));
-    }
-    let rings = super::chain::rings(lw, info, id, state, span)?;
-    cargs.extend(instance_args(lw, cx, (callee, args), Phase::Tick(k), &rings, span)?.into_iter().map(borrow));
-    Ok(after(lets, call(f, lw.m.fn_(f).ret.clone(), span, cargs)))
+/// The call of the run `r`, after its `lets`: the one place that calls
+/// the function of a stage of a flow, of `process` ([`drive`]) and of a
+/// caller ([`super::chain::entry`]); the time cut to the words its stage
+/// takes (`FlowInfo::time_words`).
+pub(super) fn call_stage(r: StageRun, span: Span) -> R<Expr> {
+    let time = r.time.get(..r.g.time_words(r.x)).ok_or_else(|| internal(span, "a stage of more time"))?;
+    let time = time.iter().cloned().map(borrow);
+    let args = [inout(r.state)].into_iter().chain(time).chain(r.inputs.into_iter().map(borrow)).collect();
+    Ok(after(r.lets, call(r.f, r.ret, span, args)))
 }
 
-/// The calls of the functions of the ticks slower than the `sample` of the
-/// body (`FlowFns::stages`), slowest first (S-578, S-1079), each at its
-/// ticks: when the counter of the phase of the state `s` is a multiple of
-/// its N, so the first frame runs it and the tick does not depend on how
-/// the host splits the frames (§11.9); with the words of `time` each takes
-/// (`FlowInfo::time_words`). The one driver of them: `process` runs it before `tick` (a
-/// slower loop of W7-16 does too).
-pub(super) fn drive(
-    lw: &Lowerer,
-    info: &FlowInfo,
-    fns: &FlowFns,
-    (s, time): (&Expr, &[Expr]),
-    span: Span,
-    out: &mut Vec<Stmt>,
-) -> R<()> {
-    for &(stage, f) in &fns.stages {
+/// The statements of each stage of `runs` (slowest first, S-578, S-1079),
+/// each run when the counter `c` is at the ticks of its stage, a multiple
+/// of its N, so the first frame runs it and the tick does not depend on how
+/// the host splits the frames (§11.9). The one drive of the stages of a
+/// part: of `process` (`c` the counter of the phase of its state, a run of
+/// [`call_stage`] of each stage; the runs j of an `.up~` and the grid of a
+/// `when~` of W7-16 and W7-10 too).
+pub(super) fn drive(runs: Vec<(ClockStage, Vec<Stmt>)>, c: &Expr, span: Span, out: &mut Vec<Stmt>) -> R<()> {
+    for (stage, run) in runs {
         let mask = match stage {
             ClockStage::Tick(k) => k.n().and_then(|n| u32::try_from(n - 1).ok()),
             _ => None,
         };
         let mask = mask.ok_or_else(|| internal(span, format!("no counter of the tick {stage:?}")))?;
-        let low = checked_binary(BinOp::BitAnd, sfield(lw, info, s, FieldOf::Tick, span)?, u32_lit(span, mask));
-        let time = time.get(..info.time_words(stage)).ok_or_else(|| internal(span, "a stage of more time"))?;
-        let args = [inout(s.clone())].into_iter().chain(time.iter().cloned().map(borrow)).collect();
-        let run = vec![stmt(span, StmtKind::Expr(call(f, Ty::Unit, span, args)))];
+        let low = checked_binary(BinOp::BitAnd, c.clone(), u32_lit(span, mask));
         let due = cmp(CmpOp::Eq, low, u32_lit(span, 0));
         out.push(stmt(span, StmtKind::If(due, Block { stmts: run, value: None }, Block::default())));
     }

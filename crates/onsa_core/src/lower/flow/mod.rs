@@ -6,7 +6,7 @@
 //! | `init(cfg, sample_rate) -> State` | `_tick = 0` and the fields of a tick read faster at `T.default()`, `Init`-rate `let`s in order (state ones stored) and the `Init` hoisted fields (below), node initialisation, sub `init`s, `_poisoned = false`, `_initialized = true` last |
 //! | `reset(inout s)` | `_tick = 0` and the fields of a tick read faster at `T.default()`, `prev` / `delay` / `vdelay` back to their `init` values, `w = 0`, sub `reset`s, `_poisoned = false` |
 //! | `ctl(inout s, p: Params)` | `Ctl`-rate `let`s in order (those read at `Sig` stored) and the `Ctl` hoisted fields, sub `ctl`s with the sub's `Params` |
-//! | `tick(inout s, [t], <Sig inputs>) -> out` | `Sig`-rate `let`s in order, the output, the stages of the callees run there ([`phases::run_child`]), then the stores of §11.4 in node order, the counter of a grid advanced last; the time `t` (and `t_hi`) of a stage that takes it (`FlowInfo::time_words`) |
+//! | `tick(inout s, [t], <Sig inputs>) -> out` | `Sig`-rate `let`s in order, the output, the stages of the callees run there ([`chain::entry`], [`phases::call_stage`]), then the stores of §11.4 in node order, the counter of a grid advanced last; the time `t` (and `t_hi`) of a stage that takes it (`FlowInfo::time_words`) |
 //! | `tick_<N>(inout s, [t], <its inputs>)` | of each tick `sample / N` of the body (`FlowInfo::stages`, those of its callees too): as `tick`, the output of an output at `sample / N` (§11.9) |
 //! | `process(inout s, p, [input], inout output)` | none of a port of a derived clock; `input` and `output` one `Span` (planar `[Span; N]`) or the `In` and `Out` of more (§11.6); length check, `ctl` once, per sample: the time `t = s._tick` (and `t_hi`), the slower ticks due ([`phases::drive`]), read all inputs, `tick`, the time advanced ([`phases::advance`]), write all outputs |
 //! | `process_inplace(inout s, p, inout output)` | `process` with the input made of the signals of `output` (they pair up) |
@@ -79,7 +79,9 @@ use onsa_sema::DefId;
 use onsa_sema::clock::{Clock, ClockStage, Ratio};
 use onsa_sema::def::{DefKind, Fields, FlowDef, FlowFn, FlowInput, FlowTy, ParamInfo, ParamKey, ParamNumber};
 use onsa_sema::flow::Counter;
-use onsa_sema::flow::{Field, FieldOf, FlowInfo, InitArg, Kept, NodeId, Part, PlanKind, PlanNode, Run};
+use onsa_sema::flow::{
+    Entry, Feed, Field, FieldOf, FlowInfo, InitArg, Kept, NodeId, Op, Out, Part, PlanKind, PlanNode, Read,
+};
 use onsa_sema::ty::{BuiltinTy, Len, Ty as STy};
 use onsa_syntax::ast::ExprId;
 
@@ -109,7 +111,7 @@ pub(crate) use branches::{tilde_if, tilde_match};
 use generated::{Gen, init_value, instance_args, replica_loop, ring_len, sfield};
 pub(crate) use hoist::HoistUses;
 pub(crate) use nodes::lower_flow_expr;
-use phases::{drive, gen_ctl, gen_init, gen_reset, gen_tick};
+use phases::{StageRun, call_stage, drive, gen_ctl, gen_init, gen_reset, gen_tick};
 use state::state_fields;
 
 /// The Core items generated for one flow.

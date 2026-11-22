@@ -1,9 +1,11 @@
 //! The chains of `.down~(N)` in the functions of the stages (§11.9,
 //! S-1207): the phase of a boundary, folded from the counter of the phase
-//! of this flow; the slot of a ring or an array at it; the rings an
-//! instance writes, the array it deals in and the one it is read from. Of
-//! the boundaries the gate passes ([`PlanNode::lowered_chain`]): an `.up~`
-//! (W7-16 U6b) is an internal error here.
+//! of this flow; the slot of a ring or an array at it; the work of an
+//! instance in the function of a stage as the table of the plan gives it
+//! ([`Entry`]: the rings it writes, the runs of the stages of its head, the
+//! array it deals in) and the array it is read from. Of the boundaries the
+//! gate passes ([`PlanNode::lowered_chain`]): an `.up~` (W7-16 U6b) is an
+//! internal error here.
 
 use super::*;
 
@@ -29,7 +31,7 @@ fn fold(words: &[Expr], r: Ratio, span: Span) -> R<Vec<Expr>> {
 /// The time the callee of `n` takes from that of its caller (§11.4,
 /// S-1217): two words folded out of each boundary, the outermost first, in
 /// `let`s `t_in`, `t_hi_in` into `out` that the next shares, cut to `words`.
-pub(super) fn child_time(cx: &mut FnCx, out: &mut Vec<Stmt>, n: &PlanNode, words: usize, span: Span) -> R<Vec<Expr>> {
+fn child_time(cx: &mut FnCx, out: &mut Vec<Stmt>, n: &PlanNode, words: usize, span: Span) -> R<Vec<Expr>> {
     let mut time = cx.flow.as_ref().expect("flow context").time.clone();
     for (k, b) in n.bounds.iter().enumerate().rev() {
         // One word divided would lose the upper (S-1211): the table gives two.
@@ -91,83 +93,96 @@ pub(super) fn len(n: &PlanNode, part: Part, span: Span) -> R<u32> {
     len.ok_or_else(|| internal(span, format!("a ring or an array {part:?}, past `U32`")))
 }
 
-/// The inputs the innermost boundary of `n` gathers, each with the stage
-/// of this flow whose function writes its ring: that of the frame around
-/// the boundary moved out ([`PlanNode::outer_stage`]), none of one with no
-/// `maps`. The one reading of them (D-15): [`rings_at`], [`rings`] and the
-/// check of `init` read it.
-pub(super) fn gathered(n: &PlanNode) -> impl Iterator<Item = (u32, Option<ClockStage>)> + '_ {
-    let gathers = n.bounds.first().into_iter().flat_map(|b| &b.gathers);
-    gathers.map(|&(input, q)| (input, n.outer_stage(0, q)))
-}
-
-/// The inputs whose rings the node `n` writes in the function of the
-/// stage `s` (§11.9, [`gathered`]). The one test of them (D-15): the walk
-/// of the runs of the stages ([`super::phases`]) and the writes read it.
-pub(super) fn rings_at(n: &PlanNode, s: ClockStage) -> impl Iterator<Item = u32> + '_ {
-    gathered(n).filter(move |g| g.1 == Some(s)).map(|g| g.0)
-}
-
-/// The ring fields of the inputs the innermost boundary of the instance
-/// `id` gathers, in the scope of `state`, by the index of the input: the
-/// arguments of its head (§11.9: the array of the values gathered).
-pub(super) fn rings(lw: &Lowerer, info: &FlowInfo, id: NodeId, state: &Expr, span: Span) -> R<Vec<(u32, Expr)>> {
-    let ring =
-        |(input, _)| Ok((input, sfield(lw, info, state, FieldOf::Node(id, Part::Gather { bound: 0, input }), span)?));
-    gathered(info.node(id)).map(ring).collect()
-}
-
-/// The writes of the rings of the instance `id` in the function of the
-/// stage lowered (§11.9), in the scope of `state`: of each input it
-/// gathers there ([`rings_at`]), its argument at the slot of the phase.
-// SPEC-GAP(S-1206): the argument is evaluated in the walk of the runs of
-// the stages, at the place of its node before its runs; the reference
+/// The ops of the entry `e` of the instance `id` in the function of its
+/// stage, in their order (§11.9, [`Entry`]), in the scope of `state`: a
+/// ring written from the argument at its slot, a run of a stage of the head
+/// as a statement, into the array of the boundary that deals it, or as the
+/// value given back (of an entry read). A ring written from another, the
+/// copy of an array and the runs of an `.up~`, which the gate stops, are an
+/// internal error (W7-16 U6b).
+// SPEC-GAP(S-1206): an argument is evaluated in the walk of the runs of the
+// stages, at the place of its node before its runs; the reference
 // evaluator evaluates that of the outermost boundary after them, which
 // differs in the order of the panics alone.
-pub(super) fn write_rings(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, id: NodeId, state: &Expr) -> R<()> {
-    let f = cx.flow.as_ref().expect("flow context");
-    let (info, n, stage) = (f.info, f.info.node(id), f.phase.stage());
-    let (span, PlanKind::Instance { args, .. }) = (cx.ast.expr(n.expr).span, &n.kind) else { return Ok(()) };
-    let Some(b) = n.bounds.first() else { return Ok(()) };
-    for input in rings_at(n, stage) {
-        let (part, arg) = (Part::Gather { bound: 0, input }, args.get(input as usize));
-        let arg = arg.ok_or_else(|| internal(span, "a ring of no argument"))?;
-        let at = slot(phase(lw, cx, n, 0, span)?, b.ratio, exp(n, part, span)?, span)?;
-        let place = index(sfield(lw, info, state, FieldOf::Node(id, part), span)?, at)?;
-        let v = lower_expr(lw, cx, *arg)?;
-        assign(out, &place, of_type(v, &place.ty)?)?;
-    }
-    Ok(())
-}
-
-/// The array the run `run` of the instance `id` deals its output in, in
-/// the scope of `state` (§11.9): of the run of the stage that makes the
-/// output of its head, of a chain that deals ([`PlanNode::deals`]); none
-/// of another.
-pub(super) fn dealt_by(
-    lw: &Lowerer,
-    info: &FlowInfo,
+pub(super) fn entry(
+    lw: &mut Lowerer,
+    cx: &mut FnCx,
+    out: &mut Vec<Stmt>,
     id: NodeId,
     state: &Expr,
-    run: Run,
-    span: Span,
+    e: &Entry,
 ) -> R<Option<Expr>> {
-    let n = info.node(id);
-    let (PlanKind::Instance { callee, .. }, Some(b)) = (&n.kind, n.dealt_at()) else { return Ok(None) };
-    if lw.a.flows.get(callee).and_then(|g| g.out_stage) != Some(run.body) {
-        return Ok(None);
+    let info = cx.flow.as_ref().expect("flow context").info;
+    let (n, mut value) = (info.node(id), None);
+    let span = cx.ast.expr(n.expr).span;
+    for op in &e.ops {
+        match *op {
+            Op::Ring { bound, input, from: Feed::Arg } => {
+                let (part, PlanKind::Instance { args, .. }) = (Part::Gather { bound, input }, &n.kind) else {
+                    return Err(internal(span, "a ring of no instance"));
+                };
+                let arg = args.get(input as usize).ok_or_else(|| internal(span, "a ring of no argument"))?;
+                let r = n.bounds.get(bound as usize).ok_or_else(|| internal(span, "a ring of no boundary"))?.ratio;
+                let at = slot(phase(lw, cx, n, bound as usize, span)?, r, exp(n, part, span)?, span)?;
+                let place = index(sfield(lw, info, state, FieldOf::Node(id, part), span)?, at)?;
+                let v = lower_expr(lw, cx, *arg)?;
+                assign(out, &place, of_type(v, &place.ty)?)?;
+            }
+            Op::Run { body, out: to } => {
+                let v = run(lw, cx, id, state, body)?;
+                match to {
+                    Out::None => expr_stmt(out, v),
+                    Out::Deal(b) => assign(out, &sfield(lw, info, state, FieldOf::Node(id, Part::Deal(b)), span)?, v)?,
+                    Out::Value => value = Some(v),
+                }
+            }
+            Op::Ring { .. } | Op::Deal { .. } | Op::Each { .. } => {
+                return Err(internal(span, format!("{op:?} of a chain the Core does not lower yet")));
+            }
+        }
     }
-    sfield(lw, info, state, FieldOf::Node(id, Part::Deal(b)), span).map(Some)
+    Ok(value)
+}
+
+/// The call of the function of the stage `body` of the callee of the
+/// instance `id`, in the scope of `state` (§11.9, S-1088, [`call_stage`]):
+/// its state, the time of a stage that takes it ([`child_time`], of the
+/// words of the callee) and its inputs of that stage, lowered here, those
+/// its chain gathers of their rings ([`PlanNode::ring_of`]).
+fn run(lw: &mut Lowerer, cx: &mut FnCx, id: NodeId, state: &Expr, body: ClockStage) -> R<Expr> {
+    let (a, info) = (lw.a, cx.flow.as_ref().expect("flow context").info);
+    let n = info.node(id);
+    let span = cx.ast.expr(n.expr).span;
+    // A chain the gate stops (`.up~`, `.when~`, `.reset_if~`, one that gathers or deals) runs no stage here.
+    let (&PlanKind::Instance { callee, ref args, .. }, ClockStage::Tick(k), true) = (&n.kind, body, n.lowered_chain())
+    else {
+        return Err(internal(span, format!("a run of {body:?} of no instance, or of one with a chain not lowered")));
+    };
+    let sub = lw.ensure_flow(callee)?;
+    let g = a.flows.get(&callee).ok_or_else(|| internal(span, "an instance of no checked flow"))?;
+    let f = sub.stage_fn(body).ok_or_else(|| internal(span, format!("a callee with no stage {k:?}")))?;
+    let own = sfield(lw, info, state, FieldOf::Node(id, Part::Own), span)?;
+    let (words, mut lets) = (g.time_words(body), Vec::new());
+    let time = if words > 0 { child_time(cx, &mut lets, n, words, span)? } else { Vec::new() };
+    let mut rings = Vec::new();
+    for (input, _) in (0u32..).zip(args) {
+        if let Some(bound) = n.ring_of(0, input) {
+            rings.push((input, sfield(lw, info, state, FieldOf::Node(id, Part::Gather { bound, input }), span)?));
+        }
+    }
+    let inputs = instance_args(lw, cx, (callee, args), Phase::Tick(k), &rings, span)?;
+    let ret = lw.m.fn_(f).ret.clone();
+    call_stage(StageRun { g, f, ret, x: body, state: own, time, lets, inputs }, span)
 }
 
 /// The value of the instance `id` of a chain that deals, in the scope of
-/// `state` (§11.9): its array at the slot of the phase, the element of the
-/// tick of its output.
-pub(super) fn dealt(lw: &Lowerer, cx: &FnCx, id: NodeId, state: &Expr, span: Span) -> R<Expr> {
+/// `state` (§11.9): the array of its boundary `b` ([`Read::Array`]) at the
+/// slot of the phase, the element of the tick of its output.
+pub(super) fn dealt(lw: &Lowerer, cx: &FnCx, id: NodeId, state: &Expr, b: u32, span: Span) -> R<Expr> {
     let info = cx.flow.as_ref().expect("flow context").info;
     let n = info.node(id);
-    let b = n.dealt_at().ok_or_else(|| internal(span, "a chain that deals nothing"))?;
     let part = Part::Deal(b);
-    let at = slot(phase(lw, cx, n, b as usize, span)?, n.bounds[b as usize].ratio, exp(n, part, span)?, span)?;
+    let r = n.bounds.get(b as usize).ok_or_else(|| internal(span, "an array of no boundary"))?.ratio;
+    let at = slot(phase(lw, cx, n, b as usize, span)?, r, exp(n, part, span)?, span)?;
     index(sfield(lw, info, state, FieldOf::Node(id, part), span)?, at)
 }

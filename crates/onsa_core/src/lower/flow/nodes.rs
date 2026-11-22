@@ -59,14 +59,17 @@ pub(crate) fn lower_flow_expr(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId) -> R<O
             index(buf, w)?
         }
         PlanKind::Vdelay { d, max, ty, .. } => vdelay_read(lw, cx, &mut stmts, &state, id, *d, *max, *ty, span)?,
-        // Of a chain that deals, its array (§11.9).
-        PlanKind::Instance { .. } if info.node(id).deals() => super::chain::dealt(lw, cx, id, &state, span)?,
-        // Read where the stage of its callee that makes the output runs (S-1088).
-        PlanKind::Instance { .. } => {
-            let run = super::phases::runs_at(info.node(id), phase.stage(), true).next();
-            let run = run.ok_or_else(|| internal(span, format!("`{name}` read where its output is not made")))?;
-            super::phases::run_child(lw, cx, id, &state, *run)?
-        }
+        PlanKind::Instance { .. } => match info.node(id).read {
+            // Of a chain that deals, the array of its outermost boundary that deals (§11.9).
+            Read::Array(b) => super::chain::dealt(lw, cx, id, &state, b, span)?,
+            // Read where the stage of its callee that makes the output runs (S-1088): its entry read.
+            Read::Run => {
+                let e = info.node(id).entry(phase.stage(), true);
+                let e = e.ok_or_else(|| internal(span, format!("`{name}` read where its output is not made")))?;
+                let v = super::chain::entry(lw, cx, &mut stmts, id, &state, e)?;
+                v.ok_or_else(|| internal(span, format!("`{name}` read of an entry of no value")))?
+            }
+        },
         PlanKind::Par { body, .. } => {
             let r = replica_loop(cx, &info.node(id).kind, span)?;
             let ty = lw.core_ty(cx.info.expr_types[&e], &[], span)?;

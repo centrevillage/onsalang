@@ -111,10 +111,17 @@ pub(super) fn gen_process<'b>(lw: &mut Lowerer<'b>, shape: &FlowShape, info: &'b
         body.push(stmt(span, StmtKind::Let(t, sfield(lw, info, &s, of, span)?)));
         time.push(local_expr(&g.cx, t, span));
     }
-    drive(lw, info, fns, (&s, &time), span, &mut body)?;
-    let mut tick_args = vec![inout(s.clone())];
-    let taken = time.get(..info.time_words(ClockStage::SAMPLE)).ok_or_else(|| internal(span, "`tick` of more time"))?;
-    tick_args.extend(taken.iter().cloned().map(borrow));
+    // The slower ticks due (S-578, S-1079): a run of the function of each on the state.
+    let mut due = Vec::new();
+    for &(x, f) in &fns.stages {
+        let (state, time, ret) = (s.clone(), time.clone(), Ty::Unit);
+        let run = StageRun { g: info, f, ret, x, state, time, lets: Vec::new(), inputs: Vec::new() };
+        due.push((x, vec![stmt(span, StmtKind::Expr(call_stage(run, span)?))]));
+    }
+    if !due.is_empty() {
+        drive(due, &sfield(lw, info, &s, FieldOf::Tick, span)?, span, &mut body)?;
+    }
+    let mut inputs = Vec::new();
     for (sp, (name, ty)) in ins.into_iter().zip(&sig_inputs) {
         let v = match ty {
             Ty::Array(_, n) => {
@@ -128,9 +135,10 @@ pub(super) fn gen_process<'b>(lw: &mut Lowerer<'b>, shape: &FlowShape, info: &'b
         };
         let l = g.cx.temp(name, ty.clone());
         body.push(stmt(span, StmtKind::Let(l, v)));
-        tick_args.push(borrow(local_expr(&g.cx, l, span)));
+        inputs.push(local_expr(&g.cx, l, span));
     }
-    let v = call(fns.tick, shape.out_val.clone(), span, tick_args);
+    let (x, ret, lets) = (ClockStage::SAMPLE, shape.out_val.clone(), Vec::new());
+    let v = call_stage(StageRun { g: info, f: fns.tick, ret, x, state: s.clone(), time, lets, inputs }, span)?;
     let vl = g.cx.temp("v", shape.out_val.clone());
     body.push(stmt(span, StmtKind::Let(vl, v)));
     super::phases::advance(lw, info, &s, span, &mut body)?;

@@ -149,7 +149,7 @@ pub struct PlanNode {
     /// the ratios of the chain, else 0: the frame the walk read the clocks
     /// of its arguments and its output in. Not the stages it runs in nor
     /// its time, which are of each boundary ([`PlanNode::bounds`],
-    /// [`PlanNode::runs`]; S-1207).
+    /// [`PlanNode::entries`]; S-1207).
     pub frame: Ratio,
     /// The modifiers after its call, in the order they are written (§11.9,
     /// §11.10): its chain, none of a node with no modifier.
@@ -161,17 +161,10 @@ pub struct PlanNode {
     /// each `.down~(N)` and `.up~(N)` of `chain`; none of a chain with an N
     /// in error.
     pub bounds: Vec<PlanBound>,
-    /// Of an instance, the runs of the stages of the body of its callee
-    /// (§11.9, S-1088), its stages slowest first, then `sample`; none of
-    /// another node, and of an instance whose callee has no table (in
-    /// error, in a loop of calls). Made by the walk of the table
-    /// ([`entries`]). Of a chain, only the stage of this flow each stage of
-    /// its head runs in: how many times and at which time are of its
-    /// `bounds`.
-    pub runs: Vec<Run>,
     /// Of an instance, its work in each stage of this flow (§11.9, S-1088,
-    /// S-1207), one entry of a stage, slowest first; none as of `runs`.
-    /// Made by the walk of the table ([`steps`]).
+    /// S-1207), one entry of a stage, slowest first; none of another node,
+    /// and of an instance whose callee has no table (in error, in a loop of
+    /// calls). Made by the walk of the table ([`entries`], [`steps`]).
     pub entries: Vec<Entry>,
     /// How this flow reads its value (§11.9).
     pub read: Read,
@@ -236,6 +229,23 @@ pub enum Read {
     Array(u32),
 }
 
+impl Entry {
+    /// Each run of the entries `entries` ([`Op::Run`], in an [`Op::Each`]
+    /// too): the stage of the body of the callee with the stage of the
+    /// caller whose function runs it, in the order of the entries.
+    pub fn runs(entries: &[Entry]) -> Vec<(ClockStage, ClockStage)> {
+        let mut runs = Vec::new();
+        for e in entries {
+            Op::walk(&e.ops, &mut |op| {
+                if let Op::Run { body, .. } = *op {
+                    runs.push((body, e.caller));
+                }
+            });
+        }
+        runs
+    }
+}
+
 impl Op {
     /// `f` of each op of `ops` and of the groups of each [`Op::Each`] in
     /// them, in their order: as deep as the `.up~` of the chain.
@@ -253,8 +263,9 @@ impl Op {
 /// `.up~(N)` of it, which runs the part it wraps (the head and the
 /// modifiers inside it) as one part in the frame of its own caller, and
 /// gathers and deals at the ports of that part. Its ports are of the
-/// record ([`bounds::bounds`]), its stages of the walk of the table
-/// ([`entries`]): the fields and the Core read them, not the ratios.
+/// record ([`bounds::bounds`]): the fields and the Core read them, and do
+/// not work them out of the ratios again; the work of the instance in the
+/// stages of its caller is of [`PlanNode::entries`].
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PlanBound {
     /// Its modifier, by its place in the `chain` of the node.
@@ -269,34 +280,11 @@ pub struct PlanBound {
     /// The inputs it gathers (a `.down~` of an input of the part faster than
     /// its `sample`), each by its index with the stage that writes its ring,
     /// of the frame around it (the caller of the part it makes; of this
-    /// flow, [`PlanNode::outer_stage`]).
+    /// flow, that of the [`Op::Ring`] of the entries).
     pub gathers: Vec<(u32, ClockStage)>,
     /// It deals the output of the part (a `.down~` of an output faster than
     /// its `sample`), at its own tick.
     pub deals: bool,
-    /// Each stage of the caller of the part (slowest first) with the stage
-    /// of its own caller that runs it ([`bounds::step`]).
-    pub maps: Vec<(ClockStage, ClockStage)>,
-    /// The stages of its caller, slowest first: those of `maps`, those of
-    /// its rings and its tick if it deals.
-    pub stages: Vec<ClockStage>,
-    /// The stage of its caller that makes its output: its tick if it deals,
-    /// else that of the part moved as `maps`. None, and no `maps` and
-    /// `stages`, of a callee with no table.
-    pub made: Option<ClockStage>,
-}
-
-/// A run of an instance (§11.9, S-1088): the stage `body` of the body of
-/// its callee runs in the function of the stage `caller` of this flow
-/// (the stage x of the body moved out of each boundary, [`bounds::step`]);
-/// `at_read`: that stage makes the output of the instance (the `made` of
-/// its outermost boundary), so it runs where the call is read; none of a
-/// chain that deals ([`PlanNode::deals`]), read from the array.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Run {
-    pub body: ClockStage,
-    pub caller: ClockStage,
-    pub at_read: bool,
 }
 
 /// The words of the time the function of a stage takes ([`FlowInfo::time`]):
@@ -475,7 +463,6 @@ pub(super) fn build(
             chain: r.chain,
             size: r.size,
             bounds: r.bounds,
-            runs: Vec::new(),
             entries: Vec::new(),
             read: Read::Run,
         }

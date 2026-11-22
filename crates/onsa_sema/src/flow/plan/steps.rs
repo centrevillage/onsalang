@@ -19,7 +19,7 @@ type Level = BTreeMap<ClockStage, Vec<Op>>;
 /// runs, that of `g.out_stage` into the array of the innermost boundary
 /// that deals, else as the value; then the arm of each boundary.
 pub(super) fn table(n: &PlanNode, g: &FlowInfo) -> (Vec<Entry>, Read) {
-    let first = n.dealt_at();
+    let first = (0u32..).zip(&n.bounds).find(|b| b.1.deals).map(|b| b.0);
     let out = |x| if Some(x) == g.out_stage { first.map_or(Out::Value, Out::Deal) } else { Out::None };
     let heads = g.stages.iter().copied().chain([ClockStage::SAMPLE]);
     let mut level: Level = heads.map(|x| (x, vec![Op::Run { body: x, out: out(x) }])).collect();

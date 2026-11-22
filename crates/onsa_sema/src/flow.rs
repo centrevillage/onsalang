@@ -131,7 +131,7 @@ pub use hoist::{Cond, Hoist, HoistId};
 pub use plan::{Counter, Words};
 pub use plan::{
     Edge, Entry, Feed, Field, FieldOf, Kept, NodeId, Op, Out, Owner, Part, PlanBound, PlanKind, PlanModifier, PlanNode,
-    Read, Run, Vertex,
+    Read, Vertex,
 };
 
 pub(crate) use clocks::finish_flow;
@@ -302,7 +302,7 @@ pub struct FlowInfo {
     /// The ticks of the body slower than its `sample` (§11.9), slowest
     /// first: of its inputs, its output and those the marking evaluates at
     /// ([`FlowInfo::eval_at`]), and the slow stages its instances run the
-    /// stages of their callees in ([`PlanNode::runs`], S-1088). The Core
+    /// stages of their callees in ([`PlanNode::entries`], S-1088). The Core
     /// makes a function of each ([`FlowInfo::run_stage`]).
     pub stages: Vec<ClockStage>,
     /// The words of the time the function of each stage that reads it or

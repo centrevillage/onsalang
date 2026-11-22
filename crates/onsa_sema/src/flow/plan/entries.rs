@@ -1,6 +1,6 @@
 //! The table of the entries of the stages (§11.9, S-1088): of each flow,
-//! the stages of the bodies of its callees each instance runs and in which
-//! of its own stages ([`PlanNode::runs`]), its stages with those
+//! the work of each instance in its own stages ([`PlanNode::entries`],
+//! [`steps`]), its stages with those
 //! ([`FlowInfo::stages`]), the words of the time each of its stages takes
 //! ([`FlowInfo::time`]), then the fields of its state, which these
 //! decide. The same walk checks the N of `.down~` and `.up~` on the paths
@@ -73,9 +73,9 @@ pub(crate) fn walk(pkg: &Package, a: &mut Analysis) {
 }
 
 /// Closes the flow `f`, whose callees are done (but those in a loop of
-/// calls): writes its runs, its stages, the time they take and its
-/// fields, reports the first of its nodes past 2^24 on a path through
-/// flows (by the place of the modifier, §18.1), and gives its count.
+/// calls): writes the entries of its instances, its stages, the time they
+/// take and its fields, reports the first of its nodes past 2^24 on a path
+/// through flows (by the place of the modifier, §18.1), and gives its count.
 fn close(pkg: &Package, a: &mut Analysis, f: DefId, marks: &HashMap<DefId, Mark>, most: &HashMap<DefId, Most>) -> Most {
     let info = a.flows.get(&f)?;
     let mut time = own_time(info);
@@ -86,28 +86,28 @@ fn close(pkg: &Package, a: &mut Analysis, f: DefId, marks: &HashMap<DefId, Mark>
         return None;
     }
     let table = |g: DefId| a.flows.get(&g).filter(|t| marks.get(&g) == Some(&Mark::Done) && t.complete);
-    let mut runs = Vec::with_capacity(info.nodes.len());
+    let mut tables = Vec::with_capacity(info.nodes.len());
     let mut stages: BTreeSet<ClockStage> = info.stages.iter().copied().collect();
     let (mut count, mut counted) = ((0, None), true);
     let mut past_at: Option<Past> = None;
     for (i, n) in info.nodes.iter().enumerate() {
         let id = NodeId(i as u32);
         let PlanKind::Instance { callee, .. } = n.kind else {
-            runs.push(None);
+            tables.push(None);
             continue;
         };
         let Some(g) = table(callee) else {
-            runs.push(None);
+            tables.push(None);
             // SPEC-GAP(S-1212): a callee in error leaves the whole flow not
             // counted (its other paths too), so the flows that run it say
             // nothing until the error is mended.
             counted = false;
             continue;
         };
-        let (r, bounds, outer) = node_runs(n, g);
-        stages.extend(outer.into_iter().filter(|s| s.tick_slower_than(ClockStage::SAMPLE)));
-        callee_time(&mut time, info, n, g, &r);
-        runs.push(Some((r, bounds, steps::table(n, g))));
+        let (entries, read) = steps::table(n, g);
+        stages.extend(entries.iter().map(|e| e.caller).filter(|s| s.tick_slower_than(ClockStage::SAMPLE)));
+        callee_time(&mut time, info, n, g, &entries);
+        tables.push(Some((entries, read)));
         let Some((inner, _)) = most.get(&callee).copied().flatten() else {
             counted = false;
             continue;
@@ -127,8 +127,8 @@ fn close(pkg: &Package, a: &mut Analysis, f: DefId, marks: &HashMap<DefId, Mark>
         }
     }
     let Some(flow) = a.flows.get_mut(&f) else { onsa_diag::internal::bug(None, "a flow closed out of the table") };
-    let set = |n: &mut PlanNode, (r, b, (e, read))| (n.runs, n.bounds, n.entries, n.read) = (r, b, e, read);
-    flow.nodes.iter_mut().zip(runs).for_each(|(n, r)| r.into_iter().for_each(|r| set(n, r)));
+    let set = |n: &mut PlanNode, (e, read)| (n.entries, n.read) = (e, read);
+    flow.nodes.iter_mut().zip(tables).for_each(|(n, t)| t.into_iter().for_each(|t| set(n, t)));
     (flow.stages, flow.time) = (stages.into_iter().collect(), time);
     fields::build(flow);
     if let Some(p) = past_at {
@@ -145,48 +145,22 @@ fn own_time(info: &FlowInfo) -> BTreeMap<ClockStage, Words> {
     info.time_at.iter().map(|&s| (info.run_stage(s), Words::One)).collect()
 }
 
-/// The time the runs `runs` of the instance `n` of the callee `g` take in
-/// `info`, into `time` (§11.4, S-1217): of each run of a stage of `g` that
-/// takes it, at its [`FlowInfo::run_stage`] here, its words, two under a
-/// `.down~`, which divides the count before it is cut to `U32` (§12.4).
-fn callee_time(time: &mut BTreeMap<ClockStage, Words>, info: &FlowInfo, n: &PlanNode, g: &FlowInfo, runs: &[Run]) {
+/// The time the runs of the entries `entries` of the instance `n` of the
+/// callee `g` take in `info`, into `time` (§11.4, S-1217): of each run of
+/// a stage of `g` that takes it ([`Entry::runs`]), at its
+/// [`FlowInfo::run_stage`] here, its words, two under a `.down~`, which
+/// divides the count before it is cut to `U32` (§12.4).
+fn callee_time(time: &mut BTreeMap<ClockStage, Words>, info: &FlowInfo, n: &PlanNode, g: &FlowInfo, entries: &[Entry]) {
     let down = n.chain.iter().any(|m| m.ratio.is_some_and(Ratio::slower_than_body));
-    for run in runs {
-        let words = match g.time.get(&run.body) {
+    for (body, caller) in Entry::runs(entries) {
+        let words = match g.time.get(&body) {
             None => continue,
             Some(_) if down => Words::Two,
             Some(&w) => w,
         };
-        let at = time.entry(info.run_stage(run.caller)).or_insert(words);
+        let at = time.entry(info.run_stage(caller)).or_insert(words);
         *at = (*at).max(words);
     }
-}
-
-/// The runs of the instance `n` of the callee whose table is `g` (§11.9,
-/// S-1088, S-1207), its boundaries with their stages, and the stages of
-/// this flow it has: each stage x of the body of `g` (its slow stages,
-/// then `sample`) is moved out of each boundary of `n`, inner first
-/// ([`bounds::step`]), and the one of the stage that makes the output of
-/// the outermost part is read (`g.out_stage` with no boundary). Each
-/// boundary maps the stages of the caller of the part it wraps, and has
-/// those, the stages of its rings and its tick if it deals. O(boundaries ×
-/// stages), 56 stages at most (S-1089).
-fn node_runs(n: &PlanNode, g: &FlowInfo) -> (Vec<Run>, Vec<PlanBound>, BTreeSet<ClockStage>) {
-    let mut heads: Vec<_> = g.stages.iter().copied().chain([ClockStage::SAMPLE]).map(|x| (x, x)).collect();
-    let mut stages: BTreeSet<ClockStage> = heads.iter().map(|h| h.1).collect();
-    let (mut made, mut bounds) = (g.out_stage, n.bounds.clone());
-    for b in &mut bounds {
-        let r = b.ratio;
-        b.maps = stages.iter().map(|&y| (y, bounds::step(y, r))).collect();
-        let tick = b.deals.then_some(ClockStage::Tick(r));
-        stages = b.maps.iter().map(|m| m.1).chain(b.gathers.iter().map(|g| g.1)).chain(tick).collect();
-        made = if b.deals { tick } else { made.map(|m| bounds::step(m, r)) };
-        (b.stages, b.made) = (stages.iter().copied().collect(), made);
-        heads.iter_mut().for_each(|h| h.1 = bounds::step(h.1, r));
-    }
-    let at_read = |caller| Some(caller) == made && !n.deals();
-    let runs = heads.into_iter().map(|(body, caller)| Run { body, caller, at_read: at_read(caller) }).collect();
-    (runs, bounds, stages)
 }
 
 /// The E0808 of the N past 2^24 (`total` the exponent) on the path from

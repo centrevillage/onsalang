@@ -173,40 +173,10 @@ impl PlanNode {
         self.chain.is_empty() || matches!(self.kind, PlanKind::Instance { .. }) && downs() && plain()
     }
 
-    /// Whether its chain deals the output of its head (§11.9): its value is
-    /// read from the array, not where a stage of the head runs. The runs
-    /// ([`Run::at_read`]) and the Core read it.
-    pub fn deals(&self) -> bool {
-        self.dealt_at().is_some()
-    }
-
-    /// The boundary whose array the stage of the head that makes its output
-    /// writes and the caller reads (§11.9), of a chain that deals: the
-    /// innermost that deals, the one the gate passes
-    /// ([`PlanNode::lowered_chain`]). The one test of it (D-15).
-    pub fn dealt_at(&self) -> Option<u32> {
-        self.bounds.iter().position(|b| b.deals).and_then(|b| u32::try_from(b).ok())
-    }
-
     /// Its entry of the stage `s` of this flow whose `read` is `read`
     /// (§11.9, [`Entry`]): the one question the Core asks of its work.
     pub fn entry(&self, s: ClockStage, read: bool) -> Option<&Entry> {
         self.entries.iter().find(|e| e.caller == s && e.read == read)
-    }
-
-    /// Each run of its entries ([`Op::Run`], in an [`Op::Each`] too): the
-    /// stage of the body of its callee with the stage of this flow whose
-    /// function runs it, in the order of the entries.
-    pub fn runs(&self) -> Vec<(ClockStage, ClockStage)> {
-        let mut runs = Vec::new();
-        for e in &self.entries {
-            Op::walk(&e.ops, &mut |op| {
-                if let Op::Run { body, .. } = *op {
-                    runs.push((body, e.caller));
-                }
-            });
-        }
-        runs
     }
 
     /// The innermost boundary from the boundary `from` out that gathers the
@@ -216,16 +186,6 @@ impl PlanNode {
     pub fn ring_of(&self, from: usize, input: u32) -> Option<u32> {
         let gathers = |b: &(u32, &PlanBound)| b.1.gathers.iter().any(|g| g.0 == input);
         (0u32..).zip(&self.bounds).skip(from).find(gathers).map(|b| b.0)
-    }
-
-    /// The stage of this flow the stage `s` of the frame around the
-    /// boundary `b` is (§11.9): `s` moved out of each boundary outside it
-    /// by its `maps`, as the walk of the table made them; the stage of the
-    /// function that writes a ring of `b` (of [`PlanBound::gathers`]). None
-    /// of a stage no `maps` has (of a callee with no table).
-    pub fn outer_stage(&self, b: usize, s: ClockStage) -> Option<ClockStage> {
-        let moved = |s: ClockStage, o: &PlanBound| o.maps.iter().find(|m| m.0 == s).map(|m| m.1);
-        self.bounds.get(b + 1..)?.iter().try_fold(s, moved)
     }
 }
 
