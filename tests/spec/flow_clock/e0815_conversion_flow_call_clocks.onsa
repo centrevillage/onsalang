@@ -4,9 +4,9 @@
 
 // W7-09 U4a/t, S-566, S-567, S-1079, S-1083 (spec §11.3: "速い→遅いと、`sample * N` へは、変換の flow（速い側を配列で受ける）で書く。`at` の無い形は E0815"; "式のクロックは三つで決まる: 周期の刻みのクロックの被演算子は
 // 揃っていること"; §11.9: the clock of a port is read in the frame of the call, see conversion_flow_calls.onsa): the arguments and the results of a conversion flow are read at the clocks of its ports in the frame of the
-// call, so a value of another clock is E0815. A value of the `sample` (or of a faster tick) is not made slower: it does not go to an input at `sample * N` or at `sample / N` of a flow that has no modifier (`fold2~(x)`,
-// there is no clock of the caller to give it), nor to the input of a flow that a `.down~(N)` of another N runs (the input at `sample * 4` of `.down~(2)` is at `sample * 2` of the caller, and of `.down~(8)` at
-// `sample / 2`), nor to the input at `sample` of a gather that deals. A slower tick with no `at` is not read at a faster input, and the value of a `.up~(N)` is at `sample * N` only. The result of a conversion
+// call, so a value of another clock is E0815. A value of the `sample` (or of a faster tick) does not go to an input at `sample * N` of a flow that has no modifier (`fold2~(x)`, there is no clock of the caller to give
+// it: a conversion flow takes it), nor to the input at `sample * 4` of a flow that `.down~(2)` runs (at `sample * 2` of the caller: the same); and it is not made slower: it does not go to an input at `sample / N`
+// (`ramp4~(x)`), to the input of `.down~(8)` (at `sample / 2` of the caller) nor to the input at `sample` of a gather that deals. A slower tick with no `at` is not read at a faster input, and the value of a `.up~(N)` is at `sample * N` only. The result of a conversion
 // flow is a tick of the clock of its port in the frame, so a faster expression reads it with `at` and the output of a flow at `sample` is not given it. The error is at the argument or at the expression that reads
 // the result. One error per flow, so each form is a flow of its own. `x` is the `sample` input, `p` is a `block` input.
 

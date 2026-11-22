@@ -71,8 +71,8 @@ flow dup2(x: F32 at sample) -> F32 at (sample * 2) {
 
 /// A flow with no port, `let` or node of a derived clock of its own that calls a flow with an input of a derived clock (a value
 /// of `block`, of `init`, a constant or of `sample`, with no chain and in `.down~(2)`, and in `if~` and `par~`), each a flow of
-/// its own: its node reads the argument at the tick of that input (§11.9). A `sample` value is not passed where it would be
-/// made slower (E0815, §11.3). The callee `fast2` has a port at `sample * 2`: a call of it with no chain takes a bundle of the caller (U6b2; the 2 elements of a `block` or `init` value
+/// its own: its node reads the argument at the tick of that input (§11.9). A `sample` value is not passed where a conversion flow
+/// takes it or it would be made slower (E0815, §11.3, §11.9). The callee `fast2` has a port at `sample * 2`: a call of it with no chain takes a bundle of the caller (U6b2; the 2 elements of a `block` or `init` value
 /// or a constant are that value, S-1214 (3)), and so does the call with the output of `dup2` (a bundle) as the argument, in a `let`, through an alias and twice. The calls of it in a `.down~(2)` gather its port at the caller's `sample`
 /// (W7-16 U6a2); the calls of `slow4` with no chain are lowered (U5b2) and the calls of `slow4` in a chain are in the case of `a_caller_of_an_input_at_sample_over_n_with_a_down_chain_is_lowered`.
 fn callers_of_derived_inputs() -> String {
