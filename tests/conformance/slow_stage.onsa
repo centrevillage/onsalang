@@ -1,0 +1,71 @@
+// onsa.toml
+// [package]
+// name = "slow_stage"
+// edition = "2026"
+//
+// [export]
+// prefix = "slow_stage_"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [test]
+// spec = ["§11.3", "§11.4", "§11.9", "§13.4"]
+// conformance = true
+
+// Conformance (W7-16 U7b/t; §11.3, §11.4, §11.9, §13.4): the stages of a slower clock of a flow (`let` at `sample / N`), the time of the
+// outermost flow (`sample_tick()`) read from them, a flow with a slow output called by the outermost one, and a chain of `.down~(N)` that
+// wraps a flow with a slow stage. The interpreter and the C must give the same values; the values are not written here.
+
+flow tk() -> U32 at sample { sample_tick() }
+flow rate() -> F32 at sample { sample_rate() }
+flow so(p: F32 at block) -> F32 at (sample / 4) { prev~(p at (sample / 4), 5.0) }
+flow lag(x: F32 at sample) -> F32 at sample {
+  let l = prev~((^l + 0.25) at (sample / 2))
+  x + (l at sample)
+}
+
+@export
+pub flow hold(x: F32 at sample, @param(min: 0.0, max: 1.0, default: 0.5) p: F32 at block) -> F32 at sample {
+  let c = prev~((^c + p) at (sample / 4))
+  (c at sample) + x
+}
+
+@export
+pub flow two_ratios(@param(min: 0.0, max: 1.0, default: 0.5) p: F32 at block) -> F32 at sample {
+  let a = prev~(p at (sample / 4))
+  let b = prev~((^b + 1.0) at (sample / 2))
+  ((a at sample) * 10.0) + (b at sample)
+}
+
+@export
+pub flow time() -> U32 at sample {
+  let t = sample_tick() at (sample / 8)
+  sample_tick() + (t at sample)
+}
+
+@export
+pub flow slow_child(x: F32 at sample, @param(min: 0.0, max: 1.0, default: 0.5) p: F32 at block) -> F32 at sample {
+  (so~(p) at sample) + lag~(x)
+}
+
+flow part(p: F32 at block) -> F32 at sample {
+  let l = prev~((^l + p) at (sample / 2))
+  l at sample
+}
+
+@export
+pub flow slow_in_part(@param(min: 0.0, max: 1.0, default: 0.5) p: F32 at block) -> F32 at sample { part~(p).down~(2) at sample }
+
+@export
+pub flow rate_and_time() -> F32 at sample { rate~() + F32.round_from(tk~()) }
+
+@export
+pub flow slow_branch(@param(min: 0, max: 1, default: 1) k: U32 at block, x: F32 at sample) -> F32 at sample {
+  let on = k > 0
+  if~ on { lag~(x) } else { x }
+}

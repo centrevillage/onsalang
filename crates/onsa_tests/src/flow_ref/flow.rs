@@ -18,7 +18,7 @@ use std::rc::Rc;
 
 use onsa_diag::Span;
 use onsa_sema::def::FlowDef;
-use onsa_sema::flow_names::FlowBuiltin;
+use onsa_sema::flow_names::{Delay, FlowBuiltin};
 use onsa_sema::{DefId, LocalId, Target};
 use onsa_syntax::ast::{CallKind, ExprId, ExprKind, PatId, StmtKind};
 
@@ -28,7 +28,6 @@ use super::host::FnHost;
 use super::rate::{Level, chain_of, components, derived, levels, on_tick, ring_clock, slow_ticks};
 use super::scalar::{Fault, PanicKind};
 use super::sema_view::{Body, Called, Stage, View, clock_stage, input_stage, inputs_at, output_stage};
-use super::state::SAVED;
 use super::state::{InstState, Run};
 use super::value::Value;
 
@@ -151,7 +150,7 @@ pub(super) fn clock_of(body: &Body, known: &Known, root: ExprId, e: ExprId) -> R
                 Called::Builtin(FlowBuiltin::SampleTick) => Clock::AMBIENT,
                 // §11.4: the clock of a delay is that of its first argument, a tick (`^name` and a parameter kind are read as `sample`, §11.3).
                 Called::Builtin(FlowBuiltin::Delay(_)) => {
-                    let first = args.get(SAVED).ok_or(Fault::Internal("a delay with no argument"))?;
+                    let first = args.get(Delay::SAVED).ok_or(Fault::Internal("a delay with no argument"))?;
                     match clock_of(body, known, root, first.expr)? {
                         c @ Clock::Tick(_) => c.rooted(),
                         _ => Clock::Sample,

@@ -5,7 +5,7 @@
 use std::collections::{BTreeSet, HashMap};
 use std::rc::Rc;
 
-use onsa_sema::flow_names::FlowBuiltin;
+use onsa_sema::flow_names::{Delay, FlowBuiltin};
 use onsa_sema::{LocalId, Target};
 use onsa_syntax::ast::{CallKind, ClockRatio, ExprId, ExprKind, PatId, RatioOp};
 
@@ -15,7 +15,6 @@ use super::flow::{Clock, Ctx, Inst, Known, Plans, Seen, Step, clock_of, join};
 use super::hoist::{feedback, stage_of};
 use super::scalar::Fault;
 use super::sema_view::{Body, Called, Stage, View, input_ratio, output_stage};
-use super::state::SAVED;
 use super::value::Value;
 use onsa_sema::def::FlowDef;
 
@@ -350,7 +349,7 @@ fn entering(body: &Body, known: &Known, root: ExprId, e: ExprId, inside: &[Local
                 body,
                 known,
                 root,
-                args.get(SAVED).ok_or(Fault::Internal("a delay with no argument"))?.expr,
+                args.get(Delay::SAVED).ok_or(Fault::Internal("a delay with no argument"))?.expr,
                 inside,
             ),
             _ => clock_of(body, known, root, e),

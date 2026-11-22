@@ -1,0 +1,86 @@
+// onsa.toml
+// [package]
+// name = "up_chain"
+// edition = "2026"
+//
+// [export]
+// prefix = "up_chain_"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [test]
+// spec = ["§11.9", "§11.10", "§11.4", "§13.4"]
+// conformance = true
+
+// Conformance (W7-16 U7b/t; §11.9, §11.10, §11.4, §13.4; S-1204, S-1207, S-1214, S-1217): a chain with an `.up~(N)` (the part runs N times
+// in a frame of its caller, its output at `sample * N` is a bundle of the caller), a bundle of the caller passed from a call to a port at
+// `sample * N` of another, a down and an up that meet (the delay of N frames, the time and `sample_rate()` that cancel), a state of the
+// part under an up, and a chain in the branch of an `if~` and in a `par~`. The interpreter and the C must give the same values.
+
+flow thru(x: F32 at sample) -> F32 at sample { x }
+flow g2(x: F32 at (sample * 2)) -> F32 at sample { x[0] + x[1] * 10.0 }
+flow g4(x: F32 at (sample * 4)) -> F32 at sample { x[0] + x[1] * 10.0 + x[2] * 100.0 + x[3] * 1000.0 }
+flow pair(x: F32 at sample) -> F32 at (sample * 2) { [x * 2.0 - 1.0, x * 2.0] }
+flow st2(x: [F32; 2] at (sample * 2)) -> F32 at sample { x[0][0] + x[0][1] * 10.0 + x[1][0] * 100.0 + x[1][1] * 1000.0 }
+flow mkst(x: F32 at sample) -> [F32; 2] at (sample * 2) { [[x, x + 1.0], [x + 2.0, x + 3.0]] }
+flow cnt2() -> F32 at (sample * 2) {
+  let n = prev~(^n) + 1.0
+  [n * 10.0, n * 10.0 + 1.0]
+}
+flow acc(f: F32 at block) -> F32 at sample {
+  let n = f + prev~(^n)
+  n
+}
+flow lp(x: F32 at sample) -> F32 at sample {
+  let y = prev~(^y) * 0.5 + x
+  y
+}
+flow tk() -> U32 at sample { sample_tick() }
+flow rate() -> F32 at sample { sample_rate() }
+
+@export
+pub flow up_down(x: F32 at sample) -> F32 at sample { lp~(x).down~(4).up~(4) at sample }
+
+@export
+pub flow delay_of_n(x: F32 at sample) -> F32 at sample { thru~(x).up~(2).down~(2) }
+
+@export
+pub flow bundle(x: F32 at sample) -> F32 at sample { g2~(pair~(x)) }
+
+@export
+pub flow bundle_stereo(x: F32 at sample) -> F32 at sample { st2~(mkst~(x)) }
+
+@export
+pub flow bundle_dealt(x: F32 at sample) -> F32 at sample { g2~(cnt2~().down~(2).up~(4).down~(2)) + x }
+
+@export
+pub flow widen(x: F32 at sample) -> F32 at sample { g4~(cnt2~().down~(2).up~(4)) + x }
+
+@export
+pub flow state_under_up(@param(min: 0.0, max: 1.0, default: 0.5) p: F32 at block) -> F32 at sample { g2~(acc~(p).up~(2)) }
+
+@export
+pub flow time_cancel() -> U32 at sample { tk~().down~(2).up~(2) at sample }
+
+@export
+pub flow time_up_down() -> U32 at sample { tk~().up~(2).down~(4) at sample }
+
+@export
+pub flow rate_cancel() -> F32 at sample { rate~().up~(2).down~(4) at sample }
+
+@export
+pub flow in_if(@param(min: 0, max: 1, default: 1) k: U32 at block, @param(min: 0.0, max: 1.0, default: 0.5) p: F32 at block) -> F32 at sample {
+  let on = k > 0
+  if~ on { g2~(acc~(p).up~(2)) } else { 7.0 }
+}
+
+@export
+pub flow in_par(@param(min: 0.0, max: 1.0, default: 0.5) p: F32 at block) -> F32 at sample {
+  let ys = par~ i in 0 ..< 2 { g2~(acc~(p * F32.round_from(i + 1)).up~(2)) }
+  ys[0] + ys[1] * 1000.0
+}

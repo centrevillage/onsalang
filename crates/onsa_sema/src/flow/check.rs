@@ -526,9 +526,11 @@ impl<'a> Checker<'a> {
                 ),
             ));
         }
-        let t = self.check_expr(args[0].expr, expected)?;
+        let saved = args[Delay::SAVED].expr;
+        let t = self.check_expr(saved, expected)?;
         let init_expr = args.get(d.init_index()).map(|a| a.expr);
         let constant = d.const_index().map(|k| args[k].expr);
+        let d_expr = d.d_index().map(|k| args[k].expr);
         let len = match d {
             Delay::Prev => Some(0),
             Delay::Fixed => {
@@ -538,12 +540,12 @@ impl<'a> Checker<'a> {
                     // The name and the length change, the rest of the call stays (S-251):
                     // the length goes with the `,` before it.
                     let name = Span::new(span.file, span.start, span.start + Delay::Fixed.name().len() as u32);
-                    let length = Span::new(span.file, self.expr(args[0].expr).span.end, self.expr(n_expr).span.end);
+                    let length = Span::new(span.file, self.expr(saved).span.end, self.expr(n_expr).span.end);
                     let edits = if self.src(name) == Delay::Fixed.name() {
                         vec![Edit::replace(name, Delay::Prev.name()), Edit::delete(length)]
                     } else {
                         // Not written as the bare name: the whole call is written again.
-                        let mut shown = vec![self.src(self.expr(args[0].expr).span)];
+                        let mut shown = vec![self.src(self.expr(saved).span)];
                         shown.extend(init_expr.map(|i| self.src(self.expr(i).span)));
                         vec![Edit::replace(span, format!("{}~({})", Delay::Prev.name(), shown.join(", ")))]
                     };
@@ -562,7 +564,7 @@ impl<'a> Checker<'a> {
                 // §11.4: `T: Float`, a requirement of the types stage (§4.5, S-1135).
                 let what = Required::Param { param: "T".into(), owner: format!("`{name}~`"), std: true };
                 self.defer(span, t, DeferredKind::Require { bound: Bound::Float, what });
-                self.check_expr(args[1].expr, Some(t))?;
+                self.check_expr(d_expr.expect("the `d` of `vdelay~`"), Some(t))?;
                 let max_expr = constant.expect("the maximum of `vdelay~`");
                 // Its range is of the flow stage, after the types ([`hold_vdelay_max`]).
                 self.flow_const_u32(max_expr)?

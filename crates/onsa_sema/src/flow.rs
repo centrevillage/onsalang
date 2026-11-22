@@ -38,11 +38,13 @@
 //!   of an owner (of a `par~`, its `children`), [`FlowInfo::top`] those of
 //!   the `let`s and the output. Empty when the flow is not `complete`.
 //!   The walk of the table of the entries of the stages ([`plan`]'s
-//!   `entries`, after every body) gives each instance its `runs` (the stages
-//!   of its callee and the stage of the flow each runs in, S-1088), each flow
-//!   its `stages` (its slow ticks and those of its callees) and `time`
-//!   (the words of the time each stage takes); `out_stage` is the stage that
-//!   makes the output.
+//!   `entries`, after every body) gives each instance its `entries` and
+//!   `read` (its work in each stage of the flow: the runs of the stages of
+//!   its callee, the rings it gathers and the arrays it deals at the
+//!   `bounds` of its chain, and where the flow reads it; [`plan`]'s `steps`,
+//!   S-1088, S-1207), each flow its `stages` (its slow ticks and those of
+//!   its callees) and `time` (the words of the time each stage takes);
+//!   `out_stage` is the stage that makes the output.
 //! - `node_of` — a call or `par~` expression → its node; `modifiers` — a
 //!   modifier of a chain of a node (`.down~(4)` of `lp~(x).down~(4)`) → its receiver.
 //! - `edges: Vec<Edge>` — who reads what, recorded with the nodes: a local
@@ -60,9 +62,12 @@
 //!   panic ([`FlowInfo::check_of`], S-888 (c′)), and the conditions of each
 //!   (W9-03).
 //! - `fields: Vec<Field>` — the fields of the `State` in the order of §12.4
-//!   (S-05, S-06, [`plan`]): `_sample_rate`, the inputs and the locals of the
-//!   `let`s [`FlowInfo::stored`] keeps, the fields of the nodes of each `let`
-//!   and of the output, the hoisted fields, `_poisoned`, `_initialized`; a
+//!   (S-05, S-06, [`plan`]): `_sample_rate`, `_tick` (the counter of the
+//!   phase, §11.9) and `_tick_hi` (the upper word of the time, §11.4) when
+//!   kept, the inputs and the locals of the `let`s [`FlowInfo::stored`]
+//!   keeps, the fields of the nodes of each `let` and of the output (of an
+//!   instance, its rings and arrays after its own, S-1208), the hoisted
+//!   fields, `_poisoned`, `_initialized`; a
 //!   `par~` with state has the fields of its replica. The lowering reads their places by what they
 //!   hold ([`FlowInfo::field_at`]) and gives them their Core types.
 //! - `sample_rate_at: Option<ClockStage>` — the latest stage at which
@@ -379,10 +384,12 @@ impl NodeCall {
     /// argument, the `d` of a `vdelay~` (its second) and the written `init`.
     /// The one place of them.
     fn delay_parts(&self) -> (ExprId, Option<ExprId>, Option<ExprId>) {
-        let Some(&first) = self.args.first() else { onsa_diag::internal::bug(None, "a delay with no argument") };
+        let Some(&first) = self.args.get(Delay::SAVED) else {
+            onsa_diag::internal::bug(None, "a delay with no argument")
+        };
         let d = match self.kind {
-            NodeKind::Delay(Delay::Variable, _) => self.args.get(1).copied(),
-            NodeKind::Delay(..) | NodeKind::Instance(_) => None,
+            NodeKind::Delay(d, _) => d.d_index().and_then(|k| self.args.get(k)).copied(),
+            NodeKind::Instance(_) => None,
         };
         (first, d, self.init_expr)
     }

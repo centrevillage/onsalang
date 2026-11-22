@@ -164,8 +164,7 @@ pub struct FlowIface {
     pub vis: String,
     pub inputs: Vec<FlowInputIface>,
     pub out: String,
-    /// The clock of the output (`sample`, §11.6), in the text form only.
-    #[serde(skip)]
+    /// The clock after `->` (§11.6, §11.9), written as that of an input.
     pub out_clock: String,
     pub members: Vec<Item>,
 }

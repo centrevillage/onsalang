@@ -1,0 +1,21 @@
+// onsa.toml
+// [test]
+// spec = ["§11.9", "§15.1", "§13.4"]
+// conformance = true
+
+// Conformance (W7-16 U7b/t; §11.9, §15.1, §13.4): chains whose heads are flows of another module, with a private function of that module,
+// a state and a slow stage under the chain. The interpreter and the C must give the same values.
+
+use parts.{sum4, count4, lp, tick}
+
+@export
+pub flow mean_in(x: F32 at sample) -> F32 at sample { sum4~(x).down~(4) at sample }
+
+@export
+pub flow counts(@param(min: 0.0, max: 1.0, default: 0.5) p: F32 at block) -> F32 at sample { count4~(p).down~(4) }
+
+@export
+pub flow state_up(x: F32 at sample) -> F32 at sample { lp~(x).down~(2).up~(2) at sample }
+
+@export
+pub flow slow_down(@param(min: 0.0, max: 1.0, default: 0.5) p: F32 at block) -> F32 at sample { tick~(p).down~(2) at sample }

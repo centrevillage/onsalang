@@ -26,11 +26,6 @@ use super::value::{IntKind, Scalar, Shape, Value};
 /// The places an instance takes in the limit of the tree (`Limits::most`): some 100 thousand instances, not 2^20.
 const INSTANCE: usize = 8;
 
-/// The positions of the arguments of a delay that the evaluator reads by place: the value it saves (the first, whose clock is the clock of the delay, §11.4)
-/// and the `d` of `vdelay~(e, d, MAX)`. The registry (`Delay`) has the positions of the constant and of `init` only.
-pub(super) const SAVED: usize = 0;
-const D: usize = 1;
-
 /// What a node of the state is for: the delay a call is, the instance it makes, and what the caller keeps for an instance that a chain runs at another rate (§11.9: "集めた値は呼び出し側の値"、"配った値は呼び出し側の
 /// `sample` の値"): the ring of the elements that the input number `input` gathers at the boundary `bound` (1 for the innermost), and the array that the boundary `bound` deals.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -228,7 +223,10 @@ impl<'a> Frame<'a> {
     fn delay(&mut self, e: ExprId, d: Delay, args: &[Arg], at: Span) -> Eval {
         let here = |fault| Stop { fault, at };
         let arg = |i: usize| args.get(i).map(|a| a.expr).ok_or(here(Internal("a delay with too few arguments")));
-        let dc = if d == Delay::Variable { Some(self.eval(arg(D)?)?) } else { None };
+        let dc = match d.d_index() {
+            Some(k) => Some(self.eval(arg(k)?)?),
+            None => None,
+        };
         let key = self.key(e, Role::Delay);
         let run = self.run.as_mut().ok_or(here(Fault::Unavailable("a delay outside an instance of a flow")))?;
         let cell = run.state.cells.get(&key).ok_or(here(Internal("a delay with no state")))?;
@@ -237,7 +235,7 @@ impl<'a> Frame<'a> {
             (Store::Ring { buf, w }, None) => buf[*w].clone(),
             (Store::Ring { buf, w }, Some(dc)) => interpolate(buf, *w, dc).map_err(here)?,
         };
-        run.saves.push(Save { key, expr: arg(SAVED)?, scope: run.scope.clone(), call: None, q: 0 });
+        run.saves.push(Save { key, expr: arg(Delay::SAVED)?, scope: run.scope.clone(), call: None, q: 0 });
         Ok(out)
     }
 

@@ -28,10 +28,10 @@ enum Mark {
 }
 
 /// The most of the exponents of the N on a path from the body of a flow
-/// (S-1089) and the node of the first step of that path (none of a path
-/// with no instance); none when it is not counted: of no table, past 2^24
-/// in it, or through a callee not counted.
-type Most = Option<(u32, Option<NodeId>)>;
+/// (S-1089) and the first step of that path with an N, the flow and its
+/// node (none of a path with no N); none when it is not counted: of no
+/// table, past 2^24 in it, or through a callee not counted.
+type Most = Option<(u32, Option<(DefId, NodeId)>)>;
 
 /// The place of an E0808 of a path (S-1089), the exponent of its N and the
 /// node of its first step.
@@ -110,14 +110,15 @@ fn close(pkg: &Package, a: &mut Analysis, f: DefId, marks: &HashMap<DefId, Mark>
         stages.extend(entries.iter().map(|e| e.caller).filter(|s| s.tick_slower_than(ClockStage::SAMPLE)));
         callee_time(&mut time, info, n, g, &entries);
         tables.push(Some((entries, read)));
-        let Some((inner, _)) = most.get(&callee).copied().flatten() else {
+        let Some((inner, via)) = most.get(&callee).copied().flatten() else {
             counted = false;
             continue;
         };
         let total = inner.saturating_add(n.size);
         if total <= MOST_N_EXP {
             if total > count.0 {
-                count = (total, Some(id));
+                // A step of no N goes on to the first one with an N in the callee.
+                count = (total, if n.size > 0 { Some((f, id)) } else { via });
             }
             continue;
         }
@@ -195,7 +196,7 @@ fn callee_time(time: &mut BTreeMap<ClockStage, Words>, info: &FlowInfo, n: &Plan
 /// The E0808 of the N past 2^24 (`total` the exponent) on the path from
 /// the body of `f` through its node `id`, at the modifier `at` of its chain
 /// (§11.9, S-1089), with a note at each step of the path with a chain of N
-/// (24 at most): the node and the N of its chain.
+/// (25 at most, each of an N of 2 or more): the node and the N of its chain.
 fn past_path(pkg: &Package, a: &Analysis, f: DefId, (at, total, id): Past, most: &HashMap<DefId, Most>) -> Diagnostic {
     let name = |d: DefId| a.def(d).name.as_str();
     let msg = format!(
@@ -209,12 +210,9 @@ fn past_path(pkg: &Package, a: &Analysis, f: DefId, (at, total, id): Past, most:
     while let Some((caller, id)) = step {
         let n = a.flows[&caller].node(id);
         let PlanKind::Instance { callee, .. } = n.kind else { break };
-        if n.size > 0 {
-            let note =
-                format!("on the path: in `{}`, `{}` runs under `{}`", name(caller), name(callee), shown(&n.chain));
-            d = d.with_note(n.span, note);
-        }
-        step = most.get(&callee).copied().flatten().and_then(|(_, via)| via).map(|v| (callee, v));
+        let note = format!("on the path: in `{}`, `{}` runs under `{}`", name(caller), name(callee), shown(&n.chain));
+        d = d.with_note(n.span, note);
+        step = most.get(&callee).copied().flatten().and_then(|(_, via)| via);
     }
     d
 }

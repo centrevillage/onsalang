@@ -158,6 +158,10 @@ pub enum Delay {
 impl Delay {
     const ALL: [Delay; 3] = [Delay::Prev, Delay::Fixed, Delay::Variable];
 
+    /// The position of the value it saves, whose clock is the clock of the
+    /// delay (§11.4): the first.
+    pub const SAVED: usize = 0;
+
     /// The name (`prev`); a call writes `~` after it (`prev~(…)`).
     pub fn name(self) -> &'static str {
         match self {
@@ -178,6 +182,14 @@ impl Delay {
             Delay::Prev => None,
             Delay::Fixed => Some(1),
             Delay::Variable => Some(2),
+        }
+    }
+
+    /// The position of the `d` of `vdelay~(e, d, MAX)` (§11.4), if any.
+    pub fn d_index(self) -> Option<usize> {
+        match self {
+            Delay::Variable => Some(1),
+            Delay::Prev | Delay::Fixed => None,
         }
     }
 

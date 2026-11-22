@@ -1,0 +1,81 @@
+// onsa.toml
+// [package]
+// name = "down_chain"
+// edition = "2026"
+//
+// [export]
+// prefix = "down_chain_"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [test]
+// spec = ["§11.9", "§11.10", "§11.4", "§13.4"]
+// conformance = true
+
+// Conformance (W7-16 U7b/t; §11.9, §11.10, §11.4, §13.4; S-1214, S-1207): a chain of `.down~(N)` that gathers the frames before its tick
+// into a conversion flow's input at `sample * N` and deals the output at `sample * N` over the frames after it, with one boundary, with two
+// boundaries (the windows of the two boundaries differ in size), nested through a flow of its own, in the branch of an `if~`, in a `par~`, and
+// with the time (`sample_tick()`) and the state of the part (a delay, a sum) inside. The interpreter and the C must give the same values.
+
+flow g4(x: F32 at (sample * 4)) -> F32 at sample { x[0] + x[1] * 10.0 + x[2] * 100.0 + x[3] * 1000.0 }
+flow g8(x: F32 at (sample * 8)) -> F32 at sample {
+  x[0] + x[1] * 2.0 + x[2] * 4.0 + x[3] * 8.0 + x[4] * 16.0 + x[5] * 32.0 + x[6] * 64.0 + x[7] * 128.0
+}
+flow mk4(p: F32 at block) -> F32 at (sample * 4) { [p, p + 1.0, p + 2.0, p + 3.0] }
+flow mk8(p: F32 at block) -> F32 at (sample * 8) { [p, p + 1.0, p + 2.0, p + 3.0, p + 4.0, p + 5.0, p + 6.0, p + 7.0] }
+flow acc(f: F32 at block) -> F32 at sample {
+  let n = f + prev~(^n)
+  n
+}
+flow lp(x: F32 at sample) -> F32 at sample {
+  let y = prev~(^y) * 0.5 + x
+  y
+}
+flow tk() -> U32 at sample { sample_tick() }
+flow mid(x: F32 at sample) -> F32 at sample { g4~(x).down~(2).down~(2) at sample }
+
+@export
+pub flow gather(x: F32 at sample) -> F32 at sample { g4~(x).down~(4) at sample }
+
+@export
+pub flow deal(@param(min: 0.0, max: 1.0, default: 0.5) p: F32 at block) -> F32 at sample { mk4~(p).down~(4) }
+
+@export
+pub flow gather_deal(x: F32 at sample, @param(min: 0.0, max: 1.0, default: 0.5) p: F32 at block) -> F32 at sample {
+  (g4~(x).down~(4) at sample) + mk4~(p).down~(4)
+}
+
+@export
+pub flow two_boundaries(x: F32 at sample, @param(min: 0.0, max: 1.0, default: 0.5) p: F32 at block) -> F32 at sample {
+  (g8~(x).down~(2).down~(4) at sample) + (mk8~(p).down~(4).down~(2))
+}
+
+@export
+pub flow nested(@param(min: 0.0, max: 1.0, default: 0.5) p: F32 at block) -> F32 at sample { mid~(p).down~(2) at sample }
+
+@export
+pub flow state_in_part(x: F32 at sample, @param(min: 0.0, max: 1.0, default: 0.5) p: F32 at block) -> F32 at sample {
+  let h = acc~(p).down~(2)
+  let g = g4~(x).down~(4)
+  (lp~(g at (sample / 2)).down~(2) at sample) + (h at sample)
+}
+
+@export
+pub flow time(x: F32 at sample) -> U32 at sample { tk~().down~(4) at sample }
+
+@export
+pub flow in_if(@param(min: 0, max: 1, default: 1) k: U32 at block, x: F32 at sample) -> F32 at sample {
+  let on = k > 0
+  if~ on { g4~(x).down~(2).down~(2) at sample } else { x }
+}
+
+@export
+pub flow in_par(x: F32 at sample) -> F32 at sample {
+  let ys = par~ i in 0 ..< 2 { g4~(x * F32.round_from(i + 1)).down~(2).down~(2) at sample }
+  ys[0] + ys[1] * 100.0
+}

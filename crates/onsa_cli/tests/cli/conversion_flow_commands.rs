@@ -191,6 +191,75 @@ fn interface_lists_the_ratio_of_each_port_of_a_conversion_flow() {
     assert!(!out.stdout.contains("[F32; 2] at"), "the port is not written as the array of the body: {}", out.stdout);
 }
 
+/// Flows whose output is at `sample * N`, `sample / N` and `sample`, with a chain in the body of two of them (W7-16 U7b/t; §11.9, §18.2).
+const OUT_CLOCK_SOURCE: &str = "\
+flow fold4(x: F32 at (sample * 4)) -> F32 at sample {
+  (x[0] + x[1] + x[2] + x[3]) * 0.25
+}
+
+pub flow up(x: F32 at sample) -> F32 at (sample * 2) {
+  [x, x]
+}
+
+pub flow avg4(x: F32 at sample) -> F32 at (sample / 4) {
+  fold4~(x).down~(4)
+}
+
+pub flow plain(x: F32 at sample) -> F32 at sample {
+  x
+}
+
+pub flow chain(x: F32 at sample) -> F32 at sample {
+  fold4~(x).down~(4) at sample
+}
+";
+
+/// `onsa interface --json` gives the clock of the output of a flow in the key `out_clock`, as `onsa interface` writes it after `-> F32 at ` of the
+/// heading (§18.2 "シグネチャ", §11.9: the output of a conversion flow is at `sample * N` or `sample / N`, a flow with a chain has the clock of its own
+/// output). The JSON is not fixed by the spec as a whole; what is checked is that the key is there for each flow, that it is the clock that the heading
+/// of the text has (the text form is the one that the spec writes, S-1084), and that the derived ones are the ratios of the declarations.
+#[test]
+fn interface_json_gives_the_clock_of_the_output_of_a_flow() {
+    let d = Dir::pkg("conversion_interface_out_clock");
+    let file = d.file("m.onsa", OUT_CLOCK_SOURCE);
+    let json = run(d.root(), &["interface", "--json", &file]);
+    assert_eq!(json.code, 0, "{}{}", json.stdout, json.stderr);
+    let doc: serde_json::Value = serde_json::from_str(&json.stdout).unwrap_or_else(|e| panic!("{e}:\n{}", json.stdout));
+    let clocks: Vec<(String, String)> = doc["modules"][0]["items"]
+        .as_array()
+        .expect("items")
+        .iter()
+        .filter(|i| i["kind"] == "flow")
+        .map(|i| {
+            let name = i["name"].as_str().expect("name").to_string();
+            let clock =
+                i["out_clock"].as_str().unwrap_or_else(|| panic!("no `out_clock` of `{name}`: {i}")).to_string();
+            (name, clock)
+        })
+        .collect();
+    let names: Vec<&str> = clocks.iter().map(|(n, _)| n.as_str()).collect();
+    assert_eq!(names, ["fold4", "up", "avg4", "plain", "chain"], "the flows of the file, in order");
+    // The heading of the text: `flow name(` … `) -> F32 at <clock>`.
+    let text = run(d.root(), &["interface", &file]);
+    assert_eq!(text.code, 0, "{}{}", text.stdout, text.stderr);
+    let mut from_text: Vec<(String, String)> = Vec::new();
+    for line in text.stdout.lines() {
+        let line = line.trim();
+        if let Some(rest) = line.strip_prefix("pub flow ").or_else(|| line.strip_prefix("flow ")) {
+            from_text.push((rest.split('(').next().unwrap().to_string(), String::new()));
+        } else if let Some(clock) = line.strip_prefix(") -> F32 at ") {
+            from_text.last_mut().expect("a heading").1 = clock.to_string();
+        }
+    }
+    assert_eq!(clocks, from_text, "the JSON has the clock of the heading of the text");
+    let of = |name: &str| clocks.iter().find(|(n, _)| n == name).map(|(_, c)| c.as_str()).unwrap();
+    assert!(of("up").contains("sample * 2"), "{clocks:?}");
+    assert!(of("avg4").contains("sample / 4"), "{clocks:?}");
+    assert_eq!(of("plain"), "sample");
+    assert_eq!(of("chain"), "sample", "the chain inside does not change the clock of the output");
+    assert_eq!(of("fold4"), "sample", "the input of a flow is at sample * 4, its output is not");
+}
+
 // ----------------------------------------------------------------------------- the graph
 
 /// The statement of the vertex with the name `id` (the line that starts with `"id" [`).
