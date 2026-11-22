@@ -191,8 +191,9 @@ pub struct PlanBound {
     /// The exponent of the output of that part.
     pub out: Option<Ratio>,
     /// The inputs it gathers (a `.down~` of an input of the part faster than
-    /// its `sample`), each by its index with the stage of its caller that
-    /// writes its ring.
+    /// its `sample`), each by its index with the stage that writes its ring,
+    /// of the frame around it (the caller of the part it makes; of this
+    /// flow, [`PlanNode::outer_stage`]).
     pub gathers: Vec<(u32, ClockStage)>,
     /// It deals the output of the part (a `.down~` of an output faster than
     /// its `sample`), at its own tick.
@@ -213,7 +214,8 @@ pub struct PlanBound {
 /// its callee runs in the function of the stage `caller` of this flow
 /// (the stage x of the body moved out of each boundary, [`bounds::step`]);
 /// `at_read`: that stage makes the output of the instance (the `made` of
-/// its outermost boundary), so it runs where the call is read.
+/// its outermost boundary), so it runs where the call is read; none of a
+/// chain that deals ([`PlanNode::deals`]), read from the array.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Run {
     pub body: ClockStage,

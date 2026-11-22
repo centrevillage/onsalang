@@ -83,6 +83,8 @@ mod expr_tests;
 #[cfg(test)]
 mod flow_tests;
 #[cfg(test)]
+mod gather_arg_tests;
+#[cfg(test)]
 mod hoist_tests;
 #[cfg(test)]
 mod instance_tests;

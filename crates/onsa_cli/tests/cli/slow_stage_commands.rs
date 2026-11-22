@@ -5,7 +5,7 @@
 //!   `build`, `dump --core` and `test` end with 0 and with no internal error, and the tests of the package are run (U5a).
 //! - A child instance with no modifier that has a stage of its own or reads `sample_tick()` (S-1088, S-1129 (1)), a grandchild, and a flow with an input or an output at `sample / N` called with no
 //!   modifier (§11.9), are lowered the same way (U5b2).
-//! - What stays E0200 after U6a1 is the work of the later units: a chain with an `.up~(N)` in it or one that gathers or deals (U6a2, U6b), a port at `sample * N` and the call of one (U6a2, U6b), and the border of the
+//! - What stays E0200 after U6a2 is the work of the later units: a chain with an `.up~(N)` in it or one that gathers or deals past its first boundary (U6b), the call of a flow with a port at `sample * N` with no chain (U6b), and the border of the
 //!   outermost flow (W10-01). The commands report E0200 and nothing else, no internal error, run no test (Q-09: what the spec has and this version does not carry is E0200, not a wrong output), and the
 //!   E0200 is in the flows that have such a form and in no flow that has only what is lowered (§18.1: a unit is checked alone; the first is the first of the file).
 //! - Of two ticks at one position that both panic, the slower one is the one that is reported (§11.9: "遅い方から並ぶ", S-1079), whether the two are of one flow or of the parent and a child (S-1088).
@@ -233,18 +233,24 @@ fn a_flow_with_a_slow_port_called_with_no_modifier_is_lowered_by_build_dump_core
 
 // ----------------------------------------------------------------------------- what stays E0200 after U5b2
 
-/// A flow that is lowered beside flows that have a form of the later units: a chain with an `.up~(N)` in it (U6b), and a port at `sample * N` with the call of it (U6a2, U6b). `build`, `dump --core` and `test`
-/// report E0200 in the flows that have such a form (one each) and in none of the flows that are lowered, `ok` and the child `ch` (§18.1).
+/// A flow that is lowered beside a flow that has a form of the later units: a chain with an `.up~(N)` in it (U6b). `build`, `dump --core` and `test` report E0200 in the flow that has such a form (one) and in none of the
+/// flows that are lowered, `ok` and the child `ch` (§18.1).
 #[test]
 fn what_is_left_of_the_ticks_is_e0200_in_its_own_flows_and_the_others_are_lowered() {
     let chain = format!(
         "{SLOW_CHILD}flow lp(x: F32 at sample) -> F32 at sample {{\n  x * 0.5 + prev~(x) * 0.5\n}}\n\npub flow ok(p: F32 at block, x: F32 at sample) -> F32 at sample {{\n  x * ch~(p)\n}}\n\npub flow chained(p: F32 at block, x: F32 at sample) -> F32 at sample {{\n  x * ch~(p) + (lp~(p).down~(4).up~(2) at sample)\n}}\n"
     );
     assert_e0200_in("slow_stage_left_chain", &chain, &["chained"]);
+}
+
+/// A call of a conversion flow with a port at `sample * N` with no chain takes or gives a burst at the caller (U6b); the bodies of the two flows with the ports are lowered (W7-16 U6a2, S-1207: only the flow that
+/// calls them is E0200), beside `ok` and the child `ch`, which are lowered too (§18.1).
+#[test]
+fn a_burst_at_the_caller_is_e0200_in_its_own_flow_and_the_bodies_of_the_conversion_flows_are_lowered() {
     let burst = format!(
         "{SLOW_CHILD}flow dup2(x: F32 at sample) -> F32 at (sample * 2) {{\n  [x, x]\n}}\n\nflow fold2(x: F32 at (sample * 2)) -> F32 at sample {{\n  (x[0] + x[1]) * 0.5\n}}\n\npub flow ok(p: F32 at block, x: F32 at sample) -> F32 at sample {{\n  x * ch~(p)\n}}\n\npub flow burst(x: F32 at sample) -> F32 at sample {{\n  fold2~(dup2~(x))\n}}\n"
     );
-    assert_e0200_in("slow_stage_left_burst", &burst, &["dup2", "fold2", "burst"]);
+    assert_e0200_in("slow_stage_left_burst", &burst, &["burst"]);
 }
 
 // ----------------------------------------------------------------------------- the slower tick first

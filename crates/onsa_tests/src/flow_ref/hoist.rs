@@ -31,7 +31,7 @@ use onsa_sema::flow_names::FlowBuiltin;
 use onsa_syntax::ast::{BinOp, CallKind, ExprId, ExprKind, StmtKind};
 
 use super::expr::{Frame, LOW_STACK, Stop};
-use super::flow::{Clock, Known, Seen, clock_of};
+use super::flow::{Clock, Known, Seen, Step, clock_of};
 use super::rate::{args_of, chain_of};
 use super::scalar::Fault;
 use super::sema_view::{Body, Called, Stage};
@@ -424,7 +424,43 @@ fn walk(f: &mut Frame, known: &Known, root: ExprId, e: ExprId, here: Clock, guar
         f.hoisted.entry(e).or_default().insert(replicas, v);
         return Ok(());
     }
+    // A chain that this stage makes (not a part that is kept): the call reads its arguments itself, and what it gathers is made by `gathered` at each stage from its own.
+    if made == here && chain_of(&body, e).map_err(stop)?.is_some() {
+        return Ok(());
+    }
     descend(f, known, root, e, here, guard)
+}
+
+/// The parts of the arguments that the chains the stage `at` has gather (§11.9), in the order of the places of the calls, that the stage makes: the call is made as a whole at the stage its output is of, and the argument is read by the ring at a later one
+/// (its own, `Frame::save_gathers`), so a part of it that a stage between the two makes (a delay of the slower clock under an `at`) is made by that stage as it is in any other expression (§11.3), else it would be of the stage that reads
+/// the argument. `steps` are the steps of the body whose `let` or output holds the call, for the clocks of the names it reads.
+pub(super) fn gathered(f: &mut Frame, steps: &[Step], at: Stage) -> Result<(), Stop> {
+    let Some(run) = f.run.as_ref() else { return Ok(()) };
+    let here = Clock::from(at);
+    let calls: Vec<_> = run
+        .state
+        .children
+        .iter()
+        .filter_map(|(k, c)| c.levels.last().map(|top| (k.clone(), top.gathers.clone(), top.made, c.scope.clone())))
+        .filter(|(_, gathers, made, _)| !gathers.is_empty() && Clock::Tick(*made) <= here)
+        .collect();
+    for (key, gathers, _, scope) in calls {
+        let (body, span) = (f.body, f.body.ast.expr(key.call).span);
+        let stop = |fault| Stop { fault, at: span };
+        let holds = |s: &Step| {
+            let x = body.ast.expr(s.init).span;
+            x.file == span.file && x.start <= span.start && span.end <= x.end
+        };
+        let step = steps.iter().find(|s| holds(s)).ok_or(stop(Fault::Internal("a chain that no step holds")))?;
+        let args = args_of(&body, key.call);
+        f.with_bindings(&key.replicas, scope, |f| {
+            gathers.iter().try_for_each(|n| {
+                let arg = args.get(*n).ok_or(stop(Fault::Internal("a gathered input with no argument")))?;
+                walk(f, &step.known, step.init, *arg, here, Clock::Const)
+            })
+        })?;
+    }
+    Ok(())
 }
 
 /// The parts inside `e`, which is not made by this stage as a whole: the conditions this stage decides are evaluated and the branch, arm or

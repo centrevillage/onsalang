@@ -147,3 +147,41 @@ pub flow f(x: F32 at sample, o: Option[I32] at block, n: I32 at block) -> F32 at
     let body = at(&ctl, "\n  s.6 = round.I32.F32((200:I32 / p.1))\n");
     assert!(first < second && second < body, "{ctl}");
 }
+
+/// W7-16 U6a2: a field in an argument a chain of `.down~` gathers, which
+/// the function of the ring lowers and reads, is written by the function
+/// of its stage before the call: in a field of that stage (the call lifted
+/// with `at`) or of a slower one, in a `let` of that stage or a slower
+/// one, and in a `par~` (its replica's). The ring is written of the field
+/// the slower function writes; the lowering checks that every field read
+/// is written ([`super::HoistUses`]).
+#[test]
+fn a_field_in_an_argument_a_chain_gathers_is_written_at_its_stage() {
+    let head = "flow cnt(i0: U32 at block) -> U32 at sample {
+  let n = (i0 + prev~(^n)) % 997
+  n
+}
+flow g2(a: U32 at (sample * 2)) -> U32 at sample { a[0] * 10 + a[1] }
+flow g4(a: U32 at (sample * 4)) -> U32 at sample { a[0] + a[1] + a[2] + a[3] }
+";
+    let bodies = [
+        "g2~((h + 1) at sample).down~(2) at sample",
+        "g4~((h + 1) at sample).down~(4) at sample",
+        "let r = g2~((h + 1) at sample).down~(2)\n  r at sample",
+        "let r = g4~((h + 1) at sample).down~(4)\n  r at sample",
+        "let ys = par~ i in 0 ..< 2 { g2~((h + 1) at sample).down~(2) at sample }\n  ys[0] + ys[1]",
+    ];
+    for body in bodies {
+        let src =
+            format!("{head}pub flow f(p: U32 at block) -> U32 at sample {{\n  let h = cnt~(p).down~(2)\n  {body}\n}}");
+        let m = crate::tests::core(&src);
+        let tick = crate::dump::dump_item(&m, "t.f.tick");
+        let ring = tick.lines().find(|l| l.contains(")] = ")).unwrap_or_default();
+        let read = ring.rsplit(" = ").next().unwrap_or_default();
+        assert!(read.starts_with("s."), "{body}: no ring written of a field in:\n{tick}");
+        let slow = crate::dump::dump_item(&m, "t.f.tick_2");
+        let write = at(&slow, &format!("{read} = (h + 1:U32)\n"));
+        let call = slow.find("t.g2.tick(").or(slow.find("t.g4.tick(")).unwrap_or(usize::MAX);
+        assert!(write < call, "{body}: the field written after the call:\n{slow}");
+    }
+}

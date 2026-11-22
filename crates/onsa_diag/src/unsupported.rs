@@ -131,7 +131,7 @@ features! {
     /// `.up~(N)`, gathers or deals, or runs the time of `sample_tick()`
     /// under `.down~(N)`, a port at `sample * N` or a call that gathers or
     /// deals one, which the later units of W7-16 lower.
-    MultirateFlows: Language, "building a flow with a chain that has an `.up~(N)`, gathers or deals, or runs a flow that reads `sample_tick()` under `.down~(N)`, a port at `(sample * N)` or a call of a flow with one", None;
+    MultirateFlows: Language, "building a flow with a chain that has an `.up~(N)`, gathers or deals at more than one `.down~(N)`, or runs a flow that reads `sample_tick()` under `.down~(N)`, or a call whose value or argument is at `(sample * N)` in its caller", None;
     /// §11.10: the meaning of `.when~(c)` and `.reset_if~(r)` (W7-10).
     InstanceModifiers: Language, "the modifiers `.when~(c)` and `.reset_if~(r)` of an instance", None;
     Iteration: Language, "iteration over types other than arrays, `Span`, `Buf` and `Array`", None;

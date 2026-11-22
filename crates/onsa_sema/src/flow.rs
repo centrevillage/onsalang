@@ -277,9 +277,6 @@ pub struct FlowInfo {
     /// `process_inplace` and `render` of it, whose uses the check stops
     /// (E0200, E0810 from W10-01).
     pub derived_port: Option<Span>,
-    /// The first port at `sample * N` ([`crate::def::FlowDef::burst_port`]),
-    /// which the Core lowers in W7-16 U6b ([`FlowInfo::multirate_at`]).
-    pub(crate) burst_port: Option<Span>,
     pub sample_rate_at: Option<ClockStage>,
     pub sample_rate_calls: Vec<ExprId>,
     /// The calls of `sample_tick()` (§11.4), which the Core reads from the

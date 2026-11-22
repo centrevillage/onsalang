@@ -14,8 +14,9 @@ impl FlowInfo {
 
     /// Whether the field `of` is written at a tick and read at a faster
     /// stage, so that it starts at `T.default()` at `init` and `reset` sets
-    /// it back (§11.3, S-1186, R-92): a field hoisted to a tick, and that of
-    /// a `let` or an input of a tick read at a faster stage. The Core
+    /// it back (§11.3, S-1186, R-92): a field hoisted to a tick, that of a
+    /// `let` or an input of a tick read at a faster stage, and the rings and
+    /// the arrays of a chain (§11.9: at the phase 0). The Core
     /// writes it so at `init` and `reset` (W7-16); W8-07 and W7-10 read it.
     pub fn starts_default(&self, of: FieldOf) -> bool {
         let read_faster = |l: LocalId| {
@@ -26,6 +27,8 @@ impl FlowInfo {
             && match of {
                 FieldOf::Hoist(h) => matches!(self.hoist(h).stage, ClockStage::Tick(_)),
                 FieldOf::Input(l) | FieldOf::Let(l) => read_faster(l),
+                // The rings a chain gathers in and the arrays it deals from (§11.9, phase 0).
+                FieldOf::Node(_, Part::Gather { .. } | Part::Deal(_)) => true,
                 _ => false,
             }
     }
@@ -87,17 +90,16 @@ impl FlowInfo {
 
     /// The first place of the plan (by its place) the Core does not lower
     /// until a later unit of W7-16, which stops at it (E0200, R-91 (1)): a
-    /// port at `sample * N` (a burst, §11.9); a node with a chain the Core
-    /// does not lower yet ([`PlanNode::lowered_chain`]); and an instance
-    /// that gathers or deals a burst (its clock, or that of an argument it
-    /// reads, at `sample * N`). The one gate of them (D-15).
+    /// node with a chain the Core does not lower yet
+    /// ([`PlanNode::lowered_chain`]), and an instance that gathers or deals
+    /// a burst in this flow (its clock, or that of an argument it reads, at
+    /// `sample * N`, §11.9). The one gate of them (D-15).
     pub fn multirate_at(&self) -> Option<Span> {
         let stops = |n: &&PlanNode| match &n.kind {
             PlanKind::Instance { .. } => n.clock.burst() || n.args.iter().any(|a| a.at.burst()),
             _ => false,
         } || !n.lowered_chain();
-        let all = self.burst_port.into_iter().chain(self.nodes.iter().filter(stops).map(|n| n.span));
-        all.min_by_key(|s| (s.start, s.end))
+        self.nodes.iter().filter(stops).map(|n| n.span).min_by_key(|s| (s.start, s.end))
     }
 
     /// The `let`s of the stage `stage`, in their order (§11.4).
@@ -117,15 +119,42 @@ impl FlowInfo {
 
 impl PlanNode {
     /// Whether the Core lowers the chain of the node (§11.9, S-1207): none,
-    /// or one of an instance whose modifiers are all `.down~(N)` and whose
-    /// boundaries gather and deal nothing, of a callee that reads no time
-    /// (`timed`: U6a3 of W7-16 lifts it, S-1217). The one test of it
-    /// (D-15): the gate ([`FlowInfo::multirate_at`]) and the Core, which
-    /// runs a stage of a callee of no other chain, read it.
+    /// or one of an instance whose modifiers are all `.down~(N)`, whose
+    /// boundaries but the innermost gather and deal nothing (U6b of W7-16),
+    /// of a callee that reads no time (`timed`: U6a3 of W7-16 lifts it,
+    /// S-1217); a burst it gathers or deals in its caller stops the gate on
+    /// its own. The one test of it (D-15): the gate
+    /// ([`FlowInfo::multirate_at`]) and the Core, which runs a stage of a
+    /// callee of no other chain, read it.
     pub fn lowered_chain(&self) -> bool {
         let downs = || self.chain.iter().all(|m| m.ratio.is_some_and(Ratio::slower_than_body));
-        let plain = || self.bounds.iter().all(|b| b.gathers.is_empty() && !b.deals);
+        let plain = || self.bounds.iter().skip(1).all(|b| b.gathers.is_empty() && !b.deals);
         self.chain.is_empty() || matches!(self.kind, PlanKind::Instance { .. }) && !self.timed && downs() && plain()
+    }
+
+    /// Whether its chain deals the output of its head (§11.9): its value is
+    /// read from the array, not where a stage of the head runs. The runs
+    /// ([`Run::at_read`]) and the Core read it.
+    pub fn deals(&self) -> bool {
+        self.dealt_at().is_some()
+    }
+
+    /// The boundary whose array the stage of the head that makes its output
+    /// writes and the caller reads (§11.9), of a chain that deals: the
+    /// innermost that deals, the one the gate passes
+    /// ([`PlanNode::lowered_chain`]). The one test of it (D-15).
+    pub fn dealt_at(&self) -> Option<u32> {
+        self.bounds.iter().position(|b| b.deals).and_then(|b| u32::try_from(b).ok())
+    }
+
+    /// The stage of this flow the stage `s` of the frame around the
+    /// boundary `b` is (§11.9): `s` moved out of each boundary outside it
+    /// by its `maps`, as the walk of the table made them; the stage of the
+    /// function that writes a ring of `b` (of [`PlanBound::gathers`]). None
+    /// of a stage no `maps` has (of a callee with no table).
+    pub fn outer_stage(&self, b: usize, s: ClockStage) -> Option<ClockStage> {
+        let moved = |s: ClockStage, o: &PlanBound| o.maps.iter().find(|m| m.0 == s).map(|m| m.1);
+        self.bounds.get(b + 1..)?.iter().try_fold(s, moved)
     }
 }
 

@@ -1,0 +1,15 @@
+# flow_ref 1 source=tests/spec/flow_semantics/down_gather_deal_module tests=3 evaluated=3 unavailable=0 skipped=0 waiting=0
+@ a head of a module that gathers: the mean of the frames before the tick, held
+init 0 check.mean_in sr=0x41000000
+process 0 frames=12 in x=[0x3f800000 0x40000000 0x40400000 0x40800000 0x40a00000 0x40c00000 0x40e00000 0x41000000 0x41100000 0x41200000 0x41300000 0x41400000]
+out=[0x00000000 0x00000000 0x00000000 0x00000000 0x40a00000 0x40a00000 0x40a00000 0x40a00000 0x41500000 0x41500000 0x41500000 0x41500000]
+@ a head of a module that deals: the elements in order, the parameter of the call of the tick
+init 0 check.counts sr=0x41000000
+process 0 params p=0x3f800000 frames=6
+out=[0x3f800000 0x40000000 0x40400000 0x40800000 0x3f800000 0x40000000]
+process 0 params p=0x40000000 frames=6
+out=[0x40400000 0x40800000 0x40000000 0x40800000 0x40c00000 0x41000000]
+@ a chain that gathers and a chain that deals in one flow keep their own states
+init 0 check.both sr=0x41000000
+process 0 params p=0x3f800000 frames=12 in x=[0x3f800000 0x40000000 0x40400000 0x40800000 0x40a00000 0x40c00000 0x40e00000 0x41000000 0x41100000 0x41200000 0x41300000 0x41400000]
+out=[0x3f800000 0x40000000 0x40400000 0x40800000 0x43fa8000 0x43fb0000 0x43fb8000 0x43fc0000 0x44a2a000 0x44a2c000 0x44a2e000 0x44a30000]

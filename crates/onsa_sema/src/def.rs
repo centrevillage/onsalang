@@ -545,10 +545,10 @@ impl FlowDef {
         self.port_where(out, Clock::of_ratio)
     }
 
-    /// The first port at `sample * N` (§11.9, a burst the body sees as an
-    /// array, [`body_view`]), as [`FlowDef::derived_port`] finds it.
-    pub fn burst_port(&self, out: Span) -> Option<Span> {
-        self.port_where(out, Clock::burst)
+    /// The length of the array the body makes its output in (§11.9, of an
+    /// output at `sample * N`, [`body_view`]); none of another.
+    pub fn out_len(&self) -> Option<u32> {
+        body_view(self.out_clock).1
     }
 
     /// The first input whose clock is `of`, else `out` of an output of one.

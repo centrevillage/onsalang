@@ -59,7 +59,6 @@ pub(crate) fn finish_flow(a: &mut Analysis, module: &Module, id: DefId, body: Bo
         modifiers: fcx.node_exprs().into_iter().filter_map(|(e, r)| Some((e, r?))).collect(),
         output: fcx.output,
         derived_port: a.def(id).as_flow().and_then(|f| f.derived_port(a.def(id).name_span)),
-        burst_port: a.def(id).as_flow().and_then(|f| f.burst_port(a.def(id).name_span)),
         complete: false,
         ..Default::default()
     };

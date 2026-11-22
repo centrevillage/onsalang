@@ -22,7 +22,9 @@ pub(crate) fn lower_flow_expr(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId) -> R<O
         // `sample_tick()` of a slower tick too (S-1210).
         if let Some(h) = f.info.hoist_of(e).filter(|&h| f.info.hoist(h).stage < f.phase.stage()) {
             let scope = f.scopes.last().ok_or_else(|| internal(span, "a hoisted field outside the state"))?;
-            return sfield(lw, f.info, &scope.state, FieldOf::Hoist(h), span).map(Some);
+            let v = sfield(lw, f.info, &scope.state, FieldOf::Hoist(h), span)?;
+            super::hoist::record(lw, h, span, false)?;
+            return Ok(Some(v));
         }
         // The time of the root its caller passes to the function (§11.4,
         // S-1129 (1)), at every stage.
@@ -57,6 +59,8 @@ pub(crate) fn lower_flow_expr(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId) -> R<O
             index(buf, w)?
         }
         PlanKind::Vdelay { d, max, ty, .. } => vdelay_read(lw, cx, &mut stmts, &state, id, *d, *max, *ty, span)?,
+        // Of a chain that deals, its array (§11.9).
+        PlanKind::Instance { .. } if info.node(id).deals() => super::chain::dealt(lw, cx, id, &state, span)?,
         // Read where the stage of its callee that makes the output runs (S-1088).
         PlanKind::Instance { .. } => {
             let run = super::phases::runs_at(info.node(id), phase.stage(), true).next();

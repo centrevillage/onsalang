@@ -23,11 +23,11 @@ flow hold4(c: F32 at sample) -> F32 at (sample * 4) { [c, c, c, c] }
 flow ramp4(c: F32 at sample) -> F32 at (sample * 4) { [c, c + 1.0, c + 2.0, c + 3.0] }
 ";
 
-type Block = Vec<(&'static str, Value)>;
+pub(super) type Block = Vec<(&'static str, Value)>;
 
 /// The outputs of the flow `name` for the calls `(block inputs, frames)` one after the other on one instance, the columns `cols` of the `sample` inputs cut across them; `reset` between the
 /// calls whose list is `resets`.
-fn run(
+pub(super) fn run(
     src: &str,
     name: &'static str,
     calls: Vec<(Block, usize)>,
@@ -51,20 +51,20 @@ fn run(
 }
 
 /// The column `c + 1` for `n` frames, and the one of the same kind that `f` makes.
-fn ramp(n: usize) -> Vec<Value> {
+pub(super) fn ramp(n: usize) -> Vec<Value> {
     (0..n).map(|c| Value::F32(c as f32 + 1.0)).collect()
 }
 
 /// `x` for one `sample` input, with the calls cut at `sizes`.
-fn go(src: &str, name: &'static str, x: Vec<Value>, sizes: &[usize]) -> Vec<f32> {
+pub(super) fn go(src: &str, name: &'static str, x: Vec<Value>, sizes: &[usize]) -> Vec<f32> {
     f32s(&run(src, name, sizes.iter().map(|n| (vec![], *n)).collect(), &[("x", x)], &[]))
 }
 
-fn rep(parts: &[(f32, usize)]) -> Vec<f32> {
+pub(super) fn rep(parts: &[(f32, usize)]) -> Vec<f32> {
     parts.iter().flat_map(|(v, n)| std::iter::repeat_n(*v, *n)).collect()
 }
 
-fn p(x: f32) -> Block {
+pub(super) fn p(x: f32) -> Block {
     vec![("p", Value::F32(x))]
 }
 

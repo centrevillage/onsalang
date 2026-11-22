@@ -20,6 +20,11 @@ pub enum Part {
     Buf,
     /// The write index of the ring.
     W,
+    /// The ring that gathers the input `input` at the boundary `bound` of
+    /// the chain of an instance ([`PlanNode::bounds`], §11.9, S-1208).
+    Gather { bound: u32, input: u32 },
+    /// The array that deals the output at the boundary of the chain.
+    Deal(u32),
 }
 
 /// What a field of the state holds.
@@ -161,7 +166,8 @@ impl Structs<'_> {
     /// The fields of the node `id` (S-06) after `out`, of the struct that
     /// holds it: `n` of `prev~` and of an instance, `n.buf` and `n.w` of
     /// `delay~` / `vdelay~`, then `n.init` of a delay whose `init` is an
-    /// `Init`-rate expression; `n` of a `par~` whose replicas have fields
+    /// `Init`-rate expression; after `n` of an instance the rings and the
+    /// array of each boundary of its chain; `n` of a `par~` whose replicas have fields
     /// (of its nodes, then its hoisted ones by their names), and none of
     /// one with no state.
     fn node(&mut self, id: NodeId, out: &mut Vec<Field>) {
@@ -181,7 +187,14 @@ impl Structs<'_> {
                 Some(init)
             }
             PlanKind::Instance { .. } => {
+                // §11.6 (S-1208): after its state, by boundary, its rings then its array.
                 push(Part::Own);
+                for (b, at) in (0u32..).zip(&n.bounds) {
+                    at.gathers.iter().for_each(|&(input, _)| push(Part::Gather { bound: b, input }));
+                    if at.deals {
+                        push(Part::Deal(b));
+                    }
+                }
                 None
             }
             PlanKind::Par { children, .. } => {

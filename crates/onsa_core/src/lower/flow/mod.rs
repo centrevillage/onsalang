@@ -78,7 +78,7 @@ use onsa_diag::unsupported::Feature;
 use onsa_sema::DefId;
 use onsa_sema::clock::{Clock, ClockStage, Ratio};
 use onsa_sema::def::{DefKind, Fields, FlowDef, FlowFn, FlowInput, FlowTy, ParamInfo, ParamKey, ParamNumber};
-use onsa_sema::flow::{Field, FieldOf, FlowInfo, InitArg, Kept, NodeId, Part, PlanKind, PlanNode, Run};
+use onsa_sema::flow::{Field, FieldOf, FlowInfo, InitArg, Kept, NodeId, Part, PlanBound, PlanKind, PlanNode, Run};
 use onsa_sema::ty::{BuiltinTy, Len, Ty as STy};
 use onsa_syntax::ast::ExprId;
 
@@ -94,6 +94,7 @@ use crate::prim::Prim;
 
 mod boundary;
 mod branches;
+mod chain;
 mod generated;
 mod hoist;
 mod nodes;
@@ -105,6 +106,7 @@ mod tests;
 use boundary::{gen_params_default, gen_process, gen_process_inplace, gen_render};
 pub(crate) use branches::{tilde_if, tilde_match};
 use generated::{Gen, init_value, instance_args, replica_loop, ring_len, sfield};
+pub(crate) use hoist::HoistUses;
 pub(crate) use nodes::lower_flow_expr;
 use phases::{drive, gen_ctl, gen_init, gen_reset, gen_tick};
 use state::state_fields;
@@ -460,7 +462,12 @@ fn lower_flow<'b>(lw: &mut Lowerer<'b>, flow: DefId, fd: FlowDef, span: Span) ->
     let params_ty = lw.flow_ty(flow, FlowTy::Params, span)?;
     let out_ty = lw.flow_ty(flow, FlowTy::Rendered, span)?;
     let out_def = generated_type(a, &fd, FlowTy::Rendered).ok_or_else(|| internal(span, "flow without `Rendered`"))?;
+    // The body makes an output at `sample * N` in an array of N (§11.9).
     let out_val = lw.core_ty(fd.out, &[], span)?;
+    let out_val = match fd.out_len() {
+        Some(n) => Ty::Array(Box::new(out_val), n),
+        None => out_val,
+    };
 
     // Boundary outputs from the `Rendered` struct (`Buf[T]` / `[Buf[T]; N]` fields, §11.6).
     let mut outputs = Vec::new();
@@ -551,12 +558,15 @@ fn lower_flow<'b>(lw: &mut Lowerer<'b>, flow: DefId, fd: FlowDef, span: Span) ->
         params_default,
     };
 
-    gen_init(lw, &shape, info, &fns)?;
-    gen_reset(lw, &shape, info, &fns)?;
-    gen_ctl(lw, &shape, info, &fns)?;
-    for s in [ClockStage::SAMPLE].into_iter().chain(info.stages.iter().copied()) {
-        gen_tick(lw, &shape, info, &fns, s)?;
-    }
+    hoist::checked(lw, info, |lw| {
+        gen_init(lw, &shape, info, &fns)?;
+        gen_reset(lw, &shape, info, &fns)?;
+        gen_ctl(lw, &shape, info, &fns)?;
+        for s in [ClockStage::SAMPLE].into_iter().chain(info.stages.iter().copied()) {
+            gen_tick(lw, &shape, info, &fns, s)?;
+        }
+        Ok(())
+    })?;
     if fns.process.is_some() {
         gen_process(lw, &shape, info, &fns)?;
         gen_process_inplace(lw, &shape, info, &fns)?;

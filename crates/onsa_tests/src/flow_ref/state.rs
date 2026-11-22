@@ -546,6 +546,7 @@ impl<'a> Frame<'a> {
 
     /// The argument that an input of `sample * N` of the last `.down~` boundary of a chain gathers is stored at the end of each `sample` frame of this one, the `2^q` elements of its stream at the clock `q = k + r` (§11.9: the frame
     /// after a tick reads it, the position's own value is not in); a stream slower than `sample` gives one element at each tick of its own, `sample / 2^-q`. The rings of the boundaries inside are written by the frames of the chain (`run_level`).
+    /// The value is what the second phase (`commit`) evaluates the argument to, which for a part that is kept is the value `hoist::gathered` made at its stage (the delays in it are read before they are saved, at their own clocks).
     pub(super) fn save_gathers(&mut self, whole: Span) -> Result<(), Stop> {
         let run = self.run.as_ref().ok_or(Stop { fault: Internal("a sample stage with no run"), at: whole })?;
         let (ctx, calls): (_, Vec<_>) = (

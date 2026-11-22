@@ -5,6 +5,7 @@
 //! written under its conditions (S-1157). The plan chose and ordered them;
 //! the lowering finds them by `FlowInfo::hoist_of` and judges nothing (D-15).
 
+use onsa_sema::flow::HoistId;
 use onsa_syntax::ast::{Ast, BinOp, ExprKind as AK};
 
 use super::super::body::{lower_match_with, push_expr_stmt};
@@ -14,15 +15,58 @@ use super::*;
 #[cfg(test)]
 mod tests;
 
+/// The hoisted fields the functions of a flow write and read (§11.3), of
+/// the flows being lowered, the innermost last ([`super::lower_flow`]):
+/// every field one reads, one writes, or the lowering is in error (a
+/// field read and never written would read its `T.default()`).
+#[derive(Debug, Default)]
+pub(crate) struct HoistUses {
+    written: HashSet<HoistId>,
+    read: Vec<(HoistId, Span)>,
+}
+
+/// That a function of the flow lowered writes (`write`) or reads at
+/// `span` the hoisted field `h` ([`HoistUses`]).
+pub(super) fn record(lw: &mut Lowerer, h: HoistId, span: Span, write: bool) -> R<()> {
+    let u = lw.hoist_uses.last_mut().ok_or_else(|| internal(span, "a hoisted field outside a flow"))?;
+    if write {
+        u.written.insert(h);
+    } else {
+        u.read.push((h, span));
+    }
+    Ok(())
+}
+
+/// The functions of the flow of `info` made by `make`, then the check of
+/// the fields they write and read ([`HoistUses`]).
+pub(super) fn checked<'b>(
+    lw: &mut Lowerer<'b>,
+    info: &FlowInfo,
+    make: impl FnOnce(&mut Lowerer<'b>) -> R<()>,
+) -> R<()> {
+    lw.hoist_uses.push(HoistUses::default());
+    let made = make(lw);
+    let u = lw.hoist_uses.pop().unwrap_or_default();
+    made?;
+    match u.read.iter().find(|(h, _)| !u.written.contains(h)) {
+        Some(&(h, at)) => {
+            Err(internal(at, format!("the hoisted field `{}` read and written by no function", info.hoist(h).path)))
+        }
+        None => Ok(()),
+    }
+}
+
 /// Writes into `out` the fields of the stage `s` hoisted in `e`, of the
-/// struct `state`, in the order of the text: of a field of `s`, its value;
-/// of one of a slower stage, nothing (its stage wrote it); else those of
-/// the parts of `e`, the guarded ones (S-1157) under the conditions on
-/// their paths: an `if` or `Switch` of the condition read at `s`, holding
-/// the bindings of an arm (§11.3). The constant expressions checked at `s`
-/// are evaluated there for their panic (S-888 (c′)). Those of the body of
-/// a `par~` are of each replica (S-1140): written in a loop over them, in
-/// the struct of the replica.
+/// struct `state`, in the order of the text: those of the parts of `e`,
+/// the guarded ones (S-1157) under the conditions on their paths: an `if`
+/// or `Switch` of the condition read at `s`, holding the bindings of an
+/// arm (§11.3); then of a field of `s`, its value. The constant
+/// expressions checked at `s` are evaluated there for their panic (S-888
+/// (c′)). Those of the body of a `par~` are of each replica (S-1140):
+/// written in a loop over them, in the struct of the replica. Every part
+/// is walked, of a field too: the arguments a chain in it gathers are
+/// lowered in the functions of their rings ([`super::chain::write_rings`]),
+/// not with it, and are roots of their own as in the marking (§11.9).
 pub(super) fn writes(
     lw: &mut Lowerer,
     cx: &mut FnCx,
@@ -32,17 +76,24 @@ pub(super) fn writes(
     state: &Expr,
     out: &mut Vec<Stmt>,
 ) -> R<()> {
-    if let Some(h) = info.hoist_of(e) {
-        let x = info.hoist(h);
-        if x.stage == s {
-            let v = lower_expr(lw, cx, e)?;
-            let f = sfield(lw, info, state, FieldOf::Hoist(h), x.span)?;
-            return assign(out, &f, v);
-        }
-        if x.stage < s {
-            return Ok(());
-        }
-    }
+    parts_writes(lw, cx, info, e, s, state, out)?;
+    let Some(h) = info.hoist_of(e).filter(|&h| info.hoist(h).stage == s) else { return Ok(()) };
+    let v = lower_expr(lw, cx, e)?;
+    let f = sfield(lw, info, state, FieldOf::Hoist(h), info.hoist(h).span)?;
+    record(lw, h, f.span, true)?;
+    assign(out, &f, v)
+}
+
+/// The fields of the stage `s` of the parts of `e` ([`writes`]).
+fn parts_writes(
+    lw: &mut Lowerer,
+    cx: &mut FnCx,
+    info: &FlowInfo,
+    e: ExprId,
+    s: ClockStage,
+    state: &Expr,
+    out: &mut Vec<Stmt>,
+) -> R<()> {
     if let Some(c) = info.check_of(e) {
         if c == s {
             push_expr_stmt(lower_expr(lw, cx, e)?, out);

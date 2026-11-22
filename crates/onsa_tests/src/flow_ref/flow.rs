@@ -23,7 +23,7 @@ use onsa_sema::{DefId, LocalId, Target};
 use onsa_syntax::ast::{CallKind, ExprId, ExprKind, PatId, StmtKind};
 
 use super::expr::{Frame, Hoisted, Stop};
-use super::hoist::{pre, seen_of, stage_of};
+use super::hoist::{gathered, pre, seen_of, stage_of};
 use super::host::FnHost;
 use super::rate::{Level, chain_of, components, derived, levels, on_tick, ring_clock, slow_ticks};
 use super::scalar::{Fault, PanicKind};
@@ -387,6 +387,7 @@ pub(super) fn enter<V: std::borrow::Borrow<Value>>(
         Stage::Init => f.make_cells(&inst.steps.iter().map(|s| s.init).collect::<Vec<_>>()),
         Stage::Block => f.run_children(at, whole),
         _ => {
+            gathered(f, &inst.steps, at)?;
             if at == Stage::Sample {
                 f.save_gathers(whole)?;
             }

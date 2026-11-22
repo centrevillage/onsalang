@@ -145,11 +145,12 @@ fn init_node(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, id: NodeId, s
         }
         PlanKind::Instance { callee, args, .. } => {
             // W7-21 U1: a chain of a callee with no table (in error) has no runs and no stages.
-            if !n.chain.is_empty() && n.runs.is_empty() {
-                return Err(internal(span, "a chain of an instance with no runs"));
+            let lost = super::chain::gathered(n).any(|g| g.1.is_none());
+            if !n.chain.is_empty() && n.runs.is_empty() || lost {
+                return Err(internal(span, "a chain of an instance with no runs, or a ring of no stage"));
             }
             let sub = lw.ensure_flow(*callee)?;
-            let fields = instance_args(lw, cx, *callee, args, Phase::Init, span)?;
+            let fields = instance_args(lw, cx, (*callee, args), Phase::Init, &[], span)?;
             let cfg = Expr::new(Ty::Struct(sub.config), span, ExprKind::Struct { ty: sub.config, fields });
             let sr = super::child_rate(sr, n, span)?;
             let c = call(sub.init, Ty::Struct(sub.state), span, vec![borrow(cfg), borrow(sr)]);
@@ -284,7 +285,7 @@ fn ctl_node(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, id: NodeId, st
     match &n.kind {
         PlanKind::Instance { callee, args, .. } => {
             let sub = lw.ensure_flow(*callee)?;
-            let fields = instance_args(lw, cx, *callee, args, Phase::Ctl, span)?;
+            let fields = instance_args(lw, cx, (*callee, args), Phase::Ctl, &[], span)?;
             let params = Expr::new(Ty::Struct(sub.params), span, ExprKind::Struct { ty: sub.params, fields });
             let st = sfield(lw, info, state, FieldOf::Node(id, Part::Own), span)?;
             expr_stmt(out, call(sub.ctl, Ty::Unit, span, vec![inout(st), borrow(params)]));
@@ -366,28 +367,42 @@ pub(super) fn gen_tick<'b>(
     Ok(())
 }
 
-/// The runs of the stages of the callee of the instance `id` in the
-/// function of the stage lowered that do not make its output (§11.9,
-/// S-1088: those that do run where it is read, [`super::nodes`]), in the
-/// order of its runs, the arms around it chosen for the arguments that
-/// read their bindings.
+/// The rings the instance `id` writes in the function of the stage
+/// lowered ([`super::chain::write_rings`]), then the runs of the stages of
+/// its callee there that do not make its output where it is read (§11.9,
+/// S-1088: those that do run there, [`super::nodes`]), in the order of its
+/// runs, the one that makes the output of a chain that deals into its
+/// array; the arms around it chosen for the arguments that read their
+/// bindings.
 fn child_runs(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, id: NodeId, state: &Expr) -> R<()> {
     let (info, stage) = (plan(cx), phase(cx).stage());
     let n = info.node(id);
+    let span = cx.ast.expr(n.expr).span;
+    if super::chain::rings_at(n, stage).next().is_some() {
+        super::branches::choose_arms(lw, cx, &n.arms, stage, state, out)?;
+        super::chain::write_rings(lw, cx, out, id, state)?;
+    }
     for &run in runs_at(n, stage, false) {
         super::branches::choose_arms(lw, cx, &n.arms, stage, state, out)?;
         let v = run_child(lw, cx, id, state, run)?;
-        expr_stmt(out, v);
+        match super::chain::dealt_by(lw, info, id, state, run, span)? {
+            Some(array) => assign(out, &array, v)?,
+            None => expr_stmt(out, v),
+        }
     }
     Ok(())
 }
 
-/// Whether one of the nodes `ids` runs a stage of its callee in the
-/// function of the stage `s` ([`child_runs`]), in a `par~` of them too.
+/// Whether one of the nodes `ids` writes a ring or runs a stage of its
+/// callee in the function of the stage `s` ([`child_runs`]), in a `par~`
+/// of them too.
 fn runs_in(info: &FlowInfo, ids: &[NodeId], s: ClockStage) -> bool {
     ids.iter().any(|&id| match &info.node(id).kind {
         PlanKind::Par { children, .. } => runs_in(info, children, s),
-        _ => runs_at(info.node(id), s, false).next().is_some(),
+        _ => {
+            let n = info.node(id);
+            runs_at(n, s, false).next().is_some() || super::chain::rings_at(n, s).next().is_some()
+        }
     })
 }
 
@@ -401,7 +416,8 @@ pub(super) fn runs_at(n: &PlanNode, s: ClockStage, read: bool) -> impl Iterator<
 /// The call of the function of the stage `run.body` of the callee of the
 /// instance `id`, in the scope of `state` (§11.9, S-1088): its state, the
 /// time of a callee that reads it ([`child_time`]) and its inputs of that
-/// stage, lowered here; the output of the stage that makes it, else `()`.
+/// stage, lowered here, those its chain gathers of their rings; the output
+/// of the stage that makes it, else `()`.
 /// The one place a caller runs a stage of a callee (the loop of `.up~`
 /// and the `when~` of later works are of it).
 pub(super) fn run_child(lw: &mut Lowerer, cx: &mut FnCx, id: NodeId, state: &Expr, run: Run) -> R<Expr> {
@@ -424,7 +440,8 @@ pub(super) fn run_child(lw: &mut Lowerer, cx: &mut FnCx, id: NodeId, state: &Exp
         let time = &cx.flow.as_ref().expect("flow context").time;
         cargs.extend(child_time(time, n.frame, span)?.into_iter().map(borrow));
     }
-    cargs.extend(instance_args(lw, cx, callee, args, Phase::Tick(k), span)?.into_iter().map(borrow));
+    let rings = super::chain::rings(lw, info, id, state, span)?;
+    cargs.extend(instance_args(lw, cx, (callee, args), Phase::Tick(k), &rings, span)?.into_iter().map(borrow));
     Ok(call(f, lw.m.fn_(f).ret.clone(), span, cargs))
 }
 

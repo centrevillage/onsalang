@@ -28,13 +28,16 @@ pub(in crate::flow) fn qualify(scope: &str, name: &str) -> String {
 }
 
 /// The field of the part `p` of a node whose own field is `field`:
-/// `<field>.buf`, `<field>.w`, `<field>.init`.
+/// `<field>.buf`, `<field>.w`, `<field>.init`, `<field>._gather_<b>_<i>`,
+/// `<field>._deal_<b>` (§11.6, S-1208).
 pub(in crate::flow) fn part(field: &str, p: Part) -> String {
     match p {
         Part::Own => field.to_string(),
         Part::Init => format!("{field}.init"),
         Part::Buf => format!("{field}.buf"),
         Part::W => format!("{field}.w"),
+        Part::Gather { bound, input } => format!("{field}._gather_{bound}_{input}"),
+        Part::Deal(bound) => format!("{field}._deal_{bound}"),
     }
 }
 

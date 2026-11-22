@@ -47,7 +47,8 @@ impl<'a> Frame<'a> {
     /// The stages of the instance at `key` that are in the stage `s` of this one, for this frame of it, once (`Inst::done`): the stage `y` of a part is in the stage the boundaries put it in (`rate::levels`, §11.9, S-1088). The
     /// arguments are read here in the frame of the call (`feed`), the time the head runs in is that of the boundaries (`time_of`), and `run_level` runs the parts.
     // SPEC-GAP(S-1206): the stage of this one that an instance runs a stage of its body in is the one the boundaries say, and its output at `sample` is made where the call is read; the spec does not say the
-    // order of the stages of the parts of a call (only a panic shows it).
+    // order of the stages of the parts of a call (only a panic shows it). The argument of a gathered input is made at the stage of its own clock, in the walk of the instances of that stage before they run (`hoist::gathered`), when it is
+    // a part that is kept (Copy, not a name); any other is made in the second phase, after them (`Frame::save_gathers`): where in the stage the spec does not say either, and again only a panic shows it.
     pub(super) fn run_unit(&mut self, key: &NodeKey, s: Stage) -> Result<(), Stop> {
         let at = self.body.ast.expr(key.call).span;
         let here = |fault| Stop { fault, at };

@@ -5,9 +5,8 @@
 //!   package or of a module, in its output or in a stage of `sample / N`, in a grandchild), is lowered by `build`, `dump --core` and `test` (W7-16 U5a, U5b2: the counter of the phase is a field of
 //!   the state and the time is the time of the parent); `check` reads it with no diagnostic and `onsa interface` ends with 0.
 //! - A chain of `.down~(N)` over a part that does not read `sample_tick()` is lowered even when its argument does (the argument is read in the caller, at the tick of the input; W7-16 U6a1/t).
-//! - What stays E0200 after U6a1 is the work of the later units: a chain over a part that reads `sample_tick()` (the part, or a child of it; U6a3, S-1217) and a body of a conversion flow with a port at
-//!   `sample * N` (U6a2). `build`, `dump --core` and `test` stop at them with E0200 and with nothing else (no internal error); the first diagnostic is at the first place of the file that has such a form
-//!   (§18.1: the order of the diagnostics).
+//! - What stays E0200 after U6a2 is the work of the later unit: a chain over a part that reads `sample_tick()` (the part, or a child of it, also a conversion flow; U6a3, S-1217). `build`, `dump --core` and `test` stop
+//!   at it with E0200 and with nothing else (no internal error); the first diagnostic is at the first place of the file that has such a form, the chain (§18.1: the order of the diagnostics).
 //!
 //! The texts are written from the spec; none is taken from the output of the compiler.
 
@@ -66,27 +65,19 @@ fn a_chain_whose_argument_reads_sample_tick_is_lowered_when_the_part_reads_no_ti
     assert_lowers("sample_tick_arg_chain_lowers", flows, &[]);
 }
 
-/// The forms that stay E0200 after U6a1, each with the line of its first form: a chain over a part that reads `sample_tick()` (line 6, the line of the chain; the part is lowered), and a conversion flow that
-/// reads it in its body (the flow `g` and its call, line 1 is the first place of a form). The chain over a part that reads the time is U6a3, the conversion flow U6a2.
+/// A chain over a part that reads `sample_tick()` stays E0200 after U6a1 (line 6, the line of the chain; the part is lowered): the time of the part under `.down~(N)` is U6a3 (S-1217).
 #[test]
-fn a_chain_over_a_part_that_reads_sample_tick_and_a_conversion_flow_that_reads_it_are_e0200_until_the_later_units() {
-    /// The main file, the other files and the line of the first form.
-    type Source<'a> = (&'a str, &'a [(&'a str, &'a str)], Option<u64>);
-    let sources: [Source; 2] = [
-        (
-            "flow tk() -> U32 at sample {\n  sample_tick()\n}\n\npub flow f() -> U32 at sample {\n  tk~().down~(4) at sample\n}\n",
-            &[],
-            Some(6),
-        ),
-        (
-            "flow g(x: F32 at (sample * 2)) -> F32 at sample {\n  x[1] * F32.round_from(sample_tick())\n}\n\npub flow f(x: F32 at sample) -> F32 at sample {\n  g~(x).down~(2) at sample\n}\n",
-            &[],
-            Some(1),
-        ),
-    ];
-    for (k, (flows, others, first)) in sources.iter().enumerate() {
-        assert_e0200(&format!("sample_tick_e0200_{k}"), flows, others, *first);
-    }
+fn a_chain_over_a_part_that_reads_sample_tick_is_e0200_until_u6a3() {
+    let flows = "flow tk() -> U32 at sample {\n  sample_tick()\n}\n\npub flow f() -> U32 at sample {\n  tk~().down~(4) at sample\n}\n";
+    assert_e0200("sample_tick_e0200_0", flows, &[], Some(6));
+}
+
+/// A conversion flow that reads `sample_tick()` in its body is lowered (W7-16 U6a2: the flow `g`, line 1, has no E0200), and the chain over it stays E0200 for the time of the part (U6a3, S-1217): the first
+/// diagnostic is at the chain, line 6.
+#[test]
+fn a_chain_over_a_conversion_flow_that_reads_sample_tick_is_e0200_at_the_chain_until_u6a3() {
+    let flows = "flow g(x: F32 at (sample * 2)) -> F32 at sample {\n  x[1] * F32.round_from(sample_tick())\n}\n\npub flow f(x: F32 at sample) -> F32 at sample {\n  g~(x).down~(2) at sample\n}\n";
+    assert_e0200("sample_tick_e0200_1", flows, &[], Some(6));
 }
 
 /// `onsa interface` reads the signatures only (§18), so a flow that reads `sample_tick()` in its body is listed with its ports and the

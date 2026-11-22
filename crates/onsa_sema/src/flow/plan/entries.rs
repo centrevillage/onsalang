@@ -159,7 +159,8 @@ fn node_runs(n: &PlanNode, g: &FlowInfo) -> (Vec<Run>, Vec<PlanBound>, BTreeSet<
         (b.stages, b.made) = (stages.iter().copied().collect(), made);
         heads.iter_mut().for_each(|h| h.1 = bounds::step(h.1, r));
     }
-    let runs = heads.into_iter().map(|(body, caller)| Run { body, caller, at_read: Some(caller) == made }).collect();
+    let at_read = |caller| Some(caller) == made && !n.deals();
+    let runs = heads.into_iter().map(|(body, caller)| Run { body, caller, at_read: at_read(caller) }).collect();
     (runs, bounds, stages)
 }
 

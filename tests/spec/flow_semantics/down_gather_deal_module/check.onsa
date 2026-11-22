@@ -1,0 +1,47 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.9", "§15.1", "§11.6"]
+
+// W7-16 U6a2/t, S-1207, S-1214 (spec §11.9: a chain of `.down~(4)` gathers the input at `sample * 4` of its head and deals its output at `sample * 4`; §15.1): the heads are flows of the module `parts` (parts.onsa), one
+// of them calls a private flow of the module. Worked out by hand: x = 1 2 3 ..., the tick c = 4 gathers 1 2 3 4 (sum4: 0.5 (1 + 2) + 0.5 (3 + 4) = 5), c = 8 gathers 5 6 7 8 (13); count4 gives p, 2 p, 3 p, 4 p to the frames
+// c .. c + 3.
+
+use parts.{sum4, count4}
+
+pub flow mean_in(x: F32 at sample) -> F32 at sample {
+  sum4~(x).down~(4) at sample
+}
+
+pub flow counts(p: F32 at block) -> F32 at sample {
+  count4~(p).down~(4)
+}
+
+pub flow both(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  (sum4~(x).down~(4) at sample) * 100.0 + count4~(p).down~(4)
+}
+
+test "a head of a module that gathers: the mean of the frames before the tick, held" {
+  let xs: [F32; 12] = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0]
+  var out: [F32; 12] = [-1.0; 12]
+  var st = mean_in.init(8.0)
+  mean_in.process(inout st, xs, inout out)
+  assert out == [0.0, 0.0, 0.0, 0.0, 5.0, 5.0, 5.0, 5.0, 13.0, 13.0, 13.0, 13.0]
+}
+
+test "a head of a module that deals: the elements in order, the parameter of the call of the tick" {
+  // p = 1 in the call of the frames 0 .. 5, 2 in the call of the frames 6 .. 11: the ticks c = 0 and 4 give 1 2 3 4, c = 8 gives 2 4 6 8.
+  var out: [F32; 12] = [-1.0; 12]
+  var st = counts.init(8.0)
+  counts.process(inout st, counts.Params { p: 1.0 }, inout out.slice(0, 6))
+  counts.process(inout st, counts.Params { p: 2.0 }, inout out.slice(6, 12))
+  assert out == [1.0, 2.0, 3.0, 4.0, 1.0, 2.0, 3.0, 4.0, 2.0, 4.0, 6.0, 8.0]
+}
+
+test "a chain that gathers and a chain that deals in one flow keep their own states" {
+  let xs: [F32; 12] = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0]
+  var out: [F32; 12] = [-1.0; 12]
+  var st = both.init(8.0)
+  both.process(inout st, both.Params { p: 1.0 }, xs, inout out)
+  assert out == [1.0, 2.0, 3.0, 4.0, 501.0, 502.0, 503.0, 504.0, 1301.0, 1302.0, 1303.0, 1304.0]
+}

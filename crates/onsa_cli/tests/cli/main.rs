@@ -30,6 +30,7 @@ mod diagnostics_json;
 mod diff_ast_sets;
 mod doc_comment_targets;
 mod down_chain_commands;
+mod down_gather_deal_commands;
 mod drop_path_model;
 mod dup_release_model;
 mod effect_names;

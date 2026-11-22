@@ -1,0 +1,13 @@
+// The conversion flows of a module that the chains of check.onsa run (W7-16 U6a2/t, spec §11.9, §15.1): a head that gathers 4 samples, one that deals 4, and one that gathers through a private function of the module. The case is in check.onsa.
+
+pub flow sum4(x: F32 at (sample * 4)) -> F32 at sample {
+  half(x[0] + x[1]) + half(x[2] + x[3])
+}
+
+rt fn half(v: F32) -> F32 {
+  v * 0.5
+}
+
+pub flow count4(p: F32 at block) -> F32 at (sample * 4) {
+  [p, p * 2.0, p * 3.0, p * 4.0]
+}

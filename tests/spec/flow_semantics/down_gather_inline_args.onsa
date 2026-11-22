@@ -1,0 +1,157 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.9", "§11.3"]
+
+// The argument a chain of `.down~(N)` gathers, written in the call (W7-16 U6a2/b, the parent): an expression of a slower clock lifted with `at`, a delay of a slower `let`, the output of
+// another chain lifted with `at`, a value of `block` and an `if`. Each is the same as the form that binds the argument to a `let` first (§11.3: a `let` changes no value), and the first pair is also
+// worked out by hand: `h` is 3, 6, 9, 12 at the frames 0, 2, 4, 6 (`cnt` under `.down~(2)` with p = 3), so `(h + 1) at sample` is 4 4 7 7 10 10 13 13, and the tick at the frame c gathers the frames
+// c - 2 and c - 1 (§11.9): 0 before the first, then 44, 77, 110.
+
+flow cnt(i0: U32 at block) -> U32 at sample {
+  let n = (i0 + prev~(^n)) % 997
+  n
+}
+
+flow g2(a: U32 at (sample * 2)) -> U32 at sample { a[0] * 10 + a[1] }
+
+flow mk(i0: U32 at block) -> U32 at (sample * 2) { [i0, i0 + 5] }
+
+pub flow lifted(p: U32 at block) -> U32 at sample {
+  let h = cnt~(p).down~(2)
+  g2~((h + 1) at sample).down~(2) at sample
+}
+
+pub flow lifted_let(p: U32 at block) -> U32 at sample {
+  let h = cnt~(p).down~(2)
+  let a = (h + 1) at sample
+  g2~(a).down~(2) at sample
+}
+
+pub flow lifted_half(p: U32 at block) -> U32 at sample {
+  let h = cnt~(p).down~(4)
+  g2~((h + 1) at (sample / 2)).down~(4) at sample
+}
+
+pub flow lifted_half_let(p: U32 at block) -> U32 at sample {
+  let h = cnt~(p).down~(4)
+  let a = (h + 1) at (sample / 2)
+  g2~(a).down~(4) at sample
+}
+
+pub flow in_a_let(p: U32 at block) -> U32 at sample {
+  let h = cnt~(p).down~(2)
+  let r = g2~((h + 1) at sample).down~(2) at sample
+  r + 1
+}
+
+pub flow in_a_let_let(p: U32 at block) -> U32 at sample {
+  let h = cnt~(p).down~(2)
+  let a = (h + 1) at sample
+  let r = g2~(a).down~(2) at sample
+  r + 1
+}
+
+pub flow delayed(p: U32 at block) -> U32 at sample {
+  let h = cnt~(p).down~(2)
+  g2~(prev~(h) at sample).down~(2) at sample
+}
+
+pub flow delayed_let(p: U32 at block) -> U32 at sample {
+  let h = cnt~(p).down~(2)
+  let a = prev~(h) at sample
+  g2~(a).down~(2) at sample
+}
+
+pub flow dealt(p: U32 at block) -> U32 at sample {
+  g2~((mk~(p).down~(4) at sample)).down~(2) at sample
+}
+
+pub flow dealt_let(p: U32 at block) -> U32 at sample {
+  let a = mk~(p).down~(4) at sample
+  g2~(a).down~(2) at sample
+}
+
+pub flow of_block(p: U32 at block) -> U32 at sample {
+  g2~(p + 1).down~(2) at sample
+}
+
+pub flow of_block_let(p: U32 at block) -> U32 at sample {
+  let a = p + 1
+  g2~(a).down~(2) at sample
+}
+
+pub flow chosen(x: U32 at sample) -> U32 at sample {
+  g2~(if x > 3 { x } else { 0 }).down~(2) at sample
+}
+
+pub flow chosen_let(x: U32 at sample) -> U32 at sample {
+  let a = if x > 3 { x } else { 0 }
+  g2~(a).down~(2) at sample
+}
+
+test "a slower expression lifted with at in the call is gathered as it is (by hand: 0 0 44 44 77 77 110 110)" {
+  var o: [U32; 8] = [99; 8]
+  var s = lifted.init(8.0)
+  lifted.process(inout s, lifted.Params { p: 3 }, inout o)
+  assert o == [0, 0, 44, 44, 77, 77, 110, 110]
+  var o2: [U32; 8] = [99; 8]
+  var s2 = lifted_let.init(8.0)
+  lifted_let.process(inout s2, lifted_let.Params { p: 3 }, inout o2)
+  assert o2 == o
+}
+
+test "lifted to sample / 2 under down 4, in a let, a delay of a slower let, the output of another chain: as with a let" {
+  var a: [U32; 16] = [99; 16]
+  var b: [U32; 16] = [99; 16]
+  var sa = lifted_half.init(8.0)
+  var sb = lifted_half_let.init(8.0)
+  lifted_half.process(inout sa, lifted_half.Params { p: 3 }, inout a)
+  lifted_half_let.process(inout sb, lifted_half_let.Params { p: 3 }, inout b)
+  assert a == b
+  assert a[15] != 0
+  var c: [U32; 8] = [99; 8]
+  var d: [U32; 8] = [99; 8]
+  var sc = in_a_let.init(8.0)
+  var sd = in_a_let_let.init(8.0)
+  in_a_let.process(inout sc, in_a_let.Params { p: 3 }, inout c)
+  in_a_let_let.process(inout sd, in_a_let_let.Params { p: 3 }, inout d)
+  assert c == d
+  assert c[7] == 111
+  var e: [U32; 8] = [99; 8]
+  var f: [U32; 8] = [99; 8]
+  var se = delayed.init(8.0)
+  var sf = delayed_let.init(8.0)
+  delayed.process(inout se, delayed.Params { p: 3 }, inout e)
+  delayed_let.process(inout sf, delayed_let.Params { p: 3 }, inout f)
+  assert f == [0, 0, 0, 0, 33, 33, 66, 66]
+  assert e == [0, 0, 0, 0, 33, 33, 66, 66]
+  var g: [U32; 12] = [99; 12]
+  var h: [U32; 12] = [99; 12]
+  var sg = dealt.init(8.0)
+  var sh = dealt_let.init(8.0)
+  dealt.process(inout sg, dealt.Params { p: 1 }, inout g)
+  dealt_let.process(inout sh, dealt_let.Params { p: 1 }, inout h)
+  assert g == h
+  assert g[11] != 0
+}
+
+test "a value of block and an if in the call: as with a let" {
+  var a: [U32; 6] = [99; 6]
+  var b: [U32; 6] = [99; 6]
+  var sa = of_block.init(8.0)
+  var sb = of_block_let.init(8.0)
+  of_block.process(inout sa, of_block.Params { p: 2 }, inout a)
+  of_block_let.process(inout sb, of_block_let.Params { p: 2 }, inout b)
+  assert a == b
+  assert a == [0, 0, 33, 33, 33, 33]
+  let xs: [U32; 8] = [1, 2, 3, 4, 5, 6, 7, 8]
+  var c: [U32; 8] = [99; 8]
+  var d: [U32; 8] = [99; 8]
+  var sc = chosen.init(8.0)
+  var sd = chosen_let.init(8.0)
+  chosen.process(inout sc, xs.slice(0, 8), inout c)
+  chosen_let.process(inout sd, xs.slice(0, 8), inout d)
+  assert c == d
+  assert c[6] == 56
+}
