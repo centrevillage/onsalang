@@ -2,14 +2,15 @@
 //! Q-09): what the case `tests/spec/flow_semantics/down_gather_deal_values.onsa` cannot pin.
 //!
 //! - `build`, `dump --core` and `test` end with 0 and no internal error for a head with a port at `sample * M` under `.down~(N)` (the input gathered, the output dealt), for a conversion flow that is only declared, and for
-//!   the forms in `par~`, `if~`, `match~` and inside a part under `.down~`. What stays E0200 is U6b: a chain whose boundary past the first one gathers or deals (`g4~(p).down~(2).down~(2)`, S-1214), a chain with an up,
-//!   and a call of a conversion flow with no chain that takes or gives a burst. A head that reads `sample_tick()` under such a chain is lowered (U6a3, S-1217; `sample_tick_commands.rs` and `down_chain_time_values.onsa`).
+//!   the forms in `par~`, `if~`, `match~` and inside a part under `.down~`. A chain whose boundary past the first one gathers or deals (`g4~(p).down~(2).down~(2)`, S-1214) is lowered from U6b1 (the last two tests;
+//!   the values are in `down_two_boundaries_values.onsa`). What stays E0200 is a chain with an up (U6b3) and a call of a conversion flow with no chain that takes or gives a burst (U6b2). A head that reads `sample_tick()` under such a chain is lowered (U6a3, S-1217; `sample_tick_commands.rs` and `down_chain_time_values.onsa`).
 //! - `onsa interface` of the parent has the ring of each gathered input as `<node>._gather_<boundary>_<input>` and the array of the dealt output as `<node>._deal_<boundary>`, after the state of the child, the boundary
 //!   counted over the `.down~` and `.up~` of the chain and the input by its place in the declaration of the head (S-1208, §11.6); the state of a conversion flow has a known size (§12.4).
 //!
 //! The texts are written from the spec; none is taken from the output of the compiler.
 
-use crate::slow_stage_commands::{assert_e0200_in, assert_lowers, bytes_of, state_fields, state_size};
+use crate::sample_tick_commands::assert_lowers_and_passes;
+use crate::slow_stage_commands::{assert_lowers, bytes_of, state_fields, state_size};
 use crate::test_support::{Dir, run};
 
 /// The heads and a part: gathers of 4 and 2 samples, two inputs, deals of 4 and 2, a head with a block input before its ports, a struct with a `Default` by hand, and `acc`.
@@ -250,11 +251,14 @@ pub flow fold_lp(x: F32 at (sample * 2)) -> F32 at sample {
     assert_eq!(state_size(&out.stdout, "fold_lp"), 8, "{}", out.stdout);
 }
 
-/// What U6a2 does not lower stays E0200 and nothing else, in the flow that has the form (§18.1: a flow is checked alone), and the flows beside it that gather at their first boundary are lowered: a boundary past the first
-/// one that gathers (`g4~(p).down~(2).down~(2)`: the first boundary gathers at the clock of its caller's `sample * 2`, S-1214 (1)) and one that deals (`mk4~(p).down~(2).down~(2)`) are U6b.
+/// A chain whose boundary past the first one gathers or deals is lowered (W7-16 U6b1; it was E0200 until then): `build`, `dump --core` and `test` end with 0 and the test of the package passes with the values of the composition
+/// of the boundaries (§11.9, S-1207, S-1214 (1); the values of the case `tests/spec/flow_semantics/down_two_boundaries_values.onsa` are the same kind). `g4~(p).down~(2).down~(2)` takes the 4 elements from the caller's frames
+/// c - 6 .. c - 3 (the first boundary takes 2 frames of the part that the second gave 2 frames each), not the c - 4 .. c - 1 of `.down~(4)`: p = 1 gives x = 0 0 1 1 at c = 4 and 1 1 1 1 at c = 8, 1100 and 1111, held 4
+/// frames. `mk4~(p).down~(2).down~(2)` deals the 4 elements to the frames c .. c + 3 in order, p = 10: 10 11 12 13 at each tick. A flow of a boundary that gathers at its first only (`ok`, `.down~(4)`) beside them gives
+/// its own values: x = 1 .. 12 gathers 4321 and 8765, and the elements of p = 10 are added.
 #[test]
-fn a_chain_that_gathers_or_deals_past_its_first_boundary_is_e0200_until_u6b() {
-    let flows = "flow g4(x: F32 at (sample * 4)) -> F32 at sample {
+fn a_chain_that_gathers_or_deals_past_its_first_boundary_is_lowered_and_gives_the_composed_values() {
+    let flows = r#"flow g4(x: F32 at (sample * 4)) -> F32 at sample {
   x[0] + x[1] * 10.0 + x[2] * 100.0 + x[3] * 1000.0
 }
 
@@ -273,6 +277,89 @@ pub flow ok(x: F32 at sample, p: F32 at block) -> F32 at sample {
 pub flow outer_deal(p: F32 at block) -> F32 at sample {
   mk4~(p).down~(2).down~(2)
 }
+
+test "values" {
+  let xs: [F32; 12] = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0]
+  var a: [F32; 12] = [-1.0; 12]
+  var b: [F32; 12] = [-1.0; 12]
+  var c: [F32; 12] = [-1.0; 12]
+  var sa = outer_gather.init(8.0)
+  var sb = ok.init(8.0)
+  var sc = outer_deal.init(8.0)
+  outer_gather.process(inout sa, outer_gather.Params { p: 1.0 }, inout a)
+  ok.process(inout sb, ok.Params { p: 10.0 }, xs.slice(0, 12), inout b)
+  outer_deal.process(inout sc, outer_deal.Params { p: 10.0 }, inout c)
+  assert a == [0.0, 0.0, 0.0, 0.0, 1100.0, 1100.0, 1100.0, 1100.0, 1111.0, 1111.0, 1111.0, 1111.0]
+  assert b == [10.0, 11.0, 12.0, 13.0, 4331.0, 4332.0, 4333.0, 4334.0, 8775.0, 8776.0, 8777.0, 8778.0]
+  assert c == [10.0, 11.0, 12.0, 13.0, 10.0, 11.0, 12.0, 13.0, 10.0, 11.0, 12.0, 13.0]
+}
+"#;
+    assert_lowers_and_passes("gather_deal_outer_values", flows, "values");
+}
+
+/// S-1208 and §11.6: a chain of two boundaries that gather has the rings of both, `<node>._gather_<boundary>_<input>` in the order of the boundaries and, in a boundary, of the inputs (W7-16 U6b1; the state of the node is
+/// `not available` while the chain is E0200). `g4~(x).down~(2).down~(2)`: the first boundary takes 4 elements of `F32` (16 bytes), the second 2 of the frames of its caller (8 bytes). Two ports at `sample * 4` and `sample * 2`
+/// (the second from a value at `sample / 2`): the first boundary has both rings (16 and 8 bytes), the second only the ring of the first port, because the second port is a value of the part's own `sample` that it does not
+/// gather. They come after the state of the child and before `_poisoned`, in a row.
+#[test]
+fn the_interface_names_the_rings_of_the_boundaries_of_a_chain_of_two_gathering_downs() {
+    let src = "\
+flow g4(x: F32 at (sample * 4)) -> F32 at sample {
+  x[0] + x[1] * 10.0 + x[2] * 100.0 + x[3] * 1000.0
+}
+
+flow g42(a: F32 at (sample * 4), b: F32 at (sample * 2)) -> F32 at sample {
+  a[0] + a[3] + b[1]
+}
+
+flow acc(f: F32 at block) -> F32 at sample {
+  let n = f + prev~(^n)
+  n
+}
+
+pub flow gather2(x: F32 at sample) -> F32 at sample {
+  let y = g4~(x).down~(2).down~(2)
+  y at sample
+}
+
+pub flow two_ports(f: F32 at block, x: F32 at sample) -> F32 at sample {
+  let h = acc~(f).down~(2)
+  let y = g42~(x, h).down~(2).down~(2)
+  y at sample
+}
 ";
-    assert_e0200_in("gather_deal_outer_e0200", flows, &["outer_gather", "outer_deal"]);
+    let d = Dir::pkg("gather_deal_interface_two");
+    d.write("m.onsa", src);
+    let out = run(d.root(), &["interface"]);
+    assert_eq!(out.code, 0, "{}{}", out.stdout, out.stderr);
+    assert!(!out.stdout.contains("not available"), "the size of the state is known: {}", out.stdout);
+    assert!(!out.stderr.contains("internal error"), "{}", out.stderr);
+    type Case<'a> = (&'a str, &'a str, &'a [(&'a str, u64)]);
+    let cases: [Case; 2] = [
+        ("gather2", "y.g4_0", &[("y.g4_0._gather_0_0", 16), ("y.g4_0._gather_1_0", 8)]),
+        (
+            "two_ports",
+            "y.g42_0",
+            &[("y.g42_0._gather_0_0", 16), ("y.g42_0._gather_0_1", 8), ("y.g42_0._gather_1_0", 8)],
+        ),
+    ];
+    for (flow, node, want) in cases {
+        let all = state_fields(&out.stdout, flow);
+        let names: Vec<&str> = all.iter().map(|f| f.0.as_str()).collect();
+        let fields = chain_fields(&out.stdout, flow);
+        let got: Vec<(&str, u64)> = fields.iter().map(|f| (f.0.as_str(), bytes_of(&f.2))).collect();
+        assert_eq!(got, want, "{flow}: the rings of the boundaries, in order, with their sizes: {names:?}");
+        let at = |n: &str| {
+            names.iter().position(|x| *x == n).unwrap_or_else(|| panic!("{flow}: a field `{n}` in {names:?}"))
+        };
+        assert_eq!(
+            at(want[0].0),
+            at(node) + 1,
+            "{flow}: the first ring is just after the state of the child: {names:?}"
+        );
+        for w in want.windows(2) {
+            assert_eq!(at(w[1].0), at(w[0].0) + 1, "{flow}: the rings are in a row: {names:?}");
+        }
+        assert_eq!(names[names.len() - 2..], ["_poisoned", "_initialized"], "{flow}: {names:?}");
+    }
 }

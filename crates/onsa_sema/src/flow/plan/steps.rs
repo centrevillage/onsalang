@@ -27,21 +27,50 @@ pub(super) fn table(n: &PlanNode, g: &FlowInfo) -> (Vec<Entry>, Read) {
     for (b, bound) in (0u32..).zip(&n.bounds) {
         level = arm(n, b, bound, level, &mut dealt);
     }
+    // The outermost that deals is read from, unless an `.up~` outside it
+    // widens its window: then the value is made of it ([`To::Value`]).
+    let read = match dealt {
+        Some(d) if !wider(n, d, n.bounds.len() as u32) => Read::Array(d),
+        _ => Read::Run,
+    };
+    // Where the caller reads it: its output moved out of the outermost boundary.
+    let read_at = n.bounds.last().and_then(|l| Some(bounds::step(ClockStage::Tick(l.out?), l.ratio)));
     let entries = level.into_iter().map(|(caller, ops)| {
-        let mut read = false;
-        Op::walk(&ops, &mut |op| read |= matches!(op, Op::Run { out: Out::Value, .. }));
-        Entry { caller, read, ops }
+        let mut writes = false;
+        Op::walk(&ops, &mut |op| {
+            writes |= match *op {
+                Op::Run { out: Out::Value, .. } | Op::Deal { to: To::Value, .. } => true,
+                Op::Run { out: Out::Deal(b), .. } | Op::Deal { to: To::Array(b), .. } => {
+                    read == Read::Array(b) && read_at == Some(caller)
+                }
+                _ => false,
+            }
+        });
+        Entry { caller, read: writes, ops }
     });
-    (entries.collect(), dealt.map_or(Read::Run, Read::Array))
+    (entries.collect(), read)
+}
+
+/// Whether the window of the array of the boundary `to` of `n` (of the
+/// value, of `to` the count of its boundaries) is wider than that of the
+/// boundary `from` inside it: the ratios from `from` to `to` sum to more
+/// than 0 (an `.up~` between widened it). The one test of it (D-15).
+fn wider(n: &PlanNode, from: u32, to: u32) -> bool {
+    let between = n.bounds.get(from as usize..to as usize).unwrap_or_default();
+    between.iter().map(|b| i64::from(b.ratio.0)).sum::<i64>() > 0
 }
 
 /// The work of the part the boundary `b` of `n` wraps (`level`) in the
 /// stages of the frame around it. Of a `.down~`, each stage moved
 /// ([`bounds::step`] is one to one), then the rings it writes, by input,
-/// then the copy of the array of the boundary inside that last dealt
-/// (`dealt`) at its tick. Of an `.up~`, which gathers and deals nothing
-/// ([`bounds::bounds`]), the stages moved to each stage of the frame in
-/// one [`Op::Each`], run each j at `sample` and j = 0 alone at a slower one.
+/// then, of one that deals, at its tick: the copy of the array of the
+/// boundary inside that last dealt (`dealt`) into its own, unless its
+/// window is wider (that boundary wrote it), and the copy of its own to the
+/// next that deals or the value when an `.up~` widens that window, after
+/// the writer of its own, in each run j of that `.up~`. Of an `.up~`,
+/// which gathers and deals nothing ([`bounds::bounds`]), the stages moved
+/// to each stage of the frame in one [`Op::Each`], run each j at `sample`
+/// and j = 0 alone at a slower one.
 fn arm(n: &PlanNode, b: u32, bound: &PlanBound, level: Level, dealt: &mut Option<u32>) -> Level {
     let r = bound.ratio;
     if !r.slower_than_body() {
@@ -57,8 +86,13 @@ fn arm(n: &PlanNode, b: u32, bound: &PlanBound, level: Level, dealt: &mut Option
         next.entry(q).or_default().push(Op::Ring { bound: b, input, from });
     }
     if bound.deals {
-        if let Some(from) = *dealt {
-            next.entry(ClockStage::Tick(r)).or_default().push(Op::Deal { bound: b, from });
+        let into = dealt.filter(|&d| !wider(n, d, b)).map(|from| Op::Deal { to: To::Array(b), from, by: b });
+        let to = (b + 1..).zip(&n.bounds[b as usize + 1..]).find(|c| c.1.deals).map(|c| c.0);
+        let wide = wider(n, b, to.unwrap_or(n.bounds.len() as u32));
+        let out = wide.then(|| Op::Deal { to: to.map_or(To::Value, To::Array), from: b, by: b });
+        let copies: Vec<Op> = into.into_iter().chain(out).collect();
+        if !copies.is_empty() {
+            next.entry(ClockStage::Tick(r)).or_default().extend(copies);
         }
         *dealt = Some(b);
     }

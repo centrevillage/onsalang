@@ -128,10 +128,9 @@ features! {
     NonCopyTickParts: Language, "a value that is not Copy computed at the clock `{}` and read at a faster clock",
         Some("write `at` on the names it reads, so that it is computed where it is read (`(a at sample) > 0.0`)");
     /// §11.9: the Core of a flow with a chain of modifiers that has an
-    /// `.up~(N)` or gathers or deals at more than one `.down~(N)`, a port
-    /// at `sample * N` or a call that gathers or deals one, which the later
-    /// units of W7-16 lower.
-    MultirateFlows: Language, "building a flow with a chain that has an `.up~(N)`, gathers or deals at more than one `.down~(N)`, or a call whose value or argument is at `(sample * N)` in its caller", None;
+    /// `.up~(N)`, a port at `sample * N` or a call that gathers or deals
+    /// one, which the later units of W7-16 lower.
+    MultirateFlows: Language, "building a flow with a chain that has an `.up~(N)`, or a call whose value or argument is at `(sample * N)` in its caller", None;
     /// §11.10: the meaning of `.when~(c)` and `.reset_if~(r)` (W7-10).
     InstanceModifiers: Language, "the modifiers `.when~(c)` and `.reset_if~(r)` of an instance", None;
     Iteration: Language, "iteration over types other than arrays, `Span`, `Buf` and `Array`", None;

@@ -44,10 +44,10 @@ pub(in crate::flow) fn bounds<'a>(chain: impl IntoIterator<Item = &'a PlanModifi
         let fast = |k: Option<Ratio>| k.filter(|k| r.slower_than_body() && k.faster_than_body());
         let gathers = (0u32..).zip(&ins).filter_map(|(i, &k)| fast(k).map(|k| (i, step(ClockStage::Tick(k), r))));
         let gathers = gathers.collect();
-        list.push(PlanBound { at, ratio: r, ins: ins.clone(), out, gathers, deals: fast(out).is_some() });
-        let moved = |k: Option<Ratio>| k.map(|k| Ratio(k.0.saturating_add(r.0)));
-        ins.iter_mut().for_each(|k| *k = moved(*k));
-        out = moved(out);
+        let bound = PlanBound { at, ratio: r, ins: ins.clone(), out, gathers, deals: fast(out).is_some() };
+        ins.iter_mut().for_each(|k| *k = k.map(|k| bound.outside(k)));
+        out = out.map(|k| bound.outside(k));
+        list.push(bound);
     }
     list
 }

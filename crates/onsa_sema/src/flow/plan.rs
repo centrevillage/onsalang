@@ -173,9 +173,11 @@ pub struct PlanNode {
 /// The work of an instance in the function of the stage `caller` of this
 /// flow (§11.9, S-1088, S-1207): its `ops`, in the order of §11.9 (the
 /// slow ticks, then the ticks of `sample`), which the Core lowers as they
-/// are. `read`: they make its value (a [`Op::Run`] of [`Out::Value`] is
-/// among them), so they are lowered where the call is read; else in the
-/// walk of the runs of that function.
+/// are. `read`: this flow reads the instance in that function and they
+/// write what it reads (a [`Op::Run`] of [`Out::Value`], a [`Op::Deal`] to
+/// [`To::Value`], or one of either into the array of its [`Read::Array`]),
+/// so they are lowered where the call is read, before it is; else in the
+/// walk of the runs of that function (the review of U6b, its high 1).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Entry {
     pub caller: ClockStage,
@@ -194,9 +196,11 @@ pub enum Op {
     /// The stage `body` of the head run (its function called); its result
     /// to `out`.
     Run { body: ClockStage, out: Out },
-    /// The array of the boundary `bound` written from that of the boundary
-    /// `from` inside it, at the tick of `bound` (two boundaries that deal).
-    Deal { bound: u32, from: u32 },
+    /// The elements of the array of the boundary `from` written to `to`
+    /// (the array of a boundary outside it that deals, or the value), in
+    /// the window of one frame inside the boundary `by` (§11.9): of the two
+    /// windows the narrower, of the boundary whose tick it is at.
+    Deal { to: To, from: u32, by: u32 },
     /// The runs of the part an `.up~(N)` boundary `bound` wraps: each of
     /// its N runs j (`once`: the run j = 0 alone, of a stage slower than
     /// the `sample` of its caller), and in each the ops of each stage of
@@ -221,8 +225,17 @@ pub enum Out {
     Deal(u32),
 }
 
-/// How a flow reads the value of an instance: the value of the run of its
-/// entry that is read, or the array of the outermost boundary that deals.
+/// Where an [`Op::Deal`] writes: the array of a boundary, or the value of
+/// the instance.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum To {
+    Array(u32),
+    Value,
+}
+
+/// How a flow reads the value of an instance: the value the ops of its
+/// entry read make, or the window of the array of the outermost
+/// boundary that deals (one no `.up~` outside it widens, [`steps`]).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Read {
     Run,
@@ -285,6 +298,15 @@ pub struct PlanBound {
     /// It deals the output of the part (a `.down~` of an output faster than
     /// its `sample`), at its own tick.
     pub deals: bool,
+}
+
+impl PlanBound {
+    /// The exponent `k` of a port of the part it wraps in the frame around
+    /// it: `k + r`. The one sum of it (D-15): the ports of the next boundary
+    /// ([`bounds::bounds`]) and the places of the Core read it.
+    pub fn outside(&self, k: Ratio) -> Ratio {
+        Ratio(k.0.saturating_add(self.ratio.0))
+    }
 }
 
 /// The words of the time the function of a stage takes ([`FlowInfo::time`]):

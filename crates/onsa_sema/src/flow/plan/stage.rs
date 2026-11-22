@@ -161,16 +161,14 @@ impl FlowInfo {
 
 impl PlanNode {
     /// Whether the Core lowers the chain of the node (§11.9, S-1207): none,
-    /// or one of an instance whose modifiers are all `.down~(N)`, whose
-    /// boundaries but the innermost gather and deal nothing (U6b of W7-16);
-    /// a burst it gathers or deals in its caller stops the gate on
-    /// its own. The one test of it (D-15): the gate
+    /// or one of an instance whose modifiers are all `.down~(N)` (an `.up~`
+    /// waits for U6b3 of W7-16); a burst it gathers or deals in its caller
+    /// stops the gate on its own. The one test of it (D-15): the gate
     /// ([`FlowInfo::multirate_at`]) and the Core, which runs a stage of a
     /// callee of no other chain, read it.
     pub fn lowered_chain(&self) -> bool {
         let downs = || self.chain.iter().all(|m| m.ratio.is_some_and(Ratio::slower_than_body));
-        let plain = || self.bounds.iter().skip(1).all(|b| b.gathers.is_empty() && !b.deals);
-        self.chain.is_empty() || matches!(self.kind, PlanKind::Instance { .. }) && downs() && plain()
+        self.chain.is_empty() || matches!(self.kind, PlanKind::Instance { .. }) && downs()
     }
 
     /// Its entry of the stage `s` of this flow whose `read` is `read`

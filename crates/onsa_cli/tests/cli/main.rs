@@ -34,6 +34,7 @@ mod down_chain_commands;
 mod down_chain_time_c_commands;
 mod down_chain_time_commands;
 mod down_gather_deal_commands;
+mod down_two_boundaries_c_commands;
 mod drop_path_model;
 mod dup_release_model;
 mod effect_names;

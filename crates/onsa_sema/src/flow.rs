@@ -131,7 +131,7 @@ pub use hoist::{Cond, Hoist, HoistId};
 pub use plan::{Counter, Words};
 pub use plan::{
     Edge, Entry, Feed, Field, FieldOf, Kept, NodeId, Op, Out, Owner, Part, PlanBound, PlanKind, PlanModifier, PlanNode,
-    Read, Vertex,
+    Read, To, Vertex,
 };
 
 pub(crate) use clocks::finish_flow;

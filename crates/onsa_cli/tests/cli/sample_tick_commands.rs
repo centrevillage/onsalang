@@ -89,19 +89,26 @@ fn a_chain_over_a_child_and_a_chain_inside_a_part_are_lowered_and_give_the_times
     assert_lowers_and_passes("sample_tick_chain_children_values", flows, "times of the parts");
 }
 
-/// What stays E0200 after U6a3 over a part that reads `sample_tick()`: a chain with an `.up~(N)` in it (U6b: the time of a part inside an up is the number times N plus the step) and a chain that gathers past its
-/// first boundary (`g4~(x).down~(2).down~(2)`, S-1214, U6b). `build`, `dump --core` and `test` stop with E0200 and nothing else (no internal error) at the line of the chain (§18.1: the first of the file); `check`
-/// reads the package with no diagnostic.
+/// What stays E0200 over a part that reads `sample_tick()`: a chain with an `.up~(N)` in it (U6b3: the time of a part inside an up is the number times N plus the step). `build`, `dump --core` and `test` stop with E0200
+/// and nothing else (no internal error) at the line of the chain (§18.1: the first of the file); `check` reads the package with no diagnostic. The chain that gathers past its first boundary is lowered from U6b1 (the next test).
 #[test]
-fn a_chain_with_an_up_or_a_second_gathering_boundary_over_a_part_that_reads_sample_tick_stays_e0200_until_u6b() {
+fn a_chain_with_an_up_over_a_part_that_reads_sample_tick_stays_e0200_until_u6b3() {
     let up = "flow tk() -> U32 at sample {\n  sample_tick()\n}\n\npub flow f() -> U32 at sample {\n  tk~().down~(2).up~(2) at sample\n}\n";
     assert_e0200("sample_tick_e0200_up", up, &[], Some(6));
-    let gathers = "flow g4(x: F32 at (sample * 4)) -> U32 at sample {\n  sample_tick()\n}\n\npub flow f(x: F32 at sample) -> U32 at sample {\n  g4~(x).down~(2).down~(2) at sample\n}\n";
-    assert_e0200("sample_tick_e0200_gather2", gathers, &[], Some(6));
+}
+
+/// A chain that gathers past its first boundary over a head that reads `sample_tick()` is lowered (W7-16 U6b1; it was E0200 until then, S-1214 (1), S-1217): the head runs at the frames c = 0, 4, 8, 12, reads the number of
+/// the outermost flow divided by the product of the N, c / 4 (§11.4: "`.down~(N)` の本体では N で割って切り捨て"), and its port at `sample * 4` has the caller's frames c - 6 .. c - 3 (the first boundary takes the 2 frames
+/// of the part that the second gave 2 frames each, §11.9). x = 1 2 3 ... (`x = c + 1`, 0 before the first frame): `x[0] + x[3] * time`: c = 0: 0; c = 4: frames -2 .. 1 = 0 0 1 2: 0 + 2 * 1 = 2; c = 8: 3 4 5 6: 3 + 6 * 2 = 15;
+/// c = 12: 7 8 9 10: 7 + 10 * 3 = 37; each held 4 frames. A head that reads the time and takes nothing of its port gives c / 4 as it is: 0 1 2.
+#[test]
+fn a_chain_with_a_second_gathering_boundary_over_a_part_that_reads_sample_tick_gives_the_time_divided_by_the_product() {
+    let flows = "flow g4(x: F32 at (sample * 4)) -> F32 at sample {\n  x[0] + x[3] * F32.round_from(sample_tick())\n}\n\nflow t4(x: F32 at (sample * 4)) -> U32 at sample {\n  sample_tick()\n}\n\npub flow f(x: F32 at sample) -> F32 at sample {\n  g4~(x).down~(2).down~(2) at sample\n}\n\npub flow t(x: F32 at sample) -> U32 at sample {\n  t4~(x).down~(2).down~(2) at sample\n}\n\ntest \"time over 4 with two boundaries\" {\n  let xs: [F32; 16] = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0]\n  var a: [F32; 16] = [-1.0; 16]\n  var b: [U32; 16] = [9; 16]\n  var sa = f.init(8.0)\n  var sb = t.init(8.0)\n  f.process(inout sa, xs.slice(0, 16), inout a)\n  t.process(inout sb, xs.slice(0, 16), inout b)\n  assert a == [0.0, 0.0, 0.0, 0.0, 2.0, 2.0, 2.0, 2.0, 15.0, 15.0, 15.0, 15.0, 37.0, 37.0, 37.0, 37.0]\n  assert b == [0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3]\n}\n";
+    assert_lowers_and_passes("sample_tick_gather2_values", flows, "time over 4 with two boundaries");
 }
 
 /// The package is lowered by `check`, `build`, `dump --core` and `test` (`assert_lowers`), and the test `name` of `main.onsa` is run and passes (the values of the chain, from §11.4).
-fn assert_lowers_and_passes(tag: &str, flows: &str, name: &str) {
+pub fn assert_lowers_and_passes(tag: &str, flows: &str, name: &str) {
     assert_lowers(tag, flows, &[]);
     let d = package(&format!("{tag}_values"), flows, &[]);
     let (out, doc) = test_json(d.root(), &[]);
