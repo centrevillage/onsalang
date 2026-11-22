@@ -28,6 +28,7 @@ fn what(f: &FlowInfo, of: FieldOf) -> String {
     let local = |l: LocalId| f.body.locals[l.0 as usize].name.clone();
     match of {
         FieldOf::SampleRate => "sample_rate".into(),
+        FieldOf::Tick => "tick".into(),
         FieldOf::Input(l) => format!("in {}", local(l)),
         FieldOf::Let(l) => format!("let {}", local(l)),
         FieldOf::Node(id, part) => {

@@ -1,0 +1,66 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.9", "§11.3", "§9.2"]
+
+// W7-16 U5a/t, S-578, S-1079, S-1077 (spec §11.9: "同じ位置では、入力のイベントの刻み、遅い刻み、`sample` の刻みの順に並ぶ。比の違う遅い刻みどうしは遅い方（N の大きい方）から並び、同じ比の刻みは本体の
+// 式の順である"; §11.3: `a at (sample / 2)` は昇格し（`a` は `sample / 4`）、逆は E0815): the frames where two ticks of different ratios are at the same position (0, 4, 8, … for `sample / 4`
+// and `sample / 2`). The one dependence that a value shows is slow to fast: a `let` of `sample / 2` that reads a value of `sample / 4` reads, at the frame 4, the value that the tick of `sample / 4`
+// gives at that frame (the slower tick is first), and a read at `sample` sees the new value of both. Which of two panics at the same position is the one that stops the run is in the CLI test
+// `slow_stage_commands.rs` (the slower first); here both flows panic at the frame 4 and nowhere before. Worked out by hand.
+
+pub flow order(p: F32 at block) -> F32 at sample {
+  let a = prev~(p at (sample / 4))
+  let b = (a at (sample / 2)) + 1.0
+  b at sample
+}
+
+pub flow three(p: F32 at block) -> F32 at sample {
+  let c = prev~(p at (sample / 8))
+  let a = (c at (sample / 4)) + 1.0
+  let b = (a at (sample / 2)) * 2.0
+  b at sample
+}
+
+pub flow both_panic(p: I32 at block) -> I32 at sample {
+  let b = delay~(p at (sample / 2), 2, 1)
+  let qb = 200 / b
+  let a = prev~(p at (sample / 4), 1)
+  let qa = 100 / a
+  (qa at sample) + (qb at sample)
+}
+
+test "a tick of sample / 2 reads the value that the tick of sample / 4 gives at the same position" {
+  // p = 3. a gives 0 at frame 0 and 3 at frame 4 (the tick of sample / 4 is first), b = a + 1 is computed at 0, 2, 4, 6: 1 1 4 4. A tick of sample / 2 first would give 1 at the frame 4 (the whole run 1 1 1 1 1 1 4 4).
+  let o = order.render(order.Params { p: 3.0 }, 8, 8.0)
+  assert o.out[0] == 1.0
+  assert o.out[1] == 1.0
+  assert o.out[2] == 1.0
+  assert o.out[3] == 1.0
+  assert o.out[4] == 4.0
+  assert o.out[5] == 4.0
+  assert o.out[6] == 4.0
+  assert o.out[7] == 4.0
+}
+
+test "three ticks at one position run from the slowest: 8, then 4, then 2" {
+  // p = 3, 16 frames. c (sample / 8) gives 0 at the frame 0 and 3 at the frame 8. a = c + 1 is computed at 0, 4, 8, 12: 1 1 4 4. b = 2 a is computed at 0, 2, …, 14: the frames 0 to 7 read a = 1 (2),
+  // and the frames 8 to 15 read a = 4 (8): at the frame 8 c is new first, then a is 4, then b is 8.
+  let o = three.render(three.Params { p: 3.0 }, 16, 8.0)
+  assert o.out[0] == 2.0
+  assert o.out[7] == 2.0
+  assert o.out[8] == 8.0
+  assert o.out[15] == 8.0
+}
+
+test "two ticks that panic at the same position do not panic before it" {
+  // p = 0: a gives 1 (its init) at the frame 0 and the stored 0 at the frame 4; b (a delay of 2 ticks) gives 1, 1 at the frames 0 and 2 and the stored 0 at the frame 4. 100 + 200 until then.
+  let o = both_panic.render(both_panic.Params { p: 0 }, 4, 8.0)
+  assert o.out[0] == 300
+  assert o.out[3] == 300
+}
+
+test "two ticks that panic at the same position panic at it" {
+  let o = both_panic.render(both_panic.Params { p: 0 }, 5, 8.0) //~ PANIC "two ticks that panic at the same position panic at it"
+  assert o.out[0] == 300
+}

@@ -16,6 +16,15 @@ pub(crate) fn lower_flow_expr(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId) -> R<O
         if f.sample_rate_calls.contains(&e) {
             return Ok(Some(f.sample_rate.clone()));
         }
+        // The counter of the phase of the state of the flow, at every
+        // stage (§11.4, S-1127). It is the time of an outermost instance
+        // alone: an instance of a flow that counts the time stops at
+        // `FlowInfo::multirate_at` until its caller gives it its time from
+        // the root (W7-16 U5b, S-1129 (1)).
+        if f.sample_tick_calls.contains(&e) {
+            let root = f.scopes.first().ok_or_else(|| internal(span, "`sample_tick()` outside the state"))?;
+            return sfield(lw, f.info, &root.state, FieldOf::Tick, span).map(Some);
+        }
         // A hoisted subexpression of an earlier stage: its field (§11.3), of
         // the scope it is lowered in: the `State` (a `let` or the output
         // holds it), or the replica of the `par~` whose body does (S-1140).
@@ -28,37 +37,30 @@ pub(crate) fn lower_flow_expr(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId) -> R<O
         (f.phase, f.info, id, state)
     };
     let (name, at) = (&info.node(id).path, |p| FieldOf::Node(id, p));
-    let not_here = |what: &str| internal(span, format!("`{what}` evaluated outside `tick`"));
+    // A delay is read in the function of its tick, an instance in `tick`.
+    let n = info.node(id);
+    let here = match n.kind {
+        PlanKind::Instance { .. } => phase == Phase::SAMPLE,
+        PlanKind::Par { .. } => true,
+        _ => n.clock.stage().is_some_and(|s| Phase::of(info, s) == phase),
+    };
+    if !here {
+        return Err(internal(span, format!("`{name}` evaluated outside the function of its tick")));
+    }
     let mut stmts = Vec::new();
     let value = match &info.node(id).kind {
-        PlanKind::Prev { .. } => {
-            if phase != Phase::Tick {
-                return Err(not_here("prev"));
-            }
-            sfield(lw, info, &state, at(Part::Own), span)?
-        }
+        PlanKind::Prev { .. } => sfield(lw, info, &state, at(Part::Own), span)?,
         PlanKind::Delay { .. } => {
-            if phase != Phase::Tick {
-                return Err(not_here("delay"));
-            }
             let buf = sfield(lw, info, &state, at(Part::Buf), span)?;
             let w = sfield(lw, info, &state, at(Part::W), span)?;
             index(buf, w)?
         }
-        PlanKind::Vdelay { d, max, ty, .. } => {
-            if phase != Phase::Tick {
-                return Err(not_here("vdelay"));
-            }
-            vdelay_read(lw, cx, &mut stmts, &state, id, *d, *max, *ty, span)?
-        }
+        PlanKind::Vdelay { d, max, ty, .. } => vdelay_read(lw, cx, &mut stmts, &state, id, *d, *max, *ty, span)?,
         PlanKind::Instance { callee, args, .. } => {
-            if phase != Phase::Tick {
-                return Err(not_here("a flow instance"));
-            }
             let sub = lw.ensure_flow(*callee)?;
             let ret = lw.m.fn_(sub.tick).ret.clone();
             let mut cargs = vec![inout(sfield(lw, info, &state, at(Part::Own), span)?)];
-            cargs.extend(instance_args(lw, cx, *callee, args, Phase::Tick, span)?.into_iter().map(borrow));
+            cargs.extend(instance_args(lw, cx, *callee, args, Phase::SAMPLE, span)?.into_iter().map(borrow));
             call(sub.tick, ret, span, cargs)
         }
         PlanKind::Par { body, .. } => {

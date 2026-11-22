@@ -4,17 +4,15 @@
 //! `derived_clock_times_in_an_expression.onsa`, `e0815_ratio_clash.onsa` and `derived_clock_non_rt_calls.onsa`.
 //!
 //! - The note of E0813 for a delay of a value of the parameter kinds shows `prev~(p at (sample / N))` (§11.4).
-//! - The flow that the clock checks accept is E0200 for `build`, `dump --core` and `test` (the Core of a derived clock is W7-16),
-//!   and `check` reads it with no diagnostic.
-//! - A computed part of a tick read at a faster stage has a field of its own (S-1158 (c), W7-09 U2r2): `check` reads it, and the Core
-//!   gate above stops the commands that lower it (the last test, which U2r2's cases pair with
-//!   `flow_clock/tick_fields_computed_parts.onsa`).
+//! - A computed part of a tick read at a faster stage has a field of its own (S-1158 (c), W7-09 U2r2): `check` reads it (the last test, which U2r2's
+//!   cases pair with `flow_clock/tick_fields_computed_parts.onsa`).
 //!
-//! The texts are written from the spec; none is taken from the output of the compiler. The checks run in this process
-//! (`check_input_out`); only the commands of the Core gate need a package on the disk.
+//! A flow with a delay or a part of a tick `sample / N` and no modifier or child is lowered by `build`, `dump --core` and `test` since W7-16 U5a: its
+//! tests are in `slow_stage_commands.rs` (what stays E0200 is there too). The texts are written from the spec; none is taken from the output of the
+//! compiler. The checks run in this process (`check_input_out`).
 
 use crate::test_support::sweep::check_input_out;
-use crate::test_support::{Dir, code_of, diagnostics, doc_of, fixes_of, notes_of, run, span_of, str_of, test_json};
+use crate::test_support::{code_of, diagnostics, doc_of, fixes_of, notes_of, str_of};
 use onsa_driver::PackageInput;
 use serde_json::Value;
 
@@ -49,56 +47,6 @@ fn the_e0813_of_a_delay_of_a_block_value_notes_the_derived_clock() {
     }
 }
 
-// ----------------------------------------------------------------------------- the gate of the Core
-
-const BUILD_MANIFEST: &str = "[package]\nname = \"demo\"\nedition = \"2026\"\n\n[targets.host]\nkind = \"source\"\nlang = \"c\"\nplatform = \"host\"\nprovides = []\n";
-
-/// A flow with a delay that ticks at `sample / 4` and is read at `sample` by its name: a form the clock checks accept.
-const TICKING: &str = "pub flow f(p: F32 at block, x: F32 at sample) -> F32 at sample {\n  let lf = prev~(p at (sample / 4))\n  x * (lf at sample)\n}\n\ntest \"reads\" {\n  assert 1 + 1 == 2\n}\n";
-
-fn error_lines(text: &str) -> Vec<&str> {
-    text.lines().filter(|l| l.contains("error[")).collect()
-}
-
-/// W7-09 (the Core of the ticks is W7-16): `check` reads the flow, and `build`, `dump --core` and `test` stop at it with E0200 and
-/// nothing else, on the file of the flow (Q-09: what is in the spec and not in this version is E0200, not a wrong output).
-#[test]
-fn a_flow_with_a_derived_clock_is_e0200_for_build_dump_core_and_test() {
-    let d = Dir::bare("ratio_core_gate");
-    d.write("onsa.toml", BUILD_MANIFEST);
-    d.write("main.onsa", TICKING);
-
-    let out = run(d.root(), &["check", "--json"]);
-    assert_eq!(out.code, 0, "check reads the flow: {}{}", out.stdout, out.stderr);
-    assert!(diagnostics(&doc_of(&out)).is_empty(), "{}", out.stdout);
-
-    let dir = d.arg();
-    let commands: [(&str, Vec<&str>); 3] = [
-        ("build", vec!["build", "--target", "host"]),
-        ("dump --core", vec!["dump", "--core", dir.as_str()]),
-        ("test", vec!["test"]),
-    ];
-    for (name, args) in commands {
-        let out = run(d.root(), &args);
-        assert_eq!(out.code, 1, "{name}: {}{}", out.stdout, out.stderr);
-        let both = format!("{}{}", out.stdout, out.stderr);
-        let lines = error_lines(&both);
-        assert!(!lines.is_empty(), "{name}: an error line: {both}");
-        for l in &lines {
-            assert!(l.contains("error[E0200]"), "{name}: only E0200: {l}");
-            assert!(l.contains("main.onsa:"), "{name}: E0200 is on the file of the flow: {l}");
-        }
-        assert!(!both.contains("internal error"), "{name}: {both}");
-    }
-
-    let (out, doc) = test_json(d.root(), &[]);
-    assert_eq!(out.code, 1, "{}{}", out.stdout, out.stderr);
-    let ds = diagnostics(&doc);
-    assert!(!ds.is_empty() && ds.iter().all(|x| code_of(x) == "E0200"), "{doc}");
-    assert!(ds.iter().all(|x| span_of(&x["span"]).file == "main.onsa"), "{doc}");
-    assert!(crate::test_support::tests_of(&doc).is_empty(), "nothing is run: {doc}");
-}
-
 // ----------------------------------------------------------------------------- the computed part of a tick (U2r2)
 
 fn flow_body(body: &str) -> String {
@@ -125,32 +73,5 @@ fn a_computed_part_of_a_tick_read_at_a_faster_stage_is_read_by_check() {
     for body in READS {
         let ds = diags(&flow_body(body));
         assert!(ds.is_empty(), "{body}: read as the spec has it, got {ds:?}");
-    }
-}
-
-/// W7-09 (the Core of the ticks is W7-16): the flow whose field `check` accepts is E0200 for the commands that lower it, and nothing else
-/// (Q-09: what the spec has and this version does not carry is E0200, not a wrong output).
-#[test]
-fn a_flow_with_the_field_of_a_computed_part_of_a_tick_is_e0200_for_build_and_dump_core() {
-    let d = Dir::bare("tick_field_core_gate");
-    d.write("onsa.toml", BUILD_MANIFEST);
-    d.write("main.onsa", &flow_body(READS[0]));
-    let out = run(d.root(), &["check", "--json"]);
-    assert_eq!(out.code, 0, "check reads the flow: {}{}", out.stdout, out.stderr);
-    assert!(diagnostics(&doc_of(&out)).is_empty(), "{}", out.stdout);
-
-    let dir = d.arg();
-    let commands: [(&str, Vec<&str>); 2] =
-        [("build", vec!["build", "--target", "host"]), ("dump --core", vec!["dump", "--core", dir.as_str()])];
-    for (name, args) in commands {
-        let out = run(d.root(), &args);
-        assert_eq!(out.code, 1, "{name}: {}{}", out.stdout, out.stderr);
-        let both = format!("{}{}", out.stdout, out.stderr);
-        let lines = error_lines(&both);
-        assert!(!lines.is_empty(), "{name}: an error line: {both}");
-        for l in &lines {
-            assert!(l.contains("error[E0200]"), "{name}: only E0200: {l}");
-        }
-        assert!(!both.contains("internal error"), "{name}: {both}");
     }
 }

@@ -1,5 +1,6 @@
-//! The phase functions of a flow (§11.4): `init`, `reset`, `ctl` and
-//! `tick`, each with the work of its nodes.
+//! The phase functions of a flow (§11.4): `init`, `reset`, `ctl`, `tick`
+//! and those of the slower ticks, each with the work of its nodes, and the
+//! driver of the slower ticks ([`drive`]).
 
 use super::*;
 
@@ -27,6 +28,7 @@ pub(super) fn gen_init<'b>(lw: &mut Lowerer<'b>, shape: &FlowShape, info: &'b Fl
         let f = sfield(lw, info, &s, FieldOf::SampleRate, span)?;
         assign(&mut g.stmts, &f, sr.clone())?;
     }
+    restart(lw, &mut g.cx, &mut g.stmts, &s)?;
     g.inputs_from(lw, shape, info, &cfg, &s)?;
     g.state_overrides(lw, info, &s)?;
     g.const_lets(lw, info)?;
@@ -62,14 +64,19 @@ struct Walk {
     /// chooses them.
     arms: Option<ClockStage>,
     /// Whether a `par~` of the children given, which holds state when the
-    /// flag is set, has a loop of its replicas.
-    loops: fn(&FlowInfo, &[NodeId], bool) -> bool,
+    /// flag is set, has a loop of its replicas in the function of the stage.
+    loops: fn(&FlowInfo, &[NodeId], bool, ClockStage) -> bool,
 }
 
 /// A `par~` that holds state has a loop of its replicas, of no work too
 /// (one of delays only in `ctl`).
-fn held(_: &FlowInfo, _: &[NodeId], holds: bool) -> bool {
+fn held(_: &FlowInfo, _: &[NodeId], holds: bool, _: ClockStage) -> bool {
     holds
+}
+
+/// The phase of the function `cx` lowers.
+fn phase(cx: &FnCx) -> Phase {
+    cx.flow.as_ref().expect("flow context").phase
 }
 
 /// The work `f` of each of the nodes `ids` in the order of the table, in
@@ -94,7 +101,7 @@ fn each_node(
         }
         f(lw, cx, out, id, state)?;
         let PlanKind::Par { children, state: holds, .. } = &n.kind else { continue };
-        if !(walk.loops)(info, children, *holds) {
+        if !(walk.loops)(info, children, *holds, phase(cx).stage()) {
             continue;
         }
         let r = replica_loop(cx, &n.kind, span)?;
@@ -148,6 +155,54 @@ fn init_node(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, id: NodeId, s
     Ok(())
 }
 
+/// The time of `init` and `reset` in the state `s` (§11.6, §11.9): the
+/// counter of the phase at 0, the one place of `init` and `reset` that
+/// writes it (`reset_if~` does not, W7-10), then the fields written at a
+/// tick and read at a faster stage at `T.default()` ([`defaults`]).
+fn restart(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, s: &Expr) -> R<()> {
+    let (info, span) = (plan(cx), s.span);
+    if info.counts_time() {
+        assign(out, &sfield(lw, info, s, FieldOf::Tick, span)?, u32_lit(span, 0))?;
+    }
+    defaults(lw, cx, out, &info.fields, s)
+}
+
+/// The fields of `fields` of the struct `state` that start at
+/// `T.default()` (§11.3, S-1186, [`FlowInfo::starts_default`]) set to it,
+/// written so and not left to the zeroed state (a hand-written `Default`),
+/// and those of the replicas of a `par~` among them in a loop of them.
+fn defaults(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, fields: &[Field], state: &Expr) -> R<()> {
+    let (info, span) = (plan(cx), state.span);
+    for f in fields {
+        if info.starts_default(f.of) {
+            let place = sfield(lw, info, state, f.of, span)?;
+            let v = crate::lower::derived::default_value(lw, &place.ty, span)?;
+            assign(out, &place, v)?;
+        }
+        let FieldOf::Node(id, Part::Own) = f.of else { continue };
+        let kind = &info.node(id).kind;
+        let PlanKind::Par { fields: inner, .. } = kind else { continue };
+        if !starts_default(info, inner) {
+            continue;
+        }
+        let r = replica_loop(cx, kind, span)?;
+        let elem = index(sfield(lw, info, state, f.of, span)?, r.index(cx, span))?;
+        let mut body = Vec::new();
+        defaults(lw, cx, &mut body, inner, &elem)?;
+        out.push(r.each(cx, span, body));
+    }
+    Ok(())
+}
+
+/// Whether one of `fields` starts at `T.default()`, in a replica too.
+fn starts_default(info: &FlowInfo, fields: &[Field]) -> bool {
+    fields.iter().any(|f| {
+        info.starts_default(f.of)
+            || matches!(f.of, FieldOf::Node(id, Part::Own)
+                if matches!(&info.node(id).kind, PlanKind::Par { fields, .. } if starts_default(info, fields)))
+    })
+}
+
 /// `reset(inout s)`.
 pub(super) fn gen_reset<'b>(lw: &mut Lowerer<'b>, shape: &FlowShape, info: &'b FlowInfo, fns: &FlowFns) -> R<()> {
     let mut g = Gen::new(lw, shape, info, Phase::Init, Ty::Unit)?;
@@ -157,6 +212,7 @@ pub(super) fn gen_reset<'b>(lw: &mut Lowerer<'b>, shape: &FlowShape, info: &'b F
     };
     let s = s.clone();
     g.flow().push_scope(s.clone());
+    restart(lw, &mut g.cx, &mut g.stmts, &s)?;
     let nodes: Vec<NodeId> = info.top().collect();
     let walk = Walk { arms: None, loops: held };
     each_node(lw, &mut g.cx, &mut g.stmts, &nodes, &s, walk, &mut reset_node)?;
@@ -233,12 +289,30 @@ fn ctl_node(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, id: NodeId, st
     Ok(())
 }
 
-/// `tick(inout s, <Sig inputs>) -> out`.
-pub(super) fn gen_tick<'b>(lw: &mut Lowerer<'b>, shape: &FlowShape, info: &'b FlowInfo, fns: &FlowFns) -> R<()> {
-    let out_ty = shape.out_val.clone();
-    let mut g = Gen::new(lw, shape, info, Phase::Tick, out_ty.clone())?;
+/// The function of the tick `stage` (§11.4, §11.9): `tick(inout s, <Sig
+/// inputs>) -> out` of the `sample` of the body, `tick_<N>(inout s)` of a
+/// slower one, which [`drive`] calls. In order: the `let`s of the tick and
+/// the fields hoisted to it ([`Gen::stage_lets`]), the output of `tick`,
+/// the stores of the nodes of the tick, and last in `tick` the counter of
+/// the phase advanced.
+// SPEC-GAP(S-1206): the order in a stage is that of the reference
+// evaluator (S-1159 provisional): its `let`s, then the stores.
+pub(super) fn gen_tick<'b>(
+    lw: &mut Lowerer<'b>,
+    shape: &FlowShape,
+    info: &'b FlowInfo,
+    fns: &FlowFns,
+    stage: ClockStage,
+) -> R<()> {
+    let span = shape.span;
+    let (ClockStage::Tick(k), Some(fid)) = (stage, fns.stage_fn(stage)) else {
+        return Err(internal(span, format!("no function of the tick {stage:?}")));
+    };
+    let phase = Phase::Tick(k);
+    let out_ty = if phase == Phase::SAMPLE { shape.out_val.clone() } else { Ty::Unit };
+    let mut g = Gen::new(lw, shape, info, phase, out_ty.clone())?;
     let s = g.param("s", Mode::Inout, Ty::Struct(shape.state_ty));
-    for i in shape.inputs.iter().filter(|i| i.phase == Phase::Tick) {
+    for i in shape.inputs.iter().filter(|i| i.phase == phase) {
         g.param_local(LocalId(i.local.0), Mode::Borrow);
     }
     g.flow().push_scope(s.clone());
@@ -246,15 +320,45 @@ pub(super) fn gen_tick<'b>(lw: &mut Lowerer<'b>, shape: &FlowShape, info: &'b Fl
     g.state_overrides(lw, info, &s)?;
     g.const_lets(lw, info)?;
     g.stage_lets(lw, info, &s)?;
-    let output = info.output.ok_or_else(|| internal(shape.span, "flow without an output expression"))?;
-    let v = lower_expr(lw, &mut g.cx, output)?;
-    let v = of_type(v, &out_ty)?;
-    // Materialised before the stores so a `prev` inside the output reads first (§11.4).
-    let out_local = g.let_("__out", v);
+    let mut out = None;
+    if phase == Phase::SAMPLE {
+        let output = info.output.ok_or_else(|| internal(span, "flow without an output expression"))?;
+        let v = lower_expr(lw, &mut g.cx, output)?;
+        let v = of_type(v, &out_ty)?;
+        // Materialised before the stores so a `prev` inside the output reads first (§11.4).
+        out = Some(g.let_("__out", v));
+    }
     let nodes: Vec<NodeId> = info.top().collect();
-    let walk = Walk { arms: None, loops: |info, children, _| stores(info, children) };
+    let walk = Walk { arms: None, loops: |info, children, _, s| stores(info, children, s) };
     each_node(lw, &mut g.cx, &mut g.stmts, &nodes, &s, walk, &mut store_node)?;
-    g.finish(lw, fns.tick, out_ty, true, Some(out_local));
+    if out.is_some() && info.counts_time() {
+        let t = sfield(lw, info, &s, FieldOf::Tick, span)?;
+        let one = Box::new(u32_lit(span, 1));
+        let next = ExprKind::Binary { op: BinOp::Add, overflow: Overflow::Wrap, lhs: Box::new(t.clone()), rhs: one };
+        assign(&mut g.stmts, &t, Expr::new(Ty::u32(), span, next))?;
+    }
+    g.finish(lw, fid, out_ty, true, out);
+    Ok(())
+}
+
+/// The calls of the functions of the ticks slower than the `sample` of the
+/// body (`FlowFns::stages`), slowest first (S-578, S-1079), each at its
+/// ticks: when the counter of the phase of the state `s` is a multiple of
+/// its N, so the first frame runs it and the tick does not depend on how
+/// the host splits the frames (§11.9). The one driver of them: `process`
+/// runs it before `tick` (a slower loop of W7-16 does too).
+pub(super) fn drive(lw: &Lowerer, info: &FlowInfo, fns: &FlowFns, s: &Expr, span: Span, out: &mut Vec<Stmt>) -> R<()> {
+    for &(stage, f) in &fns.stages {
+        let mask = match stage {
+            ClockStage::Tick(k) => k.n().and_then(|n| u32::try_from(n - 1).ok()),
+            _ => None,
+        };
+        let mask = mask.ok_or_else(|| internal(span, format!("no counter of the tick {stage:?}")))?;
+        let low = checked_binary(BinOp::BitAnd, sfield(lw, info, s, FieldOf::Tick, span)?, u32_lit(span, mask));
+        let run = vec![stmt(span, StmtKind::Expr(call(f, Ty::Unit, span, vec![inout(s.clone())])))];
+        let due = cmp(CmpOp::Eq, low, u32_lit(span, 0));
+        out.push(stmt(span, StmtKind::If(due, Block { stmts: run, value: None }, Block::default())));
+    }
     Ok(())
 }
 
@@ -276,11 +380,12 @@ pub(super) fn gen_tick<'b>(lw: &mut Lowerer<'b>, shape: &FlowShape, info: &'b Fl
 fn store_node(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, id: NodeId, state: &Expr) -> R<()> {
     let info = plan(cx);
     let n = info.node(id);
-    let Some(arg) = stored_arg(&n.kind) else { return Ok(()) };
+    let Some(arg) = stored_arg(info, id, phase(cx).stage()) else { return Ok(()) };
     let (span, at) = (cx.ast.expr(n.expr).span, |p| FieldOf::Node(id, p));
     let ring = match n.kind {
         PlanKind::Prev { .. } => None,
-        _ => Some(ring_len(&n.kind, span)?),
+        PlanKind::Delay { .. } | PlanKind::Vdelay { .. } => Some(ring_len(&n.kind, span)?),
+        PlanKind::Instance { .. } | PlanKind::Par { .. } => return Err(internal(span, "a store of no delay")),
     };
     let v = lower_expr(lw, cx, arg)?;
     let Some(len) = ring else {
@@ -293,22 +398,27 @@ fn store_node(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, id: NodeId, 
     assign(out, &w, next)
 }
 
-/// The argument a node stores at the end of `tick` ([`store_node`]), the one
-/// list of the nodes that store: a `prev` into its field, a `delay` /
-/// `vdelay` into its ring; an instance stores in its own `tick`, a `par~` in
+/// The argument the node `id` stores at the end of the function of the
+/// stage `s` ([`store_node`]), the one list of the nodes that store: a
+/// `prev` into its field, a `delay` / `vdelay` into its ring, in the
+/// function of its tick; an instance stores in its own `tick`, a `par~` in
 /// the loop of its replicas.
-fn stored_arg(kind: &PlanKind) -> Option<ExprId> {
-    match kind {
-        PlanKind::Prev { arg, .. } | PlanKind::Delay { arg, .. } | PlanKind::Vdelay { arg, .. } => Some(*arg),
-        PlanKind::Instance { .. } | PlanKind::Par { .. } => None,
-    }
+fn stored_arg(info: &FlowInfo, id: NodeId, s: ClockStage) -> Option<ExprId> {
+    let n = info.node(id);
+    let arg = match &n.kind {
+        PlanKind::Prev { arg, .. } | PlanKind::Delay { arg, .. } | PlanKind::Vdelay { arg, .. } => *arg,
+        PlanKind::Instance { .. } | PlanKind::Par { .. } => return None,
+    };
+    n.clock.stage().is_some_and(|c| info.run_stage(c) == s).then_some(arg)
 }
 
-/// Whether the nodes `ids` store in `tick` ([`stored_arg`]), in a `par~`
-/// of them too.
-fn stores(info: &FlowInfo, ids: &[NodeId]) -> bool {
+/// Whether the nodes `ids` store in the function of the stage `s`
+/// ([`stored_arg`]), in a `par~` of them too.
+fn stores(info: &FlowInfo, ids: &[NodeId], s: ClockStage) -> bool {
     ids.iter().any(|&id| match &info.node(id).kind {
-        PlanKind::Par { children, .. } => stores(info, children),
-        kind => stored_arg(kind).is_some(),
+        PlanKind::Par { children, .. } => stores(info, children, s),
+        PlanKind::Prev { .. } | PlanKind::Delay { .. } | PlanKind::Vdelay { .. } | PlanKind::Instance { .. } => {
+            stored_arg(info, id, s).is_some()
+        }
     })
 }

@@ -1,0 +1,107 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.5", "§11.9", "§11.3"]
+
+// W7-16 U5a/t, S-565, S-578 (spec §11.5: all the arms of an `if~` / `match~` and all the replicas of a `par~` run at every tick, the one that is chosen is the value that is read; §11.9: the ticks
+// are where the frame count says): the delays at `sample / 4` in the arms of an `if~` and a `match~`, in the replicas of a `par~`, and in a `par~` in an arm. The delay of an arm that is not
+// chosen goes on ticking, so the arm that is chosen later gives its own history, not its init. Worked out by hand (p = 3: the arm `p` stores 3, the arm `p * 2` stores 6).
+
+pub flow in_arms(c: Bool at block, p: F32 at block) -> F32 at sample {
+  let y = if~ c { prev~(p at (sample / 4)) } else { prev~((p * 2.0) at (sample / 4)) }
+  y at sample
+}
+
+pub flow in_match(n: U32 at block, p: F32 at block) -> F32 at sample {
+  let y = match~ n {
+    0 => prev~(p at (sample / 4)),
+    _ => prev~((p * 2.0) at (sample / 4)),
+  }
+  y at sample
+}
+
+pub flow in_par(p: F32 at block) -> F32 at sample {
+  let ys = par~ i in 0 ..< 2 { prev~((p * F32.round_from(i + 1)) at (sample / 4)) }
+  (ys[0] at sample) + (ys[1] at sample) * 10.0
+}
+
+pub flow par_in_an_arm(c: Bool at block, p: F32 at block) -> F32 at sample {
+  let y = if~ c {
+    (par~ i in 0 ..< 2 { prev~((p * F32.round_from(i + 1)) at (sample / 4)) })[1]
+  } else {
+    prev~((p * 100.0) at (sample / 4))
+  }
+  y at sample
+}
+
+test "an if~ keeps the delay of the arm that is not chosen ticking" {
+  // Call 1 (c true, frames 0 to 3): tick 0 gives 0 from both arms and stores 3 and 6. Call 2 (c false, frames 4 to 7): tick 4 gives 6 (the arm p * 2 has stored 6 at tick 0). Call 3 (c true, frames
+  // 8 to 11): tick 8 gives 3 (the arm p has stored 3 at tick 4).
+  var out: [F32; 12] = [-1.0; 12]
+  var st = in_arms.init(8.0)
+  in_arms.process(inout st, in_arms.Params { c: true, p: 3.0 }, inout out.slice(0, 4))
+  in_arms.process(inout st, in_arms.Params { c: false, p: 3.0 }, inout out.slice(4, 8))
+  in_arms.process(inout st, in_arms.Params { c: true, p: 3.0 }, inout out.slice(8, 12))
+  assert out[0] == 0.0
+  assert out[1] == 0.0
+  assert out[2] == 0.0
+  assert out[3] == 0.0
+  assert out[4] == 6.0
+  assert out[5] == 6.0
+  assert out[6] == 6.0
+  assert out[7] == 6.0
+  assert out[8] == 3.0
+  assert out[9] == 3.0
+  assert out[10] == 3.0
+  assert out[11] == 3.0
+}
+
+test "a match~ keeps the delay of the arm that is not chosen ticking" {
+  var out: [F32; 12] = [-1.0; 12]
+  var st = in_match.init(8.0)
+  in_match.process(inout st, in_match.Params { n: 0, p: 3.0 }, inout out.slice(0, 4))
+  in_match.process(inout st, in_match.Params { n: 1, p: 3.0 }, inout out.slice(4, 8))
+  in_match.process(inout st, in_match.Params { n: 0, p: 3.0 }, inout out.slice(8, 12))
+  assert out[0] == 0.0
+  assert out[1] == 0.0
+  assert out[2] == 0.0
+  assert out[3] == 0.0
+  assert out[4] == 6.0
+  assert out[5] == 6.0
+  assert out[6] == 6.0
+  assert out[7] == 6.0
+  assert out[8] == 3.0
+  assert out[9] == 3.0
+  assert out[10] == 3.0
+  assert out[11] == 3.0
+}
+
+test "the replicas of a par~ tick with their own delays" {
+  // The replica 0 stores 3 and the replica 1 stores 6: from the frame 4, 3 + 6 * 10 = 63.
+  let o = in_par.render(in_par.Params { p: 3.0 }, 8, 8.0)
+  assert o.out[0] == 0.0
+  assert o.out[3] == 0.0
+  assert o.out[4] == 63.0
+  assert o.out[7] == 63.0
+}
+
+test "a par~ in an arm of an if~ ticks when its arm is not chosen" {
+  // c true in call 1: the replica 1 gives 0 at tick 0 and stores 6. c false in call 2: the other arm has stored 300 at tick 0 and gives it at tick 4. Call 3 (c true) from the frame 8: the replica 1 has stored 6 at tick 4.
+  var out: [F32; 12] = [-1.0; 12]
+  var st = par_in_an_arm.init(8.0)
+  par_in_an_arm.process(inout st, par_in_an_arm.Params { c: true, p: 3.0 }, inout out.slice(0, 4))
+  par_in_an_arm.process(inout st, par_in_an_arm.Params { c: false, p: 3.0 }, inout out.slice(4, 8))
+  par_in_an_arm.process(inout st, par_in_an_arm.Params { c: true, p: 3.0 }, inout out.slice(8, 12))
+  assert out[0] == 0.0
+  assert out[1] == 0.0
+  assert out[2] == 0.0
+  assert out[3] == 0.0
+  assert out[4] == 300.0
+  assert out[5] == 300.0
+  assert out[6] == 300.0
+  assert out[7] == 300.0
+  assert out[8] == 6.0
+  assert out[9] == 6.0
+  assert out[10] == 6.0
+  assert out[11] == 6.0
+}

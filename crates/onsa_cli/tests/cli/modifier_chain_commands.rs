@@ -1,7 +1,7 @@
 //! A flow with a chain of `.down~(N)` and `.up~(N)` in the commands of `onsa` (W7-09 U3b/t; spec §11.9, §11.3, §11.6, §18.1,
 //! `spec/tools.md` §1.1; S-566, S-1084, S-1139, Q-09): what the case files in `tests/spec/flow_clock/` cannot pin.
 //!
-//! - The Core of the ticks is W7-16, so `build`, `dump --core` and `test` stop at a flow that has a chain with E0200 and with nothing else
+//! - The Core of a chain is W7-16 U6a and U6b, so `build`, `dump --core` and `test` stop at a flow that has a chain with E0200 and with nothing else
 //!   (no internal error), on the file of the flow, while `check` reads it with no diagnostic and `onsa interface` ends with 0 (the size of
 //!   the state, which W7-16 changes, is not pinned).
 //! - `onsa graph` of such a flow: the label of the vertex of an instance with modifiers writes the kind and then the modifiers in the order
@@ -78,6 +78,12 @@ fn a_flow_with_a_down_chain_is_e0200_for_build_dump_core_and_test() {
         assert!(!ds.is_empty() && ds.iter().all(|x| code_of(x) == "E0200"), "{body}: {doc}");
         assert!(ds.iter().all(|x| span_of(&x["span"]).file == "main.onsa"), "{body}: {doc}");
         assert!(tests_of(&doc).is_empty(), "{body}: nothing is run: {doc}");
+        // The chain is the only form that U5a leaves (W7-16 U5a/t; a `sample / N` stage of the flow is lowered), so the first diagnostic (§18.1: the order of the
+        // file, the line and the column) is on the line where the chain is written.
+        let chain_line =
+            1 + source(body).lines().position(|l| l.contains(".down~(")).expect("a chain in the body") as u64;
+        let first = span_of(&ds[0]["span"]);
+        assert_eq!(first.line, chain_line, "{body}: the first E0200 is at the chain: {doc}");
     }
 }
 

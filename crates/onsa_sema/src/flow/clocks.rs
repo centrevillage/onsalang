@@ -55,7 +55,7 @@ pub(crate) fn finish_flow(a: &mut Analysis, module: &Module, id: DefId, body: Bo
     let mut info = FlowInfo {
         inputs: fcx.inputs.clone(),
         sample_rate_calls: fcx.sample_rate_calls.clone(),
-        sample_tick_at: fcx.sample_tick_calls.iter().map(|&e| module.parsed.ast.expr(e).span).min_by_key(|s| s.start),
+        sample_tick_calls: fcx.sample_tick_calls.clone(),
         output: fcx.output,
         derived_port: a.def(id).as_flow().and_then(|f| f.derived_port(a.def(id).name_span)),
         complete: false,

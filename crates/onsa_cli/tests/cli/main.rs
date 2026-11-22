@@ -109,6 +109,7 @@ mod prelude_names;
 mod range_syntax;
 mod repeat_zero_model;
 mod sample_tick_commands;
+mod slow_stage_commands;
 mod std_privilege;
 mod syntax_units;
 mod test_failure_positions;

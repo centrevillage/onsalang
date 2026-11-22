@@ -1,0 +1,28 @@
+# flow_ref 1 source=tests/spec/flow_semantics/slow_tick_branches.onsa tests=4 evaluated=4 unavailable=0 skipped=0 waiting=0
+@ an if~ keeps the delay of the arm that is not chosen ticking
+init 0 slow_tick_branches.in_arms sr=0x41000000
+process 0 params c=true p=0x40400000 frames=4
+out=[0x00000000 0x00000000 0x00000000 0x00000000]
+process 0 params c=false p=0x40400000 frames=4
+out=[0x40c00000 0x40c00000 0x40c00000 0x40c00000]
+process 0 params c=true p=0x40400000 frames=4
+out=[0x40400000 0x40400000 0x40400000 0x40400000]
+@ a match~ keeps the delay of the arm that is not chosen ticking
+init 0 slow_tick_branches.in_match sr=0x41000000
+process 0 params n=0 p=0x40400000 frames=4
+out=[0x00000000 0x00000000 0x00000000 0x00000000]
+process 0 params n=1 p=0x40400000 frames=4
+out=[0x40c00000 0x40c00000 0x40c00000 0x40c00000]
+process 0 params n=0 p=0x40400000 frames=4
+out=[0x40400000 0x40400000 0x40400000 0x40400000]
+@ the replicas of a par~ tick with their own delays
+render slow_tick_branches.in_par sr=0x41000000 params p=0x40400000 frames=8
+out=[0x00000000 0x00000000 0x00000000 0x00000000 0x427c0000 0x427c0000 0x427c0000 0x427c0000]
+@ a par~ in an arm of an if~ ticks when its arm is not chosen
+init 0 slow_tick_branches.par_in_an_arm sr=0x41000000
+process 0 params c=true p=0x40400000 frames=4
+out=[0x00000000 0x00000000 0x00000000 0x00000000]
+process 0 params c=false p=0x40400000 frames=4
+out=[0x43960000 0x43960000 0x43960000 0x43960000]
+process 0 params c=true p=0x40400000 frames=4
+out=[0x40c00000 0x40c00000 0x40c00000 0x40c00000]

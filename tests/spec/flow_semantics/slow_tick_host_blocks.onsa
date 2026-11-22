@@ -1,0 +1,125 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.9", "§11.6", "§11.10", "§13.4"]
+
+// W7-16 U5a/t, S-565, S-1127, S-1196 (spec §11.9: "`sample / N` の刻みはカウンタが N の倍数の刻みで、最初の刻みで動く。ホストの区切りに依らない（ホストのブロックの長さを 2^N に揃える必要は無い）";
+// §11.6: "呼び出しを位置 k で分けると … 出力は分けない呼び出しとビットで同じである（`params` が同じとき。`block` は状態を持たず、位相のカウンタはホストの区切りに依らない）"、"長さが 0 の呼び出しも
+// 正しい呼び出しで、… `sample` の段は評価しない"、生成する `reset`: "位相のカウンタ（§11.9）を 0 にする"): the output of a flow with two delays at `sample / 4` and `sample / 2` and a `sample_tick()`
+// is the same wherever the host cuts the run (a block of any length, one of 0 frames, one of 1 frame) and after a `reset` at any position (the next frame is the frame 0 of a run, whose ticks are at
+// 0, 4, 8, … again and whose count is 0). The values do not depend on the evaluator that runs them. Worked out by hand: for x = 1 2 3 4 5 6 7 and p = 1,
+//   a (sample / 4, delay of p): 0 0 0 0 1 1 1          b (sample / 2, delay of 2 p): 0 0 2 2 2 2 2          t = 0 1 2 3 4 5 6
+//   out = x t + 10 a + 100 b = 0, 2, 6 + 200, 12 + 200, 20 + 10 + 200, 30 + 10 + 200, 42 + 10 + 200 = 0 2 206 212 230 240 252.
+// A run after `reset` has the delays at their init again, so another run with another p before the `reset` leaves nothing in the next.
+
+pub flow grid(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let a = prev~(p at (sample / 4))
+  let b = prev~((p * 2.0) at (sample / 2))
+  let t = sample_tick()
+  x * F32.round_from(t) + (a at sample) * 10.0 + (b at sample) * 100.0
+}
+
+fn is_grid(o: [F32; 7]) -> Bool {
+  o[0] == 0.0 && o[1] == 2.0 && o[2] == 206.0 && o[3] == 212.0 && o[4] == 230.0 && o[5] == 240.0 && o[6] == 252.0
+}
+
+// The run of 7 frames in three calls: [0, a), [a, b) and [b, 7) (a call of 0 frames when two cuts are at the same place).
+fn run_cut(a: U32, b: U32) -> [F32; 7] {
+  let xs: [F32; 7] = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0]
+  var out: [F32; 7] = [-1.0; 7]
+  var st = grid.init(8.0)
+  grid.process(inout st, grid.Params { p: 1.0 }, xs.slice(0, a), inout out.slice(0, a))
+  grid.process(inout st, grid.Params { p: 1.0 }, xs.slice(a, b), inout out.slice(a, b))
+  grid.process(inout st, grid.Params { p: 1.0 }, xs.slice(b, 7), inout out.slice(b, 7))
+  out
+}
+
+// The run of 7 frames after `k` frames of another run (with p = 5) and a `reset`.
+fn run_after_reset(k: U32) -> [F32; 7] {
+  let junk: [F32; 10] = [3.0; 10]
+  let xs: [F32; 7] = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0]
+  var scratch: [F32; 10] = [0.0; 10]
+  var out: [F32; 7] = [-1.0; 7]
+  var st = grid.init(8.0)
+  grid.process(inout st, grid.Params { p: 5.0 }, junk.slice(0, k), inout scratch.slice(0, k))
+  grid.reset(inout st)
+  grid.process(inout st, grid.Params { p: 1.0 }, xs, inout out)
+  out
+}
+
+test "one call of 7 frames gives the values worked out" {
+  let xs: [F32; 7] = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0]
+  let o = grid.render(grid.Params { p: 1.0 }, xs, 8.0)
+  assert o.out[0] == 0.0
+  assert o.out[1] == 2.0
+  assert o.out[2] == 206.0
+  assert o.out[3] == 212.0
+  assert o.out[4] == 230.0
+  assert o.out[5] == 240.0
+  assert o.out[6] == 252.0
+}
+
+test "3 frames and then 4 give the same: the second call holds the tick of the frame 4 at its 2nd frame" {
+  let xs: [F32; 7] = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0]
+  var out: [F32; 7] = [-1.0; 7]
+  var st = grid.init(8.0)
+  grid.process(inout st, grid.Params { p: 1.0 }, xs.slice(0, 3), inout out.slice(0, 3))
+  grid.process(inout st, grid.Params { p: 1.0 }, xs.slice(3, 7), inout out.slice(3, 7))
+  assert is_grid(out)
+}
+
+test "a call of 0 frames before the first frame does not use the tick of the frame 0" {
+  let xs: [F32; 7] = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0]
+  var out: [F32; 7] = [-1.0; 7]
+  var st = grid.init(8.0)
+  grid.process(inout st, grid.Params { p: 1.0 }, xs.slice(0, 0), inout out.slice(0, 0))
+  grid.process(inout st, grid.Params { p: 1.0 }, xs, inout out)
+  assert is_grid(out)
+}
+
+test "calls of 3, 0 and 4 frames give the same" {
+  let xs: [F32; 7] = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0]
+  var out: [F32; 7] = [-1.0; 7]
+  var st = grid.init(8.0)
+  grid.process(inout st, grid.Params { p: 1.0 }, xs.slice(0, 3), inout out.slice(0, 3))
+  grid.process(inout st, grid.Params { p: 1.0 }, xs.slice(3, 3), inout out.slice(3, 3))
+  grid.process(inout st, grid.Params { p: 1.0 }, xs.slice(3, 7), inout out.slice(3, 7))
+  assert is_grid(out)
+}
+
+test "every cut of the run in three calls gives the same, the cuts at the ticks of sample / 4 and of sample / 2 and between" {
+  for a in 0 ..< 8 {
+    for b in a ..< 8 {
+      assert is_grid(run_cut(a, b))
+    }
+  }
+}
+
+test "seven calls of one frame give the same" {
+  let xs: [F32; 7] = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0]
+  var out: [F32; 7] = [-1.0; 7]
+  var st = grid.init(8.0)
+  for i in 0 ..< 7 {
+    grid.process(inout st, grid.Params { p: 1.0 }, xs.slice(i, i + 1), inout out.slice(i, i + 1))
+  }
+  assert is_grid(out)
+}
+
+test "a reset after 5 frames, in the middle of a phase, makes the next frame the frame 0 of a new run" {
+  // The next frame would be the frame 5, with no tick of sample / 4 or of sample / 2; the count would be 5 and not 0. The first run has p = 5 and the second p = 1.
+  let junk: [F32; 5] = [3.0; 5]
+  let xs: [F32; 7] = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0]
+  var scratch: [F32; 5] = [0.0; 5]
+  var out: [F32; 7] = [-1.0; 7]
+  var st = grid.init(8.0)
+  grid.process(inout st, grid.Params { p: 5.0 }, junk, inout scratch)
+  grid.reset(inout st)
+  grid.process(inout st, grid.Params { p: 1.0 }, xs, inout out)
+  assert is_grid(out)
+}
+
+test "a reset after any number of frames, at a tick or between, gives the run of a state just made" {
+  for k in 0 ..< 11 {
+    assert is_grid(run_after_reset(k))
+  }
+}

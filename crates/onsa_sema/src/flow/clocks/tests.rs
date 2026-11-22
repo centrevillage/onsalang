@@ -590,7 +590,8 @@ fn sample_tick_takes_the_clock_of_its_place() {
     assert_eq!((f.let_("t"), f.let_("u")), (S, Clock::Tick(Ratio(-2))));
     let l4 = Clock::Tick(Ratio(-2));
     assert_eq!((f.expr("sample_tick() + 1"), f.expr("sample_tick() * 2")), (l4, l4));
-    assert!(f.a.flows[&f.flow].multirate_at().is_some(), "the Core stops at `sample_tick()` until W7-16");
+    let gate = f.a.flows[&f.flow].multirate_at(&f.a.flows).map(|s| &src[s.start as usize..s.end as usize]);
+    assert_eq!(gate, Some("lf: F32 at (sample / 4)"), "the Core stops at a port of a derived clock");
     let o = walk_of(src, "o");
     assert!(o.complete, "{:?}", o.walked.diag);
     let out = o.a.flows[&o.flow].output.expect("the output");

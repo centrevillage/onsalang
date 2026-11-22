@@ -166,6 +166,7 @@ impl<'b> Gen<'b> {
             phase,
             sample_rate: lit(Ty::Float(FloatKind::F32), shape.span, Lit::F32(0.0)),
             sample_rate_calls: info.sample_rate_calls.iter().copied().collect(),
+            sample_tick_calls: info.sample_tick_calls.iter().copied().collect(),
             scopes: Vec::new(),
         });
         Ok(Gen { cx, params: Vec::new(), stmts: Vec::new(), span: shape.span })
@@ -255,7 +256,10 @@ impl<'b> Gen<'b> {
     pub(super) fn slots(&mut self, info: &FlowInfo) -> R<()> {
         let (stage, span) = (self.flow().phase.stage(), self.span);
         for t in info.tilde_matches.values() {
-            for &b in t.arms.iter().flatten().filter(|b| info.bound_at.get(b).is_some_and(|r| r.contains(&stage))) {
+            let here = |b: &&onsa_sema::LocalId| {
+                info.bound_at.get(b).is_some_and(|r| r.iter().any(|&s| info.run_stage(s) == stage))
+            };
+            for &b in t.arms.iter().flatten().filter(here) {
                 let pars = if info.store_bindings.contains(&b) { &t.pars[..] } else { &[] };
                 let mut each = Vec::with_capacity(pars.len());
                 for &p in pars {
@@ -296,7 +300,7 @@ impl<'b> Gen<'b> {
     pub(super) fn stage_lets(&mut self, lw: &mut Lowerer, info: &FlowInfo, state: &Expr) -> R<()> {
         let stage = self.flow().phase.stage();
         for l in &info.lets {
-            match l.stage.stage() {
+            match l.stage.stage().map(|s| info.run_stage(s)) {
                 Some(s) if s == stage => {}
                 Some(s) if s > stage => {
                     super::hoist::writes(lw, &mut self.cx, info, l.init, stage, state, &mut self.stmts)?;

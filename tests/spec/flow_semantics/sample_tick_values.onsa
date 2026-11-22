@@ -1,0 +1,169 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.4", "§11.9", "§11.6"]
+
+// W7-16 U5a/t, S-565, S-1127 (spec §11.4: "`sample_tick()`: `reset` からの時間を、書いた場所の `sample_rate()` の刻みの数で表した `U32`（2^32 で一周し、間隔は `t -% last` で取る）。
+// `init` と生成する `reset` で 0 になり（その後の最初の刻みで読む値は 0 で、`sample_rate()` の刻みごとに 1 上がる。`sample / N` の段で読んでも同じ数）、`reset_if~` は触れない"; §11.9: 位相のカウンタは
+// ホストの区切りに依らない): the value of `sample_tick()` of one flow with no modifier. It is 0 at the first frame after `init` and after `reset`, and 1 more at each frame after it, across the calls of
+// `process` (a call of 0 frames does not count); read in a stage of `sample / 4` it is the same number (the number of frames, not of the ticks of that stage); the difference `t -% last` is 1 at `sample`
+// and N at `sample / N`. Worked out by hand. A `sample_tick()` read inside a child instance is the work of U5b, and the one under a modifier is of U6a and U6b: none is here.
+
+pub flow count() -> U32 at sample {
+  sample_tick()
+}
+
+pub flow slow_count() -> U32 at sample {
+  let t4 = sample_tick() at (sample / 4)
+  t4 at sample
+}
+
+pub flow interval() -> U32 at sample {
+  let t4 = sample_tick() at (sample / 4)
+  let d = t4 -% prev~(t4)
+  d at sample
+}
+
+pub flow since_tick() -> U32 at sample {
+  let t4 = sample_tick() at (sample / 4)
+  sample_tick() -% (t4 at sample)
+}
+
+pub flow delayed() -> U32 at sample {
+  prev~(sample_tick()) + delay~(sample_tick(), 3)
+}
+
+pub flow in_a_par() -> U32 at sample {
+  let zs = par i in 0 ..< 2 { sample_tick() + i }
+  zs[0] + zs[1]
+}
+
+pub flow gain_by_tick(x: F32 at sample) -> F32 at sample {
+  x * F32.round_from(sample_tick() % 3)
+}
+
+test "the output reads 0, 1, 2, … from the first frame" {
+  let o = count.render(6, 8.0)
+  assert o.out[0] == 0
+  assert o.out[1] == 1
+  assert o.out[5] == 5
+}
+
+test "the count goes on across calls, and a call of 0 frames does not count" {
+  var out: [U32; 7] = [9; 7]
+  var st = count.init(8.0)
+  count.process(inout st, inout out.slice(0, 3))
+  count.process(inout st, inout out.slice(3, 3))
+  count.process(inout st, inout out.slice(3, 7))
+  assert out[0] == 0
+  assert out[1] == 1
+  assert out[2] == 2
+  assert out[3] == 3
+  assert out[4] == 4
+  assert out[5] == 5
+  assert out[6] == 6
+}
+
+test "a state of its own starts at 0 and the count of the other state is not read" {
+  var a: [U32; 2] = [9; 2]
+  var b: [U32; 2] = [9; 2]
+  var sa = count.init(8.0)
+  count.process(inout sa, inout a.slice(0, 2))
+  var sb = count.init(8.0)
+  count.process(inout sb, inout b.slice(0, 2))
+  count.process(inout sa, inout a.slice(0, 2))
+  assert a[0] == 2
+  assert a[1] == 3
+  assert b[0] == 0
+  assert b[1] == 1
+}
+
+test "reset gives 0 again, as init does" {
+  var out: [U32; 7] = [9; 7]
+  var st = count.init(8.0)
+  count.process(inout st, inout out.slice(0, 3))
+  count.reset(inout st)
+  count.process(inout st, inout out.slice(3, 7))
+  assert out[0] == 0
+  assert out[1] == 1
+  assert out[2] == 2
+  assert out[3] == 0
+  assert out[4] == 1
+  assert out[5] == 2
+  assert out[6] == 3
+}
+
+test "read in a stage of sample / 4 it is the number of frames, not of the ticks of that stage" {
+  // The tick at the frame 4 reads 4, the tick at the frame 8 reads 8.
+  let o = slow_count.render(10, 8.0)
+  assert o.out[0] == 0
+  assert o.out[3] == 0
+  assert o.out[4] == 4
+  assert o.out[7] == 4
+  assert o.out[8] == 8
+  assert o.out[9] == 8
+}
+
+test "the difference of two reads in a stage of sample / 4 is 4 with t -% last" {
+  // The first tick has no last one (the delay gives 0): 0 -% 0; the others 4 -% 0, 8 -% 4.
+  let o = interval.render(10, 8.0)
+  assert o.out[0] == 0
+  assert o.out[4] == 4
+  assert o.out[7] == 4
+  assert o.out[8] == 4
+  assert o.out[9] == 4
+}
+
+test "the value at sample less the value of the last tick of sample / 4 is the frame in the tick" {
+  // 0 1 2 3 0 1 2 3 0 1, in one call and in calls of 3, 3 and 4 frames (the ticks are where the frame count says).
+  var out: [U32; 10] = [9; 10]
+  var st = since_tick.init(8.0)
+  since_tick.process(inout st, inout out.slice(0, 3))
+  since_tick.process(inout st, inout out.slice(3, 6))
+  since_tick.process(inout st, inout out.slice(6, 10))
+  assert out[0] == 0
+  assert out[1] == 1
+  assert out[2] == 2
+  assert out[3] == 3
+  assert out[4] == 0
+  assert out[5] == 1
+  assert out[6] == 2
+  assert out[7] == 3
+  assert out[8] == 0
+  assert out[9] == 1
+}
+
+test "as the first argument of a delay it is the count of the frame, delayed" {
+  // prev~ gives 0 0 1 2 3 4, delay~ of 3 gives 0 0 0 0 1 2: the sums are 0 0 1 2 4 6.
+  let o = delayed.render(6, 8.0)
+  assert o.out[0] == 0
+  assert o.out[1] == 0
+  assert o.out[2] == 1
+  assert o.out[3] == 2
+  assert o.out[4] == 4
+  assert o.out[5] == 6
+}
+
+test "in a par the count is the same for every replica" {
+  // (n + 0) + (n + 1) for n = 0, 1, 2, 3.
+  let o = in_a_par.render(4, 8.0)
+  assert o.out[0] == 1
+  assert o.out[1] == 3
+  assert o.out[2] == 5
+  assert o.out[3] == 7
+}
+
+test "the count mixes with a sample input, whatever the blocks are" {
+  // The factor is the count mod 3: 0 1 2 0 1 2 for x = 1 each.
+  let xs: [F32; 6] = [1.0; 6]
+  var out: [F32; 6] = [9.0; 6]
+  var st = gain_by_tick.init(8.0)
+  gain_by_tick.process(inout st, xs.slice(0, 2), inout out.slice(0, 2))
+  gain_by_tick.process(inout st, xs.slice(2, 6), inout out.slice(2, 6))
+  assert out[0] == 0.0
+  assert out[1] == 1.0
+  assert out[2] == 2.0
+  assert out[3] == 0.0
+  assert out[4] == 1.0
+  assert out[5] == 2.0
+}

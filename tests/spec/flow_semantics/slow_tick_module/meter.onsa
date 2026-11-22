@@ -1,0 +1,21 @@
+// A flow with a delay at `sample / 4` of a struct with private fields and a derived `Default`, and a flow that reads `sample_tick()`, declared in a module and run from another (W7-16 U5a/t,
+// spec §11.4, §11.9, §6.4, §15.1). The case is in check.onsa.
+
+pub struct Meter: Default {
+  priv level: F32 = 0.5,
+  priv peak: F32,
+}
+
+pub rt fn make(x: F32) -> Meter {
+  Meter { level: x, peak: x * 2.0 }
+}
+
+pub flow slow_meter(p: F32 at block) -> F32 at sample {
+  let m = prev~(make(p) at (sample / 4))
+  let n = m at sample
+  n.level * 10.0 + n.peak
+}
+
+pub flow frame_count() -> U32 at sample {
+  sample_tick()
+}

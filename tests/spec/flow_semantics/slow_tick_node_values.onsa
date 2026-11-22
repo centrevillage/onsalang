@@ -1,0 +1,182 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.9", "§11.3", "§11.4", "§11.6"]
+
+// W7-16 U5a/t, S-565, S-578, S-1079, S-1088, S-1127, S-1196 (spec §11.9: "`sample / N` の刻みはカウンタが N の倍数の刻みで、最初の刻みで動く。ホストの区切りに依らない"; §11.3: "刻みのクロック"、
+// "段が刻みの計算した部分式は、より速い式の中でもその刻みで評価し、値を隠れたフィールドに置く"; §11.4: `prev~` は第 1 引数のクロックで刻む): the values of the nodes, the `let`s and the computed
+// parts of a tick `sample / N` of one flow with no modifier, read at `sample` by `at sample`. The phase counter is 0 at the first frame after `init`, so the ticks of `sample / N` are at the frames
+// 0, N, 2N, … of the run (the frame number counts across the calls of `process`); at a tick a delay gives the value it stored at its last tick (`init`, or `T.default()` when it has none, at the
+// first) and then stores its argument, and between the ticks every read gives the last output. The value of `block` that a tick reads is the one of the call that holds the frame of the tick. A flow
+// whose tick is read by a faster stage, with a delay of its own or a part computed at the tick, is the work of the Core of the ticks (W7-16 U5a); it is `E0200` before. Worked out by hand.
+
+pub struct Meter: Default {
+  level: F32 = 0.5,
+  peak: F32,
+}
+
+pub rt fn meter_of(x: F32) -> Meter {
+  Meter { level: x, peak: x * 2.0 }
+}
+
+pub flow hold(p: F32 at block) -> F32 at sample {
+  prev~(p at (sample / 4)) at sample
+}
+
+pub flow hold_start(p: F32 at block, start: F32 at init) -> F32 at sample {
+  prev~(p at (sample / 4), start) at sample
+}
+
+pub flow two_rates(p: F32 at block) -> F32 at sample {
+  let a = prev~(p at (sample / 4))
+  let b = prev~(p at (sample / 2))
+  (a at sample) * 10.0 + (b at sample)
+}
+
+pub flow count_ticks(p: F32 at block) -> F32 at sample {
+  let c = prev~((^c + p) at (sample / 4))
+  c at sample
+}
+
+pub flow scaled(p: F32 at block) -> F32 at sample {
+  let lf = prev~(p at (sample / 4), 2.0)
+  (lf * p) at sample
+}
+
+pub flow default_of_a_struct(p: F32 at block) -> F32 at sample {
+  let m = prev~(meter_of(p) at (sample / 4))
+  let n = m at sample
+  n.level * 10.0 + n.peak
+}
+
+pub flow rate_in_a_slow_stage() -> F32 at sample {
+  let r4 = prev~(sample_rate() at (sample / 4))
+  (r4 at sample) + sample_rate()
+}
+
+test "a delay at sample / 4 gives its value at the ticks 0, 4, 8, 12 and keeps it between, across the calls and their blocks" {
+  // The calls hold 4, 4 and 5 frames with p = 1, 2, 3: tick 0 gives the init 0 and stores 1; tick 4 gives 1 and stores 2; tick 8 gives 2 and stores 3; tick 12 gives 3.
+  var out: [F32; 13] = [0.0; 13]
+  var st = hold.init(8.0)
+  hold.process(inout st, hold.Params { p: 1.0 }, inout out.slice(0, 4))
+  hold.process(inout st, hold.Params { p: 2.0 }, inout out.slice(4, 8))
+  hold.process(inout st, hold.Params { p: 3.0 }, inout out.slice(8, 13))
+  assert out[0] == 0.0
+  assert out[1] == 0.0
+  assert out[2] == 0.0
+  assert out[3] == 0.0
+  assert out[4] == 1.0
+  assert out[5] == 1.0
+  assert out[6] == 1.0
+  assert out[7] == 1.0
+  assert out[8] == 2.0
+  assert out[9] == 2.0
+  assert out[10] == 2.0
+  assert out[11] == 2.0
+  assert out[12] == 3.0
+}
+
+test "a call that ends between two ticks keeps the phase: the next tick is where the frame count says" {
+  // 5 frames with p = 1 then 4 with p = 2 then 4 with p = 3: tick 0 gives 0 and stores 1; tick 4 (the 5th frame) gives 1 and stores 1; tick 8 (the 4th frame of the second call) gives 1 and stores
+  // 2; tick 12 (the 4th frame of the third call) gives 2 and stores 3.
+  var out: [F32; 13] = [0.0; 13]
+  var st = hold.init(8.0)
+  hold.process(inout st, hold.Params { p: 1.0 }, inout out.slice(0, 5))
+  hold.process(inout st, hold.Params { p: 2.0 }, inout out.slice(5, 9))
+  hold.process(inout st, hold.Params { p: 3.0 }, inout out.slice(9, 13))
+  assert out[0] == 0.0
+  assert out[1] == 0.0
+  assert out[2] == 0.0
+  assert out[3] == 0.0
+  assert out[4] == 1.0
+  assert out[5] == 1.0
+  assert out[6] == 1.0
+  assert out[7] == 1.0
+  assert out[8] == 1.0
+  assert out[9] == 1.0
+  assert out[10] == 1.0
+  assert out[11] == 1.0
+  assert out[12] == 2.0
+}
+
+test "render is one call: the value of p is the same at every tick" {
+  let o = hold.render(hold.Params { p: 5.0 }, 9, 8.0)
+  assert o.out[0] == 0.0
+  assert o.out[3] == 0.0
+  assert o.out[4] == 5.0
+  assert o.out[8] == 5.0
+}
+
+test "the first output of a delay at a tick is its init, and a reset gives it again" {
+  // start = 7 gives 7 at tick 0 and p (2) from tick 4; after the reset the delay is at its init again and the frame is the tick 0 again (the call after the reset has p = 9: 7 for four frames).
+  var out: [F32; 10] = [0.0; 10]
+  var st = hold_start.init(hold_start.Config { start: 7.0 }, 8.0)
+  hold_start.process(inout st, hold_start.Params { p: 2.0 }, inout out.slice(0, 6))
+  assert out[0] == 7.0
+  assert out[3] == 7.0
+  assert out[4] == 2.0
+  assert out[5] == 2.0
+  hold_start.reset(inout st)
+  hold_start.process(inout st, hold_start.Params { p: 9.0 }, inout out.slice(6, 10))
+  assert out[6] == 7.0
+  assert out[9] == 7.0
+}
+
+test "two ticks of different ratios: sample / 2 gives its first stored value at frame 2, sample / 4 at frame 4" {
+  // p = 3: a (sample / 4) is 0 0 0 0 3 3 3 3; b (sample / 2) is 0 0 3 3 3 3 3 3; 10 a + b.
+  let o = two_rates.render(two_rates.Params { p: 3.0 }, 8, 8.0)
+  assert o.out[0] == 0.0
+  assert o.out[1] == 0.0
+  assert o.out[2] == 3.0
+  assert o.out[3] == 3.0
+  assert o.out[4] == 33.0
+  assert o.out[7] == 33.0
+}
+
+test "a loop at sample / 4 counts once per tick" {
+  // c is prev~(^c + p) of the ticks: 0 at tick 0, p at tick 4, 2 p at tick 8 (p = 1).
+  let o = count_ticks.render(count_ticks.Params { p: 1.0 }, 12, 8.0)
+  assert o.out[0] == 0.0
+  assert o.out[3] == 0.0
+  assert o.out[4] == 1.0
+  assert o.out[7] == 1.0
+  assert o.out[8] == 2.0
+  assert o.out[11] == 2.0
+}
+
+test "a part computed at the tick is computed at the tick: the p it reads is the one of the call of the tick" {
+  // lf is the delay of p with the init 2: 2 at tick 0, then the p stored. (lf * p) is computed at the ticks only. Call 1 (p = 1, 6 frames): tick 0 gives 2 * 1, tick 4 gives 1 * 1. Call 2
+  // (p = 10, 4 frames): frames 6 and 7 read the field of tick 4 (1, not the lf * 10 of this call); tick 8 gives 1 * 10 (lf is the p that tick 4 stored, 1), and frame 9 reads it.
+  var out: [F32; 10] = [0.0; 10]
+  var st = scaled.init(8.0)
+  scaled.process(inout st, scaled.Params { p: 1.0 }, inout out.slice(0, 6))
+  scaled.process(inout st, scaled.Params { p: 10.0 }, inout out.slice(6, 10))
+  assert out[0] == 2.0
+  assert out[1] == 2.0
+  assert out[2] == 2.0
+  assert out[3] == 2.0
+  assert out[4] == 1.0
+  assert out[5] == 1.0
+  assert out[6] == 1.0
+  assert out[7] == 1.0
+  assert out[8] == 10.0
+  assert out[9] == 10.0
+}
+
+test "a delay of a struct at a tick starts with the Default of the struct" {
+  // The default of Meter is level 0.5, peak 0: 5 at tick 0; tick 4 gives meter_of(3) = level 3, peak 6: 36.
+  let o = default_of_a_struct.render(default_of_a_struct.Params { p: 3.0 }, 8, 8.0)
+  assert o.out[0] == 5.0
+  assert o.out[3] == 5.0
+  assert o.out[4] == 36.0
+  assert o.out[7] == 36.0
+}
+
+test "sample_rate() is the rate of the sample of the body in a stage of sample / 4 too" {
+  // The rate 16 is stored at tick 0 and given at tick 4: 0 + 16 for the first four frames, 16 + 16 after. A rate of the stage would be 4.
+  let o = rate_in_a_slow_stage.render(6, 16.0)
+  assert o.out[0] == 16.0
+  assert o.out[3] == 16.0
+  assert o.out[4] == 32.0
+  assert o.out[5] == 32.0
+}

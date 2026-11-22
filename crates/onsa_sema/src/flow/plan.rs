@@ -286,6 +286,7 @@ pub(super) fn build(
     info.node_of = info.nodes.iter().enumerate().map(|(i, n)| (n.expr, NodeId(i as u32))).collect();
     info.roots = roots;
     super::hoist::table(info, ast, hoisted);
+    info.stages = stage::slow_stages(info);
     fields::build(info);
 }
 

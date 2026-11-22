@@ -47,14 +47,14 @@ fn process_types(lw: &Lowerer, fns: &FlowFns) -> Vec<Ty> {
 /// `process(inout s, params, [input], inout output)` (§11.6): `input` and
 /// `output` one `Span` (planar `[Span; N]`) or the `In` and `Out` of more.
 pub(super) fn gen_process<'b>(lw: &mut Lowerer<'b>, shape: &FlowShape, info: &'b FlowInfo, fns: &FlowFns) -> R<()> {
-    let mut g = Gen::new(lw, shape, info, Phase::Tick, Ty::Unit)?;
+    let mut g = Gen::new(lw, shape, info, Phase::SAMPLE, Ty::Unit)?;
     let span = g.span;
     let (s, params, input, output) = match g.member_params(lw, shape, FlowFn::Process)?.as_slice() {
         [s, p, o] => (s.clone(), p.clone(), None, o.clone()),
         [s, p, i, o] => (s.clone(), p.clone(), Some(i.clone()), o.clone()),
         _ => return Err(internal(span, "`process` with another number of parameters")),
     };
-    let sig_inputs: Vec<(String, Ty)> = (shape.inputs.iter().filter(|i| i.phase == Phase::Tick))
+    let sig_inputs: Vec<(String, Ty)> = (shape.inputs.iter().filter(|i| i.phase == Phase::SAMPLE))
         .map(|Input { decl: i, .. }| Ok((i.name.clone(), lw.core_ty(i.ty, &[], i.span)?)))
         .collect::<R<_>>()?;
     let ins = input.as_ref().map(|i| signals(lw, i)).transpose()?.unwrap_or_default();
@@ -91,13 +91,14 @@ pub(super) fn gen_process<'b>(lw: &mut Lowerer<'b>, shape: &FlowShape, info: &'b
         g.stmts.push(stmt(span, StmtKind::If(bad, panic, Block::default())));
     }
     expr_stmt(&mut g.stmts, call(fns.ctl, Ty::Unit, span, vec![inout(s.clone()), borrow(params)]));
-    // Sample loop: read every input, tick, write every output. Its indices
+    // Sample loop: run the slower ticks due, read every input, tick, write every output. Its indices
     // are known in range (S-196): `i` is below the length every channel was
     // compared to, a channel `c` below the `N` of its type.
     let at = |base: &Expr, c: u32| index_as(base.clone(), u32_lit(span, c), Bounds::Known);
     let i = g.cx.temp("i", Ty::u32());
     let i_e = local_expr(&g.cx, i, span);
     let mut body = Vec::new();
+    drive(lw, info, fns, &s, span, &mut body)?;
     let mut tick_args = vec![inout(s.clone())];
     for (sp, (name, ty)) in ins.into_iter().zip(&sig_inputs) {
         let v = match ty {
@@ -145,7 +146,7 @@ pub(super) fn gen_process_inplace<'b>(
     fns: &FlowFns,
 ) -> R<()> {
     let Some(fid) = fns.process_inplace else { return Ok(()) };
-    let mut g = Gen::new(lw, shape, info, Phase::Tick, Ty::Unit)?;
+    let mut g = Gen::new(lw, shape, info, Phase::SAMPLE, Ty::Unit)?;
     let span = g.span;
     let [s, params, output] = &g.member_params(lw, shape, FlowFn::ProcessInplace)?[..] else {
         return Err(internal(span, "`process_inplace` with another number of parameters"));
@@ -176,7 +177,7 @@ pub(super) fn gen_process_inplace<'b>(
 /// (interpreter only): `process` on zeroed `Buf`s, whose views it makes.
 pub(super) fn gen_render<'b>(lw: &mut Lowerer<'b>, shape: &FlowShape, info: &'b FlowInfo, fns: &FlowFns) -> R<()> {
     let out_ty = Ty::Struct(shape.out_ty);
-    let mut g = Gen::new(lw, shape, info, Phase::Tick, out_ty.clone())?;
+    let mut g = Gen::new(lw, shape, info, Phase::SAMPLE, out_ty.clone())?;
     let span = g.span;
     // The third is `input` (views), or the `U32` `frames` of a flow with no `sample` input, as the
     // signature the types stage made reads (§11.6).

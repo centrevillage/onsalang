@@ -1,0 +1,28 @@
+# flow_ref 1 source=tests/spec/flow_semantics/slow_tick_panics.onsa tests=6 evaluated=6 unavailable=0 skipped=0 waiting=0
+@ the division of a tick does not panic between the ticks, whatever the 0 that is stored
+init 0 slow_tick_panics.inv sr=0x41000000
+process 0 params p=0 frames=1
+out=[100]
+process 0 params p=0 frames=3
+out=[100 100 100]
+@ the division of a tick panics at the tick that reads the 0, in the call that holds it
+init 0 slow_tick_panics.inv sr=0x41000000
+process 0 params p=0 frames=4
+out=[100 100 100 100]
+process 0 params p=0 frames=1
+panic sample 0
+@ a call of 0 frames at the position of a tick does not evaluate the tick
+init 0 slow_tick_panics.inv sr=0x41000000
+process 0 params p=0 frames=4
+out=[100 100 100 100]
+process 0 params p=0 frames=0
+out=[]
+@ a call of 5 frames that holds the tick 4 panics at it
+render slow_tick_panics.inv sr=0x41000000 params p=0 frames=5
+panic sample 4
+@ the same call does not panic with 4 frames: the tick 4 is not in it
+render slow_tick_panics.inv sr=0x41000000 params p=0 frames=4
+out=[100 100 100 100]
+@ a value that is not 0 is divided at each tick
+render slow_tick_panics.inv sr=0x41000000 params p=4 frames=8
+out=[100 100 100 100 25 25 25 25]

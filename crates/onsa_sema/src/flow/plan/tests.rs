@@ -252,9 +252,9 @@ pub flow g(x: F32 at sample) -> F32 at sample {
     assert_eq!(hoisted.len(), 1, "{hoisted:?}");
     assert_eq!((hoisted[0].0.start as usize, hoisted[0].1), (chain, ClockStage::Tick(Ratio(-2))));
     assert_eq!(out.frame, Ratio(-2));
-    assert!(f.multirate_at().is_some());
+    assert!(f.multirate_at(&a.flows).is_some());
     let g = flow(&a, "g");
-    assert_eq!(g.multirate_at(), Some(g.nodes[0].span), "a chain of the ratio one stops the Core too");
+    assert_eq!(g.multirate_at(&a.flows), Some(g.nodes[0].span), "a chain of the ratio one stops the Core too");
 }
 
 /// The Core stops at a flow with a port of a derived clock until W7-16
@@ -267,8 +267,50 @@ fn a_port_of_a_derived_clock_stops_the_core() {
                pub flow h(x: F32 at sample) -> F32 at sample {\n  x\n}\n";
     let a = check(src);
     assert!(a.diagnostics.is_empty(), "{:?}", a.diagnostics);
-    let at = |name: &str| flow(&a, name).multirate_at().map(|s| &src[s.start as usize..s.end as usize]);
+    let at = |name: &str| flow(&a, name).multirate_at(&a.flows).map(|s| &src[s.start as usize..s.end as usize]);
     assert_eq!(at("f"), Some("x: F32 at (sample * 2)"));
     assert_eq!(at("g"), Some("g"));
     assert_eq!(at("h"), None);
+}
+
+/// The Core lowers the slower ticks of one flow and `sample_tick()` (W7-16
+/// U5a): the gate passes a flow with a `let`, a node and a hoisted field
+/// at `sample / 4` or `sample / 2` and one that reads `sample_tick()`,
+/// whose ticks are slowest first and whose state has the counter of the
+/// phase after `_sample_rate` (S-1179 (2)); it stops at an instance of a
+/// flow that counts the time (its ticks no caller runs yet, the H2 of the
+/// review), not at one of a flow that does not.
+#[test]
+fn the_gate_passes_the_slower_ticks_of_one_flow_and_stops_at_an_instance_of_one() {
+    let src = "pub flow slow(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  let a = prev~(p at (sample / 4)) + 1.0
+  let b = prev~(a at (sample / 2))
+  x * sample_rate() + (a at sample) + (b at sample) + (prev~(b) at sample)
+}
+pub flow tk(x: F32 at sample) -> F32 at sample {
+  x * F32.round_from(sample_tick())
+}
+pub flow plain(x: F32 at sample) -> F32 at sample {
+  prev~(x)
+}
+pub flow calls(x: F32 at sample) -> F32 at sample {
+  plain~(x) + tk~(x)
+}
+";
+    let a = check(src);
+    assert!(a.diagnostics.is_empty(), "{:?}", a.diagnostics);
+    let (slow, tk, plain, calls) = (flow(&a, "slow"), flow(&a, "tk"), flow(&a, "plain"), flow(&a, "calls"));
+    let tick = |k| crate::clock::ClockStage::Tick(crate::clock::Ratio(k));
+    assert_eq!(slow.stages, [tick(-2), tick(-1)]);
+    assert!(tk.stages.is_empty() && plain.stages.is_empty());
+    assert!(slow.counts_time() && tk.counts_time() && !plain.counts_time() && !calls.counts_time());
+    let names = |f: &FlowInfo| f.fields.iter().take(2).map(|x| x.name.clone()).collect::<Vec<_>>();
+    assert_eq!(names(slow), ["_sample_rate", "_tick"]);
+    assert_eq!(names(tk)[0], "_tick");
+    assert!(plain.fields.iter().all(|x| x.name != "_tick"));
+    assert_eq!([slow, tk, plain].map(|f| f.multirate_at(&a.flows)), [None, None, None]);
+    let at = calls.multirate_at(&a.flows).map(|s| &src[s.start as usize..s.end as usize]);
+    assert_eq!(at, Some("tk~(x)"), "an instance of a flow that counts the time stops the Core");
+    assert_eq!(slow.run_stage(tick(2)), tick(0), "a burst is of the function of the `sample` of the body");
+    assert_eq!(slow.run_stage(tick(-2)), tick(-2));
 }

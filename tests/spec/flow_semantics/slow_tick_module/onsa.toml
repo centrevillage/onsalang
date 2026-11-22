@@ -1,0 +1,3 @@
+[package]
+name = "slow_tick_module"
+edition = "2026"

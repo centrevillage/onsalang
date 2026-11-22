@@ -27,6 +27,8 @@ pub const HOIST: &str = "_hoist";
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FixedField {
     SampleRate,
+    /// The counter of the phase (§11.9, S-1137).
+    Tick,
     Poisoned,
     Initialized,
     /// The pointer to the bulk region (§12.4).
@@ -37,6 +39,7 @@ impl FixedField {
     pub fn name(self) -> &'static str {
         match self {
             FixedField::SampleRate => "_sample_rate",
+            FixedField::Tick => "_tick",
             FixedField::Poisoned => "_poisoned",
             FixedField::Initialized => "_initialized",
             FixedField::Bulk => "_bulk",

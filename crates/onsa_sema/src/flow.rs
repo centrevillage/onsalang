@@ -264,9 +264,13 @@ pub struct FlowInfo {
     pub(crate) derived_port: Option<Span>,
     pub sample_rate_at: Option<ClockStage>,
     pub sample_rate_calls: Vec<ExprId>,
-    /// The first call of `sample_tick()` (§11.4) by its place, which the
-    /// Core stops at until W7-16 ([`FlowInfo::multirate_at`]).
-    pub(crate) sample_tick_at: Option<Span>,
+    /// The calls of `sample_tick()` (§11.4), which the Core reads from the
+    /// counter of the phase (`_tick`, [`FlowInfo::counts_time`]).
+    pub sample_tick_calls: Vec<ExprId>,
+    /// The ticks of the body slower than its `sample` (§11.9), slowest
+    /// first: of its inputs, `let`s, nodes and hoisted fields. The Core
+    /// makes a function of each ([`FlowInfo::run_stage`]).
+    pub stages: Vec<ClockStage>,
     pub read_at: HashMap<LocalId, BTreeSet<ClockStage>>,
     /// The stages each binding of an arm of `match~` is read at in a body,
     /// not its guard (S-1131): where it has a place, which its arm chosen

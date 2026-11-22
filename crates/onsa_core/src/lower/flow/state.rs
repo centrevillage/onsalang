@@ -42,6 +42,7 @@ pub(super) fn state_fields(
 fn field_ty(lw: &mut Lowerer, flow: DefId, decls: &Decls, info: &FlowInfo, of: FieldOf) -> R<Ty> {
     match of {
         FieldOf::SampleRate => Ok(Ty::Float(FloatKind::F32)),
+        FieldOf::Tick => Ok(Ty::u32()),
         FieldOf::Poisoned | FieldOf::Initialized => Ok(Ty::Bool),
         FieldOf::Input(l) | FieldOf::Let(l) => {
             let decl =

@@ -1,0 +1,30 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.4", "§11.9", "§6.4", "§15.1"]
+
+// W7-16 U5a/t, S-565 (spec §11.9: the ticks of `sample / N` are at the frames 0, N, 2N, …; §11.4: `sample_tick()` is 0 at the first frame; §6.4: the derived `Default`): the flows of the module
+// meter.onsa are run from here. The first output of the delay at `sample / 4` of a `Meter` is its `Default` (level 0.5, peak 0: 5); the next ticks give `make(3)` (level 3, peak 6: 36). Worked
+// out by hand.
+
+use meter.{slow_meter, frame_count}
+
+test "a delay of a struct at sample / 4 of a module starts with the Default of the struct and gives the stored value at the next tick" {
+  let o = slow_meter.render(slow_meter.Params { p: 3.0 }, 8, 8.0)
+  assert o.out[0] == 5.0
+  assert o.out[3] == 5.0
+  assert o.out[4] == 36.0
+  assert o.out[7] == 36.0
+}
+
+test "a flow of a module that reads sample_tick() counts the frames across the calls" {
+  var out: [U32; 5] = [9; 5]
+  var st = frame_count.init(8.0)
+  frame_count.process(inout st, inout out.slice(0, 2))
+  frame_count.process(inout st, inout out.slice(2, 5))
+  assert out[0] == 0
+  assert out[1] == 1
+  assert out[2] == 2
+  assert out[3] == 3
+  assert out[4] == 4
+}

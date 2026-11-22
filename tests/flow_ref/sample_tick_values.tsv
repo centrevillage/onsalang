@@ -1,0 +1,54 @@
+# flow_ref 1 source=tests/spec/flow_semantics/sample_tick_values.onsa tests=10 evaluated=10 unavailable=0 skipped=0 waiting=0
+@ the output reads 0, 1, 2, … from the first frame
+render sample_tick_values.count sr=0x41000000 frames=6
+out=[0 1 2 3 4 5]
+@ the count goes on across calls, and a call of 0 frames does not count
+init 0 sample_tick_values.count sr=0x41000000
+process 0 frames=3
+out=[0 1 2]
+process 0 frames=0
+out=[]
+process 0 frames=4
+out=[3 4 5 6]
+@ a state of its own starts at 0 and the count of the other state is not read
+init 0 sample_tick_values.count sr=0x41000000
+process 0 frames=2
+out=[0 1]
+init 1 sample_tick_values.count sr=0x41000000
+process 1 frames=2
+out=[0 1]
+process 0 frames=2
+out=[2 3]
+@ reset gives 0 again, as init does
+init 0 sample_tick_values.count sr=0x41000000
+process 0 frames=3
+out=[0 1 2]
+reset 0
+process 0 frames=4
+out=[0 1 2 3]
+@ read in a stage of sample / 4 it is the number of frames, not of the ticks of that stage
+render sample_tick_values.slow_count sr=0x41000000 frames=10
+out=[0 0 0 0 4 4 4 4 8 8]
+@ the difference of two reads in a stage of sample / 4 is 4 with t -% last
+render sample_tick_values.interval sr=0x41000000 frames=10
+out=[0 0 0 0 4 4 4 4 4 4]
+@ the value at sample less the value of the last tick of sample / 4 is the frame in the tick
+init 0 sample_tick_values.since_tick sr=0x41000000
+process 0 frames=3
+out=[0 1 2]
+process 0 frames=3
+out=[3 0 1]
+process 0 frames=4
+out=[2 3 0 1]
+@ as the first argument of a delay it is the count of the frame, delayed
+render sample_tick_values.delayed sr=0x41000000 frames=6
+out=[0 0 1 2 4 6]
+@ in a par the count is the same for every replica
+render sample_tick_values.in_a_par sr=0x41000000 frames=4
+out=[1 3 5 7]
+@ the count mixes with a sample input, whatever the blocks are
+init 0 sample_tick_values.gain_by_tick sr=0x41000000
+process 0 frames=2 in x=[0x3f800000 0x3f800000]
+out=[0x00000000 0x3f800000]
+process 0 frames=4 in x=[0x3f800000 0x3f800000 0x3f800000 0x3f800000]
+out=[0x40000000 0x00000000 0x3f800000 0x40000000]
