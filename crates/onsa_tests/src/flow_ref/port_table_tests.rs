@@ -22,11 +22,11 @@ use super::value::Value;
 use onsa_driver::Analyzed;
 use onsa_sema::DefId;
 
-fn two(k: i32) -> usize {
+pub(super) fn two(k: i32) -> usize {
     1 << k.unsigned_abs()
 }
 
-fn tag(k: i32) -> String {
+pub(super) fn tag(k: i32) -> String {
     match k {
         0 => "z".into(),
         k if k > 0 => format!("u{k}"),
@@ -35,7 +35,7 @@ fn tag(k: i32) -> String {
 }
 
 /// The clock of a port `2^k` times as fast as `sample`.
-fn clock(k: i32) -> String {
+pub(super) fn clock(k: i32) -> String {
     match k {
         0 => "sample".into(),
         k if k > 0 => format!("(sample * {})", two(k)),
@@ -43,7 +43,7 @@ fn clock(k: i32) -> String {
     }
 }
 
-fn chain(r: i32) -> String {
+pub(super) fn chain(r: i32) -> String {
     match r {
         0 => String::new(),
         r if r > 0 => format!(".up~({})", two(r)),
@@ -52,7 +52,7 @@ fn chain(r: i32) -> String {
 }
 
 /// The value of a call of the clock `o` as the one flow of the outer flow gives it: a bundle of `2^o` values is taken by `col_o` (an array of the frame), a slower one is read with `at sample`.
-fn read_call(call: &str, o: i32) -> (String, String) {
+pub(super) fn read_call(call: &str, o: i32) -> (String, String) {
     match o {
         0 => (call.to_string(), "F32".into()),
         o if o > 0 => (format!("col_{}~({call})", tag(o)), format!("[F32; {}]", two(o))),
@@ -62,7 +62,7 @@ fn read_call(call: &str, o: i32) -> (String, String) {
 
 /// How the argument of an input row is made: a stream that is exactly at the clock q (element i of it is `i + 1`), or the `block` value `p` (which the calls of `process` change).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Arg {
+pub(super) enum Arg {
     Stream,
     Param,
 }
@@ -75,14 +75,14 @@ fn out_name(m: i32, r: i32) -> String {
     format!("out_{}_{}", tag(m), tag(r))
 }
 
-const RANGE: std::ops::RangeInclusive<i32> = -2..=2;
+pub(super) const RANGE: std::ops::RangeInclusive<i32> = -2..=2;
 
 /// The source of the table. The flows of a row:
 /// - `col_o` takes a bundle `sample * 2^o` into an array of the frame; `gen_q` makes the stream of a frame `c = x`: the `2^q` elements `(c - 1) * 2^q + u + 1` (u = 0 .. `2^q`), that is the element
 ///   i of the stream has the value `i + 1`; for q < 0 the stream is `cnt`, which counts the ticks of its clock (`lf` is 1 at every tick, `one` is 1.0) and has the value `i + 1` at the tick i.
 /// - `ib_k` is the body of an input row: its output is, for k > 0, `x[0] + 10 x[1] + 100 x[2] + ...` of the array of the frame, for k <= 0 the input read at `sample`.
 /// - `ob_m` is the body of an output row: the run n (or the tick n of `sample / 2^-m`) has the element e with the value `e + 1 + 1000 w`, `w` of `block` read where the element is made.
-fn table_source() -> String {
+pub(super) fn flows() -> String {
     let mut s = String::new();
     for o in 1..=4 {
         s += &format!("flow col_{}(x: F32 at {}) -> [F32; {}] at sample {{ x }}\n", tag(o), clock(o), two(o));
@@ -106,6 +106,32 @@ fn table_source() -> String {
             k => format!("flow ib_{}(x: F32 at {}) -> F32 at sample {{ x at sample }}\n", tag(k), clock(k)),
         };
     }
+    for m in RANGE {
+        s += &match m {
+            0 => "flow ob_z(one: F32 at block, w: F32 at block) -> F32 at sample {\n  let cnt = prev~(^cnt) + one\n  cnt + w * 1000.0\n}\n".to_string(),
+            m if m > 0 => {
+                let n = two(m);
+                let els: Vec<String> = (0..n).map(|u| if u == 0 { "a".into() } else { format!("a + {u}.0") }).collect();
+                format!(
+                    "flow ob_{}(one: F32 at block, w: F32 at block) -> F32 at {} {{\n  let cnt = prev~(^cnt) + one\n  let a = cnt * {n}.0 - {}.0 + w * 1000.0\n  [{}]\n}}\n",
+                    tag(m),
+                    clock(m),
+                    n - 1,
+                    els.join(", ")
+                )
+            }
+            m => format!(
+                "flow ob_{}(one: F32 at block, w: F32 at block) -> F32 at {c} {{\n  let lf = prev~(one at {c}, 1.0)\n  let cnt = prev~(^cnt) + lf\n  cnt + w * 1000.0\n}}\n",
+                tag(m),
+                c = clock(m)
+            ),
+        };
+    }
+    s
+}
+
+fn table_source() -> String {
+    let mut s = flows();
     for k in RANGE {
         for r in RANGE {
             for arg in [Arg::Stream, Arg::Param] {
@@ -128,27 +154,6 @@ fn table_source() -> String {
         }
     }
     for m in RANGE {
-        s += &match m {
-            0 => "flow ob_z(one: F32 at block, w: F32 at block) -> F32 at sample {\n  let cnt = prev~(^cnt) + one\n  cnt + w * 1000.0\n}\n".to_string(),
-            m if m > 0 => {
-                let n = two(m);
-                let els: Vec<String> = (0..n).map(|u| if u == 0 { "a".into() } else { format!("a + {u}.0") }).collect();
-                format!(
-                    "flow ob_{}(one: F32 at block, w: F32 at block) -> F32 at {} {{\n  let cnt = prev~(^cnt) + one\n  let a = cnt * {n}.0 - {}.0 + w * 1000.0\n  [{}]\n}}\n",
-                    tag(m),
-                    clock(m),
-                    n - 1,
-                    els.join(", ")
-                )
-            }
-            m => format!(
-                "flow ob_{}(one: F32 at block, w: F32 at block) -> F32 at {c} {{\n  let lf = prev~(one at {c}, 1.0)\n  let cnt = prev~(^cnt) + lf\n  cnt + w * 1000.0\n}}\n",
-                tag(m),
-                c = clock(m)
-            ),
-        };
-    }
-    for m in RANGE {
         for r in RANGE {
             let (call, ret) = read_call(&format!("ob_{}~(one, w){}", tag(m), chain(r)), m + r);
             s += &format!(
@@ -161,27 +166,27 @@ fn table_source() -> String {
 }
 
 /// The calls of `process`: the frames and the value of the `block` input that changes (`p` of an input row, `w` of an output row) in each. The inputs `one` (1.0) and the column `x` (`c + 1`) are the same in all.
-type Calls = Vec<(usize, f32)>;
+pub(super) type Calls = Vec<(usize, f32)>;
 
 /// 24 frames in four calls, the parameter changing at the cuts (5, 12, 16): an input row has `p` = 10, 20, 30, 40, an output row `w` = 1, 2, 3, 4.
-fn calls_of(scale: f32) -> Calls {
+pub(super) fn calls_of(scale: f32) -> Calls {
     vec![(5, scale), (7, 2.0 * scale), (4, 3.0 * scale), (8, 4.0 * scale)]
 }
 
-fn per_frame(calls: &Calls) -> Vec<f32> {
+pub(super) fn per_frame(calls: &Calls) -> Vec<f32> {
     calls.iter().flat_map(|(n, v)| vec![*v; *n]).collect()
 }
 
 /// What an evaluator gave: the values (an array of a frame is spread out), or the way it stopped.
 #[derive(Clone, Debug, PartialEq)]
-enum Got {
+pub(super) enum Got {
     Values(Vec<f32>),
     Unavailable,
-    Internal,
+    Internal(&'static str),
     Other(String),
 }
 
-fn spread(v: &Value, to: &mut Vec<f32>) {
+pub(super) fn spread(v: &Value, to: &mut Vec<f32>) {
     match v {
         Value::F32(x) => to.push(*x),
         Value::Int(_, n, _) => to.push(*n as f32),
@@ -190,10 +195,10 @@ fn spread(v: &Value, to: &mut Vec<f32>) {
     }
 }
 
-fn drive(a: &Analyzed, def: DefId, calls: &Calls, vary: &'static str, with_x: bool) -> Got {
+pub(super) fn drive(a: &Analyzed, def: DefId, calls: &Calls, vary: &'static str, with_x: bool) -> Got {
     let stop = |f: Fault| match f {
         Fault::Unavailable(_) => Got::Unavailable,
-        Fault::Internal(_) => Got::Internal,
+        Fault::Internal(what) => Got::Internal(what),
         f => Got::Other(format!("{f:?}")),
     };
     let mut me = match Instance::init(View::new(a), def, 48000.0, &[], None) {
@@ -215,11 +220,11 @@ fn drive(a: &Analyzed, def: DefId, calls: &Calls, vary: &'static str, with_x: bo
 }
 
 /// The rows to run: the flow, the calls and the `block` input that changes in them.
-struct Job {
-    name: String,
-    calls: Calls,
-    vary: &'static str,
-    with_x: bool,
+pub(super) struct Job {
+    pub(super) name: String,
+    pub(super) calls: Calls,
+    pub(super) vary: &'static str,
+    pub(super) with_x: bool,
 }
 
 fn input_job(k: i32, r: i32, arg: Arg, calls: Calls) -> Job {
@@ -231,7 +236,7 @@ fn output_job(m: i32, r: i32, calls: Calls) -> Job {
 }
 
 /// The outcomes of the jobs, all on the one checked source of the table (a flow by name).
-fn run_jobs(src: String, jobs: Vec<Job>) -> Vec<Got> {
+pub(super) fn run_jobs(src: String, jobs: Vec<Job>) -> Vec<Got> {
     with_checked(&src, true, move |a| {
         jobs.iter().map(|j| drive(a, def_named(a, &j.name), &j.calls, j.vary, j.with_x)).collect()
     })
@@ -300,7 +305,7 @@ fn model_out(m: i32, r: i32, w: &[f32]) -> Vec<f32> {
         .collect()
 }
 
-fn same_values(row: &str, got: &[f32], want: &[f32]) {
+pub(super) fn same_values(row: &str, got: &[f32], want: &[f32]) {
     let eq = |a: &f32, b: &f32| a.to_bits() == b.to_bits();
     assert!(
         got.len() == want.len() && got.iter().zip(want).all(|(a, b)| eq(a, b)),
@@ -565,7 +570,7 @@ fn run_src(src: &str, name: &'static str, calls: Vec<(usize, Block)>, cols: &[(&
 fn stopped(f: Fault) -> Got {
     match f {
         Fault::Unavailable(_) => Got::Unavailable,
-        Fault::Internal(_) => Got::Internal,
+        Fault::Internal(what) => Got::Internal(what),
         f => Got::Other(format!("{f:?}")),
     }
 }

@@ -1,0 +1,87 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.9", "§11.10", "§11.4"]
+
+// What a chain of modifiers gathers and what it does not (§11.9, S-1207, S-1214): a part with no input at `sample` (the counter of its time, a value of `block`) is not late, its runs are the counters
+// of the block in order; a constant or a parameter that is the argument of an input at `sample` is gathered like any stream, by position (the value read at each frame), the first block having
+// `T.default()`. The body runs `2^N` times in the block at the counters of the block (`sample_tick()` is the counter of the instance, §11.4).
+
+flow tk() -> U32 at sample { sample_tick() }
+
+// n += f at each run.
+flow acc(f: F32 at block) -> F32 at sample {
+  let n = f + prev~(^n)
+  n
+}
+
+// n += k at each run, k an input at `sample`.
+flow cnt(k: F32 at sample) -> F32 at sample {
+  let n = k + prev~(^n)
+  n
+}
+
+pub flow ticks_in_blocks() -> U32 at sample { tk~().up~(2).down~(2) }
+pub flow acc_plain(f: F32 at block) -> F32 at sample { acc~(f) }
+pub flow acc_in_blocks(f: F32 at block) -> F32 at sample { acc~(f).up~(2).down~(2) }
+pub flow cnt_const() -> F32 at sample { cnt~(1.0).up~(2).down~(2) }
+pub flow cnt_param(p: F32 at block) -> F32 at sample { cnt~(p).up~(2).down~(2) }
+
+test "a part with no input at sample in up 2 down 2: its counter runs in order, no delay" {
+  // `tk~()` run alone gives `sample_tick()` = c. Under `.up~(2).down~(2)` the body runs at the counters 2 b and 2 b + 1 in the block b (the frames 2 b, 2 b + 1) and the 2 outputs are dealt to
+  // those frames: 0 1 2 3 4 ..., the same stream, not late.
+  let o = ticks_in_blocks.render(8, 8.0)
+  assert o.out[0] == 0
+  assert o.out[1] == 1
+  assert o.out[2] == 2
+  assert o.out[3] == 3
+  assert o.out[6] == 6
+  assert o.out[7] == 7
+}
+
+test "a value of block as the only input of a part in up 2 down 2 is not late: acc is the same as alone" {
+  // f = 1.0: `acc` adds f at each run: 1 2 3 4 5 6 (a block of 2 runs it twice, the dealt outputs are those of the frames).
+  let alone = acc_plain.render(acc_plain.Params { f: 1.0 }, 6, 8.0)
+  let blocks = acc_in_blocks.render(acc_in_blocks.Params { f: 1.0 }, 6, 8.0)
+  assert alone.out[0] == 1.0
+  assert blocks.out[0] == 1.0
+  assert alone.out[1] == 2.0
+  assert blocks.out[1] == 2.0
+  assert alone.out[2] == 3.0
+  assert blocks.out[2] == 3.0
+  assert alone.out[3] == 4.0
+  assert blocks.out[3] == 4.0
+  assert alone.out[4] == 5.0
+  assert blocks.out[4] == 5.0
+  assert alone.out[5] == 6.0
+  assert blocks.out[5] == 6.0
+}
+
+test "a constant argument of an input at sample is gathered by position: the first block has the default" {
+  // `cnt~(1.0).up~(2).down~(2)`: the tick c = 0 gathers the 2 values before it (0 0, the default), so `cnt` adds 0 0: 0 0; the tick c = 2 gathers the frames 0 1 (1 1): 1 2; c = 4 gathers 1 1: 3 4.
+  // The 2 outputs of each block are dealt to its 2 frames: 0 0 1 2 3 4 (the call with no chain is 1 2 3 4 5 6).
+  let o = cnt_const.render(6, 8.0)
+  assert o.out[0] == 0.0
+  assert o.out[1] == 0.0
+  assert o.out[2] == 1.0
+  assert o.out[3] == 2.0
+  assert o.out[4] == 3.0
+  assert o.out[5] == 4.0
+}
+
+test "a parameter argument of an input at sample is gathered at the frame it was read in" {
+  // p = 1.0 in the first call of 3 frames, 2.0 in the second of 5: the values of the frames are 1 1 1 2 2 2 2 2. The tick c = 0 gathers 0 0: 0 0; c = 2 gathers the frames 0 1 (1 1): 1 2;
+  // c = 4 gathers the frames 2 3 (1 2): 3 5; c = 6 gathers the frames 4 5 (2 2): 7 9. The window that has the change in it (the frame 3) is gathered whole by the block that follows it.
+  var out: [F32; 8] = [0.0; 8]
+  var st = cnt_param.init(8.0)
+  cnt_param.process(inout st, cnt_param.Params { p: 1.0 }, inout out.slice(0, 3))
+  cnt_param.process(inout st, cnt_param.Params { p: 2.0 }, inout out.slice(3, 8))
+  assert out[0] == 0.0
+  assert out[1] == 0.0
+  assert out[2] == 1.0
+  assert out[3] == 2.0
+  assert out[4] == 3.0
+  assert out[5] == 5.0
+  assert out[6] == 7.0
+  assert out[7] == 9.0
+}

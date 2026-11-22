@@ -1,5 +1,4 @@
-//! The rates (§11.9, §11.4): the chain of `.down~(N)` and `.up~(N)` that ends in a call of an instance (its head and the sum of the ratios of the
-//! chain, S-566, S-567), the ratio of a derived clock `(sample / N)`, the ticks slower than `sample` a flow has stages for (S-578, S-1079, S-1088),
+//! The rates (§11.9, §11.4): the chain of `.down~(N)` and `.up~(N)` that ends in a call of an instance (its head and the list of its boundaries, one for each modifier, S-566, S-567, S-1207), the ratio of a derived clock `(sample / N)`, the ticks slower than `sample` a flow has stages for (S-578, S-1079, S-1088),
 //! and the time an instance of a chain runs in (`sample_rate()` and `sample_tick()` are 1/N and N times, §11.4). A ratio is the exponent `r` of
 //! the `2^r` of the clock over the `sample` of the body: `.down~(4)` is `-2`.
 
@@ -15,15 +14,22 @@ use super::expr::{Frame, LIMITS, LOW_STACK, Stop};
 use super::flow::{Clock, Ctx, Inst, Known, Plans, Seen, Step, clock_of, join};
 use super::hoist::{feedback, stage_of};
 use super::scalar::Fault;
-use super::sema_view::{Body, Called, Stage, View, output_stage};
+use super::sema_view::{Body, Called, Stage, View, input_ratio, output_stage};
 use super::state::SAVED;
 use super::value::Value;
 use onsa_sema::def::FlowDef;
 
-/// A chain of modifiers: the call of the instance it starts at (`lp~(x)` of `lp~(x).down~(2).up~(4)`) and the sum of its ratios.
+/// A chain of modifiers: the call of the instance it starts at (`lp~(x)` of `lp~(x).down~(2).up~(4)`) and the ratio of each modifier, innermost first (a boundary each, S-1207: a modifier wraps the whole on its left).
 pub(super) struct Chain {
     pub head: ExprId,
-    pub ratio: i32,
+    pub bounds: Vec<i32>,
+}
+
+impl Chain {
+    /// The ratio of the ports of the call as its caller reads them (§11.9, the clock of the call): the sum of the ratios of the boundaries.
+    pub(super) fn sum(&self) -> i32 {
+        self.bounds.iter().sum()
+    }
 }
 
 /// The exponent of the N of a modifier or of a derived clock: a power of two that is 2 or more (E0808 stops the others in the checker).
@@ -50,12 +56,6 @@ pub(super) fn out_ratio(decl: &FlowDef) -> Result<i32, Fault> {
     }
 }
 
-/// The most the exponent of a ratio of a chain, and of the product of the ratios of the chains around a call, is for the evaluator: the product is 2^24 at most (§11.9, which the lowering checks), and the
-/// evaluator stops (`Unavailable`) at a larger one and does not round it.
-// SPEC-GAP(S-1089): the product is 2^24 at most, and the spec does not say whether it is of the size of the ratio (a product of 2^-26, `.down~(8192)` twice, is over too) or of the one it makes a faster time;
-// the evaluator takes the size, in both directions, as the most conservative reading.
-pub(super) const MOST_RATIO: i32 = 24;
-
 /// Does an input declared at the ratio `k` (`sample * 2^k`) gather its values at an instance run by a chain of the ratio `r`? When `k > 0` and the chain is slower (§11.9): the body reads the `2^k` elements of the
 /// stream of its argument (at the clock `q = k + r`) that came before the position of its tick, a window that the caller's ring keeps (S-578, S-1079). Any other input reads the stream where the run is in time.
 pub(super) fn gathers(k: i32, r: i32) -> bool {
@@ -71,15 +71,17 @@ pub(super) fn counted(es: &[Value], q: i32) -> Result<(), Fault> {
     }
 }
 
-/// What the run `j` of a frame of the caller takes of the argument `v` of an input at `sample * 2^k` that is not gathered, when the chain is of the ratio `r` (§11.9: the argument is a stream at the clock `q = k + r` of
-/// the caller, and the runs of its frame take its elements in time order): a burst (a stream of `q > 0`) gives the `2^k` elements from `j * 2^k` of a `sample * 2^k` (an array), or the element `j / 2^-k` of a tick of
-/// `sample / 2^-k` (when the run is on it) or `j`; any other value is the one value that is read at the position.
-pub(super) fn take(k: i32, r: i32, j: u32, v: &Value) -> Result<Value, Fault> {
-    let Value::Burst(es) = v else { return Ok(v.clone()) };
-    counted(es, k + r)?;
-    let (from, n) = if k > 0 { ((j as usize) << k, 1usize << k) } else { ((j as usize) >> -k, 1) };
-    match (es.get(from..from + n), k > 0) {
-        (Some(part), true) => Ok(Value::Array(part.to_vec())),
+/// What the run `j` of an `.up~(N)` boundary (the ratio `r` > 0) takes of the input `v` of its frame (§11.9: the runs of a frame take the elements of the stream in time order) for the input of the part it wraps at `sample * 2^kp`:
+/// the stream at the clock `q = kp + r` of a frame is a burst of `2^q` values for `q > 0`, which gives the `2^kp` elements from `j * 2^kp` (a burst) of a `sample * 2^kp`, or the element `j / 2^-kp` of a tick of `sample / 2^-kp` or `j`; any
+/// other value is the one value that is read at the position.
+pub(super) fn slice(kp: Option<i32>, r: i32, j: u32, v: &Value) -> Result<Value, Fault> {
+    // An input that the caller makes at a later stage than this one (`Frame::feed`) is no value yet: the boundary that gathers it replaces it by its ring, or no run reads it (`run_head` checks).
+    let Some(kp) = kp.filter(|kp| kp + r > 0 && !matches!(v, Value::Unit)) else { return Ok(v.clone()) };
+    let Value::Burst(es) = v else { return Err(Fault::Internal("an input at `sample * N` that is not a burst")) };
+    counted(es, kp + r)?;
+    let (from, n) = if kp > 0 { ((j as usize) << kp, 1usize << kp) } else { ((j as usize) >> -kp, 1) };
+    match (es.get(from..from + n), kp > 0) {
+        (Some(part), true) => Ok(Value::Burst(part.to_vec())),
         (Some([one]), false) => Ok(one.clone()),
         _ => Err(Fault::Internal("a run that is not of the frame it takes from")),
     }
@@ -106,25 +108,21 @@ pub(super) fn elements(m: i32, v: &Value) -> Result<Vec<Value>, Fault> {
     }
 }
 
-/// The chain that the call `e` ends, if it is a modifier: `.down~(N)` and `.up~(N)` add `-log2 N` and `log2 N` (§11.9); `when~` and `reset_if~` are
-/// W7-10's.
+/// The chain that the call `e` ends, if it is a modifier: a boundary of `-log2 N` and of `log2 N` for each `.down~(N)` and `.up~(N)` (§11.9, S-1207, innermost first); `when~` and `reset_if~` are W7-10's.
 pub(super) fn chain_of(body: &Body, e: ExprId) -> Result<Option<Chain>, Fault> {
-    let (mut at, mut ratio, mut seen) = (e, 0, false);
+    let (mut at, mut bounds) = (e, Vec::new());
     while let Some((m, receiver)) = body.modifier(at) {
         let ExprKind::Call { args, .. } = &body.ast.expr(at).kind else { break };
         let n = args.first().ok_or(Fault::Internal("a modifier with no argument"))?.expr;
-        ratio += match m.ratio_op() {
+        bounds.push(match m.ratio_op() {
             Some(RatioOp::Div) => -exponent(body, n)?,
             Some(RatioOp::Mul) => exponent(body, n)?,
             None => return Err(Fault::Unavailable("a modifier of W7-10 (`when~`, `reset_if~`)")),
-        };
-        (at, seen) = (receiver, true);
+        });
+        at = receiver;
     }
-    // SPEC-GAP(S-1089): the size of the ratio of a chain, `.down~(N)` too, is held to `MOST_RATIO`.
-    if ratio.abs() > MOST_RATIO {
-        return Err(Fault::Unavailable("a chain of modifiers of a ratio over 2^24"));
-    }
-    Ok(seen.then_some(Chain { head: at, ratio }))
+    bounds.reverse();
+    Ok((!bounds.is_empty()).then_some(Chain { head: at, bounds }))
 }
 
 /// The arguments of the call `e`.
@@ -136,7 +134,7 @@ pub(super) fn args_of(body: &Body, e: ExprId) -> Vec<ExprId> {
 }
 
 /// The N of the ratio `2^r` of a clock, `.down~(N)` or `.up~(N)` or `sample / N` (`r` is the sign of the direction and `log2 N` of the size): the one place of the
-/// division of the time that every rate reads. `|r|` is 55 at most (a chain is 24 at most, `chain_of`; a clock of a port 31, `exponent`; the clock of a call is the sum of the two), so that the shift is whole.
+/// division of the time that every rate reads. `|r|` is 55 at most (the product of the ratios of the chains is 2^24 at most, which the check stops (E0808, S-1089); a clock of a port 31, `exponent`; the clock of a call is the sum of the two), so that the shift is whole.
 pub(super) fn n_of(ratio: i32) -> u64 {
     1u64 << ratio.unsigned_abs()
 }
@@ -149,12 +147,6 @@ pub(super) fn phase(ctx: Ctx, r: i32) -> u64 {
 /// Is the time `ctx` on a tick of `sample / N` (the ratio `r` < 0): when the counter is a multiple of N, the first frame included (§11.9).
 pub(super) fn on_tick(ctx: Ctx, r: i32) -> bool {
     phase(ctx, r) == 0
-}
-
-/// The frames an instance of the rate `ratio` of the chain runs for a frame of its caller: one for none of the chain (ratio 0), N for `.up~(N)` (§11.9). A `.down~(N)` is
-/// run in the ticks of its caller and not in its `sample` (the stage 0 of a caller has the runs of a ratio of 0 or more only), so it asks for none.
-pub(super) fn frames(ratio: i32) -> u32 {
-    1 << ratio.max(0)
 }
 
 /// The time the j-th frame of an instance of the rate `ratio` runs in, for the time `ctx` of its caller (§11.4): at 1/N of the rate and of the counter for
@@ -180,13 +172,58 @@ pub(super) fn body_out_stage(m: i32) -> i32 {
     m.min(0)
 }
 
-/// The stage of the caller that makes the output at `m` of an instance of the ratio `r`: the stage of the body that makes it, in the caller (`caller_stage`).
-pub(super) fn out_stage(m: i32, r: i32) -> i32 {
-    caller_stage(body_out_stage(m), r)
+/// A part of a chain (§11.9, S-1207): the head (the part 0) or the head wrapped by the first `b` modifiers (the part `b`, `ratio` the ratio of the modifier that wraps the part `b - 1`). Each is made once, by `levels`, and read by what runs the chain.
+#[derive(Debug)]
+pub(super) struct Level {
+    pub ratio: i32,
+    /// The exponent of each input of the head (`None` for the parameter kinds) and of the output as the caller of this part reads them (`sample * 2^k`): those of the part inside, plus `ratio`.
+    pub ins: Vec<Option<i32>>,
+    pub out: i32,
+    /// The inputs of the part inside that this boundary gathers (a ring of its own), and whether it deals the output of the part inside (an array of its own): `gathers`, `deals`.
+    pub gathers: Vec<usize>,
+    pub deals: bool,
+    /// The stages of the caller of this part that it runs in, the slowest first (`caller_stage` of those inside, the stage a ring is written at, the stage it deals at), and the stage it makes its output in.
+    pub stages: Vec<i32>,
+    pub made: i32,
+}
+
+/// The parts of a chain of the boundaries `bounds` (innermost first) of the flow `decl` that has the ticks `slow` of its own: `[head, ..]`, one more than the modifiers.
+pub(super) fn levels(decl: &FlowDef, slow: &[i32], bounds: &[i32]) -> Result<Rc<[Level]>, Fault> {
+    let m = out_ratio(decl)?;
+    let head = Level {
+        ratio: 0,
+        ins: decl.inputs.iter().map(input_ratio).collect(),
+        out: m,
+        gathers: Vec::new(),
+        deals: false,
+        stages: slow.iter().copied().chain([0]).collect(),
+        made: body_out_stage(m),
+    };
+    let mut all = vec![head];
+    for &r in bounds {
+        let prev = &all[all.len() - 1];
+        let gathers: Vec<usize> =
+            (0..prev.ins.len()).filter(|i| prev.ins[*i].is_some_and(|k| self::gathers(k, r))).collect();
+        let deals = self::deals(prev.out, r);
+        let ins: Vec<Option<i32>> = prev.ins.iter().map(|k| k.map(|k| k + r)).collect();
+        let mut stages: BTreeSet<i32> = prev.stages.iter().map(|y| caller_stage(*y, r)).collect();
+        stages.extend(gathers.iter().filter_map(|i| ins[*i]).map(|k| k.min(0)));
+        stages.extend(deals.then_some(r));
+        let made = if deals { r } else { caller_stage(prev.made, r) };
+        let next =
+            Level { ratio: r, ins, out: prev.out + r, gathers, deals, stages: stages.into_iter().collect(), made };
+        all.push(next);
+    }
+    Ok(all.into())
+}
+
+/// The time of the head of a chain that its caller runs at `ctx` (`init`, `block`; the run of a stage takes it from `time_of` boundary by boundary, §11.4).
+pub(super) fn child_time(levels: &[Level], ctx: Ctx) -> Ctx {
+    levels.iter().skip(1).rev().fold(ctx, |c, l| time_of(c, l.ratio, 0))
 }
 
 /// The ticks slower than `sample` that the stages of a body are of, in the order they run: the larger N (the slower tick) first (§11.9, S-1079): the clock of each step, the clocks of its parts,
-/// and the stage of the body of each instance it calls that is in this one (`caller_stage` of each of its slow ticks and of its `sample`, with the ratio of the chain it is called by).
+/// and the stage of the body of each instance it calls that is in this one (`caller_stage` of each of its slow ticks and of its `sample`, moved out of each boundary of the chain it is called by, `levels`).
 pub(super) fn slow_ticks(view: View, body: &Body, steps: &[Step], plans: &Plans) -> Result<Rc<[i32]>, Stop> {
     let mut all = BTreeSet::new();
     for s in steps {
@@ -349,11 +386,12 @@ fn visit(
     let read = clock_of(body, known, root, e).map_err(here)?;
     out.extend([stage_of(body, known, root, e).map_err(here)?, read].into_iter().filter_map(slow));
     let chain = chain_of(body, e).map_err(here)?;
-    // The stages of an instance that is called here are stages of this one (`caller_stage`, at the ratio of the chain, 0 for no modifier).
-    let (call, ratio) = chain.as_ref().map_or((e, 0), |c| (c.head, c.ratio));
+    // The stages of an instance that is called here are stages of this one: those of the last part of its chain (`levels`; of the head alone for no modifier).
+    let (call, bounds) = chain.as_ref().map_or((e, &[][..]), |c| (c.head, &c.bounds[..]));
     if let Ok(Called::Flow(def)) = body.called(call) {
         let body_ticks = Inst::planned(view, def, plans)?.slow;
-        out.extend(body_ticks.iter().chain(&[0]).map(|x| caller_stage(*x, ratio)).filter(|s| *s < 0));
+        let parts = levels(view.flow(def).map_err(here)?, &body_ticks, bounds).map_err(here)?;
+        out.extend(parts[parts.len() - 1].stages.iter().copied().filter(|s| *s < 0));
     }
     let inside = match &chain {
         Some(c) => args_of(body, c.head),

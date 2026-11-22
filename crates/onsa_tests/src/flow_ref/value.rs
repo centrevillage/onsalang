@@ -156,7 +156,7 @@ pub enum Value {
     Tuple(Vec<Value>, Seal),
     Array(Vec<Value>),
     /// The values a caller reads of a call at `sample * N` (§11.9): its N values of one frame, in the order of time, each of the type of the call (not an array of the type, whatever
-    /// the values an `[T; N]` of the `sample` of a body is). Only the output boundary of a call makes one (the clock of the output `m + r` over 0, `Frame::held`), and only the input boundary
+    /// the values an `[T; N]` of the `sample` of a body is). Only the output boundary of a call makes one (the clock of the output `m + r` over 0, `level_out`), and only the input boundary
     /// of a call takes one apart (`rate::take`), so that a value of the parameter kinds that is an array is not taken for one.
     Burst(Vec<Value>),
     /// The fields in the order of the declaration.

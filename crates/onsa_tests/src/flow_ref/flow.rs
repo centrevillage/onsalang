@@ -25,7 +25,7 @@ use onsa_syntax::ast::{CallKind, ExprId, ExprKind, PatId, StmtKind};
 use super::expr::{Frame, Hoisted, Stop};
 use super::hoist::{pre, seen_of, stage_of};
 use super::host::FnHost;
-use super::rate::{chain_of, components, derived, on_tick, ring_clock, slow_ticks};
+use super::rate::{Level, chain_of, components, derived, levels, on_tick, ring_clock, slow_ticks};
 use super::scalar::{Fault, PanicKind};
 use super::sema_view::{Body, Called, Stage, View, clock_stage, input_stage, inputs_at, output_stage};
 use super::state::SAVED;
@@ -140,7 +140,7 @@ pub(super) fn clock_of(body: &Body, known: &Known, root: ExprId, e: ExprId) -> R
             if let Some(chain) = chain_of(body, e)? {
                 return match body.called(chain.head)? {
                     Called::Flow(def) => match output_stage(body.view.flow(def)?)? {
-                        Stage::Tick(m) => Ok(Clock::Tick(m + chain.ratio)),
+                        Stage::Tick(m) => Ok(Clock::Tick(m + chain.sum())),
                         _ => Err(Fault::Unavailable("a chain whose head is not an instance with an output at a tick")),
                     },
                     _ => Err(Fault::Unavailable("a chain whose head is not an instance of a flow")),
@@ -217,12 +217,14 @@ pub struct Inst {
     pub(super) steps: Rc<[Step]>,
     /// The ticks slower than `sample` that its stages are of (the larger N first).
     pub(super) slow: Rc<[i32]>,
-    /// The ratio of the chain of modifiers it is the head of (`.down~(2)` is -1); 0 for a call with none, which runs at the time of its caller.
-    pub(super) rate: i32,
+    /// The parts of the chain of modifiers it is the head of, the head first (`rate::levels`; the head alone for a call with none, which runs at the time of its caller).
+    pub(super) levels: Rc<[Level]>,
     /// The time of its caller and the stage of it that this instance last ran the stages of (`Frame::run_unit`): each stage of it runs once for each, whoever asks first.
     pub(super) done: Option<(u64, Stage)>,
-    /// The elements of the outputs of the runs of the last frame of a `.up~(N)` chain, in the order of time: what its call reads as a burst (`Frame::held`).
-    pub(super) runs: Vec<Value>,
+    /// The elements of the outputs of the runs of the last frame of each `.up~(N)` boundary of the chain, in the order of time (the burst the part gives, `Frame::level_out`), by the part.
+    pub(super) bursts: Vec<Vec<Value>>,
+    /// The argument of each input of the head that the caller reads at the clock of the call and does not gather, as of the last frame it was made in (`Frame::feed`).
+    pub(super) fed: Vec<Value>,
     locals: HashMap<LocalId, Value>,
     /// The parts of the body that a slower stage made (`Frame::hoisted`).
     hoisted: Hoisted,
@@ -430,14 +432,16 @@ impl Inst {
         let unavailable = |fault| Stop { fault, at: view.name_span(def) };
         let (body, decl) = (view.body(def).map_err(unavailable)?, view.flow(def).map_err(unavailable)?);
         let Plan { steps, slow } = Inst::planned(view, def, plans)?;
+        let levels = levels(decl, &slow, &[]).map_err(unavailable)?;
         Ok((
             Inst {
                 def,
                 steps,
                 slow,
-                rate: 0,
+                bursts: vec![Vec::new(); levels.len()],
+                fed: vec![Value::Unit; decl.inputs.len()],
+                levels,
                 done: None,
-                runs: Vec::new(),
                 locals: HashMap::new(),
                 hoisted: HashMap::new(),
                 out: Value::Unit,

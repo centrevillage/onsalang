@@ -1,0 +1,167 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.9", "§11.10", "§13.4"]
+
+// A chain of modifiers is read by composition: each `.down~(N)` and `.up~(N)` wraps the whole part on its left (§11.10 "各修飾子は左の全体を包む", §11.9 "`x.up~(M).down~(N)` も、中の部品の入出力を境界で
+// 集めて配る形で読む"). `x.up~(2).down~(2)` is `x.up~(2)`, a part that runs its body twice in a frame, run by a `.down~(2)` that gathers the input of that part (the 2 samples before its tick) and
+// deals its output (2 samples to the 2 frames from its tick). It is a block of 2 samples, so it is 2 samples late (§11.9 "集めて配ると N サンプル遅れる"), not of the ratio 0 (S-1207). The first block has
+// `T.default()` (§11.9 "位相 0"). Each boundary adds its own delay: the 4 of `.up~(4).down~(4)`, and for `.up~(4).down~(2).down~(2)` the 4 of its inner boundary and the 2 of its outer one: 6
+// (S-1207 "6 サンプル"). Every `xs` below is 1 .. 12 (the frame c has c + 1), so a delay of d gives c + 1 - d for c >= d and the default 0.0 before it.
+
+flow thru(x: F32 at sample) -> F32 at sample { x }
+
+// A one-pole with a memory: y[n] = 0.5 x[n] + 0.5 y[n - 1].
+flow lp(x: F32 at sample) -> F32 at sample {
+  let y = x * 0.5 + prev~(^y) * 0.5
+  y
+}
+
+pub flow delay2(x: F32 at sample) -> F32 at sample { thru~(x).up~(2).down~(2) }
+pub flow delay4(x: F32 at sample) -> F32 at sample { thru~(x).up~(4).down~(4) }
+pub flow delay6(x: F32 at sample) -> F32 at sample { thru~(x).up~(4).down~(2).down~(2) }
+pub flow lp_late(x: F32 at sample) -> F32 at sample { lp~(x).up~(2).down~(2) }
+pub flow lp_plain(x: F32 at sample) -> F32 at sample { lp~(x) }
+
+// The chain in a flow that has a chain itself: each flow adds the delay of its own, 2 + 2.
+pub flow mid(x: F32 at sample) -> F32 at sample { thru~(x).up~(2).down~(2) }
+pub flow outer(x: F32 at sample) -> F32 at sample { mid~(x).up~(2).down~(2) }
+
+test "up 2 down 2 is a block of 2: two samples late" {
+  let xs: [F32; 12] = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0]
+  let o = delay2.render(xs, 8.0)
+  assert o.out[0] == 0.0
+  assert o.out[1] == 0.0
+  assert o.out[2] == 1.0
+  assert o.out[3] == 2.0
+  assert o.out[4] == 3.0
+  assert o.out[5] == 4.0
+  assert o.out[6] == 5.0
+  assert o.out[7] == 6.0
+  assert o.out[8] == 7.0
+  assert o.out[9] == 8.0
+  assert o.out[10] == 9.0
+  assert o.out[11] == 10.0
+}
+
+test "up 4 down 4 is a block of 4: four samples late" {
+  let xs: [F32; 12] = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0]
+  let o = delay4.render(xs, 8.0)
+  assert o.out[0] == 0.0
+  assert o.out[1] == 0.0
+  assert o.out[2] == 0.0
+  assert o.out[3] == 0.0
+  assert o.out[4] == 1.0
+  assert o.out[5] == 2.0
+  assert o.out[6] == 3.0
+  assert o.out[7] == 4.0
+  assert o.out[8] == 5.0
+  assert o.out[9] == 6.0
+  assert o.out[10] == 7.0
+  assert o.out[11] == 8.0
+}
+
+test "up 4 down 2 down 2 is six samples late, the delays of its boundaries added" {
+  let xs: [F32; 12] = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0]
+  let o = delay6.render(xs, 8.0)
+  assert o.out[0] == 0.0
+  assert o.out[1] == 0.0
+  assert o.out[2] == 0.0
+  assert o.out[3] == 0.0
+  assert o.out[4] == 0.0
+  assert o.out[5] == 0.0
+  assert o.out[6] == 1.0
+  assert o.out[7] == 2.0
+  assert o.out[8] == 3.0
+  assert o.out[9] == 4.0
+  assert o.out[10] == 5.0
+  assert o.out[11] == 6.0
+}
+
+test "a body with a memory in up 2 down 2 is the body run on the stream two samples late" {
+  // The runs of the body are in order, 2 in each block, so its memory sees the samples in time order: the input stream of `lp` is 0 0 8 16 32 64 128 256 (the default of the first block, then xs
+  // two late), and `lp` of that is 0 0 4 10 21 42.5 85.25 170.625 (4 = 0.5 * 8, 10 = 0.5 * 16 + 0.5 * 4, 21 = 16 + 5, 42.5 = 32 + 10.5, 85.25 = 64 + 21.25, 170.625 = 128 + 42.625).
+  let xs: [F32; 8] = [8.0, 16.0, 32.0, 64.0, 128.0, 256.0, 512.0, 1024.0]
+  let late: [F32; 8] = [0.0, 0.0, 8.0, 16.0, 32.0, 64.0, 128.0, 256.0]
+  let o = lp_late.render(xs, 8.0)
+  let p = lp_plain.render(late, 8.0)
+  assert o.out[0] == 0.0
+  assert p.out[0] == 0.0
+  assert o.out[1] == 0.0
+  assert p.out[1] == 0.0
+  assert o.out[2] == 4.0
+  assert p.out[2] == 4.0
+  assert o.out[3] == 10.0
+  assert p.out[3] == 10.0
+  assert o.out[4] == 21.0
+  assert p.out[4] == 21.0
+  assert o.out[5] == 42.5
+  assert p.out[5] == 42.5
+  assert o.out[6] == 85.25
+  assert p.out[6] == 85.25
+  assert o.out[7] == 170.625
+  assert p.out[7] == 170.625
+}
+
+test "a flow with a chain, called with a chain, adds the delay of each: 2 and 2" {
+  let xs: [F32; 12] = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0]
+  let o = outer.render(xs, 8.0)
+  let m = mid.render(xs, 8.0)
+  assert o.out[0] == 0.0
+  assert o.out[1] == 0.0
+  assert o.out[2] == 0.0
+  assert o.out[3] == 0.0
+  assert o.out[4] == 1.0
+  assert o.out[5] == 2.0
+  assert o.out[6] == 3.0
+  assert o.out[7] == 4.0
+  assert o.out[8] == 5.0
+  assert o.out[9] == 6.0
+  assert o.out[10] == 7.0
+  assert o.out[11] == 8.0
+  assert m.out[1] == 0.0
+  assert m.out[2] == 1.0
+  assert m.out[11] == 10.0
+}
+
+test "the calls of process cut the blocks anywhere, the same values (§13.4), and reset starts the first block again" {
+  // Cuts at the frames 3, 8 (both inside a block of 4 or of 2) and at 11: the blocks are of the counter and not of the calls of `process`.
+  let xs: [F32; 12] = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0]
+  var out: [F32; 12] = [0.0; 12]
+  var st = delay6.init(8.0)
+  delay6.process(inout st, xs.slice(0, 3), inout out.slice(0, 3))
+  delay6.process(inout st, xs.slice(3, 8), inout out.slice(3, 8))
+  delay6.process(inout st, xs.slice(8, 11), inout out.slice(8, 11))
+  delay6.process(inout st, xs.slice(11, 12), inout out.slice(11, 12))
+  assert out[0] == 0.0
+  assert out[1] == 0.0
+  assert out[2] == 0.0
+  assert out[3] == 0.0
+  assert out[4] == 0.0
+  assert out[5] == 0.0
+  assert out[6] == 1.0
+  assert out[7] == 2.0
+  assert out[8] == 3.0
+  assert out[9] == 4.0
+  assert out[10] == 5.0
+  assert out[11] == 6.0
+  // A reset in the middle of a block of the counter (after 5 frames, the counter 5): the counter is 0 again and the rings and arrays are the defaults, as after init.
+  var again: [F32; 12] = [0.0; 12]
+  var junk: [F32; 5] = [0.0; 5]
+  var st2 = delay6.init(8.0)
+  delay6.process(inout st2, xs.slice(0, 5), inout junk)
+  delay6.reset(inout st2)
+  delay6.process(inout st2, xs, inout again)
+  assert again[0] == 0.0
+  assert again[1] == 0.0
+  assert again[2] == 0.0
+  assert again[3] == 0.0
+  assert again[4] == 0.0
+  assert again[5] == 0.0
+  assert again[6] == 1.0
+  assert again[7] == 2.0
+  assert again[8] == 3.0
+  assert again[9] == 4.0
+  assert again[10] == 5.0
+  assert again[11] == 6.0
+}

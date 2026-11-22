@@ -929,3 +929,24 @@ target = "tests/spec/flow_clock/conversion_flow_events_until_w7_11.onsa"
 reasons = ["S-1182", "S-1098"]
 until = "W7-11"
 note = "`event` のクロックの名前が引けるまで E0302"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/flow_semantics/chain_blocks_delay.onsa"
+reasons = ["S-1207", "S-1214"]
+until = "W7-16"
+note = "A chain of .down~ and .up~ is E0200 in the Core until W7-16 lowers it (U6a and U6b); the reference evaluator runs the case now (W7-21 U2)."
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/flow_semantics/chain_blocks_ports.onsa"
+reasons = ["S-1207", "S-1214"]
+until = "W7-16"
+note = "A chain of .down~ and .up~ is E0200 in the Core until W7-16 lowers it (U6a and U6b); the reference evaluator runs the case now (W7-21 U2)."
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/flow_semantics/chain_blocks_inputs.onsa"
+reasons = ["S-1207", "S-1214"]
+until = "W7-16"
+note = "A chain of .down~ and .up~ is E0200 in the Core until W7-16 lowers it (U6a and U6b); the reference evaluator runs the case now (W7-21 U2)."

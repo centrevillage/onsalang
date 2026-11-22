@@ -1,0 +1,29 @@
+# flow_ref 1 source=tests/spec/flow_semantics/chain_blocks_ports.onsa tests=6 evaluated=6 unavailable=0 skipped=0 waiting=1
+@ an input at sample * 4 is gathered by each down in turn: 4 + 2 samples late; one down 4 is 4 late
+render chain_blocks_ports.in4_down4 sr=0x41000000 in x=[0x3f800000 0x40000000 0x40400000 0x40800000 0x40a00000 0x40c00000 0x40e00000 0x41000000 0x41100000 0x41200000 0x41300000 0x41400000]
+out=[0x00000000 0x00000000 0x00000000 0x00000000 0x45870800 0x45870800 0x45870800 0x45870800 0x4608f400 0x4608f400 0x4608f400 0x4608f400]
+render chain_blocks_ports.in4_down2_down2 sr=0x41000000 in x=[0x3f800000 0x40000000 0x40400000 0x40800000 0x40a00000 0x40c00000 0x40e00000 0x41000000 0x41100000 0x41200000 0x41300000 0x41400000]
+out=[0x00000000 0x00000000 0x00000000 0x00000000 0x45034000 0x45034000 0x45034000 0x45034000 0x45cc7800 0x45cc7800 0x45cc7800 0x45cc7800]
+@ a down then an up over an input at sample * 2 gives the frame before in both runs of the up
+render chain_blocks_ports.in2_down_up sr=0x41000000 in x=[0x3f800000 0x40000000 0x40400000 0x40800000 0x40a00000 0x40c00000 0x40e00000 0x41000000]
+out=[0x00000000 0x41a80000 0x422c0000 0x42820000 0x42ae0000 0x42da0000 0x43030000 0x43190000]
+@ a down then an up over an input at sample gathers nothing: the stream as it is
+render chain_blocks_ports.thru_down_up sr=0x41000000 in x=[0x3f800000 0x40000000 0x40400000 0x40800000 0x40a00000 0x40c00000 0x40e00000 0x41000000]
+out=[0x3f800000 0x40000000 0x40400000 0x40800000 0x40a00000 0x40c00000 0x40e00000 0x41000000]
+@ an input at sample / 2 that an up lifts to sample * 2 and a down gathers is the stream four frames late
+render chain_blocks_ports.lifted_gathered sr=0x41000000 params one=0x3f800000 frames=12
+out=[0x00000000 0x00000000 0x00000000 0x00000000 0x3f800000 0x3f800000 0x40000000 0x40000000 0x40400000 0x40400000 0x40800000 0x40800000]
+render chain_blocks_ports.up2_down4 sr=0x41000000 params one=0x3f800000 frames=12
+out=[0x00000000 0x00000000 0x00000000 0x00000000 0x3f800000 0x3f800000 0x40000000 0x40000000 0x40400000 0x40400000 0x40800000 0x40800000]
+@ an output at sample * 4 dealt by two downs in turn is read in order by the frames from the tick, with the parameter of the frame that made each
+init 0 chain_blocks_ports.out4_dealt_in_turn sr=0x41000000
+process 0 params p=0x41200000 frames=5
+out=[0x41200000 0x41300000 0x41400000 0x41500000 0x41200000]
+process 0 params p=0x41a00000 frames=7
+out=[0x41300000 0x41400000 0x41500000 0x41a00000 0x41a80000 0x41b00000 0x41b80000]
+@ an output at sample * 2 dealt by a down and read by an up is the output of the run, in each frame
+init 0 chain_blocks_ports.out2_down_up sr=0x41000000
+process 0 params p=0x3f800000 frames=3
+out=[0x41400000 0x41400000 0x41400000]
+process 0 params p=0x40000000 frames=3
+out=[0x41b80000 0x41b80000 0x41b80000]

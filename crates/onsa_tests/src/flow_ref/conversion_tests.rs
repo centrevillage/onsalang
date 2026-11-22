@@ -398,7 +398,7 @@ flow i2(p: F32 at block) -> F32 at sample {{ w4~(ramp4~(p).down~(2)).down~(2) at
 #[test]
 fn a_burst_is_of_the_type_of_the_table_when_each_of_its_values_is_and_an_array_of_them_is_not() {
     // §11.9: the table gives the call `ramp4~(p).down~(2)`, a value of `sample * 2` in the caller's frame, the type of one value (`F32`), and the value that the caller reads of it is a burst (`Value::Burst`) of its 2 values:
-    // it is of that type when each of its values is (the length is the input boundary's to check, `unit_inputs`), and an array of them is not (the `[F32; 2]` of the body of a flow is another value). A value of another
+    // it is of that type when each of its values is (the length is the input boundary's to check, `rate::take`), and an array of them is not (the `[F32; 2]` of the body of a flow is another value). A value of another
     // type in it is not. One value of the type is (a value of the parameter kinds is read at any clock).
     let src = format!(
         "{CONV}flow sum2(x: F32 at (sample * 2)) -> F32 at sample {{ x[0] + x[1] }}
@@ -575,8 +575,11 @@ flow d(p: F32 at block) -> F32 at sample { twice~(p).down~(2) at sample }";
             )
         })
     });
-    assert_eq!(nodes[0], (vec![Role::Delay, Role::Gather(0), Role::Gather(1)], true, vec![0]));
-    assert_eq!(nodes[1], (vec![Role::Deal], true, vec![0]));
+    assert_eq!(
+        nodes[0],
+        (vec![Role::Delay, Role::Gather { bound: 1, input: 0 }, Role::Gather { bound: 1, input: 1 }], true, vec![0])
+    );
+    assert_eq!(nodes[1], (vec![Role::Deal(1)], true, vec![0]));
     // The output of `d`: the tick at c reads the `p` of its frame, 10, 20, 30 for the calls of 2 frames, and deals `[p, p + 1]` to the frames c and c + 1, one element each: 10 11 20 21 30 31.
     let calls = vec![(p(10.0), 2), (p(20.0), 2), (p(30.0), 2)];
     same(&f32s(&run(src, "d", calls, &[], &[])), &[10.0, 11.0, 20.0, 21.0, 30.0, 31.0]);

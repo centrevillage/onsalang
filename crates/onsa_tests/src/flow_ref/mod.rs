@@ -35,7 +35,7 @@
 //!   (every branch is evaluated, one is taken, an arm not taken has the default of its bindings).
 //! - [`boundary`]: an exported flow as the C API has it (§9.2, §14.2): `init`, `process` and `reset` with the status, a panic that
 //!   zeroes the outputs of a call and poisons the instance, and one that leaves it uninitialized.
-//! - [`rate`]: the rates (W7-09): the chain of `.down~(N)` and `.up~(N)` and its ratio, the ticks slower than `sample` a flow has stages for, and the time
+//! - [`rate`]: the rates (W7-09): the chain of `.down~(N)` and `.up~(N)` as its boundaries (S-1207), the ticks slower than `sample` a flow has stages for, and the time
 //!   an instance of a chain runs in (§11.4, §11.9).
 //! - [`state`]: the state of an instance, a tree of cells and instances made for each place a delay or a flow is called,
 //!   the delays (`prev~`, `delay~`, `vdelay~`) with the two phases of a tick that `^` needs, the time (`sample_rate()`, `sample_tick()`).
@@ -47,6 +47,7 @@ pub mod aggregate;
 pub mod boundary;
 pub mod branch;
 pub mod call;
+mod chain;
 pub mod data;
 pub mod expr;
 pub mod flow;
@@ -71,6 +72,8 @@ mod boundary_tests;
 mod branch_tests;
 #[cfg(test)]
 mod call_tests;
+#[cfg(test)]
+mod chain_table_tests;
 #[cfg(test)]
 mod conversion_tests;
 #[cfg(test)]

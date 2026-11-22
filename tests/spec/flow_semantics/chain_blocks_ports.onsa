@@ -1,0 +1,175 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.9", "§11.10"]
+
+// The boundaries of a chain gather and deal by the ports of the part each wraps (§11.9, S-1207, S-1214), not by the chain as a whole. A body with an input at `sample * 4` is gathered by each of two
+// `.down~(2)` in turn (the outer one gathers the frames, the inner one the blocks of the outer): 4 + 2 = 6 samples late, `.down~(4)` alone 4; a `.down~(2).up~(2)` over a port at `sample * 2` gathers
+// the frame before (the 2 elements of it) and gives them in both runs of the up; an input at `sample / 2` that an up lifts and a down gathers is the stream late by the frames of the block; an
+// output at `sample * 4` is dealt by two downs in turn, the elements in order to the frames from the tick, with the parameter read where each element is made.
+
+// x[0] + 10 x[1] + 100 x[2] + 1000 x[3] of the 4 samples of a frame of `sample * 4`.
+flow g4(x: F32 at (sample * 4)) -> F32 at sample { x[0] + x[1] * 10.0 + x[2] * 100.0 + x[3] * 1000.0 }
+
+// x[0] + 10 x[1] of the 2 samples of a frame of `sample * 2`.
+flow g2(x: F32 at (sample * 2)) -> F32 at sample { x[0] + x[1] * 10.0 }
+
+// The frame c of the stream at `sample * 2` with element i = i + 1 (x = c + 1): 2 x - 1, 2 x.
+flow pair(x: F32 at sample) -> F32 at (sample * 2) { [x * 2.0 - 1.0, x * 2.0] }
+
+flow thru(x: F32 at sample) -> F32 at sample { x }
+
+// `p at sample` of a port at `sample / 2` (the value of its tick, held).
+flow slow_in(p: F32 at (sample / 2)) -> F32 at sample { p at sample }
+
+// 4 elements in a run.
+flow mk4(p: F32 at block) -> F32 at (sample * 4) { [p, p + 1.0, p + 2.0, p + 3.0] }
+flow mk2(p: F32 at block) -> F32 at (sample * 2) { [p, p + 1.0] }
+flow pair_sum(x: F32 at (sample * 2)) -> F32 at sample { x[0] * 10.0 + x[1] }
+
+pub flow in4_down4(x: F32 at sample) -> F32 at sample { g4~(x).down~(4) at sample }
+pub flow in4_down2_down2(x: F32 at sample) -> F32 at sample { g4~(x).down~(2).down~(2) at sample }
+pub flow in2_down_up(x: F32 at sample) -> F32 at sample { g2~(pair~(x)).down~(2).up~(2) }
+pub flow thru_down_up(x: F32 at sample) -> F32 at sample { thru~(x).down~(2).up~(2) }
+
+// The stream at `sample / 2` with element i = i + 1 (one tick in each 2 frames).
+pub flow lifted_gathered(one: F32 at block) -> F32 at sample {
+  let lf = prev~(one at (sample / 2), 1.0)
+  let s = prev~(^s) + lf
+  slow_in~(s).up~(4).down~(4)
+}
+
+pub flow up2_down4(one: F32 at block) -> F32 at sample {
+  let lf = prev~(one at (sample / 2), 1.0)
+  let s = prev~(^s) + lf
+  thru~(s).up~(2).down~(4) at sample
+}
+
+pub flow out4_dealt_in_turn(p: F32 at block) -> F32 at sample { mk4~(p).down~(2).down~(2) }
+pub flow out2_down_up(p: F32 at block) -> F32 at sample { pair_sum~(mk2~(p).down~(2).up~(2)) }
+
+test "an input at sample * 4 is gathered by each down in turn: 4 + 2 samples late; one down 4 is 4 late" {
+  // x = c + 1. down 4: the tick c = 4 gathers x[0..3] = 1 2 3 4: 1 + 20 + 300 + 4000 = 4321, c = 8 gathers 5 6 7 8: 5 + 60 + 700 + 8000 = 8765 (and the first block has 0 0 0 0). down 2 down 2: the
+  // tick c = 4 gathers x[-2..1] = 0 0 1 2: 100 + 2000 = 2100, c = 8 gathers x[2..5] = 3 4 5 6: 3 + 40 + 500 + 6000 = 6543. Each is held 4 frames to the next tick.
+  let xs: [F32; 12] = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0]
+  let a = in4_down4.render(xs, 8.0)
+  let b = in4_down2_down2.render(xs, 8.0)
+  assert a.out[0] == 0.0
+  assert b.out[0] == 0.0
+  assert a.out[1] == 0.0
+  assert b.out[1] == 0.0
+  assert a.out[2] == 0.0
+  assert b.out[2] == 0.0
+  assert a.out[3] == 0.0
+  assert b.out[3] == 0.0
+  assert a.out[4] == 4321.0
+  assert b.out[4] == 2100.0
+  assert a.out[5] == 4321.0
+  assert b.out[5] == 2100.0
+  assert a.out[6] == 4321.0
+  assert b.out[6] == 2100.0
+  assert a.out[7] == 4321.0
+  assert b.out[7] == 2100.0
+  assert a.out[8] == 8765.0
+  assert b.out[8] == 6543.0
+  assert a.out[9] == 8765.0
+  assert b.out[9] == 6543.0
+  assert a.out[10] == 8765.0
+  assert b.out[10] == 6543.0
+  assert a.out[11] == 8765.0
+  assert b.out[11] == 6543.0
+}
+
+test "a down then an up over an input at sample * 2 gives the frame before in both runs of the up" {
+  // The stream at `sample * 2` is the elements 1 2 | 3 4 | 5 6 ... (frame c: 2c + 1, 2c + 2). The down gathers the 2 elements before its tick (the frame c - 1: 2c - 1, 2c) and the body gives
+  // x[0] + 10 x[1] = 22 c - 1; the first frame has 0 0: 0, then 21 43 65 87 109 131 153. The runs j = 0 and j = 1 of the up are the counters 2 c and 2 c + 1, and the down runs at the even one.
+  let xs: [F32; 8] = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]
+  let o = in2_down_up.render(xs, 8.0)
+  assert o.out[0] == 0.0
+  assert o.out[1] == 21.0
+  assert o.out[2] == 43.0
+  assert o.out[3] == 65.0
+  assert o.out[4] == 87.0
+  assert o.out[5] == 109.0
+  assert o.out[6] == 131.0
+  assert o.out[7] == 153.0
+}
+
+test "a down then an up over an input at sample gathers nothing: the stream as it is" {
+  let xs: [F32; 8] = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]
+  let o = thru_down_up.render(xs, 8.0)
+  assert o.out[0] == 1.0
+  assert o.out[1] == 2.0
+  assert o.out[2] == 3.0
+  assert o.out[3] == 4.0
+  assert o.out[4] == 5.0
+  assert o.out[5] == 6.0
+  assert o.out[6] == 7.0
+  assert o.out[7] == 8.0
+}
+
+test "an input at sample / 2 that an up lifts to sample * 2 and a down gathers is the stream four frames late" {
+  // The stream has the element i = i + 1 in the frames 2 i and 2 i + 1. The tick of the down (c = 0 mod 4) gathers the 2 elements before it (the ticks at c - 4 and c - 2): the frames 4 .. 7 have
+  // the ring 1 2, the body reads them in its 4 runs (the element j / 2 of the burst): 1 1 2 2, and the output at `sample * 4` of the up is dealt to the frames of the block in order.
+  let o = lifted_gathered.render(lifted_gathered.Params { one: 1.0 }, 12, 8.0)
+  let u = up2_down4.render(up2_down4.Params { one: 1.0 }, 12, 8.0)
+  assert o.out[0] == 0.0
+  assert u.out[0] == 0.0
+  assert o.out[1] == 0.0
+  assert u.out[1] == 0.0
+  assert o.out[2] == 0.0
+  assert u.out[2] == 0.0
+  assert o.out[3] == 0.0
+  assert u.out[3] == 0.0
+  assert o.out[4] == 1.0
+  assert u.out[4] == 1.0
+  assert o.out[5] == 1.0
+  assert u.out[5] == 1.0
+  assert o.out[6] == 2.0
+  assert u.out[6] == 2.0
+  assert o.out[7] == 2.0
+  assert u.out[7] == 2.0
+  assert o.out[8] == 3.0
+  assert u.out[8] == 3.0
+  assert o.out[9] == 3.0
+  assert u.out[9] == 3.0
+  assert o.out[10] == 4.0
+  assert u.out[10] == 4.0
+  assert o.out[11] == 4.0
+  assert u.out[11] == 4.0
+}
+
+test "an output at sample * 4 dealt by two downs in turn is read in order by the frames from the tick, with the parameter of the frame that made each" {
+  // p = 10 in the first call of 5 frames, 20 in the second of 7. The runs are at c = 0, 4, 8 (the elements p .. p + 3 of the frame of the run): 10 11 12 13 | 10 11 12 13 | 20 21 22 23.
+  var out: [F32; 12] = [0.0; 12]
+  var st = out4_dealt_in_turn.init(8.0)
+  out4_dealt_in_turn.process(inout st, out4_dealt_in_turn.Params { p: 10.0 }, inout out.slice(0, 5))
+  out4_dealt_in_turn.process(inout st, out4_dealt_in_turn.Params { p: 20.0 }, inout out.slice(5, 12))
+  assert out[0] == 10.0
+  assert out[1] == 11.0
+  assert out[2] == 12.0
+  assert out[3] == 13.0
+  assert out[4] == 10.0
+  assert out[5] == 11.0
+  assert out[6] == 12.0
+  assert out[7] == 13.0
+  assert out[8] == 20.0
+  assert out[9] == 21.0
+  assert out[10] == 22.0
+  assert out[11] == 23.0
+}
+
+test "an output at sample * 2 dealt by a down and read by an up is the output of the run, in each frame" {
+  // `mk2~(p).down~(2).up~(2)`: the run is at the even counter, the run j = 0 of each frame, and the 2 elements are read by the 2 runs of the up in order: [p, p + 1] to `pair_sum` = 10 p + p + 1 =
+  // 11 p + 1: p = 1 is 12, p = 2 is 23, from the frame the parameter changes in (the frame 3).
+  var out: [F32; 6] = [0.0; 6]
+  var st = out2_down_up.init(8.0)
+  out2_down_up.process(inout st, out2_down_up.Params { p: 1.0 }, inout out.slice(0, 3))
+  out2_down_up.process(inout st, out2_down_up.Params { p: 2.0 }, inout out.slice(3, 6))
+  assert out[0] == 12.0
+  assert out[1] == 12.0
+  assert out[2] == 12.0
+  assert out[3] == 23.0
+  assert out[4] == 23.0
+  assert out[5] == 23.0
+}

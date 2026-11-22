@@ -6,6 +6,7 @@
 //! time of its caller (§11.5), and counted in the limit of the tree.
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::rc::Rc;
 
 use onsa_diag::Span;
 use onsa_sema::def::FlowDef;
@@ -17,12 +18,9 @@ use onsa_syntax::ast::{Arg, CallKind, ExprId, ExprKind};
 use super::call::parts;
 use super::expr::{Eval, Frame, LOW_STACK, Stop, evaluates};
 use super::flow::{Ctx, Inst, Plans, enter};
-use super::rate::{
-    MOST_RATIO, body_out_stage, caller_stage, chain_of, counted, deals, dealt, elements, frames, gathers, n_of,
-    on_tick, out_ratio, out_stage, phase, take, time_of,
-};
+use super::rate::{Level, chain_of, child_time, counted, levels, n_of, on_tick};
 use super::scalar::{Fault, Fault::Internal};
-use super::sema_view::{Called, Stage, input_ratio, input_stage};
+use super::sema_view::{Called, Stage, input_stage};
 use super::value::{IntKind, Scalar, Shape, Value};
 
 /// The places an instance takes in the limit of the tree (`Limits::most`): some 100 thousand instances, not 2^20.
@@ -34,13 +32,13 @@ pub(super) const SAVED: usize = 0;
 const D: usize = 1;
 
 /// What a node of the state is for: the delay a call is, the instance it makes, and what the caller keeps for an instance that a chain runs at another rate (§11.9: "集めた値は呼び出し側の値"、"配った値は呼び出し側の
-/// `sample` の値"): the ring of the elements that its input number `n` gathers, and the array that its output deals.
+/// `sample` の値"): the ring of the elements that the input number `input` gathers at the boundary `bound` (1 for the innermost), and the array that the boundary `bound` deals.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Role {
     Delay,
     Child,
-    Gather(usize),
-    Deal,
+    Gather { bound: usize, input: usize },
+    Deal(usize),
 }
 
 /// Where a node of the state is: the call that makes it (the head of a chain; a node of a gather or a deal is a node of that call, never of the argument it takes), the replica of each `par~` it is in (U2), and what
@@ -54,7 +52,7 @@ pub struct NodeKey {
 
 impl NodeKey {
     /// The node of another role of the same call and replicas.
-    fn role(&self, role: Role) -> NodeKey {
+    pub(super) fn role(&self, role: Role) -> NodeKey {
         NodeKey { role, ..self.clone() }
     }
 }
@@ -119,37 +117,29 @@ pub struct Run {
     pub(super) scope: Vec<(LocalId, Value)>,
     /// The stage of this instance that the evaluation is in (`enter` sets it): a call reads in it (`Frame::call`).
     pub(super) stage: Stage,
-    /// The exponent of the product of the ratios of the chains this instance is run by, from the outermost (0 there): at most `MOST_RATIO`.
-    pub(super) exp: i32,
 }
 
 impl Run {
     pub(super) fn new(state: InstState, ctx: Ctx, used: usize, plans: Plans) -> Run {
-        Run {
-            state,
-            saves: Vec::new(),
-            ctx,
-            used,
-            plans,
-            replicas: Vec::new(),
-            scope: Vec::new(),
-            stage: Stage::Init,
-            exp: 0,
-        }
+        Run { state, saves: Vec::new(), ctx, used, plans, replicas: Vec::new(), scope: Vec::new(), stage: Stage::Init }
     }
 }
 
 enum Node {
     Delay(Delay),
-    /// The ring of the `2^k` elements that the input number `input` at `sample * 2^k` of a `.down~` chain gathers (§11.9), flat, at the call.
+    /// The ring of the `2^k` elements that the input number `input` at `sample * 2^k` of the part inside the `.down~` boundary `bound` gathers (§11.9), flat, at the call.
     Gather {
+        bound: usize,
         input: usize,
         k: i32,
     },
-    /// The array of the `2^m` elements that the output at `sample * 2^m` of a `.down~` chain deals (§11.9), at the call.
-    Deal(i32),
-    /// The flow, and the ratio of the chain of modifiers it is the head of (0 for none).
-    Instance(DefId, i32),
+    /// The array of the `2^m` elements that the output at `sample * 2^m` of the part inside the `.down~` boundary `bound` deals (§11.9), at the call.
+    Deal {
+        bound: usize,
+        m: i32,
+    },
+    /// The flow, and the parts of the chain of modifiers it is the head of (the head alone for none).
+    Instance(DefId, Rc<[Level]>),
 }
 
 /// What an expression makes at `init`: the node of a call, or the nodes of the body of a `par~`, each made for every replica.
@@ -184,7 +174,7 @@ impl<'a> Frame<'a> {
     pub(super) fn stateful(&mut self, e: ExprId, at: Span) -> Eval {
         let here = |fault| Stop { fault, at };
         if let Some(chain) = chain_of(&self.body, e).map_err(here)? {
-            return self.read_call(chain.head, chain.ratio, at);
+            return self.read_call(chain.head, at);
         }
         match &self.body.ast.expr(e).kind {
             ExprKind::Feedback(_) => self.name(e, at),
@@ -193,7 +183,7 @@ impl<'a> Frame<'a> {
                 Called::Builtin(FlowBuiltin::SampleRate) => Ok(Value::F32(self.time(at)?.sample_rate)),
                 // S-1127 (1), §11.4: the first tick after `init` or `reset` reads 0, and each tick adds 1.
                 Called::Builtin(FlowBuiltin::SampleTick) => Ok(Value::int(IntKind::U32, self.time(at)?.tick.into())),
-                Called::Flow(_) => self.read_call(e, 0, at),
+                Called::Flow(_) => self.read_call(e, at),
             },
             _ => Err(here(Internal("not a stateful form"))),
         }
@@ -228,7 +218,7 @@ impl<'a> Frame<'a> {
     }
 
     /// The time this evaluation is at (§11.4: `sample_rate()`, `sample_tick()`); there is none outside an instance.
-    fn time(&self, at: Span) -> Result<Ctx, Stop> {
+    pub(super) fn time(&self, at: Span) -> Result<Ctx, Stop> {
         let run = self.run.as_ref();
         run.map(|r| r.ctx).ok_or(Stop { fault: Fault::Unavailable("a time outside an instance of a flow"), at })
     }
@@ -302,7 +292,7 @@ impl<'a> Frame<'a> {
         if !evaluates(&self.body, e) {
             return Err(here(Fault::Unavailable("a form of a later unit")));
         }
-        // A chain of modifiers is one node, the instance of its head, which the ratio of the chain says the time of: its arguments are the parts.
+        // A chain of modifiers is one node, the instance of its head, whose stages and time the boundaries of the chain give (`rate::levels`, S-1207): its arguments are the parts.
         if let Some(chain) = chain_of(&self.body, e).map_err(here)? {
             let ExprKind::Call { args, .. } = &ast.expr(chain.head).kind else {
                 return Err(here(Internal("a chain with no head call")));
@@ -311,17 +301,17 @@ impl<'a> Frame<'a> {
                 return Err(here(Fault::Unavailable("a modifier of a delay")));
             };
             args.iter().try_for_each(|a| self.nodes(a.expr, out))?;
-            let decl = self.body.view.flow(def).map_err(here)?;
-            for (input, i) in decl.inputs.iter().enumerate() {
-                if let Some(k) = input_ratio(i).filter(|k| gathers(*k, chain.ratio)) {
-                    out.push(Site::Node(chain.head, Node::Gather { input, k }, args.as_slice()));
+            let parts = self.parts_of(def, &chain.bounds, at)?;
+            for (b, lv) in parts.iter().enumerate().skip(1) {
+                for &input in &lv.gathers {
+                    let k = parts[b - 1].ins[input].ok_or(here(Internal("a gather of an input of no clock")))?;
+                    out.push(Site::Node(chain.head, Node::Gather { bound: b, input, k }, args.as_slice()));
+                }
+                if lv.deals {
+                    out.push(Site::Node(chain.head, Node::Deal { bound: b, m: parts[b - 1].out }, args.as_slice()));
                 }
             }
-            let m = out_ratio(decl).map_err(here)?;
-            if deals(m, chain.ratio) {
-                out.push(Site::Node(chain.head, Node::Deal(m), args.as_slice()));
-            }
-            out.push(Site::Node(chain.head, Node::Instance(def, chain.ratio), args.as_slice()));
+            out.push(Site::Node(chain.head, Node::Instance(def, parts), args.as_slice()));
             return Ok(());
         }
         let node = match &ast.expr(e).kind {
@@ -336,7 +326,9 @@ impl<'a> Frame<'a> {
             ExprKind::Call { args, kind: CallKind::Flow, .. } => match self.body.called(e).map_err(here)? {
                 Called::Builtin(FlowBuiltin::Delay(d)) => Some(Site::Node(e, Node::Delay(d), args.as_slice())),
                 Called::Builtin(_) => None,
-                Called::Flow(def) => Some(Site::Node(e, Node::Instance(def, 0), args.as_slice())),
+                Called::Flow(def) => {
+                    Some(Site::Node(e, Node::Instance(def, self.parts_of(def, &[], at)?), args.as_slice()))
+                }
             },
             _ => None,
         };
@@ -359,9 +351,11 @@ impl<'a> Frame<'a> {
         for site in sites {
             match site {
                 Site::Node(e, Node::Delay(d), args) => self.make_cell(*e, *d, args)?,
-                Site::Node(e, Node::Gather { input, k }, args) => self.make_gather(*e, *input, *k, args)?,
-                Site::Node(e, Node::Deal(m), _) => self.make_deal(*e, *m)?,
-                Site::Node(e, Node::Instance(def, rate), _) => self.make_child(*e, *def, *rate)?,
+                Site::Node(e, Node::Gather { bound, input, k }, args) => {
+                    self.make_gather(*e, *bound, *input, *k, args)?
+                }
+                Site::Node(e, Node::Deal { bound, m }, _) => self.make_deal(*e, *bound, *m)?,
+                Site::Node(e, Node::Instance(def, parts), _) => self.make_child(*e, *def, parts.clone())?,
                 Site::Par(e, inner) => drop(self.replicate(*e, |_| 0, |f| f.build(inner))?),
             }
         }
@@ -421,7 +415,7 @@ impl<'a> Frame<'a> {
 
     /// The node of the ring of the input number `input` (at `sample * 2^k`) of the chain whose head is `e`: the `2^k` elements of its argument that came before, `T.default()` at first (§11.9: position 0 has no
     /// sample before it). It is a node of the call: what the argument is does not matter to it (it may be a delay itself).
-    fn make_gather(&mut self, e: ExprId, input: usize, k: i32, args: &[Arg]) -> Result<(), Stop> {
+    fn make_gather(&mut self, e: ExprId, bound: usize, input: usize, k: i32, args: &[Arg]) -> Result<(), Stop> {
         let at = self.body.ast.expr(e).span;
         let here = |fault| Stop { fault, at };
         let arg = args.get(input).ok_or(here(Internal("an input with no argument")))?.expr;
@@ -430,14 +424,14 @@ impl<'a> Frame<'a> {
         self.hold(n.checked_mul(shape.places()), at)?;
         let one = shape.default_value().ok_or(here(Internal("a gathered type with no default")))?;
         let store = Store::Ring { buf: vec![one; n], w: 0 };
-        let key = self.key(e, Role::Gather(input));
+        let key = self.key(e, Role::Gather { bound, input });
         let run = self.run.as_mut().ok_or(here(Internal("no run")))?;
         run.state.cells.insert(key, Cell { initial: store.clone(), current: store });
         Ok(())
     }
 
     /// The node of the array that the output (at `sample * 2^m`) of the chain whose head is `e` deals: `T.default()` until the first tick makes it.
-    fn make_deal(&mut self, e: ExprId, m: i32) -> Result<(), Stop> {
+    fn make_deal(&mut self, e: ExprId, bound: usize, m: i32) -> Result<(), Stop> {
         let at = self.body.ast.expr(e).span;
         let here = |fault| Stop { fault, at };
         let shape = self.shape(self.body.ty(e).map_err(here)?, at)?;
@@ -445,7 +439,7 @@ impl<'a> Frame<'a> {
         self.hold(n.checked_mul(shape.places()), at)?;
         let one = shape.default_value().ok_or(here(Internal("a dealt type with no default")))?;
         let store = Store::Last(Value::Array(vec![one; n]));
-        let key = self.key(e, Role::Deal);
+        let key = self.key(e, Role::Deal(bound));
         let run = self.run.as_mut().ok_or(here(Internal("no run")))?;
         run.state.cells.insert(key, Cell { initial: store.clone(), current: store });
         Ok(())
@@ -460,18 +454,22 @@ impl<'a> Frame<'a> {
         Ok((inst, decl))
     }
 
+    /// The parts of the chain of the boundaries `bounds` (innermost first) of the flow `def`.
+    fn parts_of(&self, def: DefId, bounds: &[i32], at: Span) -> Result<Rc<[Level]>, Stop> {
+        let plans = self.run.as_ref().map(|r| r.plans.clone()).ok_or(Stop { fault: Internal("no run"), at })?;
+        let slow = Inst::planned(self.body.view, def, &plans)?.slow;
+        let decl = self.body.view.flow(def).map_err(|fault| Stop { fault, at })?;
+        levels(decl, &slow, bounds).map_err(|fault| Stop { fault, at })
+    }
+
     /// The instance of the flow `def` that the call `e` makes: kept in the state, then its `init` (the arguments of that clock).
-    fn make_child(&mut self, e: ExprId, def: DefId, rate: i32) -> Result<(), Stop> {
+    fn make_child(&mut self, e: ExprId, def: DefId, parts: Rc<[Level]>) -> Result<(), Stop> {
         let at = self.body.ast.expr(e).span;
-        // SPEC-GAP(S-1089): the product of the ratios of the chains around a call is held to `MOST_RATIO` by its size, a product that is slower (`.down~(8192)` inside `.down~(8192)`) too.
-        if self.run.as_ref().is_some_and(|run| (run.exp + rate).abs() > MOST_RATIO) {
-            return Err(Stop { fault: Fault::Unavailable("a product of the ratios of the chains over 2^24"), at });
-        }
         let (mut inst, decl) = self.new_child(def, at)?;
-        inst.rate = rate;
+        inst.bursts = vec![Vec::new(); parts.len()];
+        inst.levels = parts;
         let key = self.key(e, Role::Child);
-        let config = self.unit_inputs(&key, decl, 0, Stage::Init)?;
-        let config: Vec<(&str, &Value)> = config.iter().map(|(n, _, v)| (*n, v)).collect();
+        let config = self.param_inputs(&key, decl, Stage::Init)?;
         inst.scope = self.run.as_ref().map(|r| r.scope.clone()).unwrap_or_default();
         let run = self.run.as_mut().ok_or(Stop { fault: Internal("no run"), at })?;
         run.state.children.insert(key.clone(), inst);
@@ -479,7 +477,7 @@ impl<'a> Frame<'a> {
     }
 
     /// The arguments of the call `call` of the flow `decl`: one for each of its inputs (the checker sees to it).
-    fn args_of_call(&self, call: ExprId, decl: &FlowDef) -> Result<&'a [Arg], Stop> {
+    pub(super) fn args_of_call(&self, call: ExprId, decl: &FlowDef) -> Result<&'a [Arg], Stop> {
         let (ast, at) = (self.body.ast, self.body.ast.expr(call).span);
         match &ast.expr(call).kind {
             ExprKind::Call { args, .. } if args.len() == decl.inputs.len() => Ok(args),
@@ -490,47 +488,27 @@ impl<'a> Frame<'a> {
         }
     }
 
-    /// The arguments of the call at `key` (an instance at the ratio `r` of its chain) that are inputs of `decl` at `stage`, by input name with the ratio `k` of its clock, evaluated here from the left (S-1131: the bindings
-    /// of an arm they read are those of the stage). The input boundary (§11.9): an input that is gathered is the ring of the elements before this position (`ring`), another is the stream of its clock `q = k + r` of
-    /// this frame: one value for `q <= 0`, and for `q > 0` the burst of its `2^q` values of the frame (a value of the parameter kinds that is not one is each of them), which `run_unit` takes apart for each run.
-    fn unit_inputs(
+    /// The arguments of the call at `key` that are inputs of `decl` at `stage` (`init` or `block`: the parameter kinds), by input name, evaluated here from the left (S-1131: the bindings of an arm they read are those of the stage).
+    /// The inputs at a tick are read by `feed`, and what a boundary gathers is its ring (`ring`).
+    pub(super) fn param_inputs(
         &mut self,
         key: &NodeKey,
         decl: &'a FlowDef,
-        r: i32,
         stage: Stage,
-    ) -> Result<Vec<(&'a str, i32, Value)>, Stop> {
-        let at = self.body.ast.expr(key.call).span;
-        let here = |fault| Stop { fault, at };
+    ) -> Result<Vec<(&'a str, Value)>, Stop> {
+        let here = |fault| Stop { fault, at: self.body.ast.expr(key.call).span };
         let args = self.args_of_call(key.call, decl)?;
         let mut mine = Vec::new();
-        for (n, (i, a)) in decl.inputs.iter().zip(args).enumerate() {
-            if input_stage(i).map_err(here)? != stage {
-                continue;
+        for (i, a) in decl.inputs.iter().zip(args) {
+            if input_stage(i).map_err(here)? == stage {
+                mine.push((i.name.as_str(), self.eval_staged(key.call, a.expr, stage)?));
             }
-            let (k, q) = input_ratio(i).map_or((0, 0), |k| (k, k + r));
-            let value = if gathers(k, r) {
-                self.ring(key, n, at)?
-            } else {
-                match self.eval_staged(key.call, a.expr, stage)? {
-                    Value::Burst(es) => counted(&es, q).map(|()| Value::Burst(es)).map_err(here)?,
-                    // The elements are made after the limit has been asked: `x: F32 at (sample * 2147483648)` of a value of the parameter kinds is not 2^31 of them.
-                    _ if q > 0 && !self.limits.holds(n_of(q) as usize) => {
-                        return Err(here(Fault::Unavailable(
-                            "an input at `sample * N` of more elements than the evaluator holds",
-                        )));
-                    }
-                    v if q > 0 => Value::Burst(vec![v; n_of(q) as usize]),
-                    v => v,
-                }
-            };
-            mine.push((i.name.as_str(), k, value));
         }
         Ok(mine)
     }
 
     /// `go` on the instance at `key` in a frame of its own (the host, limits, time and places of this one); kept again whatever.
-    fn in_child<R>(
+    pub(super) fn in_child<R>(
         &mut self,
         key: &NodeKey,
         go: impl FnOnce(&mut Frame<'a>, &mut Inst, &'a FlowDef) -> Result<R, Stop>,
@@ -543,16 +521,18 @@ impl<'a> Frame<'a> {
         let view = self.body.view;
         let run = self.run.as_mut().ok_or(here(Fault::Unavailable("an instance outside an instance of a flow")))?;
         let (used, plans) = (run.used, run.plans.clone());
-        let (def, rate) =
-            run.state.children.get(key).map(|c| (c.def, c.rate)).ok_or(here(Internal("an instance with no state")))?;
-        // The instance reads the time of its rate (`sample_rate()` of `init` and of `block` too): its caller's for no modifier, 1/N and N times for a chain.
-        let ctx = time_of(run.ctx, rate, 0);
+        let (def, parts) = run
+            .state
+            .children
+            .get(key)
+            .map(|c| (c.def, c.levels.clone()))
+            .ok_or(here(Internal("an instance with no state")))?;
+        // The instance reads the time of its rate (`sample_rate()` of `init` and of `block` too): its caller's for no modifier, 1/N and N times for each boundary of a chain.
+        let ctx = child_time(&parts, run.ctx);
         let (body, decl) = (view.body(def).map_err(here)?, view.flow(def).map_err(here)?);
         let mut inst = run.state.children.remove(key).ok_or(here(Internal("an instance with no state")))?;
-        let exp = run.exp + rate;
         let mut f = inst.frame(body, ctx, used, plans, self.host.take());
         f.limits = self.limits;
-        f.run.iter_mut().for_each(|run| run.exp = exp);
         let done = go(&mut f, &mut inst, decl);
         self.host = f.host.take();
         let used = f.run.as_ref().map_or(used, |r| r.used);
@@ -564,159 +544,28 @@ impl<'a> Frame<'a> {
         kept.map(|()| value)
     }
 
-    /// A call of a flow (§11.5), alone or the head of a chain of the ratio `r` (§11.9): the instance it makes runs the stages of its body in the stages of this one (`run_children`), and the call reads its
-    /// output where it is made, the stage of this one that `out_stage` says (its arguments are read there, so the call is always evaluated there), else the output of the stage that made it, held
-    /// until the next one (a tick, the elements of an array that a `.down~` chain deals to the frames after it).
-    fn read_call(&mut self, head: ExprId, r: i32, at: Span) -> Eval {
-        let here = |fault| Stop { fault, at };
-        let Called::Flow(def) = self.body.called(head).map_err(here)? else {
-            return Err(here(Fault::Unavailable("a modifier of a delay")));
-        };
-        let m = out_ratio(self.body.view.flow(def).map_err(here)?).map_err(here)?;
-        let (key, caller) = (self.key(head, Role::Child), self.time(at)?);
-        let made = Stage::Tick(out_stage(m, r));
-        if self.run.as_ref().is_some_and(|run| run.stage == made) {
-            self.run_unit(&key, made)?;
-        }
-        self.held(&key, m, r, caller, at)
-    }
-
-    /// The stages of the instance at `key` that are in the stage `s` of this one, for this frame of it, once (`Inst::done`): the stage `x` of its body is in the stage `caller_stage(x, r)` of this one, `r` the ratio of its chain
-    /// (§11.9, S-1088: `r` = 0 is the same stage, `.down~(N)` N times slower, and for `.up~(N)` the stages that are not slower than `sample / N` are in the `sample` of this one, N runs for each frame, the ticks
-    /// first and then `sample`). The inputs are read here in the frame of the call (`unit_inputs`; the run j of `.up~(N)` takes its part of what a burst is, `take`), the time the instance runs in is that of its rate (`time_of`), and
-    /// the elements the body makes of its output are, for `.up~(N)`, those of the N runs in a row (what the call reads, `held`), and for a `.down~` chain that makes `sample * 2^m` what the caller deals (`Role::Deal`).
-    // SPEC-GAP(S-1206): the stage of this one that an instance runs a stage of its body in is the one `caller_stage` says, and its output at `sample` is made where the call is read; the spec does not say the
-    // order of the stages of the parts of a call (only a panic shows it).
-    fn run_unit(&mut self, key: &NodeKey, s: Stage) -> Result<(), Stop> {
-        let at = self.body.ast.expr(key.call).span;
-        let here = |fault| Stop { fault, at };
-        let run = self.run.as_ref().ok_or(here(Internal("no run")))?;
-        let child = run.state.children.get(key).ok_or(here(Internal("an instance with no state")))?;
-        let (def, r, caller, slow, done) = (child.def, child.rate, run.ctx, child.slow.clone(), child.done);
-        let decl = self.body.view.flow(def).map_err(here)?;
-        let Stage::Tick(sx) = s else {
-            let params = self.unit_inputs(key, decl, 0, s)?;
-            let params: Vec<(&str, &Value)> = params.iter().map(|(n, _, v)| (*n, v)).collect();
-            return match s {
-                Stage::Block => self.in_child(key, |f, inst, decl| enter(f, inst, decl, s, &params)),
-                _ => Ok(()),
-            };
-        };
-        let mine: Vec<i32> = slow.iter().copied().chain([0]).filter(|x| caller_stage(*x, r) == sx).collect();
-        if mine.is_empty() || done == Some((caller.total(), s)) {
-            return Ok(());
-        }
-        let m = out_ratio(decl).map_err(here)?;
-        let mut given = Vec::new();
-        for x in &mine {
-            given.push((*x, self.unit_inputs(key, decl, r, Stage::Tick(*x))?));
-        }
-        let dealt = self.in_child(key, |f, inst, decl| {
-            let mut outs = Vec::new();
-            for j in 0..if sx == 0 { frames(r) } else { 1 } {
-                let time = time_of(caller, r, j);
-                f.run.as_mut().ok_or(Stop { fault: Internal("no run"), at })?.ctx = time;
-                for (x, inputs) in &given {
-                    if *x != 0 && !on_tick(time, *x) {
-                        continue;
-                    }
-                    let mut now = Vec::new();
-                    for (name, k, v) in inputs {
-                        now.push((*name, take(*k, r, j, v).map_err(|fault| Stop { fault, at })?));
-                    }
-                    enter(f, inst, decl, if *x == 0 { Stage::Sample } else { Stage::Tick(*x) }, &now)?;
-                    if *x == body_out_stage(m) {
-                        outs.extend(elements(m, &inst.out).map_err(|fault| Stop { fault, at })?);
-                    }
-                }
-            }
-            inst.done = Some((caller.total(), s));
-            let made = sx == out_stage(m, r);
-            Ok(if made && deals(m, r) {
-                Some(outs)
-            } else {
-                if made && r > 0 {
-                    inst.runs = outs;
-                }
-                None
-            })
-        })?;
-        match dealt {
-            Some(outs) => {
-                let run = self.run.as_mut().ok_or(here(Internal("no run")))?;
-                let cell =
-                    run.state.cells.get_mut(&key.role(Role::Deal)).ok_or(here(Internal("a deal with no array")))?;
-                cell.current = Store::Last(Value::Array(outs));
-                Ok(())
-            }
-            None => Ok(()),
-        }
-    }
-
-    /// What the call at `key` (its chain of the ratio `r`, its output declared at `m`) gives in the frame of this one, the output boundary (§11.9): `o = m + r` is the clock the caller reads it at, a burst of its `2^o`
-    /// values for `o > 0` (`Value::Burst`) and one value for `o <= 0`. A `.down~` chain that makes `sample * 2^m` deals what its tick made to the frames after it, in order (the caller's `Role::Deal`: the elements
-    /// from `phase * 2^o`, or the one `phase / 2^-o` that the tick of `sample / 2^-o` it is in has); a `.up~(N)` chain gives the elements of its N runs in a row; a call with no chain gives the `2^m` elements of the
-    /// body for `sample * 2^m`; any other is the value the body made last, held until its next tick.
-    fn held(&self, key: &NodeKey, m: i32, r: i32, caller: Ctx, at: Span) -> Eval {
-        let here = |fault| Stop { fault, at };
-        let run = self.run.as_ref().ok_or(here(Internal("no run")))?;
-        let child = run.state.children.get(key).ok_or(here(Internal("an instance with no state")))?;
-        let burst = |es: Vec<Value>| counted(&es, m + r).map(|()| Value::Burst(es)).map_err(here);
-        match (r.cmp(&0), m > 0) {
-            (std::cmp::Ordering::Less, true) => {
-                let Some(Store::Last(Value::Array(vs))) =
-                    run.state.cells.get(&key.role(Role::Deal)).map(|c| &c.current)
-                else {
-                    return Err(here(Internal("a deal with no array")));
-                };
-                let (from, n) = dealt(m, r, phase(caller, r));
-                match (vs.get(from..from + n), m + r > 0) {
-                    (Some(part), true) => burst(part.to_vec()),
-                    (Some([one]), false) => Ok(one.clone()),
-                    _ => Err(here(Internal("a dealt array that is not `sample * N` long"))),
-                }
-            }
-            (std::cmp::Ordering::Greater, _) if m + r > 0 => burst(child.runs.clone()),
-            (std::cmp::Ordering::Equal, true) => burst(elements(m, &child.out).map_err(here)?),
-            _ => Ok(child.out.clone()),
-        }
-    }
-
-    /// The elements the ring of the input number `input` of the chain at `key` holds, the oldest first (the last is the one of the frame before): the `2^k` the body reads at its tick. The frames between two ticks
-    /// write all of the ring (`2^q` of each of the `2^-r` frames, the one of each tick of a slower stream), so at a tick it is back at its first place and the buffer is in order.
-    fn ring(&self, key: &NodeKey, input: usize, at: Span) -> Eval {
-        let here = |fault| Stop { fault, at };
-        let run = self.run.as_ref().ok_or(here(Internal("no run")))?;
-        let Some(Store::Ring { buf, .. }) = run.state.cells.get(&key.role(Role::Gather(input))).map(|c| &c.current)
-        else {
-            return Err(here(Internal("a gather with no ring")));
-        };
-        Ok(Value::Array(buf.clone()))
-    }
-
-    /// The argument that an input of `sample * N` of a `.down~` chain gathers is stored at the end of each `sample` frame of this one, the `2^q` elements of its stream at the clock `q = k + r` (§11.9: the frame
-    /// after a tick reads it, the position's own value is not in); a stream slower than `sample` gives one element at each tick of its own, `sample / 2^-q`.
+    /// The argument that an input of `sample * N` of the last `.down~` boundary of a chain gathers is stored at the end of each `sample` frame of this one, the `2^q` elements of its stream at the clock `q = k + r` (§11.9: the frame
+    /// after a tick reads it, the position's own value is not in); a stream slower than `sample` gives one element at each tick of its own, `sample / 2^-q`. The rings of the boundaries inside are written by the frames of the chain (`run_level`).
     pub(super) fn save_gathers(&mut self, whole: Span) -> Result<(), Stop> {
         let run = self.run.as_ref().ok_or(Stop { fault: Internal("a sample stage with no run"), at: whole })?;
-        let (ctx, calls): (_, Vec<_>) =
-            (run.ctx, run.state.children.iter().map(|(k, c)| (k.clone(), c.def, c.rate, c.scope.clone())).collect());
-        for (key, def, rate, scope) in calls {
+        let (ctx, calls): (_, Vec<_>) = (
+            run.ctx,
+            run.state.children.iter().map(|(k, c)| (k.clone(), c.def, c.levels.clone(), c.scope.clone())).collect(),
+        );
+        for (key, def, parts, scope) in calls {
             let here = |fault| Stop { fault, at: self.body.ast.expr(key.call).span };
             let decl = self.body.view.flow(def).map_err(here)?;
             let args = self.args_of_call(key.call, decl)?;
-            for (n, (i, a)) in decl.inputs.iter().zip(args).enumerate() {
-                let Some(q) = input_ratio(i).filter(|k| gathers(*k, rate)).map(|k| k + rate) else { continue };
+            let top = &parts[parts.len() - 1];
+            for &n in &top.gathers {
+                let q = top.ins[n].ok_or(here(Internal("a gather of an input of no clock")))?;
                 if q < 0 && !on_tick(ctx, q) {
                     continue;
                 }
                 let run = self.run.as_mut().ok_or(here(Internal("no run")))?;
-                let save = Save {
-                    key: key.role(Role::Gather(n)),
-                    expr: a.expr,
-                    scope: scope.clone(),
-                    call: Some(key.call),
-                    q,
-                };
+                let role = Role::Gather { bound: parts.len() - 1, input: n };
+                let save =
+                    Save { key: key.role(role), expr: args[n].expr, scope: scope.clone(), call: Some(key.call), q };
                 run.saves.push(save);
             }
         }
@@ -729,12 +578,14 @@ impl<'a> Frame<'a> {
     // their places; the spec does not say the order, which only the place of a panic shows.
     pub(super) fn run_children(&mut self, s: Stage, whole: Span) -> Result<(), Stop> {
         let run = self.run.as_ref().ok_or(Stop { fault: Internal("a stage with no run"), at: whole })?;
-        let calls: Vec<_> =
-            run.state.children.iter().map(|(k, c)| (k.clone(), c.def, c.rate, c.scope.clone())).collect();
-        for (key, def, rate, scope) in calls {
-            let here = |fault| Stop { fault, at: self.body.ast.expr(key.call).span };
-            let made = out_ratio(self.body.view.flow(def).map_err(here)?).map_err(here)?;
-            if s == Stage::Sample && s == Stage::Tick(out_stage(made, rate)) {
+        let calls: Vec<_> = run
+            .state
+            .children
+            .iter()
+            .map(|(k, c)| (k.clone(), c.levels[c.levels.len() - 1].made, c.scope.clone()))
+            .collect();
+        for (key, made, scope) in calls {
+            if s == Stage::Sample && s == Stage::Tick(made) {
                 continue;
             }
             self.with_bindings(&key.replicas, scope, |f| f.run_unit(&key, s))?;

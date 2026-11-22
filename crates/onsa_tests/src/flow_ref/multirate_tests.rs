@@ -162,7 +162,7 @@ fn a_down_chain_runs_its_instance_at_the_ticks_of_the_ratio_and_the_value_holds(
     // §11.9: `cnt~(p).down~(4)` runs `cnt` at c = 0, 4, 8 (a tick of `sample / 4`) with the `block` input of that frame; its output is a value of `sample / 4`
     // that the caller reads at `sample` with `at` and that holds. p = 1.0: n = 1, 2, 3 at the ticks: 1 1 1 1 2 2 2 2 3 3. `.down~(2).down~(2)` is 1/4 as well
     // (the ratios multiply). With p = 1.0 for 5 frames and 10.0 for 5: c = 0, 4 give 1, 2 and c = 8 (p = 10.0) gives 12: 1 1 1 1 2 2 2 2 12 12.
-    // `.down~(2).up~(2)` is of ratio 0, so `cnt` runs at every frame: 1 2 3 4 5 6.
+    // `.down~(2).up~(2)` (S-1207: the up wraps the down) runs `cnt` at every frame, 1 2 3 4 5 6: the run 0 of the up in each frame is the tick of the down, whose input is at `sample` and gathers nothing.
     let src = format!(
         "{CNT}flow d4(p: F32 at block) -> F32 at sample {{
   let a = cnt~(p).down~(4)
@@ -188,7 +188,7 @@ flow du(p: F32 at block) -> F32 at sample {{ cnt~(p).down~(2).up~(2) }}"
 #[test]
 fn a_down_chain_runs_at_a_tick_of_its_own_and_a_flow_inside_a_chain_keeps_the_counter_of_its_own() {
     // §11.4, §11.9: the body of `.down~(N)` runs at 1/N of the rate and its counter counts its own frames: `sample_rate()` is 48000 / 4 = 12000.0 and
-    // `sample_tick()` is c / 4 (0 0 0 0 1 1 1 1 2 2). `.down~(2).down~(2)` gives the same, `.down~(2).up~(2)` is the counter of the caller (0 1 2 3 ...).
+    // `sample_tick()` is c / 4 (0 0 0 0 1 1 1 1 2 2). `.down~(2).down~(2)` gives the same, `.down~(2).up~(2)` is the counter of the caller (0 1 2 3 ...: the run 0 of the up in each frame is the tick of the down).
     // A flow with no modifier, called inside `.down~(2)`, shares its counter, and a `.down~(2)` in the body of `.up~(2)` ticks when the counter of the
     // `.up~` instance (2 c + j) is even, j = 0, with the tick (2 c) / 2 = c: the instance gives the last of its two frames, j = 1, whose held `g` is c.
     let src = format!(
@@ -238,7 +238,9 @@ fn an_up_chain_runs_its_instance_n_times_in_a_frame_at_n_times_the_rate() {
     // §11.4, §11.9: `.up~(4)` runs the instance 4 times in a frame of its caller, in a time of 4 times the rate (`sample_rate()` is 192000.0) whose counter is
     // 4 c + j for j = 0 .. 3. The output is a value of `sample * 4` (the array of the four; the evaluator keeps the last of them, which a conversion flow
     // will read with the others, U2b). After frame c the last is: for `tk`, 4 c + 3 = 3, 7, 11; for `cnt~(1.0)`, which counts its runs, 4 (c + 1) = 4, 8, 12;
-    // for `rate_of`, 192000.0. The chain `.up~(2).down~(2)` is of ratio 0 (the same as a call with none): `cnt` runs once for a frame: 1, 2, 3.
+    // for `rate_of`, 192000.0. `cnt~(1.0).up~(2).down~(2)` is no call with no modifier (S-1207, S-1214 (3)): the down gathers the 2 values of its input before its tick, `1.0` in each frame, the
+    // up runs `cnt` twice in the block and the down deals the two outputs to the frames of the block (the stream of the call, not the last run). The first block has `T.default()` = 0.0: the
+    // runs add 0, 0, then 1, 1, then 1, 1 ...: the outputs 0 0 | 1 2 | 3 4 (two frames each) at c = 0 .. 5, a delay of 2 frames (`cnt~(1.0)` alone is 1 2 3 4 5 6).
     let src = format!(
         "{CNT}flow ut() -> U32 at sample {{
   let _ = tk~().up~(4)
@@ -271,7 +273,8 @@ flow ud() -> F32 at sample {{
     assert_eq!(u32s(&lasts("ut")), [3, 7, 11]);
     same(&f32s(&lasts("uc")), &[4.0, 8.0, 12.0]);
     same(&f32s(&lasts("ur")), &[192000.0; 3]);
-    same(&f32s(&lasts("ud")), &[1.0, 2.0, 3.0]);
+    let block = vec![(vec![], 6)];
+    same(&f32s(&calls(&src, "ud", vec![], block)), &[0.0, 0.0, 1.0, 2.0, 3.0, 4.0]);
 }
 
 #[test]
@@ -417,9 +420,11 @@ flow direct(p: F32 at block) -> F32 at sample {
 }
 
 #[test]
-fn a_chain_of_ratio_0_has_the_ticks_of_its_instance_in_the_stage_of_its_caller() {
-    // §11.9, S-566, S-1088: `.down~(2).up~(2)` is of ratio 0, so `slow_in` runs at the time of its caller and its tick (`sample / 4`, the first test's `prev~`) is
-    // the caller's, at c = 0, 4, 8: the same series as the call with no modifier, p = 2.0: 1 1 1 1 2 2 2 2 2 2 2. (A tick that nobody runs gives the init all the way.)
+fn a_down_then_up_chain_has_the_ticks_of_its_instance_in_the_stage_of_its_caller() {
+    // §11.9, S-566, S-1088, S-1207: `slow_in~(p).down~(2).up~(2)` runs `slow_in` at the time of its caller (the run 0 of the up in each frame is the tick of the down, and the input is `block`, which nothing gathers),
+    // so its tick (`sample / 4`, the first test's `prev~`) is the caller's, at c = 0, 4, 8: the same series as the call with no modifier, p = 2.0: 1 1 1 1 2 2 2 2 2 2 2. `.up~(4).down~(4)` (the up runs
+    // the body 4 times in the frame of the tick of the down, which deals the 4 outputs to the next 4 frames, nothing gathered) gives the same series: the body runs at the counter 4 c' + j of the block c' = c / 4,
+    // its tick is the run j = 0 of each block. (A tick that nobody runs gives the init all the way.)
     let src = "flow slow_in(p: F32 at block) -> F32 at sample { prev~(p at (sample / 4), 1.0) at sample }
 flow plain(p: F32 at block) -> F32 at sample { slow_in~(p) }
 flow ratio0(p: F32 at block) -> F32 at sample { slow_in~(p).down~(2).up~(2) }

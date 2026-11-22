@@ -1,0 +1,18 @@
+# flow_ref 1 source=tests/spec/flow_semantics/chain_blocks_inputs.onsa tests=4 evaluated=4 unavailable=0 skipped=0 waiting=1
+@ a part with no input at sample in up 2 down 2: its counter runs in order, no delay
+render chain_blocks_inputs.ticks_in_blocks sr=0x41000000 frames=8
+out=[0 1 2 3 4 5 6 7]
+@ a value of block as the only input of a part in up 2 down 2 is not late: acc is the same as alone
+render chain_blocks_inputs.acc_plain sr=0x41000000 params f=0x3f800000 frames=6
+out=[0x3f800000 0x40000000 0x40400000 0x40800000 0x40a00000 0x40c00000]
+render chain_blocks_inputs.acc_in_blocks sr=0x41000000 params f=0x3f800000 frames=6
+out=[0x3f800000 0x40000000 0x40400000 0x40800000 0x40a00000 0x40c00000]
+@ a constant argument of an input at sample is gathered by position: the first block has the default
+render chain_blocks_inputs.cnt_const sr=0x41000000 frames=6
+out=[0x00000000 0x00000000 0x3f800000 0x40000000 0x40400000 0x40800000]
+@ a parameter argument of an input at sample is gathered at the frame it was read in
+init 0 chain_blocks_inputs.cnt_param sr=0x41000000
+process 0 params p=0x3f800000 frames=3
+out=[0x00000000 0x00000000 0x3f800000]
+process 0 params p=0x40000000 frames=5
+out=[0x40000000 0x40400000 0x40a00000 0x40e00000 0x41100000]
