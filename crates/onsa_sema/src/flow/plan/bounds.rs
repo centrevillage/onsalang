@@ -41,7 +41,7 @@ pub(in crate::flow) fn bounds<'a>(chain: impl IntoIterator<Item = &'a PlanModifi
         // SPEC-GAP(S-1209): `.when~` and `.reset_if~` are no boundary; with `.up~`
         // in the chain too, the E0816 of a boundary that gathers comes first.
         let Some(r) = m.ratio else { continue };
-        let fast = |k: Option<Ratio>| k.filter(|k| r.0 < 0 && k.faster_than_body());
+        let fast = |k: Option<Ratio>| k.filter(|k| r.slower_than_body() && k.faster_than_body());
         let gathers = (0u32..).zip(&ins).filter_map(|(i, &k)| fast(k).map(|k| (i, step(ClockStage::Tick(k), r))));
         let gathers = gathers.collect();
         let (deals, maps, stages) = (fast(out).is_some(), Vec::new(), Vec::new());

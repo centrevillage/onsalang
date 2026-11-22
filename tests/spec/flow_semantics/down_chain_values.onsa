@@ -1,0 +1,408 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.9", "§11.10", "§11.3", "§11.5", "§13.4", "§9.2"]
+
+// A chain of `.down~(N)` that gathers and deals nothing (W7-16 U6a1/t; §11.9, S-566, S-1088, S-1207, S-1214): the part it wraps runs at the frames 0, N, 2N ... (the first tick at the frame 0, "最初の刻みで動く"),
+// its delays count those ticks, its `sample_rate()` is 1/N, and its output is a value of `sample / N` held to the next tick (the tick is before the `sample` of the same frame, S-578). No head has a port at `sample * N`
+// (chain_blocks_ports.onsa) and no part reads `sample_tick()` (S-1217). An argument of a head is a value of `block`, `init`, a constant or one of the clock of the chain. Every value is worked out by hand: `acc` gives
+// 1 2 3 ... when `f` is 1.0, so a down 4 gives 1 for the frames 0 .. 3, 2 for the frames 4 .. 7, 3 for the frames 8 .. 11.
+
+flow acc(f: F32 at block) -> F32 at sample {
+  let n = f + prev~(^n)
+  n
+}
+
+flow rate() -> F32 at sample {
+  sample_rate()
+}
+
+// A stage of its own at `sample / 2` of its body (100.0 at its first tick, then the `p` of the tick before) and an input at `sample`.
+flow h1(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let s = prev~(p at (sample / 2), 100.0)
+  x + (s at sample)
+}
+
+// A child with a stage of its own and no modifier, inside a part (S-1088).
+flow ch2(p: F32 at block) -> F32 at sample {
+  let s = prev~(p at (sample / 2), 100.0)
+  s at sample
+}
+
+flow mid2(p: F32 at block) -> F32 at sample {
+  ch2~(p) * 2.0
+}
+
+flow deep(p: F32 at block) -> F32 at sample {
+  acc~(p).down~(2) at sample
+}
+
+flow rate_deep() -> F32 at sample {
+  rate~().down~(2) at sample
+}
+
+flow lag4(x: F32 at (sample / 4)) -> F32 at (sample / 4) {
+  prev~(x, 100.0)
+}
+
+// `d` is the `p` of the run before (1 at the first): the division stops the run when it is 0.
+flow div_prev(p: I32 at block) -> I32 at sample {
+  let d = prev~(p at sample, 1)
+  100 / d
+}
+
+pub flow acc_down4(f: F32 at block) -> F32 at sample {
+  acc~(f).down~(4) at sample
+}
+
+pub flow acc_down2_down2(f: F32 at block) -> F32 at sample {
+  acc~(f).down~(2).down~(2) at sample
+}
+
+pub flow slow_lets(f: F32 at block) -> F32 at sample {
+  let y = acc~(f).down~(4)
+  let z = y * 2.0
+  let d = prev~(y)
+  (z at sample) * 100.0 + (d at sample)
+}
+
+pub flow rate_plain() -> F32 at sample {
+  rate~()
+}
+
+pub flow rate_down2() -> F32 at sample {
+  rate~().down~(2) at sample
+}
+
+pub flow rate_down2_down2() -> F32 at sample {
+  rate~().down~(2).down~(2) at sample
+}
+
+pub flow rate_down4() -> F32 at sample {
+  rate~().down~(4) at sample
+}
+
+pub flow rate_down2_x3() -> F32 at sample {
+  rate~().down~(2).down~(2).down~(2) at sample
+}
+
+pub flow rate_down8() -> F32 at sample {
+  rate~().down~(8) at sample
+}
+
+pub flow rate_down2_down8() -> F32 at sample {
+  rate~().down~(2).down~(8) at sample
+}
+
+pub flow rate_down8_down2() -> F32 at sample {
+  rate~().down~(8).down~(2) at sample
+}
+
+pub flow head_stage(p: F32 at block) -> F32 at sample {
+  let k = acc~(1.0).down~(2)
+  h1~(k, p).down~(2) at sample
+}
+
+pub flow grand_slow(p: F32 at block) -> F32 at sample {
+  mid2~(p).down~(2) at sample
+}
+
+pub flow grand_down(p: F32 at block) -> F32 at sample {
+  deep~(p).down~(2) at sample
+}
+
+pub flow rate_grand() -> F32 at sample {
+  rate_deep~().down~(2) at sample
+}
+
+pub flow lag_down2(p: F32 at block) -> F32 at sample {
+  lag4~(p).down~(2) at sample
+}
+
+pub flow mixed(f: F32 at block) -> F32 at sample {
+  let a1 = acc~(f)
+  let a2 = acc~(f).down~(2)
+  let a4 = acc~(f).down~(4)
+  a1 * 10000.0 + (a2 at sample) * 100.0 + (a4 at sample)
+}
+
+pub flow par_down(f: F32 at block) -> F32 at sample {
+  let ys = par~ i in 0 ..< 3 { acc~(f * F32.round_from(i + 1)).down~(2) at sample }
+  ys[0] + ys[1] * 10.0 + ys[2] * 100.0
+}
+
+pub flow if_down(c: Bool at block) -> F32 at sample {
+  if~ c { acc~(1.0).down~(2) at sample } else { acc~(10.0).down~(2) at sample }
+}
+
+pub flow match_down(k: U32 at block) -> F32 at sample {
+  match~ k {
+    0 => acc~(1.0).down~(2) at sample,
+    n => acc~(F32.round_from(n)).down~(2) at sample,
+  }
+}
+
+pub flow panics_at_slow(p: I32 at block) -> I32 at sample {
+  div_prev~(p).down~(4) at sample
+}
+
+// The `let r` of the parent is at `sample / 4` and so is the body of the part under `.down~(4)`: both divide by the 0 at the frame 4.
+pub flow both_panic(p: I32 at block) -> I32 at sample {
+  let e = prev~(p at (sample / 4), 1)
+  let r = 200 / e
+  (r at sample) + (div_prev~(p).down~(4) at sample)
+}
+
+test "a part with a memory under down 4 counts its own ticks and the output is held between them" {
+  let o = acc_down4.render(acc_down4.Params { f: 1.0 }, 12, 8.0)
+  assert o.out[0] == 1.0
+  assert o.out[1] == 1.0
+  assert o.out[2] == 1.0
+  assert o.out[3] == 1.0
+  assert o.out[4] == 2.0
+  assert o.out[5] == 2.0
+  assert o.out[6] == 2.0
+  assert o.out[7] == 2.0
+  assert o.out[8] == 3.0
+  assert o.out[9] == 3.0
+  assert o.out[10] == 3.0
+  assert o.out[11] == 3.0
+}
+
+test "the output of a chain is a value of its clock: a let of that clock and a delay of it count the ticks" {
+  // y = 1 2 3 at the frames 0 4 8, z = 2 4 6, d = the y before = 0 1 2: z * 100 + d = 200, 401, 602, each held 4 frames and read by `at sample`.
+  let o = slow_lets.render(slow_lets.Params { f: 1.0 }, 12, 8.0)
+  assert o.out[0] == 200.0
+  assert o.out[3] == 200.0
+  assert o.out[4] == 401.0
+  assert o.out[7] == 401.0
+  assert o.out[8] == 602.0
+  assert o.out[11] == 602.0
+}
+
+test "down 2 down 2 is down 4: the inner part runs at each second tick of the outer one" {
+  let o = acc_down2_down2.render(acc_down2_down2.Params { f: 1.0 }, 12, 8.0)
+  assert o.out[0] == 1.0
+  assert o.out[3] == 1.0
+  assert o.out[4] == 2.0
+  assert o.out[7] == 2.0
+  assert o.out[8] == 3.0
+  assert o.out[11] == 3.0
+}
+
+test "sample_rate of the part is 1/N of the rate of its call, one division for each boundary" {
+  // The host rate is 48000.0: down 2 is 24000.0, down 2 down 2 and down 4 are 12000.0, down 2 three times and down 8 are 6000.0.
+  let p = rate_plain.render(4, 48000.0)
+  let a = rate_down2.render(4, 48000.0)
+  let b = rate_down2_down2.render(4, 48000.0)
+  let c = rate_down4.render(4, 48000.0)
+  let d = rate_down2_x3.render(4, 48000.0)
+  let e = rate_down8.render(4, 48000.0)
+  assert p.out[3] == 48000.0
+  assert a.out[3] == 24000.0
+  assert b.out[3] == 12000.0
+  assert c.out[3] == 12000.0
+  assert d.out[3] == 6000.0
+  assert e.out[3] == 6000.0
+}
+
+test "the rate is divided at each boundary in turn, not once by the product: below the normal range they differ" {
+  // 7.0e-45 is 5 times the smallest F32 (2^-149 = 1.4e-45). Divided by 2 three times, each rounded to nearest even: 5 / 2 = 2.5 -> 2, 2 / 2 = 1, 1 / 2 = 0.5 -> 0: 0.0. Divided by 8 once: 5 / 8 = 0.625 -> 1: 1.0e-45 (1 times 2^-149).
+  let stepwise = rate_down2_x3.render(1, 7.0e-45)
+  let once = rate_down8.render(1, 7.0e-45)
+  assert stepwise.out[0] == 0.0
+  assert once.out[0] == 1.0e-45
+}
+
+test "the rate is divided from the outermost boundary in: each modifier wraps the whole on its left (§11.10)" {
+  // 1.4012985e-44 is 10 times 2^-149. In `.down~(2).down~(8)` the `.down~(8)` wraps the rest, so the part reads (sr / 8) / 2: 10 / 8 = 1.25 -> 1, then 1 / 2 = 0.5 -> 0 (to even): 0.0.
+  // In `.down~(8).down~(2)` it is (sr / 2) / 8: 10 / 2 = 5, then 5 / 8 = 0.625 -> 1: 1.0e-45. The products are the same, so only the order tells them apart.
+  let outer8 = rate_down2_down8.render(1, 1.4012985e-44)
+  let outer2 = rate_down8_down2.render(1, 1.4012985e-44)
+  assert outer8.out[0] == 0.0
+  assert outer2.out[0] == 1.0e-45
+}
+
+test "a head with a stage of its own at sample / 2 of its body: that stage is of the caller at 1/4, and the frame of a tick reads the new value" {
+  // k = 1 2 3 ... at the frames 0 2 4 ... (`acc` under down 2); `h1` runs there with p = 5.0 and its stage at `sample / 2` is at the frames 0 4 8: 100.0, 5.0, 5.0. x + s: 1 + 100, 2 + 100, 3 + 5 ...: the stage of the frame 4 is before the body of
+  // that frame, so the 3 meets the new 5.0 (8), not the old 100.0 (103).
+  let o = head_stage.render(head_stage.Params { p: 5.0 }, 12, 8.0)
+  assert o.out[0] == 101.0
+  assert o.out[1] == 101.0
+  assert o.out[2] == 102.0
+  assert o.out[3] == 102.0
+  assert o.out[4] == 8.0
+  assert o.out[5] == 8.0
+  assert o.out[6] == 9.0
+  assert o.out[7] == 9.0
+}
+
+test "a child with a stage of its own inside a part under down 2: a stage of the part at its place, no extra delay (S-1088)" {
+  // `ch2` gives s = 100.0 at the frame 0 and 5.0 at the frame 4 (its `sample / 2` is each fourth frame of the caller); `mid2` doubles: 200.0 at the frames 0 and 2, 10.0 from the frame 4 (with the stage after the read, the frame 4 would be 200.0).
+  let o = grand_slow.render(grand_slow.Params { p: 5.0 }, 12, 8.0)
+  assert o.out[0] == 200.0
+  assert o.out[3] == 200.0
+  assert o.out[4] == 10.0
+  assert o.out[11] == 10.0
+}
+
+test "a part that is a chain itself under down 2 is down 2 down 2, and the rates are divided in turn" {
+  // `deep` runs at the even frames and its `acc` under down 2 at each second of them: the frames 0 4 8, 1 2 3 as down 4. The rate of the grandchild is 1/2 of 1/2 of 48000.0.
+  let o = grand_down.render(grand_down.Params { p: 1.0 }, 12, 8.0)
+  assert o.out[0] == 1.0
+  assert o.out[3] == 1.0
+  assert o.out[4] == 2.0
+  assert o.out[7] == 2.0
+  assert o.out[8] == 3.0
+  assert o.out[11] == 3.0
+  let r = rate_grand.render(4, 48000.0)
+  assert r.out[3] == 12000.0
+}
+
+test "a head with a port at sample / 4 under down 2: the port is at each fourth tick of the part, the frames 0 8 ..." {
+  let o = lag_down2.render(lag_down2.Params { p: 5.0 }, 12, 8.0)
+  assert o.out[0] == 100.0
+  assert o.out[7] == 100.0
+  assert o.out[8] == 5.0
+  assert o.out[11] == 5.0
+}
+
+test "a chain of 1/2, a chain of 1/4 and a call with no chain side by side keep their own states" {
+  // a1 = 1 2 3 ... (each frame), a2 = 1 1 2 2 3 3 ..., a4 = 1 1 1 1 2 2 2 2: a1 * 10000 + a2 * 100 + a4.
+  let o = mixed.render(mixed.Params { f: 1.0 }, 8, 8.0)
+  assert o.out[0] == 10101.0
+  assert o.out[1] == 20101.0
+  assert o.out[2] == 30201.0
+  assert o.out[3] == 40201.0
+  assert o.out[4] == 50302.0
+  assert o.out[5] == 60302.0
+  assert o.out[6] == 70402.0
+  assert o.out[7] == 80402.0
+}
+
+test "the replicas of a par~ have a state each under down 2" {
+  // The replica i adds (i + 1) at each tick: after m ticks m (i + 1), and the output is m * (1 + 20 + 300) = 321 m for the frames 2 m - 2 and 2 m - 1.
+  let o = par_down.render(par_down.Params { f: 1.0 }, 8, 8.0)
+  assert o.out[0] == 321.0
+  assert o.out[1] == 321.0
+  assert o.out[2] == 642.0
+  assert o.out[5] == 963.0
+  assert o.out[6] == 1284.0
+  assert o.out[7] == 1284.0
+}
+
+test "the arms of an if~ all advance under down 2, and the arms read at sample are chosen at each frame" {
+  // The counters of the arms are 1 2 3 4 5 and 10 20 30 40 50 at the frames 0 2 4 6 8, both advancing. `c` is true in the first call (the frames 0 1 2) and false in the second (from the frame 3): the first arm is read at the frames
+  // 0 1 2 (1 1 2), the second after it: the frame 3 holds the 20 of the second arm's tick of the frame 2, then 30 30 40 40 50 50.
+  var out: [F32; 10] = [0.0; 10]
+  var st = if_down.init(8.0)
+  if_down.process(inout st, if_down.Params { c: true }, inout out.slice(0, 3))
+  if_down.process(inout st, if_down.Params { c: false }, inout out.slice(3, 10))
+  assert out[0] == 1.0
+  assert out[2] == 2.0
+  assert out[3] == 20.0
+  assert out[4] == 30.0
+  assert out[5] == 30.0
+  assert out[6] == 40.0
+  assert out[9] == 50.0
+}
+
+test "a match~ arm reads its binding as the argument of a chain: the arm that is not taken binds the default and advances" {
+  // The first arm adds 1.0 at each tick: 1 2 3 4 5 at the frames 0 2 4 6 8. `k` is 0 in the first call (the frames 0 .. 3), 3 in the second: the second arm adds `n`, the default 0 while the first arm is taken (0 0), then 3 (3 6 9). The
+  // arm taken is the first for the frames 0 .. 3 (1 1 2 2) and the second after (3 3 6 6 9 9).
+  var out: [F32; 10] = [0.0; 10]
+  var st = match_down.init(8.0)
+  match_down.process(inout st, match_down.Params { k: 0 }, inout out.slice(0, 4))
+  match_down.process(inout st, match_down.Params { k: 3 }, inout out.slice(4, 10))
+  assert out[0] == 1.0
+  assert out[3] == 2.0
+  assert out[4] == 3.0
+  assert out[5] == 3.0
+  assert out[6] == 6.0
+  assert out[9] == 9.0
+}
+
+test "the calls of process cut the frames anywhere, 0 frames too: the same values (§13.4)" {
+  // Cuts at 1, 1 (0 frames), 6, 6 (0 frames), 7: inside a block of the counter, not at its multiples.
+  var out: [F32; 12] = [0.0; 12]
+  var st = acc_down4.init(8.0)
+  let ps = acc_down4.Params { f: 1.0 }
+  acc_down4.process(inout st, ps, inout out.slice(0, 1))
+  acc_down4.process(inout st, ps, inout out.slice(1, 1))
+  acc_down4.process(inout st, ps, inout out.slice(1, 6))
+  acc_down4.process(inout st, ps, inout out.slice(6, 6))
+  acc_down4.process(inout st, ps, inout out.slice(6, 7))
+  acc_down4.process(inout st, ps, inout out.slice(7, 12))
+  assert out[0] == 1.0
+  assert out[3] == 1.0
+  assert out[4] == 2.0
+  assert out[7] == 2.0
+  assert out[8] == 3.0
+  assert out[11] == 3.0
+}
+
+test "a block input is read in the call of the frame of the tick, wherever the calls are cut" {
+  // The ticks are at the frames 0 4 8. Cut at 5 (f = 1.0, then 10.0): the first two ticks are in the first call, the third in the second: 1, 2, 12. Cut at 3: the ticks 4 and 8 are in the second call: 1, 11, 21.
+  var a: [F32; 12] = [0.0; 12]
+  var sa = acc_down4.init(8.0)
+  acc_down4.process(inout sa, acc_down4.Params { f: 1.0 }, inout a.slice(0, 5))
+  acc_down4.process(inout sa, acc_down4.Params { f: 10.0 }, inout a.slice(5, 12))
+  assert a[3] == 1.0
+  assert a[4] == 2.0
+  assert a[7] == 2.0
+  assert a[8] == 12.0
+  var b: [F32; 12] = [0.0; 12]
+  var sb = acc_down4.init(8.0)
+  acc_down4.process(inout sb, acc_down4.Params { f: 1.0 }, inout b.slice(0, 3))
+  acc_down4.process(inout sb, acc_down4.Params { f: 10.0 }, inout b.slice(3, 12))
+  assert b[3] == 1.0
+  assert b[4] == 11.0
+  assert b[7] == 11.0
+  assert b[8] == 21.0
+}
+
+test "reset in the middle of a phase: the next frame is as after init" {
+  // 6 frames leave the counter at 6 (the phase 2 of 4, the tick of the frame 4 run), 3 frames at 3. After the reset the frame 0 is a tick and the state is the initial one: 1 .. 2 .. 3 ...
+  var junk: [F32; 6] = [0.0; 6]
+  var out: [F32; 12] = [0.0; 12]
+  var st = acc_down4.init(8.0)
+  acc_down4.process(inout st, acc_down4.Params { f: 1.0 }, inout junk)
+  acc_down4.reset(inout st)
+  acc_down4.process(inout st, acc_down4.Params { f: 1.0 }, inout out)
+  assert out[0] == 1.0
+  assert out[3] == 1.0
+  assert out[4] == 2.0
+  assert out[8] == 3.0
+  var few: [F32; 3] = [0.0; 3]
+  var again: [F32; 12] = [0.0; 12]
+  var s2 = grand_down.init(8.0)
+  grand_down.process(inout s2, grand_down.Params { p: 1.0 }, inout few)
+  grand_down.reset(inout s2)
+  grand_down.process(inout s2, grand_down.Params { p: 1.0 }, inout again)
+  assert again[0] == 1.0
+  assert again[3] == 1.0
+  assert again[4] == 2.0
+  assert again[8] == 3.0
+}
+
+test "the panic of a part under down 4 is at its tick: the run of the frames 0 .. 3 does not stop, the call that has the frame 4 does" {
+  // The first run divides by 1 (the init of the delay), the second by the 0 of the call before.
+  var out: [I32; 8] = [0; 8]
+  var st = panics_at_slow.init(8.0)
+  panics_at_slow.process(inout st, panics_at_slow.Params { p: 0 }, inout out.slice(0, 4))
+  assert out[0] == 100
+  assert out[3] == 100
+  panics_at_slow.process(inout st, panics_at_slow.Params { p: 0 }, inout out.slice(4, 8)) //~ PANIC "the panic of a part under down 4 is at its tick: the run of the frames 0 .. 3 does not stop, the call that has the frame 4 does"
+}
+
+test "a let of the parent and a part under down 4 that both divide at the frame 4: 4 frames run, 5 stop" {
+  let o = both_panic.render(both_panic.Params { p: 0 }, 4, 8.0)
+  assert o.out[0] == 300
+  assert o.out[3] == 300
+}
+
+test "S-1206 S-1159 provisional: a let of the parent and a part under down 4 that divide by 0 at one tick stop the run at the frame 4" {
+  // Which of the two is reported is the order of S-1206 and S-1159 (open; the provisional order, the `let`s of the parent first, is read from the failure of `onsa test` in a CLI test).
+  let o = both_panic.render(both_panic.Params { p: 0 }, 5, 8.0) //~ PANIC "S-1206 S-1159 provisional: a let of the parent and a part under down 4 that divide by 0 at one tick stop the run at the frame 4"
+  assert o.out[0] == 0
+}

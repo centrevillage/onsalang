@@ -1,0 +1,119 @@
+//! A chain of `.down~(N)` that gathers and deals nothing, over a part that reads no `sample_tick()`, in the commands of `onsa` (W7-16 U6a1/t; spec §11.9, §12.4, §11.6, §9.2; S-1079, S-1088, S-1179 (2),
+//! S-1206, S-1159, S-1207, Q-09): what the case `tests/spec/flow_semantics/down_chain_values.onsa` cannot pin.
+//!
+//! - `onsa interface` of the parent of such a chain has the state of the child and the counter of the phase (`_tick`) after `_sample_rate` and before the fields of the `let`s (§12.4, S-1179 (2)). That the
+//!   parent has the field is the choice of the implementation (§11.9 "誰が欄を持つかは実装の選択"); where it is, is the spec's. `_tick_hi` is not read (a part that reads the time is U6a3, S-1217).
+//! - Which of two panics at one position is reported (`onsa test`, the `failure` of the test): the slower tick first (§11.9, S-1079), and at one stage a `let` of the parent before the stage of the part under the
+//!   chain (S-1206 and S-1159, open: the provisional order of the reference evaluator, so that test has `provisional` in its name).
+//!
+//! The texts are written from the spec; none is taken from the output of the compiler.
+
+use crate::slow_stage_commands::{bytes_of, line_of, state_fields, state_size, stop_line};
+use crate::test_support::{Dir, run};
+
+/// §12.4 and S-1179 (2): the parent of a chain of downs has the phase counter after `_sample_rate` (when the parent reads `sample_rate()`) and before the fields of the `let`s, and the field of the child is the
+/// state of the child (`acc.State`, which has the same layout alone and embedded, §12.4); the node of a `let` of a tick is `<let>.<kind>_<number>` and the node in the output expression is `_out.<kind>_<number>` (§11.6).
+/// The parent that does not read `sample_rate()` has the counter first. No stage of a down chain makes the size unknown.
+#[test]
+fn the_interface_of_a_parent_of_a_down_chain_has_the_counter_after_sample_rate_and_the_state_of_the_child() {
+    let src = "pub flow acc(f: F32 at block) -> F32 at sample {
+  let n = f + prev~(^n)
+  n
+}
+
+pub flow first(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  let c = acc~(p).down~(4)
+  x * (c at sample) * sample_rate()
+}
+
+pub flow second(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  x * (acc~(p).down~(2).down~(2) at sample)
+}
+";
+    let d = Dir::pkg("down_chain_interface");
+    d.write("m.onsa", src);
+    let out = run(d.root(), &["interface"]);
+    assert_eq!(out.code, 0, "{}{}", out.stdout, out.stderr);
+    assert!(!out.stdout.contains("not available"), "the size of the state is known: {}", out.stdout);
+    assert!(!out.stderr.contains("internal error"), "{}", out.stderr);
+
+    let field = |fs: &[(String, u64, String)], name: &str| {
+        fs.iter().find(|f| f.0 == name).unwrap_or_else(|| panic!("a field `{name}` in {fs:?}")).clone()
+    };
+    let f = state_fields(&out.stdout, "first");
+    let names: Vec<&str> = f.iter().map(|x| x.0.as_str()).collect();
+    assert_eq!(&names[..2], ["_sample_rate", "_tick"], "the counter is after `_sample_rate`: {names:?}");
+    assert_eq!((f[0].1, f[1].1), (0, 4), "the counter is next to `_sample_rate`: {f:?}");
+    assert!(f[1].2.contains("4 bytes, align 4"), "{}", f[1].2);
+    assert_eq!(names[names.len() - 2..], ["_poisoned", "_initialized"], "{names:?}");
+    let child = field(&f, "c.acc_0");
+    assert_eq!(
+        bytes_of(&child.2),
+        state_size(&out.stdout, "acc"),
+        "the field of the child is the state of `acc`: {}",
+        child.2
+    );
+    let at = |n: &str| names.iter().position(|x| *x == n).unwrap_or_else(|| panic!("a field `{n}` in {names:?}"));
+    assert!(at("_tick") < at("c.acc_0"), "the counter is before the child: {names:?}");
+
+    let g = state_fields(&out.stdout, "second");
+    let names: Vec<&str> = g.iter().map(|x| x.0.as_str()).collect();
+    assert_eq!(
+        (names[0], g[0].1),
+        ("_tick", 0),
+        "a parent that does not read `sample_rate()` has the counter first: {names:?}"
+    );
+    let child = field(&g, "_out.acc_0");
+    assert_eq!(bytes_of(&child.2), state_size(&out.stdout, "acc"), "the field of the child: {}", child.2);
+}
+
+/// The source `flows` and the test `stops` that renders `f` (a `block` input `p` of 0) over `frames` frames.
+fn stops(flows: &str, frames: u32) -> String {
+    format!(
+        "{flows}\ntest \"stops\" {{\n  let o = f.render(f.Params {{ p: 0 }}, {frames}, 8.0)\n  assert o.out[0] == 0\n}}\n"
+    )
+}
+
+/// The part: `d` is the `p` of the run before (1 at the first), so the second run divides by the 0 of `p`.
+const KID: &str =
+    "flow kid(p: I32 at block) -> I32 at sample {\n  let d = prev~(p at sample, 1)\n  let q = 100 / d\n  q\n}\n\n";
+
+/// A part under `.down~(4)` that stops alone stops at its own division, at its second tick, the frame 4.
+#[test]
+fn the_panic_of_a_part_under_a_down_chain_is_reported_at_its_own_division() {
+    let flows = format!("{KID}pub flow f(p: I32 at block) -> I32 at sample {{\n  kid~(p).down~(4) at sample\n}}\n");
+    let src = stops(&flows, 5);
+    assert_eq!(stop_line("down_chain_panic_alone", &src), line_of(&src, "100 / d"), "{src}");
+}
+
+/// §11.9 (S-1079, "比の違う遅い刻みどうしは遅い方（N の大きい方）から並び"): at the frame 8 the part under `.down~(8)` (the stage `sample / 8` of the parent) and a stage of the parent at `sample / 2` (a delay of
+/// 4 ticks, the 0 of the first) both divide by 0; the slower tick is the part's, so its division (`100 / d`) is reported, not the parent's (`200 / b`, written first).
+#[test]
+fn of_a_stage_of_the_parent_and_a_part_under_a_down_chain_at_one_position_the_slower_is_reported() {
+    let flows = format!(
+        "{KID}pub flow f(p: I32 at block) -> I32 at sample {{\n  let b = delay~(p at (sample / 2), 4, 1)\n  let qb = 200 / b\n  (qb at sample) + (kid~(p).down~(8) at sample)\n}}\n"
+    );
+    let src = stops(&flows, 9);
+    assert_eq!(stop_line("down_chain_panic_slower", &src), line_of(&src, "100 / d"), "the stage of sample / 8: {src}");
+}
+
+/// S-1206 and S-1159 (provisional): at one stage (the part under `.down~(4)` runs at the stage `sample / 4` of the parent)
+/// the part runs after the `let`s of that stage when the value of the chain is read at a faster stage (`… at sample` in the
+/// output), and where it is read when it is read at that stage (`let k = kid~(p).down~(4)`, an output at the tick read by a
+/// reader at its stage). Both divide by the 0 at the frame 4; the one reported is the first of them in that order.
+#[test]
+fn at_one_stage_the_part_under_a_down_chain_runs_after_the_lets_or_where_its_tick_reads_it_s1206_s1159_provisional() {
+    let let_first = format!(
+        "{KID}pub flow f(p: I32 at block) -> I32 at sample {{\n  let e = prev~(p at (sample / 4), 1)\n  let r = 200 / e\n  (r at sample) + (kid~(p).down~(4) at sample)\n}}\n"
+    );
+    let child_first = format!(
+        "{KID}pub flow f(p: I32 at block) -> I32 at sample {{\n  let k = kid~(p).down~(4)\n  let e = prev~(p at (sample / 4), 1)\n  let r = 200 / e\n  (r at sample) + (k at sample)\n}}\n"
+    );
+    for (tag, flows, first) in [
+        ("down_chain_panic_let_first", &let_first, "200 / e"),
+        ("down_chain_panic_child_first", &child_first, "100 / d"),
+    ] {
+        let src = stops(flows, 5);
+        assert_eq!(stop_line(tag, &src), line_of(&src, first), "the first in the order of S-1206: {src}");
+    }
+}

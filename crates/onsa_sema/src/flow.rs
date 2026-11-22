@@ -43,7 +43,8 @@
 //!   its `stages` (its slow ticks and those of its callees) and `reads_time`
 //!   (it or a callee reads `sample_tick()`); `out_stage` is the stage that
 //!   makes the output.
-//! - `node_of` — a call or `par~` expression → its node.
+//! - `node_of` — a call or `par~` expression → its node; `modifiers` — a
+//!   modifier of a chain of a node (`.down~(4)` of `lp~(x).down~(4)`) → its receiver.
 //! - `edges: Vec<Edge>` — who reads what, recorded with the nodes: a local
 //!   or a node ([`Vertex`]) read by the innermost node, `let` or output
 //!   around the read, `lookback` in the first argument of a delay (§11.4).
@@ -243,6 +244,10 @@ pub struct FlowInfo {
     pub lets: Vec<FlowLet>,
     pub nodes: Vec<PlanNode>,
     pub node_of: HashMap<ExprId, NodeId>,
+    /// The calls of the modifiers of a chain whose head is a node, each with
+    /// its receiver (§11.9: the value of the chain is the output of its
+    /// head), of `FlowCx`'s `node_exprs`: the Core lowers one as its receiver.
+    pub modifiers: HashMap<ExprId, ExprId>,
     /// Who reads what (R-91 (1), RF-8 (C)): the edges of the reads of the
     /// body, each once, in the order of the text (a node before its
     /// arguments'); empty when the flow is not `complete`. `onsa graph` and

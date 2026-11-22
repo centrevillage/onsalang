@@ -367,6 +367,24 @@ fn child_time(time: &[Expr], r: Ratio, span: Span) -> R<Vec<Expr>> {
     }
 }
 
+/// The `sample_rate()` the callee of the node `n` reads from the rate `sr`
+/// of its caller (§11.9: 1/N in the body of `.down~(N)`): divided at each
+/// boundary, the outermost first, as each part runs the one it wraps, so
+/// that a rate below the normal floats rounds at each (once by the product
+/// it would not). The one place of it. A boundary of no `.down~` is an
+/// internal error (W7-16 U6b writes `.up~`).
+fn child_rate(sr: &Expr, n: &PlanNode, span: Span) -> R<Expr> {
+    let mut rate = sr.clone();
+    for b in n.bounds.iter().rev() {
+        let r = n.chain.get(b.at as usize).and_then(|m| m.ratio);
+        let Some(big) = r.filter(|r| r.slower_than_body()).and_then(Ratio::n) else {
+            return Err(internal(span, format!("the rate of a callee under a boundary of the ratio {r:?}")));
+        };
+        rate = checked_binary(BinOp::Div, rate, float_lit(&sr.ty, big as f64, span)?);
+    }
+    Ok(rate)
+}
+
 fn member(fd: &FlowDef, name: &str) -> Option<DefId> {
     fd.members.iter().find(|(n, _)| n == name).map(|(_, d)| *d)
 }

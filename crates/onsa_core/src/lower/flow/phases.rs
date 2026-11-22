@@ -144,10 +144,15 @@ fn init_node(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, id: NodeId, s
             assign(out, &sfield(lw, info, state, at(Part::W), span)?, u32_lit(span, 0))?;
         }
         PlanKind::Instance { callee, args, .. } => {
+            // W7-21 U1: a chain of a callee with no table (in error) has no runs and no stages.
+            if !n.chain.is_empty() && n.runs.is_empty() {
+                return Err(internal(span, "a chain of an instance with no runs"));
+            }
             let sub = lw.ensure_flow(*callee)?;
             let fields = instance_args(lw, cx, *callee, args, Phase::Init, span)?;
             let cfg = Expr::new(Ty::Struct(sub.config), span, ExprKind::Struct { ty: sub.config, fields });
-            let c = call(sub.init, Ty::Struct(sub.state), span, vec![borrow(cfg), borrow(sr.clone())]);
+            let sr = super::child_rate(sr, n, span)?;
+            let c = call(sub.init, Ty::Struct(sub.state), span, vec![borrow(cfg), borrow(sr)]);
             assign(out, &sfield(lw, info, state, at(Part::Own), span)?, c)?;
         }
         PlanKind::Par { .. } => {}
@@ -403,11 +408,14 @@ pub(super) fn run_child(lw: &mut Lowerer, cx: &mut FnCx, id: NodeId, state: &Exp
     let info = plan(cx);
     let n = info.node(id);
     let span = cx.ast.expr(n.expr).span;
-    // A node with a chain (`.when~`, `.reset_if~` of frame 0 too) runs no stage here until the work that lowers it.
+    // A chain the gate stops (`.up~`, `.when~`, `.reset_if~`, one that gathers or deals) runs no stage here.
     let (&PlanKind::Instance { callee, ref args, .. }, ClockStage::Tick(k), true) =
-        (&n.kind, run.body, n.chain.is_empty())
+        (&n.kind, run.body, n.lowered_chain())
     else {
-        return Err(internal(span, format!("a run of {:?} of no instance, or of one with a chain", run.body)));
+        return Err(internal(
+            span,
+            format!("a run of {:?} of no instance, or of one with a chain not lowered", run.body),
+        ));
     };
     let sub = lw.ensure_flow(callee)?;
     let f = sub.stage_fn(run.body).ok_or_else(|| internal(span, format!("a callee with no stage {k:?}")))?;

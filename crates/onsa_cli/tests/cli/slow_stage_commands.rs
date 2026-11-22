@@ -5,7 +5,7 @@
 //!   `build`, `dump --core` and `test` end with 0 and with no internal error, and the tests of the package are run (U5a).
 //! - A child instance with no modifier that has a stage of its own or reads `sample_tick()` (S-1088, S-1129 (1)), a grandchild, and a flow with an input or an output at `sample / N` called with no
 //!   modifier (§11.9), are lowered the same way (U5b2).
-//! - What stays E0200 after U5b2 is the work of the later units: a chain of `.down~(N)` and `.up~(N)` (U6a, U6b), a port at `sample * N` and the call of one (U6b), and the border of the
+//! - What stays E0200 after U6a1 is the work of the later units: a chain with an `.up~(N)` in it or one that gathers or deals (U6a2, U6b), a port at `sample * N` and the call of one (U6a2, U6b), and the border of the
 //!   outermost flow (W10-01). The commands report E0200 and nothing else, no internal error, run no test (Q-09: what the spec has and this version does not carry is E0200, not a wrong output), and the
 //!   E0200 is in the flows that have such a form and in no flow that has only what is lowered (§18.1: a unit is checked alone; the first is the first of the file).
 //! - Of two ticks at one position that both panic, the slower one is the one that is reported (§11.9: "遅い方から並ぶ", S-1079), whether the two are of one flow or of the parent and a child (S-1088).
@@ -233,12 +233,12 @@ fn a_flow_with_a_slow_port_called_with_no_modifier_is_lowered_by_build_dump_core
 
 // ----------------------------------------------------------------------------- what stays E0200 after U5b2
 
-/// A flow that is lowered beside flows that have a form of the later units: the chain of `.down~(N)` (U6a, U6b), and a port at `sample * N` with the call of it (U6b). `build`, `dump --core` and `test`
+/// A flow that is lowered beside flows that have a form of the later units: a chain with an `.up~(N)` in it (U6b), and a port at `sample * N` with the call of it (U6a2, U6b). `build`, `dump --core` and `test`
 /// report E0200 in the flows that have such a form (one each) and in none of the flows that are lowered, `ok` and the child `ch` (§18.1).
 #[test]
 fn what_is_left_of_the_ticks_is_e0200_in_its_own_flows_and_the_others_are_lowered() {
     let chain = format!(
-        "{SLOW_CHILD}flow lp(x: F32 at sample) -> F32 at sample {{\n  x * 0.5 + prev~(x) * 0.5\n}}\n\npub flow ok(p: F32 at block, x: F32 at sample) -> F32 at sample {{\n  x * ch~(p)\n}}\n\npub flow chained(p: F32 at block, x: F32 at sample) -> F32 at sample {{\n  x * ch~(p) + (lp~(p).down~(4) at sample)\n}}\n"
+        "{SLOW_CHILD}flow lp(x: F32 at sample) -> F32 at sample {{\n  x * 0.5 + prev~(x) * 0.5\n}}\n\npub flow ok(p: F32 at block, x: F32 at sample) -> F32 at sample {{\n  x * ch~(p)\n}}\n\npub flow chained(p: F32 at block, x: F32 at sample) -> F32 at sample {{\n  x * ch~(p) + (lp~(p).down~(4).up~(2) at sample)\n}}\n"
     );
     assert_e0200_in("slow_stage_left_chain", &chain, &["chained"]);
     let burst = format!(
@@ -279,7 +279,7 @@ test \"stops\" {
 // ----------------------------------------------------------------------------- the order of the panics of a parent and its children
 
 /// The line (from 1) of the first line of `src` that has `needle`.
-fn line_of(src: &str, needle: &str) -> u64 {
+pub fn line_of(src: &str, needle: &str) -> u64 {
     1 + src.lines().position(|l| l.contains(needle)).unwrap_or_else(|| panic!("no `{needle}` in:\n{src}")) as u64
 }
 
@@ -291,7 +291,7 @@ fn stops_src(flows: &str, flow: &str) -> String {
 }
 
 /// The line of `m.onsa` of the expression where the test `stops` of `src` stops (the `failure` of `onsa test`).
-fn stop_line(tag: &str, src: &str) -> u64 {
+pub fn stop_line(tag: &str, src: &str) -> u64 {
     let d = Dir::pkg(tag);
     d.write("m.onsa", src);
     let (out, doc) = test_json(d.root(), &[&d.arg()]);
@@ -368,7 +368,7 @@ fn of_a_stage_of_the_parent_and_a_stage_of_a_child_at_one_position_the_slower_is
 // ----------------------------------------------------------------------------- the interface
 
 /// The lines of the fields of `<flow>.State` in the text of `onsa interface`: (name, offset, the line).
-fn state_fields(text: &str, flow: &str) -> Vec<(String, u64, String)> {
+pub fn state_fields(text: &str, flow: &str) -> Vec<(String, u64, String)> {
     let head = format!("pub struct {flow}.State");
     let mut lines = text.lines().skip_while(|l| !l.trim_start().starts_with(&head));
     assert!(lines.next().is_some(), "no `{head}` in:\n{text}");
@@ -432,13 +432,13 @@ pub flow plain(x: F32 at sample) -> F32 at sample {
 // ----------------------------------------------------------------------------- the interface of a parent
 
 /// The size in bytes of a field line (`name: N bytes, align A, …`).
-fn bytes_of(line: &str) -> u64 {
+pub fn bytes_of(line: &str) -> u64 {
     let n = line.split(": ").nth(1).and_then(|r| r.split(" bytes").next()).and_then(|n| n.trim().parse().ok());
     n.unwrap_or_else(|| panic!("a size in `{line}`"))
 }
 
 /// The size of `<flow>.State` in the header line of the struct.
-fn state_size(text: &str, flow: &str) -> u64 {
+pub fn state_size(text: &str, flow: &str) -> u64 {
     let head = format!("pub struct {flow}.State  // Affine; size ");
     let line =
         text.lines().map(str::trim).find(|l| l.starts_with(&head)).unwrap_or_else(|| panic!("no `{head}` in:\n{text}"));

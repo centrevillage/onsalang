@@ -465,6 +465,40 @@ fn a_port_at_sample_times_n_stops_the_core() {
     assert_eq!([port("sl"), port("h"), port("k")], [Some("x: F32 at (sample / 4)"), None, None]);
 }
 
+/// The gate passes a chain of `.down~(N)` alone that gathers and deals
+/// nothing, of a callee that reads no time (W7-16 U6a1, §11.9), nested
+/// too; and stops one whose callee reads the time through a flow (U6a3,
+/// S-1217), one that gathers or deals (U6a2) and one with an `.up~(N)`
+/// (U6b), at the node. The walk records the time of the callee
+/// (`timed`), and each modifier of a chain has its receiver.
+#[test]
+fn the_gate_passes_a_chain_of_downs_alone_that_reads_no_time() {
+    let src = "flow lp(x: F32 at sample) -> F32 at sample {\n  x + prev~(x)\n}\n\
+               flow tk() -> U32 at sample {\n  sample_tick()\n}\n\
+               flow mid() -> U32 at sample {\n  tk~()\n}\n\
+               flow g4(x: F32 at (sample * 4)) -> F32 at sample {\n  x[0]\n}\n\
+               flow mk4(p: F32 at block) -> F32 at (sample * 4) {\n  [p, p, p, p]\n}\n\
+               pub flow down(p: F32 at block) -> F32 at sample {\n  lp~(p).down~(4).down~(2) at sample\n}\n\
+               pub flow timed(p: F32 at block) -> U32 at sample {\n  mid~().down~(2) at sample\n}\n\
+               pub flow gathers(p: F32 at block) -> F32 at sample {\n  g4~(p).down~(4) at sample\n}\n\
+               pub flow deals(p: F32 at block) -> F32 at sample {\n  mk4~(p).down~(4)\n}\n\
+               pub flow up(p: F32 at block) -> F32 at sample {\n  lp~(p).down~(2).up~(2)\n}\n";
+    let a = check(src);
+    assert!(a.diagnostics.is_empty(), "{:?}", a.diagnostics);
+    let at = |name: &str| flow(&a, name).multirate_at().map(|s| &src[s.start as usize..s.end as usize]);
+    assert_eq!(at("down"), None);
+    assert_eq!(
+        [at("timed"), at("gathers"), at("deals"), at("up")],
+        [Some("mid~()"), Some("g4~(p)"), Some("mk4~(p)"), Some("lp~(p)")]
+    );
+    let (down, timed) = (flow(&a, "down"), flow(&a, "timed"));
+    assert!(down.nodes[0].lowered_chain() && !down.nodes[0].timed && timed.nodes[0].timed);
+    // `.down~(4)` of the head, then `.down~(2)` of that.
+    let of = |r| down.modifiers.iter().find(|&(_, &x)| x == r).map(|(&m, _)| m);
+    let inner = of(down.nodes[0].expr);
+    assert_eq!((down.modifiers.len(), inner.and_then(of).is_some()), (2, true), "{:?}", down.modifiers);
+}
+
 /// The Core lowers the slower ticks of one flow and `sample_tick()` (W7-16
 /// U5a): the gate passes a flow with a `let`, a node and a hoisted field
 /// at `sample / 4` or `sample / 2` and one that reads `sample_tick()`,

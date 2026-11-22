@@ -56,6 +56,7 @@ pub(crate) fn finish_flow(a: &mut Analysis, module: &Module, id: DefId, body: Bo
         inputs: fcx.inputs.clone(),
         sample_rate_calls: fcx.sample_rate_calls.clone(),
         sample_tick_calls: fcx.sample_tick_calls.clone(),
+        modifiers: fcx.node_exprs().into_iter().filter_map(|(e, r)| Some((e, r?))).collect(),
         output: fcx.output,
         derived_port: a.def(id).as_flow().and_then(|f| f.derived_port(a.def(id).name_span)),
         burst_port: a.def(id).as_flow().and_then(|f| f.burst_port(a.def(id).name_span)),

@@ -10,6 +10,7 @@ file default_init_module.tsv rows=7 tests=2 evaluated=2 unavailable=0 skipped=0 
 file default_init_numbers.tsv rows=19 tests=6 evaluated=6 unavailable=0 skipped=0 waiting=0
 file default_init_reset.tsv rows=30 tests=5 evaluated=5 unavailable=0 skipped=0 waiting=0
 file default_init_values.tsv rows=54 tests=19 evaluated=17 unavailable=1 skipped=1 waiting=0
+file down_chain_values.tsv rows=115 tests=20 evaluated=20 unavailable=0 skipped=0 waiting=0
 file enum_construct.tsv rows=21 tests=6 evaluated=6 unavailable=0 skipped=0 waiting=0
 file enum_construct_match.tsv rows=9 tests=2 evaluated=2 unavailable=0 skipped=0 waiting=1
 file feedback.tsv rows=7 tests=2 evaluated=2 unavailable=0 skipped=0 waiting=0
@@ -130,4 +131,4 @@ file struct_pattern_rest_let.tsv rows=7 tests=2 evaluated=2 unavailable=0 skippe
 file struct_pattern_rest_match.tsv rows=4 tests=1 evaluated=1 unavailable=0 skipped=0 waiting=0
 file vdelay_edges.tsv rows=64 tests=15 evaluated=14 unavailable=0 skipped=1 waiting=0
 file vdelay_varying_d.tsv rows=2 tests=1 evaluated=0 unavailable=0 skipped=1 waiting=0
-total files=131 rows=3723 tests=902 evaluated=825 unavailable=1 skipped=76 waiting=9
+total files=132 rows=3838 tests=922 evaluated=845 unavailable=1 skipped=76 waiting=9

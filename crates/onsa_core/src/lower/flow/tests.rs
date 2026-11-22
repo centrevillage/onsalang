@@ -180,3 +180,22 @@ fn a_binding_a_delay_stores_in_a_par_has_a_place_of_each_replica() {
     let stores = t.rfind("for i in").unwrap_or_default();
     assert!(place < write && write < stores && stores < store, "{t}");
 }
+
+/// §11.9: the body of `.down~(N)` reads a `sample_rate()` of 1/N, divided
+/// at each boundary, the outermost first (as each part runs the one it
+/// wraps), not once by the product, which rounds otherwise below the normal
+/// floats; a call with no modifier passes the rate as it is. The value of
+/// the chain is the output of its head, read at the tick of its frame.
+#[test]
+fn the_rate_of_a_child_under_down_is_divided_at_each_boundary() {
+    let src = "flow rate() -> F32 at sample { sample_rate() }
+pub flow f() -> F32 at sample {
+  (rate~().down~(2).down~(4) at sample) + rate~()
+}";
+    let m = crate::tests::core(src);
+    let init = crate::dump::dump_item(&m, "t.f.init");
+    assert!(init.contains("t.rate.init(t.rate.Config {}, ((sample_rate / 4.0:F32) / 2.0:F32))"), "{init}");
+    assert!(init.contains("t.rate.init(t.rate.Config {}, sample_rate)"), "{init}");
+    let slow = crate::dump::dump_item(&m, "t.f.tick_8");
+    assert!(slow.contains("t.rate.tick(inout s.1)"), "{slow}");
+}

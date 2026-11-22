@@ -165,6 +165,12 @@ impl Ratio {
         self.0 > 0
     }
 
+    /// Slower than the `sample` of the body: `sample / N`, and the ratio of
+    /// a `.down~(N)` (§11.9). The one test of it (D-15).
+    pub fn slower_than_body(self) -> bool {
+        self.0 < 0
+    }
+
     /// The N of the ratio (`sample / N`, `.down~(N)`), none past `u64`.
     pub fn n(self) -> Option<u64> {
         2u64.checked_pow(self.0.unsigned_abs())

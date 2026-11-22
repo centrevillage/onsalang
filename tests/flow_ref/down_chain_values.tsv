@@ -1,0 +1,115 @@
+# flow_ref 1 source=tests/spec/flow_semantics/down_chain_values.onsa tests=20 evaluated=20 unavailable=0 skipped=0 waiting=0
+@ a part with a memory under down 4 counts its own ticks and the output is held between them
+render down_chain_values.acc_down4 sr=0x41000000 params f=0x3f800000 frames=12
+out=[0x3f800000 0x3f800000 0x3f800000 0x3f800000 0x40000000 0x40000000 0x40000000 0x40000000 0x40400000 0x40400000 0x40400000 0x40400000]
+@ the output of a chain is a value of its clock: a let of that clock and a delay of it count the ticks
+render down_chain_values.slow_lets sr=0x41000000 params f=0x3f800000 frames=12
+out=[0x43480000 0x43480000 0x43480000 0x43480000 0x43c88000 0x43c88000 0x43c88000 0x43c88000 0x44168000 0x44168000 0x44168000 0x44168000]
+@ down 2 down 2 is down 4: the inner part runs at each second tick of the outer one
+render down_chain_values.acc_down2_down2 sr=0x41000000 params f=0x3f800000 frames=12
+out=[0x3f800000 0x3f800000 0x3f800000 0x3f800000 0x40000000 0x40000000 0x40000000 0x40000000 0x40400000 0x40400000 0x40400000 0x40400000]
+@ sample_rate of the part is 1/N of the rate of its call, one division for each boundary
+render down_chain_values.rate_plain sr=0x473b8000 frames=4
+out=[0x473b8000 0x473b8000 0x473b8000 0x473b8000]
+render down_chain_values.rate_down2 sr=0x473b8000 frames=4
+out=[0x46bb8000 0x46bb8000 0x46bb8000 0x46bb8000]
+render down_chain_values.rate_down2_down2 sr=0x473b8000 frames=4
+out=[0x463b8000 0x463b8000 0x463b8000 0x463b8000]
+render down_chain_values.rate_down4 sr=0x473b8000 frames=4
+out=[0x463b8000 0x463b8000 0x463b8000 0x463b8000]
+render down_chain_values.rate_down2_x3 sr=0x473b8000 frames=4
+out=[0x45bb8000 0x45bb8000 0x45bb8000 0x45bb8000]
+render down_chain_values.rate_down8 sr=0x473b8000 frames=4
+out=[0x45bb8000 0x45bb8000 0x45bb8000 0x45bb8000]
+@ the rate is divided at each boundary in turn, not once by the product: below the normal range they differ
+render down_chain_values.rate_down2_x3 sr=0x00000005 frames=1
+out=[0x00000000]
+render down_chain_values.rate_down8 sr=0x00000005 frames=1
+out=[0x00000001]
+@ the rate is divided from the outermost boundary in: each modifier wraps the whole on its left (§11.10)
+render down_chain_values.rate_down2_down8 sr=0x0000000a frames=1
+out=[0x00000000]
+render down_chain_values.rate_down8_down2 sr=0x0000000a frames=1
+out=[0x00000001]
+@ a head with a stage of its own at sample / 2 of its body: that stage is of the caller at 1/4, and the frame of a tick reads the new value
+render down_chain_values.head_stage sr=0x41000000 params p=0x40a00000 frames=12
+out=[0x42ca0000 0x42ca0000 0x42cc0000 0x42cc0000 0x41000000 0x41000000 0x41100000 0x41100000 0x41200000 0x41200000 0x41300000 0x41300000]
+@ a child with a stage of its own inside a part under down 2: a stage of the part at its place, no extra delay (S-1088)
+render down_chain_values.grand_slow sr=0x41000000 params p=0x40a00000 frames=12
+out=[0x43480000 0x43480000 0x43480000 0x43480000 0x41200000 0x41200000 0x41200000 0x41200000 0x41200000 0x41200000 0x41200000 0x41200000]
+@ a part that is a chain itself under down 2 is down 2 down 2, and the rates are divided in turn
+render down_chain_values.grand_down sr=0x41000000 params p=0x3f800000 frames=12
+out=[0x3f800000 0x3f800000 0x3f800000 0x3f800000 0x40000000 0x40000000 0x40000000 0x40000000 0x40400000 0x40400000 0x40400000 0x40400000]
+render down_chain_values.rate_grand sr=0x473b8000 frames=4
+out=[0x463b8000 0x463b8000 0x463b8000 0x463b8000]
+@ a head with a port at sample / 4 under down 2: the port is at each fourth tick of the part, the frames 0 8 ...
+render down_chain_values.lag_down2 sr=0x41000000 params p=0x40a00000 frames=12
+out=[0x42c80000 0x42c80000 0x42c80000 0x42c80000 0x42c80000 0x42c80000 0x42c80000 0x42c80000 0x40a00000 0x40a00000 0x40a00000 0x40a00000]
+@ a chain of 1/2, a chain of 1/4 and a call with no chain side by side keep their own states
+render down_chain_values.mixed sr=0x41000000 params f=0x3f800000 frames=8
+out=[0x461dd400 0x469d0a00 0x46ebf200 0x471d0900 0x47447e00 0x476b8e00 0x47898100 0x479d0900]
+@ the replicas of a par~ have a state each under down 2
+render down_chain_values.par_down sr=0x41000000 params f=0x3f800000 frames=8
+out=[0x43a08000 0x43a08000 0x44208000 0x44208000 0x4470c000 0x4470c000 0x44a08000 0x44a08000]
+@ the arms of an if~ all advance under down 2, and the arms read at sample are chosen at each frame
+init 0 down_chain_values.if_down sr=0x41000000
+process 0 params c=true frames=3
+out=[0x3f800000 0x3f800000 0x40000000]
+process 0 params c=false frames=7
+out=[0x41a00000 0x41f00000 0x41f00000 0x42200000 0x42200000 0x42480000 0x42480000]
+@ a match~ arm reads its binding as the argument of a chain: the arm that is not taken binds the default and advances
+init 0 down_chain_values.match_down sr=0x41000000
+process 0 params k=0 frames=4
+out=[0x3f800000 0x3f800000 0x40000000 0x40000000]
+process 0 params k=3 frames=6
+out=[0x40400000 0x40400000 0x40c00000 0x40c00000 0x41100000 0x41100000]
+@ the calls of process cut the frames anywhere, 0 frames too: the same values (§13.4)
+init 0 down_chain_values.acc_down4 sr=0x41000000
+process 0 params f=0x3f800000 frames=1
+out=[0x3f800000]
+process 0 params f=0x3f800000 frames=0
+out=[]
+process 0 params f=0x3f800000 frames=5
+out=[0x3f800000 0x3f800000 0x3f800000 0x40000000 0x40000000]
+process 0 params f=0x3f800000 frames=0
+out=[]
+process 0 params f=0x3f800000 frames=1
+out=[0x40000000]
+process 0 params f=0x3f800000 frames=5
+out=[0x40000000 0x40400000 0x40400000 0x40400000 0x40400000]
+@ a block input is read in the call of the frame of the tick, wherever the calls are cut
+init 0 down_chain_values.acc_down4 sr=0x41000000
+process 0 params f=0x3f800000 frames=5
+out=[0x3f800000 0x3f800000 0x3f800000 0x3f800000 0x40000000]
+process 0 params f=0x41200000 frames=7
+out=[0x40000000 0x40000000 0x40000000 0x41400000 0x41400000 0x41400000 0x41400000]
+init 1 down_chain_values.acc_down4 sr=0x41000000
+process 1 params f=0x3f800000 frames=3
+out=[0x3f800000 0x3f800000 0x3f800000]
+process 1 params f=0x41200000 frames=9
+out=[0x3f800000 0x41300000 0x41300000 0x41300000 0x41300000 0x41a80000 0x41a80000 0x41a80000 0x41a80000]
+@ reset in the middle of a phase: the next frame is as after init
+init 0 down_chain_values.acc_down4 sr=0x41000000
+process 0 params f=0x3f800000 frames=6
+out=[0x3f800000 0x3f800000 0x3f800000 0x3f800000 0x40000000 0x40000000]
+reset 0
+process 0 params f=0x3f800000 frames=12
+out=[0x3f800000 0x3f800000 0x3f800000 0x3f800000 0x40000000 0x40000000 0x40000000 0x40000000 0x40400000 0x40400000 0x40400000 0x40400000]
+init 1 down_chain_values.grand_down sr=0x41000000
+process 1 params p=0x3f800000 frames=3
+out=[0x3f800000 0x3f800000 0x3f800000]
+reset 1
+process 1 params p=0x3f800000 frames=12
+out=[0x3f800000 0x3f800000 0x3f800000 0x3f800000 0x40000000 0x40000000 0x40000000 0x40000000 0x40400000 0x40400000 0x40400000 0x40400000]
+@ the panic of a part under down 4 is at its tick: the run of the frames 0 .. 3 does not stop, the call that has the frame 4 does
+init 0 down_chain_values.panics_at_slow sr=0x41000000
+process 0 params p=0 frames=4
+out=[100 100 100 100]
+process 0 params p=0 frames=4
+panic sample 0
+@ a let of the parent and a part under down 4 that both divide at the frame 4: 4 frames run, 5 stop
+render down_chain_values.both_panic sr=0x41000000 params p=0 frames=4
+out=[300 300 300 300]
+@ S-1206 S-1159 provisional: a let of the parent and a part under down 4 that divide by 0 at one tick stop the run at the frame 4
+render down_chain_values.both_panic sr=0x41000000 params p=0 frames=5
+panic sample 4

@@ -30,7 +30,11 @@ pub(crate) fn lower_flow_expr(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId) -> R<O
             let t = f.time.first().cloned();
             return t.map(Some).ok_or_else(|| internal(span, "`sample_tick()` in a function with no time"));
         }
-        let Some(&id) = f.info.node_of.get(&e) else { return Ok(None) };
+        let Some(&id) = f.info.node_of.get(&e) else {
+            // A modifier of a chain is the output of its head (§11.9).
+            let Some(&receiver) = f.info.modifiers.get(&e) else { return Ok(None) };
+            return lower_expr(lw, cx, receiver).map(Some);
+        };
         let state = f.scopes.last().ok_or_else(|| internal(span, "node outside a state scope"))?.state.clone();
         (f.phase, f.info, id, state)
     };

@@ -168,6 +168,10 @@ pub struct PlanNode {
     /// its head runs in: how many times and at which time are of its
     /// `bounds`.
     pub runs: Vec<Run>,
+    /// Of an instance, its callee reads the time ([`FlowInfo::reads_time`]),
+    /// recorded by the walk of the table ([`entries`]) for the gate of a
+    /// chain ([`PlanNode::lowered_chain`]); U6a3 of W7-16 lifts it (S-1217).
+    pub timed: bool,
 }
 
 /// A boundary of a chain (§11.9, §11.10, S-1207): a `.down~(N)` or an
@@ -376,6 +380,7 @@ pub(super) fn build(
             size: r.size,
             bounds: r.bounds,
             runs: Vec::new(),
+            timed: false,
         }
     });
     info.nodes = nodes.collect();

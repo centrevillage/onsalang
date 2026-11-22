@@ -87,15 +87,15 @@ impl FlowInfo {
 
     /// The first place of the plan (by its place) the Core does not lower
     /// until a later unit of W7-16, which stops at it (E0200, R-91 (1)): a
-    /// port at `sample * N` (a burst, §11.9); a node with a chain of
-    /// modifiers (`.down~(2).up~(2)` of the ratio one too); and an instance
+    /// port at `sample * N` (a burst, §11.9); a node with a chain the Core
+    /// does not lower yet ([`PlanNode::lowered_chain`]); and an instance
     /// that gathers or deals a burst (its clock, or that of an argument it
     /// reads, at `sample * N`). The one gate of them (D-15).
     pub fn multirate_at(&self) -> Option<Span> {
         let stops = |n: &&PlanNode| match &n.kind {
             PlanKind::Instance { .. } => n.clock.burst() || n.args.iter().any(|a| a.at.burst()),
             _ => false,
-        } || !n.chain.is_empty();
+        } || !n.lowered_chain();
         let all = self.burst_port.into_iter().chain(self.nodes.iter().filter(stops).map(|n| n.span));
         all.min_by_key(|s| (s.start, s.end))
     }
@@ -112,6 +112,20 @@ impl FlowInfo {
         let read =
             move |v: &LocalId| self.read_at.get(v).is_some_and(|r| r.iter().any(|&s| self.run_stage(s) == stage));
         self.lets.iter().filter(move |l| l.stage == Clock::Const && l.locals.iter().any(read))
+    }
+}
+
+impl PlanNode {
+    /// Whether the Core lowers the chain of the node (§11.9, S-1207): none,
+    /// or one of an instance whose modifiers are all `.down~(N)` and whose
+    /// boundaries gather and deal nothing, of a callee that reads no time
+    /// (`timed`: U6a3 of W7-16 lifts it, S-1217). The one test of it
+    /// (D-15): the gate ([`FlowInfo::multirate_at`]) and the Core, which
+    /// runs a stage of a callee of no other chain, read it.
+    pub fn lowered_chain(&self) -> bool {
+        let downs = || self.chain.iter().all(|m| m.ratio.is_some_and(Ratio::slower_than_body));
+        let plain = || self.bounds.iter().all(|b| b.gathers.is_empty() && !b.deals);
+        self.chain.is_empty() || matches!(self.kind, PlanKind::Instance { .. }) && !self.timed && downs() && plain()
     }
 }
 

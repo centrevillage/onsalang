@@ -1,9 +1,10 @@
 //! A flow with a chain of `.down~(N)` and `.up~(N)` in the commands of `onsa` (W7-09 U3b/t; spec §11.9, §11.3, §11.6, §18.1,
 //! `spec/tools.md` §1.1; S-566, S-1084, S-1139, Q-09): what the case files in `tests/spec/flow_clock/` cannot pin.
 //!
-//! - The Core of a chain is W7-16 U6a and U6b, so `build`, `dump --core` and `test` stop at a flow that has a chain with E0200 and with nothing else
-//!   (no internal error), on the file of the flow, while `check` reads it with no diagnostic and `onsa interface` ends with 0 (the size of
-//!   the state, which W7-16 changes, is not pinned).
+//! - The Core of a chain whose modifiers are all `.down~(N)` and whose boundaries gather and deal nothing, over a part that reads no `sample_tick()`, is W7-16 U6a1 (S-1207, S-1214): `build`,
+//!   `dump --core` and `test` end with 0 and no internal error for it (W7-16 U6a1/t; the values are in `tests/spec/flow_semantics/down_chain_values.onsa`).
+//! - The Core of a chain with an `.up~(N)` in it is W7-16 U6b, so `build`, `dump --core` and `test` stop at a flow that has such a chain with E0200 and with nothing else
+//!   (no internal error), on the file of the flow, while `check` reads it with no diagnostic and `onsa interface` ends with 0.
 //! - `onsa graph` of such a flow: the label of the vertex of an instance with modifiers writes the kind and then the modifiers in the order
 //!   they are written, with the N as a value, and the type and the clock of the value of the chain at the call side (S-1084, provisional
 //!   reading (2): `lp_0 = lp~.down~(4): F32 at (sample / 4)`). No colour is added (the vertices keep the three of §1.1, and a tick has the black
@@ -12,17 +13,26 @@
 //!
 //! The texts are written from the spec; none is taken from the output of the compiler.
 
+use crate::slow_stage_commands::assert_lowers;
 use crate::test_support::{Dir, code_of, diagnostics, doc_of, run, span_of, test_json, tests_of};
 
 const BUILD_MANIFEST: &str = "[package]\nname = \"demo\"\nedition = \"2026\"\n\n[targets.host]\nkind = \"source\"\nlang = \"c\"\nplatform = \"host\"\nprovides = []\n";
 
 const LP: &str = "pub flow lp(x: F32 at sample) -> F32 at sample {\n  x * 0.5 + prev~(x) * 0.5\n}\n\n";
 
-/// Flows with a chain whose ratio is not one, each in a form that `check` accepts (modifier_chain_clocks.onsa).
+/// Flows with a chain of `.down~(N)` whose ratio is not one, each in a form that `check` accepts (modifier_chain_clocks.onsa): the head has no input at `sample * N`, so no boundary gathers or deals,
+/// and it reads no `sample_tick()`.
 const BODIES: [&str; 3] = [
     "pub flow f(p: F32 at block, x: F32 at sample) -> F32 at sample {\n  x * (lp~(p).down~(4) at sample)\n}\n",
     "pub flow f(p: F32 at block, x: F32 at sample) -> F32 at sample {\n  let y = lp~(p).down~(2).down~(2)\n  x * (y at sample)\n}\n",
     "pub flow f(p: F32 at block, x: F32 at sample) -> F32 at sample {\n  let a = p at (sample / 4)\n  let y = lp~(a).down~(4)\n  x * (y at sample)\n}\n",
+];
+
+/// Flows with an `.up~(N)` in the chain, each in a form that `check` accepts (modifier_rules.rs, the graph test below): the Core of a chain with an up is W7-16 U6b. Each has `.down~(` on the line of its chain.
+const UP_BODIES: [&str; 3] = [
+    "pub flow f(p: F32 at block, x: F32 at sample) -> F32 at sample {\n  x * (lp~(p).down~(4).up~(2) at sample)\n}\n",
+    "pub flow f(x: F32 at sample) -> F32 at sample {\n  lp~(x).down~(2).up~(2)\n}\n",
+    "pub flow f(p: F32 at block, x: F32 at sample) -> F32 at sample {\n  let y = lp~(p).up~(2).down~(4)\n  x * (y at sample)\n}\n",
 ];
 
 fn source(body: &str) -> String {
@@ -42,11 +52,20 @@ fn package(tag: &str, body: &str) -> Dir {
 
 // ----------------------------------------------------------------------------- the gate of the Core
 
-/// W7-09 (the Core of the ticks is W7-16): `check` reads the flow with a chain, and `build`, `dump --core` and `test` stop at it with E0200
+/// W7-16 U6a1 (S-1207, S-1214; the Core of a chain whose modifiers are all `.down~(N)` and that gathers and deals nothing, over a part that reads no time): `check` reads the flow, and `build`, `dump --core` and
+/// `test` end with 0 and no internal error, and the test of the package runs. The values are in `tests/spec/flow_semantics/down_chain_values.onsa`.
+#[test]
+fn a_flow_with_a_down_chain_that_gathers_and_deals_nothing_is_lowered_by_build_dump_core_and_test() {
+    for (k, body) in BODIES.iter().enumerate() {
+        assert_lowers(&format!("chain_core_lowers_{k}"), &format!("{LP}{body}"), &[]);
+    }
+}
+
+/// W7-09 (the Core of an up is W7-16 U6b): `check` reads the flow with a chain that has an `.up~(N)`, and `build`, `dump --core` and `test` stop at it with E0200
 /// and nothing else, on the file of the flow (Q-09: what the spec has and this version does not carry is E0200, not a wrong output).
 #[test]
-fn a_flow_with_a_down_chain_is_e0200_for_build_dump_core_and_test() {
-    for (k, body) in BODIES.iter().enumerate() {
+fn a_flow_with_an_up_chain_is_e0200_for_build_dump_core_and_test() {
+    for (k, body) in UP_BODIES.iter().enumerate() {
         let d = package(&format!("chain_core_gate_{k}"), body);
 
         let out = run(d.root(), &["check", "--json"]);
@@ -78,7 +97,7 @@ fn a_flow_with_a_down_chain_is_e0200_for_build_dump_core_and_test() {
         assert!(!ds.is_empty() && ds.iter().all(|x| code_of(x) == "E0200"), "{body}: {doc}");
         assert!(ds.iter().all(|x| span_of(&x["span"]).file == "main.onsa"), "{body}: {doc}");
         assert!(tests_of(&doc).is_empty(), "{body}: nothing is run: {doc}");
-        // The chain is the only form that U5a leaves (W7-16 U5a/t; a `sample / N` stage of the flow is lowered), so the first diagnostic (§18.1: the order of the
+        // The chain with an up is the only form that U6a1 leaves (a `sample / N` stage of the flow and a chain of downs are lowered), so the first diagnostic (§18.1: the order of the
         // file, the line and the column) is on the line where the chain is written.
         let chain_line =
             1 + source(body).lines().position(|l| l.contains(".down~(")).expect("a chain in the body") as u64;
@@ -88,10 +107,10 @@ fn a_flow_with_a_down_chain_is_e0200_for_build_dump_core_and_test() {
 }
 
 /// `onsa interface` reads the signatures and the kinds, not the Core: the flow with a chain is listed, the command ends with 0 and no
-/// internal error (the size of the state is W7-16's, so no text of it is read here).
+/// internal error (the size of the state is W7-16's, so no text of it is read here; the state of a down chain is in `slow_stage_commands.rs`).
 #[test]
-fn interface_of_a_flow_with_a_down_chain_ends_with_zero() {
-    for (k, body) in BODIES.iter().enumerate() {
+fn interface_of_a_flow_with_a_chain_ends_with_zero() {
+    for (k, body) in BODIES.iter().chain(UP_BODIES.iter()).enumerate() {
         let d = package(&format!("chain_interface_{k}"), body);
         let out = run(d.root(), &["interface"]);
         assert_eq!(out.code, 0, "{body}: {}{}", out.stdout, out.stderr);
