@@ -41,6 +41,7 @@ fn named(f: &FlowInfo, name: &str) -> NodeId {
 #[test]
 fn the_owner_is_the_let_or_the_output() {
     let a = check(SRC);
+    old_and_new(&a);
     assert!(a.diagnostics.is_empty(), "{:?}", a.diagnostics);
     let f = flow(&a, "f");
     assert_eq!(f.node(named(f, "a")).owner, Owner::Let(0));
@@ -242,6 +243,7 @@ pub flow u(x: F32 at sample) -> F32 at sample {
 }
 ";
     let a = check(src);
+    old_and_new(&a);
     assert!(a.diagnostics.is_empty(), "{:?}", a.diagnostics);
     let f = flow(&a, "f");
     let d = f.node(named(f, "d"));
@@ -440,22 +442,12 @@ pub flow h1(x: F32 at sample, p: F32 at block) -> F32 at sample {
     );
     assert_eq!(r3.bounds[2].ins, [Some(Ratio(1))], "the input of the part the outermost wraps is at `sample * 2`");
     downs_that_gather_and_deal(heads);
+    steps_of_a_chain(heads, &callers);
 }
 
-/// Of a chain of `.down~(N)` whose innermost boundary alone gathers or
-/// deals (W7-16 U6a2): each boundary (its ports, the inputs it gathers with
-/// the stage of the frame around it, whether it deals, its `maps`, its
-/// stages and `made`), the stage of this flow each ring is written at
-/// ([`super::PlanNode::outer_stage`]), the runs, and the stage the node is
-/// read at. Of the hand table of the memo of U6a0 (1.5, its rows b–h, the
-/// row c of a parameter kind gathered, S-1214), each ring, `St_L`, `made_L`
-/// and the stages of the head as the model of W7-21
-/// (`target/notes/176/w721/u1/b/mymodel.py`, as `plansweep.py` reads it)
-/// sees them; a chain that deals is read from its array, not where its
-/// head runs (`at_read`, the review of U6a0).
-fn downs_that_gather_and_deal(heads: &str) {
-    use crate::clock::{ClockStage, Ratio};
-    let more = "pub flow id4(x: F32 at (sample * 4)) -> F32 at (sample * 4) { x }
+/// The chains of `.down~(N)` of [`downs_that_gather_and_deal`], of the heads
+/// of [`the_boundaries_of_a_chain`].
+const DOWNS: &str = "pub flow id4(x: F32 at (sample * 4)) -> F32 at (sample * 4) { x }
 pub flow mk2p(p: F32 at block) -> F32 at (sample * 2) { [p, p] }
 pub flow two(x: F32 at (sample * 2), y: F32 at (sample * 2)) -> F32 at sample { x[0] + y[1] }
 pub flow db(x: F32 at sample) -> F32 at sample { g4~(x).down~(4) at sample }
@@ -471,7 +463,21 @@ pub flow dh(p: F32 at block) -> F32 at sample { h1~(p, p).down~(2) at sample }
 pub flow dx(x: F32 at sample) -> F32 at sample { two~(x, x).down~(2) at sample }
 pub flow dy(p: F32 at block) -> F32 at sample { mk4~(p).down~(4).down~(2) at sample }
 ";
-    let a = check(&format!("{heads}{more}"));
+
+/// Of a chain of `.down~(N)` whose innermost boundary alone gathers or
+/// deals (W7-16 U6a2): each boundary (its ports, the inputs it gathers with
+/// the stage of the frame around it, whether it deals, its `maps`, its
+/// stages and `made`), the stage of this flow each ring is written at
+/// ([`super::PlanNode::outer_stage`]), the runs, and the stage the node is
+/// read at. Of the hand table of the memo of U6a0 (1.5, its rows b–h, the
+/// row c of a parameter kind gathered, S-1214), each ring, `St_L`, `made_L`
+/// and the stages of the head as the model of W7-21
+/// (`target/notes/176/w721/u1/b/mymodel.py`, as `plansweep.py` reads it)
+/// sees them; a chain that deals is read from its array, not where its
+/// head runs (`at_read`, the review of U6a0).
+fn downs_that_gather_and_deal(heads: &str) {
+    use crate::clock::{ClockStage, Ratio};
+    let a = check(&format!("{heads}{DOWNS}"));
     assert!(a.diagnostics.is_empty(), "{:?}", a.diagnostics);
     let t = |k| ClockStage::Tick(Ratio(k));
     // A boundary: ins, out, gathers (input, stage of the frame around it), deals, maps, stages, made.
@@ -576,6 +582,154 @@ pub flow dy(p: F32 at block) -> F32 at sample { mk4~(p).down~(4).down~(2) at sam
     assert!(names("dc").contains(&"_out.g4_0._gather_0_0".to_string()), "{:?}", names("dc"));
 }
 
+/// The table of the work of each instance in the stages of its caller
+/// (§11.9, S-1207, S-1214, W7-16 U6b0a), drawn as the memo of U6b0 writes
+/// it: of each entry its stage (`*` of the one read) and its ops, `R(body,
+/// out)` a run (`-` nowhere, `V` the value, `D(b)` the array of `b`),
+/// `G(b,input,from)` a ring, `Deal(b<-from)`, `Each(b,j|once)[stage: ops;
+/// …]`, then how the caller reads it. Each row as the memo (2.6, 5.2) drew
+/// it by hand from §11.9 and the model of its review
+/// (`target/notes/178/w716/u6b0/review/model.py`, `mine()`) gave it on its
+/// own: the order of the groups of an `Each` (r6) and of a `Deal` after the
+/// work inside (r3, m8u) are of the values (§11.9). The sources are those
+/// of [`the_boundaries_of_a_chain`] and [`DOWNS`], with two of a head
+/// dealing at `sample * 8` read by a head of `sample * N` (as r11);
+/// [`old_and_new`] checks every node of them.
+fn steps_of_a_chain(heads: &str, callers: &str) {
+    let eight = "pub flow mk8(c: F32 at block) -> F32 at (sample * 8) { [c, c, c, c, c, c, c, c] }
+pub flow m8(p: F32 at block) -> F32 at sample { g2~(mk8~(p).down~(2).down~(2)) }
+pub flow m8u(p: F32 at block) -> F32 at sample { g4~(mk8~(p).down~(2).up~(2).down~(2)) }
+";
+    let a = check(&format!("{heads}{callers}{DOWNS}{eight}"));
+    assert!(a.diagnostics.is_empty(), "{:?}", a.diagnostics);
+    let rows = [
+        ("db", "-2*: R(0,V) | 0: G(0,0,arg)   read=Run"),
+        ("dc", "-3*: R(0,V) | -1: G(0,0,arg)   read=Run"),
+        ("dd", "-2: R(0,D(0))   read=Array(0)"),
+        ("de", "-2: R(0,D(0)) | 0: G(0,0,arg)   read=Array(0)"),
+        ("df", "-2: R(0,D(0))   read=Array(0)"),
+        ("dg", "-2*: R(0,V) | -1: G(0,0,arg)   read=Run"),
+        ("dh", "-2: R(-1,-) | -1*: R(0,V)   read=Run"),
+        ("dx", "-1*: R(0,V) | 0: G(0,0,arg), G(0,1,arg)   read=Run"),
+        ("dy", "-3: R(0,D(0))   read=Array(0)"),
+        // S-1214 (1): `g4~(x).down~(2).down~(2)`.
+        ("r9", "-2*: R(0,V) | -1: G(0,0,ring1) | 0: G(1,0,arg)   read=Run"),
+        ("rx7", "-2: Each(0,j)[-1: R(-1,-); 0: R(0,D(1))] | 0: G(1,0,arg)   read=Array(1)"),
+        ("ra", "-2: Each(0,j)[0: R(0,D(1))] | -1: Deal(2<-1)   read=Array(2)"),
+        ("m8", "-2: R(0,D(0)) | -1: Deal(1<-0)   read=Array(1)"),
+        ("r6", "0*: Each(1,j)[-1: R(0,V); 0: G(0,0,arg)]   read=Run"),
+        ("r3", "-2: Each(0,j)[0: R(0,D(1))] | -1: G(1,0,ring2), Deal(2<-1) | 0: G(2,0,arg)   read=Array(2)"),
+        ("m8u", "-1: Each(1,j)[-1: R(0,D(0))], Deal(2<-0)   read=Array(2)"),
+    ];
+    for (name, want) in rows {
+        let f = flow(&a, name);
+        let n = f.nodes.iter().find(|n| !n.bounds.is_empty()).unwrap_or_else(|| panic!("{name}: no chain"));
+        assert_eq!(drawn(n), want, "{name}");
+    }
+    old_and_new(&a);
+}
+
+/// The stage `s` as the memo of U6b0 writes it: the exponent of a tick.
+fn st(s: crate::clock::ClockStage) -> String {
+    match s {
+        crate::clock::ClockStage::Tick(k) => k.0.to_string(),
+        s => format!("{s:?}"),
+    }
+}
+
+/// The ops `ops` drawn ([`steps_of_a_chain`]).
+fn drawn_ops(ops: &[super::Op]) -> String {
+    use super::{Feed, Op, Out};
+    let op = |op: &Op| match op {
+        Op::Run { body, out } => {
+            let out = match out {
+                Out::None => "-".to_string(),
+                Out::Value => "V".to_string(),
+                Out::Deal(b) => format!("D({b})"),
+            };
+            format!("R({},{out})", st(*body))
+        }
+        Op::Ring { bound, input, from: Feed::Arg } => format!("G({bound},{input},arg)"),
+        Op::Ring { bound, input, from: Feed::Ring(r) } => format!("G({bound},{input},ring{r})"),
+        Op::Deal { bound, from } => format!("Deal({bound}<-{from})"),
+        Op::Each { bound, once, groups } => {
+            let groups: Vec<_> = groups.iter().map(|(y, ops)| format!("{}: {}", st(*y), drawn_ops(ops))).collect();
+            format!("Each({bound},{})[{}]", if *once { "once" } else { "j" }, groups.join("; "))
+        }
+    };
+    ops.iter().map(op).collect::<Vec<_>>().join(", ")
+}
+
+/// The table of the work of the node `n` drawn ([`steps_of_a_chain`]).
+fn drawn(n: &super::PlanNode) -> String {
+    let entry = |e: &super::Entry| format!("{}{}: {}", st(e.caller), if e.read { "*" } else { "" }, drawn_ops(&e.ops));
+    let read = match n.read {
+        super::Read::Run => "Run".to_string(),
+        super::Read::Array(b) => format!("Array({b})"),
+    };
+    format!("{}   read={read}", n.entries.iter().map(entry).collect::<Vec<_>>().join(" | "))
+}
+
+/// While the Core reads the runs (W7-16 U6b0a, until U6b0b removes them
+/// with this): of every instance of `a`, the table of its work gives the
+/// answers of the runs. The same runs (`runs()`), its stages those of the
+/// outermost boundary, each ring written at the stage of the frame around
+/// its boundary moved out (`outer_stage`), and from the argument at the
+/// stage of the function it is read at (`run_stage` of its `ArgRead`, the
+/// marking), the run that deals of the stage that makes the output of the
+/// head into the innermost that deals (the `dealt_by` of the Core); of a
+/// chain the Core lowers, the stage of the entry read that of the run
+/// `at_read`, and its array that of `dealt_at`.
+fn old_and_new(a: &Analysis) {
+    use super::{Feed, Op, Out, Read};
+    let mut seen = 0;
+    for f in a.flows.values() {
+        for n in &f.nodes {
+            let PlanKind::Instance { callee, .. } = n.kind else { continue };
+            let mut old: Vec<_> = n.runs.iter().map(|r| (r.body, r.caller)).collect();
+            let mut new = n.runs();
+            old.sort();
+            new.sort();
+            assert_eq!(old, new, "{}", n.path);
+            if n.runs.is_empty() {
+                assert!(n.entries.is_empty(), "{}", n.path);
+                continue;
+            }
+            seen += 1;
+            let g = &a.flows[&callee];
+            if let Some(last) = n.bounds.last() {
+                assert_eq!(n.entries.iter().map(|e| e.caller).collect::<Vec<_>>(), last.stages, "{}", n.path);
+            }
+            let mut dealt = Vec::new();
+            for e in &n.entries {
+                Op::walk(&e.ops, &mut |op| match *op {
+                    Op::Ring { bound, input, from } => {
+                        let b = &n.bounds[bound as usize];
+                        let q = b.gathers.iter().find(|g| g.0 == input).map(|g| g.1);
+                        assert_eq!(q.and_then(|q| n.outer_stage(bound as usize, q)), Some(e.caller), "{}", n.path);
+                        if from == Feed::Arg {
+                            let at = n.args[input as usize].at.stage().map(|s| f.run_stage(s));
+                            assert_eq!(at, Some(e.caller), "{}", n.path);
+                        }
+                    }
+                    Op::Run { body, out: Out::Deal(b) } => dealt.push((body, b)),
+                    _ => {}
+                });
+            }
+            let by = n.runs.iter().filter(|r| g.out_stage == Some(r.body));
+            let by: Vec<_> = by.filter_map(|r| n.dealt_at().map(|b| (r.body, b))).collect();
+            assert_eq!(dealt, by, "{}", n.path);
+            if n.lowered_chain() {
+                let read: Vec<_> = n.entries.iter().filter(|e| e.read).map(|e| e.caller).collect();
+                let at_read: Vec<_> = n.runs.iter().filter(|r| r.at_read).map(|r| r.caller).collect();
+                assert_eq!(read, at_read, "{}", n.path);
+                assert_eq!(n.read, n.dealt_at().map_or(Read::Run, Read::Array), "{}", n.path);
+            }
+        }
+    }
+    assert!(seen > 0, "no instance with a table");
+}
+
 /// The Core lowers the body of a flow with a port at `sample * N` (W7-16
 /// U6a2, §11.9) and stops until U6b at an instance that gathers or deals
 /// one in its caller (its value or an argument at `sample * N`). A port at
@@ -591,6 +745,7 @@ fn a_burst_in_the_caller_stops_the_core() {
                pub flow k(p: F32 at block) -> F32 at sample {\n  sl~(p at (sample / 4)) at sample\n}\n\
                pub flow m(p: F32 at block, x: F32 at sample) -> F32 at sample {\n  f~(p, g~(x))\n}\n";
     let a = check(src);
+    old_and_new(&a);
     assert!(a.diagnostics.is_empty(), "{:?}", a.diagnostics);
     let at = |name: &str| flow(&a, name).multirate_at().map(|s| &src[s.start as usize..s.end as usize]);
     assert_eq!([at("f"), at("g"), at("h"), at("sl"), at("k")], [None, None, None, None, None]);
@@ -622,6 +777,7 @@ fn the_gate_passes_a_chain_of_downs_that_gathers_and_deals_at_its_innermost_alon
                pub flow burst_in(p: F32 at block) -> F32 at sample {\n  g4~(p).down~(2) at sample\n}\n\
                pub flow burst_out(p: F32 at block) -> F32 at sample {\n  g2~(mk4~(p).down~(2))\n}\n";
     let a = check(src);
+    old_and_new(&a);
     assert!(a.diagnostics.is_empty(), "{:?}", a.diagnostics);
     let at = |name: &str| flow(&a, name).multirate_at().map(|s| &src[s.start as usize..s.end as usize]);
     assert_eq!([at("down"), at("timed"), at("gathers"), at("deals")], [None, None, None, None]);
@@ -660,6 +816,7 @@ fn the_table_gives_the_words_of_the_time_of_each_stage() {
                flow g4(v: U32 at (sample * 4)) -> U32 at sample {\n  v[3]\n}\n\
                pub flow gat() -> U32 at sample {\n  g4~(sample_tick()).down~(4) at sample\n}\n";
     let a = check(src);
+    old_and_new(&a);
     assert!(a.diagnostics.is_empty(), "{:?}", a.diagnostics);
     let tick = |k| crate::clock::ClockStage::Tick(crate::clock::Ratio(k));
     let time = |name: &str| flow(&a, name).time.iter().map(|(&s, &w)| (s, w)).collect::<Vec<_>>();
@@ -698,6 +855,7 @@ fn the_marking_records_the_stages_it_evaluates_at() {
                pub flow gat(p: U32 at block) -> U32 at sample {\n  let h = cnt~(p).down~(2)\n  \
                let r = g2~((h + 1) at sample).down~(2) at sample\n  r + 1\n}\n";
     let a = check(src);
+    old_and_new(&a);
     let codes: Vec<String> = a.diagnostics.iter().map(|d| format!("{:?}", d.code)).collect();
     assert_eq!(codes.len(), 1, "{codes:?}");
     let tick = |k| crate::clock::ClockStage::Tick(crate::clock::Ratio(k));
@@ -739,6 +897,7 @@ pub flow calls(x: F32 at sample) -> F32 at sample {
 }
 ";
     let a = check(src);
+    old_and_new(&a);
     assert!(a.diagnostics.is_empty(), "{:?}", a.diagnostics);
     let (slow, tk, plain, calls) = (flow(&a, "slow"), flow(&a, "tk"), flow(&a, "plain"), flow(&a, "calls"));
     let tick = |k| crate::clock::ClockStage::Tick(crate::clock::Ratio(k));
@@ -780,6 +939,7 @@ pub flow plain(x: F32 at sample) -> F32 at sample {
 }
 ";
     let a = check(src);
+    old_and_new(&a);
     assert!(a.diagnostics.is_empty(), "{:?}", a.diagnostics);
     let tick = |k| crate::clock::ClockStage::Tick(crate::clock::Ratio(k));
     let run = |b, c, at_read| super::Run { body: tick(b), caller: tick(c), at_read };
@@ -837,6 +997,7 @@ pub flow mid(x: F32 at (sample / 4096)) -> F32 at sample { leaf~(x).down~(4096) 
     let got = past(t);
     assert_eq!(got, [("E0808".to_string(), "down".to_string(), 2)]);
     let a = check(&format!("{leaf}{t}"));
+    old_and_new(&a);
     // Multiplied in the order they are written, the N are past 2^24 at `.down~(4096)`.
     assert_eq!(a.diagnostics[0].span.start as usize, leaf.len() + t.find("down~(4096)").unwrap());
     let notes: Vec<&str> = a.diagnostics[0].notes.iter().map(|n| n.message.as_str()).collect();

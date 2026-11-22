@@ -16,6 +16,7 @@ pub(crate) mod entries;
 mod fields;
 pub(super) mod names;
 mod stage;
+mod steps;
 
 pub use fields::{Field, FieldOf, Part};
 
@@ -168,6 +169,84 @@ pub struct PlanNode {
     /// its head runs in: how many times and at which time are of its
     /// `bounds`.
     pub runs: Vec<Run>,
+    /// Of an instance, its work in each stage of this flow (§11.9, S-1088,
+    /// S-1207), one entry of a stage, slowest first; none as of `runs`.
+    /// Made by the walk of the table ([`steps`]).
+    pub entries: Vec<Entry>,
+    /// How this flow reads its value (§11.9).
+    pub read: Read,
+}
+
+/// The work of an instance in the function of the stage `caller` of this
+/// flow (§11.9, S-1088, S-1207): its `ops`, in the order of §11.9 (the
+/// slow ticks, then the ticks of `sample`), which the Core lowers as they
+/// are. `read`: they make its value (a [`Op::Run`] of [`Out::Value`] is
+/// among them), so they are lowered where the call is read; else in the
+/// walk of the runs of that function.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Entry {
+    pub caller: ClockStage,
+    pub read: bool,
+    pub ops: Vec<Op>,
+}
+
+/// A step of the work of an instance ([`Entry`]). A list of them and the
+/// groups of an [`Op::Each`] are in the order of §11.9 (the slow ticks,
+/// then the ticks of `sample`), which the Core lowers as it is.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Op {
+    /// The slot of the ring of the input `input` of the boundary `bound`,
+    /// at its phase, written from `from`.
+    Ring { bound: u32, input: u32, from: Feed },
+    /// The stage `body` of the head run (its function called); its result
+    /// to `out`.
+    Run { body: ClockStage, out: Out },
+    /// The array of the boundary `bound` written from that of the boundary
+    /// `from` inside it, at the tick of `bound` (two boundaries that deal).
+    Deal { bound: u32, from: u32 },
+    /// The runs of the part an `.up~(N)` boundary `bound` wraps: each of
+    /// its N runs j (`once`: the run j = 0 alone, of a stage slower than
+    /// the `sample` of its caller), and in each the ops of each stage of
+    /// the part, when j is at the tick of that stage.
+    Each { bound: u32, once: bool, groups: Vec<(ClockStage, Vec<Op>)> },
+}
+
+/// Where a ring is written from: the argument of the call, or the ring of
+/// the boundary outside that gathers the same input.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Feed {
+    Arg,
+    Ring(u32),
+}
+
+/// Where the result of a run goes: nowhere, the value of the instance, or
+/// the array of the boundary that deals it (the innermost that deals).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Out {
+    None,
+    Value,
+    Deal(u32),
+}
+
+/// How a flow reads the value of an instance: the value of the run of its
+/// entry that is read, or the array of the outermost boundary that deals.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Read {
+    Run,
+    Array(u32),
+}
+
+impl Op {
+    /// `f` of each op of `ops` and of the groups of each [`Op::Each`] in
+    /// them, in their order: as deep as the `.up~` of the chain.
+    pub fn walk<'a>(ops: &'a [Op], f: &mut impl FnMut(&'a Op)) {
+        for op in ops {
+            f(op);
+            if let Op::Each { groups, .. } = op {
+                groups.iter().for_each(|g| Op::walk(&g.1, f));
+            }
+        }
+    }
 }
 
 /// A boundary of a chain (§11.9, §11.10, S-1207): a `.down~(N)` or an
@@ -178,9 +257,10 @@ pub struct PlanNode {
 /// ([`entries`]): the fields and the Core read them, not the ratios.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PlanBound {
-    /// Its modifier, by its place in the `chain` of the node (its ratio is
-    /// `chain[at].ratio`).
+    /// Its modifier, by its place in the `chain` of the node.
     pub at: u32,
+    /// The ratio of its modifier (`chain[at].ratio`).
+    pub ratio: Ratio,
     /// The exponent of each input of the part it wraps, in the frame that
     /// part is called in (`sample * 2^k`); none of a parameter kind.
     pub ins: Vec<Option<Ratio>>,
@@ -396,6 +476,8 @@ pub(super) fn build(
             size: r.size,
             bounds: r.bounds,
             runs: Vec::new(),
+            entries: Vec::new(),
+            read: Read::Run,
         }
     });
     info.nodes = nodes.collect();

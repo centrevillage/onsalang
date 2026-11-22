@@ -79,7 +79,7 @@ use onsa_sema::DefId;
 use onsa_sema::clock::{Clock, ClockStage, Ratio};
 use onsa_sema::def::{DefKind, Fields, FlowDef, FlowFn, FlowInput, FlowTy, ParamInfo, ParamKey, ParamNumber};
 use onsa_sema::flow::Counter;
-use onsa_sema::flow::{Field, FieldOf, FlowInfo, InitArg, Kept, NodeId, Part, PlanBound, PlanKind, PlanNode, Run};
+use onsa_sema::flow::{Field, FieldOf, FlowInfo, InitArg, Kept, NodeId, Part, PlanKind, PlanNode, Run};
 use onsa_sema::ty::{BuiltinTy, Len, Ty as STy};
 use onsa_syntax::ast::ExprId;
 
@@ -371,9 +371,8 @@ impl<'a> Lowerer<'a> {
 fn child_rate(sr: &Expr, n: &PlanNode, span: Span) -> R<Expr> {
     let mut rate = sr.clone();
     for b in n.bounds.iter().rev() {
-        let r = n.chain.get(b.at as usize).and_then(|m| m.ratio);
-        let Some(big) = r.filter(|r| r.slower_than_body()).and_then(Ratio::n) else {
-            return Err(internal(span, format!("the rate of a callee under a boundary of the ratio {r:?}")));
+        let Some(big) = Some(b.ratio).filter(|r| r.slower_than_body()).and_then(Ratio::n) else {
+            return Err(internal(span, format!("the rate of a callee under a boundary of the ratio {:?}", b.ratio)));
         };
         rate = checked_binary(BinOp::Div, rate, float_lit(&sr.ty, big as f64, span)?);
     }

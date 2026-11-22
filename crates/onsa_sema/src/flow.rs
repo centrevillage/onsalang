@@ -130,7 +130,8 @@ pub use branching::{Chain, Link, chain};
 pub use hoist::{Cond, Hoist, HoistId};
 pub use plan::{Counter, Words};
 pub use plan::{
-    Edge, Field, FieldOf, Kept, NodeId, Owner, Part, PlanBound, PlanKind, PlanModifier, PlanNode, Run, Vertex,
+    Edge, Entry, Feed, Field, FieldOf, Kept, NodeId, Op, Out, Owner, Part, PlanBound, PlanKind, PlanModifier, PlanNode,
+    Read, Run, Vertex,
 };
 
 pub(crate) use clocks::finish_flow;

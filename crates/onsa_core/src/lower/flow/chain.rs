@@ -7,12 +7,6 @@
 
 use super::*;
 
-/// The ratio of the boundary `b` of the chain of `n`.
-fn ratio(n: &PlanNode, b: &PlanBound, span: Span) -> R<Ratio> {
-    let r = n.chain.get(b.at as usize).and_then(|m| m.ratio);
-    r.ok_or_else(|| internal(span, "a boundary of no modifier with a ratio"))
-}
-
 /// The words of a count of the frames of the caller of a boundary of the
 /// ratio `r` as those of the part it wraps, of a `.down~(2^s)`: `[c >> s]`
 /// of one (the phase, its low word alone), `[(t >> s) | (t_hi << (32 −
@@ -40,7 +34,7 @@ pub(super) fn child_time(cx: &mut FnCx, out: &mut Vec<Stmt>, n: &PlanNode, words
     for (k, b) in n.bounds.iter().enumerate().rev() {
         // One word divided would lose the upper (S-1211): the table gives two.
         let two = Some(&time[..]).filter(|t| t.len() == 2).ok_or_else(|| internal(span, "one word of time"))?;
-        let kept = fold(two, ratio(n, b, span)?, span)?.into_iter().take(if k == 0 { words } else { 2 });
+        let kept = fold(two, b.ratio, span)?.into_iter().take(if k == 0 { words } else { 2 });
         time = kept.zip(["t_in", "t_hi_in"]).map(|(e, name)| materialize(cx, e, out, name)).collect();
     }
     let time = time.get(..words).ok_or_else(|| internal(span, format!("a callee of {words} words of time")))?;
@@ -61,10 +55,10 @@ fn phase(lw: &Lowerer, cx: &FnCx, n: &PlanNode, b: usize, span: Span) -> R<Expr>
     }
     let mut c = vec![sfield(lw, f.info, &root.state, FieldOf::Tick, span)?];
     for o in n.bounds.iter().skip(b + 1).rev() {
-        c = fold(&c, ratio(n, o, span)?, span)?;
+        c = fold(&c, o.ratio, span)?;
     }
     let c = c.pop().ok_or_else(|| internal(span, "a phase of no word"))?;
-    let r = n.bounds.get(b).map(|x| ratio(n, x, span)).transpose()?;
+    let r = n.bounds.get(b).map(|x| x.ratio);
     let mask = r.and_then(|r| r.n()).and_then(|m| u32::try_from(m - 1).ok());
     let mask = mask.ok_or_else(|| internal(span, format!("no phase of the boundary {b}")))?;
     Ok(checked_binary(BinOp::BitAnd, c, u32_lit(span, mask)))
@@ -138,7 +132,7 @@ pub(super) fn write_rings(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, 
     for input in rings_at(n, stage) {
         let (part, arg) = (Part::Gather { bound: 0, input }, args.get(input as usize));
         let arg = arg.ok_or_else(|| internal(span, "a ring of no argument"))?;
-        let at = slot(phase(lw, cx, n, 0, span)?, ratio(n, b, span)?, exp(n, part, span)?, span)?;
+        let at = slot(phase(lw, cx, n, 0, span)?, b.ratio, exp(n, part, span)?, span)?;
         let place = index(sfield(lw, info, state, FieldOf::Node(id, part), span)?, at)?;
         let v = lower_expr(lw, cx, *arg)?;
         assign(out, &place, of_type(v, &place.ty)?)?;
@@ -174,7 +168,6 @@ pub(super) fn dealt(lw: &Lowerer, cx: &FnCx, id: NodeId, state: &Expr, span: Spa
     let n = info.node(id);
     let b = n.dealt_at().ok_or_else(|| internal(span, "a chain that deals nothing"))?;
     let part = Part::Deal(b);
-    let at =
-        slot(phase(lw, cx, n, b as usize, span)?, ratio(n, &n.bounds[b as usize], span)?, exp(n, part, span)?, span)?;
+    let at = slot(phase(lw, cx, n, b as usize, span)?, n.bounds[b as usize].ratio, exp(n, part, span)?, span)?;
     index(sfield(lw, info, state, FieldOf::Node(id, part), span)?, at)
 }

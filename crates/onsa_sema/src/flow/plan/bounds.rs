@@ -45,7 +45,7 @@ pub(in crate::flow) fn bounds<'a>(chain: impl IntoIterator<Item = &'a PlanModifi
         let gathers = (0u32..).zip(&ins).filter_map(|(i, &k)| fast(k).map(|k| (i, step(ClockStage::Tick(k), r))));
         let gathers = gathers.collect();
         let (deals, maps, stages) = (fast(out).is_some(), Vec::new(), Vec::new());
-        list.push(PlanBound { at, ins: ins.clone(), out, gathers, deals, maps, stages, made: None });
+        list.push(PlanBound { at, ratio: r, ins: ins.clone(), out, gathers, deals, maps, stages, made: None });
         let moved = |k: Option<Ratio>| k.map(|k| Ratio(k.0.saturating_add(r.0)));
         ins.iter_mut().for_each(|k| *k = moved(*k));
         out = moved(out);

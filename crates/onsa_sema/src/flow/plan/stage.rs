@@ -188,6 +188,36 @@ impl PlanNode {
         self.bounds.iter().position(|b| b.deals).and_then(|b| u32::try_from(b).ok())
     }
 
+    /// Its entry of the stage `s` of this flow whose `read` is `read`
+    /// (§11.9, [`Entry`]): the one question the Core asks of its work.
+    pub fn entry(&self, s: ClockStage, read: bool) -> Option<&Entry> {
+        self.entries.iter().find(|e| e.caller == s && e.read == read)
+    }
+
+    /// Each run of its entries ([`Op::Run`], in an [`Op::Each`] too): the
+    /// stage of the body of its callee with the stage of this flow whose
+    /// function runs it, in the order of the entries.
+    pub fn runs(&self) -> Vec<(ClockStage, ClockStage)> {
+        let mut runs = Vec::new();
+        for e in &self.entries {
+            Op::walk(&e.ops, &mut |op| {
+                if let Op::Run { body, .. } = *op {
+                    runs.push((body, e.caller));
+                }
+            });
+        }
+        runs
+    }
+
+    /// The innermost boundary from the boundary `from` out that gathers the
+    /// input `input` of its head (§11.9): of `from` 0, the ring the head
+    /// reads it from; of the one outside a boundary, the ring that ring is
+    /// written from ([`Feed`]). The one walk of it (D-15).
+    pub fn ring_of(&self, from: usize, input: u32) -> Option<u32> {
+        let gathers = |b: &(u32, &PlanBound)| b.1.gathers.iter().any(|g| g.0 == input);
+        (0u32..).zip(&self.bounds).skip(from).find(gathers).map(|b| b.0)
+    }
+
     /// The stage of this flow the stage `s` of the frame around the
     /// boundary `b` is (§11.9): `s` moved out of each boundary outside it
     /// by its `maps`, as the walk of the table made them; the stage of the

@@ -107,7 +107,7 @@ fn close(pkg: &Package, a: &mut Analysis, f: DefId, marks: &HashMap<DefId, Mark>
         let (r, bounds, outer) = node_runs(n, g);
         stages.extend(outer.into_iter().filter(|s| s.tick_slower_than(ClockStage::SAMPLE)));
         callee_time(&mut time, info, n, g, &r);
-        runs.push(Some((r, bounds)));
+        runs.push(Some((r, bounds, steps::table(n, g))));
         let Some((inner, _)) = most.get(&callee).copied().flatten() else {
             counted = false;
             continue;
@@ -127,7 +127,8 @@ fn close(pkg: &Package, a: &mut Analysis, f: DefId, marks: &HashMap<DefId, Mark>
         }
     }
     let Some(flow) = a.flows.get_mut(&f) else { onsa_diag::internal::bug(None, "a flow closed out of the table") };
-    flow.nodes.iter_mut().zip(runs).for_each(|(n, r)| r.into_iter().for_each(|r| (n.runs, n.bounds) = r));
+    let set = |n: &mut PlanNode, (r, b, (e, read))| (n.runs, n.bounds, n.entries, n.read) = (r, b, e, read);
+    flow.nodes.iter_mut().zip(runs).for_each(|(n, r)| r.into_iter().for_each(|r| set(n, r)));
     (flow.stages, flow.time) = (stages.into_iter().collect(), time);
     fields::build(flow);
     if let Some(p) = past_at {
@@ -175,9 +176,7 @@ fn node_runs(n: &PlanNode, g: &FlowInfo) -> (Vec<Run>, Vec<PlanBound>, BTreeSet<
     let mut stages: BTreeSet<ClockStage> = heads.iter().map(|h| h.1).collect();
     let (mut made, mut bounds) = (g.out_stage, n.bounds.clone());
     for b in &mut bounds {
-        let Some(r) = n.chain.get(b.at as usize).and_then(|m| m.ratio) else {
-            onsa_diag::internal::bug(Some(n.span), "a boundary of no modifier with a ratio")
-        };
+        let r = b.ratio;
         b.maps = stages.iter().map(|&y| (y, bounds::step(y, r))).collect();
         let tick = b.deals.then_some(ClockStage::Tick(r));
         stages = b.maps.iter().map(|m| m.1).chain(b.gathers.iter().map(|g| g.1)).chain(tick).collect();
