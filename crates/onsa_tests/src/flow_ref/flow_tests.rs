@@ -77,7 +77,7 @@ fn a_let_is_made_at_the_stage_of_its_clock() {
         assert_eq!(me.clocks(), [Clock::Init, Clock::Block, Clock::Sample, Clock::Sample]);
         // After `init`: the `init` one has been made, the others not.
         assert_eq!(counts([&N_I, &N_B, &N_S]), [1, 0, 0]);
-        assert_eq!(me.ctx, Ctx { sample_rate: 48000.0, tick: 0, rounds: 0 });
+        assert_eq!(me.ctx, Ctx::at(48000.0, 0));
         // Three frames, `p = 100`: 1000 + 100 + x for x = 1, 2, 3; the `block` one once, the `sample` one three times.
         let xs = [i32v(1), i32v(2), i32v(3)];
         let outs = me.process(&[("p", i32v(100))], &[("x", &xs[..])], 3, host(&mut table)).expect("process");
@@ -92,7 +92,7 @@ fn a_let_is_made_at_the_stage_of_its_clock() {
         let outs = me.process(&[("p", i32v(300))], &[("x", &[])], 0, host(&mut table)).expect("process");
         assert!(outs.is_empty());
         assert_eq!(counts([&N_I, &N_B, &N_S]), [1, 3, 4]);
-        assert_eq!(me.ctx, Ctx { sample_rate: 48000.0, tick: 4, rounds: 0 });
+        assert_eq!(me.ctx, Ctx::at(48000.0, 4));
     });
 }
 

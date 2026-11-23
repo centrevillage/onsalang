@@ -11,11 +11,34 @@ use onsa_syntax::ast::ExprId;
 
 use super::expr::{Eval, Frame, LOW_STACK, Stop};
 use super::flow::{Ctx, Inst, enter};
-use super::rate::{Level, counted, dealt, elements, n_of, on_tick, phase, slice, time_of};
+use super::rate::{Level, When, counted, dealt, elements, n_of, on_tick, phase, slice, time_of};
 use super::scalar::{Fault, Fault::Internal};
 use super::sema_view::{Called, Stage, input_stage};
 use super::state::{NodeKey, Role, Store};
 use super::value::Value;
+
+const NO_GATE: &str = "a `when~` with no state";
+
+/// What a `.when~(c)` of a chain keeps (§11.9, §11.10): the condition the caller read for it, whether it read true at the last tick of W, the frames the part ran (the counter of the grid of the part), and the output it holds,
+/// `start` (`T.default()`, a burst of them for an output at `sample * N`) until the part makes one. `init` and the generated `reset` put them back (`InstState::reset`).
+#[derive(Clone, Debug)]
+pub(super) struct Gate {
+    cond: Value,
+    on: bool,
+    runs: u64,
+    held: Value,
+    start: Value,
+}
+
+impl Gate {
+    pub(super) fn new(start: Value) -> Gate {
+        Gate { cond: Value::Unit, on: false, runs: 0, held: start.clone(), start }
+    }
+
+    pub(super) fn reset(&mut self) {
+        *self = Gate::new(self.start.clone());
+    }
+}
 
 impl<'a> Frame<'a> {
     /// A call of a flow (§11.5), alone or the head of a chain (§11.9): the instance it makes runs the stages of its parts in the stages of this one (`run_children`), and the call reads its output where the last part makes it
@@ -68,6 +91,7 @@ impl<'a> Frame<'a> {
             return Ok(());
         }
         self.feed(key, decl, top, sx)?;
+        self.read_conds(key, &levels, sx)?;
         let ins = self.run.as_ref().and_then(|r| r.state.children.get(key)).map(|c| c.fed.clone());
         self.run_level(key, &levels, levels.len() - 1, sx, caller, ins.ok_or(here(Internal("no instance")))?)?;
         self.child_mut(key, at)?.done = Some((caller.total(), s));
@@ -85,12 +109,7 @@ impl<'a> Frame<'a> {
             let v = match self.eval_staged(key.call, a.expr, Stage::Tick(sx))? {
                 Value::Burst(es) => counted(&es, q).map(|()| Value::Burst(es)).map_err(here)?,
                 // The elements are made after the limit has been asked: `x: F32 at (sample * 2147483648)` of a value of the parameter kinds is not 2^31 of them.
-                _ if q > 0 && !self.limits.holds(n_of(q) as usize) => {
-                    return Err(here(Fault::Unavailable(
-                        "an input at `sample * N` of more elements than the evaluator holds",
-                    )));
-                }
-                v if q > 0 => Value::Burst(vec![v; n_of(q) as usize]),
+                v if q > 0 => self.holds_burst(q, at).map(|()| Value::Burst(vec![v; n_of(q) as usize]))?,
                 v => v,
             };
             self.child_mut(key, at)?.fed[n] = v;
@@ -122,6 +141,9 @@ impl<'a> Frame<'a> {
             return self.run_head(key, &levels[0], s, ctx, &ins);
         }
         let (lv, inside) = (&levels[b], &levels[b - 1]);
+        if lv.when.is_some() {
+            return self.run_when(key, levels, b, s, ctx, ins);
+        }
         let r = lv.ratio;
         let n = r.unsigned_abs();
         if r < 0 {
@@ -154,6 +176,9 @@ impl<'a> Frame<'a> {
             }
         } else {
             // The runs of the frame: the stages slower than the boundary's `sample` once (the run 0), its own `sample` in each of the runs, and the elements of the output of the runs in a row at the stage that makes them.
+            if lv.out > 0 && s == 0 && lv.made == 0 {
+                self.holds_burst(lv.out, at)?;
+            }
             let mut outs = Vec::new();
             for j in 0..1u32 << r {
                 let (cj, now) = (time_of(ctx, r, j), self.slices(&inside.ins, r, j, &ins, at)?);
@@ -179,6 +204,84 @@ impl<'a> Frame<'a> {
             }
         }
         Ok(())
+    }
+
+    /// The condition of each `when~` of the chain at `key` that is read in the stage `sx` of this one (`When::at`, §11.10: at its W, where the arguments of the head of that clock are read).
+    // SPEC-GAP(S-1221): the condition of a `when~` inside another is read at its W whether or not the outer one runs the part (provisional, as the arguments of the head are; only a panic shows it).
+    fn read_conds(&mut self, key: &NodeKey, levels: &[Level], sx: i32) -> Result<(), Stop> {
+        let at = self.body.ast.expr(key.call).span;
+        for (b, when) in levels.iter().enumerate().filter_map(|(b, lv)| lv.when.map(|w| (b, w))) {
+            if when.at == sx {
+                let v = self.eval_staged(key.call, when.cond, Stage::Tick(sx))?;
+                self.gate(key, b, at)?.cond = v;
+            }
+        }
+        Ok(())
+    }
+
+    /// What the `when~` that makes the part `b` of the chain at `key` keeps.
+    fn gate(&mut self, key: &NodeKey, b: usize, at: Span) -> Result<&mut Gate, Stop> {
+        let gate = self.child_mut(key, at)?.whens.get_mut(b).and_then(Option::as_mut);
+        gate.ok_or(Stop { fault: Internal(NO_GATE), at })
+    }
+
+    /// The stage `s` of the part `b`, a `.when~(c)` (§11.10, S-1209), in its frame at the time `ctx`: at W it takes the condition the caller read (`read_conds`) and, while it holds, runs the stages of the part
+    /// slower than W (on the grid of the frames the part ran, the slowest first) before the stage W; any other stage of the part runs while it holds. At W it holds the output of the part that ran, else keeps the last one (an
+    /// output at `sample * N` is then its last element at each of its N ticks, S-1222), and the `sample` of P counts the frames the part ran (§11.9). The time goes on as the caller's (§11.4, S-1129 (1)).
+    fn run_when(
+        &mut self,
+        key: &NodeKey,
+        levels: &Rc<[Level]>,
+        b: usize,
+        s: i32,
+        ctx: Ctx,
+        ins: Vec<Value>,
+    ) -> Result<(), Stop> {
+        let at = self.body.ast.expr(key.call).span;
+        let Some(When { w, .. }) = levels[b].when else { return Err(Stop { fault: Internal(NO_GATE), at }) };
+        if s == w {
+            let gate = self.gate(key, b, at)?;
+            let Value::Bool(on) = gate.cond else {
+                return Err(Stop { fault: Internal("a condition of a `when~` that was not read at its W"), at });
+            };
+            gate.on = on;
+        }
+        let (on, runs) = self.gate(key, b, at).map(|g| (g.on, g.runs))?;
+        let part = ctx.with_grid(runs);
+        let inside = &levels[b - 1];
+        if on {
+            let slower = inside.stages.iter().copied().filter(|y| s == w && *y < w);
+            for y in slower.chain(inside.stages.contains(&s).then_some(s)).collect::<Vec<_>>() {
+                self.run_level(key, levels, b - 1, y, part, ins.clone())?;
+            }
+        }
+        if s == w {
+            let held = match (on, &self.gate(key, b, at)?.held) {
+                (true, _) => self.level_out(key, levels, b - 1, part, at)?,
+                (false, Value::Burst(es)) => {
+                    let last = es.last().ok_or(Stop { fault: Internal("an empty burst held"), at })?;
+                    Value::Burst(vec![last.clone(); es.len()])
+                }
+                (false, v) => v.clone(),
+            };
+            self.gate(key, b, at)?.held = held;
+        }
+        if on && s == 0 {
+            let gate = self.gate(key, b, at)?;
+            gate.runs = gate.runs.wrapping_add(1);
+        }
+        Ok(())
+    }
+
+    /// A burst of the stream at `sample * 2^q` is not made of more elements than the evaluator holds (`Limits`): a run of `.up~(N)`s, or an input of a parameter kind, of a large N.
+    fn holds_burst(&self, q: i32, at: Span) -> Result<(), Stop> {
+        match self.limits.holds(n_of(q) as usize) {
+            true => Ok(()),
+            false => Err(Stop {
+                fault: Fault::Unavailable("a burst at `sample * N` of more elements than the evaluator holds"),
+                at,
+            }),
+        }
     }
 
     /// The inputs of the part inside an `.up~(N)` boundary of the ratio `r`, for its run `j` (`rate::slice`).
@@ -226,6 +329,9 @@ impl<'a> Frame<'a> {
         let child = run.state.children.get(key).ok_or(here(Internal("an instance with no state")))?;
         let (lv, burst) = (&levels[b], |es: Vec<Value>, m| counted(&es, m).map(|()| Value::Burst(es)).map_err(here));
         let r = lv.ratio;
+        if lv.when.is_some() {
+            return child.whens.get(b).and_then(Option::as_ref).map(|g| g.held.clone()).ok_or(here(Internal(NO_GATE)));
+        }
         match (b, r.cmp(&0)) {
             (0, _) if lv.out > 0 => burst(elements(lv.out, &child.out).map_err(here)?, lv.out),
             (0, _) => Ok(child.out.clone()),
@@ -243,6 +349,7 @@ impl<'a> Frame<'a> {
             }
             (_, std::cmp::Ordering::Less) => self.level_out(key, levels, b - 1, time_of(ctx, r, 0), at),
             _ if lv.out > 0 && lv.made < 0 => {
+                self.holds_burst(lv.out, at)?;
                 let mut outs = Vec::new();
                 for j in 0..1u32 << r {
                     let cj = time_of(ctx, r, j);

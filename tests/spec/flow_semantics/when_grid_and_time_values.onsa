@@ -1,0 +1,72 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.10", "§11.9", "§11.4"]
+
+// The grid of a part under `when~` counts the ticks it ran, and its time is the caller's (§11.10, §11.9, §11.4; S-1129 (1), S-1217, S-1222).
+// From the breaker of W7-10 U1e: three mutants of the reference evaluator (the grid of a `.down~` or an `.up~` made from the time, the time
+// of an `.up~` made from the grid) passed its unit tests and the cases before; these tests kill them. Worked out by hand: in the first, the
+// part runs at the grids 0, 1, 3, 4, 5 (k4 is 3 at the grid 2), its `.down~(2)` stage runs at its runs 0, 2, 4 (counted on the runs, not on
+// the grids), so it gives 101, 102, held 102, 203, 204, 305; in the third, `sample_tick()` under `.up~(2)` is 2 t + j of the caller's time t
+// whether or not the part ran, and a stopped frame reads the last value of the last run twice (S-1222).
+
+flow acc(f: F32 at block) -> F32 at sample {
+  let n = f + prev~(^n)
+  n
+}
+
+flow slot(f: F32 at block) -> F32 at sample {
+  let s = acc~(f).down~(2)
+  let n = prev~(^n) + 1.0
+  (s at sample) * 100.0 + n
+}
+
+flow slot4(f: F32 at block) -> F32 at sample {
+  let s = acc~(f).down~(4)
+  let n = prev~(^n) + 1.0
+  (s at sample) * 100.0 + n
+}
+
+flow tkf() -> F32 at sample {
+  F32.round_from(sample_tick())
+}
+
+flow g2(x: F32 at (sample * 2)) -> F32 at sample {
+  x[0] + x[1] * 10.0
+}
+
+pub flow a1() -> F32 at sample {
+  let k4 = acc~(1.0).down~(4)
+  slot~(1.0).down~(4).when~(k4 != 3.0) at sample
+}
+
+pub flow a2(c: Bool at sample) -> F32 at sample {
+  g2~(slot4~(1.0).up~(2).when~(c))
+}
+
+pub flow a3(c: Bool at sample) -> F32 at sample {
+  g2~(tkf~().up~(2).when~(c))
+}
+
+test "down in a when after a stopped grid keeps its grid on the runs" {
+  var o: [F32; 24] = [0.0; 24]
+  var s = a1.init(8.0)
+  a1.process(inout s, inout o)
+  assert o == [101.0, 101.0, 101.0, 101.0, 102.0, 102.0, 102.0, 102.0, 102.0, 102.0, 102.0, 102.0, 203.0, 203.0, 203.0, 203.0, 204.0, 204.0, 204.0, 204.0, 305.0, 305.0, 305.0, 305.0]
+}
+
+test "up in a when: the grid of its head counts the runs (a stage of sample / 4 after one stopped frame)" {
+  let cs: [Bool; 4] = [false, true, true, true]
+  var o: [F32; 4] = [0.0; 4]
+  var s = a2.init(8.0)
+  a2.process(inout s, cs, inout o)
+  assert o == [0.0, 1121.0, 1143.0, 2265.0]
+}
+
+test "sample_tick() in up in a when is the time of the caller times 2 plus j, whether or not the part ran" {
+  let cs: [Bool; 4] = [false, true, false, true]
+  var o: [F32; 4] = [0.0; 4]
+  var s = a3.init(8.0)
+  a3.process(inout s, cs, inout o)
+  assert o == [0.0, 32.0, 33.0, 76.0]
+}

@@ -244,13 +244,10 @@ impl<'a> Body<'a> {
         }
     }
 
-    /// The modifier the call `e` is and its receiver (`lp~(x).down~(2)` is `down` of `lp~(x)`, §11.10): the names stage records no flow for it, and its
-    /// callee is a field of the closed list of the modifiers. A call of a flow of a module (`util.down~(x)`) has a flow recorded: not one.
-    pub fn modifier(&self, e: ExprId) -> Option<(Modifier, ExprId)> {
-        let ExprKind::Call { callee, kind: CallKind::Flow, .. } = &self.ast.expr(e).kind else { return None };
-        let ExprKind::Field { base, name } = &self.ast.expr(*callee).kind else { return None };
-        let listed = Modifier::named(&name.name)?;
-        (self.builtin(e).is_none() && self.view.analysis.instance_of(self.def, e).is_none()).then_some((listed, *base))
+    /// The modifier the call `e` is, its receiver and the head of its chain (`lp~(x).down~(2)` is `down` of `lp~(x)`, §11.10), as the names stage recorded it
+    /// (R-512, D-15). A call of a flow of a module (`util.down~(x)`) is not one.
+    pub fn modifier(&self, e: ExprId) -> Option<(Modifier, ExprId, ExprId)> {
+        self.view.analysis.modifier_of(self.def, e)
     }
 
     /// Is `e` the call `sample_rate()` or `sample_tick()`? They are written with no `~`, and the table has no target for them.

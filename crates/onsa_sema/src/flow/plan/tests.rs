@@ -1338,6 +1338,8 @@ pub flow w6(x: F32 at sample, a: Bool at block, b: Bool at block) -> F32 at samp
 pub flow w7(p: F32 at block, c: Bool at sample) -> F32 at sample { pick0~(mk4~(p).when~(c)) }
 pub flow w8(p: F32 at block, c: Bool at block) -> F32 at sample { mk4~(p).when~(c).down~(4) }
 pub flow w9(p: F32 at block, c: Bool at sample) -> F32 at sample { mk4~(p).down~(4).when~(c) }
+flow mk2() -> F32 at (sample * 2) { [cnt~(), 0.0] }
+pub flow w10(c: Bool at init) -> F32 at sample { pick0~(mk2~().down~(2).when~(c).up~(2).up~(2)) }
 ";
     let a = check(src);
     assert!(a.diagnostics.is_empty(), "{:?}", a.diagnostics);
@@ -1366,6 +1368,13 @@ pub flow w9(p: F32 at block, c: Bool at sample) -> F32 at sample { mk4~(p).down~
         (
             "w9",
             "0*: W(0,r)[], W(0,l@-2)[R(0,D(0))], W(0,l+)[Deal(H(0)<-0@1)], Hold(0,V)   read=Run",
+            "._deal_0 ._tick_0 .held",
+        ),
+        // The two `.up~` widen the window of the array dealt, but the `when~` holds the value
+        // in its own frame: no copy of the whole array past it (W7-10 U1e).
+        (
+            "w10",
+            "0*: Each(2,j)[0: Each(1,j)[0: W(0,r)[], W(0,l@-1)[R(0,D(0))], W(0,l+)[Deal(H(0)<-0@1)], Hold(0,V)]]   read=Run",
             "._deal_0 ._tick_0 .held",
         ),
     ];

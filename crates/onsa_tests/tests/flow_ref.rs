@@ -37,6 +37,10 @@ mod twin_match;
 mod twin_pan;
 #[path = "flow_ref/twin_tests.rs"]
 mod twin_tests;
+#[path = "flow_ref/twin_when.rs"]
+mod twin_when;
+#[path = "flow_ref/twin_when_tests.rs"]
+mod twin_when_tests;
 
 /// The roots of the cases that are run on the evaluator, from the repository root (one place; a root is added here).
 const ROOTS: &[&str] = &["tests/spec/flow_semantics/"];

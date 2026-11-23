@@ -1,10 +1,86 @@
-# flow_ref 1 source=tests/spec/flow_semantics/when_slow_values.onsa tests=9 evaluated=0 unavailable=9 skipped=0 waiting=0
-? a condition that always holds, a literal or a block value, is the same as no condition: a chain, in both orders, and a let read at sample / 4	unavailable a modifier of W7-10 (`when~`, `reset_if~`)
-? a condition that never holds gives T.default() at every grid, for a literal and a block value	unavailable a modifier of W7-10 (`when~`, `reset_if~`)
-? down 4 then when~ and when~ then down 4 read the condition at the grid and give the same values: false at the first two grids, true after	unavailable a modifier of W7-10 (`when~`, `reset_if~`)
-? the condition changes from grid to grid: the grids that are stopped keep the last output, and the runs of the part count only the true grids, in both orders	unavailable a modifier of W7-10 (`when~`, `reset_if~`)
-? x.when~(a).down~(4).when~(b) runs at the grids where a and b both hold	unavailable a modifier of W7-10 (`when~`, `reset_if~`)
-? a conversion flow as the receiver: the window is the 4 samples the part saw before its tick, the grids where it is stopped add none, and the delay stays N	unavailable a modifier of W7-10 (`when~`, `reset_if~`)
-? x.when~(c).up~(2) runs both runs of a frame or neither: the condition is the caller's sample value, read in each run	unavailable a modifier of W7-10 (`when~`, `reset_if~`)
-? a when~ inside the boundary that deals is read at the grid: before its first run the dealt array is T.default()	unavailable a modifier of W7-10 (`when~`, `reset_if~`)
-? the calls of process cut the frames at the middle of a grid, of a run and of a stopped stretch, and a reset in the middle of a grid starts over (§13.4, §11.6)	unavailable a modifier of W7-10 (`when~`, `reset_if~`)
+# flow_ref 1 source=tests/spec/flow_semantics/when_slow_values.onsa tests=9 evaluated=9 unavailable=0 skipped=0 waiting=0
+@ a condition that always holds, a literal or a block value, is the same as no condition: a chain, in both orders, and a let read at sample / 4
+init 0 when_slow_values.down_plain sr=0x41000000
+init 1 when_slow_values.down_true sr=0x41000000
+init 2 when_slow_values.when_true_down sr=0x41000000
+init 3 when_slow_values.down_block sr=0x41000000
+init 4 when_slow_values.read4_plain sr=0x41000000
+init 5 when_slow_values.read4_true sr=0x41000000
+process 0 frames=24
+out=[0x42ca0000 0x42ca0000 0x42ca0000 0x42ca0000 0x42cc0000 0x42cc0000 0x42cc0000 0x42cc0000 0x434b0000 0x434b0000 0x434b0000 0x434b0000 0x434c0000 0x434c0000 0x434c0000 0x434c0000 0x43988000 0x43988000 0x43988000 0x43988000 0x43990000 0x43990000 0x43990000 0x43990000]
+process 1 frames=24
+out=[0x42ca0000 0x42ca0000 0x42ca0000 0x42ca0000 0x42cc0000 0x42cc0000 0x42cc0000 0x42cc0000 0x434b0000 0x434b0000 0x434b0000 0x434b0000 0x434c0000 0x434c0000 0x434c0000 0x434c0000 0x43988000 0x43988000 0x43988000 0x43988000 0x43990000 0x43990000 0x43990000 0x43990000]
+process 2 frames=24
+out=[0x42ca0000 0x42ca0000 0x42ca0000 0x42ca0000 0x42cc0000 0x42cc0000 0x42cc0000 0x42cc0000 0x434b0000 0x434b0000 0x434b0000 0x434b0000 0x434c0000 0x434c0000 0x434c0000 0x434c0000 0x43988000 0x43988000 0x43988000 0x43988000 0x43990000 0x43990000 0x43990000 0x43990000]
+process 3 params c=true frames=24
+out=[0x42ca0000 0x42ca0000 0x42ca0000 0x42ca0000 0x42cc0000 0x42cc0000 0x42cc0000 0x42cc0000 0x434b0000 0x434b0000 0x434b0000 0x434b0000 0x434c0000 0x434c0000 0x434c0000 0x434c0000 0x43988000 0x43988000 0x43988000 0x43988000 0x43990000 0x43990000 0x43990000 0x43990000]
+process 4 frames=24
+out=[0x4489a000 0x4489a000 0x4489a000 0x4489a000 0x4489c000 0x4489c000 0x4489c000 0x4489c000 0x44966000 0x44966000 0x44966000 0x44966000 0x44968000 0x44968000 0x44968000 0x44968000 0x44a32000 0x44a32000 0x44a32000 0x44a32000 0x44a34000 0x44a34000 0x44a34000 0x44a34000]
+process 5 frames=24
+out=[0x4489a000 0x4489a000 0x4489a000 0x4489a000 0x4489c000 0x4489c000 0x4489c000 0x4489c000 0x44966000 0x44966000 0x44966000 0x44966000 0x44968000 0x44968000 0x44968000 0x44968000 0x44a32000 0x44a32000 0x44a32000 0x44a32000 0x44a34000 0x44a34000 0x44a34000 0x44a34000]
+@ a condition that never holds gives T.default() at every grid, for a literal and a block value
+init 0 when_slow_values.down_never sr=0x41000000
+init 1 when_slow_values.down_block sr=0x41000000
+process 0 frames=8
+out=[0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000]
+process 1 params c=false frames=8
+out=[0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000]
+@ down 4 then when~ and when~ then down 4 read the condition at the grid and give the same values: false at the first two grids, true after
+init 0 when_slow_values.down_then_when_late sr=0x41000000
+init 1 when_slow_values.when_then_down_late sr=0x41000000
+process 0 frames=24
+out=[0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x42ca0000 0x42ca0000 0x42ca0000 0x42ca0000 0x42cc0000 0x42cc0000 0x42cc0000 0x42cc0000 0x434b0000 0x434b0000 0x434b0000 0x434b0000 0x434c0000 0x434c0000 0x434c0000 0x434c0000]
+process 1 frames=24
+out=[0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x42ca0000 0x42ca0000 0x42ca0000 0x42ca0000 0x42cc0000 0x42cc0000 0x42cc0000 0x42cc0000 0x434b0000 0x434b0000 0x434b0000 0x434b0000 0x434c0000 0x434c0000 0x434c0000 0x434c0000]
+@ the condition changes from grid to grid: the grids that are stopped keep the last output, and the runs of the part count only the true grids, in both orders
+init 0 when_slow_values.down_then_when_odd sr=0x41000000
+init 1 when_slow_values.when_then_down_odd sr=0x41000000
+process 0 frames=24
+out=[0x42ca0000 0x42ca0000 0x42ca0000 0x42ca0000 0x42ca0000 0x42ca0000 0x42ca0000 0x42ca0000 0x42cc0000 0x42cc0000 0x42cc0000 0x42cc0000 0x42cc0000 0x42cc0000 0x42cc0000 0x42cc0000 0x434b0000 0x434b0000 0x434b0000 0x434b0000 0x434b0000 0x434b0000 0x434b0000 0x434b0000]
+process 1 frames=24
+out=[0x42ca0000 0x42ca0000 0x42ca0000 0x42ca0000 0x42ca0000 0x42ca0000 0x42ca0000 0x42ca0000 0x42cc0000 0x42cc0000 0x42cc0000 0x42cc0000 0x42cc0000 0x42cc0000 0x42cc0000 0x42cc0000 0x434b0000 0x434b0000 0x434b0000 0x434b0000 0x434b0000 0x434b0000 0x434b0000 0x434b0000]
+@ x.when~(a).down~(4).when~(b) runs at the grids where a and b both hold
+init 0 when_slow_values.two_whens sr=0x41000000
+process 0 frames=24
+out=[0x42ca0000 0x42ca0000 0x42ca0000 0x42ca0000 0x42ca0000 0x42ca0000 0x42ca0000 0x42ca0000 0x42ca0000 0x42ca0000 0x42ca0000 0x42ca0000 0x42cc0000 0x42cc0000 0x42cc0000 0x42cc0000 0x434b0000 0x434b0000 0x434b0000 0x434b0000 0x434c0000 0x434c0000 0x434c0000 0x434c0000]
+@ a conversion flow as the receiver: the window is the 4 samples the part saw before its tick, the grids where it is stopped add none, and the delay stays N
+init 0 when_slow_values.dws_plain sr=0x41000000
+init 1 when_slow_values.dws_true sr=0x41000000
+init 2 when_slow_values.dws_never sr=0x41000000
+init 3 when_slow_values.dws_gap sr=0x41000000
+process 0 frames=16 in x=[0x3f800000 0x40000000 0x40400000 0x40800000 0x40a00000 0x40c00000 0x40e00000 0x41000000 0x41100000 0x41200000 0x41300000 0x41400000 0x41500000 0x41600000 0x41700000 0x41800000]
+out=[0x00000000 0x00000000 0x00000000 0x00000000 0x41200000 0x41200000 0x41200000 0x41200000 0x41d00000 0x41d00000 0x41d00000 0x41d00000 0x42280000 0x42280000 0x42280000 0x42280000]
+process 1 frames=16 in x=[0x3f800000 0x40000000 0x40400000 0x40800000 0x40a00000 0x40c00000 0x40e00000 0x41000000 0x41100000 0x41200000 0x41300000 0x41400000 0x41500000 0x41600000 0x41700000 0x41800000]
+out=[0x00000000 0x00000000 0x00000000 0x00000000 0x41200000 0x41200000 0x41200000 0x41200000 0x41d00000 0x41d00000 0x41d00000 0x41d00000 0x42280000 0x42280000 0x42280000 0x42280000]
+process 2 frames=16 in x=[0x3f800000 0x40000000 0x40400000 0x40800000 0x40a00000 0x40c00000 0x40e00000 0x41000000 0x41100000 0x41200000 0x41300000 0x41400000 0x41500000 0x41600000 0x41700000 0x41800000]
+out=[0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000]
+process 3 frames=20 in x=[0x3f800000 0x40000000 0x40400000 0x40800000 0x40a00000 0x40c00000 0x40e00000 0x41000000 0x41100000 0x41200000 0x41300000 0x41400000 0x41500000 0x41600000 0x41700000 0x41800000 0x41880000 0x41900000 0x41980000 0x41a00000]
+out=[0x00000000 0x00000000 0x00000000 0x00000000 0x41200000 0x41200000 0x41200000 0x41200000 0x41200000 0x41200000 0x41200000 0x41200000 0x41d00000 0x41d00000 0x41d00000 0x41d00000 0x42680000 0x42680000 0x42680000 0x42680000]
+@ x.when~(c).up~(2) runs both runs of a frame or neither: the condition is the caller's sample value, read in each run
+init 0 when_slow_values.when_up sr=0x41000000
+process 0 frames=5 in x=[0x3f800000 0x40000000 0x40400000 0x40800000 0x40a00000]
+out=[0x41a80000 0x41b00000 0x422c0000 0x42820000 0x42840000]
+@ a when~ inside the boundary that deals is read at the grid: before its first run the dealt array is T.default()
+init 0 when_slow_values.deal_inside_first sr=0x41000000
+process 0 frames=12
+out=[0x00000000 0x00000000 0x00000000 0x00000000 0x41200000 0x41300000 0x41400000 0x41500000 0x41a00000 0x41a80000 0x41b00000 0x41b80000]
+@ the calls of process cut the frames at the middle of a grid, of a run and of a stopped stretch, and a reset in the middle of a grid starts over (§13.4, §11.6)
+init 0 when_slow_values.down_then_when_late sr=0x41000000
+process 0 frames=1
+out=[0x00000000]
+process 0 frames=0
+out=[]
+process 0 frames=4
+out=[0x00000000 0x00000000 0x00000000 0x00000000]
+process 0 frames=5
+out=[0x00000000 0x00000000 0x00000000 0x42ca0000 0x42ca0000]
+process 0 frames=3
+out=[0x42ca0000 0x42ca0000 0x42cc0000]
+process 0 frames=11
+out=[0x42cc0000 0x42cc0000 0x42cc0000 0x434b0000 0x434b0000 0x434b0000 0x434b0000 0x434c0000 0x434c0000 0x434c0000 0x434c0000]
+init 1 when_slow_values.down_then_when_late sr=0x41000000
+process 1 frames=10
+out=[0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x42ca0000 0x42ca0000]
+reset 1
+process 1 frames=24
+out=[0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x42ca0000 0x42ca0000 0x42ca0000 0x42ca0000 0x42cc0000 0x42cc0000 0x42cc0000 0x42cc0000 0x434b0000 0x434b0000 0x434b0000 0x434b0000 0x434c0000 0x434c0000 0x434c0000 0x434c0000]

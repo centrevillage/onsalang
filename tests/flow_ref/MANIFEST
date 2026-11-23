@@ -140,8 +140,9 @@ file struct_pattern_rest_match.tsv rows=4 tests=1 evaluated=1 unavailable=0 skip
 file up_chain_values.tsv rows=100 tests=16 evaluated=13 unavailable=0 skipped=3 waiting=0
 file vdelay_edges.tsv rows=64 tests=15 evaluated=14 unavailable=0 skipped=1 waiting=0
 file vdelay_varying_d.tsv rows=2 tests=1 evaluated=0 unavailable=0 skipped=1 waiting=0
-file when_boundary_hold_values.tsv rows=6 tests=5 evaluated=0 unavailable=5 skipped=0 waiting=0
-file when_identity_regressions.tsv rows=4 tests=3 evaluated=0 unavailable=3 skipped=0 waiting=0
-file when_slow_values.tsv rows=10 tests=9 evaluated=0 unavailable=9 skipped=0 waiting=0
-file when_values.tsv rows=11 tests=10 evaluated=0 unavailable=10 skipped=0 waiting=0
-total files=145 rows=4541 tests=1050 evaluated=934 unavailable=28 skipped=88 waiting=6
+file when_boundary_hold_values.tsv rows=21 tests=5 evaluated=5 unavailable=0 skipped=0 waiting=0
+file when_grid_and_time_values.tsv rows=13 tests=3 evaluated=3 unavailable=0 skipped=0 waiting=0
+file when_identity_regressions.tsv rows=78 tests=5 evaluated=5 unavailable=0 skipped=0 waiting=0
+file when_slow_values.tsv rows=86 tests=9 evaluated=9 unavailable=0 skipped=0 waiting=0
+file when_values.tsv rows=77 tests=10 evaluated=10 unavailable=0 skipped=0 waiting=0
+total files=146 rows=4785 tests=1055 evaluated=966 unavailable=1 skipped=88 waiting=6

@@ -80,8 +80,9 @@ fn wider(n: &PlanNode, from: u32, to: u32) -> bool {
 /// then, of one that deals, at its tick: the copy of the array of the
 /// boundary inside that last dealt (`dealt`) into its own, unless its
 /// window is wider (that boundary wrote it), and the copy of its own to the
-/// next that deals or the value when an `.up~` widens that window, after
-/// the writer of its own, in each run j of that `.up~`. Of an `.up~`,
+/// next that deals or the value when an `.up~` widens that window (not
+/// past a guard that holds a value: it ends there), after the writer of
+/// its own, in each run j of that `.up~`. Of an `.up~`,
 /// which gathers and deals nothing ([`bounds::bounds`]), the stages moved
 /// to each stage of the frame in one [`Op::Each`], run each j at `sample`
 /// and j = 0 alone at a slower one.
@@ -104,7 +105,10 @@ fn arm(n: &PlanNode, b: u32, bound: &PlanBound, level: Level, dealt: &mut Option
     if bound.deals {
         let into = dealt.filter(|&d| !wider(n, d, b)).map(|from| Op::Deal { to: To::Array(b), from, by: b });
         let to = (b + 1..).zip(&n.bounds[b as usize + 1..]).find(|c| c.1.deals).map(|c| c.0);
-        let wide = wider(n, b, to.unwrap_or(n.bounds.len() as u32));
+        // A guard outside it that holds a value (of a part that is not a burst) makes it in
+        // its own frame ([`when`]): the window ends there.
+        let held = n.guards.iter().find(|g| g.at > bound.at && !burst(g)).map(|g| inside(n, g));
+        let wide = wider(n, b, to.into_iter().chain(held).min().unwrap_or(n.bounds.len() as u32));
         let out = wide.then(|| Op::Deal { to: to.map_or(To::Value, To::Array), from: b, by: b });
         let copies: Vec<Op> = into.into_iter().chain(out).collect();
         if !copies.is_empty() {
@@ -131,15 +135,13 @@ fn arm(n: &PlanNode, b: u32, bound: &PlanBound, level: Level, dealt: &mut Option
 /// stage slower than W keeps its tag in its own [`Op::When`] (where
 /// `.reset_if~` goes between, W7-10 U2).
 fn when(n: &PlanNode, g: u32, guard: &PlanGuard, level: Level, dealt: &mut Option<u32>) -> Level {
-    let (w, burst) = (ClockStage::Tick(guard.w), guard.out.is_some_and(Ratio::faster_than_body));
-    let inside = |b: &&PlanBound| b.at < guard.at;
-    let nb = n.bounds.iter().filter(inside).count() as u32;
+    let (w, burst, nb) = (ClockStage::Tick(guard.w), burst(guard), inside(n, guard));
     // The array of a boundary inside it the caller read: of a burst copied where the
     // boundary just outside would (into its array, or the value), else held.
     let into_of = if burst { n.bounds.get(nb as usize).map_or(To::Value, |_| To::Array(nb)) } else { To::Held(g) };
     let read = dealt.take().filter(|&d| !wider(n, d, nb)).map(|from| (w, Op::Deal { to: into_of, from, by: nb }));
     let counted =
-        level.keys().any(|&y| y < w) || n.bounds.iter().filter(inside).any(|b| b.deals || !b.gathers.is_empty());
+        level.keys().any(|&y| y < w) || n.bounds[..nb as usize].iter().any(|b| b.deals || !b.gathers.is_empty());
     let guarded = |cond, due, ops: Vec<(ClockStage, Op)>, advance| Op::When {
         guard: g,
         cond,
@@ -187,6 +189,18 @@ fn when(n: &PlanNode, g: u32, guard: &PlanGuard, level: Level, dealt: &mut Optio
         next.insert(s, vec![(s, guarded(CondRead::Kept, None, Vec::new(), true))]);
     }
     next
+}
+
+/// Whether the part the guard `guard` wraps is a burst (its output faster
+/// than the `sample` of its frame), whose value [`when`] does not hold.
+fn burst(guard: &PlanGuard) -> bool {
+    guard.out.is_some_and(Ratio::faster_than_body)
+}
+
+/// The count of the boundaries of `n` inside the guard `guard`: of the
+/// boundary just outside it, its index.
+fn inside(n: &PlanNode, guard: &PlanGuard) -> u32 {
+    n.bounds.iter().filter(|b| b.at < guard.at).count() as u32
 }
 
 /// Whether `op` or one in its groups and ops is one `of`.

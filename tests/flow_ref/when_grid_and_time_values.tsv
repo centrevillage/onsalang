@@ -1,0 +1,13 @@
+# flow_ref 1 source=tests/spec/flow_semantics/when_grid_and_time_values.onsa tests=3 evaluated=3 unavailable=0 skipped=0 waiting=0
+@ down in a when after a stopped grid keeps its grid on the runs
+init 0 when_grid_and_time_values.a1 sr=0x41000000
+process 0 frames=24
+out=[0x42ca0000 0x42ca0000 0x42ca0000 0x42ca0000 0x42cc0000 0x42cc0000 0x42cc0000 0x42cc0000 0x42cc0000 0x42cc0000 0x42cc0000 0x42cc0000 0x434b0000 0x434b0000 0x434b0000 0x434b0000 0x434c0000 0x434c0000 0x434c0000 0x434c0000 0x43988000 0x43988000 0x43988000 0x43988000]
+@ up in a when: the grid of its head counts the runs (a stage of sample / 4 after one stopped frame)
+init 0 when_grid_and_time_values.a2 sr=0x41000000
+process 0 frames=4 in c=[false true true true]
+out=[0x00000000 0x448c2000 0x448ee000 0x450d9000]
+@ sample_tick() in up in a when is the time of the caller times 2 plus j, whether or not the part ran
+init 0 when_grid_and_time_values.a3 sr=0x41000000
+process 0 frames=4 in c=[false true false true]
+out=[0x00000000 0x42000000 0x42040000 0x42980000]

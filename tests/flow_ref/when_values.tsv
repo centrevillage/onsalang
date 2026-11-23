@@ -1,11 +1,77 @@
-# flow_ref 1 source=tests/spec/flow_semantics/when_values.onsa tests=10 evaluated=0 unavailable=10 skipped=0 waiting=0
-? a condition that always holds changes nothing: a literal, a block value, an init value	unavailable a modifier of W7-10 (`when~`, `reset_if~`)
-? a condition that never holds leaves the output at T.default() for the whole run	unavailable a modifier of W7-10 (`when~`, `reset_if~`)
-? a block condition is read once for each call of process, so the calls cut where the part stops and runs again	unavailable a modifier of W7-10 (`when~`, `reset_if~`)
-? the part runs on the frames where the condition holds, and its grid of sample / 2 counts the runs, not the frames	unavailable a modifier of W7-10 (`when~`, `reset_if~`)
-? the delays of the part count its runs: a stopped frame is no sample of the part	unavailable a modifier of W7-10 (`when~`, `reset_if~`)
-? sample_tick() in the part is the time of the caller, which goes on while the part is stopped; the grid of its own stage counts the runs	unavailable a modifier of W7-10 (`when~`, `reset_if~`)
-? S-1218: the part under down 4 inside a when~ counts the runs of the part, and reads the time of the caller divided by 4	unavailable a modifier of W7-10 (`when~`, `reset_if~`)
-? x.when~(a).when~(b) runs on the frames where both hold	unavailable a modifier of W7-10 (`when~`, `reset_if~`)
-? the calls of process cut the frames anywhere, a stopped stretch and 0 frames too: the same values (§13.4)	unavailable a modifier of W7-10 (`when~`, `reset_if~`)
-? reset puts the part and its last output back: the next frame is as after init, in the middle of a grid and while the part is stopped	unavailable a modifier of W7-10 (`when~`, `reset_if~`)
+# flow_ref 1 source=tests/spec/flow_semantics/when_values.onsa tests=10 evaluated=10 unavailable=0 skipped=0 waiting=0
+@ a condition that always holds changes nothing: a literal, a block value, an init value
+init 0 when_values.plain sr=0x41000000
+init 1 when_values.with_true sr=0x41000000
+init 2 when_values.with_block sr=0x41000000
+init 3 when_values.with_init sr=0x41000000 cfg c=true
+process 0 frames=8
+out=[0x42ca0000 0x42cc0000 0x434b0000 0x434c0000 0x43988000 0x43990000 0x43cb8000 0x43cc0000]
+process 1 frames=8
+out=[0x42ca0000 0x42cc0000 0x434b0000 0x434c0000 0x43988000 0x43990000 0x43cb8000 0x43cc0000]
+process 2 params c=true frames=8
+out=[0x42ca0000 0x42cc0000 0x434b0000 0x434c0000 0x43988000 0x43990000 0x43cb8000 0x43cc0000]
+process 3 frames=8
+out=[0x42ca0000 0x42cc0000 0x434b0000 0x434c0000 0x43988000 0x43990000 0x43cb8000 0x43cc0000]
+@ a condition that never holds leaves the output at T.default() for the whole run
+init 0 when_values.with_block sr=0x41000000
+init 1 when_values.with_init sr=0x41000000 cfg c=false
+process 0 params c=false frames=6
+out=[0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000]
+process 1 frames=6
+out=[0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000]
+@ a block condition is read once for each call of process, so the calls cut where the part stops and runs again
+init 0 when_values.with_block sr=0x41000000
+process 0 params c=true frames=3
+out=[0x42ca0000 0x42cc0000 0x434b0000]
+process 0 params c=false frames=3
+out=[0x434b0000 0x434b0000 0x434b0000]
+process 0 params c=true frames=2
+out=[0x434c0000 0x43988000]
+@ the part runs on the frames where the condition holds, and its grid of sample / 2 counts the runs, not the frames
+init 0 when_values.gated sr=0x41000000
+process 0 frames=8 in c=[true true false true false false true true]
+out=[0x42ca0000 0x42cc0000 0x42cc0000 0x434b0000 0x434b0000 0x434b0000 0x434c0000 0x43988000]
+@ the delays of the part count its runs: a stopped frame is no sample of the part
+init 0 when_values.lp_gated sr=0x41000000
+process 0 frames=8 in c=[true true false true false true true true]
+out=[0x3f000000 0x3fc00000 0x3fc00000 0x40400000 0x40400000 0x40a00000 0x40d00000 0x40f00000]
+@ sample_tick() in the part is the time of the caller, which goes on while the part is stopped; the grid of its own stage counts the runs
+init 0 when_values.time_gated sr=0x41000000
+init 1 when_values.tick2_gated sr=0x41000000
+process 0 frames=8 in c=[true true false true false false true true]
+out=[0 1 1 3 3 3 6 7]
+process 1 frames=8 in c=[true true false true false false true true]
+out=[0 0 0 3 3 3 3 7]
+@ S-1218: the part under down 4 inside a when~ counts the runs of the part, and reads the time of the caller divided by 4
+init 0 when_values.slow_gated sr=0x41000000
+process 0 frames=16 in c=[false true true false true true true true false true true false true true true true]
+out=[0x00000000 0x42c80000 0x42c80000 0x42c80000 0x42c80000 0x42c80000 0x43490000 0x43490000 0x43490000 0x43490000 0x43490000 0x43490000 0x43978000 0x43978000 0x43978000 0x43978000]
+@ x.when~(a).when~(b) runs on the frames where both hold
+init 0 when_values.both sr=0x41000000
+process 0 frames=8 in a=[true true true false true true false true]
+out=[0x42ca0000 0x42cc0000 0x42cc0000 0x42cc0000 0x434b0000 0x434c0000 0x434c0000 0x43988000]
+@ the calls of process cut the frames anywhere, a stopped stretch and 0 frames too: the same values (§13.4)
+init 0 when_values.gated sr=0x41000000
+process 0 frames=1 in c=[true]
+out=[0x42ca0000]
+process 0 frames=0 in c=[]
+out=[]
+process 0 frames=2 in c=[true false]
+out=[0x42cc0000 0x42cc0000]
+process 0 frames=2 in c=[true false]
+out=[0x434b0000 0x434b0000]
+process 0 frames=3 in c=[false true true]
+out=[0x434b0000 0x434c0000 0x43988000]
+@ reset puts the part and its last output back: the next frame is as after init, in the middle of a grid and while the part is stopped
+init 0 when_values.gated sr=0x41000000
+process 0 frames=3 in c=[true true true]
+out=[0x42ca0000 0x42cc0000 0x434b0000]
+reset 0
+process 0 frames=4 in c=[true true true true]
+out=[0x42ca0000 0x42cc0000 0x434b0000 0x434c0000]
+reset 0
+process 0 frames=3 in c=[true true false]
+out=[0x42ca0000 0x42cc0000 0x42cc0000]
+reset 0
+process 0 frames=4 in c=[false false true true]
+out=[0x00000000 0x00000000 0x42ca0000 0x42cc0000]

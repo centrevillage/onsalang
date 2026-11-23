@@ -22,6 +22,7 @@ use onsa_sema::flow_names::{Delay, FlowBuiltin};
 use onsa_sema::{DefId, LocalId, Target};
 use onsa_syntax::ast::{CallKind, ExprId, ExprKind, PatId, StmtKind};
 
+use super::chain::Gate;
 use super::expr::{Frame, Hoisted, Stop};
 use super::hoist::{gathered, pre, seen_of, stage_of};
 use super::host::FnHost;
@@ -102,20 +103,27 @@ impl Clock {
     }
 }
 
-/// The time an instance runs in: its sample rate, and the frames it has run since `init` (the counter of §11.9, which
-/// goes round at 2^32).
+/// The time an instance runs in: its sample rate, the frames of the outermost instance since `init` as its rate counts them (the time of §11.4 that
+/// `sample_tick()` reads, which goes round at 2^32), and the counter of its grid (§11.9: the frames it has run, which a `when~` counts apart from the time).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Ctx {
     pub sample_rate: f32,
     pub tick: u32,
     /// The digits over the counter: how many times it has gone round (§11.4 keeps them for `.down~(N)`, whose counter is 1/N of its caller's whole one).
     pub rounds: u32,
+    /// The counter of the grid, which the ticks slower than `sample` are on (`rate::on_tick`): the time but in a `when~`, where it counts the frames the part ran (§11.9, §11.10, S-1129 (1), S-1217).
+    pub grid: u64,
 }
 
 impl Ctx {
-    /// The time at the sample rate `sample_rate` and the counter `total`, the digits over the `U32` included.
+    /// The time at the sample rate `sample_rate` and the counter `total`, the digits over the `U32` included, and the grid of the same count.
     pub(super) fn at(sample_rate: f32, total: u64) -> Ctx {
-        Ctx { sample_rate, tick: total as u32, rounds: (total >> 32) as u32 }
+        Ctx { sample_rate, tick: total as u32, rounds: (total >> 32) as u32, grid: total }
+    }
+
+    /// The same time on the grid of the count `grid`.
+    pub(super) fn with_grid(self, grid: u64) -> Ctx {
+        Ctx { grid, ..self }
     }
 
     /// The counter with the digits over it.
@@ -224,6 +232,8 @@ pub struct Inst {
     pub(super) bursts: Vec<Vec<Value>>,
     /// The argument of each input of the head that the caller reads at the clock of the call and does not gather, as of the last frame it was made in (`Frame::feed`).
     pub(super) fed: Vec<Value>,
+    /// What each `when~` of the chain keeps, by the part it makes (`Frame::run_when`).
+    pub(super) whens: Vec<Option<Gate>>,
     locals: HashMap<LocalId, Value>,
     /// The parts of the body that a slower stage made (`Frame::hoisted`).
     hoisted: Hoisted,
@@ -440,6 +450,7 @@ impl Inst {
                 slow,
                 bursts: vec![Vec::new(); levels.len()],
                 fed: vec![Value::Unit; decl.inputs.len()],
+                whens: Vec::new(),
                 levels,
                 done: None,
                 locals: HashMap::new(),

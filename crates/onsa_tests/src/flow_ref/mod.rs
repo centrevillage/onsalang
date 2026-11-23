@@ -108,3 +108,5 @@ mod state_tests;
 mod tests;
 #[cfg(test)]
 mod walk_tests;
+#[cfg(test)]
+mod when_tests;

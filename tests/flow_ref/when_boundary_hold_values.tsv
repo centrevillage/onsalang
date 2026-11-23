@@ -1,6 +1,21 @@
-# flow_ref 1 source=tests/spec/flow_semantics/when_boundary_hold_values.onsa tests=5 evaluated=0 unavailable=5 skipped=0 waiting=0
-? x.up~(2).when~(c): both runs of a frame or neither, and a stopped frame reads the last element at both ticks of sample * 2	unavailable a modifier of W7-10 (`when~`, `reset_if~`)
-? a when~ outside the boundary that deals: the grid counts the frames where c holds, and a stopped frame reads the last element it gave	unavailable a modifier of W7-10 (`when~`, `reset_if~`)
-? a when~ inside the boundary that deals, stopped after a run: each of the 4 ticks of the output reads its last output, the last element (§11.10, S-1222)	unavailable a modifier of W7-10 (`when~`, `reset_if~`)
-? a when~ outside a block whose up is wider than its down reads the last value it read, twice, not the last element of the array dealt	unavailable a modifier of W7-10 (`when~`, `reset_if~`)
-? a when~ outside the up of a head at sample * 4: a stopped frame reads the last element at all 8 ticks of sample * 8	unavailable a modifier of W7-10 (`when~`, `reset_if~`)
+# flow_ref 1 source=tests/spec/flow_semantics/when_boundary_hold_values.onsa tests=5 evaluated=5 unavailable=0 skipped=0 waiting=0
+@ x.up~(2).when~(c): both runs of a frame or neither, and a stopped frame reads the last element at both ticks of sample * 2
+init 0 when_boundary_hold_values.up_when sr=0x41000000
+process 0 frames=5 in x=[0x3f800000 0x40000000 0x40400000 0x40800000 0x40a00000]
+out=[0x41a80000 0x41b00000 0x422c0000 0x42820000 0x42840000]
+@ a when~ outside the boundary that deals: the grid counts the frames where c holds, and a stopped frame reads the last element it gave
+init 0 when_boundary_hold_values.deal_outside sr=0x41000000
+process 0 frames=12 in x=[0x3f800000 0x40000000 0x40400000 0x40800000 0x40a00000 0x40c00000 0x40e00000 0x41000000 0x41100000 0x41200000 0x41300000 0x41400000]
+out=[0x41200000 0x41300000 0x41300000 0x41400000 0x41500000 0x41500000 0x41500000 0x41a00000 0x41a80000 0x41b00000 0x41b00000 0x41b80000]
+@ a when~ inside the boundary that deals, stopped after a run: each of the 4 ticks of the output reads its last output, the last element (§11.10, S-1222)
+init 0 when_boundary_hold_values.deal_inside_stopped sr=0x41000000
+process 0 frames=12
+out=[0x41200000 0x41300000 0x41400000 0x41500000 0x41500000 0x41500000 0x41500000 0x41500000 0x41a00000 0x41a80000 0x41b00000 0x41b80000]
+@ a when~ outside a block whose up is wider than its down reads the last value it read, twice, not the last element of the array dealt
+init 0 when_boundary_hold_values.up_wider_than_down sr=0x41000000
+process 0 frames=5 in x=[0x3f800000 0x40000000 0x40400000 0x40800000 0x40a00000]
+out=[0x41a80000 0x41b00000 0x422c0000 0x42820000 0x42ae0000]
+@ a when~ outside the up of a head at sample * 4: a stopped frame reads the last element at all 8 ticks of sample * 8
+init 0 when_boundary_hold_values.burst_up_when sr=0x41000000
+process 0 frames=3 in x=[0x3f800000 0x40000000 0x40400000]
+out=[0x45106000 0x45113000 0x45875000]

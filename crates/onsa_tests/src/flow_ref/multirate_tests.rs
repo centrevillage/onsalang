@@ -542,7 +542,7 @@ fn with_bindings_takes_the_replicas_and_the_scope_off_the_run_when_it_is_done() 
         let body = view.body(def).expect("a body");
         let local = body.input("x").expect("the local of x");
         let mut f = Frame::new(body);
-        f.run = Some(Run::new(InstState::default(), Ctx { sample_rate: 1.0, tick: 0, rounds: 0 }, 0, Plans::default()));
+        f.run = Some(Run::new(InstState::default(), Ctx::at(1.0, 0), 0, Plans::default()));
         let lens = |f: &Frame| f.run.as_ref().map(|r| (r.replicas.len(), r.scope.len())).expect("a run");
         assert_eq!(lens(&f), (0, 0));
         let inside = f

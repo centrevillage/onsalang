@@ -7,6 +7,9 @@
 // breaker: a `when~` whose receiver makes a burst that has boundaries inside it was not stopped by the gate and gave zeros, or failed in
 // the lowering, and one inside a dealing boundary under another `when~` read its condition before the local it names was made). Each test
 // compares a chain with the `.when~(true)` put in and the same chain without it, so it holds whatever S-1222 decides of a stopped burst.
+// So too a `when~` whose receiver closes a burst with a `.down~` and has two `.up~` or more outside it (W7-10 U1e: the copy of the
+// array dealt to the wider window outside was made past the `when~` that holds the value, and the lowering failed): with `true`, and
+// with a condition of `init` that holds, as without it; one that does not hold is lowered and run, its values not compared here.
 
 flow tk() -> F32 at sample {
   F32.round_from(sample_tick())
@@ -80,6 +83,104 @@ pub flow f3n_plain(c: Bool at sample) -> F32 at sample {
 pub flow f3n_when(c: Bool at sample) -> F32 at sample {
   let c2 = last4b~(c).down~(4)
   mk4c~().when~(!c2).down~(4).when~(true)
+}
+
+flow mk2() -> F32 at (sample * 2) {
+  let n = cnt~() * 10.0
+  [n, n + 1.0]
+}
+
+flow mk4() -> F32 at (sample * 4) {
+  let n = cnt~() * 10.0
+  [n, n + 1.0, n + 2.0, n + 3.0]
+}
+
+flow g4(x: F32 at (sample * 4)) -> F32 at sample {
+  x[0] + x[1] * 10.0 + x[2] * 100.0 + x[3] * 1000.0
+}
+
+pub flow u1_plain() -> F32 at sample {
+  g4~(tk~().up~(2).down~(2).up~(2).up~(2))
+}
+
+pub flow u1_when() -> F32 at sample {
+  g4~(tk~().up~(2).down~(2).when~(true).up~(2).up~(2))
+}
+
+pub flow u1_cond(c: Bool at init) -> F32 at sample {
+  g4~(tk~().up~(2).down~(2).when~(c).up~(2).up~(2))
+}
+
+pub flow u2_plain() -> F32 at sample {
+  g4~(mk2~().down~(2).up~(2).up~(2))
+}
+
+pub flow u2_when() -> F32 at sample {
+  g4~(mk2~().down~(2).when~(true).up~(2).up~(2))
+}
+
+pub flow u2_cond(c: Bool at init) -> F32 at sample {
+  g4~(mk2~().down~(2).when~(c).up~(2).up~(2))
+}
+
+pub flow u3_plain() -> F32 at sample {
+  g4~(mk4~().down~(2).down~(2).up~(2).up~(2))
+}
+
+pub flow u3_when() -> F32 at sample {
+  g4~(mk4~().down~(2).down~(2).when~(true).up~(2).up~(2))
+}
+
+pub flow u3_cond(c: Bool at init) -> F32 at sample {
+  g4~(mk4~().down~(2).down~(2).when~(c).up~(2).up~(2))
+}
+
+test "a when~ that always holds after a down~ that closes a burst and before two up~ changes nothing" {
+  var a: [F32; 16] = [0.0; 16]
+  var b: [F32; 16] = [0.0; 16]
+  var c: [F32; 16] = [0.0; 16]
+  var sa = u1_plain.init(8.0)
+  var sb = u1_when.init(8.0)
+  var sc = u1_cond.init(u1_cond.Config { c: true }, 8.0)
+  u1_plain.process(inout sa, inout a)
+  u1_when.process(inout sb, inout b)
+  u1_cond.process(inout sc, inout c)
+  assert a == b
+  assert a == c
+  var d: [F32; 16] = [0.0; 16]
+  var e: [F32; 16] = [0.0; 16]
+  var f: [F32; 16] = [0.0; 16]
+  var sd = u2_plain.init(8.0)
+  var se = u2_when.init(8.0)
+  var sf = u2_cond.init(u2_cond.Config { c: true }, 8.0)
+  u2_plain.process(inout sd, inout d)
+  u2_when.process(inout se, inout e)
+  u2_cond.process(inout sf, inout f)
+  assert d == e
+  assert d == f
+  var g: [F32; 16] = [0.0; 16]
+  var h: [F32; 16] = [0.0; 16]
+  var i: [F32; 16] = [0.0; 16]
+  var sg = u3_plain.init(8.0)
+  var sh = u3_when.init(8.0)
+  var si = u3_cond.init(u3_cond.Config { c: true }, 8.0)
+  u3_plain.process(inout sg, inout g)
+  u3_when.process(inout sh, inout h)
+  u3_cond.process(inout si, inout i)
+  assert g == h
+  assert g == i
+}
+
+test "a when~ that does not hold after a down~ that closes a burst and before two up~ is lowered and run" {
+  var a: [F32; 16] = [0.0; 16]
+  var b: [F32; 16] = [0.0; 16]
+  var c: [F32; 16] = [0.0; 16]
+  var sa = u1_cond.init(u1_cond.Config { c: false }, 8.0)
+  var sb = u2_cond.init(u2_cond.Config { c: false }, 8.0)
+  var sc = u3_cond.init(u3_cond.Config { c: false }, 8.0)
+  u1_cond.process(inout sa, inout a)
+  u2_cond.process(inout sb, inout b)
+  u3_cond.process(inout sc, inout c)
 }
 
 test "a when~ that always holds after a block inside a dealing boundary changes nothing" {

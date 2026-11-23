@@ -333,6 +333,20 @@ impl Analysis {
         self.names.get(&body)?.instance(call)
     }
 
+    /// The modifier the call `call` in the flow body of `body` is
+    /// (`lp~(x).when~(c)`, §11.9, §11.10), with its receiver and the head
+    /// of its chain, as the names stage decided it
+    /// (`names/body/modifiers.rs`, D-15); `None` of any other call. The one
+    /// place a reader outside the checker (the reference evaluator) takes
+    /// it from (R-512).
+    pub fn modifier_of(
+        &self,
+        body: DefId,
+        call: onsa_syntax::ast::ExprId,
+    ) -> Option<(flow_names::Modifier, onsa_syntax::ast::ExprId, onsa_syntax::ast::ExprId)> {
+        self.names.get(&body)?.modifier(call).map(|m| (m.modifier, m.receiver, m.head))
+    }
+
     /// The builtin of a flow (a delay, `sample_rate`, `sample_tick`; §2.2,
     /// §11.4) that the name `name` of a callee in the flow body of `body`
     /// is ([`named`] of the callee), as the names stage found it: a name an

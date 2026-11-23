@@ -25,7 +25,7 @@ const MATCH: Family = ("match_twins", twin_match::make);
 
 /// The seeds run, and what they came to: nothing is run without a failure, and what the generator made is all evaluated,
 /// printed and run again (the numbers of the evaluator and of the interpreter are the same, and are not 0).
-fn check(seeds: Vec<u64>, family: Family) -> Stats {
+pub fn check(seeds: Vec<u64>, family: Family) -> Stats {
     assert!(!seeds.is_empty(), "no seed was run");
     let (s, bad) = run(seeds.clone(), family, false);
     assert!(bad.is_empty(), "{}", bad.join("\n\n"));
@@ -64,7 +64,7 @@ fn a_twin_that_selects_the_next_branch_is_caught_in_every_seed_of_the_gate() {
 }
 
 /// The seeds of `heavy_`: `ONSA_FLOW_GEN=<lo>..<hi>` runs a range again (what a failure tells how to).
-fn heavy_seeds(count: u64) -> Vec<u64> {
+pub fn heavy_seeds(count: u64) -> Vec<u64> {
     let Ok(range) = std::env::var("ONSA_FLOW_GEN") else { return (0..count).collect() };
     let (lo, hi) = range.split_once("..").expect("ONSA_FLOW_GEN is <lo>..<hi>");
     (lo.parse().expect("a number")..hi.parse().expect("a number")).collect()

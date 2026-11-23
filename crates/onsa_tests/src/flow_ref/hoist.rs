@@ -231,10 +231,12 @@ fn operands(body: &Body, e: ExprId) -> Vec<ExprId> {
         K::Tuple(xs) | K::Array(xs) => xs.clone(),
         K::Repeat { elem, len } => vec![*elem, *len],
         K::Struct { fields, .. } => fields.iter().map(|(_, x)| *x).collect(),
-        // A chain of modifiers is made by its head's arguments: the head is no part that a stage makes (it runs in a frame of its own, `rate.rs`).
-        K::Call { .. } if matches!(chain_of(body, e), Ok(Some(_))) => {
-            chain_of(body, e).ok().flatten().map(|c| args_of(body, c.head)).unwrap_or_default()
-        }
+        // A chain of modifiers is made by its head's arguments and the conditions of its `when~`s: the head is no part that a stage makes (it runs in a frame of its own, `rate.rs`).
+        K::Call { .. } if matches!(chain_of(body, e), Ok(Some(_))) => chain_of(body, e)
+            .ok()
+            .flatten()
+            .map(|c| args_of(body, c.head).into_iter().chain(c.conds()).collect())
+            .unwrap_or_default(),
         K::Call { callee, args, .. } => {
             let mut out = Vec::new();
             if let K::Field { base, .. } = &ast.expr(*callee).kind {

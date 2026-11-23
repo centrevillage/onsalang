@@ -16,9 +16,10 @@ use onsa_sema::{DefId, LocalId, Ty};
 use onsa_syntax::ast::{Arg, CallKind, ExprId, ExprKind};
 
 use super::call::parts;
+use super::chain::Gate;
 use super::expr::{Eval, Frame, LOW_STACK, Stop, evaluates};
 use super::flow::{Ctx, Inst, Plans, enter};
-use super::rate::{Level, chain_of, child_time, counted, levels, n_of, on_tick};
+use super::rate::{Bound, Level, chain_of, child_time, counted, levels, n_of, on_tick};
 use super::scalar::{Fault, Fault::Internal};
 use super::sema_view::{Called, Stage, input_stage};
 use super::value::{IntKind, Scalar, Shape, Value};
@@ -81,6 +82,7 @@ impl InstState {
         self.cells.values_mut().for_each(|c| c.current = c.initial.clone());
         self.children.values_mut().for_each(|c| {
             c.done = None;
+            c.whens.iter_mut().flatten().for_each(Gate::reset);
             c.state.reset();
         });
     }
@@ -298,7 +300,7 @@ impl<'a> Frame<'a> {
             let Called::Flow(def) = self.body.called(chain.head).map_err(here)? else {
                 return Err(here(Fault::Unavailable("a modifier of a delay")));
             };
-            args.iter().try_for_each(|a| self.nodes(a.expr, out))?;
+            args.iter().map(|a| a.expr).chain(chain.conds()).try_for_each(|x| self.nodes(x, out))?;
             let parts = self.parts_of(def, &chain.bounds, at)?;
             for (b, lv) in parts.iter().enumerate().skip(1) {
                 for &input in &lv.gathers {
@@ -453,7 +455,7 @@ impl<'a> Frame<'a> {
     }
 
     /// The parts of the chain of the boundaries `bounds` (innermost first) of the flow `def`.
-    fn parts_of(&self, def: DefId, bounds: &[i32], at: Span) -> Result<Rc<[Level]>, Stop> {
+    fn parts_of(&self, def: DefId, bounds: &[Bound], at: Span) -> Result<Rc<[Level]>, Stop> {
         let plans = self.run.as_ref().map(|r| r.plans.clone()).ok_or(Stop { fault: Internal("no run"), at })?;
         let slow = Inst::planned(self.body.view, def, &plans)?.slow;
         let decl = self.body.view.flow(def).map_err(|fault| Stop { fault, at })?;
@@ -465,6 +467,7 @@ impl<'a> Frame<'a> {
         let at = self.body.ast.expr(e).span;
         let (mut inst, decl) = self.new_child(def, at)?;
         inst.bursts = vec![Vec::new(); parts.len()];
+        inst.whens = self.gates(e, &parts, at)?;
         inst.levels = parts;
         let key = self.key(e, Role::Child);
         let config = self.param_inputs(&key, decl, Stage::Init)?;
@@ -472,6 +475,24 @@ impl<'a> Frame<'a> {
         let run = self.run.as_mut().ok_or(Stop { fault: Internal("no run"), at })?;
         run.state.children.insert(key.clone(), inst);
         self.in_child(&key, |f, inst, decl| enter(f, inst, decl, Stage::Init, &config))
+    }
+
+    /// What each `when~` of the chain whose head is `e` keeps (§11.10): the output it holds is `T.default()` at first, a burst of them for an output at `sample * N` (S-1222), and its places are held first.
+    fn gates(&mut self, e: ExprId, parts: &[Level], at: Span) -> Result<Vec<Option<Gate>>, Stop> {
+        let here = |fault| Stop { fault, at };
+        let mut gates = Vec::new();
+        for lv in parts {
+            if lv.when.is_none() {
+                gates.push(None);
+                continue;
+            }
+            let shape = self.shape(self.body.ty(e).map_err(here)?, at)?;
+            let n = if lv.out > 0 { n_of(lv.out) as usize } else { 1 };
+            self.hold(n.checked_mul(shape.places()), at)?;
+            let one = shape.default_value().ok_or(here(Internal("a held type with no default")))?;
+            gates.push(Some(Gate::new(if lv.out > 0 { Value::Burst(vec![one; n]) } else { one })));
+        }
+        Ok(gates)
     }
 
     /// The arguments of the call `call` of the flow `decl`: one for each of its inputs (the checker sees to it).
