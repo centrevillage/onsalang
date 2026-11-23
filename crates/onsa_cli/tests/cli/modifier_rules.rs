@@ -91,7 +91,7 @@ fn the_program_after_a_candidate_of_a_when_on_an_instance_has_no_diagnostic() {
     }
 }
 
-/// The modifiers that stay E0200 until the later units of W7-10 (`.reset_if~` until U2, a `.when~` on a built-in delay until U3) are still E0200 after the candidate (Q-09: the flow stage stops at the meaning it has not).
+/// The modifiers that stay E0200 until the later units of W7-10 (`.reset_if~` until U2b, a `.when~` on a built-in delay until U3) are still E0200 after the candidate (Q-09: the flow stage stops at the meaning it has not).
 #[test]
 fn the_program_after_a_candidate_of_a_reset_if_or_a_delay_receiver_is_e0200_until_the_later_units() {
     let forms = [

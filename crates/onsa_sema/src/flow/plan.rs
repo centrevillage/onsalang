@@ -347,7 +347,6 @@ pub struct PlanBound {
 /// modifier in the `chain`, the exponent `w` of W in the frame it is in
 /// (that of the output of the part it wraps when slower than the `sample`
 /// of the frame, else 0) and that of the output of that part (none of a
-/// parameter kind), and those of the inputs of that part (none of a
 /// parameter kind).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PlanGuard {
@@ -355,7 +354,6 @@ pub struct PlanGuard {
     pub cond: ExprId,
     pub w: Ratio,
     pub out: Option<Ratio>,
-    pub ins: Vec<Option<Ratio>>,
 }
 
 impl PlanBound {

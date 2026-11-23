@@ -1,9 +1,10 @@
 //! The order of the names of a flow body (§11.2, S-116, S-117, S-267): a
 //! value reads the names defined above it, and a later `let` only as
 //! `^name` in the first argument of a delay, which an argument of a flow
-//! there does not hold. The walk reports E0801 and the E0020 of a `^` on a
-//! visible name at the name, in the order of the text (R-286), and keeps
-//! where it is ([`Reach`]); the types stage reads the records only. The
+//! or the condition of a modifier there does not hold (S-1130). The walk
+//! reports E0801 and the E0020 of a `^` on a visible name at the name, in
+//! the order of the text (R-286), and keeps where it is ([`Reach`]); the
+//! types stage reads the records only. The
 //! clock of `e at k` is looked up here too (§11.3, R-472).
 
 use onsa_diag::hash::HashMap;
@@ -23,6 +24,8 @@ pub(super) enum Reach {
     Delay,
     /// In an argument of the flow called by the callee, in the first argument of a delay.
     FlowArg(ExprId),
+    /// In the condition of the `.when~` or `.reset_if~` call, in the first argument of a delay.
+    Cond(ExprId),
 }
 
 /// The state of the order of a flow body.
@@ -99,6 +102,18 @@ impl Walker<'_> {
         format!("a flow takes no `^` in its arguments; the delay is written inside them: `{callee}~(prev~({found}))`")
     }
 
+    /// The note of a name read past in the condition of the modifier call
+    /// `call` in a delay (§11.2, S-1130): the call taken into a `let`.
+    fn cond_rule(&self, call: ExprId) -> String {
+        let Some(m) = self.out.modifiers.get(&call) else {
+            onsa_diag::internal::bug(Some(self.ast.expr(call).span), "a condition of no modifier call")
+        };
+        let (recv, name) = (self.src(self.ast.expr(m.receiver).span), self.src(m.name));
+        format!(
+            "a modifier takes no past value in its condition; take the call into a `let` and read that: `let l = {recv}.{name}~(…)`, then `prev~(^l)`"
+        )
+    }
+
     /// The span of the `let` that binds `b`, for the note.
     fn let_of(&self, b: BindingId) -> Span {
         match self.out.bindings[b.0 as usize].origin {
@@ -139,6 +154,7 @@ impl Walker<'_> {
                 "names are defined from the top: move the `let` of `{name}` above this use; a feedback reads its past value with `prev~(^{name})`"
             )),
             (_, Reach::FlowArg(callee)) => d.with_rule(self.flow_arg_rule(callee, &format!("^{name}"))),
+            (_, Reach::Cond(call)) => d.with_rule(self.cond_rule(call)),
             _ => d,
         };
         (Vec::new(), Some(Fail::Report(d)))
@@ -185,6 +201,7 @@ impl Walker<'_> {
         let not_a_delay = "`^` is not a delay: it reads a later `let` in the first argument of a delay";
         let d = match (self.order.reach, self.candidate_reach(&[e])) {
             (Reach::FlowArg(callee), _) => d.with_rule(self.flow_arg_rule(callee, &found)),
+            (Reach::Cond(call), _) => d.with_rule(self.cond_rule(call)),
             (_, None) => d.with_rule(not_a_delay),
             _ => d.with_rule(not_a_delay).with_fix(Fix::new(
                 "read the past value with `prev~`",
@@ -216,11 +233,14 @@ impl Walker<'_> {
     }
 
     /// Where the argument `k` of the call `e` of `callee`, read from `outer`,
-    /// is read from: the first of a delay in a delay, an argument of an
-    /// instance of a flow out of it.
+    /// is read from: the first of a delay in a delay, the condition of a
+    /// `.when~` / `.reset_if~` (not the N of `.down~` / `.up~`, a constant)
+    /// and an argument of an instance of a flow out of it.
     pub(super) fn arg_reach(&self, (e, callee, k): (ExprId, ExprId, usize), outer: Reach) -> Reach {
+        let cond = self.out.modifiers.get(&e).is_some_and(|m| m.modifier.ratio_op().is_none());
         match self.out.paths.get(&super::named(self.ast, callee)) {
             Some(PathRes::FlowBuiltin(crate::flow_names::FlowBuiltin::Delay(_))) if k == 0 => Reach::Delay,
+            _ if outer != Reach::Now && cond => Reach::Cond(e),
             _ if outer != Reach::Now && self.out.instance_of.contains_key(&e) => Reach::FlowArg(callee),
             _ => outer,
         }

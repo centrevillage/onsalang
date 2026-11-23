@@ -1,0 +1,108 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§11.9", "§11.10", "§18.1"]
+
+// W7-10 U2a/t, S-1209, S-1130 (spec §11.10: "W より速い条件（下げる変換は利用者の flow で書く、`when~(dws32~(c))`）と、W 以外のクロックへの `at` は E0815"; W is the output clock of the part when it is slower than the place of
+// the modifier P, and P otherwise). The condition of a `.when~` is read at W: a condition that is faster than W is E0815 whatever the form of the part is (a conversion flow, `.down~` before or after the modifier, a second `.when~`),
+// and an `at` to a clock that is not W anywhere in the condition (also inside parentheses, as an operand) is E0815. The error is at the condition (the expression read at the wrong clock, the first column of the argument).
+// The notes are not fixed. The same conditions read at W, or slower than W (held), are accepted: when_condition_accepted.onsa. One error per flow (P-01), so each form is a flow of its own.
+// `x` and `c` are `sample` inputs, `p` is a `block` input, `l` is `sample / 4`, `m` is `sample / 8`, `b` and `d` are `sample / 16`, `q` is a `sample / 8` `F32`.
+
+pub flow lp(x: F32 at sample) -> F32 at sample {
+  x * 0.5 + prev~(x) * 0.5
+}
+
+flow sum4(x: F32 at (sample * 4)) -> F32 at sample {
+  x[0] + x[1] + x[2] + x[3]
+}
+
+flow dws4(x: F32 at sample) -> F32 at (sample / 4) {
+  sum4~(x).down~(4)
+}
+
+// ---------------------------------------------------------------- faster than W
+
+pub flow conversion_flow_with_a_sample_condition(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  dws4~(x).when~(c) at sample                                 //~ E0815 @18
+}
+
+pub flow down_then_when_with_a_sample_condition(p: F32 at block, c: Bool at sample) -> F32 at sample {
+  lp~(p).down~(4).when~(c) at sample                          //~ E0815 @25
+}
+
+pub flow when_then_down_with_a_sample_condition(p: F32 at block, c: Bool at sample) -> F32 at sample {
+  lp~(p).when~(c).down~(4) at sample                          //~ E0815 @16
+}
+
+pub flow a_computed_sample_condition(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  lp~(p).down~(4).when~(x > 0.5) at sample                    //~ E0815 @25
+}
+
+pub flow slow_and_fast_in_one_condition(p: F32 at block, l: Bool at (sample / 4), c: Bool at sample) -> F32 at sample {
+  lp~(p).down~(4).when~(l && c) at sample                     //~ E0815 @25
+}
+
+pub flow a_let_of_a_sample_value(p: F32 at block, c: Bool at sample, d: Bool at sample) -> F32 at sample {
+  let f = c || d
+  lp~(p).down~(4).when~(f) at sample                          //~ E0815 @25
+}
+
+pub flow the_second_when_of_a_chain(p: F32 at block, l: Bool at (sample / 4), c: Bool at sample) -> F32 at sample {
+  lp~(p).down~(4).when~(l).when~(c) at sample                 //~ E0815 @34
+}
+
+pub flow in_a_let(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  let a = dws4~(x).when~(c)                                   //~ E0815 @26
+  a at sample
+}
+
+pub flow in_an_argument(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  lp~(dws4~(x).when~(c) at sample)                            //~ E0815 @22
+}
+
+pub flow in_an_arm_of_if_tilde(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  if~ c { dws4~(x).when~(c) at sample } else { x }            //~ E0815 @26
+}
+
+pub flow in_a_par_body(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  let ys = par~ i in 0 ..< 2 { dws4~(x * F32.round_from(i + 1)).when~(c) at sample } //~ E0815 @71
+  ys[0] + ys[1]
+}
+
+// ---------------------------------------------------------------- an `at` that is not to W
+
+pub flow a_nested_at_in_an_operand(x: F32 at sample, b: Bool at (sample / 16), d: Bool at (sample / 16)) -> F32 at sample {
+  lp~(x).when~((b at (sample / 16)) && d)                     //~ E0815 @16
+}
+
+pub flow a_nested_at_in_a_comparison(x: F32 at sample, q: F32 at (sample / 8)) -> F32 at sample {
+  lp~(x).when~((q at (sample / 8)) > 0.5)                     //~ E0815 @16
+}
+
+pub flow an_at_that_promotes_to_a_faster_tick(x: F32 at sample, l: Bool at (sample / 4)) -> F32 at sample {
+  lp~(x).when~(l at (sample / 2))                             //~ E0815 @16
+}
+
+pub flow an_at_of_a_block_value_to_a_tick(x: F32 at sample, p: Bool at block) -> F32 at sample {
+  lp~(x).when~(p at (sample / 4))                             //~ E0815 @16
+}
+
+pub flow an_at_to_sample_where_w_is_slower(p: F32 at block, m: Bool at (sample / 8)) -> F32 at sample {
+  lp~(p).down~(4).when~(m at sample) at sample                //~ E0815 @25
+}
+
+pub flow an_at_in_the_second_operand(x: F32 at sample, l: Bool at (sample / 4), c: Bool at sample) -> F32 at sample {
+  lp~(x).when~(true && (l at (sample / 2)))                   //~ E0815 @16
+}
+
+// The parent's readings of W7-10 U2a: an `at` to a parameter kind is an `at` to a clock that is not W (§11.10, by the letter), and a value
+// slower than W joined with a value at W in one expression does not meet (§11.3: the operands of tick clocks agree; §11.10 holds a slower
+// value only as the whole condition).
+
+pub flow an_at_to_a_parameter_kind(x: F32 at sample, p: Bool at block) -> F32 at sample {
+  lp~(x).when~(p at block)                                    //~ E0815 @16
+}
+
+pub flow a_slower_operand_and_one_at_w(x: F32 at sample, l: Bool at (sample / 4), c: Bool at sample) -> F32 at sample {
+  lp~(x).when~(l && c)                                        //~ E0815 @16
+}

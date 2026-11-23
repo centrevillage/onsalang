@@ -96,6 +96,7 @@ mod match_tilde_clock_model;
 mod match_tilde_order;
 mod mode_only_notes;
 mod modifier_chain_commands;
+mod modifier_condition_rules;
 mod modifier_product_notes;
 mod modifier_rules;
 mod name_overlaps;

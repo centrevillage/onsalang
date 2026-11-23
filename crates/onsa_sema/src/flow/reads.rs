@@ -357,7 +357,7 @@ impl Marker<'_> {
                     // A node is in no branch (K-08): its arguments are roots
                     // of their own, under the body of a `par~` around it.
                     for r in &clocks.nodes[k].args {
-                        if let Some(s) = read_stage(r.at) {
+                        if let Some(s) = r.stage.or_else(|| read_stage(r.at)) {
                             self.mark(r.expr, s, g);
                         }
                     }

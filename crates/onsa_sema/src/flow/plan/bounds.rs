@@ -47,6 +47,37 @@ pub(in crate::flow) fn run_at<'a>(
     })
 }
 
+/// The stage of the caller of a chain that reads the condition of its guard
+/// `g` (§11.10, S-1209): its W, moved out by [`run_at`]. The one place of it
+/// (D-15): the walk of the clocks reads the condition there, and an input of
+/// the head no faster than it ([`head_stage`]).
+pub(in crate::flow) fn cond_stage<'a>(
+    chain: impl IntoIterator<Item = &'a PlanModifier>,
+    guards: &[PlanGuard],
+    g: &PlanGuard,
+) -> ClockStage {
+    run_at(chain, guards, g.at, ClockStage::Tick(g.w))
+}
+
+/// The stage of the caller that reads an input of the head of a chain read
+/// at the stage `s` of its port (§11.10, S-1209: a part a `.when~` stops
+/// reads it at the tick of the part, its stages slower than W being run at
+/// W): `s` past the stage of each guard that reads its condition, a tick
+/// the steps then run at ([`run_at`] being monotone in its stage, the
+/// greatest of them is that of the steps of the input). `init` and `block`
+/// as they are (of the caller).
+pub(in crate::flow) fn head_stage<'a>(
+    chain: impl IntoIterator<Item = &'a PlanModifier> + Clone,
+    guards: &[PlanGuard],
+    s: ClockStage,
+) -> ClockStage {
+    let conds = guards.iter().map(|g| cond_stage(chain.clone(), guards, g));
+    match s {
+        ClockStage::Tick(_) => conds.fold(s, ClockStage::max),
+        s => s,
+    }
+}
+
 /// The boundaries of the chain `chain` of an instance of `f`, inner first
 /// ([`PlanBound`]): of each modifier with a ratio (not `.when~` and
 /// `.reset_if~`), the ports of the part it wraps, the inputs it gathers
@@ -67,7 +98,7 @@ pub(in crate::flow) fn bounds<'a>(
             // `.reset_if~` is the E0200 of W7-10 U2, which makes no plan.
             if let (Modifier::When, Some(cond)) = (m.modifier, m.cond) {
                 let w = out.filter(|k| k.slower_than_body()).unwrap_or(Ratio(0));
-                guards.push(PlanGuard { at, cond, w, out, ins: ins.clone() });
+                guards.push(PlanGuard { at, cond, w, out });
             }
             continue;
         };

@@ -3,11 +3,12 @@
 // spec = ["§2.6", "§11.10", "§18.1"]
 // fixes = 0
 
-// W7-09 U3a/t, rewritten for W7-10 U1/t: this file fixes the output of this version, not a sentence of the spec, and it changes when W7-10 U2 and U3 land. The forms `lp~(x).when~(c)` and `.reset_if~(c)` are correct forms of §11.10
-// ("受け手は flow の呼び出し（組込みの遅延を含む）か修飾子の連鎖である"). Since W7-10 U1 a `.when~(c)` on an instance with a condition of the clock W (or of the parameter kinds) has its meaning and no diagnostic (the accepted forms are in
-// flow_clock/when_forms_accepted.onsa, the values in flow_semantics/when_values.onsa). What the flow stage still stops with E0200 (Q-09), until W7-10 U2: every `.reset_if~(r)`, and a condition that is read by holding (slower than W), has an
-// `at`, or reads `sample_tick()`; until U3: a `.when~(c)` on a built-in delay. There is no candidate (`fixes = 0`). When those units land each flow below changes to the correct form (a value, no diagnostic, or the errors of the clocks of
-// §11.10) and this file is rewritten or removed with it. The `down` and `up` forms are in flow_clock/modifier_down_forms.onsa. One error per flow (P-01). `l` is a `sample / 4` input.
+// W7-09 U3a/t, rewritten for W7-10 U1/t and U2a/t: this file fixes the output of this version, not a sentence of the spec, and it changes when W7-10 U2b and U3 land. The forms `lp~(x).reset_if~(c)` and `prev~(x).when~(c)` are correct
+// forms of §11.10 ("受け手は flow の呼び出し（組込みの遅延を含む）か修飾子の連鎖である"). Since W7-10 U1 a `.when~(c)` on an instance has its meaning and no diagnostic (flow_clock/when_forms_accepted.onsa, flow_semantics/when_values.onsa), and
+// since U2a the conditions that were still E0200 here (slower than W, an `at`, `sample_tick()`) and the head with an input slower than W have their meaning too (flow_clock/when_condition_accepted.onsa, flow_semantics/when_condition_values.onsa
+// and when_slow_head_values.onsa). What the flow stage still stops with E0200 (Q-09): every `.reset_if~(r)` (until U2b; also in a chain after or before a `.when~`), and a `.when~(c)` on a built-in delay (until U3). There is no candidate
+// (`fixes = 0`). When those units land each flow below changes to the correct form (a value, no diagnostic, or the errors of the clocks of §11.10) and this file is rewritten or removed with it. The `down` and `up` forms are in
+// flow_clock/modifier_down_forms.onsa. One error per flow (P-01).
 
 pub flow lp(x: F32 at sample) -> F32 at sample {
   x * 0.5 + prev~(x) * 0.5
@@ -28,36 +29,4 @@ pub flow two_modifiers_on_an_instance(x: F32 at sample, c: Bool at sample, r: Bo
 
 pub flow reset_if_then_when(x: F32 at sample, c: Bool at sample, r: Bool at sample) -> F32 at sample {
   lp~(x).reset_if~(r).when~(c)                      //~ E0200
-}
-
-pub flow when_with_a_slower_condition(x: F32 at sample, l: Bool at (sample / 4)) -> F32 at sample {
-  lp~(x).when~(l)                                   //~ E0200
-}
-
-pub flow when_with_an_at_in_the_condition(x: F32 at sample, l: Bool at (sample / 4)) -> F32 at sample {
-  lp~(x).when~(l at sample)                         //~ E0200
-}
-
-pub flow when_with_the_time_in_the_condition(x: F32 at sample) -> F32 at sample {
-  lp~(x).when~(sample_tick() > 3)                   //~ E0200
-}
-
-// A head with an input slower than W (`sl` reads `p` at `sample / 2`, W is `sample`): until U2.
-flow cnt() -> F32 at sample {
-  let n = prev~(^n) + 1.0
-  n
-}
-
-flow sl(p: F32 at (sample / 2)) -> F32 at sample {
-  let h = p + 1.0
-  h at sample
-}
-
-pub flow when_on_a_head_with_a_slower_input(c: Bool at sample) -> F32 at sample {
-  let q = cnt~().down~(2)
-  sl~(q).when~(c)                                   //~ E0200
-}
-
-pub flow when_on_a_head_given_the_time_at_a_slower_input() -> F32 at sample {
-  sl~(F32.round_from(sample_tick())).when~(true)    //~ E0200
 }

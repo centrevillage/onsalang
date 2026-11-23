@@ -469,17 +469,17 @@ impl Walk<'_> {
     /// [`super::super::plan::bounds::bounds`]): of an input a boundary
     /// gathers, whose first tick gathers it before any sample, at its
     /// argument in `args`, and of an output a boundary deals before its
-    /// first tick, at the whole chain (S-1203 (1)), of a value type that
-    /// does not satisfy `Default` ([`crate::signal::no_default_signal`]).
-    /// Its type is the same at every boundary: one of each input and one of
-    /// the output.
+    /// first tick, or a `.when~` holds before it first runs (§11.10), at the
+    /// whole chain (S-1203 (1)), of a value type that does not satisfy
+    /// `Default` ([`crate::signal::no_default_signal`]). Its type is the same
+    /// at every boundary and guard: one of each input and one of the output.
     // SPEC-GAP(S-1203): the places, provisional (1).
     pub(super) fn check_gather_deal(&mut self, e: ExprId, g: DefId, args: &[ExprId]) {
         let (a, name) = (self.a, &self.a.def(g).name);
         // Of a flow with a port in error, none (§18.1).
         let Some(f) = a.def(g).as_flow().filter(|f| !f.ports_in_error) else { return };
         let Some(chain) = self.cx.chains.get(&e) else { return };
-        let (bounds, _) = super::super::plan::bounds::bounds(chain.mods.iter().map(|m| &m.plan), f);
+        let (bounds, guards) = super::super::plan::bounds::bounds(chain.mods.iter().map(|m| &m.plan), f);
         let gathered = |i: usize| bounds.iter().any(|b| b.gathers.iter().any(|g| g.0 as usize == i));
         let mut found = Vec::new();
         for (_, (&x, input)) in args.iter().zip(&f.inputs).enumerate().filter(|&(i, _)| gathered(i)) {
@@ -490,6 +490,11 @@ impl Walk<'_> {
         let what = format!("the array `{name}` deals before its first tick");
         if bounds.iter().any(|b| b.deals) {
             found.extend(crate::signal::no_default_signal(a, f.out, self.ast.expr(chain).span, &what, "§11.9"));
+        } else if !guards.is_empty() {
+            // The output a `.when~` holds, of a part that has not run (§11.10,
+            // S-558; one error with the dealt array, S-1214 (1)).
+            let (what, ty) = (format!("the output of `{name}` a `.when~` holds before it first runs"), self.ty_of(e));
+            found.extend(crate::signal::no_default_signal(a, ty, self.ast.expr(chain).span, &what, "§11.10"));
         }
         for d in found {
             let at = self.src(d.span);

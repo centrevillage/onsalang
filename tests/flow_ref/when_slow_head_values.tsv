@@ -1,0 +1,6 @@
+# flow_ref 1 source=tests/spec/flow_semantics/when_slow_head_values.onsa tests=5 evaluated=0 unavailable=5 skipped=0 waiting=0
+? with no condition, or one that always holds, the head reads its input at the frames 0, 2, 4 ...	unavailable an input slower than the W of a `.when~` (W7-10 U2e)
+? a part that is stopped reads nothing, and the one that runs again reads the value of the frame where its own grid ticks (not the grid of the caller)	unavailable an input slower than the W of a `.when~` (W7-10 U2e)
+? a slow head input and a slow condition: the first run reads the caller's value of its frame	unavailable an input slower than the W of a `.when~` (W7-10 U2e)
+? the time that the head reads is the caller's time at its own tick of sample / 2, held and read at the tick of the part's grid	unavailable an input slower than the W of a `.when~` (W7-10 U2e)
+? the calls of process cut the frames at a tick of the part, in a stopped stretch and at 0 frames, and a reset starts over: the same values (§13.4, §11.6)	unavailable an input slower than the W of a `.when~` (W7-10 U2e)

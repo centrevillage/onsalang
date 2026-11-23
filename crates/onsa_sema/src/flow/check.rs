@@ -460,7 +460,7 @@ impl<'a> Checker<'a> {
     /// receiver, and one argument, the N of `.down~` and `.up~` (a constant
     /// expression of type `U32`, a power of 2 that is 2 or more, else the
     /// E0808 of the flow stage, S-969, S-1077) or the `Bool` condition of
-    /// `.when~` and `.reset_if~`, whose meaning is W7-10's (E0200). Each is
+    /// `.when~` (§11.10) and `.reset_if~` (the E0200 of W7-10 U2b). Each is
     /// recorded once in the chain of its head ([`ModifierChain`]).
     fn check_modifier(&mut self, e: ExprId, m: ModifierCall, args: &[Arg], expected: Option<TyId>) -> R<TyId> {
         let t = self.check_expr(m.receiver, expected)?;
@@ -487,12 +487,9 @@ impl<'a> Checker<'a> {
             None => {
                 let bool = self.bool_();
                 self.check_expr(arg.expr, Some(bool))?;
-                // W7-10 U1 opens `.when~` of a condition that reads no other clock
-                // with `at`, no `^name` and no `sample_tick()`, of a held output whose
-                // type satisfies `Default` (the rest is U2, U3; [`gated`] of the chain).
-                let what = "the held output";
-                let kept = crate::signal::no_default_signal(self.a, t, m.name, what, "§11.10").is_none();
-                let gate = (m.modifier != Modifier::When || !kept || self.reads_apart(arg.expr)).then(|| {
+                // `.reset_if~` is W7-10 U2b's (the rest of `.when~`: [`gated`] of
+                // the chain, the walk of the clocks of its condition).
+                let gate = (m.modifier != Modifier::When).then(|| {
                     Feature::InstanceModifiers.diagnostic(Stage::Flow, m.name, &[]).with_found(self.src(m.name))
                 });
                 (Ok(None), gate)
@@ -509,21 +506,6 @@ impl<'a> Checker<'a> {
         let plan = PlanModifier { modifier: m.modifier, ratio: r, cond, name: m.name };
         chain.mods.push(ChainModifier { call: e, receiver: m.receiver, plan });
         Ok(t)
-    }
-
-    /// Whether the condition `e` of a modifier has an `at`, a `^name` or a
-    /// `sample_tick()` in it (W7-10 U2: E0815, E0801 and the root of the time).
-    fn reads_apart(&self, e: ExprId) -> bool {
-        let mut todo = vec![e];
-        while let Some(x) = todo.pop() {
-            if matches!(self.expr(x).kind, ExprKind::At { .. } | ExprKind::Feedback(_))
-                || self.flow.as_ref().is_some_and(|f| f.sample_tick_calls.contains(&x))
-            {
-                return true;
-            }
-            todo.extend(self.ast.sub_exprs(x));
-        }
-        false
     }
 
     /// `sample_rate()`, an `F32`, and `sample_tick()`, a `U32` (§11.4), of
@@ -727,8 +709,7 @@ pub(super) fn hold_vdelay_max(a: &Analysis, module: &Module, body: &BodyInfo, fc
 /// form of the chain (§11.10, S-1207; U3): of the head of a built-in delay,
 /// and of one with an `.up~` outside it and either a `.down~` outside that
 /// (in a block) or a burst it wraps (of the record, [`super::plan::bounds`]:
-/// run N times), and of one an input of the part it wraps is slower than
-/// the W of (U2: read where its stage runs at W). The one judgement of the form of a chain (D-15): the walk
+/// run N times). The one judgement of the form of a chain (D-15): the walk
 /// of the clocks opens the rest by the clock of the condition alone.
 fn gated(a: &Analysis, mods: &[ChainModifier], head: Option<&NodeKind>) -> Option<Span> {
     let guards = match head {
@@ -743,10 +724,7 @@ fn gated(a: &Analysis, mods: &[ChainModifier], head: Option<&NodeKind>) -> Optio
         let up = mods[i..].iter().position(|m| m.plan.ratio.is_some_and(Ratio::faster_than_body));
         let guard = guards.iter().find(|g| g.at as usize == i);
         let burst = guard.is_some_and(|g| g.out.is_some_and(Ratio::faster_than_body));
-        // An input slower than W, read where its stage runs at W (U2: kept, as a condition slower than W).
-        let slow = guard.is_some_and(|g| g.ins.iter().flatten().any(|k| k.0 < g.w.0));
-        slow || up
-            .is_some_and(|u| burst || mods[i + u..].iter().any(|m| m.plan.ratio.is_some_and(Ratio::slower_than_body)))
+        up.is_some_and(|u| burst || mods[i + u..].iter().any(|m| m.plan.ratio.is_some_and(Ratio::slower_than_body)))
     };
     let mut at = mods.iter().enumerate().filter(|(_, m)| m.plan.ratio.is_none());
     at.find(|&(i, _)| shut(i)).map(|(_, m)| m.plan.name)

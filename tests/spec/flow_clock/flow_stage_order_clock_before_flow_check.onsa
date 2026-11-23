@@ -85,7 +85,7 @@
 // an error of the clock rules (E0813 on the first argument of a delay, E0815 on a value that is too
 // fast) is reported when it is written before an error of the other flow checks: the length of a
 // delay (E0807 for 1, E0808 for 0 and for the `MAX` of `vdelay~`), the bounds of a `par~` (E0808),
-// and the meaning this version does not take (E0200 for a `.reset_if~(c)`, W7-10 U2, none here; a delay inside a delay
+// and the meaning this version does not take (E0200 for a `.reset_if~(c)`, W7-10 U2b, none here; a delay inside a delay
 // is no error since W7-07, so the two `nested_delay` flows have the first error alone). They are all of
 // the flow stage, and none of them hides another by the way the compiler walks the body. One error per
 // flow, so each form is a flow of its own: the first line has the reported error, the second the other.

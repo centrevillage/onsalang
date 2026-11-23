@@ -445,7 +445,7 @@ impl Walk<'_> {
         };
         match self.node_of.get(&e) {
             Some(&k) => (0..self.node_clocks[k].args.len()).for_each(|i| {
-                let ArgRead { expr, at } = self.node_clocks[k].args[i];
+                let ArgRead { expr, at, .. } = self.node_clocks[k].args[i];
                 self.settle(expr, at);
             }),
             None => self.ast.sub_exprs(e).into_iter().for_each(|x| self.settle(x, at)),
@@ -827,40 +827,83 @@ impl Walk<'_> {
     }
 
     /// The condition of the `.when~` `e` of the chain of the head `head`, an
-    /// instance of `g` (§11.10, S-1209): read at `min(W, sample)` of this
-    /// body, W the clock of its guard ([`super::plan::bounds::bounds`]) moved
-    /// out of the ratios outside it. W7-10 U1 opens one of that clock or of a
-    /// parameter kind, an argument its head reads where the table reads it
-    /// (its node's, [`ArgRead`], at [`super::plan::bounds::run_at`]: hoisted
-    /// and kept as the others are), and holds the rest,
-    /// the E0200 of a condition W reads apart (U2: E0815, kept slower ones;
-    /// the form of the chain is of the check, `check::gated`): whether it is
-    /// opened, its condition walked; none of `.down~` and `.up~`, whose
-    /// argument the caller walks.
+    /// instance of `g` (§11.10, S-1209): read at W, the clock of its guard
+    /// ([`super::plan::bounds::bounds`]) moved out of the ratios outside it
+    /// (`w`, a `sample * N` read at the `sample` of the body, §11.4), by its
+    /// head's node ([`ArgRead`]) in the stage of the caller that reads it
+    /// ([`super::plan::bounds::cond_stage`]): hoisted and kept as the other
+    /// arguments are, a value of a slower tick held. An `at` in it to another
+    /// clock than W (not in an argument of a flow, read at its port) and a
+    /// condition faster than W are E0815, one of an event the E0200 of
+    /// W7-11: whether it is opened, its condition walked; none of `.down~`
+    /// and `.up~`, whose argument the caller walks.
     fn guard_cond(&mut self, e: ExprId, head: ExprId, g: DefId) -> Option<bool> {
         let (chain, f) = (self.cx.chains.get(&head)?, self.a.def(g).as_flow()?);
         let i = chain.mods.iter().position(|m| m.call == e)?;
         let (_, guards) = super::plan::bounds::bounds(chain.mods.iter().map(|m| &m.plan), f);
         let (guard, cond) = (guards.iter().find(|x| x.at == i as u32)?, chain.mods[i].plan.cond?);
         let outside = chain.mods[i + 1..].iter().filter_map(|m| m.plan.ratio);
-        let w = Ratio(guard.w.0.saturating_add(outside.map(|r| r.0).sum::<i32>()).min(0));
-        let opened = match self.cut(cond) {
-            None | Some(Clock::Error | Clock::Const | Clock::Init | Clock::Block) => true,
-            Some(c) => c == Clock::Tick(w),
-        };
+        let w = Ratio(guard.w.0.saturating_add(outside.map(|r| r.0).sum::<i32>()));
+        let c = self.cut(cond);
+        let apart = self.at_apart(cond, Clock::Tick(w));
+        let faster = matches!(c, Some(Clock::Tick(k)) if k > w);
         let name = chain.mods[i].plan.name;
-        if !opened {
+        if (apart || faster) && self.checking() {
+            let wc = Clock::Tick(w).shown(name);
+            let msg = match apart {
+                true => format!(
+                    "the condition of `.when~` reads a value `at` another clock than `{wc}`, the clock it is read at; `when~` reads a slower value with no `at` (§11.10)"
+                ),
+                false => format!(
+                    "the condition of `.when~` is at a clock faster than `{wc}`, the clock it is read at (§11.10)"
+                ),
+            };
+            let of =
+                if guard.w.slower_than_body() { "the output of its receiver" } else { "the place of the modifier" };
+            let receiver = self.ast.expr(chain.mods[i].receiver).span;
+            let span = self.ast.expr(cond).span;
+            let mut d = Diagnostic::new(Stage::Flow, Code::E0815, span, msg).with_found(self.src(span));
+            d = d.with_note(receiver, format!("`.when~` reads its condition at `{wc}`, the clock of {of}"));
+            if faster && !apart {
+                d = d.with_rule("a value is made slower by a flow of the writer: `.when~(dws~(c))`");
+            }
+            self.report(d);
+            return Some(false);
+        }
+        if matches!(c, Some(Clock::Event(_))) {
             let d = Feature::InstanceModifiers.diagnostic(Stage::Flow, name, &[]);
             self.report(d.with_found(self.src(name)));
-        } else if let (true, Some(&k)) = (self.checking(), self.node_of.get(&head)) {
-            let mods = chain.mods.iter().map(|m| &m.plan);
-            let at = match super::plan::bounds::run_at(mods, &guards, i as u32, ClockStage::Tick(guard.w)) {
-                ClockStage::Tick(k) => Clock::Tick(k),
-                _ => onsa_diag::internal::bug(Some(name), "a condition run at no tick"),
-            };
-            self.node_clocks[k].args.push(ArgRead { expr: cond, at });
+            return Some(false);
         }
-        Some(opened)
+        if let (true, Some(&k)) = (self.checking(), self.node_of.get(&head)) {
+            let mods = chain.mods.iter().map(|m| &m.plan);
+            let stage = super::plan::bounds::cond_stage(mods, &guards, guard);
+            let at = Clock::Tick(Ratio(w.0.min(0)));
+            let stage = (at.stage() != Some(stage)).then_some(stage);
+            self.node_clocks[k].args.push(ArgRead { expr: cond, at, stage });
+        }
+        Some(true)
+    }
+
+    /// Whether the condition `cond` has an `at` to another clock than `w` in
+    /// it (§11.10, E0815): in its parts, not in an argument of a flow (read
+    /// at its port) nor in the condition of a modifier in it (its own).
+    fn at_apart(&self, cond: ExprId, w: Clock) -> bool {
+        let mut todo = vec![cond];
+        while let Some(x) = todo.pop() {
+            if let Some(&k) = self.cx.at_clocks.get(&x)
+                && k != Clock::Error
+                && k != w
+            {
+                return true;
+            }
+            match (self.calls.get(&x).map(|&i| &self.cx.calls[i].kind), self.names.modifier(x)) {
+                (Some(NodeKind::Instance(_)), _) => {}
+                (_, Some(m)) => todo.push(m.receiver),
+                _ => todo.extend(self.ast.sub_exprs(x)),
+            }
+        }
+        false
     }
 
     /// A delay or an instance call `call` at `e` (§11.4, §11.5): its clock,
@@ -920,15 +963,34 @@ impl Walk<'_> {
             let at = rebased(input.caller_clock());
             if let Some(c) = self.cut(x) {
                 self.check_arg(x, c, at, input, g);
-                reads.push(ArgRead { expr: x, at });
+                reads.push(ArgRead { expr: x, at, stage: None });
             }
         }
         self.frame = outer;
         // A chain with an N in error has no boundary (§18.1).
         if self.checking() && frame.is_some() {
             self.check_gather_deal(e, g, &call.args);
+            self.head_stages(e, f, &mut reads);
         }
         (Some(rebased(f.out_clock)), reads)
+    }
+
+    /// The stages the arguments `reads` of the head `e` of a chain, an
+    /// instance of `f`, are read at where its `.when~`s move them
+    /// ([`super::plan::bounds::head_stage`]); none of a chain held by a gate.
+    fn head_stages(&self, e: ExprId, f: &crate::def::FlowDef, reads: &mut [ArgRead]) {
+        let Some(chain) = self.cx.chains.get(&e).filter(|c| c.gate.is_none()) else { return };
+        let mods = || chain.mods.iter().map(|m| &m.plan);
+        let (_, guards) = super::plan::bounds::bounds(mods(), f);
+        if guards.is_empty() {
+            return;
+        }
+        for r in reads {
+            if let Some(s) = r.at.stage() {
+                let moved = super::plan::bounds::head_stage(mods(), &guards, s);
+                r.stage = (moved != s).then_some(moved);
+            }
+        }
     }
 
     /// The frame an instance call `e` runs in: of the sum of the ratios of
@@ -969,8 +1031,8 @@ impl Walk<'_> {
         {
             self.check_init(delay, i, c);
         }
-        let reads = [Some(first), d].into_iter().flatten().map(|x| ArgRead { expr: x, at });
-        let init = init.map(|i| ArgRead { expr: i, at: Clock::Init });
+        let reads = [Some(first), d].into_iter().flatten().map(|x| ArgRead { expr: x, at, stage: None });
+        let init = init.map(|i| ArgRead { expr: i, at: Clock::Init, stage: None });
         (out, reads.chain(init).collect())
     }
 }

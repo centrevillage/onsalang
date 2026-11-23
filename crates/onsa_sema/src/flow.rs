@@ -245,6 +245,11 @@ pub(super) struct NodeClock {
 pub struct ArgRead {
     pub expr: ExprId,
     pub at: Clock,
+    /// The stage of the caller that reads it where that is not the stage of
+    /// `at` (§11.10, S-1209): of an input of the head of a chain and of a
+    /// condition a `.when~` moves to its W. `at` stays the clock of the
+    /// port, the root of `sample_tick()` and the judgement of a burst.
+    pub stage: Option<ClockStage>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]

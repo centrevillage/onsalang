@@ -1,0 +1,155 @@
+// onsa.toml
+// [test]
+// spec = ["§11.2", "§11.4", "§11.9", "§11.10", "§18.1"]
+
+// W7-10 U2a/t, S-1209, S-1130, S-1218 (spec §11.10: "`c` は `Bool` で、W の値、パラメータの種類、W より遅い周期のクロックの値（保持で読む。`at` なしで遅い値を読めるのは `when~` だけ）を書ける。W が `sample * N` のとき、
+// 条件は本体の `sample` 以下の値で、遅い値として保持で読む"; "止まる部品の `at (sample / N)` の入力は、呼び出し側の値を、部品の中の刻みの時点で読む"; §11.4: the `sample_tick()` of a condition is the value of the body's `sample`): the
+// conditions of a `.when~` that are read with no diagnostic. A condition slower than W (held, one clock in a condition), an `at` to W (`l at sample` where W is `sample`, `at (sample / 4)` where W is `sample / 4`), `sample_tick()` in
+// the condition (the time of the body's `sample`; `at (sample / 4)` where W is `sample / 4`; where W is `sample * 2` the body's `sample` value), a head whose input is slower than W, and an inner delay in a condition inside the
+// first argument of a delay (its own `^`). Before W7-10 U2a these were the E0200 of the flow stage (negative/modifier_when_reset_if_e0200_until_w7_10.onsa); the values are in flow_semantics/when_condition_values.onsa
+// and when_slow_head_values.onsa. `x` and `c` are `sample` inputs, `p` is a `block` input, `l` is `sample / 4`, `m` is `sample / 8`.
+
+flow lp(x: F32 at sample) -> F32 at sample {
+  x * 0.5 + prev~(x) * 0.5
+}
+
+flow acc(f: F32 at block) -> F32 at sample {
+  let n = f + prev~(^n)
+  n
+}
+
+flow cnt() -> F32 at sample {
+  let n = prev~(^n) + 1.0
+  n
+}
+
+flow sum4(x: F32 at (sample * 4)) -> F32 at sample {
+  x[0] + x[1] + x[2] + x[3]
+}
+
+flow dws4(x: F32 at sample) -> F32 at (sample / 4) {
+  sum4~(x).down~(4)
+}
+
+flow g2(x: F32 at (sample * 2)) -> F32 at sample {
+  x[0] + x[1] * 10.0
+}
+
+flow sl(p: F32 at (sample / 2)) -> F32 at sample {
+  let h = p + 1.0
+  h at sample
+}
+
+// ---------------------------------------------------------------- slower than W (held)
+
+pub flow slower_condition(x: F32 at sample, l: Bool at (sample / 4)) -> F32 at sample {
+  lp~(x).when~(l)
+}
+
+pub flow slower_condition_of_a_computed_tick(x: F32 at sample, m: F32 at (sample / 8)) -> F32 at sample {
+  lp~(x).when~(m > 1.0)
+}
+
+pub flow slower_than_a_conversion_flow(x: F32 at sample, m: Bool at (sample / 8)) -> F32 at sample {
+  dws4~(x).when~(m) at sample
+}
+
+pub flow slower_than_a_down(p: F32 at block, m: Bool at (sample / 8)) -> F32 at sample {
+  lp~(p).down~(4).when~(m) at sample
+}
+
+pub flow slower_before_a_down(p: F32 at block, m: Bool at (sample / 8)) -> F32 at sample {
+  lp~(p).when~(m).down~(4) at sample
+}
+
+pub flow slower_before_an_up(l: Bool at (sample / 4)) -> F32 at sample {
+  g2~(acc~(1.0).when~(l).up~(2))
+}
+
+pub flow slower_in_a_par_body(x: F32 at sample, l: Bool at (sample / 4)) -> F32 at sample {
+  let ys = par~ i in 0 ..< 2 { lp~(x * F32.round_from(i + 1)).when~(l) }
+  ys[0] + ys[1]
+}
+
+pub flow two_slower_whens(x: F32 at sample, l: Bool at (sample / 4), m: Bool at (sample / 8)) -> F32 at sample {
+  lp~(x).when~(l).when~(m)
+}
+
+// ---------------------------------------------------------------- an `at` to W
+
+pub flow at_to_sample(x: F32 at sample, l: Bool at (sample / 4)) -> F32 at sample {
+  lp~(x).when~(l at sample)
+}
+
+pub flow at_to_sample_of_a_block_value(x: F32 at sample, p: Bool at block) -> F32 at sample {
+  lp~(x).when~(p at sample)
+}
+
+pub flow at_to_sample_nested(x: F32 at sample, l: Bool at (sample / 4), c: Bool at sample) -> F32 at sample {
+  lp~(x).when~((l at sample) && c)
+}
+
+pub flow at_to_the_grid(p: F32 at block, l: Bool at (sample / 4)) -> F32 at sample {
+  lp~(p).down~(4).when~(l at (sample / 4)) at sample
+}
+
+pub flow at_to_the_grid_nested(p: F32 at block, l: Bool at (sample / 4)) -> F32 at sample {
+  lp~(p).when~((l at (sample / 4)) || false).down~(4) at sample
+}
+
+// ---------------------------------------------------------------- `sample_tick()` in the condition
+
+pub flow time_at_sample(x: F32 at sample) -> F32 at sample {
+  lp~(x).when~(sample_tick() > 3)
+}
+
+pub flow time_at_the_grid(p: F32 at block) -> F32 at sample {
+  lp~(p).down~(4).when~((sample_tick() at (sample / 4)) > 5) at sample
+}
+
+pub flow time_before_an_up() -> F32 at sample {
+  g2~(acc~(1.0).when~(sample_tick() != 1).up~(2))
+}
+
+pub flow time_after_an_up() -> F32 at sample {
+  g2~(acc~(1.0).up~(2).when~(sample_tick() != 1))
+}
+
+// ---------------------------------------------------------------- a head whose input is slower than W
+
+pub flow a_slower_head_input(c: Bool at sample) -> F32 at sample {
+  let q = cnt~().down~(2)
+  sl~(q).when~(c)
+}
+
+pub flow a_slower_head_input_and_a_slower_condition(l: Bool at (sample / 4)) -> F32 at sample {
+  let q = cnt~().down~(2)
+  sl~(q).when~(l)
+}
+
+pub flow a_slower_head_input_of_the_time(c: Bool at sample) -> F32 at sample {
+  sl~(F32.round_from(sample_tick())).when~(c)
+}
+
+pub flow a_slower_head_input_under_two_whens(c: Bool at sample, l: Bool at (sample / 4)) -> F32 at sample {
+  let q = cnt~().down~(2)
+  sl~(q).when~(c).when~(l)
+}
+
+// ---------------------------------------------------------------- an inner delay in the condition has its own `^`
+
+pub flow an_inner_delay_in_a_when(x: F32 at sample) -> F32 at sample {
+  let a = prev~(lp~(x).when~(prev~(^d) > 0.0))
+  let d = a + 1.0
+  a
+}
+
+// The parent's reading of W7-10 U2a: an `at` in the argument of a flow called in the condition is the clock of that flow's input, not of
+// reading the condition, so it is not an `at` to a clock that is not W (§11.10).
+flow same_bool(c: Bool at sample) -> Bool at sample {
+  c
+}
+
+pub flow an_at_in_an_argument_of_a_flow_in_the_condition(x: F32 at sample, p: Bool at block) -> F32 at sample {
+  lp~(x).when~(same_bool~(p at sample))
+}

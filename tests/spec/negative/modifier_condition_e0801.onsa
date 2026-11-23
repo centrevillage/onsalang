@@ -1,0 +1,111 @@
+// onsa.toml
+// [test]
+// spec = ["§11.2", "§11.10", "§18.1"]
+// fixes = 0
+
+// W7-10 U2a/t, S-1130 (spec §11.2: "`^名前` を書けるのは、遅延の組込みの第 1 引数の式の中だけで、その中の利用者の flow の引数と修飾子の引数（`when~`・`reset_if~` の条件）には書けない（E0801）"; "修飾子の条件も同じで、受け手が
+// 利用者の flow でも組込みの遅延でも E0801 である（`prev~(lp~(x).when~(^c))`、`prev~(prev~(x).reset_if~(^c))`。候補は無く…）"; §18.1: the names stage): a `^name` in the condition of a modifier that is inside the first argument of
+// a delay is E0801, for every receiver (a user flow, a built-in delay), every modifier and every position in the chain and in the condition, and for each of the three delays. The rule is of the names stage, so it is reported
+// before the E0200 of the flow stage that `.reset_if~` and a built-in delay as the receiver still have (the forms of the second block are the ones that would be E0200: the E0801 comes first). A name that is used before its `let` with
+// no `^`, in the same place, is E0801 too, and the `^` is no candidate there (`fixes = 0` counts every candidate of the file; the rule of the candidate outside such a place is in fixes/e0801_forward.onsa). The inner delay in a condition
+// takes its own `^` (the first argument of the inner delay), which is accepted: flow_clock/when_condition_accepted.onsa. One error per flow (P-01). `c` is a later `let` of `Bool`, `d` a later `let` of `F32`.
+
+pub flow lp(x: F32 at sample) -> F32 at sample {
+  x * 0.5 + prev~(x) * 0.5
+}
+
+// ---------------------------------------------------------------- the receiver is a user flow
+
+pub flow when_with_a_caret(x: F32 at sample) -> F32 at sample {
+  let a = prev~(lp~(x).when~(^c))                   //~ E0801
+  let c = a > 0.0
+  a
+}
+
+pub flow reset_if_with_a_caret(x: F32 at sample) -> F32 at sample {
+  let a = prev~(lp~(x).reset_if~(^c))               //~ E0801
+  let c = a > 0.0
+  a
+}
+
+pub flow the_second_modifier_of_a_chain(x: F32 at sample, r: Bool at sample) -> F32 at sample {
+  let a = prev~(lp~(x).when~(r).when~(^c))          //~ E0801
+  let c = a > 0.0
+  a
+}
+
+pub flow the_caret_in_an_expression(x: F32 at sample) -> F32 at sample {
+  let a = prev~(lp~(x).when~(^d > 0.5 || ^d < -0.5)) //~ E0801
+  let d = a * 2.0
+  a
+}
+
+pub flow the_caret_under_a_negation(x: F32 at sample) -> F32 at sample {
+  let a = prev~(lp~(x).when~(!^c))                  //~ E0801
+  let c = a > 0.0
+  a
+}
+
+pub flow in_a_delay_of_n_samples(x: F32 at sample) -> F32 at sample {
+  let a = delay~(lp~(x).when~(^c), 4)               //~ E0801
+  let c = a > 0.0
+  a
+}
+
+pub flow in_a_variable_delay(x: F32 at sample) -> F32 at sample {
+  let a = vdelay~(lp~(x).when~(^c), 2.0, 4)         //~ E0801
+  let c = a > 0.0
+  a
+}
+
+pub flow in_a_delay_of_a_delay(x: F32 at sample) -> F32 at sample {
+  let a = prev~(prev~(lp~(x).when~(^c)))            //~ E0801
+  let c = a > 0.0
+  a
+}
+
+// ---------------------------------------------------------------- the receiver is a built-in delay (it would be the E0200 of the flow stage)
+
+pub flow when_on_a_delay_with_a_caret(x: F32 at sample) -> F32 at sample {
+  let a = prev~(prev~(x).when~(^c))                 //~ E0801
+  let c = a > 0.0
+  a
+}
+
+pub flow reset_if_on_a_delay_with_a_caret(x: F32 at sample) -> F32 at sample {
+  let a = prev~(prev~(x).reset_if~(^c))             //~ E0801
+  let c = a > 0.0
+  a
+}
+
+pub flow reset_if_on_a_delay_line_with_a_caret(x: F32 at sample) -> F32 at sample {
+  let a = prev~(delay~(x, 2).reset_if~(^c))         //~ E0801
+  let c = a > 0.0
+  a
+}
+
+// ---------------------------------------------------------------- no `^`: the name is used before its `let`, and there is no candidate
+
+pub flow forward_name_in_a_when(x: F32 at sample) -> F32 at sample {
+  let a = prev~(lp~(x).when~(c))                    //~ E0801
+  let c = a > 0.0
+  a
+}
+
+pub flow forward_name_in_a_reset_if(x: F32 at sample) -> F32 at sample {
+  let a = prev~(lp~(x).reset_if~(c))                //~ E0801
+  let c = a > 0.0
+  a
+}
+
+pub flow forward_name_in_a_when_outside_a_delay(x: F32 at sample) -> F32 at sample {
+  let a = lp~(x).when~(c)                           //~ E0801
+  let c = a > 0.0
+  a
+}
+
+pub flow forward_name_in_a_delay_receiver(x: F32 at sample) -> F32 at sample {
+  let a = prev~(prev~(x).when~(c))                  //~ E0801
+  let c = a > 0.0
+  a
+}

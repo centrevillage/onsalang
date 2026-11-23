@@ -141,8 +141,10 @@ file up_chain_values.tsv rows=100 tests=16 evaluated=13 unavailable=0 skipped=3 
 file vdelay_edges.tsv rows=64 tests=15 evaluated=14 unavailable=0 skipped=1 waiting=0
 file vdelay_varying_d.tsv rows=2 tests=1 evaluated=0 unavailable=0 skipped=1 waiting=0
 file when_boundary_hold_values.tsv rows=21 tests=5 evaluated=5 unavailable=0 skipped=0 waiting=0
+file when_condition_values.tsv rows=76 tests=11 evaluated=9 unavailable=0 skipped=2 waiting=0
 file when_grid_and_time_values.tsv rows=13 tests=3 evaluated=3 unavailable=0 skipped=0 waiting=0
 file when_identity_regressions.tsv rows=78 tests=5 evaluated=5 unavailable=0 skipped=0 waiting=0
+file when_slow_head_values.tsv rows=6 tests=5 evaluated=0 unavailable=5 skipped=0 waiting=0
 file when_slow_values.tsv rows=86 tests=9 evaluated=9 unavailable=0 skipped=0 waiting=0
 file when_values.tsv rows=77 tests=10 evaluated=10 unavailable=0 skipped=0 waiting=0
-total files=146 rows=4785 tests=1055 evaluated=966 unavailable=1 skipped=88 waiting=6
+total files=148 rows=4867 tests=1071 evaluated=975 unavailable=6 skipped=90 waiting=6

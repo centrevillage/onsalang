@@ -1,0 +1,73 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§11.9", "§11.10", "§18.1"]
+
+// W7-10 U2a/t, S-1209, S-1203 (provisional reading (1): the chain as a whole), S-1214 (1) (spec §11.10: "止まっている間は最後の出力を保つ（一度も動いていなければ `T.default()`。`T` が `Default` を満たさなければ E0816）"):
+// the part that a `.when~` can stop keeps its last output, `T.default()` before it first ran, so the type of the output of the part (of the element, for an output at `sample * N`) needs `Default`, whether or not a
+// faster stage reads it. `NoDef` is a struct with no `Default` (and Copy, as in e0816_chain_value_without_default.onsa), `Char` a scalar with none (§6.4). The error is at the chain as a whole (the line of the call); a chain
+// with two `.when~` has one; where the array that a `.down~` deals is the same type, the error of the deal and of the held output are one (S-1214 (1)). The same flows with a type that has `Default` and the part with no `.when~` are
+// accepted (the values are in flow_semantics/when_values.onsa). One error per flow, so each form is a flow of its own. `x` and `c` are `sample` inputs, `p` is a `block` input, `l` is `sample / 4`.
+
+pub struct NoDef {
+  f: F32,
+}
+
+flow mk(c: F32 at sample) -> NoDef at sample {
+  NoDef { f: c }
+}
+
+flow make_chars(c: F32 at sample) -> Char at (sample * 2) {
+  [if c > 0.0 { 'a' } else { 'b' }, 'c']
+}
+
+flow pass_char(v: Char at sample) -> Char at sample {
+  v
+}
+
+flow take_char(v: Char at sample) -> F32 at sample {
+  if v == 'a' { 1.0 } else { 0.0 }
+}
+
+pub flow the_output_of_a_when(x: F32 at sample, c: Bool at sample) -> NoDef at sample {
+  mk~(x).when~(c)                                   //~ E0816
+}
+
+pub flow the_output_of_a_when_in_a_let(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  let m = mk~(x).when~(c)                           //~ E0816
+  m.f * x
+}
+
+pub flow two_whens(x: F32 at sample, c: Bool at sample, d: Bool at sample) -> NoDef at sample {
+  mk~(x).when~(c).when~(d)                          //~ E0816
+}
+
+pub flow a_char_output(c: Bool at sample) -> Char at sample {
+  pass_char~('a').when~(c)                          //~ E0816
+}
+
+pub flow when_under_a_down(p: F32 at block, l: Bool at (sample / 4)) -> NoDef at (sample / 4) {
+  mk~(p).down~(4).when~(l)                          //~ E0816
+}
+
+pub flow when_before_a_down(p: F32 at block, l: Bool at (sample / 4)) -> NoDef at (sample / 4) {
+  mk~(p).when~(l).down~(4)                          //~ E0816
+}
+
+pub flow the_deal_and_the_hold_are_one_error(p: F32 at block, l: Bool at (sample / 2)) -> Char at sample {
+  make_chars~(p).when~(l).down~(2)                  //~ E0816
+}
+
+pub flow a_when_after_a_deal(p: F32 at block, c: Bool at sample) -> Char at sample {
+  make_chars~(p).down~(2).when~(c)                  //~ E0816
+}
+
+// ---------------------------------------------------------------- no error: the part is not stopped, or its output has `Default`
+
+pub flow no_when(x: F32 at sample) -> NoDef at sample {
+  mk~(x)
+}
+
+pub flow a_float_output(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  let m = mk~(x)
+  m.f + take_char~('b').when~(c)
+}

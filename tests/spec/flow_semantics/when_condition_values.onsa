@@ -1,0 +1,278 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.10", "§11.9", "§11.4", "§13.4"]
+
+// The conditions of `.when~` that are slower than W and the `sample_tick()` in a condition (W7-10 U2a/t; S-1209, S-1218, S-1222, S-1217). Worked out by hand from §11.10 and the grid of the caller: the grid positions are the frames
+// 0, 4, 8 ... (m = 0, 1, 2 ...); `k` = m + 1 is the value of a child under `.down~(4)` (it adds 1 at each tick, and the frames of the grid m read m + 1); `m8` is the same under `.down~(8)`: g + 1 at the frames 8 g .. 8 g + 7.
+// A condition slower than W is held (§11.10: "W より遅い周期のクロックの値（保持で読む）"): the frame f reads the value of the last grid at or before it (a grid before a `sample` stage of the same position, §11.9), so
+// `acc~(1.0).when~(k > 2.0)` (W is `sample`) runs on the frames 8, 9, 10 ... and counts 1 2 3 ... there, T.default() before. `acc` counts the runs, `slot(f)` (the head of when_values.onsa) gives 101 102 203 204 305 ... at its
+// runs j = 0 1 2 ... (a stage of `sample / 2` writes the field that the stage of `sample` reads), `g2` adds the two elements of an array of `sample * 2`. The windows of `dws4` are N samples late: the tick at the body
+// sample s gathers the samples s - 4 .. s - 1 that the part ran (the first one gathers the 4 defaults).
+
+flow acc(f: F32 at block) -> F32 at sample {
+  let n = f + prev~(^n)
+  n
+}
+
+flow slot(f: F32 at block) -> F32 at sample {
+  let s = acc~(f).down~(2)
+  let n = prev~(^n) + 1.0
+  (s at sample) * 100.0 + n
+}
+
+flow lp(x: F32 at sample) -> F32 at sample {
+  x * 0.5 + prev~(x) * 0.5
+}
+
+flow g2(x: F32 at (sample * 2)) -> F32 at sample {
+  x[0] + x[1] * 10.0
+}
+
+flow sum4(x: F32 at (sample * 4)) -> F32 at sample {
+  x[0] + x[1] + x[2] + x[3]
+}
+
+flow dws4(x: F32 at sample) -> F32 at (sample / 4) {
+  sum4~(x).down~(4)
+}
+
+pub flow hold_acc() -> F32 at sample {
+  let k = acc~(1.0).down~(4)
+  acc~(1.0).when~(k > 2.0)
+}
+
+pub flow hold_slot() -> F32 at sample {
+  let k = acc~(1.0).down~(4)
+  slot~(1.0).when~(k > 2.0)
+}
+
+pub flow hold_odd() -> F32 at sample {
+  let k = acc~(1.0).down~(4)
+  acc~(1.0).when~(k == 1.0 || k == 3.0 || k == 5.0)
+}
+
+pub flow hold_lp(x: F32 at sample) -> F32 at sample {
+  let k = acc~(1.0).down~(4)
+  lp~(x).when~(k == 1.0 || k == 3.0)
+}
+
+pub flow lp_plain(x: F32 at sample) -> F32 at sample {
+  lp~(x)
+}
+
+pub flow lp_always(x: F32 at sample) -> F32 at sample {
+  let k = acc~(1.0).down~(4)
+  lp~(x).when~(k > 0.0)
+}
+
+pub flow dws_plain(x: F32 at sample) -> F32 at sample {
+  dws4~(x) at sample
+}
+
+pub flow dws_always(x: F32 at sample) -> F32 at sample {
+  let m8 = acc~(1.0).down~(8)
+  dws4~(x).when~(m8 > 0.0) at sample
+}
+
+pub flow dws_hold(x: F32 at sample) -> F32 at sample {
+  let m8 = acc~(1.0).down~(8)
+  dws4~(x).when~(m8 != 2.0) at sample
+}
+
+pub flow down_then_when_slower() -> F32 at sample {
+  let m8 = acc~(1.0).down~(8)
+  acc~(1.0).down~(4).when~(m8 != 2.0) at sample
+}
+
+pub flow when_then_down_slower() -> F32 at sample {
+  let m8 = acc~(1.0).down~(8)
+  acc~(1.0).when~(m8 != 2.0).down~(4) at sample
+}
+
+pub flow hold_up() -> F32 at sample {
+  let k = acc~(1.0).down~(4)
+  g2~(acc~(1.0).when~(k > 2.0).up~(2))
+}
+
+pub flow in_an_arm(c: Bool at sample) -> F32 at sample {
+  let k = acc~(1.0).down~(4)
+  if~ c { acc~(1.0).when~(k > 2.0) } else { 0.0 }
+}
+
+pub flow in_a_par() -> F32 at sample {
+  let k = acc~(1.0).down~(4)
+  let ys = par~ i in 0 ..< 2 { acc~(1.0).when~(k > F32.round_from(i + 1)) }
+  ys[0] * 10.0 + ys[1]
+}
+
+pub flow time_at_sample() -> F32 at sample {
+  acc~(1.0).when~(sample_tick() > 2)
+}
+
+pub flow time_before_an_up() -> F32 at sample {
+  g2~(acc~(1.0).when~(sample_tick() != 1).up~(2))
+}
+
+pub flow time_after_an_up() -> F32 at sample {
+  g2~(acc~(1.0).up~(2).when~(sample_tick() != 1))
+}
+
+pub flow time_at_the_grid() -> F32 at sample {
+  acc~(1.0).down~(4).when~((sample_tick() at (sample / 4)) > 5) at sample
+}
+
+pub flow time_with_no_at() -> F32 at sample {
+  acc~(1.0).down~(4).when~(sample_tick() > 5) at sample
+}
+
+test "a condition slower than W is read by holding it: the part runs from the frame where the held value holds, and the stage of sample / 2 inside it counts the runs" {
+  var a: [F32; 16] = [9.0; 16]
+  var b: [F32; 16] = [9.0; 16]
+  var sa = hold_acc.init(8.0)
+  var sb = hold_slot.init(8.0)
+  hold_acc.process(inout sa, inout a)
+  hold_slot.process(inout sb, inout b)
+  assert a == [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]
+  assert b == [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 101.0, 102.0, 203.0, 204.0, 305.0, 306.0, 407.0, 408.0]
+}
+
+test "a held condition that changes: the stopped stretches keep the last output, and the delays of the part count its runs" {
+  // k is 1 2 3 4 5 6 at the grids: the condition holds at the grids 0, 2, 4 (the frames 0 .. 3, 8 .. 11, 16 .. 19): the runs count 1 .. 4, 5 .. 8, 9 .. 12; the frames between keep the last one.
+  var a: [F32; 24] = [9.0; 24]
+  var sa = hold_odd.init(8.0)
+  hold_odd.process(inout sa, inout a)
+  assert a == [1.0, 2.0, 3.0, 4.0, 4.0, 4.0, 4.0, 4.0, 5.0, 6.0, 7.0, 8.0, 8.0, 8.0, 8.0, 8.0, 9.0, 10.0, 11.0, 12.0, 12.0, 12.0, 12.0, 12.0]
+  // x = the frame + 1, the part runs at the frames 0 .. 3 and 8 .. 11, so it sees 1 2 3 4 9 10 11 12 as one sequence: lp = (x + the one before) / 2 with 0 before the first: 0.5 1.5 2.5 3.5, then 6.5 (9 and 4) 9.5 10.5 11.5.
+  let xs: [F32; 12] = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0]
+  var b: [F32; 12] = [9.0; 12]
+  var sb = hold_lp.init(8.0)
+  hold_lp.process(inout sb, xs, inout b)
+  assert b == [0.5, 1.5, 2.5, 3.5, 3.5, 3.5, 3.5, 3.5, 6.5, 9.5, 10.5, 11.5]
+}
+
+test "a slow condition that always holds is the same as no when~: a chain and a conversion flow" {
+  var xs: [F32; 24] = [0.0; 24]
+  for i in 0 ..< 24 {
+    xs[i] = F32.round_from(i + 1)
+  }
+  var a: [F32; 24] = [9.0; 24]
+  var b: [F32; 24] = [9.0; 24]
+  var c: [F32; 24] = [9.0; 24]
+  var d: [F32; 24] = [9.0; 24]
+  var sa = lp_plain.init(8.0)
+  var sb = lp_always.init(8.0)
+  var sc = dws_plain.init(8.0)
+  var sd = dws_always.init(8.0)
+  lp_plain.process(inout sa, xs, inout a)
+  lp_always.process(inout sb, xs, inout b)
+  dws_plain.process(inout sc, xs, inout c)
+  dws_always.process(inout sd, xs, inout d)
+  assert b == a
+  assert d == c
+  // The tick at 4 m gathers the frames 4 m - 4 .. 4 m - 1: 0, 1 + 2 + 3 + 4, 5 + .. + 8, 9 + .. + 12, 13 + .. + 16, 17 + .. + 20.
+  assert c == [0.0, 0.0, 0.0, 0.0, 10.0, 10.0, 10.0, 10.0, 26.0, 26.0, 26.0, 26.0, 42.0, 42.0, 42.0, 42.0, 58.0, 58.0, 58.0, 58.0, 74.0, 74.0, 74.0, 74.0]
+}
+
+test "a conversion flow whose condition is slower than its output: the grids that are stopped keep the output, and the window is the 4 samples the part ran" {
+  // m8 is 1 for the frames 0 .. 7, 2 for 8 .. 15, 3 for 16 .. 23: the condition (m8 != 2) is read at the grids of sample / 4 (W is the clock of the output of dws4): false at the grids 2 and 3. The part ran at the
+  // frames 0 .. 7 (its samples 0 .. 7: 1 .. 8) and 16 .. 23 (its samples 8 .. 15: 17 .. 24): its ticks give 0, 10 (1 .. 4), then at the frame 16 (sample 8) 26 (5 .. 8) and at the frame 20 (sample 12) 74 (17 .. 20).
+  var xs: [F32; 24] = [0.0; 24]
+  for i in 0 ..< 24 {
+    xs[i] = F32.round_from(i + 1)
+  }
+  var out: [F32; 24] = [9.0; 24]
+  var st = dws_hold.init(8.0)
+  dws_hold.process(inout st, xs, inout out)
+  assert out == [0.0, 0.0, 0.0, 0.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 26.0, 26.0, 26.0, 26.0, 74.0, 74.0, 74.0, 74.0]
+}
+
+test "x.down~(4).when~(m8 != 2) and x.when~(m8 != 2).down~(4) give the same values: W is sample / 4 in both, and m8 is read held at the grid" {
+  // The part runs at the grids 0, 1, 4, 5 (m8 is 1, 1, 3, 3 there) and counts 1 2 3 4; the grids 2 and 3 keep 2.
+  var a: [F32; 24] = [9.0; 24]
+  var b: [F32; 24] = [9.0; 24]
+  var sa = down_then_when_slower.init(8.0)
+  var sb = when_then_down_slower.init(8.0)
+  down_then_when_slower.process(inout sa, inout a)
+  when_then_down_slower.process(inout sb, inout b)
+  let want: [F32; 24] = [1.0, 1.0, 1.0, 1.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 3.0, 3.0, 3.0, 3.0, 4.0, 4.0, 4.0, 4.0]
+  assert a == want
+  assert b == want
+}
+
+test "x.when~(l).up~(2) with a slow condition: W is sample * 2, the condition is held and read in both runs of a frame" {
+  // The condition holds from the frame 8: the frame 8 runs the part twice (n = 1, 2: 1 + 20), then 3 4, 5 6, 7 8. The array of the frames before is [T.default(); 2].
+  var out: [F32; 12] = [9.0; 12]
+  var st = hold_up.init(8.0)
+  hold_up.process(inout st, inout out)
+  assert out == [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 21.0, 43.0, 65.0, 87.0]
+}
+
+test "a when~ with a slow condition inside an arm of if~ goes on whether the arm is taken or not" {
+  // The part runs from the frame 8 (n = 1 2 3 4 at the frames 8 .. 11); c is 1 0 1 0 ...: the arm is read at the frames 8 and 10 (1 and 3), the else value 0 at the others.
+  let cs: [Bool; 12] = [true, false, true, false, true, false, true, false, true, false, true, false]
+  var out: [F32; 12] = [9.0; 12]
+  var st = in_an_arm.init(8.0)
+  in_an_arm.process(inout st, cs, inout out)
+  assert out == [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 3.0, 0.0]
+}
+
+test "a when~ with a slow condition in the body of a par~: each replica holds the condition it reads and counts its own runs" {
+  // The replica 0 reads k > 1 (from the frame 4: n = 1 .. 8 at the frames 4 .. 11), the replica 1 reads k > 2 (from the frame 8: n = 1 .. 4): the output is 10 n0 + n1.
+  var out: [F32; 12] = [9.0; 12]
+  var st = in_a_par.init(8.0)
+  in_a_par.process(inout st, inout out)
+  assert out == [0.0, 0.0, 0.0, 0.0, 10.0, 20.0, 30.0, 40.0, 51.0, 62.0, 73.0, 84.0]
+}
+
+test "sample_tick() in a condition is the time of the body's sample: the frame index, the same in both runs of an up, and at the grid of sample / 4 the time of the grid (S-1218)" {
+  // W is sample: the condition (t > 2) holds from the frame 3. Under an up (both orders) the frame reads t once and both runs use it: t != 1 stops the frame 1, whose array is [2; 2] (the last run of the frame 0: 22).
+  var a: [F32; 8] = [9.0; 8]
+  var b: [F32; 5] = [9.0; 5]
+  var c: [F32; 5] = [9.0; 5]
+  var d: [F32; 20] = [9.0; 20]
+  var sa = time_at_sample.init(8.0)
+  var sb = time_before_an_up.init(8.0)
+  var sc = time_after_an_up.init(8.0)
+  var sd = time_at_the_grid.init(8.0)
+  time_at_sample.process(inout sa, inout a)
+  time_before_an_up.process(inout sb, inout b)
+  time_after_an_up.process(inout sc, inout c)
+  time_at_the_grid.process(inout sd, inout d)
+  assert a == [0.0, 0.0, 0.0, 1.0, 2.0, 3.0, 4.0, 5.0]
+  assert b == [21.0, 22.0, 43.0, 65.0, 87.0]
+  assert c == b
+  // The time at the grid m is 4 m, so (t > 5) holds from the grid 2 (the frame 8): the part counts 1 2 3 at the grids 2 3 4; before it nothing ran.
+  assert d == [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0, 2.0, 2.0, 2.0, 2.0, 3.0, 3.0, 3.0, 3.0]
+}
+
+test "the calls of process cut the frames in the middle of a grid, a run and a stopped stretch, and a reset starts over: the same values (§13.4, §11.6)" {
+  // The values of hold_odd, in the pieces 1, 0, 4 (the frames 1 .. 4), 5 (5 .. 9: stopped, then the second run), 3, 11, and again after a reset in the middle of a stopped stretch.
+  var out: [F32; 24] = [9.0; 24]
+  var st = hold_odd.init(8.0)
+  hold_odd.process(inout st, inout out.slice(0, 1))
+  hold_odd.process(inout st, inout out.slice(1, 1))
+  hold_odd.process(inout st, inout out.slice(1, 5))
+  hold_odd.process(inout st, inout out.slice(5, 10))
+  hold_odd.process(inout st, inout out.slice(10, 13))
+  hold_odd.process(inout st, inout out.slice(13, 24))
+  let want: [F32; 24] = [1.0, 2.0, 3.0, 4.0, 4.0, 4.0, 4.0, 4.0, 5.0, 6.0, 7.0, 8.0, 8.0, 8.0, 8.0, 8.0, 9.0, 10.0, 11.0, 12.0, 12.0, 12.0, 12.0, 12.0]
+  assert out == want
+  var again: [F32; 24] = [9.0; 24]
+  var junk: [F32; 6] = [0.0; 6]
+  var s2 = hold_odd.init(8.0)
+  hold_odd.process(inout s2, inout junk)
+  hold_odd.reset(inout s2)
+  hold_odd.process(inout s2, inout again)
+  assert again == want
+}
+
+test "sample_tick() in a condition read at sample / 4 takes that clock with no at, as with an at to it (§11.4: the tick clock of the place it is used, up to sample / N)" {
+  var a: [F32; 24] = [9.0; 24]
+  var b: [F32; 24] = [9.0; 24]
+  var sa = time_at_the_grid.init(8.0)
+  var sb = time_with_no_at.init(8.0)
+  time_at_the_grid.process(inout sa, inout a)
+  time_with_no_at.process(inout sb, inout b)
+  assert a == b
+}

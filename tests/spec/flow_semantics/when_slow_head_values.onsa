@@ -1,0 +1,134 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.10", "§11.9", "§11.4", "§13.4"]
+
+// A head whose input is slower than W, under a `.when~` (W7-10 U2a/t; S-1209, S-1217). Worked out by hand from §11.10: "止まる部品の `at (sample / N)` の入力は、呼び出し側の値を、部品の中の刻みの時点で読む（中の格子は動いた
+// 刻みで数えるため）" and "頭の引数と `block` の段は呼び出し側のもので、止まっている間も評価する" (the argument of the head is the caller's value; the stage of `sample / 2` inside the part ticks at the runs 0, 2, 4 ... of the part and
+// reads it there, and a frame where the part is stopped reads nothing). `cnt` counts the runs, `q` = `cnt~().down~(2)` is a value of `sample / 2` of the caller that is m + 1 at the frames 2 m and 2 m + 1 (the frame f reads
+// f / 2 + 1, rounded down), `sl(p)` adds 1 to `p` in its stage of `sample / 2` (`h`) and gives it at `sample`. With no `when~`, or one that always holds, the part ticks at the frames 0, 2, 4 ...: 2 2 3 3 4 4 ... (q + 1).
+// With a condition that holds at the frames 1 2 5 6 7 9 10 11, the runs j = 0 .. 7 are those frames, and its ticks (j = 0, 2, 4, 6) are the frames 1, 5, 7, 10, which read q = 1, 3, 4, 6 there: h = 2, 4, 5, 7.
+
+flow cnt() -> F32 at sample {
+  let n = prev~(^n) + 1.0
+  n
+}
+
+flow acc(f: F32 at block) -> F32 at sample {
+  let n = f + prev~(^n)
+  n
+}
+
+flow sl(p: F32 at (sample / 2)) -> F32 at sample {
+  let h = p + 1.0
+  h at sample
+}
+
+pub flow head_plain() -> F32 at sample {
+  let q = cnt~().down~(2)
+  sl~(q)
+}
+
+pub flow head_true() -> F32 at sample {
+  let q = cnt~().down~(2)
+  sl~(q).when~(true)
+}
+
+pub flow head_gated(c: Bool at sample) -> F32 at sample {
+  let q = cnt~().down~(2)
+  sl~(q).when~(c)
+}
+
+pub flow head_with_a_slow_condition() -> F32 at sample {
+  let q = cnt~().down~(2)
+  let k = acc~(1.0).down~(4)
+  sl~(q).when~(k > 1.0)
+}
+
+pub flow head_time(c: Bool at sample) -> F32 at sample {
+  sl~(F32.round_from(sample_tick())).when~(c)
+}
+
+pub flow head_time_plain() -> F32 at sample {
+  sl~(F32.round_from(sample_tick()))
+}
+
+pub flow head_time_at(c: Bool at sample) -> F32 at sample {
+  sl~(F32.round_from(sample_tick() at (sample / 2))).when~(c)
+}
+
+test "with no condition, or one that always holds, the head reads its input at the frames 0, 2, 4 ..." {
+  let cs: [Bool; 12] = [true, true, true, true, true, true, true, true, true, true, true, true]
+  var a: [F32; 12] = [9.0; 12]
+  var b: [F32; 12] = [9.0; 12]
+  var sa = head_plain.init(8.0)
+  var sb = head_true.init(8.0)
+  var sc = head_gated.init(8.0)
+  var c: [F32; 12] = [9.0; 12]
+  head_plain.process(inout sa, inout a)
+  head_true.process(inout sb, inout b)
+  head_gated.process(inout sc, cs, inout c)
+  assert a == [2.0, 2.0, 3.0, 3.0, 4.0, 4.0, 5.0, 5.0, 6.0, 6.0, 7.0, 7.0]
+  assert b == a
+  assert c == a
+}
+
+test "a part that is stopped reads nothing, and the one that runs again reads the value of the frame where its own grid ticks (not the grid of the caller)" {
+  // c is 0 1 1 0 0 1 1 1 0 1 1 1: the runs are the frames 1 2 5 6 7 9 10 11 (j = 0 .. 7); the frames 0, 3, 4, 8 keep the last output (T.default() before the first run).
+  let cs: [Bool; 12] = [false, true, true, false, false, true, true, true, false, true, true, true]
+  var out: [F32; 12] = [9.0; 12]
+  var st = head_gated.init(8.0)
+  head_gated.process(inout st, cs, inout out)
+  assert out == [0.0, 2.0, 2.0, 2.0, 2.0, 4.0, 4.0, 5.0, 5.0, 5.0, 7.0, 7.0]
+}
+
+test "a slow head input and a slow condition: the first run reads the caller's value of its frame" {
+  // k is 1 2 3 at the grids of 4: k > 1 holds from the frame 4. The part runs at the frames 4 .. 11 (j = 0 .. 7): its ticks (j = 0, 2, 4, 6) are the frames 4, 6, 8, 10, which read q = 3, 4, 5, 6: h = 4, 5, 6, 7.
+  var out: [F32; 12] = [9.0; 12]
+  var st = head_with_a_slow_condition.init(8.0)
+  head_with_a_slow_condition.process(inout st, inout out)
+  assert out == [0.0, 0.0, 0.0, 0.0, 4.0, 4.0, 5.0, 5.0, 6.0, 6.0, 7.0, 7.0]
+}
+
+test "the time that the head reads is the caller's time at its own tick of sample / 2, held and read at the tick of the part's grid" {
+  // With no when~ the frames 0, 2, 4 ... read t = 0, 2, 4: h = 1 3 5 ... The argument is the caller's (§11.10: the arguments of the head are
+  // of the caller and evaluated while it is stopped; §11.3: a computed part of a tick is evaluated at that tick and kept; §11.4: the tick
+  // it takes is of the body where it is written, the caller), so `sample_tick()` is taken at the caller's frames 0, 2, 4 ... and the part
+  // reads the last of it at its ticks, the frames 1, 5, 7, 10 (the condition of the case above): t = 0, 4, 6, 10 (at the frame 10 the
+  // caller's tick of sample / 2 comes first, §11.9), h = 1, 5, 7, 11. With an `at` to the clock of the input the same (S-1210). The parent's
+  // reading of W7-10 U2a, checked by an advisor from the letter (`target/notes/180/w710/u2a/adv/report.md`).
+  let cs: [Bool; 12] = [false, true, true, false, false, true, true, true, false, true, true, true]
+  var a: [F32; 12] = [9.0; 12]
+  var b: [F32; 12] = [9.0; 12]
+  var sa = head_time_plain.init(8.0)
+  var sb = head_time.init(8.0)
+  head_time_plain.process(inout sa, inout a)
+  head_time.process(inout sb, cs, inout b)
+  var c: [F32; 12] = [9.0; 12]
+  var sc = head_time_at.init(8.0)
+  head_time_at.process(inout sc, cs, inout c)
+  assert a == [1.0, 1.0, 3.0, 3.0, 5.0, 5.0, 7.0, 7.0, 9.0, 9.0, 11.0, 11.0]
+  assert b == [0.0, 1.0, 1.0, 1.0, 1.0, 5.0, 5.0, 7.0, 7.0, 7.0, 11.0, 11.0]
+  assert c == b
+}
+
+test "the calls of process cut the frames at a tick of the part, in a stopped stretch and at 0 frames, and a reset starts over: the same values (§13.4, §11.6)" {
+  let cs: [Bool; 12] = [false, true, true, false, false, true, true, true, false, true, true, true]
+  var out: [F32; 12] = [9.0; 12]
+  var st = head_gated.init(8.0)
+  head_gated.process(inout st, cs.slice(0, 1), inout out.slice(0, 1))
+  head_gated.process(inout st, cs.slice(1, 1), inout out.slice(1, 1))
+  head_gated.process(inout st, cs.slice(1, 4), inout out.slice(1, 4))
+  head_gated.process(inout st, cs.slice(4, 6), inout out.slice(4, 6))
+  head_gated.process(inout st, cs.slice(6, 12), inout out.slice(6, 12))
+  let want: [F32; 12] = [0.0, 2.0, 2.0, 2.0, 2.0, 4.0, 4.0, 5.0, 5.0, 5.0, 7.0, 7.0]
+  assert out == want
+  // A reset after 3 frames (the part ran at the frames 1 and 2) puts the grid of the part and its last output back: the whole run again gives the same values.
+  var again: [F32; 12] = [9.0; 12]
+  var junk: [F32; 3] = [0.0; 3]
+  var s2 = head_gated.init(8.0)
+  head_gated.process(inout s2, cs.slice(0, 3), inout junk)
+  head_gated.reset(inout s2)
+  head_gated.process(inout s2, cs, inout again)
+  assert again == want
+}

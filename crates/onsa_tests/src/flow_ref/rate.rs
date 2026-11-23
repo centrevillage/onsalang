@@ -247,7 +247,7 @@ pub(super) fn levels(decl: &FlowDef, slow: &[i32], bounds: &[Bound]) -> Result<R
         let r = match bound {
             Bound::Rate(r) => r,
             Bound::When(cond) => {
-                all.push(when_level(prev, cond));
+                all.push(when_level(prev, cond)?);
                 continue;
             }
         };
@@ -283,11 +283,15 @@ pub(super) fn levels(decl: &FlowDef, slow: &[i32], bounds: &[Bound]) -> Result<R
 }
 
 /// The part that a `.when~(c)` makes of the part `inside` (§11.10, S-1209): the same ports and output; it reads `c` at W and runs the part at the ticks of P it holds for, so the stages of the part slower than W are run in W (their
-/// grid counts the frames it ran), and its `sample` counts them. It makes its output, which it holds, at W.
-fn when_level(inside: &Level, cond: ExprId) -> Level {
+/// grid counts the frames it ran), and its `sample` counts them. It makes its output, which it holds, at W. An input of the part slower than W, read
+/// at the ticks of the part, is W7-10 U2e's.
+fn when_level(inside: &Level, cond: ExprId) -> Result<Level, Fault> {
     let w = inside.out.min(0);
+    if inside.ins.iter().flatten().any(|&k| k < w) {
+        return Err(Fault::Unavailable("an input slower than the W of a `.when~` (W7-10 U2e)"));
+    }
     let stages: BTreeSet<i32> = inside.stages.iter().map(|y| (*y).max(w)).chain([w, 0]).collect();
-    Level {
+    Ok(Level {
         ratio: 0,
         ins: inside.ins.clone(),
         out: inside.out,
@@ -296,7 +300,7 @@ fn when_level(inside: &Level, cond: ExprId) -> Level {
         stages: stages.into_iter().collect(),
         made: w,
         when: Some(When { cond, w, at: w }),
-    }
+    })
 }
 
 /// The time of the head of a chain that its caller runs at `ctx` (`init`, `block`; the run of a stage takes it from `time_of` boundary by boundary, §11.4).
