@@ -133,11 +133,11 @@ mod tests;
 
 pub use branching::{Chain, Link, chain};
 pub use hoist::{Cond, Hoist, HoistId};
-pub use plan::{Counter, Words};
 pub use plan::{
-    Edge, Entry, Feed, Field, FieldOf, Kept, NodeId, Op, Out, Owner, Part, PlanBound, PlanKind, PlanModifier, PlanNode,
-    Read, To, Vertex,
+    CondRead, Edge, Entry, Feed, Field, FieldOf, Kept, NodeId, Op, Out, Owner, Part, PlanBound, PlanGuard, PlanKind,
+    PlanModifier, PlanNode, Read, To, Vertex,
 };
+pub use plan::{Counter, Words};
 
 pub(crate) use clocks::finish_flow;
 pub(crate) use plan::entries::walk as walk_entries;

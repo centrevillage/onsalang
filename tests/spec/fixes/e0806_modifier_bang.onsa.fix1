@@ -6,7 +6,7 @@
 // W7-09 U3a/t, S-811, S-555, S-556: a modifier of the closed list called with `!` after the call of an instance (a user flow, a
 // built-in delay, a chain of modifiers) is E0806 in a flow body (§11.2: "`!` の呼び出しの E0806 は、呼び先が flow か組込みの遅延なら `!` を `~` に置き換える
 // 修正候補"), and the one candidate replaces the `!` with `~`. The flow stage reads the modifier it makes
-// (the E0200 of `when~` and `reset_if~` until W7-10, and the chain clock for `down~` and `up~`) after the names stage, so the
+// (the E0200 of `reset_if~` until W7-10 U2 and of a built-in delay receiver until U3, the meaning of `when~`, and the chain clock for `down~` and `up~`) after the names stage, so the
 // program after the candidate may have an error of a later stage (§18.1). The receivers that are values and the names that the
 // list has not have no candidate (negative/e0806_modifier_bang_no_candidate.onsa). One error per flow (P-01).
 

@@ -1,0 +1,18 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§11.9", "§11.10", "§18.1"]
+
+// W7-10 U1/t (S-1209; it was the last flow of when_chain_head_clocks.onsa with the E0200 of the modifier until U1): `.when~` changes no clock (§11.10), so the output of `lp~(x).when~(c)` is a value of `sample` (the condition is read at
+// W = `sample`), which a flow declared with the output at `sample / 4` cannot give: a faster value read in a slower clock is E0815 (§11.3, §11.9) at the output expression. `c` is a `sample` input.
+
+pub flow lp(x: U32 at sample) -> U32 at sample {
+  x + prev~(x)
+}
+
+pub flow the_value_read_at_another_clock(x: U32 at sample, c: Bool at sample) -> U32 at (sample / 4) {
+  lp~(x).when~(c)                                   //~ E0815
+}
+
+pub flow the_value_of_a_down_read_at_a_faster_clock(p: U32 at block, c: Bool at block) -> U32 at sample {
+  lp~(p).down~(4).when~(c)                          //~ E0815
+}

@@ -12,7 +12,7 @@ fn the_forms_of_a_name() {
     assert_eq!(local("prev", 0), "prev_0");
     assert_eq!(local("_hoist", 2), "_hoist_2");
     assert_eq!(qualify("a", "lp_1"), "a.lp_1");
-    let parts = [Part::Own, Part::Buf, Part::W, Part::Init].map(|p| part("a.delay_0", p));
+    let parts = [Part::Own, Part::Buf, Part::W, Part::Init].map(|p| part("a.delay_0", p, None));
     assert_eq!(parts, ["a.delay_0", "a.delay_0.buf", "a.delay_0.w", "a.delay_0.init"]);
     // The `let`s that bind no name count apart from the others.
     let scopes = let_scopes([Some("p"), None, Some("n"), None].into_iter());

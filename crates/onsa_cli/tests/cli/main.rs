@@ -145,6 +145,7 @@ mod use_reexport;
 mod use_repair_loop;
 mod use_shapes;
 mod visibility;
+mod when_c_commands;
 
 /// Every file of tests in this directory is a module above: a file with no `mod` line is not
 /// compiled, and its tests go unrun without a failure.

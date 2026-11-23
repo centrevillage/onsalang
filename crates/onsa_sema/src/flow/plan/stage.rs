@@ -29,6 +29,8 @@ impl FlowInfo {
                 FieldOf::Input(l) | FieldOf::Let(l) => read_faster(l),
                 // The rings a chain gathers in and the arrays it deals from (§11.9, phase 0).
                 FieldOf::Node(_, Part::Gather { .. } | Part::Deal(_)) => true,
+                // The held output of a guard, until it first runs (§11.10).
+                FieldOf::Node(_, Part::Held(_)) => true,
                 _ => false,
             }
     }

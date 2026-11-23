@@ -1,0 +1,135 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.10", "§11.9"]
+
+// A `.when~(true)` changes nothing (§11.10: the part runs at every tick of W), wherever it is put in a chain (W7-10 U1/b, F1 to F3 of the
+// breaker: a `when~` whose receiver makes a burst that has boundaries inside it was not stopped by the gate and gave zeros, or failed in
+// the lowering, and one inside a dealing boundary under another `when~` read its condition before the local it names was made). Each test
+// compares a chain with the `.when~(true)` put in and the same chain without it, so it holds whatever S-1222 decides of a stopped burst.
+
+flow tk() -> F32 at sample {
+  F32.round_from(sample_tick())
+}
+
+flow r0(x: F32 at (sample * 2)) -> F32 at sample {
+  x[0]
+}
+
+flow cnt() -> F32 at sample {
+  let n = prev~(^n) + 1.0
+  n
+}
+
+flow last4b(c: Bool at (sample * 4)) -> Bool at sample {
+  c[3]
+}
+
+flow mk4c() -> F32 at (sample * 4) {
+  let n = cnt~() * 10.0
+  [n, n + 1.0, n + 2.0, n + 3.0]
+}
+
+pub flow f1_plain() -> F32 at sample {
+  tk~().up~(2).down~(2).up~(2).down~(2)
+}
+
+pub flow f1_when() -> F32 at sample {
+  tk~().up~(2).down~(2).up~(2).when~(true).down~(2)
+}
+
+pub flow f1b_plain() -> F32 at sample {
+  tk~().up~(2).up~(2).down~(2).down~(2)
+}
+
+pub flow f1b_when() -> F32 at sample {
+  tk~().up~(2).up~(2).down~(2).when~(true).down~(2)
+}
+
+pub flow f2_plain() -> F32 at sample {
+  r0~(tk~().up~(2).down~(2).up~(2))
+}
+
+pub flow f2_when() -> F32 at sample {
+  r0~(tk~().up~(2).down~(2).up~(2).when~(true))
+}
+
+pub flow f2b_plain() -> F32 at sample {
+  r0~(tk~().up~(2).up~(2).down~(2))
+}
+
+pub flow f2b_when() -> F32 at sample {
+  r0~(tk~().up~(2).up~(2).down~(2).when~(true))
+}
+
+pub flow f3_plain(c: Bool at sample) -> F32 at sample {
+  let c2 = last4b~(c).down~(4)
+  mk4c~().when~(c2).down~(4)
+}
+
+pub flow f3_when(c: Bool at sample) -> F32 at sample {
+  let c2 = last4b~(c).down~(4)
+  mk4c~().when~(c2).down~(4).when~(true)
+}
+
+pub flow f3n_plain(c: Bool at sample) -> F32 at sample {
+  let c2 = last4b~(c).down~(4)
+  mk4c~().when~(!c2).down~(4)
+}
+
+pub flow f3n_when(c: Bool at sample) -> F32 at sample {
+  let c2 = last4b~(c).down~(4)
+  mk4c~().when~(!c2).down~(4).when~(true)
+}
+
+test "a when~ that always holds after a block inside a dealing boundary changes nothing" {
+  var a: [F32; 16] = [0.0; 16]
+  var b: [F32; 16] = [0.0; 16]
+  var sa = f1_plain.init(8.0)
+  var sb = f1_when.init(8.0)
+  f1_plain.process(inout sa, inout a)
+  f1_when.process(inout sb, inout b)
+  assert a == b
+  var c: [F32; 16] = [0.0; 16]
+  var d: [F32; 16] = [0.0; 16]
+  var sc = f1b_plain.init(8.0)
+  var sd = f1b_when.init(8.0)
+  f1b_plain.process(inout sc, inout c)
+  f1b_when.process(inout sd, inout d)
+  assert c == d
+}
+
+test "a when~ that always holds outside a burst with a block inside changes nothing" {
+  var a: [F32; 16] = [0.0; 16]
+  var b: [F32; 16] = [0.0; 16]
+  var sa = f2_plain.init(8.0)
+  var sb = f2_when.init(8.0)
+  f2_plain.process(inout sa, inout a)
+  f2_when.process(inout sb, inout b)
+  assert a == b
+  var c: [F32; 16] = [0.0; 16]
+  var d: [F32; 16] = [0.0; 16]
+  var sc = f2b_plain.init(8.0)
+  var sd = f2b_when.init(8.0)
+  f2b_plain.process(inout sc, inout c)
+  f2b_when.process(inout sd, inout d)
+  assert c == d
+}
+
+test "an outer when~ that always holds around a when~ inside a dealing boundary changes nothing" {
+  let c: [Bool; 16] = [true, true, true, true, false, false, false, false, true, true, true, true, true, true, true, false]
+  var a: [F32; 16] = [0.0; 16]
+  var b: [F32; 16] = [0.0; 16]
+  var sa = f3_plain.init(8.0)
+  var sb = f3_when.init(8.0)
+  f3_plain.process(inout sa, c, inout a)
+  f3_when.process(inout sb, c, inout b)
+  assert a == b
+  var e: [F32; 16] = [0.0; 16]
+  var f: [F32; 16] = [0.0; 16]
+  var se = f3n_plain.init(8.0)
+  var sf = f3n_when.init(8.0)
+  f3n_plain.process(inout se, c, inout e)
+  f3n_when.process(inout sf, c, inout f)
+  assert e == f
+}

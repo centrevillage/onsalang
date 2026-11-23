@@ -934,16 +934,27 @@ fn st(s: crate::clock::ClockStage) -> String {
 
 /// The ops `ops` drawn ([`steps_of_a_chain`]).
 fn drawn_ops(ops: &[super::Op]) -> String {
-    use super::{Feed, Op, Out, To};
+    use super::{CondRead, Feed, Op, Out, To};
+    let out = |out: &Out| match out {
+        Out::None => "-".to_string(),
+        Out::Value => "V".to_string(),
+        Out::Deal(b) => format!("D({b})"),
+        Out::Held(g) => format!("H({g})"),
+    };
     let op = |op: &Op| match op {
-        Op::Run { body, out } => {
-            let out = match out {
-                Out::None => "-".to_string(),
-                Out::Value => "V".to_string(),
-                Out::Deal(b) => format!("D({b})"),
+        Op::Run { body, out: o } => format!("R({},{})", st(*body), out(o)),
+        // A guard: `r` reads its condition, `l` as read before it, `k` as kept; `@y` its
+        // stage driven by its count, `+` the count after it.
+        Op::When { guard, cond, due, ops, advance } => {
+            let cond = match cond {
+                CondRead::Read => "r",
+                CondRead::Local => "l",
+                CondRead::Kept => "k",
             };
-            format!("R({},{out})", st(*body))
+            let due = due.map_or(String::new(), |y| format!("@{}", st(y)));
+            format!("W({guard},{cond}{due}{})[{}]", if *advance { "+" } else { "" }, drawn_ops(ops))
         }
+        Op::Hold { guard, out: o } => format!("Hold({guard},{})", out(o)),
         Op::Ring { bound, input, from: Feed::Arg } => format!("G({bound},{input},arg)"),
         Op::Ring { bound, input, from: Feed::Ring(r) } => format!("G({bound},{input},ring{r})"),
         // `@by` of a copy in the window of `by` not that of its array (§11.9: the narrower).
@@ -951,6 +962,7 @@ fn drawn_ops(ops: &[super::Op]) -> String {
             To::Array(b) if *b == *by => format!("Deal({b}<-{from})"),
             To::Array(b) => format!("Deal({b}<-{from}@{by})"),
             To::Value => format!("Deal(V<-{from}@{by})"),
+            To::Held(g) => format!("Deal(H({g})<-{from}@{by})"),
         },
         Op::Each { bound, once, groups } => {
             let groups: Vec<_> = groups.iter().map(|(y, ops)| format!("{}: {}", st(*y), drawn_ops(ops))).collect();
@@ -1284,4 +1296,86 @@ pub flow outer(p: F32 at block) -> F32 at sample { user~(p).down~(8192) at sampl
     );
     assert_eq!(got.len(), 1, "{got:?}");
     assert!(got[0].1.starts_with("down~(8192) at sample }\npub flow user"), "{got:?}");
+}
+
+/// The table of a chain with `.when~` (§11.10, S-1209, W7-10 U1), each row
+/// worked out by hand from the arm of the memo of W7-10 (3.2, 3.5) with the
+/// tags of the high 1 of its review and its middle 1 (`target/notes/179/
+/// w710/decided.md`), not of the output of the implementation: W the
+/// `sample` of the frame with a stage of the head slower (`xh` has one at
+/// `sample / 2`), W slower than the frame (the read, the slower stage moved
+/// to it under the count, the count at the `sample` of the frame under the
+/// condition kept), both orders with `.down~`, a converter flow (its
+/// `sample` guarded by the condition kept), `.up~` inside and outside, two
+/// guards, a burst held, the array of a boundary dealt inside it and the
+/// array read outside it held. Each guard then the fields its table reads,
+/// in the order of the chain, inner first (S-1208, S-1220 provisional).
+#[test]
+fn the_table_of_a_chain_with_when() {
+    let src = "flow cnt() -> F32 at sample {
+  let n = prev~(^n) + 1.0
+  n
+}
+flow xh(a: F32 at sample) -> F32 at sample {
+  let h = cnt~().down~(2)
+  a + (h at sample)
+}
+flow last4(x: F32 at (sample * 4)) -> F32 at sample { x[3] }
+flow dws4(x: F32 at sample) -> F32 at (sample / 4) { last4~(x).down~(4) }
+flow dup2(x: F32 at sample) -> F32 at (sample * 2) { [x, x] }
+flow r0(x: F32 at (sample * 2)) -> F32 at sample { x[0] }
+flow mk4(p: F32 at block) -> F32 at (sample * 4) { [p, p, p, p] }
+flow pick0(x: F32 at (sample * 4)) -> F32 at sample { x[0] }
+pub flow w0(x: F32 at sample, c: Bool at sample) -> F32 at sample { xh~(x).when~(c) }
+pub flow w1(x: F32 at sample, c: Bool at block) -> F32 at sample { xh~(dws4~(x)).down~(4).when~(c) at sample }
+pub flow w2(x: F32 at sample, c: Bool at block) -> F32 at sample { xh~(dws4~(x)).when~(c).down~(4) at sample }
+pub flow w3(x: F32 at sample, c: Bool at block) -> F32 at sample { dws4~(x).when~(c) at sample }
+pub flow w4(x: F32 at sample, c: Bool at sample) -> F32 at sample { r0~(xh~(dup2~(x)).when~(c).up~(2)) }
+pub flow w5(x: F32 at sample, c: Bool at sample) -> F32 at sample { r0~(xh~(dup2~(x)).up~(2).when~(c)) }
+pub flow w6(x: F32 at sample, a: Bool at block, b: Bool at block) -> F32 at sample {
+  xh~(dws4~(x)).when~(a).down~(4).when~(b) at sample
+}
+pub flow w7(p: F32 at block, c: Bool at sample) -> F32 at sample { pick0~(mk4~(p).when~(c)) }
+pub flow w8(p: F32 at block, c: Bool at block) -> F32 at sample { mk4~(p).when~(c).down~(4) }
+pub flow w9(p: F32 at block, c: Bool at sample) -> F32 at sample { mk4~(p).down~(4).when~(c) }
+";
+    let a = check(src);
+    assert!(a.diagnostics.is_empty(), "{:?}", a.diagnostics);
+    let rows = [
+        ("w0", "0*: W(0,r)[], W(0,l@-1)[R(-1,-)], W(0,l+)[R(0,H(0))], Hold(0,V)   read=Run", "._tick_0 .held"),
+        (
+            "w1",
+            "-2*: W(0,r)[], W(0,l@-3)[R(-1,-)], W(0,l)[R(0,H(0))], Hold(0,V) | 0: W(0,k+)[]   read=Run",
+            "._on_0 ._tick_0 .held",
+        ),
+        ("w2", "-2*: W(0,r)[], W(0,l@-1)[R(-1,-)], W(0,l+)[R(0,H(0))], Hold(0,V)   read=Run", "._tick_0 .held"),
+        ("w3", "-2*: W(0,r)[R(-2,H(0))], Hold(0,V) | 0: W(0,k)[R(0,-)]   read=Run", "._on_0 .held"),
+        (
+            "w4",
+            "0*: Each(0,j)[0: W(0,r)[], W(0,l@-1)[R(-1,-)], W(0,l+)[R(0,H(0))], Hold(0,V)]   read=Run",
+            "._tick_0 .held",
+        ),
+        ("w5", "0*: W(0,r)[Each(0,j)[-1: R(-1,-); 0: R(0,V)]], Hold(0,V)   read=Run", ".held"),
+        (
+            "w6",
+            "-2*: W(1,r)[W(0,r)[], W(0,l@-1)[R(-1,-)], W(0,l+)[R(0,H(0))], Hold(0,H(1))], Hold(1,V)   read=Run",
+            "._tick_0 ._held_0 .held",
+        ),
+        ("w7", "0*: W(0,r)[R(0,V)], Hold(0,V)   read=Run", ".held"),
+        ("w8", "-2: W(0,r)[R(0,D(0))], Hold(0,D(0))   read=Array(0)", ".held ._deal_0"),
+        (
+            "w9",
+            "0*: W(0,r)[], W(0,l@-2)[R(0,D(0))], W(0,l+)[Deal(H(0)<-0@1)], Hold(0,V)   read=Run",
+            "._deal_0 ._tick_0 .held",
+        ),
+    ];
+    for (name, want, fields) in rows {
+        let f = flow(&a, name);
+        let id = f.nodes.iter().position(|n| !n.guards.is_empty()).unwrap_or_else(|| panic!("{name}: no guard"));
+        let n = &f.nodes[id];
+        assert_eq!(drawn(n), want, "{name}");
+        let own = |x: &&super::Field| matches!(x.of, super::FieldOf::Node(k, p) if k.0 as usize == id && p != super::Part::Own);
+        let got: Vec<_> = f.fields.iter().filter(own).map(|x| x.name.trim_start_matches(n.path.as_str())).collect();
+        assert_eq!(got.join(" "), fields, "{name}");
+    }
 }

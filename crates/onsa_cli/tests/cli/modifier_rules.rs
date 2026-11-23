@@ -73,6 +73,41 @@ fn diags(text: &str) -> Vec<Value> {
     diagnostics(&doc_of(&out)).clone()
 }
 
+/// §11.10 (W7-10 U1; S-1209): the program after a candidate that gives a `.when~(c)` on an instance whose condition `c` (a `sample` input) is read at the clock of the call is read with no diagnostic: the
+/// modifier has its meaning (it was the E0200 of the flow stage until U1).
+#[test]
+fn the_program_after_a_candidate_of_a_when_on_an_instance_has_no_diagnostic() {
+    let forms = [
+        ("lp~(x).when(c)", "E0811"),
+        ("lp~(lp~(x).when(c))", "E0811"),
+        ("let a = lp~(x).when(c)\n  a", "E0811"),
+        ("lp~(x).when!(c)", "E0806"),
+        ("lp~(x).when!(c).when~(c)", "E0806"),
+    ];
+    for (body, code) in forms {
+        let after = one_candidate(&flow(body), code);
+        let ds = diags(&after);
+        assert!(ds.is_empty(), "{body}: no diagnostic after the candidate, got {ds:?}\n{after}");
+    }
+}
+
+/// The modifiers that stay E0200 until the later units of W7-10 (`.reset_if~` until U2, a `.when~` on a built-in delay until U3) are still E0200 after the candidate (Q-09: the flow stage stops at the meaning it has not).
+#[test]
+fn the_program_after_a_candidate_of_a_reset_if_or_a_delay_receiver_is_e0200_until_the_later_units() {
+    let forms = [
+        ("lp~(x).reset_if(c)", "E0811"),
+        ("prev~(x).when(c)", "E0811"),
+        ("lp~(x).reset_if!(c)", "E0806"),
+        ("prev~(x).when!(c)", "E0806"),
+    ];
+    for (body, code) in forms {
+        let after = one_candidate(&flow(body), code);
+        let ds = diags(&after);
+        assert_eq!(ds.len(), 1, "{body}: one diagnostic after the candidate: {ds:?}\n{after}");
+        assert_eq!(code_of(&ds[0]), "E0200", "{body}: {}", ds[0]);
+    }
+}
+
 /// The one E0812 of the body, with no candidate, and the text of its notes.
 fn e0812_notes(body: &str) -> String {
     let ds = diags(&flow(body));

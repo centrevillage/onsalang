@@ -1,0 +1,10 @@
+# flow_ref 1 source=tests/spec/flow_semantics/when_slow_values.onsa tests=9 evaluated=0 unavailable=9 skipped=0 waiting=0
+? a condition that always holds, a literal or a block value, is the same as no condition: a chain, in both orders, and a let read at sample / 4	unavailable a modifier of W7-10 (`when~`, `reset_if~`)
+? a condition that never holds gives T.default() at every grid, for a literal and a block value	unavailable a modifier of W7-10 (`when~`, `reset_if~`)
+? down 4 then when~ and when~ then down 4 read the condition at the grid and give the same values: false at the first two grids, true after	unavailable a modifier of W7-10 (`when~`, `reset_if~`)
+? the condition changes from grid to grid: the grids that are stopped keep the last output, and the runs of the part count only the true grids, in both orders	unavailable a modifier of W7-10 (`when~`, `reset_if~`)
+? x.when~(a).down~(4).when~(b) runs at the grids where a and b both hold	unavailable a modifier of W7-10 (`when~`, `reset_if~`)
+? a conversion flow as the receiver: the window is the 4 samples the part saw before its tick, the grids where it is stopped add none, and the delay stays N	unavailable a modifier of W7-10 (`when~`, `reset_if~`)
+? x.when~(c).up~(2) runs both runs of a frame or neither: the condition is the caller's sample value, read in each run	unavailable a modifier of W7-10 (`when~`, `reset_if~`)
+? a when~ inside the boundary that deals is read at the grid: before its first run the dealt array is T.default()	unavailable a modifier of W7-10 (`when~`, `reset_if~`)
+? the calls of process cut the frames at the middle of a grid, of a run and of a stopped stretch, and a reset in the middle of a grid starts over (§13.4, §11.6)	unavailable a modifier of W7-10 (`when~`, `reset_if~`)

@@ -1,0 +1,11 @@
+# flow_ref 1 source=tests/spec/flow_semantics/when_values.onsa tests=10 evaluated=0 unavailable=10 skipped=0 waiting=0
+? a condition that always holds changes nothing: a literal, a block value, an init value	unavailable a modifier of W7-10 (`when~`, `reset_if~`)
+? a condition that never holds leaves the output at T.default() for the whole run	unavailable a modifier of W7-10 (`when~`, `reset_if~`)
+? a block condition is read once for each call of process, so the calls cut where the part stops and runs again	unavailable a modifier of W7-10 (`when~`, `reset_if~`)
+? the part runs on the frames where the condition holds, and its grid of sample / 2 counts the runs, not the frames	unavailable a modifier of W7-10 (`when~`, `reset_if~`)
+? the delays of the part count its runs: a stopped frame is no sample of the part	unavailable a modifier of W7-10 (`when~`, `reset_if~`)
+? sample_tick() in the part is the time of the caller, which goes on while the part is stopped; the grid of its own stage counts the runs	unavailable a modifier of W7-10 (`when~`, `reset_if~`)
+? S-1218: the part under down 4 inside a when~ counts the runs of the part, and reads the time of the caller divided by 4	unavailable a modifier of W7-10 (`when~`, `reset_if~`)
+? x.when~(a).when~(b) runs on the frames where both hold	unavailable a modifier of W7-10 (`when~`, `reset_if~`)
+? the calls of process cut the frames anywhere, a stopped stretch and 0 frames too: the same values (§13.4)	unavailable a modifier of W7-10 (`when~`, `reset_if~`)
+? reset puts the part and its last output back: the next frame is as after init, in the middle of a grid and while the part is stopped	unavailable a modifier of W7-10 (`when~`, `reset_if~`)

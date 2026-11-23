@@ -1,0 +1,64 @@
+// onsa.toml
+// [test]
+// spec = ["§11.9", "§11.10", "§18.1"]
+
+// W7-10 U1/t (S-1209, S-557, S-558): `.when~(c)` on an instance with a condition of the clock W (the clock the output of the part is read at, when it is slower than the place of the modifier, and else the place) or of the parameter kinds
+// is read with no diagnostic: a call of a flow, a chain of `.down~` and `.up~` before or after it, a conversion flow, two of them, in a `let`, an argument and an arm of `if~`. The values are in flow_semantics/when_values.onsa and
+// when_slow_values.onsa. These forms were E0200 in negative/modifier_when_reset_if_e0200_until_w7_10.onsa until W7-10 U1. `l` is a `sample / 4` input, `p` and `b` are `block` inputs.
+
+pub flow lp(x: F32 at sample) -> F32 at sample {
+  x * 0.5 + prev~(x) * 0.5
+}
+
+flow sum4(x: F32 at (sample * 4)) -> F32 at sample {
+  x[0] + x[1] + x[2] + x[3]
+}
+
+flow avg4(x: F32 at sample) -> F32 at (sample / 4) {
+  sum4~(x).down~(4)
+}
+
+pub flow on_an_instance(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  let a = lp~(x).when~(c)
+  a
+}
+
+pub flow a_constant_condition(x: F32 at sample) -> F32 at sample {
+  lp~(x).when~(true)
+}
+
+pub flow an_init_condition(x: F32 at sample, i: Bool at init) -> F32 at sample {
+  lp~(x).when~(i)
+}
+
+pub flow after_a_down_with_a_block_condition(p: F32 at block, b: Bool at block) -> F32 at sample {
+  lp~(p).down~(4).when~(b) at sample
+}
+
+pub flow after_a_down_at_the_grid(p: F32 at block, l: Bool at (sample / 4)) -> F32 at sample {
+  lp~(p).down~(4).when~(l) at sample
+}
+
+pub flow before_a_down_at_the_grid(p: F32 at block, l: Bool at (sample / 4)) -> F32 at sample {
+  lp~(p).when~(l).down~(4) at sample
+}
+
+pub flow on_a_conversion_flow(x: F32 at sample, l: Bool at (sample / 4)) -> F32 at sample {
+  avg4~(x).when~(l) at sample
+}
+
+pub flow two_whens(x: F32 at sample, a: Bool at sample, c: Bool at sample) -> F32 at sample {
+  lp~(x).when~(a).when~(c)
+}
+
+pub flow two_whens_around_a_down(p: F32 at block, l: Bool at (sample / 4), m: Bool at (sample / 4)) -> F32 at sample {
+  lp~(p).when~(l).down~(4).when~(m) at sample
+}
+
+pub flow in_an_argument(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  lp~(lp~(x).when~(c))
+}
+
+pub flow in_an_arm_of_if_tilde(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  if~ c { lp~(x).when~(c) } else { x }
+}

@@ -1,0 +1,24 @@
+// onsa.toml
+// [test]
+// spec = ["§11.9", "§11.10", "§18.1"]
+
+// W7-09 U4b/i2 (spec §11.10: `.when~` and `.reset_if~` change no type and no clock; §11.9: the head of a chain runs in the frame of the sum of its ratios; §18.1): the head of a chain with a `.when~` or a `.reset_if~` is read in its frame, so
+// an argument of the head at another clock than its input is E0815, whatever the modifier after it is (the `.reset_if~` of the third flow is E0200 until W7-10 U2; the E0815 of its head comes first in the order of the file). One error per flow.
+// The output of such a chain read at another clock is in when_output_read_at_another_clock.onsa. `l` is a `sample / 4` input.
+
+pub flow lp(x: U32 at sample) -> U32 at sample {
+  x + prev~(x)
+}
+
+pub flow an_argument_of_the_head(l: U32 at (sample / 4), c: Bool at sample) -> U32 at sample {
+  lp~(l).when~(c)                                   //~ E0815
+}
+
+pub flow an_argument_of_the_head_in_a_frame(x: U32 at sample, c: Bool at sample) -> U32 at sample {
+  lp~(x).down~(2).when~(c) at sample                //~ E0815
+}
+
+pub flow an_argument_of_the_head_in_a_let(l: U32 at (sample / 4), c: Bool at sample) -> U32 at sample {
+  let a = lp~(l).reset_if~(c)                       //~ E0815
+  a
+}

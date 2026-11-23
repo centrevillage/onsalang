@@ -8,6 +8,7 @@
 //! it is read from.
 
 use super::*;
+use onsa_sema::flow::{CondRead, PlanGuard};
 
 /// The walk of the ops of an entry of the instance `id` (`n`) in the scope
 /// of `state` (§11.9): the run j of each `.up~` around the ops lowered, by
@@ -22,12 +23,15 @@ struct Walk<'a> {
     span: Span,
     js: Vec<(usize, Expr)>,
     args: Vec<(u32, Expr, Option<Ratio>)>,
+    /// The conditions of the guards read in the ops, lowered before them.
+    conds: Vec<(u32, Expr)>,
     value: Option<Expr>,
 }
 
 impl<'a> Walk<'a> {
     fn new(info: &'a FlowInfo, id: NodeId, state: &'a Expr, span: Span) -> Self {
-        Walk { info, id, n: info.node(id), state, span, js: Vec::new(), args: Vec::new(), value: None }
+        let (js, args, conds) = (Vec::new(), Vec::new(), Vec::new());
+        Walk { info, id, n: info.node(id), state, span, js, args, conds, value: None }
     }
 
     fn field(&self, lw: &Lowerer, part: Part) -> R<Expr> {
@@ -36,6 +40,29 @@ impl<'a> Walk<'a> {
 
     fn bound(&self, b: u32) -> R<&'a onsa_sema::flow::PlanBound> {
         self.n.bounds.get(b as usize).ok_or_else(|| internal(self.span, format!("no boundary {b}")))
+    }
+
+    fn guard(&self, g: u32) -> R<&'a onsa_sema::flow::PlanGuard> {
+        self.n.guards.get(g as usize).ok_or_else(|| internal(self.span, format!("no guard {g}")))
+    }
+
+    /// The frame a guard is in, by the count of the boundaries inside it,
+    /// and the exponent of the output of the part it wraps there.
+    fn guard_frame(&self, g: u32) -> R<(usize, Ratio)> {
+        let guard = self.guard(g)?;
+        let out = guard.out.ok_or_else(|| internal(self.span, "a held output of no clock"))?;
+        Ok((self.n.bounds.iter().filter(|b| b.at < guard.at).count(), out))
+    }
+
+    /// The exponent of the output of the head in the frame of the call of
+    /// the innermost boundary (of the call of the chain with none).
+    fn head_out(&self) -> R<Ratio> {
+        let out = match (self.n.bounds.first(), self.n.clock) {
+            (Some(b), _) => b.out,
+            (None, Clock::Tick(o)) => Some(o),
+            (None, _) => None,
+        };
+        out.ok_or_else(|| internal(self.span, "a run of no output"))
     }
 
     /// The run j of the `.up~` of the boundary `b` the ops are lowered in.
@@ -93,15 +120,27 @@ fn child_time(cx: &mut FnCx, out: &mut Vec<Stmt>, w: &Walk, words: usize) -> R<V
 /// `.up~`); 0 at the start of one whose `_tick` is not of a grid (S-1217),
 /// whose work is all at its `sample`, where the start is masked out of each
 /// window ([`at`]).
-fn counter(lw: &Lowerer, cx: &FnCx, w: &Walk, from: usize) -> R<Expr> {
+fn counter(lw: &Lowerer, cx: &FnCx, w: &Walk, from: usize, own: usize) -> R<Expr> {
     let (f, span) = (cx.flow.as_ref().expect("flow context"), w.span);
     let root = f.scopes.first().ok_or_else(|| internal(span, "a chain outside the state"))?;
     let mut c = match f.info.counter() {
         Counter::Tick => vec![sfield(lw, f.info, &root.state, FieldOf::Tick, span)?],
         Counter::None | Counter::Process => vec![u32_lit(span, 0)],
     };
-    for (b, bound) in w.n.bounds.iter().enumerate().skip(from).rev() {
-        c = fold(&c, bound.ratio, w.j(b), span)?;
+    let (bounds, len) = (&w.n.bounds, w.n.bounds.len());
+    for k in (from..=len).rev() {
+        // A guard in the frame inside the boundary k that counts the ticks it ran counts
+        // those of the part it wraps (§11.9, S-1217), outermost first, of a window of
+        // a boundary it wraps (outside `own`, of none of the caller's).
+        let here = |g: &&PlanGuard| k > own && g.at > bounds[k - 1].at && (k == len || g.at < bounds[k].at);
+        for (g, _) in (0u32..).zip(&w.n.guards).filter(|g| here(&g.1)).collect::<Vec<_>>().into_iter().rev() {
+            if f.info.field_at(FieldOf::Node(w.id, Part::Count(g))).is_some() {
+                c = vec![w.field(lw, Part::Count(g))?];
+            }
+        }
+        if k > from {
+            c = fold(&c, bounds[k - 1].ratio, w.j(k - 1), span)?;
+        }
     }
     c.pop().ok_or_else(|| internal(span, "a counter of no word"))
 }
@@ -111,14 +150,14 @@ fn counter(lw: &Lowerer, cx: &FnCx, w: &Walk, from: usize) -> R<Expr> {
 /// each of its frames ([`counter`] C): `(C & (2^(e − x) − 1)) >> −x` of x ≤
 /// 0 (`>> 0` too), `<< x` of 0 < x < e, 0 of the whole window ([`whole`]).
 /// The one place of the places of the rings and the arrays of a chain.
-fn at(lw: &Lowerer, cx: &FnCx, w: &Walk, from: usize, x: Ratio, e: Ratio) -> R<Expr> {
+fn at(lw: &Lowerer, cx: &FnCx, w: &Walk, (from, own): (usize, usize), x: Ratio, e: Ratio) -> R<Expr> {
     let span = w.span;
     if whole(x, e) {
         return Ok(u32_lit(span, 0));
     }
     let mask = u32::try_from(e.0 - x.0).ok().and_then(|w| 1u32.checked_shl(w)).map(|m| m - 1);
     let mask = mask.ok_or_else(|| internal(span, format!("a window of 2^{} of 2^{}", e.0, x.0)))?;
-    let c = checked_binary(BinOp::BitAnd, counter(lw, cx, w, from)?, u32_lit(span, mask));
+    let c = checked_binary(BinOp::BitAnd, counter(lw, cx, w, from, own)?, u32_lit(span, mask));
     let (op, by) = if x.0 <= 0 { (BinOp::Shr, x.0.unsigned_abs()) } else { (BinOp::Shl, x.0.unsigned_abs()) };
     Ok(checked_binary(op, c, u32_lit(span, by)))
 }
@@ -170,10 +209,10 @@ pub(super) fn entry(
 ) -> R<Option<Expr>> {
     let info = cx.flow.as_ref().expect("flow context").info;
     let mut w = Walk::new(info, id, state, cx.ast.expr(info.node(id).expr).span);
-    let value = |op: &Op| matches!(op, Op::Run { out: Out::Value, .. } | Op::Deal { to: To::Value, .. });
+    // The value made in a loop or under a guard (of a burst, the review of the memo of W7-10, its middle 1).
     let mut looped = false;
-    for op in e.ops.iter().filter(|op| matches!(op, Op::Each { .. })) {
-        Op::walk(std::slice::from_ref(op), &mut |op| looped |= value(op));
+    for op in e.ops.iter().filter(|op| matches!(op, Op::Each { .. } | Op::When { .. })) {
+        Op::walk(std::slice::from_ref(op), &mut |op| looped |= op.makes_value());
     }
     if looped {
         let t = cx.info.expr_types.get(&w.n.expr).ok_or_else(|| internal(w.span, "an instance of no type"))?;
@@ -194,51 +233,107 @@ pub(super) fn entry(
 /// ([`drive`]), the arguments they read lowered before the outermost.
 fn ops(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, w: &mut Walk, list: &[Op]) -> R<Option<Expr>> {
     let (n, span, mut value) = (w.n, w.span, None);
+    // The condition of each guard read in this list, as it read it.
+    let mut read: Vec<(u32, Expr)> = Vec::new();
     for op in list {
         match *op {
             Op::Ring { bound: b, input, from } => {
                 let part = Part::Gather { bound: b, input };
                 let k = exp(n, part, span)?;
                 let (x, f) = (w.bound(b)?.outside(k), b as usize + 1);
-                let (dst, pos) = (w.field(lw, part)?, at(lw, cx, w, f, x, k)?);
+                let (dst, pos) = (w.field(lw, part)?, at(lw, cx, w, (f, b as usize), x, k)?);
+                let caller = n.bounds.len();
                 let src = match from {
                     Feed::Arg => match arg_value(lw, cx, out, w, input)? {
-                        (v, Some(q)) => Src::At(v, at(lw, cx, w, f, x, q)?, q),
+                        (v, Some(q)) => Src::At(v, at(lw, cx, w, (f, caller), x, q)?, q),
                         (v, None) => Src::Value(v),
                     },
                     Feed::Ring(o) => {
                         let part = Part::Gather { bound: o, input };
                         let q = exp(n, part, span)?;
-                        Src::At(w.field(lw, part)?, at(lw, cx, w, f, x, q)?, q)
+                        Src::At(w.field(lw, part)?, at(lw, cx, w, (f, o as usize), x, q)?, q)
                     }
                 };
                 copy(cx, out, (dst, k), pos, src, x, span)?;
             }
             Op::Run { body, out: to } => {
                 let v = run(lw, cx, w, body)?;
-                let to = match to {
-                    Out::None => {
-                        expr_stmt(out, v);
-                        continue;
-                    }
-                    Out::Value if w.value.is_none() => {
-                        value = Some(v);
-                        continue;
-                    }
-                    Out::Value => To::Value,
-                    Out::Deal(b) => To::Array(b),
+                value = put(lw, cx, out, w, to, v, |w| Ok((0, w.head_out()?)))?.or(value);
+            }
+            Op::Hold { guard: g, out: to } => {
+                let on = read.iter().find(|x| x.0 == g).map(|x| x.1.clone());
+                let on = on.ok_or_else(|| internal(span, "a hold of a guard not read"))?;
+                let ((from, o), held) = (w.guard_frame(g)?, w.field(lw, Part::Held(g))?);
+                if !o.faster_than_body() {
+                    value = put(lw, cx, out, w, to, held, |_| Ok((from, o)))?.or(value);
+                    continue;
+                }
+                // A burst, made in the local of the value or the array that deals it: its last
+                // element held when it ran, else that N times, each tick of its output reading
+                // the last element (§11.10, S-1222).
+                let v = match to {
+                    Out::Deal(b) => Some(w.field(lw, Part::Deal(b))?),
+                    _ => w.value.clone(),
                 };
-                let m = w.bound(0)?.out.ok_or_else(|| internal(span, "a run of no output"))?;
-                // Of the value of a tick of the caller made once in a loop, e ≤ 0 (the memo of U6b 2.5).
-                let (dst, e) = target(lw, w, to)?;
-                let pos = at(lw, cx, w, 0, m, e)?;
-                copy(cx, out, (dst, e), pos, Src::Value(v), m, span)?;
+                let (v, n) = (v.ok_or_else(|| internal(span, "a burst held of no local"))?, count(o, span)?);
+                let (mut ran, mut not) = (Vec::new(), Vec::new());
+                assign(&mut ran, &held, index(v.clone(), u32_lit(span, n - 1))?)?;
+                let all = Expr::new(v.ty.clone(), span, ExprKind::Repeat { elem: Box::new(held), n });
+                assign(&mut not, &v, all)?;
+                let (ran, not) = (Block { stmts: ran, value: None }, Block { stmts: not, value: None });
+                out.push(stmt(span, StmtKind::If(on, ran, not)));
+            }
+            Op::When { guard: g, cond, due, ops: ref inner, advance } => {
+                if w.js.is_empty() {
+                    prelower(lw, cx, out, w, std::slice::from_ref(op))?;
+                }
+                let on = match cond {
+                    CondRead::Read => {
+                        let v = w.conds.iter().find(|x| x.0 == g).map(|x| x.1.clone());
+                        let v = v.map_or_else(|| lower_expr(lw, cx, w.guard(g)?.cond), Ok)?;
+                        let v = materialize(cx, v, out, "__on");
+                        if w.info.field_at(FieldOf::Node(w.id, Part::On(g))).is_some() {
+                            assign(out, &w.field(lw, Part::On(g))?, v.clone())?;
+                        }
+                        v
+                    }
+                    CondRead::Local => read
+                        .iter()
+                        .find(|x| x.0 == g)
+                        .map(|x| x.1.clone())
+                        .ok_or_else(|| internal(span, "a guard of a condition not read before it"))?,
+                    CondRead::Kept => w.field(lw, Part::On(g))?,
+                };
+                read.push((g, on.clone()));
+                let mut body = Vec::new();
+                // The ops under a guard make no value: they write the held output or a local.
+                if ops(lw, cx, &mut body, w, inner)?.is_some() {
+                    return Err(internal(span, "a value made under a guard"));
+                }
+                if let Some(y) = due {
+                    let mut runs = Vec::new();
+                    drive(vec![(y, body)], &w.field(lw, Part::Count(g))?, span, &mut runs)?;
+                    body = runs;
+                }
+                if advance {
+                    let t = w.field(lw, Part::Count(g))?;
+                    assign(&mut body, &t, super::phases::wrap_add(t.clone(), span))?;
+                }
+                if !body.is_empty() {
+                    out.push(stmt(span, StmtKind::If(on, Block { stmts: body, value: None }, Block::default())));
+                }
             }
             Op::Deal { to, from, by } => {
-                let x = w.bound(by)?.out.ok_or_else(|| internal(span, "a copy of no window"))?;
-                let (from, (dst, e)) = (Part::Deal(from), target(lw, w, to)?);
-                let (pos, q) = (at(lw, cx, w, by as usize, x, e)?, exp(n, from, span)?);
-                let src = Src::At(w.field(lw, from)?, at(lw, cx, w, by as usize, x, q)?, q);
+                // The output of the part inside `by`; of none, of the chain (the caller's frame).
+                let x = match (w.n.bounds.get(by as usize), w.n.clock) {
+                    (Some(b), _) => b.out,
+                    (None, Clock::Tick(o)) => Some(o),
+                    (None, _) => None,
+                };
+                let x = x.ok_or_else(|| internal(span, "a copy of no window"))?;
+                let (array, (dst, e, own)) = (Part::Deal(from), target(lw, w, to)?);
+                let (pos, q) = (at(lw, cx, w, (by as usize, own), x, e)?, exp(n, array, span)?);
+                let src = Src::At(w.field(lw, array)?, at(lw, cx, w, (by as usize, from as usize), x, q)?, q);
                 copy(cx, out, (dst, e), pos, src, x, span)?;
             }
             Op::Each { bound: u, once, ref groups } => {
@@ -269,12 +364,47 @@ fn ops(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, w: &mut Walk, list:
     Ok(value)
 }
 
-/// Where a run or a copy writes (§11.9), with the exponent of its window:
-/// the array of a boundary, or the value the ops make in a loop.
-fn target(lw: &Lowerer, w: &Walk, to: To) -> R<(Expr, Ratio)> {
+/// The result `v` of an op to `to` (§11.9, §11.10): nowhere, the value
+/// (made in a loop or under a guard: its window of it), the array of a
+/// boundary or the held output of a guard, each a window of the 2^m
+/// elements of each frame inside the boundary `from` (`frame` of the walk
+/// gives both). The value when it is not made in a local.
+fn put(
+    lw: &Lowerer,
+    cx: &mut FnCx,
+    out: &mut Vec<Stmt>,
+    w: &Walk,
+    to: Out,
+    v: Expr,
+    frame: impl FnOnce(&Walk) -> R<(usize, Ratio)>,
+) -> R<Option<Expr>> {
+    let to = match to {
+        Out::None => {
+            expr_stmt(out, v);
+            return Ok(None);
+        }
+        Out::Value if w.value.is_none() => return Ok(Some(v)),
+        Out::Value => To::Value,
+        Out::Deal(b) => To::Array(b),
+        Out::Held(g) => To::Held(g),
+    };
+    let (from, m) = frame(w)?;
+    // Of the value of a tick of the caller made once in a loop, e ≤ 0 (the memo of U6b 2.5).
+    let (dst, e, own) = target(lw, w, to)?;
+    let pos = at(lw, cx, w, (from, own), m, e)?;
+    copy(cx, out, (dst, e), pos, Src::Value(v), m, w.span)?;
+    Ok(None)
+}
+
+/// Where a run or a copy writes (§11.9), with the exponent of its window
+/// and the boundary whose it is ([`counter`]): the array of a boundary, the
+/// value the ops make in a loop, the held output of a guard (the caller's).
+fn target(lw: &Lowerer, w: &Walk, to: To) -> R<(Expr, Ratio, usize)> {
+    let caller = w.n.bounds.len();
     match (to, &w.value, w.n.clock) {
-        (To::Array(b), ..) => Ok((w.field(lw, Part::Deal(b))?, exp(w.n, Part::Deal(b), w.span)?)),
-        (To::Value, Some(v), Clock::Tick(o)) => Ok((v.clone(), o)),
+        (To::Array(b), ..) => Ok((w.field(lw, Part::Deal(b))?, exp(w.n, Part::Deal(b), w.span)?, b as usize)),
+        (To::Held(g), ..) => Ok((w.field(lw, Part::Held(g))?, Ratio(0), caller)),
+        (To::Value, Some(v), Clock::Tick(o)) => Ok((v.clone(), o, caller)),
         (To::Value, ..) => Err(internal(w.span, "a value made in a loop of no local")),
     }
 }
@@ -285,16 +415,26 @@ fn target(lw: &Lowerer, w: &Walk, to: To) -> R<(Expr, Ratio)> {
 /// of U6b0, its low 5): read in a loop, the places of the nodes in them
 /// would be in it, which the reads after it do not see.
 fn prelower(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, w: &mut Walk, list: &[Op]) -> R<()> {
-    let (mut read, mut bodies) = (BTreeSet::new(), Vec::new());
+    let (mut read, mut bodies, mut conds) = (BTreeSet::new(), Vec::new(), Vec::new());
     Op::walk(list, &mut |op| match *op {
         Op::Ring { input, from: Feed::Arg, .. } => {
             read.insert(input);
         }
         Op::Run { body, .. } => bodies.push(body),
+        Op::When { guard, cond: CondRead::Read, .. } => conds.push(guard),
         _ => {}
     });
     for body in bodies {
         read.extend(head_inputs(lw, w, body)?.into_iter().filter(|&i| w.n.ring_of(0, i).is_none()));
+    }
+    // Lowered once: those of an op before (a guard and a loop, §11.10: read while it stops).
+    read.retain(|i| w.args.iter().all(|x| x.0 != *i));
+    conds.retain(|g| w.conds.iter().all(|x| x.0 != *g));
+    // SPEC-GAP(S-1221): the condition of a guard inside one that stops it is read too, as
+    // the arguments of the head are (provisional).
+    for g in conds {
+        let v = lower_expr(lw, cx, w.guard(g)?.cond)?;
+        w.conds.push((g, materialize(cx, v, out, "__cond")));
     }
     for input in read {
         let (v, q) = arg_value(lw, cx, out, w, input)?;
@@ -370,6 +510,7 @@ fn copy(
             return assign(out, &place, of_type(v, &place.ty)?);
         }
         Src::At(a, _, q) if whole(x, e) && whole(x, q) => return assign(out, &dst, a),
+        Src::At(a, at, _) if whole(x, e) && count == 1 => return assign(out, &dst, index(a, at)?),
         Src::At(a, at, _) if count == 1 => return assign(out, &index(dst, pos)?, index(a, at)?),
         Src::Value(v) => (materialize(cx, v, out, "__chunk"), u32_lit(span, 0)),
         Src::At(a, at, _) => (a, at),
@@ -439,16 +580,16 @@ fn run(lw: &mut Lowerer, cx: &mut FnCx, w: &Walk, body: ClockStage) -> R<Expr> {
     let time = if words > 0 { child_time(cx, &mut lets, w, words)? } else { Vec::new() };
     let mut given = Vec::new();
     for input in head_inputs(lw, w, body)? {
-        let (src, e) = match (n.ring_of(0, input), w.args.iter().find(|x| x.0 == input)) {
+        let (src, e, owner) = match (n.ring_of(0, input), w.args.iter().find(|x| x.0 == input)) {
             (Some(bound), _) => {
                 let part = Part::Gather { bound, input };
-                (w.field(lw, part)?, exp(n, part, span)?)
+                (w.field(lw, part)?, exp(n, part, span)?, bound as usize)
             }
-            (None, Some((_, v, q))) => (v.clone(), q.unwrap_or(Ratio(0))),
+            (None, Some((_, v, q))) => (v.clone(), q.unwrap_or(Ratio(0)), n.bounds.len()),
             (None, None) => continue,
         };
         let v = match n.bounds.first().and_then(|b| *b.ins.get(input as usize)?) {
-            Some(k) => window(cx, &mut lets, src, (k, e), |cx| at(lw, cx, w, 0, k, e), "__in", span)?,
+            Some(k) => window(cx, &mut lets, src, (k, e), |cx| at(lw, cx, w, (0, owner), k, e), "__in", span)?,
             None => src,
         };
         given.push((input, v));
@@ -475,5 +616,13 @@ pub(super) fn dealt(
     let (n, part) = (w.n, Part::Deal(b));
     let o = n.bounds.last().and_then(|l| l.out.map(|e| l.outside(e)));
     let (o, e) = (o.ok_or_else(|| internal(span, "a value of no output"))?, exp(n, part, span)?);
-    window(cx, out, w.field(lw, part)?, (o, e), |cx| at(lw, cx, &w, n.bounds.len(), o, e), "__dealt", span)
+    window(
+        cx,
+        out,
+        w.field(lw, part)?,
+        (o, e),
+        |cx| at(lw, cx, &w, (n.bounds.len(), b as usize), o, e),
+        "__dealt",
+        span,
+    )
 }

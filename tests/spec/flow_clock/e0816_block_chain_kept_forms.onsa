@@ -5,7 +5,7 @@
 // W7-21 U1/t, S-1207, S-1214 (1), S-1209 (spec §11.9: "集める入力の型が `Default` を満たさなければ E0816"; §11.10: "`when~`・`reset_if~` はレートを変えない"): the chains whose E0816 is the same when each modifier
 // wraps the whole of its left as one part (S-1207) as when the ratios of the chain are summed. The part with a fast port under `.down~` over `.down~` is gathered at each of the boundaries (a boundary after a `.down~`
 // still has the port faster than its own `sample`) and dealt the same, so the one error of the input or of the output stays (S-1214 (1)). The `.when~` and `.reset_if~` of a chain are no boundary: they change no E0816
-// of a chain of `.down~`, before or after it (a chain with `.up~` and one of them is the E0816 of a boundary that gathers or deals first, else E0200 until W7-10, and what it means is S-1209, so none is written here). The forms that were no error before are in
+// of a chain of `.down~`, before or after it (a chain with `.up~` and one of them is the E0816 of a boundary that gathers or deals first; the E0816 of the output a `.when~` keeps while it is stopped, and the `.reset_if~`, are the units W7-10 U2, so none is written here). The forms that were no error before are in
 // e0816_block_chain_gather_deal.onsa. One error per flow, so each form is a flow of its own. `Char` is a scalar with no `Default` (§6.4). `b` is a `block` input, `c` is a `block` input of `Char`.
 
 flow take_fast_char(v: Char at (sample * 4)) -> F32 at sample {

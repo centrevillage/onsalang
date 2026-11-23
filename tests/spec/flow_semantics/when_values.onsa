@@ -1,0 +1,210 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.10", "§11.9", "§11.4", "§11.6", "§13.4"]
+
+// `.when~(c)` where the condition is read at the clock of the call (W = P, §11.10; W7-10 U1/t; S-1209, S-1217, S-1129 (1), S-1218). Worked out by hand from the text. `slot(f)` is the head: a stage of `sample / 2` of its body
+// (a child under `.down~(2)` that adds `f` at each tick) writes the field `s`, the stage of `sample` reads it, and `n` counts the runs of the body: the run j (0, 1, 2 ...) gives 100 s + n, s = f (j / 2 + 1), n = j + 1: 101 102 203 204
+// 305 ... for f = 1. A part under `when~` runs on the frames where the condition holds (the j-th of them is its run j), its grid and its delays count those runs, not the frames (§11.9, §11.10), `sample_tick()` in it is the time of the
+// caller whether or not it ran (§11.4), and the frames where it is stopped read its last output, `T.default()` before its first run.
+
+flow acc(f: F32 at block) -> F32 at sample {
+  let n = f + prev~(^n)
+  n
+}
+
+flow slot(f: F32 at block) -> F32 at sample {
+  let s = acc~(f).down~(2)
+  let n = prev~(^n) + 1.0
+  (s at sample) * 100.0 + n
+}
+
+flow lp(x: F32 at sample) -> F32 at sample {
+  x * 0.5 + prev~(x) * 0.5
+}
+
+flow tm() -> U32 at sample {
+  sample_tick()
+}
+
+flow tick2() -> U32 at sample {
+  let l = sample_tick() at (sample / 2)
+  l at sample
+}
+
+flow tkf() -> F32 at sample {
+  F32.round_from(sample_tick())
+}
+
+// `a` counts the runs of its child under `.down~(4)` (which tick at the runs 0, 4, 8), `t` is the time that child reads (the time of the caller divided by 4): 100 a + t.
+flow slow(r: F32 at block) -> F32 at sample {
+  let a = acc~(r).down~(4)
+  let t = tkf~().down~(4)
+  (a at sample) * 100.0 + (t at sample)
+}
+
+pub flow plain() -> F32 at sample {
+  slot~(1.0)
+}
+
+pub flow with_true() -> F32 at sample {
+  slot~(1.0).when~(true)
+}
+
+pub flow with_block(c: Bool at block) -> F32 at sample {
+  slot~(1.0).when~(c)
+}
+
+pub flow with_init(c: Bool at init) -> F32 at sample {
+  slot~(1.0).when~(c)
+}
+
+pub flow gated(c: Bool at sample) -> F32 at sample {
+  slot~(1.0).when~(c)
+}
+
+pub flow lp_gated(c: Bool at sample) -> F32 at sample {
+  let x = acc~(1.0)
+  lp~(x).when~(c)
+}
+
+pub flow time_gated(c: Bool at sample) -> U32 at sample {
+  tm~().when~(c)
+}
+
+pub flow tick2_gated(c: Bool at sample) -> U32 at sample {
+  tick2~().when~(c)
+}
+
+pub flow slow_gated(c: Bool at sample) -> F32 at sample {
+  slow~(1.0).when~(c)
+}
+
+pub flow both(a: Bool at sample) -> F32 at sample {
+  let k = acc~(1.0)
+  slot~(1.0).when~(a).when~(k <= 2.0 || k >= 5.0)
+}
+
+test "a condition that always holds changes nothing: a literal, a block value, an init value" {
+  var a: [F32; 8] = [0.0; 8]
+  var b: [F32; 8] = [0.0; 8]
+  var c: [F32; 8] = [0.0; 8]
+  var d: [F32; 8] = [0.0; 8]
+  var sa = plain.init(8.0)
+  var sb = with_true.init(8.0)
+  var sc = with_block.init(8.0)
+  var sd = with_init.init(with_init.Config { c: true }, 8.0)
+  plain.process(inout sa, inout a)
+  with_true.process(inout sb, inout b)
+  with_block.process(inout sc, with_block.Params { c: true }, inout c)
+  with_init.process(inout sd, inout d)
+  let want: [F32; 8] = [101.0, 102.0, 203.0, 204.0, 305.0, 306.0, 407.0, 408.0]
+  assert a == want
+  assert b == want
+  assert c == want
+  assert d == want
+}
+
+test "a condition that never holds leaves the output at T.default() for the whole run" {
+  var a: [F32; 6] = [9.0; 6]
+  var b: [F32; 6] = [9.0; 6]
+  var sa = with_block.init(8.0)
+  var sb = with_init.init(with_init.Config { c: false }, 8.0)
+  with_block.process(inout sa, with_block.Params { c: false }, inout a)
+  with_init.process(inout sb, inout b)
+  assert a == [0.0; 6]
+  assert b == [0.0; 6]
+}
+
+test "a block condition is read once for each call of process, so the calls cut where the part stops and runs again" {
+  // c is true for the frames 0 .. 2 (the runs 0 .. 2: 101 102 203), false for 3 .. 5 (the last output, 203), true for 6 and 7 (the runs 3 and 4: 204 305).
+  var out: [F32; 8] = [0.0; 8]
+  var st = with_block.init(8.0)
+  with_block.process(inout st, with_block.Params { c: true }, inout out.slice(0, 3))
+  with_block.process(inout st, with_block.Params { c: false }, inout out.slice(3, 6))
+  with_block.process(inout st, with_block.Params { c: true }, inout out.slice(6, 8))
+  assert out == [101.0, 102.0, 203.0, 203.0, 203.0, 203.0, 204.0, 305.0]
+}
+
+test "the part runs on the frames where the condition holds, and its grid of sample / 2 counts the runs, not the frames" {
+  // c is 1 1 0 1 0 0 1 1: the runs are the frames 0 1 3 6 7 (j = 0 .. 4: 101 102 203 204 305); the frames 2, 4, 5 read the last output.
+  let c: [Bool; 8] = [true, true, false, true, false, false, true, true]
+  var out: [F32; 8] = [0.0; 8]
+  var st = gated.init(8.0)
+  gated.process(inout st, c, inout out)
+  assert out == [101.0, 102.0, 102.0, 203.0, 203.0, 203.0, 204.0, 305.0]
+}
+
+test "the delays of the part count its runs: a stopped frame is no sample of the part" {
+  // The part reads x = 1 2 3 ... (the frame + 1) at its runs; c is 1 1 0 1 0 1 1 1, so it sees 1 2 4 6 7 8 as one sequence: lp = 0.5 1.5 3 5 6.5 7.5 at the runs (0 = the sample before the first), held between.
+  let c: [Bool; 8] = [true, true, false, true, false, true, true, true]
+  var out: [F32; 8] = [0.0; 8]
+  var st = lp_gated.init(8.0)
+  lp_gated.process(inout st, c, inout out)
+  assert out == [0.5, 1.5, 1.5, 3.0, 3.0, 5.0, 6.5, 7.5]
+}
+
+test "sample_tick() in the part is the time of the caller, which goes on while the part is stopped; the grid of its own stage counts the runs" {
+  // c is 1 1 0 1 0 0 1 1 (the runs at the frames 0 1 3 6 7). `tm` reads the frame at its runs: 0 1 1 3 3 3 6 7. `tick2` reads it at the runs 0, 2, 4 only (the frames 0, 3, 7): 0 0 0 3 3 3 3 7.
+  let c: [Bool; 8] = [true, true, false, true, false, false, true, true]
+  var a: [U32; 8] = [9; 8]
+  var b: [U32; 8] = [9; 8]
+  var sa = time_gated.init(8.0)
+  var sb = tick2_gated.init(8.0)
+  time_gated.process(inout sa, c, inout a)
+  tick2_gated.process(inout sb, c, inout b)
+  assert a == [0, 1, 1, 3, 3, 3, 6, 7]
+  assert b == [0, 0, 0, 3, 3, 3, 3, 7]
+}
+
+test "S-1218: the part under down 4 inside a when~ counts the runs of the part, and reads the time of the caller divided by 4" {
+  // c is 0 1 1 0 1 1 1 1 0 1 1 0 1 1 1 1: the runs j = 0 .. 11 are the frames 1 2 4 5 6 7 9 10 12 13 14 15. The child ticks at j = 0, 4, 8 (the frames 1, 6, 12): a = 1 2 3 there, and it reads the time of
+  // those frames divided by 4 (rounded down): 0 1 3. The output 100 a + t is 100, 201, 303 from those runs, held on to the next; 0 before the first run.
+  let c: [Bool; 16] = [false, true, true, false, true, true, true, true, false, true, true, false, true, true, true, true]
+  var out: [F32; 16] = [9.0; 16]
+  var st = slow_gated.init(8.0)
+  slow_gated.process(inout st, c, inout out)
+  assert out == [0.0, 100.0, 100.0, 100.0, 100.0, 100.0, 201.0, 201.0, 201.0, 201.0, 201.0, 201.0, 303.0, 303.0, 303.0, 303.0]
+}
+
+test "x.when~(a).when~(b) runs on the frames where both hold" {
+  // a is 1 1 1 0 1 1 0 1 and b (k <= 2 or k >= 5, k = the frame + 1) is 1 1 0 0 1 1 1 1: the runs are the frames 0 1 4 5 7 (101 102 203 204 305).
+  let a: [Bool; 8] = [true, true, true, false, true, true, false, true]
+  var out: [F32; 8] = [0.0; 8]
+  var st = both.init(8.0)
+  both.process(inout st, a, inout out)
+  assert out == [101.0, 102.0, 102.0, 102.0, 203.0, 204.0, 204.0, 305.0]
+}
+
+test "the calls of process cut the frames anywhere, a stopped stretch and 0 frames too: the same values (§13.4)" {
+  // The cuts are 1, 1, 3 (before a run), 5 (inside the stopped frames 4 and 5): the values of the case that gates by 1 1 0 1 0 0 1 1.
+  let c: [Bool; 8] = [true, true, false, true, false, false, true, true]
+  var out: [F32; 8] = [0.0; 8]
+  var st = gated.init(8.0)
+  gated.process(inout st, c.slice(0, 1), inout out.slice(0, 1))
+  gated.process(inout st, c.slice(1, 1), inout out.slice(1, 1))
+  gated.process(inout st, c.slice(1, 3), inout out.slice(1, 3))
+  gated.process(inout st, c.slice(3, 5), inout out.slice(3, 5))
+  gated.process(inout st, c.slice(5, 8), inout out.slice(5, 8))
+  assert out == [101.0, 102.0, 102.0, 203.0, 203.0, 203.0, 204.0, 305.0]
+}
+
+test "reset puts the part and its last output back: the next frame is as after init, in the middle of a grid and while the part is stopped" {
+  // 3 frames of runs leave the child at the second pair of its grid; after the reset the runs are 101 102 203 204 again. Then frames 1 1 0 and a reset leave nothing to read: 0 0, and the run after them is 101, 102.
+  let run3: [Bool; 3] = [true, true, true]
+  let run4: [Bool; 4] = [true, true, true, true]
+  let two_then_a_stop: [Bool; 3] = [true, true, false]
+  let stop_then_run: [Bool; 4] = [false, false, true, true]
+  var junk: [F32; 3] = [0.0; 3]
+  var out: [F32; 4] = [0.0; 4]
+  var st = gated.init(8.0)
+  gated.process(inout st, run3, inout junk)
+  gated.reset(inout st)
+  gated.process(inout st, run4, inout out)
+  assert out == [101.0, 102.0, 203.0, 204.0]
+  gated.reset(inout st)
+  gated.process(inout st, two_then_a_stop, inout junk)
+  gated.reset(inout st)
+  gated.process(inout st, stop_then_run, inout out)
+  assert out == [0.0, 0.0, 101.0, 102.0]
+}

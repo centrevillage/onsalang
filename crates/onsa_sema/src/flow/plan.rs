@@ -161,6 +161,9 @@ pub struct PlanNode {
     /// each `.down~(N)` and `.up~(N)` of `chain`; none of a chain with an N
     /// in error.
     pub bounds: Vec<PlanBound>,
+    /// The guards of its chain, inner first (§11.10, S-1209): one of each
+    /// `.when~` of `chain`, of the same walk as `bounds`.
+    pub guards: Vec<PlanGuard>,
     /// Of an instance, its work in each stage of this flow (§11.9, S-1088,
     /// S-1207), one entry of a stage, slowest first; none of another node,
     /// and of an instance whose callee has no table (in error, in a loop of
@@ -199,13 +202,36 @@ pub enum Op {
     /// The elements of the array of the boundary `from` written to `to`
     /// (the array of a boundary outside it that deals, or the value), in
     /// the window of one frame inside the boundary `by` (§11.9): of the two
-    /// windows the narrower, of the boundary whose tick it is at.
+    /// windows the narrower, of the boundary whose tick it is at (of the
+    /// count of the boundaries, the frame of the caller).
     Deal { to: To, from: u32, by: u32 },
     /// The runs of the part an `.up~(N)` boundary `bound` wraps: each of
     /// its N runs j (`once`: the run j = 0 alone, of a stage slower than
     /// the `sample` of its caller), and in each the ops of each stage of
     /// the part, when j is at the tick of that stage.
     Each { bound: u32, once: bool, groups: Vec<(ClockStage, Vec<Op>)> },
+    /// The ops of the part the `.when~` of the guard `guard` wraps, run
+    /// while it runs (§11.10, S-1209): its condition read as `cond` says,
+    /// `due` the stage of the part slower than the clock W it is read at,
+    /// run at the ticks of that stage of the count of the ticks it ran
+    /// (`Part::Count`), else run each time; `advance`: that count goes on
+    /// after them.
+    When { guard: u32, cond: CondRead, due: Option<ClockStage>, ops: Vec<Op>, advance: bool },
+    /// The value of the part the guard `guard` wraps (§11.10): of one that
+    /// is not a burst its held output, which the ops of its runs wrote;
+    /// of a burst the array the runs made when it ran (and its last
+    /// element held), else that held N times. Its result to `out`.
+    Hold { guard: u32, out: Out },
+}
+
+/// How an [`Op::When`] reads its condition: at its clock W, here (and into
+/// [`Part::On`] when the table has a `Kept` of it); as the one before it in
+/// the same list read it; or as the last tick of W did, of `Part::On`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum CondRead {
+    Read,
+    Local,
+    Kept,
 }
 
 /// Where a ring is written from: the argument of the call, or the ring of
@@ -223,6 +249,8 @@ pub enum Out {
     None,
     Value,
     Deal(u32),
+    /// The held output of the guard (§11.10, [`Op::Hold`]).
+    Held(u32),
 }
 
 /// Where an [`Op::Deal`] writes: the array of a boundary, or the value of
@@ -231,6 +259,7 @@ pub enum Out {
 pub enum To {
     Array(u32),
     Value,
+    Held(u32),
 }
 
 /// How a flow reads the value of an instance: the value the ops of its
@@ -260,15 +289,27 @@ impl Entry {
 }
 
 impl Op {
-    /// `f` of each op of `ops` and of the groups of each [`Op::Each`] in
-    /// them, in their order: as deep as the `.up~` of the chain.
+    /// `f` of each op of `ops`, of the groups of each [`Op::Each`] and of
+    /// the ops of each [`Op::When`] in them, in their order: as deep as the
+    /// `.up~` and the `.when~` of the chain.
     pub fn walk<'a>(ops: &'a [Op], f: &mut impl FnMut(&'a Op)) {
         for op in ops {
             f(op);
-            if let Op::Each { groups, .. } = op {
-                groups.iter().for_each(|g| Op::walk(&g.1, f));
+            match op {
+                Op::Each { groups, .. } => groups.iter().for_each(|g| Op::walk(&g.1, f)),
+                Op::When { ops, .. } => Op::walk(ops, f),
+                _ => {}
             }
         }
+    }
+
+    /// Whether it makes the value of the instance (§11.9, §11.10): a run of
+    /// [`Out::Value`], a copy to [`To::Value`] or a hold of it.
+    pub fn makes_value(&self) -> bool {
+        matches!(
+            self,
+            Op::Run { out: Out::Value, .. } | Op::Deal { to: To::Value, .. } | Op::Hold { out: Out::Value, .. }
+        )
     }
 }
 
@@ -298,6 +339,23 @@ pub struct PlanBound {
     /// It deals the output of the part (a `.down~` of an output faster than
     /// its `sample`), at its own tick.
     pub deals: bool,
+}
+
+/// A guard of a chain (§11.10, S-1209): a `.when~` of it, which runs the
+/// part it wraps while its condition `cond` is true at the clock W it reads
+/// it at, of the record ([`bounds::bounds`]): the place `at` of its
+/// modifier in the `chain`, the exponent `w` of W in the frame it is in
+/// (that of the output of the part it wraps when slower than the `sample`
+/// of the frame, else 0) and that of the output of that part (none of a
+/// parameter kind), and those of the inputs of that part (none of a
+/// parameter kind).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PlanGuard {
+    pub at: u32,
+    pub cond: ExprId,
+    pub w: Ratio,
+    pub out: Option<Ratio>,
+    pub ins: Vec<Option<Ratio>>,
 }
 
 impl PlanBound {
@@ -358,6 +416,8 @@ pub struct PlanModifier {
     /// The ratio of `.down~(N)` and `.up~(N)` (S-1077), none of `.when~`
     /// and `.reset_if~`.
     pub ratio: Option<Ratio>,
+    /// The condition of `.when~` and `.reset_if~`.
+    pub cond: Option<ExprId>,
     /// The name of the modifier (`down`).
     pub name: Span,
 }
@@ -485,6 +545,7 @@ pub(super) fn build(
             chain: r.chain,
             size: r.size,
             bounds: r.bounds,
+            guards: r.guards,
             entries: Vec::new(),
             read: Read::Run,
         }

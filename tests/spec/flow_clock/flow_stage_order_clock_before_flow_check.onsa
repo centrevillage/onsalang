@@ -85,7 +85,7 @@
 // an error of the clock rules (E0813 on the first argument of a delay, E0815 on a value that is too
 // fast) is reported when it is written before an error of the other flow checks: the length of a
 // delay (E0807 for 1, E0808 for 0 and for the `MAX` of `vdelay~`), the bounds of a `par~` (E0808),
-// and the meaning this version does not take (E0200 for a `.when~(c)`, W7-10; a delay inside a delay
+// and the meaning this version does not take (E0200 for a `.reset_if~(c)`, W7-10 U2, none here; a delay inside a delay
 // is no error since W7-07, so the two `nested_delay` flows have the first error alone). They are all of
 // the flow stage, and none of them hides another by the way the compiler walks the body. One error per
 // flow, so each form is a flow of its own: the first line has the reported error, the second the other.
@@ -95,9 +95,9 @@
 // line (the clock error starts first). The forms with the error of the length first are in
 // `flow_stage_order_flow_check_first.onsa`. The candidate of E0813 leaves the later error.
 // Since W7-14 (R-495) the walk of the types holds the errors of the lengths and goes on, so they do
-// not win. The E0200 of the `when~` goes when W7-10 takes the modifier; the error that is
+// not win. The `when~(true)` of three flows was an E0200 until W7-10 U1 and is no error now; the error that is
 // reported (the first one) does not change, and it is only after E0815, which has no candidate (the
-// candidate of E0813 would leave an E0200 that goes).
+// candidate of E0813 would have left that E0200).
 
 const K: F32 = 1.0
 pub flow pass(c: F32 at block) -> F32 at sample { c }

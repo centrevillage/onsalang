@@ -813,9 +813,54 @@ impl Walk<'_> {
             return Some(Clock::Error);
         }
         let c = self.expr(receiver);
-        args.iter().for_each(|x| _ = self.cut(x.expr));
         let held = self.cx.chains.get(&head).is_some_and(|c| c.gate.is_some());
+        let opened = match (call.map(|c| &c.kind), frame, held) {
+            (Some(&NodeKind::Instance(g)), Some(_), false) => self.guard_cond(e, head, g),
+            _ => None,
+        };
+        match opened {
+            Some(false) => return Some(Clock::Error),
+            Some(true) => {}
+            None => args.iter().for_each(|x| _ = self.cut(x.expr)),
+        }
         if call.is_some() && frame.is_some() && !held { c } else { Some(Clock::Error) }
+    }
+
+    /// The condition of the `.when~` `e` of the chain of the head `head`, an
+    /// instance of `g` (§11.10, S-1209): read at `min(W, sample)` of this
+    /// body, W the clock of its guard ([`super::plan::bounds::bounds`]) moved
+    /// out of the ratios outside it. W7-10 U1 opens one of that clock or of a
+    /// parameter kind, an argument its head reads where the table reads it
+    /// (its node's, [`ArgRead`], at [`super::plan::bounds::run_at`]: hoisted
+    /// and kept as the others are), and holds the rest,
+    /// the E0200 of a condition W reads apart (U2: E0815, kept slower ones;
+    /// the form of the chain is of the check, `check::gated`): whether it is
+    /// opened, its condition walked; none of `.down~` and `.up~`, whose
+    /// argument the caller walks.
+    fn guard_cond(&mut self, e: ExprId, head: ExprId, g: DefId) -> Option<bool> {
+        let (chain, f) = (self.cx.chains.get(&head)?, self.a.def(g).as_flow()?);
+        let i = chain.mods.iter().position(|m| m.call == e)?;
+        let (_, guards) = super::plan::bounds::bounds(chain.mods.iter().map(|m| &m.plan), f);
+        let (guard, cond) = (guards.iter().find(|x| x.at == i as u32)?, chain.mods[i].plan.cond?);
+        let outside = chain.mods[i + 1..].iter().filter_map(|m| m.plan.ratio);
+        let w = Ratio(guard.w.0.saturating_add(outside.map(|r| r.0).sum::<i32>()).min(0));
+        let opened = match self.cut(cond) {
+            None | Some(Clock::Error | Clock::Const | Clock::Init | Clock::Block) => true,
+            Some(c) => c == Clock::Tick(w),
+        };
+        let name = chain.mods[i].plan.name;
+        if !opened {
+            let d = Feature::InstanceModifiers.diagnostic(Stage::Flow, name, &[]);
+            self.report(d.with_found(self.src(name)));
+        } else if let (true, Some(&k)) = (self.checking(), self.node_of.get(&head)) {
+            let mods = chain.mods.iter().map(|m| &m.plan);
+            let at = match super::plan::bounds::run_at(mods, &guards, i as u32, ClockStage::Tick(guard.w)) {
+                ClockStage::Tick(k) => Clock::Tick(k),
+                _ => onsa_diag::internal::bug(Some(name), "a condition run at no tick"),
+            };
+            self.node_clocks[k].args.push(ArgRead { expr: cond, at });
+        }
+        Some(opened)
     }
 
     /// A delay or an instance call `call` at `e` (§11.4, §11.5): its clock,

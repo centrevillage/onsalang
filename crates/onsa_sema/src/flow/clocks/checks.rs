@@ -479,7 +479,7 @@ impl Walk<'_> {
         // Of a flow with a port in error, none (§18.1).
         let Some(f) = a.def(g).as_flow().filter(|f| !f.ports_in_error) else { return };
         let Some(chain) = self.cx.chains.get(&e) else { return };
-        let bounds = super::super::plan::bounds::bounds(chain.mods.iter().map(|m| &m.plan), f);
+        let (bounds, _) = super::super::plan::bounds::bounds(chain.mods.iter().map(|m| &m.plan), f);
         let gathered = |i: usize| bounds.iter().any(|b| b.gathers.iter().any(|g| g.0 as usize == i));
         let mut found = Vec::new();
         for (_, (&x, input)) in args.iter().zip(&f.inputs).enumerate().filter(|&(i, _)| gathered(i)) {

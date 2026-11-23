@@ -1,0 +1,258 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.10", "§11.9", "§11.4", "§11.6", "§13.4"]
+
+// `.when~(c)` where the clock W that reads the condition is slower than the place of the modifier (a chain, a conversion flow, `.up~`), and the forms of `.up~`/`.down~` around it (W7-10 U1/t; S-1209, S-1207, S-1214, S-1218). Worked out by
+// hand from §11.9 and §11.10 and the grid of the caller: the grid positions are 0, 4, 8 ... (m = 0, 1, 2 ...), `k` = m + 1 is the counter of a child under `.down~(4)` (it is read at the grid after it is written, the same ratio in the order of
+// the text), and `slot(f)` is the head of when_values.onsa (the run j gives 100 s + n: 101 102 203 204 305 ...). `x.down~(4).when~(c)` and `x.when~(c).down~(4)` (the ports of x at `sample`) read `c` at the grid, run x there and give the same
+// values (§11.10, "合成"); a grid where `c` is false keeps the last output of the part, `T.default()` if it never ran (the grids before the first true one, here the frames 0 .. 7).
+
+flow acc(f: F32 at block) -> F32 at sample {
+  let n = f + prev~(^n)
+  n
+}
+
+flow slot(f: F32 at block) -> F32 at sample {
+  let s = acc~(f).down~(2)
+  let n = prev~(^n) + 1.0
+  (s at sample) * 100.0 + n
+}
+
+flow g2(x: F32 at (sample * 2)) -> F32 at sample {
+  x[0] + x[1] * 10.0
+}
+
+// The run n of the head gives the 4 elements 10 n .. 10 n + 3.
+flow cnt4() -> F32 at (sample * 4) {
+  let n = prev~(^n) + 1.0
+  [n * 10.0, n * 10.0 + 1.0, n * 10.0 + 2.0, n * 10.0 + 3.0]
+}
+
+flow sum4(x: F32 at (sample * 4)) -> F32 at sample {
+  x[0] + x[1] + x[2] + x[3]
+}
+
+// The window of 4 samples of the body before its tick, so that the output is the sum of the 4 samples before the tick (N samples late).
+flow dws4(x: F32 at sample) -> F32 at (sample / 4) {
+  sum4~(x).down~(4)
+}
+
+pub flow down_plain() -> F32 at sample {
+  slot~(1.0).down~(4) at sample
+}
+
+pub flow down_true() -> F32 at sample {
+  slot~(1.0).down~(4).when~(true) at sample
+}
+
+pub flow when_true_down() -> F32 at sample {
+  slot~(1.0).when~(true).down~(4) at sample
+}
+
+pub flow down_never() -> F32 at sample {
+  slot~(1.0).down~(4).when~(false) at sample
+}
+
+pub flow down_block(c: Bool at block) -> F32 at sample {
+  slot~(1.0).down~(4).when~(c) at sample
+}
+
+pub flow read4_plain() -> F32 at sample {
+  let y = slot~(1.0).down~(4)
+  let z = y + 1000.0
+  z at sample
+}
+
+pub flow read4_true() -> F32 at sample {
+  let y = slot~(1.0).down~(4).when~(true)
+  let z = y + 1000.0
+  z at sample
+}
+
+pub flow down_then_when_late() -> F32 at sample {
+  let k = acc~(1.0).down~(4)
+  slot~(1.0).down~(4).when~(k > 2.0) at sample
+}
+
+pub flow when_then_down_late() -> F32 at sample {
+  let k = acc~(1.0).down~(4)
+  slot~(1.0).when~(k > 2.0).down~(4) at sample
+}
+
+pub flow down_then_when_odd() -> F32 at sample {
+  let k = acc~(1.0).down~(4)
+  slot~(1.0).down~(4).when~(k == 1.0 || k == 3.0 || k == 5.0) at sample
+}
+
+pub flow when_then_down_odd() -> F32 at sample {
+  let k = acc~(1.0).down~(4)
+  slot~(1.0).when~(k == 1.0 || k == 3.0 || k == 5.0).down~(4) at sample
+}
+
+pub flow two_whens() -> F32 at sample {
+  let k = acc~(1.0).down~(4)
+  slot~(1.0).when~(k != 2.0).down~(4).when~(k != 3.0) at sample
+}
+
+pub flow dws_plain(x: F32 at sample) -> F32 at sample {
+  dws4~(x) at sample
+}
+
+pub flow dws_true(x: F32 at sample) -> F32 at sample {
+  dws4~(x).when~(true) at sample
+}
+
+pub flow dws_never(x: F32 at sample) -> F32 at sample {
+  dws4~(x).when~(false) at sample
+}
+
+pub flow dws_gap(x: F32 at sample) -> F32 at sample {
+  let k = acc~(1.0).down~(4)
+  dws4~(x).when~(k != 3.0) at sample
+}
+
+pub flow when_up(x: F32 at sample) -> F32 at sample {
+  g2~(acc~(1.0).when~(x != 2.0 && x != 5.0).up~(2))
+}
+
+pub flow deal_inside_first() -> F32 at sample {
+  let k = acc~(1.0).down~(4)
+  cnt4~().when~(k > 1.0).down~(4)
+}
+
+test "a condition that always holds, a literal or a block value, is the same as no condition: a chain, in both orders, and a let read at sample / 4" {
+  // down 4 gives the run j = m at the grid m: 101 102 203 204 305 306 (24 frames); the let adds 1000 at the grid (the part runs before the let that reads it).
+  var a: [F32; 24] = [0.0; 24]
+  var b: [F32; 24] = [0.0; 24]
+  var c: [F32; 24] = [0.0; 24]
+  var d: [F32; 24] = [0.0; 24]
+  var e: [F32; 24] = [0.0; 24]
+  var f: [F32; 24] = [0.0; 24]
+  var sa = down_plain.init(8.0)
+  var sb = down_true.init(8.0)
+  var sc = when_true_down.init(8.0)
+  var sd = down_block.init(8.0)
+  var se = read4_plain.init(8.0)
+  var sf = read4_true.init(8.0)
+  down_plain.process(inout sa, inout a)
+  down_true.process(inout sb, inout b)
+  when_true_down.process(inout sc, inout c)
+  down_block.process(inout sd, down_block.Params { c: true }, inout d)
+  read4_plain.process(inout se, inout e)
+  read4_true.process(inout sf, inout f)
+  let want: [F32; 24] = [101.0, 101.0, 101.0, 101.0, 102.0, 102.0, 102.0, 102.0, 203.0, 203.0, 203.0, 203.0, 204.0, 204.0, 204.0, 204.0, 305.0, 305.0, 305.0, 305.0, 306.0, 306.0, 306.0, 306.0]
+  assert a == want
+  assert b == want
+  assert c == want
+  assert d == want
+  assert e == [1101.0, 1101.0, 1101.0, 1101.0, 1102.0, 1102.0, 1102.0, 1102.0, 1203.0, 1203.0, 1203.0, 1203.0, 1204.0, 1204.0, 1204.0, 1204.0, 1305.0, 1305.0, 1305.0, 1305.0, 1306.0, 1306.0, 1306.0, 1306.0]
+  assert f == e
+}
+
+test "a condition that never holds gives T.default() at every grid, for a literal and a block value" {
+  var a: [F32; 8] = [9.0; 8]
+  var b: [F32; 8] = [9.0; 8]
+  var sa = down_never.init(8.0)
+  var sb = down_block.init(8.0)
+  down_never.process(inout sa, inout a)
+  down_block.process(inout sb, down_block.Params { c: false }, inout b)
+  assert a == [0.0; 8]
+  assert b == [0.0; 8]
+}
+
+test "down 4 then when~ and when~ then down 4 read the condition at the grid and give the same values: false at the first two grids, true after" {
+  // k = 1 2 3 4 5 6 at the grids; k > 2 holds from m = 2 (the frame 8): the part runs at the grids 2 .. 5 as its runs 0 .. 3 (101 102 203 204); before it the frames 0 .. 7 read T.default().
+  var a: [F32; 24] = [9.0; 24]
+  var b: [F32; 24] = [9.0; 24]
+  var sa = down_then_when_late.init(8.0)
+  var sb = when_then_down_late.init(8.0)
+  down_then_when_late.process(inout sa, inout a)
+  when_then_down_late.process(inout sb, inout b)
+  let want: [F32; 24] = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 101.0, 101.0, 101.0, 101.0, 102.0, 102.0, 102.0, 102.0, 203.0, 203.0, 203.0, 203.0, 204.0, 204.0, 204.0, 204.0]
+  assert a == want
+  assert b == want
+}
+
+test "the condition changes from grid to grid: the grids that are stopped keep the last output, and the runs of the part count only the true grids, in both orders" {
+  // The condition holds at k = 1, 3, 5 (m = 0, 2, 4): the runs 0, 1, 2 give 101, 102, 203 at the grids 0, 2, 4; the grids 1, 3, 5 read the last output.
+  var a: [F32; 24] = [9.0; 24]
+  var b: [F32; 24] = [9.0; 24]
+  var sa = down_then_when_odd.init(8.0)
+  var sb = when_then_down_odd.init(8.0)
+  down_then_when_odd.process(inout sa, inout a)
+  when_then_down_odd.process(inout sb, inout b)
+  let want: [F32; 24] = [101.0, 101.0, 101.0, 101.0, 101.0, 101.0, 101.0, 101.0, 102.0, 102.0, 102.0, 102.0, 102.0, 102.0, 102.0, 102.0, 203.0, 203.0, 203.0, 203.0, 203.0, 203.0, 203.0, 203.0]
+  assert a == want
+  assert b == want
+}
+
+test "x.when~(a).down~(4).when~(b) runs at the grids where a and b both hold" {
+  // a is k != 2 (it reads at the inner modifier, the place of the grid), b is k != 3 (the outer one): the runs are the grids 0, 3, 4, 5 (101 102 203 204); the grids 1 and 2 keep 101.
+  var out: [F32; 24] = [9.0; 24]
+  var st = two_whens.init(8.0)
+  two_whens.process(inout st, inout out)
+  assert out == [101.0, 101.0, 101.0, 101.0, 101.0, 101.0, 101.0, 101.0, 101.0, 101.0, 101.0, 101.0, 102.0, 102.0, 102.0, 102.0, 203.0, 203.0, 203.0, 203.0, 204.0, 204.0, 204.0, 204.0]
+}
+
+test "a conversion flow as the receiver: the window is the 4 samples the part saw before its tick, the grids where it is stopped add none, and the delay stays N" {
+  // x = 1 2 3 ... With no condition (or a true one) the tick c = 4 m gathers the frames c - 4 .. c - 1: 0 at m = 0, then 10 26 42 (1 + 2 + 3 + 4, 5 + .. + 8, 9 + .. + 12).
+  // With k != 3 the part is stopped at the grid 2 (the frames 8 .. 11): it keeps 10, and the tick of the grid 3 (the part's 8th sample) gathers the 4 samples before it that the part saw, the frames 4 .. 7: 26; then the frames 12 .. 15: 58.
+  let xs: [F32; 20] = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0, 17.0, 18.0, 19.0, 20.0]
+  var a: [F32; 16] = [9.0; 16]
+  var b: [F32; 16] = [9.0; 16]
+  var c: [F32; 16] = [9.0; 16]
+  var d: [F32; 20] = [9.0; 20]
+  var sa = dws_plain.init(8.0)
+  var sb = dws_true.init(8.0)
+  var sc = dws_never.init(8.0)
+  var sd = dws_gap.init(8.0)
+  dws_plain.process(inout sa, xs.slice(0, 16), inout a)
+  dws_true.process(inout sb, xs.slice(0, 16), inout b)
+  dws_never.process(inout sc, xs.slice(0, 16), inout c)
+  dws_gap.process(inout sd, xs, inout d)
+  assert a == [0.0, 0.0, 0.0, 0.0, 10.0, 10.0, 10.0, 10.0, 26.0, 26.0, 26.0, 26.0, 42.0, 42.0, 42.0, 42.0]
+  assert b == a
+  assert c == [0.0; 16]
+  assert d == [0.0, 0.0, 0.0, 0.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 26.0, 26.0, 26.0, 26.0, 58.0, 58.0, 58.0, 58.0]
+}
+
+test "x.when~(c).up~(2) runs both runs of a frame or neither: the condition is the caller's sample value, read in each run" {
+  // The head adds 1 at each run, two runs a frame: g2 = e0 + 10 e1. c = x != 2 and x != 5 is 1 0 1 1 0 (x = the frame + 1): the frames 0, 2, 3 give the runs 1 2, 3 4, 5 6 (21, 43, 65); the frames 1 and 4 read the last output of
+  // the part at both runs of the up (2 and 6): 22 and 66. The order up then when is in when_boundary_hold_values.onsa.
+  let xs: [F32; 5] = [1.0, 2.0, 3.0, 4.0, 5.0]
+  var out: [F32; 5] = [0.0; 5]
+  var st = when_up.init(8.0)
+  when_up.process(inout st, xs, inout out)
+  assert out == [21.0, 22.0, 43.0, 65.0, 66.0]
+}
+
+test "a when~ inside the boundary that deals is read at the grid: before its first run the dealt array is T.default()" {
+  // k > 1 holds from the grid 1: the head runs there (10 .. 13 at the frames 4 .. 7) and at the grid 2 (20 .. 23); the grid 0 deals the 4 default elements.
+  var out: [F32; 12] = [9.0; 12]
+  var st = deal_inside_first.init(8.0)
+  deal_inside_first.process(inout st, inout out)
+  assert out == [0.0, 0.0, 0.0, 0.0, 10.0, 11.0, 12.0, 13.0, 20.0, 21.0, 22.0, 23.0]
+}
+
+test "the calls of process cut the frames at the middle of a grid, of a run and of a stopped stretch, and a reset in the middle of a grid starts over (§13.4, §11.6)" {
+  // The values of the case with k > 2, in the pieces 1, 1 (0 frames), 5 (inside the grid 1), 10 (inside the first grid that runs), 13, 24. A reset after 10 frames (the part ran at the grid 2 and gave 101) puts its last output
+  // and the counters back, so that the run after it is the run from the start.
+  var out: [F32; 24] = [9.0; 24]
+  var st = down_then_when_late.init(8.0)
+  var junk: [F32; 10] = [0.0; 10]
+  var again: [F32; 24] = [9.0; 24]
+  down_then_when_late.process(inout st, inout out.slice(0, 1))
+  down_then_when_late.process(inout st, inout out.slice(1, 1))
+  down_then_when_late.process(inout st, inout out.slice(1, 5))
+  down_then_when_late.process(inout st, inout out.slice(5, 10))
+  down_then_when_late.process(inout st, inout out.slice(10, 13))
+  down_then_when_late.process(inout st, inout out.slice(13, 24))
+  let want: [F32; 24] = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 101.0, 101.0, 101.0, 101.0, 102.0, 102.0, 102.0, 102.0, 203.0, 203.0, 203.0, 203.0, 204.0, 204.0, 204.0, 204.0]
+  assert out == want
+  var s2 = down_then_when_late.init(8.0)
+  down_then_when_late.process(inout s2, inout junk)
+  down_then_when_late.reset(inout s2)
+  down_then_when_late.process(inout s2, inout again)
+  assert again == want
+}

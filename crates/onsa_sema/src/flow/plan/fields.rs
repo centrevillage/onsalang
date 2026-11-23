@@ -22,9 +22,18 @@ pub enum Part {
     W,
     /// The ring that gathers the input `input` at the boundary `bound` of
     /// the chain of an instance ([`PlanNode::bounds`], §11.9, S-1208).
-    Gather { bound: u32, input: u32 },
+    Gather {
+        bound: u32,
+        input: u32,
+    },
     /// The array that deals the output at the boundary of the chain.
     Deal(u32),
+    /// Of the guard of the chain (`.when~`, §11.10, S-1209, S-1220): the
+    /// condition it read at its last tick of W, the count of the ticks it
+    /// ran, and its held output.
+    On(u32),
+    Count(u32),
+    Held(u32),
 }
 
 /// What a field of the state holds.
@@ -181,7 +190,11 @@ impl Structs<'_> {
         let n = info.node(id);
         let start = out.len() as u32;
         let own = names::field(n);
-        let mut push = |part: Part| out.push(Field { name: names::part(own, part), of: FieldOf::Node(id, part) });
+        // Of a guard, the name of its held output reads which is the outermost.
+        let outermost =
+            guard_parts(n).into_iter().filter_map(|p| if let Part::Held(g) = p { Some(g) } else { None }).max();
+        let mut push =
+            |part: Part| out.push(Field { name: names::part(own, part, outermost), of: FieldOf::Node(id, part) });
         let init = match &n.kind {
             PlanKind::Prev { init, .. } => {
                 push(Part::Own);
@@ -193,14 +206,21 @@ impl Structs<'_> {
                 Some(init)
             }
             PlanKind::Instance { .. } => {
-                // §11.6 (S-1208): after its state, by boundary, its rings then its array.
+                // §11.6 (S-1208, S-1220): after its state, by the modifiers of its chain inner
+                // first, the rings then the array of a boundary, and of a guard what its table reads.
                 push(Part::Own);
+                let mut parts = Vec::new();
                 for (b, at) in (0u32..).zip(&n.bounds) {
-                    at.gathers.iter().for_each(|&(input, _)| push(Part::Gather { bound: b, input }));
-                    if at.deals {
-                        push(Part::Deal(b));
-                    }
+                    parts.extend(at.gathers.iter().map(|&(input, _)| (at.at, Part::Gather { bound: b, input })));
+                    parts.extend(at.deals.then_some((at.at, Part::Deal(b))));
                 }
+                let read = guard_parts(n);
+                for (g, at) in (0u32..).zip(&n.guards) {
+                    let of = [Part::On(g), Part::Count(g), Part::Held(g)];
+                    parts.extend(of.into_iter().filter(|p| read.contains(p)).map(|p| (at.at, p)));
+                }
+                parts.sort_by_key(|p| p.0);
+                parts.into_iter().for_each(|p| push(p.1));
                 None
             }
             PlanKind::Par { children, .. } => {
@@ -225,6 +245,24 @@ impl Structs<'_> {
         }
         self.at[id.0 as usize] = Some(start);
     }
+}
+
+/// The fields of the guards of the chain of `n` its table reads (§11.10,
+/// S-1220): [`Part::On`] of a guard read where its condition is not, its
+/// [`Part::Count`] of one that counts, its [`Part::Held`] of one that holds.
+fn guard_parts(n: &PlanNode) -> Vec<Part> {
+    let mut read = Vec::new();
+    for e in &n.entries {
+        Op::walk(&e.ops, &mut |op| match *op {
+            Op::When { guard, cond, due, advance, .. } => {
+                read.extend((cond == CondRead::Kept).then_some(Part::On(guard)));
+                read.extend((advance || due.is_some()).then_some(Part::Count(guard)));
+            }
+            Op::Hold { guard, .. } => read.push(Part::Held(guard)),
+            _ => {}
+        });
+    }
+    read
 }
 
 #[cfg(test)]

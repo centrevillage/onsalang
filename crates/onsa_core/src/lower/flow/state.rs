@@ -80,6 +80,13 @@ fn node_field_ty(lw: &mut Lowerer, flow: DefId, decls: &Decls, info: &FlowInfo, 
             let ty = ty.ok_or_else(|| internal(span, format!("a ring or an array {part:?} of no port")))?;
             Ok(Ty::Array(Box::new(lw.core_ty(ty, &[], span)?), super::chain::len(n, part, span)?))
         }
+        // Of a guard (§11.10, S-1220): its condition, its count, its held output.
+        (PlanKind::Instance { .. }, Part::On(_)) => Ok(Ty::Bool),
+        (PlanKind::Instance { .. }, Part::Count(_)) => Ok(Ty::u32()),
+        (PlanKind::Instance { callee, .. }, Part::Held(_)) => {
+            let out = lw.a.def(*callee).as_flow().map(|f| f.out);
+            lw.core_ty(out.ok_or_else(|| internal(span, "a held output of no flow"))?, &[], span)
+        }
         (PlanKind::Par { fields, count, .. }, Part::Own) => {
             let inner = state_fields(lw, flow, decls, info, fields)?;
             let tname = format!("{}.{}.State", lw.qual_name(flow), n.path);

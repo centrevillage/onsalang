@@ -3,22 +3,14 @@
 // spec = ["§2.6", "§11.10", "§18.1"]
 // fixes = 0
 
-// W7-09 U3a/t, replacing negative/e0812_modifier_head_instance_until_w7_10.onsa (W4-12 U2, R-252): this file fixes the output of this
-// version, not a sentence of the spec, and it changes when W7-10 lands. The forms `lp~(x).when~(c)` and `.reset_if~(c)` are correct
-// forms of §11.10 ("受け手は flow の呼び出し（組込みの遅延を含む）か修飾子の連鎖である"): the names stage reads them (the receiver is
-// an instance, the name is in the closed list, S-555, S-556), the type stage checks the condition, and the flow stage stops at the
-// meaning that W7-10 gives (§11.10: the instance runs only on the ticks where `c` holds, and is reset on those where `r` holds),
-// which this version has not, with E0200 (Q-09). There is no candidate (`fixes = 0`). When W7-10 lands each unit of the flows below
-// changes to the correct form (a value, no diagnostic, or the errors of the clocks of §11.10) and this file is rewritten or removed
-// with it. The `down` and `up` forms are in flow_clock/modifier_down_forms.onsa. One error per flow (P-01).
+// W7-09 U3a/t, rewritten for W7-10 U1/t: this file fixes the output of this version, not a sentence of the spec, and it changes when W7-10 U2 and U3 land. The forms `lp~(x).when~(c)` and `.reset_if~(c)` are correct forms of §11.10
+// ("受け手は flow の呼び出し（組込みの遅延を含む）か修飾子の連鎖である"). Since W7-10 U1 a `.when~(c)` on an instance with a condition of the clock W (or of the parameter kinds) has its meaning and no diagnostic (the accepted forms are in
+// flow_clock/when_forms_accepted.onsa, the values in flow_semantics/when_values.onsa). What the flow stage still stops with E0200 (Q-09), until W7-10 U2: every `.reset_if~(r)`, and a condition that is read by holding (slower than W), has an
+// `at`, or reads `sample_tick()`; until U3: a `.when~(c)` on a built-in delay. There is no candidate (`fixes = 0`). When those units land each flow below changes to the correct form (a value, no diagnostic, or the errors of the clocks of
+// §11.10) and this file is rewritten or removed with it. The `down` and `up` forms are in flow_clock/modifier_down_forms.onsa. One error per flow (P-01). `l` is a `sample / 4` input.
 
 pub flow lp(x: F32 at sample) -> F32 at sample {
   x * 0.5 + prev~(x) * 0.5
-}
-
-pub flow when_on_an_instance(x: F32 at sample, c: Bool at sample) -> F32 at sample {
-  let a = lp~(x).when~(c)                           //~ E0200
-  a
 }
 
 pub flow reset_if_on_an_instance(x: F32 at sample, c: Bool at sample) -> F32 at sample {
@@ -38,14 +30,34 @@ pub flow reset_if_then_when(x: F32 at sample, c: Bool at sample, r: Bool at samp
   lp~(x).reset_if~(r).when~(c)                      //~ E0200
 }
 
-pub flow when_after_a_down(p: F32 at block, c: Bool at block) -> F32 at sample {
-  lp~(p).down~(4).when~(c) at sample                //~ E0200
+pub flow when_with_a_slower_condition(x: F32 at sample, l: Bool at (sample / 4)) -> F32 at sample {
+  lp~(x).when~(l)                                   //~ E0200
 }
 
-pub flow when_in_an_argument(x: F32 at sample, c: Bool at sample) -> F32 at sample {
-  lp~(lp~(x).when~(c))                              //~ E0200
+pub flow when_with_an_at_in_the_condition(x: F32 at sample, l: Bool at (sample / 4)) -> F32 at sample {
+  lp~(x).when~(l at sample)                         //~ E0200
 }
 
-pub flow when_in_an_if_tilde(x: F32 at sample, c: Bool at sample) -> F32 at sample {
-  if~ c { lp~(x).when~(c) } else { x }              //~ E0200
+pub flow when_with_the_time_in_the_condition(x: F32 at sample) -> F32 at sample {
+  lp~(x).when~(sample_tick() > 3)                   //~ E0200
+}
+
+// A head with an input slower than W (`sl` reads `p` at `sample / 2`, W is `sample`): until U2.
+flow cnt() -> F32 at sample {
+  let n = prev~(^n) + 1.0
+  n
+}
+
+flow sl(p: F32 at (sample / 2)) -> F32 at sample {
+  let h = p + 1.0
+  h at sample
+}
+
+pub flow when_on_a_head_with_a_slower_input(c: Bool at sample) -> F32 at sample {
+  let q = cnt~().down~(2)
+  sl~(q).when~(c)                                   //~ E0200
+}
+
+pub flow when_on_a_head_given_the_time_at_a_slower_input() -> F32 at sample {
+  sl~(F32.round_from(sample_tick())).when~(true)    //~ E0200
 }

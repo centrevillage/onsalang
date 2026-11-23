@@ -5,7 +5,7 @@
 //!   `build`, `dump --core` and `test` end with 0 and with no internal error, and the tests of the package are run (U5a).
 //! - A child instance with no modifier that has a stage of its own or reads `sample_tick()` (S-1088, S-1129 (1)), a grandchild, and a flow with an input or an output at `sample / N` called with no
 //!   modifier (§11.9), are lowered the same way (U5b2).
-//! - A chain with an `.up~(N)` in it is lowered beside the flows with ticks (U6b3); what stays E0200 is `when~` and `reset_if~` (W7-10, `check` stops at it) and the border of the outermost flow (W10-01).
+//! - A chain with an `.up~(N)` in it is lowered beside the flows with ticks (U6b3); what stays E0200 is `reset_if~`, a `when~` on a built-in delay and a modifier inside a chain with an `.up~` inside a `.down~` (W7-10 U2 and U3, `check` stops at it) and the border of the outermost flow (W10-01).
 //! - Of two ticks at one position that both panic, the slower one is the one that is reported (§11.9: "遅い方から並ぶ", S-1079), whether the two are of one flow or of the parent and a child (S-1088).
 //!   The order of a `let` of the parent and of a child at one stage, and of two children, is the one of S-1206 and S-1159 (open: the provisional order of the reference evaluator).
 //! - `onsa interface` shows the phase counter of a flow that has a stage of `sample / N`, whose child has one or reads `sample_tick()`, after `_sample_rate` and before the fields of

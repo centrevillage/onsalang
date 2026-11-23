@@ -1,0 +1,6 @@
+# flow_ref 1 source=tests/spec/flow_semantics/when_boundary_hold_values.onsa tests=5 evaluated=0 unavailable=5 skipped=0 waiting=0
+? x.up~(2).when~(c): both runs of a frame or neither, and a stopped frame reads the last element at both ticks of sample * 2	unavailable a modifier of W7-10 (`when~`, `reset_if~`)
+? a when~ outside the boundary that deals: the grid counts the frames where c holds, and a stopped frame reads the last element it gave	unavailable a modifier of W7-10 (`when~`, `reset_if~`)
+? a when~ inside the boundary that deals, stopped after a run: each of the 4 ticks of the output reads its last output, the last element (§11.10, S-1222)	unavailable a modifier of W7-10 (`when~`, `reset_if~`)
+? a when~ outside a block whose up is wider than its down reads the last value it read, twice, not the last element of the array dealt	unavailable a modifier of W7-10 (`when~`, `reset_if~`)
+? a when~ outside the up of a head at sample * 4: a stopped frame reads the last element at all 8 ticks of sample * 8	unavailable a modifier of W7-10 (`when~`, `reset_if~`)

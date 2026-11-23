@@ -1,0 +1,4 @@
+# flow_ref 1 source=tests/spec/flow_semantics/when_identity_regressions.onsa tests=3 evaluated=0 unavailable=3 skipped=0 waiting=0
+? a when~ that always holds after a block inside a dealing boundary changes nothing	unavailable a modifier of W7-10 (`when~`, `reset_if~`)
+? a when~ that always holds outside a burst with a block inside changes nothing	unavailable a modifier of W7-10 (`when~`, `reset_if~`)
+? an outer when~ that always holds around a when~ inside a dealing boundary changes nothing	unavailable a modifier of W7-10 (`when~`, `reset_if~`)

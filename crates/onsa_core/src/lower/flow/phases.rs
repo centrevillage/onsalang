@@ -255,6 +255,16 @@ fn reset_node(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, id: NodeId, 
             let sub = lw.ensure_flow(*callee)?;
             let st = sfield(lw, info, state, at(Part::Own), span)?;
             expr_stmt(out, call(sub.reset, Ty::Unit, span, vec![inout(st)]));
+            // The condition and the count of each guard of its chain (§11.9: `reset`, not `reset_if~`).
+            for g in 0..n.guards.len() as u32 {
+                for (part, v) in
+                    [(Part::On(g), lit(Ty::Bool, span, Lit::Bool(false))), (Part::Count(g), u32_lit(span, 0))]
+                {
+                    if info.field_at(at(part)).is_some() {
+                        assign(out, &sfield(lw, info, state, at(part), span)?, v)?;
+                    }
+                }
+            }
         }
         PlanKind::Par { .. } => {}
     }
@@ -462,7 +472,7 @@ pub(super) fn advance(lw: &Lowerer, info: &FlowInfo, s: &Expr, span: Span, out: 
 }
 
 /// `x +% 1` of a `U32`.
-fn wrap_add(x: Expr, span: Span) -> Expr {
+pub(super) fn wrap_add(x: Expr, span: Span) -> Expr {
     let (lhs, rhs) = (Box::new(x), Box::new(u32_lit(span, 1)));
     Expr::new(Ty::u32(), span, ExprKind::Binary { op: BinOp::Add, overflow: Overflow::Wrap, lhs, rhs })
 }
