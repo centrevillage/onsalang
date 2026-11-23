@@ -1,0 +1,31 @@
+# flow_ref 1 source=tests/spec/flow_semantics/sample_tick_explicit_burst_values.onsa tests=4 evaluated=4 unavailable=0 skipped=0 waiting=0
+@ a bundle of the time is the elements 2 k and 2 k + 1 of the frame k, and a held time is k twice
+init 0 sample_tick_explicit_burst_values.time_bundle sr=0x41000000
+init 1 sample_tick_explicit_burst_values.held_time sr=0x41000000
+init 2 sample_tick_explicit_burst_values.held_double sr=0x41000000
+process 0 frames=4
+out=[1 2003 4005 6007]
+process 1 frames=4
+out=[0 1001 2002 3003]
+process 2 frames=4
+out=[0 2002 4004 6006]
+@ the time goes on across the calls of process and starts at 0 again after reset
+init 0 sample_tick_explicit_burst_values.time_bundle sr=0x41000000
+process 0 frames=2
+out=[1 2003]
+process 0 frames=3
+out=[4005 6007 8009]
+reset 0
+process 0 frames=2
+out=[1 2003]
+@ a slow port reads the time of the caller at its tick: 0, 4, 8, each held for 4 frames
+init 0 sample_tick_explicit_burst_values.slow_port sr=0x41000000
+process 0 frames=12
+out=[0 0 0 0 4 4 4 4 8 8 8 8]
+@ the held time in a par~ is 1001 (2 k + 1) and in an if~ arm is the held time where the frame is odd and 7 where it is not
+init 0 sample_tick_explicit_burst_values.held_time_in_a_par sr=0x41000000
+init 1 sample_tick_explicit_burst_values.held_time_in_an_if_tilde_arm sr=0x41000000
+process 0 frames=4
+out=[1001 3003 5005 7007]
+process 1 frames=4
+out=[7 1001 7 3003]

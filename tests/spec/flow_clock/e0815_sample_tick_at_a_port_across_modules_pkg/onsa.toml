@@ -1,0 +1,3 @@
+[package]
+name = "e0815_sample_tick_at_a_port_across_modules_pkg"
+edition = "2026"

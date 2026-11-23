@@ -176,13 +176,13 @@ impl Ratio {
         2u64.checked_pow(self.0.unsigned_abs())
     }
 
-    /// The N of a clock the Core makes, none of one it does not: of
-    /// `sample * N` the length of an array, `U32` (2^31 at most), of
-    /// `sample / N` the period of a counter of one `U32` word (2^32 at
-    /// most). The one test of it (D-15): the check of the composed clocks of
-    /// a chain (E0200 of the flow stage, S-1216) and the Core read it.
+    /// The N of a clock, `U32` (2^31 at most) of `sample * N` and `sample /
+    /// N` alike, none past it (§11.9, S-1216): of `sample * N` the length of
+    /// an array, of `sample / N` the period of a counter of one `U32` word.
+    /// The one test of it (D-15): the check of the composed clocks of a
+    /// chain (E0808 of the flow stage) and the Core read it.
     pub fn made_n(self) -> Option<u64> {
-        self.n().filter(|_| (-32..32).contains(&self.0))
+        self.n().filter(|_| (-31..32).contains(&self.0))
     }
 
     /// The ratio of `(sample / n)` (`op` `/`) or `(sample * n)` (`*`), and

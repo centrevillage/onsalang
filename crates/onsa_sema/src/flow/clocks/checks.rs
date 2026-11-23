@@ -33,6 +33,11 @@ fn shown(c: Clock, at: Span) -> String {
     grounded(c).shown(at)
 }
 
+/// The note of the E0815 of `sample_tick()` read at a `sample * N` of the
+/// caller (S-1218): the two flows that write its time at the ticks of a
+/// burst and copy it, of N = 2.
+const SAMPLE_TICK_AT_BURSTS: &str = "here `sample_tick()` is the time at the `sample` of this body (§11.4); a conversion flow makes the time of each tick, as `flow mkt() -> U32 at (sample * 2) { [sample_tick() *% 2, sample_tick() *% 2 +% 1] }`, or copies a value to each, as `flow hold2(x: U32 at sample) -> U32 at (sample * 2) { [x, x] }`";
+
 /// The tick `tick` as a title names it: `sample`, ``tick of `sample / 2` ``.
 pub(super) fn per_tick(tick: Clock, at: Span) -> String {
     let shown = tick.shown(at);
@@ -435,24 +440,16 @@ impl Walk<'_> {
 
     /// The argument `x` at the clock `c` of an instance of `g`, read at
     /// `at`, the clock of its input `input` (§11.3, E0815): to a `sample *
-    /// N` of the caller, a value comes through a conversion flow (§11.9).
-    /// `sample_tick()` there is E0200 (S-1218).
+    /// N` of the caller, a value comes through a conversion flow (§11.9),
+    /// and `sample_tick()`, which is there of the `sample` of the body
+    /// however the argument holds it (§11.4, S-1218), with a note of the
+    /// flows that make its time or its copies.
     pub(super) fn check_arg(&mut self, x: ExprId, c: Clock, at: Clock, input: &FlowInput, g: DefId) {
-        if !self.checking() {
+        let time = c == Clock::Ambient && at.burst();
+        if !self.checking() || (readable_at(c, at).is_ok() && !time) {
             return;
         }
         let span = self.ast.expr(x).span;
-        // SPEC-GAP(S-1218): `sample_tick()` read at a `sample * N` of the
-        // caller is E0200 (provisional), however the argument holds it.
-        if c == Clock::Ambient && at.burst() {
-            let d =
-                onsa_diag::unsupported::Feature::SampleTickAtBursts.diagnostic(Stage::Flow, span, &[&at.shown(span)]);
-            let found = self.src(span);
-            return self.report(d.with_found(found));
-        }
-        if readable_at(c, at).is_ok() {
-            return;
-        }
         let (shown, to, name) = (shown(c, span), at.shown(span), &self.a.def(g).name);
         let how = match (promotable(c, at), at.burst()) {
             (true, _) => format!("read it at `{to}` with `at` (§11.3)"),
@@ -463,7 +460,8 @@ impl Walk<'_> {
             "this argument is at the clock `{shown}` but the input `{}` of `{name}` is at `{to}`; {how}",
             input.name
         );
-        self.err(Code::E0815, span, msg);
+        let d = Diagnostic::new(Stage::Flow, Code::E0815, span, msg).with_found(self.src(span));
+        self.report(if time { d.with_note(span, SAMPLE_TICK_AT_BURSTS) } else { d });
     }
 
     /// The E0816 of the part `g` run at `e` heads, gathered and dealt at a

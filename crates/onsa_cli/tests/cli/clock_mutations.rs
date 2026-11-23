@@ -27,7 +27,7 @@
 //! A third group (W7-16 U7c/t; chains and bursts): 40 mutants of 5 files (`bursts_values`, `up_chain_values`, `down_two_boundaries_values`, `down_chain_time_values`, `chain_blocks_ports`), 8 of each, 1 to 3 changes
 //! each, of nine kinds: a number (a modifier's N, a clock's N), an `at` left out, a clock put in place of another, a `sample_tick()` put at another clock, an `.up~` for a `.down~`, a modifier added after a call, two
 //! modifiers swapped, a bundle element repeated, a line deleted (a third keep their `test` blocks). Where `check` ends clean, `dump --core`, `interface`, `graph` of the first `pub flow` and `test` end with 0 or 1 and no
-//! internal error. The reach test counts each kind and the time handed to a flow with a burst port by a change of the chain (S-1218: an E0200 of `check` until it is decided), the high finding of U6b2.
+//! internal error. The reach test counts each kind and the time handed to a flow with a burst port by a change of the chain (S-1218: an E0815 of `check`), the high finding of U6b2.
 
 use std::path::{Path, PathBuf};
 
@@ -701,7 +701,7 @@ fn mutants_of_chains_and_bursts_end_as_the_commands_do() {
     assert!(ran.iter().sum::<usize>() > 0, "no mutant that passes the check has a test to run");
 }
 
-/// The mutants have each kind of change, and the form of U6b2's high finding: the time handed to a flow whose port is a burst by a change of the chain (S-1218, an E0200 of `check` until it is decided).
+/// The mutants have each kind of change, and the form of U6b2's high finding: the time handed to a flow whose port is a burst by a change of the chain (S-1218, an E0815 of `check`).
 #[test]
 fn the_chain_mutants_have_every_kind_of_change_and_the_time_that_reaches_a_burst() {
     let ms = chain_mutants(CHAIN_SEED);

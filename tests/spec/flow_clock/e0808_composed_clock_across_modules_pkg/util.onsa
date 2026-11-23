@@ -1,0 +1,11 @@
+pub flow slow_input_of_2_to_the_31(c: U32 at (sample / 2147483648)) -> U32 at sample {
+  c at sample
+}
+
+pub flow gather_of_2_to_the_20(x: U32 at (sample * 1048576)) -> U32 at sample {
+  x[0]
+}
+
+pub flow slow_input_of_2_to_the_30(c: U32 at (sample / 1073741824)) -> U32 at sample {
+  c at sample
+}

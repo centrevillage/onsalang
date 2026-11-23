@@ -1,0 +1,3 @@
+[package]
+name = "e0808_composed_clock_across_modules_pkg"
+edition = "2026"

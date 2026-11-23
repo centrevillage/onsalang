@@ -8,9 +8,10 @@
 // accepted too (with the 2^31 counted it would be past the limit). A frame flow `x: F32 at (sample * 65536)` run by `.down~(65536)` is 2^16 on the path, not 2^32, so a flow that runs it and is run
 // itself by `.down~(256)` is 2^24, and by `.down~(512)` is 2^25 and E0808 at that modifier. The value of the N is the rule of S-1077 apart from this (a power of two that is 2 or more): the
 // derived clock and the port of 2^31 are fine. One error per flow, so each form is a flow of its own. `p` is a `block` input, `x` a `sample` input.
-// W7-16 U6b3/i2, S-1216 (provisional, open): a clock composed of the N of a port or a stage and those of the chain that the Core does not make (`sample / N` past 2^32, a counter of one `U32`
-// word; `sample * N` past 2^31) is E0200 until S-1216 decides its limit: the tick of the derived 2^31 and the slow input of 2^31 run by `.down~` past 2^1 are of `sample / 2^55` and
-// `sample / 2^43`, which these two callers now stop at. The slow input of 2^31 run by `.down~(2)`, `sample / 2^32`, is made and accepted.
+// W7-16 U7d/t, S-1216 (the decision: the N of a clock composed of a port or a stage and the chain is `U32` too, 2^31 or less on the fast side and on the slow side, E0808 at the modifier that goes past): the
+// tick of the derived 2^31 and the slow input of 2^31 run by `.down~` past 2^1 are of `sample / 2^55` and `sample / 2^43`, and the slow input of 2^31 run by `.down~(2)` is `sample / 2^32`, one past: the three
+// callers are E0808 (the composed clock of a port and of a tick is in e0808_composed_clock_past_u32_s1216.onsa). The derived clock `p at (sample / 2^31)` with no tick of its own, under the chain of 2^24, is
+// not made into a state: it makes no tick, so it is not counted (the supplement of S-1216 of 2026-11-23, §11.9) and it is accepted.
 
 flow leaf(x: F32 at sample) -> F32 at sample {
   x * 0.5 + prev~(x) * 0.5
@@ -32,7 +33,7 @@ pub flow a_caller_of_the_derived_n_exactly(p: F32 at block) -> F32 at sample {
 }
 
 pub flow a_caller_of_the_tick_of_the_derived_n_exactly(p: F32 at block) -> F32 at sample {
-  derived_n_huge_of_a_tick~(p).down~(16777216) at sample                         //~ E0200
+  derived_n_huge_of_a_tick~(p).down~(16777216) at sample                         //~ E0808
 }
 
 // ---------------------------------------------------------------- the port of a conversion flow
@@ -50,11 +51,11 @@ flow slow_output_of_2_to_the_31(p: F32 at block) -> F32 at (sample / 2147483648)
 }
 
 pub flow a_caller_of_the_slow_input_exactly(p: F32 at block) -> F32 at sample {
-  slow_input_of_2_to_the_31~(p).down~(4096).down~(4096) at sample               //~ E0200
+  slow_input_of_2_to_the_31~(p).down~(4096).down~(4096) at sample               //~ E0808
 }
 
 pub flow a_caller_of_the_slow_input_by_two(p: F32 at block) -> F32 at sample {
-  slow_input_of_2_to_the_31~(p).down~(2) at sample
+  slow_input_of_2_to_the_31~(p).down~(2) at sample                                //~ E0808
 }
 
 pub flow a_caller_of_the_slow_output(p: F32 at block) -> F32 at sample {

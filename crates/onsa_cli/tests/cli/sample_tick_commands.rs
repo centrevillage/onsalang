@@ -8,12 +8,14 @@
 //! - A chain of `.down~(N)` over a part that reads `sample_tick()` (the part, a child of it, also a conversion flow) is lowered and gives the number of the outermost flow divided by N, cut to `U32` last (§11.4; W7-16 U6a3/t,
 //!   S-1217). The values of the chains are in `tests/spec/flow_semantics/down_chain_time_values.onsa`; the cases here are the commands: the package is lowered and its test passes.
 //! - `sample_tick()` read at a `sample * N` of the caller (an argument of a port at it, alone, in an operation, a block or an `if`, the head of a chain whose port is one in its frame, the head of an
-//!   `.up~(N)`) is E0200 at `check` (S-1218 open, provisional): every command stops with E0200 and no internal error. Read at a port of `sample / N` it is the time of the caller (§11.4).
+//!   `.up~(N)`) is the `sample` value of the body it is written in, and a `sample` value is not given there: E0815 at `check` (S-1218), every command stops with it and no internal error, and the
+//!   note names the conversion flow that writes the time (§11.3). Read at a port of `sample / N` it is the time of the caller (§11.4). The explicit forms (a time bundle, a held time) are lowered and
+//!   give their values (`tests/spec/flow_semantics/sample_tick_explicit_burst_values.onsa`).
 //!
 //! The texts are written from the spec; none is taken from the output of the compiler.
 
 use crate::slow_stage_commands::{assert_lowers, error_lines, package};
-use crate::test_support::{Dir, record, run, str_of, test_json};
+use crate::test_support::{Dir, diagnostics, doc_of, record, run, str_of, test_json};
 
 /// The bodies of `main.onsa` that read `sample_tick()` in the places of §11.4 (a `let`, the output, a `par`, the first argument of a delay), with no modifier and no child.
 const LOWERING: [&str; 4] = [
@@ -113,10 +115,11 @@ fn a_chain_with_a_second_gathering_boundary_over_a_part_that_reads_sample_tick_g
 /// The flows of the forms of S-1218: a port at `sample * 2` (`g2`), at `sample * 8` under `.down~(4)` (`g8`, `sample * 2` in the frame of the call), and a port at `sample` under `.up~(2)`.
 const BURST_PORTS: &str = "flow g2(x: U32 at (sample * 2)) -> U32 at sample {\n  x[0] +% x[1] *% 10\n}\n\nflow g8(x: U32 at (sample * 8)) -> U32 at sample {\n  x[0]\n}\n\nflow pass(x: U32 at sample) -> U32 at sample {\n  x\n}\n\n";
 
-/// `sample_tick()` read at a `sample * N` of the caller, however the argument holds it: its clock and value are open (S-1218), so `check`, `build`, `dump --core` and `test` stop with E0200 and
-/// nothing else (Q-09), and no command ends with an internal error. Only the stop is pinned, no value.
+/// `sample_tick()` read at a `sample * N` of the caller, however the argument holds it, is the `sample` value of the body (S-1218; §11.4: "書いた場所の `sample_rate()` の刻みの数", §11.3: "`sample * N` へは、変換の
+/// flow で書く"), and a `sample` value is not given to a port at `sample * N` (§11.9): `check`, `build`, `dump --core` and `test` stop with E0815 and nothing else, and no command ends with an internal error.
+/// Only the stop is pinned, no value.
 #[test]
-fn sample_tick_read_at_a_sample_times_n_of_the_caller_is_e0200_at_every_command() {
+fn sample_tick_read_at_a_sample_times_n_of_the_caller_is_e0815_at_every_command() {
     let forms = [
         "g2~(sample_tick())",
         "g2~(sample_tick() *% 2)",
@@ -137,9 +140,38 @@ fn sample_tick_read_at_a_sample_times_n_of_the_caller_is_e0200_at_every_command(
             assert_eq!(out.code, 1, "{form}: {args:?}: {both}");
             assert!(!both.contains("internal error"), "{form}: {args:?}: {both}");
             let lines = error_lines(&both);
-            assert!(!lines.is_empty() && lines.iter().all(|l| l.contains("error[E0200]")), "{form}: {args:?}: {both}");
+            assert!(!lines.is_empty() && lines.iter().all(|l| l.contains("error[E0815]")), "{form}: {args:?}: {both}");
         }
     }
+}
+
+/// The note of the E0815 of `g2~(sample_tick())` says where the time goes: it is written with a conversion flow (§11.3: "`sample * N` へは、変換の flow で書く", S-1218 "時間の束や複製は変換の flow で書く"),
+/// so a note names the conversion flow. The words of the note are not fixed by the spec, so only that it is there and says "conversion flow" is read. One error at the line of the argument (`check --json`).
+#[test]
+fn the_e0815_of_sample_tick_at_a_sample_times_n_of_the_caller_notes_the_conversion_flow() {
+    let flows = format!("{BURST_PORTS}pub flow f() -> U32 at sample {{\n  g2~(sample_tick())\n}}\n");
+    let d = package("sample_tick_burst_note", &flows, &[]);
+    let out = run(d.root(), &["check", "--json"]);
+    assert_eq!(out.code, 1, "{}{}", out.stdout, out.stderr);
+    let doc = doc_of(&out);
+    let ds = diagnostics(&doc);
+    assert_eq!(ds.len(), 1, "one diagnostic: {doc}");
+    assert_eq!(str_of(&ds[0], "code"), "E0815", "{doc}");
+    let notes: Vec<String> = ds[0]["notes"]
+        .as_array()
+        .unwrap_or_else(|| panic!("no `notes` array: {doc}"))
+        .iter()
+        .map(|n| str_of(n, "message").to_string())
+        .collect();
+    assert!(notes.iter().any(|n| n.contains("conversion flow")), "a note names the conversion flow: {notes:?}");
+}
+
+/// The two explicit ways that give the time to a port at `sample * 2` (S-1218, §11.3, §11.4): a time bundle `mkt` (the elements 2 k and 2 k + 1 of the frame k) and a held time `hold2` (`[k, k]`), each read
+/// by `gw` (element 0 times 1000 plus element 1) are lowered by every command and give 1 2003 4005 6007 (2002 k + 1) and 0 1001 2002 3003 (1001 k).
+#[test]
+fn the_explicit_forms_of_a_time_for_a_port_at_a_sample_times_n_are_lowered_and_give_their_values() {
+    let flows = "flow gw(x: U32 at (sample * 2)) -> U32 at sample {\n  x[0] *% 1000 +% x[1]\n}\n\nflow mkt() -> U32 at (sample * 2) {\n  let t = sample_tick()\n  [t *% 2, t *% 2 +% 1]\n}\n\nflow hold2(x: U32 at sample) -> U32 at (sample * 2) {\n  [x, x]\n}\n\npub flow bundle() -> U32 at sample {\n  gw~(mkt~())\n}\n\npub flow held() -> U32 at sample {\n  gw~(hold2~(sample_tick()))\n}\n\ntest \"explicit time\" {\n  var a: [U32; 4] = [9; 4]\n  var b: [U32; 4] = [9; 4]\n  var sa = bundle.init(8.0)\n  var sb = held.init(8.0)\n  bundle.process(inout sa, inout a)\n  held.process(inout sb, inout b)\n  assert a == [1, 2003, 4005, 6007]\n  assert b == [0, 1001, 2002, 3003]\n}\n";
+    assert_lowers_and_passes("sample_tick_explicit_burst_values", flows, "explicit time");
 }
 
 /// `sample_tick()` passed to a port of `sample / 4` is read at its tick and is the time of the caller (§11.4: "書いた場所の `sample_rate()` の刻みの数", "`sample / N` の段で読んでも同じ数"): 0, 4, 8 at the

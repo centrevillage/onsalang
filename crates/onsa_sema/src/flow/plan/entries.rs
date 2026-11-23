@@ -4,7 +4,8 @@
 //! ([`FlowInfo::stages`]), the words of the time each of its stages takes
 //! ([`FlowInfo::time`]), then the fields of its state, which these
 //! decide. The same walk checks the N of `.down~` and `.up~` on the paths
-//! through flows (S-1089, E0808 of the flow stage).
+//! through flows (S-1089) and the clocks they compose (S-1216), E0808 of
+//! the flow stage.
 //!
 //! One walk after the bodies of all the flows are checked, the callees
 //! before their callers: depth first with a stack of its own (a body never
@@ -36,6 +37,10 @@ type Most = Option<(u32, Option<(DefId, NodeId)>)>;
 /// The place of an E0808 of a path (S-1089), the exponent of its N and the
 /// node of its first step.
 type Past = (Span, u32, NodeId);
+
+/// A clock past `U32` a chain composes ([`unmade`]): its node, its modifier,
+/// its exponent and what it is of.
+type Unmade = (NodeId, Span, Ratio, Over);
 
 /// The walk of the table of every flow of `a` (the module docs), in the
 /// order of their [`DefId`]s, so that the diagnostics come in one order.
@@ -75,7 +80,8 @@ pub(crate) fn walk(pkg: &Package, a: &mut Analysis) {
 /// Closes the flow `f`, whose callees are done (but those in a loop of
 /// calls): writes the entries of its instances, its stages, the time they
 /// take and its fields, reports the first of its nodes past 2^24 on a path
-/// through flows (by the place of the modifier, §18.1), and gives its count.
+/// through flows (by the place of the modifier, §18.1), else each chain that
+/// composes a clock past `U32`, and gives its count.
 fn close(pkg: &Package, a: &mut Analysis, f: DefId, marks: &HashMap<DefId, Mark>, most: &HashMap<DefId, Most>) -> Most {
     let info = a.flows.get(&f)?;
     let mut time = own_time(info);
@@ -106,7 +112,7 @@ fn close(pkg: &Package, a: &mut Analysis, f: DefId, marks: &HashMap<DefId, Mark>
             continue;
         };
         let (entries, read) = steps::table(n, g);
-        unmade_at.extend(unmade(n, g, &entries));
+        unmade_at.extend(unmade(n, g).map(|(at, k, over)| (id, at, k, over)));
         stages.extend(entries.iter().map(|e| e.caller).filter(|s| s.tick_slower_than(ClockStage::SAMPLE)));
         callee_time(&mut time, info, n, g, &entries);
         tables.push(Some((entries, read)));
@@ -134,37 +140,87 @@ fn close(pkg: &Package, a: &mut Analysis, f: DefId, marks: &HashMap<DefId, Mark>
     flow.nodes.iter_mut().zip(tables).for_each(|(n, t)| t.into_iter().for_each(|t| set(n, t)));
     (flow.stages, flow.time) = (stages.into_iter().collect(), time);
     fields::build(flow);
-    // The E0808 of the flow first: the E0200 of a clock past the Core is of no limit decided.
+    // The E0808 of the path first, one of the flow, as before S-1216.
     if let Some(p) = past_at {
         a.diagnostics.push(past_path(pkg, a, f, p, most));
-    } else if !unmade_at.is_empty() {
-        let text = crate::module_of_def(pkg, a, f).map(|m| m.text.clone()).unwrap_or_default();
-        for at in unmade_at {
-            let d = onsa_diag::unsupported::Feature::ComposedClocks.diagnostic(Stage::Flow, at, &[]);
-            a.diagnostics.push(d.with_found(at.text_in(&text).to_string()));
-        }
+    } else {
+        let found: Vec<Diagnostic> = unmade_at.into_iter().map(|u| past_u32(pkg, a, f, u)).collect();
+        a.diagnostics.extend(found);
     }
     counted.then_some(count)
 }
 
-/// Where the chain of the instance `n` of the callee `g` makes a clock the
-/// Core does not ([`Ratio::made_n`]), of its entries `entries`: the
-/// modifier of the first boundary out of which a port of the part it wraps
-/// faster than `sample` is past it (an array of a `.down~` outside or the
-/// value is of it), else the call, of a stage of the caller past it that
-/// `g` has not (that of its own chains, told there). A port or a stage
-/// slower than `sample` inside the chain is of no counter: the runs of an
-/// `.up~` at a slower stage are one ([`Op::Each`]).
-// SPEC-GAP(S-1216): no limit of a composed clock is decided (`sample * N`,
-// `sample / N` past `U32`); one the Core does not make is E0200.
-fn unmade(n: &PlanNode, g: &FlowInfo, entries: &[Entry]) -> Option<Span> {
-    let made = |k: Ratio| !k.faster_than_body() || k.made_n().is_some();
-    let port = n.bounds.iter().find(|b| !b.ins.iter().flatten().chain(&b.out).all(|&k| made(b.outside(k))));
-    if let Some(b) = port {
-        return Some(n.chain.get(b.at as usize).map_or(n.span, |m| m.name));
+/// What a chain composes past `U32` ([`unmade`]): of an input of the callee
+/// by its index, of its output, or of a stage of it by its ratio.
+enum Over {
+    Input(usize),
+    Output,
+    Stage(Ratio),
+}
+
+/// The first clock past `U32` ([`Ratio::made_n`]) the chain of the instance
+/// `n` of the callee `g` composes (§11.9, S-1216), inner first, with its
+/// modifier: of a port of the part a boundary wraps, or a stage of `g` (not
+/// one past it, told in `g`), moved to that boundary ([`PlanBound::outside`]).
+fn unmade(n: &PlanNode, g: &FlowInfo) -> Option<(Span, Ratio, Over)> {
+    let past = |k: Ratio| k.made_n().is_none();
+    let slow = |s: &ClockStage| match *s {
+        ClockStage::Tick(k) if k.slower_than_body() && !past(k) => Some((k, k)),
+        _ => None,
+    };
+    let mut stages: Vec<(Ratio, Ratio)> = g.stages.iter().filter_map(slow).collect();
+    for b in &n.bounds {
+        stages.iter_mut().for_each(|s| s.1 = b.outside(s.1));
+        let ins = (0..).zip(&b.ins).filter_map(|(i, k)| Some((b.outside((*k)?), Over::Input(i))));
+        let mut over = ins
+            .chain(b.out.map(|k| (b.outside(k), Over::Output)))
+            .chain(stages.iter().map(|s| (s.1, Over::Stage(s.0))));
+        if let Some((k, over)) = over.find(|p| past(p.0)) {
+            let Some(m) = n.chain.get(b.at as usize) else {
+                onsa_diag::internal::bug(Some(n.span), "a boundary of no modifier of its chain")
+            };
+            return Some((m.name, k, over));
+        }
     }
-    let past = |s: &ClockStage| matches!(*s, ClockStage::Tick(k) if k.made_n().is_none());
-    (entries.iter().any(|e| past(&e.caller)) && !g.stages.iter().any(past)).then_some(n.span)
+    None
+}
+
+/// The E0808 of the clock `k` past `U32` the chain of the node `id` of `f`
+/// composes at its modifier `at` ([`unmade`]): the notes of the path
+/// ([`down_path`]) down to the flow that declares the N, and one of the
+/// clock it declares.
+fn past_u32(pkg: &Package, a: &Analysis, f: DefId, (id, at, k, mut over): Unmade) -> Diagnostic {
+    let op = if k.faster_than_body() { "*" } else { "/" };
+    let msg =
+        format!("this chain makes the clock `sample {op} 2^{}`, past `U32`: an N is 2^31 at most (§11.9)", k.0.abs());
+    let (d, callee) = down_path(a, e0808(pkg, a, f, at, msg), (f, id), |g| match over {
+        Over::Stage(s) => {
+            let (id, o) = source(&a.flows[&g], s)?;
+            over = o;
+            Some((g, id))
+        }
+        _ => None,
+    });
+    let def = a.def(callee);
+    let Some(g) = def.as_flow() else { return d };
+    let (span, what, c) = match over {
+        Over::Input(i) => {
+            (g.inputs[i].span, format!("the input `{}` of", g.inputs[i].name), g.inputs[i].caller_clock())
+        }
+        Over::Output => (def.name_span, "the output of".into(), g.out_clock),
+        Over::Stage(s) => (def.name_span, "a stage of".into(), Clock::Tick(s)),
+    };
+    d.with_note(span, format!("{what} `{}` is at `{}`", def.name, c.shown(span)))
+}
+
+/// The node of `g` whose chain moves a stage of its callee slower than its
+/// `sample` to the stage of `g` of the ratio `s` ([`Entry::runs`]), with it.
+fn source(g: &FlowInfo, s: Ratio) -> Option<(NodeId, Over)> {
+    let run = |r| match r {
+        (ClockStage::Tick(body), ClockStage::Tick(at)) if at == s && body.slower_than_body() => Some(Over::Stage(body)),
+        _ => None,
+    };
+    (0u32..).zip(&g.nodes).find_map(|(i, n)| Some((NodeId(i), Entry::runs(&n.entries).into_iter().find_map(run)?)))
 }
 
 /// The time of the stages of `info` that read `sample_tick()` (§11.4,
@@ -198,21 +254,39 @@ fn callee_time(time: &mut BTreeMap<ClockStage, Words>, info: &FlowInfo, n: &Plan
 /// (§11.9, S-1089), with a note at each step of the path with a chain of N
 /// (25 at most, each of an N of 2 or more): the node and the N of its chain.
 fn past_path(pkg: &Package, a: &Analysis, f: DefId, (at, total, id): Past, most: &HashMap<DefId, Most>) -> Diagnostic {
-    let name = |d: DefId| a.def(d).name.as_str();
     let msg = format!(
         "the N of the `.down~` and `.up~` on the path from the body of `{}` multiply to 2^{total}, past 2^24 (§11.9)",
-        name(f)
+        a.def(f).name
     );
+    let next = |callee| most.get(&callee).copied().flatten().and_then(|(_, via)| via);
+    down_path(a, e0808(pkg, a, f, at, msg), (f, id), next).0
+}
+
+/// The E0808 of `f` at `at` with the message `msg`.
+fn e0808(pkg: &Package, a: &Analysis, f: DefId, at: Span, msg: String) -> Diagnostic {
     let found = crate::module_of_def(pkg, a, f).map(|m| at.text_in(&m.text).to_string()).unwrap_or_default();
-    let mut d = Diagnostic::new(Stage::Flow, Code::E0808, at, msg).with_found(found);
-    // Each flow once: a path of the counts goes to callees done before.
-    let mut step = Some((f, id));
-    while let Some((caller, id)) = step {
+    Diagnostic::new(Stage::Flow, Code::E0808, at, msg).with_found(found)
+}
+
+/// `d` with the notes of the path of an E0808 (S-1089, S-1216) down from a
+/// node (callees closed first): of each step of a chain of N, its callee and
+/// chain; `next` gives a callee's next step. Returns the last step's callee.
+fn down_path(
+    a: &Analysis,
+    mut d: Diagnostic,
+    (mut caller, mut id): (DefId, NodeId),
+    mut next: impl FnMut(DefId) -> Option<(DefId, NodeId)>,
+) -> (Diagnostic, DefId) {
+    loop {
         let n = a.flows[&caller].node(id);
-        let PlanKind::Instance { callee, .. } = n.kind else { break };
-        let note = format!("on the path: in `{}`, `{}` runs under `{}`", name(caller), name(callee), shown(&n.chain));
-        d = d.with_note(n.span, note);
-        step = most.get(&callee).copied().flatten().and_then(|(_, via)| via);
+        let PlanKind::Instance { callee, .. } = n.kind else {
+            onsa_diag::internal::bug(Some(n.span), "a step of the path of an E0808 that is no instance")
+        };
+        if !n.bounds.is_empty() {
+            let (name, called) = (&a.def(caller).name, &a.def(callee).name);
+            d = d.with_note(n.span, format!("on the path: in `{name}`, `{called}` runs under `{}`", shown(&n.chain)));
+        }
+        let Some(step) = next(callee) else { return (d, callee) };
+        (caller, id) = step;
     }
-    d
 }

@@ -1,0 +1,11 @@
+pub flow g2(x: U32 at (sample * 2)) -> U32 at sample {
+  x[0] +% x[1] *% 10
+}
+
+pub flow pass(x: U32 at sample) -> U32 at sample {
+  x
+}
+
+pub flow hold4(g: U32 at (sample / 4)) -> U32 at sample {
+  g at sample
+}

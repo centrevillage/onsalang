@@ -1,0 +1,40 @@
+// onsa.toml
+// [test]
+// spec = ["§11.9", "§11.3", "§15.1", "§18.1"]
+
+// W7-16 U7d/t, S-1216 (spec §11.3, §11.9: the N of a clock composed of a port and the chain is `U32`, 2^31 or less on both sides, E0808 at the modifier that goes past): the callee is a flow of another
+// module, through the qualified name and through a name taken in by `use`; the port of `util.slow_input_of_2_to_the_31` is `sample / 2^31`, so `.down~(2)` over it is `sample / 2^32` and the error is at the
+// modifier of this file; `util.gather_of_2_to_the_20` with a constant under `.up~(4096)` is `sample * 2^32`; `util.slow_input_of_2_to_the_30` under `.down~(2)` is 2^31 and no error. One error per flow
+// (P-01), so each form is a flow of its own. `x` is a `sample` input.
+
+use util
+use util.{gather_of_2_to_the_20, slow_input_of_2_to_the_30}
+
+pub flow qualified_slow(x: U32 at sample) -> U32 at sample {
+  let _ = util.slow_input_of_2_to_the_31~(7).down~(2)                       //~ E0808
+  x
+}
+
+pub flow imported_fast(x: U32 at sample) -> U32 at sample {
+  let _ = gather_of_2_to_the_20~(7).up~(4096)                               //~ E0808
+  x
+}
+
+pub flow imported_slow_past(x: U32 at sample) -> U32 at sample {
+  let _ = slow_input_of_2_to_the_30~(7).down~(2).down~(2)                   //~ E0808
+  x
+}
+
+pub flow in_an_if_tilde_arm(c: Bool at sample, x: U32 at sample) -> U32 at sample {
+  if~ c { util.slow_input_of_2_to_the_31~(7).down~(2) at sample } else { 0 }   //~ E0808
+}
+
+pub flow imported_slow_exactly(x: U32 at sample) -> U32 at sample {
+  let _ = slow_input_of_2_to_the_30~(7).down~(2)
+  x
+}
+
+pub flow qualified_fast_exactly(x: U32 at sample) -> U32 at sample {
+  let _ = util.gather_of_2_to_the_20~(7).up~(2048)
+  x
+}

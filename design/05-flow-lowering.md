@@ -66,5 +66,5 @@ rt fn resonator.process(inout s, params, input: Span[F32], inout output: Span[F3
   - Core の `chain::entry` が一つの `Entry` の `ops` を歩く（`Walk`。`.up~` の走り j は `Walk::js`）。位置の算術は `counter`（位相の畳み込み）と `at`（窓の中の位置）に一つ、輪と配る配列への書き読みは `copy`（全体・要素一つ・`ForRange`）、頭の入力の切り出しは `window`。
     `Each` の腕は `for j` の本体に組ごとの `drive`、引数は繰り返しの前に一度（`prelower`・`arg_value`）。集める輪と配る配列の欄の名前は S-1208（`<ノードの名前>._gather_<境界>_<入力>`・`._deal_<境界>`）。
   - 呼び出し側の `sample * N` の値と引数（束）は `[T; N]` で、型は `burst_ty` の一か所、束でない引数の N 個の複製は `spread` の一か所（頭の入力と輪の両方）。
-  - 段の入口の表ができたので、Core の門（`multirate_at`・`lowered_chain`、`Feature::MultirateFlows`）は無い。`check` の段の仮の E0200 が二つ残る: `Feature::SampleTickAtBursts`（S-1218、`sample_tick()` を束のクロックの位置で読む形。`clocks/checks.rs` の `check_arg`）と `Feature::ComposedClocks`（S-1216、Core が作れない合成したクロック。`plan/entries.rs` の `unmade`）。決まったら診断に替える。
+  - 段の入口の表ができたので、Core の門（`multirate_at`・`lowered_chain`、`Feature::MultirateFlows`）は無い。Core が作れない形は `check` の段で止まる: `sample_tick()` を呼び出し側の `sample * N` になる引数に置く形は E0815（S-1218、`clocks/checks.rs` の `check_arg`）、連鎖と合成したクロックの N が `U32` を超える形は E0808（S-1216、`plan/entries.rs` の表の歩き。判定は `Ratio::made_n` の一か所を Core の `chain::len`・`Clock::burst_len`・`phases::drive` も読む）。
 - （2026-10-06、点検 C-66: 例を S-27、S-30、S-33、S-44、S-86、S-102、R-13、R-92 に合わせた。名前と巻き上げの細部は点検の C-36。）

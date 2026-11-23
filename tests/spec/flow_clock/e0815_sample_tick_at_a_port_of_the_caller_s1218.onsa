@@ -1,0 +1,102 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§11.4", "§11.9", "§18.1"]
+
+// W7-16 U7d/t, S-1218 (spec §11.4: "`sample_tick()`: `reset` からの時間を、書いた場所の `sample_rate()` の刻みの数で表した `U32`"; §11.3: "`sample * N` へは、変換の flow（速い側を配列で受ける）で書く。`at` の無い形は E0815",
+// `e at k` の行き先は本体の `sample` まで; §11.9: "呼び出し側の `sample` の値を連鎖の無い束のポートへ渡す形は E0815"): the clock `sample_tick()` is read at is the tick of the body it is written in at the
+// fastest, so where the caller has a `sample * N` (the argument of a port at `sample * N`, the argument of the head of an `.up~(N)`, the port at `sample * N` of a head under a `.down~(M)` that is
+// `sample * N / M` of the caller) it is the `sample` value of the body, and a `sample` value is not given there (E0815, like `x`, `let t = sample_tick()` and `sample_tick() at sample`): a time that is a bundle, or
+// a time that is held, is written with a conversion flow (`mkt` and `hold2` in tests/spec/flow_semantics/sample_tick_explicit_burst_values.onsa). The slow ports read it at the tick of the port with the time of
+// the caller, as before (`hold4~(sample_tick())` is below, no error). One error per flow (P-01), so each form is a flow of its own. `p` is a `block` input, `n` a `U32` `block` input.
+
+flow g2(x: U32 at (sample * 2)) -> U32 at sample {
+  x[0] +% x[1] *% 10
+}
+
+flow g8(x: U32 at (sample * 8)) -> U32 at sample {
+  x[0]
+}
+
+flow pass(x: U32 at sample) -> U32 at sample {
+  x
+}
+
+flow hold4(g: U32 at (sample / 4)) -> U32 at sample {
+  g at sample
+}
+
+flow hold2(x: U32 at sample) -> U32 at (sample * 2) {
+  [x, x]
+}
+
+flow mkt() -> U32 at (sample * 2) {
+  let t = sample_tick()
+  [t *% 2, t *% 2 +% 1]
+}
+
+// ---------------------------------------------------------------- the argument of a port at `sample * N`
+
+pub flow bare() -> U32 at sample {
+  g2~(sample_tick())                                              //~ E0815
+}
+
+pub flow in_an_operation() -> U32 at sample {
+  g2~(sample_tick() *% 2)                                         //~ E0815
+}
+
+pub flow in_a_block() -> U32 at sample {
+  g2~({ sample_tick() })                                          //~ E0815
+}
+
+pub flow in_an_if(p: Bool at block) -> U32 at sample {
+  g2~(if p { sample_tick() } else { 0 })                          //~ E0815
+}
+
+pub flow beside_a_block_value(n: U32 at block) -> U32 at sample {
+  g2~(n +% sample_tick())                                         //~ E0815
+}
+
+pub flow in_a_par_tilde() -> U32 at sample {
+  let ys = par~ i in 0 ..< 2 { g2~(sample_tick() +% i) }          //~ E0815
+  ys[0] +% ys[1]
+}
+
+pub flow in_an_if_tilde_arm(c: Bool at sample) -> U32 at sample {
+  if~ c { g2~(sample_tick()) } else { 0 }                         //~ E0815
+}
+
+// ---------------------------------------------------------------- the head of a chain
+
+// The port at `sample * 8` under `.down~(4)` is `sample * 2` of the caller.
+pub flow head_under_a_down() -> U32 at sample {
+  g8~(sample_tick()).down~(4) at sample                           //~ E0815
+}
+
+// The port at `sample` under `.up~(2)` is `sample * 2` of the caller (`pass~(x).up~(2)`, `x` a `sample` value, is the same error).
+pub flow head_of_an_up() -> U32 at sample {
+  g2~(pass~(sample_tick()).up~(2))                                //~ E0815
+}
+
+// ---------------------------------------------------------------- no error
+
+// A slow port reads it at its tick with the time of the caller: 0, 4, 8 (the value is in tests/spec/flow_semantics/sample_tick_explicit_burst_values.onsa).
+pub flow slow_port() -> U32 at sample {
+  hold4~(sample_tick()) at sample
+}
+
+// The two ways it is written with a conversion flow: a bundle of the time (`[2k, 2k + 1]`), and the time held for the elements (`[k, k]`).
+pub flow a_time_bundle() -> U32 at sample {
+  g2~(mkt~())
+}
+
+pub flow a_held_time() -> U32 at sample {
+  g2~(hold2~(sample_tick()))
+}
+
+pub flow a_held_time_in_an_operation() -> U32 at sample {
+  g2~(hold2~(sample_tick() *% 2))
+}
+
+pub flow a_block_value(n: U32 at block) -> U32 at sample {
+  g2~(n)
+}

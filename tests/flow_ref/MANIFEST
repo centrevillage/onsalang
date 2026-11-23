@@ -116,6 +116,7 @@ file reset_boundary.tsv rows=30 tests=3 evaluated=3 unavailable=0 skipped=0 wait
 file reset_replay.tsv rows=58 tests=9 evaluated=9 unavailable=0 skipped=0 waiting=0
 file sample_tick_at_a_slower_tick_values.tsv rows=59 tests=10 evaluated=10 unavailable=0 skipped=0 waiting=0
 file sample_tick_child_values.tsv rows=73 tests=11 evaluated=11 unavailable=0 skipped=0 waiting=0
+file sample_tick_explicit_burst_values.tsv rows=31 tests=4 evaluated=4 unavailable=0 skipped=0 waiting=0
 file sample_tick_time_only_values.tsv rows=51 tests=5 evaluated=5 unavailable=0 skipped=0 waiting=0
 file sample_tick_values.tsv rows=54 tests=10 evaluated=10 unavailable=0 skipped=0 waiting=0
 file scalar_assoc_const_flows.tsv rows=19 tests=6 evaluated=6 unavailable=0 skipped=0 waiting=0
@@ -139,4 +140,4 @@ file struct_pattern_rest_match.tsv rows=4 tests=1 evaluated=1 unavailable=0 skip
 file up_chain_values.tsv rows=100 tests=16 evaluated=13 unavailable=0 skipped=3 waiting=0
 file vdelay_edges.tsv rows=64 tests=15 evaluated=14 unavailable=0 skipped=1 waiting=0
 file vdelay_varying_d.tsv rows=2 tests=1 evaluated=0 unavailable=0 skipped=1 waiting=0
-total files=140 rows=4479 tests=1019 evaluated=930 unavailable=1 skipped=88 waiting=6
+total files=141 rows=4510 tests=1023 evaluated=934 unavailable=1 skipped=88 waiting=6

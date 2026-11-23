@@ -11,14 +11,14 @@
 //!   of `sample`), and the edge of the head argument is the edge of any call. The node whose `let` is a tick has the name of S-1139 (a)
 //!   (`b.lp_0`, a node with no name of §1.1 whose label drops the qualification, drawn into the vertex of the `let` `b`).
 //!
-//! - A clock composed of the N of a port or a stage and those of the chain that the Core does not make (`sample * N` past 2^31, `sample / N` past 2^32) is E0200 at `check` (W7-16 U6b3/i2,
-//!   S-1216 open, provisional): every command stops with E0200 and no internal error. `sample / 2^32` is made and lowered.
+//! - A clock composed of the N of a port or a stage and those of the chain is `sample * N` or `sample / N` with the N a `U32`, 2^31 or less (S-1216): past it (`sample * 2^32`, `sample / 2^32`) is E0808 at
+//!   `check`, every command stops with it and no internal error, with a note (the declared N and the path); exactly 2^31 is read by `check`, and a slow one is lowered by every command.
 //!
 //! The texts are written from the spec; none is taken from the output of the compiler.
 
 use crate::sample_tick_commands::assert_lowers_and_passes;
 use crate::slow_stage_commands::{assert_lowers, error_lines, package};
-use crate::test_support::{Dir, run};
+use crate::test_support::{Dir, diagnostics, doc_of, run, str_of};
 
 const LP: &str = "pub flow lp(x: F32 at sample) -> F32 at sample {\n  x * 0.5 + prev~(x) * 0.5\n}\n\n";
 
@@ -93,9 +93,10 @@ fn interface_of_a_flow_with_a_chain_ends_with_zero() {
     }
 }
 
-/// The forms of S-1216 (its supplement): a part whose output (`h`, `sample * 2^20`) an `.up~(4096)` makes `sample * 2^32` in the frame of a `.down~` that deals it, and that value itself; a constant given
-/// to an input at `sample * 2^20` under an `.up~(4096)`; a stage of `sample / 512` and a slow input at `sample / 2^31` under a `.down~(2^24)`.
-const PAST_U32: [&str; 5] = [
+/// The forms of S-1216: a part whose output (`h`, `sample * 2^20`) an `.up~(4096)` makes `sample * 2^32` in the frame of a `.down~` that deals it, and that value itself; a constant given
+/// to an input at `sample * 2^20` under an `.up~(4096)`; a stage of `sample / 512` and a slow input at `sample / 2^31` under a `.down~(2^24)`; and the slow input at `sample / 2^31` under a `.down~(2)`,
+/// `sample / 2^32`, one past 2^31. Each is past `U32` and none is the product of the modifiers (S-1089).
+const PAST_U32: [&str; 6] = [
     "flow h(x: U32 at sample) -> U32 at (sample * 1048576) {\n  let a: [U32; 1048576] = [x; 1048576]\n  a\n}\n\nflow r(x: U32 at (sample * 1048576)) -> U32 at sample {\n  x[0]\n}\n\n\
      pub flow f(x: U32 at sample) -> U32 at sample {\n  r~(h~(x).up~(4096).down~(4096))\n}\n",
     "flow h(x: U32 at sample) -> U32 at (sample * 1048576) {\n  let a: [U32; 1048576] = [x; 1048576]\n  a\n}\n\n\
@@ -104,12 +105,13 @@ const PAST_U32: [&str; 5] = [
     "flow h(x: U32 at sample) -> U32 at sample {\n  let c = prev~(^c at (sample / 512)) + 1\n  x + (c at sample)\n}\n\n\
      pub flow f(x: U32 at sample) -> U32 at sample {\n  let _ = h~(7).down~(16777216)\n  x\n}\n",
     "flow h(x: U32 at (sample / 2147483648)) -> U32 at sample {\n  x at sample\n}\n\npub flow f(x: U32 at sample) -> U32 at sample {\n  let _ = h~(7).down~(16777216)\n  x\n}\n",
+    "flow h(x: U32 at (sample / 2147483648)) -> U32 at sample {\n  x at sample\n}\n\npub flow f(x: U32 at sample) -> U32 at sample {\n  let _ = h~(7).down~(2)\n  x\n}\n",
 ];
 
-/// A clock composed in a chain that the Core does not make is E0200 (S-1216 open, provisional): `check`, `build`, `dump --core`, `test` and `interface` end with 1, with E0200 and nothing else
-/// (Q-09), and no command ends with an internal error. Only the stop is pinned, no value.
+/// A clock composed in a chain past `U32` is E0808 (S-1216): `check`, `build`, `dump --core`, `test` and `interface` end with 1, with E0808 and nothing else (Q-09), and no command ends with an internal
+/// error. Only the stop is pinned, no value.
 #[test]
-fn a_clock_composed_in_a_chain_past_u32_is_e0200_at_every_command() {
+fn a_clock_composed_in_a_chain_past_u32_is_e0808_at_every_command() {
     for (k, flows) in PAST_U32.iter().enumerate() {
         let d = package(&format!("chain_past_u32_{k}"), flows, &[]);
         let dir = d.arg();
@@ -126,16 +128,57 @@ fn a_clock_composed_in_a_chain_past_u32_is_e0200_at_every_command() {
             assert_eq!(out.code, 1, "{flows}: {args:?}: {both}");
             assert!(!both.contains("internal error"), "{flows}: {args:?}: {both}");
             let lines = error_lines(&both);
-            assert!(!lines.is_empty() && lines.iter().all(|l| l.contains("error[E0200]")), "{flows}: {args:?}: {both}");
+            assert!(!lines.is_empty() && lines.iter().all(|l| l.contains("error[E0808]")), "{flows}: {args:?}: {both}");
         }
     }
 }
 
-/// A slow input at `sample / 2^31` under a `.down~(2)` is of `sample / 2^32`, which the Core makes: the package is lowered as before S-1216's supplement.
+/// The E0808 of a clock composed past `U32` has a note (S-1216: "note に宣言の N と経路"; the words are not fixed by the spec, so only that a note is there is read), in each of the six forms
+/// (`check --json`: every diagnostic is an E0808 and has a note).
 #[test]
-fn a_slow_input_of_2_to_the_31_under_a_down_of_2_is_lowered() {
-    let flows = "flow h(x: U32 at (sample / 2147483648)) -> U32 at sample {\n  x at sample\n}\n\npub flow f(x: U32 at sample) -> U32 at sample {\n  let _ = h~(7).down~(2)\n  x\n}\n";
-    assert_lowers("chain_slow_2_to_the_32", flows, &[]);
+fn the_e0808_of_a_clock_composed_past_u32_has_a_note() {
+    for (k, flows) in PAST_U32.iter().enumerate() {
+        let d = package(&format!("chain_past_u32_note_{k}"), flows, &[]);
+        let out = run(d.root(), &["check", "--json"]);
+        assert_eq!(out.code, 1, "{flows}: {}{}", out.stdout, out.stderr);
+        let doc = doc_of(&out);
+        let ds = diagnostics(&doc);
+        assert!(!ds.is_empty(), "{flows}: a diagnostic: {doc}");
+        for dg in ds {
+            assert_eq!(str_of(dg, "code"), "E0808", "{flows}: {doc}");
+            let notes = dg["notes"].as_array().unwrap_or_else(|| panic!("{flows}: no `notes` array: {doc}"));
+            assert!(!notes.is_empty(), "{flows}: a note with the declared N and the path: {doc}");
+        }
+    }
+}
+
+/// A slow input at `sample / 2^30` under a `.down~(2)` is of `sample / 2^31`, the largest N that a composed clock may have (S-1216): the package is lowered by every command, as the slow input at
+/// `sample / 2^31` run by itself and by nothing is.
+#[test]
+fn a_slow_input_of_2_to_the_30_under_a_down_of_2_is_lowered() {
+    let flows = "flow h(x: U32 at (sample / 1073741824)) -> U32 at sample {\n  x at sample\n}\n\npub flow f(x: U32 at sample) -> U32 at sample {\n  let _ = h~(7).down~(2)\n  x\n}\n";
+    assert_lowers("chain_slow_2_to_the_31", flows, &[]);
+}
+
+/// A clock composed to exactly `sample * 2^31` and `sample / 2^31` is read by `check` with no diagnostic (S-1216; the arrays are not made, so no `build`): the window of an output at `sample * 2^20` under
+/// `.up~(2048).down~(2048)` of `U8` elements (an array of 2^31 bytes, a state that fits §4.1 only when it is no more than 2^32 - 1 bytes), the value of the same chain, a constant given to an input at
+/// `sample * 2^30` under an `.up~(2)`, and the slow input at `sample / 2^30` under a `.down~(2)`.
+#[test]
+fn a_clock_composed_to_exactly_2_to_the_31_is_read_by_check() {
+    let forms = [
+        "flow h(x: U8 at sample) -> U8 at (sample * 1048576) {\n  let a: [U8; 1048576] = [x; 1048576]\n  a\n}\n\nflow r(x: U8 at (sample * 1048576)) -> U8 at sample {\n  x[0]\n}\n\n\
+         pub flow f(x: U8 at sample) -> U8 at sample {\n  r~(h~(x).up~(2048).down~(2048))\n}\n",
+        "flow h(x: U32 at sample) -> U32 at (sample * 1048576) {\n  let a: [U32; 1048576] = [x; 1048576]\n  a\n}\n\n\
+         pub flow f(x: U32 at sample) -> U32 at sample {\n  let _ = h~(7).up~(2048)\n  x\n}\n",
+        "flow h(x: U32 at (sample * 1073741824)) -> U32 at sample {\n  x[0]\n}\n\npub flow f(x: U32 at sample) -> U32 at sample {\n  let _ = h~(7).up~(2)\n  x\n}\n",
+        "flow h(x: U32 at (sample / 1073741824)) -> U32 at sample {\n  x at sample\n}\n\npub flow f(x: U32 at sample) -> U32 at sample {\n  let _ = h~(7).down~(2)\n  x\n}\n",
+    ];
+    for (k, flows) in forms.iter().enumerate() {
+        let d = package(&format!("chain_exactly_2_to_the_31_{k}"), flows, &[]);
+        let out = run(d.root(), &["check", "--json"]);
+        assert_eq!(out.code, 0, "{flows}: {}{}", out.stdout, out.stderr);
+        assert!(diagnostics(&doc_of(&out)).is_empty(), "{flows}: {}", out.stdout);
+    }
 }
 
 // ----------------------------------------------------------------------------- the graph

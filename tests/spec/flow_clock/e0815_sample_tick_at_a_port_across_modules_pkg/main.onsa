@@ -1,0 +1,30 @@
+// onsa.toml
+// [test]
+// spec = ["§11.4", "§11.3", "§11.9", "§15.1", "§18.1"]
+
+// W7-16 U7d/t, S-1218 (spec §11.4, §11.3, §11.9: `sample_tick()` is the `sample` value of the body it is written in where the caller has a `sample * N`, and a `sample` value is not given there): the callee is a
+// flow of another module, through the qualified name and through a name taken in by `use`, and the head of an `.up~(2)`. A slow port of a flow of a module reads it at its tick, no error. One error per flow
+// (P-01), so each form is a flow of its own.
+
+use util
+use util.{g2, pass}
+
+pub flow qualified() -> U32 at sample {
+  util.g2~(sample_tick())                                       //~ E0815
+}
+
+pub flow imported() -> U32 at sample {
+  g2~(sample_tick() *% 2)                                       //~ E0815
+}
+
+pub flow imported_up_head() -> U32 at sample {
+  g2~(pass~(sample_tick()).up~(2))                              //~ E0815
+}
+
+pub flow qualified_up_head() -> U32 at sample {
+  g2~(util.pass~(sample_tick()).up~(2))                         //~ E0815
+}
+
+pub flow a_slow_port_of_a_module() -> U32 at sample {
+  util.hold4~(sample_tick()) at sample
+}

@@ -1,0 +1,120 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§11.9", "§4.5", "§18.1"]
+
+// W7-16 U7d/t, S-1216 (spec §11.3: "N は … 値は 2 以上の 2 のべき乗" with the type `U32`; §11.9: "合成の比は `sample * N`・`sample / N`・`sample` のどれかに閉じる"; the decision: the N of a clock that is composed
+// of the N of a port or a stage and those of the chain is `U32` too, 2^31 or less on the fast side and on the slow side, E0808 past it at the modifier that goes past, the note with the declared N and the
+// path; the product of the N of the modifiers (S-1089, 2^24) does not count the N of a port or a derived clock, so it is not this): a clock composed in a chain is `sample * N` or `sample / N` of the flow
+// that runs it, whatever the arguments are. The forms: (a) the window that an output at `sample * 2^20` under `.up~(4096)` and `.down~(4096)` gathers (2^32 in the middle of the chain), (b) the value of the chain
+// itself, (c) a constant given to an input at `sample * 2^20` under an `.up~(4096)`, (d) a stage of `sample / 512` of the part under a `.down~(2^24)` (`sample / 2^33`), (e) a slow input at `sample / 2^31` under
+// a `.down~(2^24)`, and a `.down~(2)` over it (`sample / 2^32`, exactly one past 2^31). 2^31 itself is no error: the window and the value of `.up~(2048)` over 2^20, and the slow input at `sample / 2^30`
+// under a `.down~(2)`. The element is `U8` where the array of 2^31 elements is no `U32` array of 8 GiB; the array is not made here (`check` only, the size of a state is §4.1). One error per flow (P-01), so
+// each form is a flow of its own. `x` is a `sample` input.
+
+flow gather_of_2_to_the_20(x: U32 at (sample * 1048576)) -> U32 at sample {
+  x[0]
+}
+
+flow deal_of_2_to_the_20(x: U32 at sample) -> U32 at (sample * 1048576) {
+  let a: [U32; 1048576] = [x; 1048576]
+  a
+}
+
+flow tick_of_512(x: U32 at sample) -> U32 at sample {
+  let c = prev~(^c at (sample / 512)) + 1
+  x + (c at sample)
+}
+
+flow slow_input_of_2_to_the_31(c: U32 at (sample / 2147483648)) -> U32 at sample {
+  c at sample
+}
+
+flow slow_input_of_2_to_the_30(c: U32 at (sample / 1073741824)) -> U32 at sample {
+  c at sample
+}
+
+flow deal_of_2_to_the_20_u8(x: U8 at sample) -> U8 at (sample * 1048576) {
+  let a: [U8; 1048576] = [x; 1048576]
+  a
+}
+
+flow gather_of_2_to_the_20_u8(x: U8 at (sample * 1048576)) -> U8 at sample {
+  x[0]
+}
+
+flow gather_of_2_to_the_30(x: U32 at (sample * 1073741824)) -> U32 at sample {
+  x[0]
+}
+
+// ---------------------------------------------------------------- past 2^31 on the fast side
+
+pub flow window_of_2_to_the_32(x: U32 at sample) -> U32 at sample {
+  gather_of_2_to_the_20~(deal_of_2_to_the_20~(x).up~(4096).down~(4096))    //~ E0808
+}
+
+pub flow value_of_2_to_the_32(x: U32 at sample) -> U32 at sample {
+  let _ = deal_of_2_to_the_20~(7).up~(4096)                               //~ E0808
+  x
+}
+
+pub flow constant_given_to_an_input_of_2_to_the_32(x: U32 at sample) -> U32 at sample {
+  let _ = gather_of_2_to_the_20~(7).up~(4096)                             //~ E0808
+  x
+}
+
+pub flow in_an_if_tilde_arm(c: Bool at sample, x: U32 at sample) -> U32 at sample {
+  if~ c { gather_of_2_to_the_20~(deal_of_2_to_the_20~(x).up~(4096).down~(4096)) } else { 0 }   //~ E0808
+}
+
+pub flow two_ups_that_pass_it(x: U32 at sample) -> U32 at sample {
+  let _ = deal_of_2_to_the_20~(7).up~(64).up~(64)                         //~ E0808
+  x
+}
+
+// ---------------------------------------------------------------- past 2^31 on the slow side
+
+pub flow stage_of_2_to_the_33(x: U32 at sample) -> U32 at sample {
+  let _ = tick_of_512~(7).down~(16777216)                                 //~ E0808
+  x
+}
+
+pub flow slow_input_of_2_to_the_55(x: U32 at sample) -> U32 at sample {
+  let _ = slow_input_of_2_to_the_31~(7).down~(16777216)                   //~ E0808
+  x
+}
+
+pub flow slow_input_of_2_to_the_32_exactly(x: U32 at sample) -> U32 at sample {
+  let _ = slow_input_of_2_to_the_31~(7).down~(2)                          //~ E0808
+  x
+}
+
+pub flow slow_input_of_2_to_the_31_under_two_downs(x: U32 at sample) -> U32 at sample {
+  let _ = slow_input_of_2_to_the_30~(7).down~(2).down~(2)                 //~ E0808
+  x
+}
+
+// ---------------------------------------------------------------- 2^31 exactly: no error
+
+pub flow window_of_2_to_the_31_of_u8(x: U8 at sample) -> U8 at sample {
+  gather_of_2_to_the_20_u8~(deal_of_2_to_the_20_u8~(x).up~(2048).down~(2048))
+}
+
+pub flow value_of_2_to_the_31(x: U32 at sample) -> U32 at sample {
+  let _ = deal_of_2_to_the_20~(7).up~(2048)
+  x
+}
+
+pub flow constant_given_to_an_input_of_2_to_the_31(x: U32 at sample) -> U32 at sample {
+  let _ = gather_of_2_to_the_30~(7).up~(2)
+  x
+}
+
+pub flow slow_input_of_2_to_the_31_exactly(x: U32 at sample) -> U32 at sample {
+  let _ = slow_input_of_2_to_the_30~(7).down~(2)
+  x
+}
+
+pub flow port_of_2_to_the_31_alone(x: U32 at sample) -> U32 at sample {
+  let _ = slow_input_of_2_to_the_31~(7)
+  x
+}

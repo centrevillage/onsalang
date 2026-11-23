@@ -1,0 +1,102 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.4", "§11.9", "§11.3"]
+
+// W7-16 U7d/t, S-1218 (spec §11.4: "`sample_tick()`: `reset` からの時間を、書いた場所の `sample_rate()` の刻みの数で表した `U32`" and "`sample / N` の段で読んでも同じ数"; §11.9: the output at `sample * N` is the
+// bundle of the caller, "呼び出し側の `sample` の値は `sample * N` の位置に渡せない（変換の flow で書く）"): the two ways that `sample_tick()` reaches a port at `sample * N`, written with a conversion flow (the
+// direct argument is E0815, e0815_sample_tick_at_a_port_of_the_caller_s1218.onsa). The time of the caller at the frame k is k (0 at the first frame). `mkt` gives the bundle of the time, the elements
+// 2 k and 2 k + 1 of the frame (the time of the `sample * 2` of its body, `tk~().up~(2)` has the same values); `hold2` holds the value of the frame for the 2 elements, `[k, k]`, and `hold2~(sample_tick() *% 2)`
+// is `[2 k, 2 k]`. `gw` takes the element 0 times 1000 plus the element 1, so each element is told from the other: `mkt` is 1000 (2 k) + 2 k + 1 = 2002 k + 1: 1, 2003, 4005, 6007; `hold2` is 1001 k: 0, 1001,
+// 2002, 3003; the doubled one is 2002 k: 0, 2002, 4004, 6006. A slow port reads it at its tick with the time of the caller, not of the tick: `hold4~(sample_tick())` is 0, 0, 0, 0, 4, 4, 4, 4, 8, 8, 8, 8
+// (§11.4: the number of the frames of the caller, "`sample / N` の段で読んでも同じ数"). `par~` and `if~` read the time of the frame in each of their bodies.
+
+flow gw(x: U32 at (sample * 2)) -> U32 at sample {
+  x[0] *% 1000 +% x[1]
+}
+
+flow mkt() -> U32 at (sample * 2) {
+  let t = sample_tick()
+  [t *% 2, t *% 2 +% 1]
+}
+
+flow hold2(x: U32 at sample) -> U32 at (sample * 2) {
+  [x, x]
+}
+
+flow hold4(g: U32 at (sample / 4)) -> U32 at sample {
+  g at sample
+}
+
+pub flow time_bundle() -> U32 at sample {
+  gw~(mkt~())
+}
+
+pub flow held_time() -> U32 at sample {
+  gw~(hold2~(sample_tick()))
+}
+
+pub flow held_double() -> U32 at sample {
+  gw~(hold2~(sample_tick() *% 2))
+}
+
+pub flow slow_port() -> U32 at sample {
+  hold4~(sample_tick()) at sample
+}
+
+// The par~ index i is 0 and 1: gw of hold2 of (k + i) is 1001 (k + i), the sum 1001 (2 k + 1).
+pub flow held_time_in_a_par() -> U32 at sample {
+  let ys = par~ i in 0 ..< 2 { gw~(hold2~(sample_tick() +% i)) }
+  ys[0] +% ys[1]
+}
+
+// The arm is taken where the frame c is odd (`c` is the time of the caller): the frames 1 and 3 give the held time, the frames 0 and 2 the 7 (the arm that is not taken goes on, §11.5, and the time is the
+// time of the frame in both).
+pub flow held_time_in_an_if_tilde_arm() -> U32 at sample {
+  if~ sample_tick() % 2 == 1 { gw~(hold2~(sample_tick())) } else { 7 }
+}
+
+test "a bundle of the time is the elements 2 k and 2 k + 1 of the frame k, and a held time is k twice" {
+  var a: [U32; 4] = [9; 4]
+  var b: [U32; 4] = [9; 4]
+  var c: [U32; 4] = [9; 4]
+  var sa = time_bundle.init(8.0)
+  var sb = held_time.init(8.0)
+  var sc = held_double.init(8.0)
+  time_bundle.process(inout sa, inout a)
+  held_time.process(inout sb, inout b)
+  held_double.process(inout sc, inout c)
+  assert a == [1, 2003, 4005, 6007]
+  assert b == [0, 1001, 2002, 3003]
+  assert c == [0, 2002, 4004, 6006]
+}
+
+test "the time goes on across the calls of process and starts at 0 again after reset" {
+  var a: [U32; 5] = [9; 5]
+  var st = time_bundle.init(8.0)
+  time_bundle.process(inout st, inout a.slice(0, 2))
+  time_bundle.process(inout st, inout a.slice(2, 5))
+  assert a == [1, 2003, 4005, 6007, 8009]
+  var b: [U32; 2] = [9; 2]
+  time_bundle.reset(inout st)
+  time_bundle.process(inout st, inout b)
+  assert b == [1, 2003]
+}
+
+test "a slow port reads the time of the caller at its tick: 0, 4, 8, each held for 4 frames" {
+  var out: [U32; 12] = [9; 12]
+  var st = slow_port.init(8.0)
+  slow_port.process(inout st, inout out)
+  assert out == [0, 0, 0, 0, 4, 4, 4, 4, 8, 8, 8, 8]
+}
+
+test "the held time in a par~ is 1001 (2 k + 1) and in an if~ arm is the held time where the frame is odd and 7 where it is not" {
+  var a: [U32; 4] = [9; 4]
+  var b: [U32; 4] = [9; 4]
+  var sa = held_time_in_a_par.init(8.0)
+  var sb = held_time_in_an_if_tilde_arm.init(8.0)
+  held_time_in_a_par.process(inout sa, inout a)
+  held_time_in_an_if_tilde_arm.process(inout sb, inout b)
+  assert a == [1001, 3003, 5005, 7007]
+  assert b == [7, 1001, 7, 3003]
+}
