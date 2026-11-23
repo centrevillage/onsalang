@@ -3,7 +3,7 @@
 // spec = ["§11.9", "§11.10", "§18.1"]
 
 // W7-09 U4b/i2 (spec §11.10: `.when~` and `.reset_if~` change no type and no clock; §11.9: the head of a chain runs in the frame of the sum of its ratios; §18.1): the head of a chain with a `.when~` or a `.reset_if~` is read in its frame, so
-// an argument of the head at another clock than its input is E0815, whatever the modifier after it is (the `.reset_if~` of the third flow is E0200 until W7-10 U2b; the E0815 of its head comes first in the order of the file). One error per flow.
+// an argument of the head at another clock than its input is E0815, whatever the modifier after it is (the `.reset_if~` of the third flow was E0200 until W7-10 U2b and is no error since; the E0815 of its head stays). One error per flow.
 // The output of such a chain read at another clock is in when_output_read_at_another_clock.onsa. `l` is a `sample / 4` input.
 
 pub flow lp(x: U32 at sample) -> U32 at sample {

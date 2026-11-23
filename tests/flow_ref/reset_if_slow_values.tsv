@@ -1,0 +1,9 @@
+# flow_ref 1 source=tests/spec/flow_semantics/reset_if_slow_values.onsa tests=8 evaluated=0 unavailable=8 skipped=0 waiting=0
+? a condition of the kind block at the grid resets the ring of the conversion flow: the tick gives T.default(), the next tick sums the frames since	unavailable a modifier of W7-10 U2e (`reset_if~`)
+? reset_if~ does not touch what when~ remembers: the frames of the window go on being gathered after the reset at the grid	unavailable a modifier of W7-10 U2e (`reset_if~`)
+? a reset_if~ outside the boundary of a conversion flow puts back the ring that gathers; inside it does not (§11.9)	unavailable a modifier of W7-10 U2e (`reset_if~`)
+? a reset_if~ outside a boundary that deals puts back the array that is dealt, in the middle of a window and at a tick	unavailable a modifier of W7-10 U2e (`reset_if~`)
+? x.up~(2) with reset_if~ inside or outside: the condition is read once for the frame, before the first of its 2 runs (S-1218)	unavailable a modifier of W7-10 U2e (`reset_if~`)
+? the held output of a part that is stopped is put back by a reset_if~ outside the when~: all N values are T.default() (S-1222)	unavailable a modifier of W7-10 U2e (`reset_if~`)
+? the stage of the part that is slower than the part's own W is written first, and a reset at W takes it back; the same with a when~ before it (the stage moved to W)	unavailable a modifier of W7-10 U2e (`reset_if~`)
+? an at to the clock of W, the tick of the grid of sample / 4, is the condition read at W: the same values as with no at	unavailable a modifier of W7-10 U2e (`reset_if~`)

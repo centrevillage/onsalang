@@ -8,7 +8,7 @@
 // is accepted, and the N of a derived clock and of a port of a conversion flow is not in the product (e0808_modifier_product_not_counted.onsa). The error is at the name of the modifier at which the
 // product, taken in the order they are written (the first call inward, S-1089), first passes 2^24, so in a chain of three it is the first that passes and not the last. The chain in error has no
 // rate to read, so what reads it (`x * y`, a delay, the argument of another call, an `at` that would make a value slower) reports nothing (§18.1: a part that could not be read). One error per flow,
-// so each form is a flow of its own. `p` is a `block` input. The `.when~(c)` and `.reset_if~(c)` of a chain are E0200 in this version, so no case here has them.
+// so each form is a flow of its own. `p` is a `block` input. The `.when~(c)` and `.reset_if~(c)` of a chain change no ratio, so no case here has them.
 
 pub flow lp(x: F32 at sample) -> F32 at sample {
   x * 0.5 + prev~(x) * 0.5

@@ -1,0 +1,6 @@
+# flow_ref 1 source=tests/spec/flow_semantics/reset_if_regressions.onsa tests=5 evaluated=0 unavailable=5 skipped=0 waiting=0
+? two whens inside a reset: the stage at sample / 2 writes first at the frame of the reset	unavailable a modifier of W7-10 U2e (`reset_if~`)
+? a when inside a reset inside an up: the dealt array is reset after the slower stage writes it	unavailable a modifier of W7-10 U2e (`reset_if~`)
+? a reset at sample / 2 after a stage of the part at sample / 4 moved by a when	unavailable a modifier of W7-10 U2e (`reset_if~`)
+? a when inside an up inside a reset, with and without a when between (the implementer's forms 4 and 5)	unavailable a modifier of W7-10 U2e (`reset_if~`)
+? a reset outside a when that stops: the slower stage on the moved grid writes first, a stopped frame is reset too	unavailable a modifier of W7-10 U2e (`reset_if~`)

@@ -192,9 +192,20 @@ impl<'b> Gen<'b> {
         phase: Phase,
         ret: Ty,
     ) -> R<Gen<'b>> {
-        let mut cx = FnCx::new(lw, shape.def, Vec::new(), &info.body, ret)?;
+        Gen::of(lw, (shape.def, shape.span), info, phase, ret)
+    }
+
+    /// [`Gen::new`] of the flow `def` declared at `span`, with no shape.
+    pub(super) fn of(
+        lw: &mut Lowerer<'b>,
+        (def, span): (DefId, Span),
+        info: &'b FlowInfo,
+        phase: Phase,
+        ret: Ty,
+    ) -> R<Gen<'b>> {
+        let mut cx = FnCx::new(lw, def, Vec::new(), &info.body, ret)?;
         for (l, &c) in &info.clocks.locals {
-            let local = cx.locals.get_mut(l.0 as usize).ok_or_else(|| internal(shape.span, "a clock of no local"))?;
+            let local = cx.locals.get_mut(l.0 as usize).ok_or_else(|| internal(span, "a clock of no local"))?;
             local.ty = burst_ty(Some(c), local.ty.clone());
         }
         cx.flow = Some(FlowLowerCx {
@@ -202,13 +213,13 @@ impl<'b> Gen<'b> {
             expr_override: HashMap::new(),
             info,
             phase,
-            sample_rate: lit(Ty::Float(FloatKind::F32), shape.span, Lit::F32(0.0)),
+            sample_rate: lit(Ty::Float(FloatKind::F32), span, Lit::F32(0.0)),
             sample_rate_calls: info.sample_rate_calls.iter().copied().collect(),
             sample_tick_calls: info.sample_tick_calls.iter().copied().collect(),
             time: Vec::new(),
             scopes: Vec::new(),
         });
-        Ok(Gen { cx, params: Vec::new(), stmts: Vec::new(), span: shape.span })
+        Ok(Gen { cx, params: Vec::new(), stmts: Vec::new(), span })
     }
 
     pub(super) fn flow(&mut self) -> &mut FlowLowerCx<'b> {

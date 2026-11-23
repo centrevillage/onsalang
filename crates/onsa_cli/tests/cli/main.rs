@@ -118,6 +118,7 @@ mod planar_caller_generics;
 mod prelude_names;
 mod range_syntax;
 mod repeat_zero_model;
+mod reset_if_c_commands;
 mod sample_tick_commands;
 mod slow_stage_commands;
 mod slow_written_forms;

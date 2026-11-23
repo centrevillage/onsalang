@@ -1,0 +1,13 @@
+# flow_ref 1 source=tests/spec/flow_semantics/reset_if_values.onsa tests=12 evaluated=0 unavailable=12 skipped=0 waiting=0
+? a condition that never holds is no condition	unavailable a modifier of W7-10 U2e (`reset_if~`)
+? the condition is a level: every true frame resets, and the frame gives its own input	unavailable a modifier of W7-10 U2e (`reset_if~`)
+? a rising edge resets once: let pb = prev~(start) and reset_if~(start && !pb)	unavailable a modifier of W7-10 U2e (`reset_if~`)
+? a condition of the kind block is read at each frame: the frames of a call where it is true all reset, the calls cut where it changes	unavailable a modifier of W7-10 U2e (`reset_if~`)
+? reset_if~(c at (sample / 4)) reads the condition at the grid of sample / 4 only: it resets at the frames 0 and 4 and not at 5	unavailable a modifier of W7-10 U2e (`reset_if~`)
+? the values of the kinds block and init are not put back (the copy of the input and the part computed at block), the state is	unavailable a modifier of W7-10 U2e (`reset_if~`)
+? reset_if~ does not touch the phase counter: sample_tick() goes on	unavailable a modifier of W7-10 U2e (`reset_if~`)
+? a field written at a tick and read at sample is T.default() after the reset until the next tick; the counter goes on	unavailable a modifier of W7-10 U2e (`reset_if~`)
+? x.when~(c).reset_if~(r) resets the stopped frames too and the held output; x.reset_if~(r).when~(c) resets only the frames that run	unavailable a modifier of W7-10 U2e (`reset_if~`)
+? x.when~(true).reset_if~(r) and x.when~(c).reset_if~(r) with c always true are x.reset_if~(r): the same values	unavailable a modifier of W7-10 U2e (`reset_if~`)
+? the grid of a reset_if~ inside a when~ counts the runs of the part, not the frames	unavailable a modifier of W7-10 U2e (`reset_if~`)
+? the calls of process cut the frames anywhere, and a reset in the middle of a grid starts over, with the counter (§13.4, §11.6)	unavailable a modifier of W7-10 U2e (`reset_if~`)

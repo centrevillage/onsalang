@@ -23,7 +23,8 @@ struct Walk<'a> {
     span: Span,
     js: Vec<(usize, Expr)>,
     args: Vec<(u32, Expr, Option<Ratio>)>,
-    /// The conditions of the guards read in the ops, lowered before them.
+    /// The conditions of the guards and the `.reset_if~`s read in the ops,
+    /// lowered before them, by the place of their modifier in the chain.
     conds: Vec<(u32, Expr)>,
     value: Option<Expr>,
 }
@@ -44,6 +45,16 @@ impl<'a> Walk<'a> {
 
     fn guard(&self, g: u32) -> R<&'a onsa_sema::flow::PlanGuard> {
         self.n.guards.get(g as usize).ok_or_else(|| internal(self.span, format!("no guard {g}")))
+    }
+
+    /// The condition of the modifier at `at` of the chain, lowered before
+    /// the ops ([`prelower`]) or here.
+    fn cond(&self, lw: &mut Lowerer, cx: &mut FnCx, at: u32) -> R<Expr> {
+        if let Some(v) = self.conds.iter().find(|x| x.0 == at) {
+            return Ok(v.1.clone());
+        }
+        let cond = self.n.chain.get(at as usize).and_then(|m| m.cond);
+        lower_expr(lw, cx, cond.ok_or_else(|| internal(self.span, "a modifier of no condition"))?)
     }
 
     /// The frame a guard is in, by the count of the boundaries inside it,
@@ -289,8 +300,7 @@ fn ops(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, w: &mut Walk, list:
                 }
                 let on = match cond {
                     CondRead::Read => {
-                        let v = w.conds.iter().find(|x| x.0 == g).map(|x| x.1.clone());
-                        let v = v.map_or_else(|| lower_expr(lw, cx, w.guard(g)?.cond), Ok)?;
+                        let v = w.cond(lw, cx, w.guard(g)?.at)?;
                         let v = materialize(cx, v, out, "__on");
                         if w.info.field_at(FieldOf::Node(w.id, Part::On(g))).is_some() {
                             assign(out, &w.field(lw, Part::On(g))?, v.clone())?;
@@ -322,6 +332,24 @@ fn ops(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, w: &mut Walk, list:
                 if !body.is_empty() {
                     out.push(stmt(span, StmtKind::If(on, Block { stmts: body, value: None }, Block::default())));
                 }
+            }
+            // The condition read into the flag, then, after the slower work, read from it (§11.10).
+            Op::Arm { at } => {
+                let v = w.cond(lw, cx, at)?;
+                assign(out, &w.field(lw, Part::Flag(at))?, v)?;
+            }
+            Op::Reset { at } | Op::Fire { at } => {
+                let mut body = Vec::new();
+                let on = match *op {
+                    Op::Fire { .. } => {
+                        let flag = w.field(lw, Part::Flag(at))?;
+                        assign(&mut body, &flag, lit(Ty::Bool, span, Lit::Bool(false)))?;
+                        flag
+                    }
+                    _ => w.cond(lw, cx, at)?,
+                };
+                reset(lw, &mut body, w, at)?;
+                out.push(stmt(span, StmtKind::If(on, Block { stmts: body, value: None }, Block::default())));
             }
             Op::Deal { to, from, by } => {
                 // The output of the part inside `by`; of none, of the chain (the caller's frame).
@@ -362,6 +390,26 @@ fn ops(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, w: &mut Walk, list:
         }
     }
     Ok(value)
+}
+
+/// The part the `.reset_if~` at `at` of the walk wraps back to its start
+/// (§11.10): its head by its soft reset ([`super::phases::ensure_reset_kept`]),
+/// the rings and the arrays of the boundaries inside it and the held outputs
+/// of the guards inside it at `T.default()`; not the conditions and the
+/// counts of the guards, nor what is outside it (§11.9).
+fn reset(lw: &mut Lowerer, out: &mut Vec<Stmt>, w: &Walk, at: u32) -> R<()> {
+    let (n, span) = (w.n, w.span);
+    let PlanKind::Instance { callee, .. } = n.kind else { return Err(internal(span, "a reset of no instance")) };
+    let f = super::phases::ensure_reset_kept(lw, callee, span)?;
+    expr_stmt(out, call(f, Ty::Unit, span, vec![inout(w.field(lw, Part::Own)?)]));
+    // A held output of a guard the table reads alone has a field (S-1220).
+    let kept = |p: &Part| !matches!(p, Part::Held(_)) || w.info.field_at(FieldOf::Node(w.id, *p)).is_some();
+    for part in n.reset_parts(at).into_iter().filter(kept) {
+        let place = w.field(lw, part)?;
+        let v = crate::lower::derived::default_value(lw, &place.ty, span)?;
+        assign(out, &place, v)?;
+    }
+    Ok(())
 }
 
 /// The result `v` of an op to `to` (§11.9, §11.10): nowhere, the value
@@ -416,25 +464,29 @@ fn target(lw: &Lowerer, w: &Walk, to: To) -> R<(Expr, Ratio, usize)> {
 /// would be in it, which the reads after it do not see.
 fn prelower(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, w: &mut Walk, list: &[Op]) -> R<()> {
     let (mut read, mut bodies, mut conds) = (BTreeSet::new(), Vec::new(), Vec::new());
+    // A condition by the place of its modifier in the chain: of a guard, by its index first.
     Op::walk(list, &mut |op| match *op {
         Op::Ring { input, from: Feed::Arg, .. } => {
             read.insert(input);
         }
         Op::Run { body, .. } => bodies.push(body),
-        Op::When { guard, cond: CondRead::Read, .. } => conds.push(guard),
+        Op::When { guard, cond: CondRead::Read, .. } => conds.push(Err(guard)),
+        Op::Reset { at } | Op::Arm { at } => conds.push(Ok(at)),
         _ => {}
     });
+    let conds = conds.into_iter().map(|c| c.or_else(|g| Ok(w.guard(g)?.at)));
+    let mut conds: Vec<u32> = conds.collect::<R<_>>()?;
     for body in bodies {
         read.extend(head_inputs(lw, w, body)?.into_iter().filter(|&i| w.n.ring_of(0, i).is_none()));
     }
     // Lowered once: those of an op before (a guard and a loop, §11.10: read while it stops).
     read.retain(|i| w.args.iter().all(|x| x.0 != *i));
-    conds.retain(|g| w.conds.iter().all(|x| x.0 != *g));
-    // SPEC-GAP(S-1221): the condition of a guard inside one that stops it is read too, as
-    // the arguments of the head are (provisional).
-    for g in conds {
-        let v = lower_expr(lw, cx, w.guard(g)?.cond)?;
-        w.conds.push((g, materialize(cx, v, out, "__cond")));
+    conds.retain(|at| w.conds.iter().all(|x| x.0 != *at));
+    // SPEC-GAP(S-1221): the condition of a guard or a `.reset_if~` inside one that stops
+    // it is read too, as the arguments of the head are (provisional).
+    for at in conds {
+        let v = w.cond(lw, cx, at)?;
+        w.conds.push((at, materialize(cx, v, out, "__cond")));
     }
     for input in read {
         let (v, q) = arg_value(lw, cx, out, w, input)?;

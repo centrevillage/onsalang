@@ -31,14 +31,17 @@ pub(in crate::flow) fn qualify(scope: &str, name: &str) -> String {
 /// `<field>.buf`, `<field>.w`, `<field>.init`, `<field>._gather_<b>_<i>`,
 /// `<field>._deal_<b>` (§11.6, S-1208); of the guard m of its chain
 /// `<field>._on_<m>`, `<field>._tick_<m>` and `<field>._held_<m>`, but the
-/// held output of the guard `outermost`, which its caller reads, `<field>.held`.
-// SPEC-GAP(S-1220): the names and the order of the fields of a guard, provisional.
+/// held output of the guard `outermost`, which its caller reads, `<field>.held`;
+/// of the `.reset_if~` at the place `at` of its chain `<field>._flag_<at>`.
+// SPEC-GAP(S-1220): the names and the order of the fields of a guard and of the flag
+// of a `.reset_if~`, provisional.
 pub(in crate::flow) fn part(field: &str, p: Part, outermost: Option<u32>) -> String {
     match p {
         Part::Held(g) if Some(g) == outermost => format!("{field}.held"),
         Part::Held(g) => format!("{field}._held_{g}"),
         Part::On(g) => format!("{field}._on_{g}"),
         Part::Count(g) => format!("{field}._tick_{g}"),
+        Part::Flag(at) => format!("{field}._flag_{at}"),
         Part::Own => field.to_string(),
         Part::Init => format!("{field}.init"),
         Part::Buf => format!("{field}.buf"),

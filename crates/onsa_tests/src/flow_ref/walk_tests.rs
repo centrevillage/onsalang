@@ -14,7 +14,7 @@ flow same(x: F32 at sample) -> F32 at sample { x }
 flow chans(x: F32 at sample) -> [F32; 2] at sample { [x, x + 1.0] }
 flow pair(x: F32 at sample) -> Pair at sample { Pair { l: x, r: x * 3.0 } }
 flow inv(x: I32 at sample) -> I32 at sample { 10 / x }
-flow closed(x: F32 at sample) -> [F32; 1] at sample { [same~(x).reset_if~(false)] }
+flow closed(x: F32 at sample) -> [F32; 1] at sample { [prev~(x).when~(x > 0.0)] }
 flow acc(x: F32 at sample) -> F32 at sample {
   let y = x + prev~(^y)
   y
@@ -107,7 +107,7 @@ fn what_is_not_run_is_skipped_with_its_reason() {
 
 #[test]
 fn a_body_the_tables_do_not_cover_is_unavailable_and_the_case_is_waiting() {
-    // A `.reset_if~(r)` in a flow body is E0200 today (§11.10, W7-10 U2): the case is read and lowers no more, and the test that renders it is
+    // A `.when~(c)` on a built-in delay in a flow body is E0200 today (§11.10, until W7-10 U3): the case is read and lowers no more, and the test that renders it is
     // counted.
     let got = run("test \"closed\" {\n  let xs: [F32; 1] = [1.0]\n  let o = closed.render(xs, 8.0)\n  assert o.out[0][0] == 1.0\n}")
         .expect("the case is read");

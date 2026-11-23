@@ -162,8 +162,9 @@ fn init_node(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, id: NodeId, s
 
 /// The time of `init` and `reset` in the state `s` (§11.6, §11.9): the
 /// counter of the phase and `_tick_hi` at 0, the one place that
-/// writes it (`reset_if~` does not, W7-10), then the fields written at a
-/// tick and read at a faster stage at `T.default()` ([`defaults`]).
+/// writes it, then the fields written at a tick and read at a faster stage
+/// at `T.default()` ([`defaults`], which alone a `.reset_if~` writes,
+/// [`ensure_reset_kept`]).
 fn restart(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, s: &Expr) -> R<()> {
     let (info, span) = (plan(cx), s.span);
     if info.counts_time() {
@@ -223,16 +224,58 @@ pub(super) fn gen_reset<'b>(lw: &mut Lowerer<'b>, shape: &FlowShape, info: &'b F
     restart(lw, &mut g.cx, &mut g.stmts, &s)?;
     let nodes: Vec<NodeId> = info.top().collect();
     let walk = Walk { arms: None, loops: held };
-    each_node(lw, &mut g.cx, &mut g.stmts, &nodes, &s, walk, &mut reset_node)?;
+    let work = &mut |lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, id, s: &Expr| {
+        reset_node(lw, cx, out, id, s, Keep::Hard)
+    };
+    each_node(lw, &mut g.cx, &mut g.stmts, &nodes, &s, walk, work)?;
     let poisoned = sfield(lw, info, &s, FieldOf::Poisoned, span)?;
     assign(&mut g.stmts, &poisoned, lit(Ty::Bool, span, Lit::Bool(false)))?;
     g.finish(lw, fns.reset, Ty::Unit, true, None);
     Ok(())
 }
 
+/// What a reset of an instance keeps (§11.9, §11.10): nothing (`reset`), or
+/// its counters and the conditions and the counts of its guards
+/// (`reset_if~`).
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum Keep {
+    Hard,
+    Kept,
+}
+
+/// `<flow>._reset_kept(inout s)` of the flow `flow` (§11.10), made once when
+/// a `.reset_if~` of an instance of it is first lowered: the fields of a
+/// tick read faster at `T.default()` ([`defaults`]) and each node back to
+/// its start ([`reset_node`] that keeps), of an instance its own (made
+/// first, a tree of calls with no loop, E0817). No counter, no `_poisoned`.
+pub(super) fn ensure_reset_kept(lw: &mut Lowerer, flow: DefId, span: Span) -> R<FnId> {
+    let fns = lw.ensure_flow(flow)?;
+    if let Some(f) = fns.reset_kept {
+        return Ok(f);
+    }
+    let a: &onsa_sema::Analysis = lw.a;
+    let info = a.flows.get(&flow).ok_or_else(|| internal(span, "an instance of no checked flow"))?;
+    let at = a.def(flow).span;
+    let f = super::push_fn(lw, format!("{}._reset_kept", lw.qual_name(flow)), true, at);
+    lw.flow_fns.get_mut(&flow).into_iter().for_each(|x| x.reset_kept = Some(f));
+    lw.m.flows.iter_mut().filter(|m| m.fns.flow == flow).for_each(|m| m.fns.reset_kept = Some(f));
+    let mut g = Gen::of(lw, (flow, at), info, Phase::Init, Ty::Unit)?;
+    let s = g.param("s", Mode::Inout, Ty::Struct(fns.state));
+    g.flow().push_scope(s.clone());
+    defaults(lw, &mut g.cx, &mut g.stmts, &info.fields, &s)?;
+    let nodes: Vec<NodeId> = info.top().collect();
+    let walk = Walk { arms: None, loops: held };
+    let work = &mut |lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, id, s: &Expr| {
+        reset_node(lw, cx, out, id, s, Keep::Kept)
+    };
+    each_node(lw, &mut g.cx, &mut g.stmts, &nodes, &s, walk, work)?;
+    g.finish(lw, f, Ty::Unit, true, None);
+    Ok(f)
+}
+
 /// A node back to its value after `init` (§11.4), from the copy of its
-/// `init` value the state keeps.
-fn reset_node(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, id: NodeId, state: &Expr) -> R<()> {
+/// `init` value the state keeps; of an instance by `keep` ([`Keep`]).
+fn reset_node(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, id: NodeId, state: &Expr, keep: Keep) -> R<()> {
     let info = plan(cx);
     let n = info.node(id);
     let (span, at) = (cx.ast.expr(n.expr).span, |p| FieldOf::Node(id, p));
@@ -252,8 +295,13 @@ fn reset_node(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, id: NodeId, 
             assign(out, &sfield(lw, info, state, at(Part::W), span)?, u32_lit(span, 0))?;
         }
         PlanKind::Instance { callee, .. } => {
-            let sub = lw.ensure_flow(*callee)?;
             let st = sfield(lw, info, state, at(Part::Own), span)?;
+            if keep == Keep::Kept {
+                let f = ensure_reset_kept(lw, *callee, span)?;
+                expr_stmt(out, call(f, Ty::Unit, span, vec![inout(st)]));
+                return Ok(());
+            }
+            let sub = lw.ensure_flow(*callee)?;
             expr_stmt(out, call(sub.reset, Ty::Unit, span, vec![inout(st)]));
             // The condition and the count of each guard of its chain (§11.9: `reset`, not `reset_if~`).
             for g in 0..n.guards.len() as u32 {
@@ -263,6 +311,16 @@ fn reset_node(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, id: NodeId, 
                     if info.field_at(at(part)).is_some() {
                         assign(out, &sfield(lw, info, state, at(part), span)?, v)?;
                     }
+                }
+            }
+            // And the flag of each `.reset_if~` that has one.
+            for k in 0..n.chain.len() as u32 {
+                if info.field_at(at(Part::Flag(k))).is_some() {
+                    assign(
+                        out,
+                        &sfield(lw, info, state, at(Part::Flag(k)), span)?,
+                        lit(Ty::Bool, span, Lit::Bool(false)),
+                    )?;
                 }
             }
         }

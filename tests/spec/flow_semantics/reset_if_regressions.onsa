@@ -1,0 +1,187 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.10", "§11.9", "§11.4"]
+
+// W7-10 U2b, the break side's high 1 and high 2 and the parent's variant of high 2 (S-1209, S-1218): a `.reset_if~` that wraps a `.when~` which moves a
+// stage of the part slower than the condition's tick to its W. §11.10: "条件の刻みより遅い刻みは、格子の上の位置でも、その位置で先に書いた後に戻す", and
+// a `.when~(true)` is no `.when~` (S-1209), so each pair gives the same values; the values are those of reset_if_values.onsa and reset_if_slow_values.onsa
+// or worked out here. `slot` writes the field `s` at `sample / 2` (1 2 3 4 at the frames 0 2 4 6) and `n` counts the frames: 100 s + n.
+
+flow acc(f: F32 at block) -> F32 at sample {
+  let n = f + prev~(^n)
+  n
+}
+
+flow slot(f: F32 at block) -> F32 at sample {
+  let s = acc~(f).down~(2)
+  let n = prev~(^n) + 1.0
+  (s at sample) * 100.0 + n
+}
+
+flow slot4(f: F32 at block) -> F32 at sample {
+  let s = acc~(f).down~(4)
+  let n = prev~(^n) + 1.0
+  (s at sample) * 100.0 + n
+}
+
+flow cnt() -> F32 at sample {
+  let n = prev~(^n) + 1.0
+  n
+}
+
+flow mk4() -> F32 at (sample * 4) {
+  let n = cnt~() * 10.0
+  [n, n + 1.0, n + 2.0, n + 3.0]
+}
+
+flow g2(x: F32 at (sample * 2)) -> F32 at sample {
+  x[0] + x[1] * 10.0
+}
+
+flow slot8(f: F32 at block) -> F32 at sample {
+  let s = acc~(f).down~(8)
+  let n = prev~(^n) + 1.0
+  (s at sample) * 100.0 + n
+}
+
+flow g2k(x: F32 at (sample * 2)) -> F32 at sample {
+  x[0] + x[1] * 1000.0
+}
+
+pub flow up_slow_plain(p: Bool at block) -> F32 at sample {
+  g2k~(slot8~(1.0).up~(2).reset_if~(p at (sample / 2)))
+}
+
+pub flow up_slow_when(p: Bool at block) -> F32 at sample {
+  g2k~(slot8~(1.0).when~(true).up~(2).reset_if~(p at (sample / 2)))
+}
+
+pub flow up_slow_when_when(p: Bool at block) -> F32 at sample {
+  g2k~(slot8~(1.0).when~(true).up~(2).when~(p).reset_if~(p at (sample / 2)))
+}
+
+pub flow stopping_inner(c: Bool at sample, p: Bool at block) -> F32 at sample {
+  slot4~(1.0).when~(c).reset_if~(p at (sample / 2))
+}
+
+pub flow reset_when_reset(c: Bool at sample, p: Bool at block) -> F32 at sample {
+  slot8~(1.0).when~(true).reset_if~(p at (sample / 4)).when~(c).reset_if~(p at (sample / 2))
+}
+
+pub flow plain(r: Bool at sample) -> F32 at sample {
+  slot~(1.0).reset_if~(r)
+}
+
+pub flow two_whens(b: Bool at block, r: Bool at sample) -> F32 at sample {
+  slot~(1.0).when~(b).when~(b).reset_if~(r)
+}
+
+pub flow two_true_whens(r: Bool at sample) -> F32 at sample {
+  slot~(1.0).when~(true).when~(true).reset_if~(r)
+}
+
+pub flow up_plain() -> F32 at sample {
+  g2~(mk4~().down~(4).reset_if~(true).up~(2))
+}
+
+pub flow up_when() -> F32 at sample {
+  g2~(mk4~().down~(4).when~(true).reset_if~(true).up~(2))
+}
+
+pub flow slow_plain(b: Bool at block) -> F32 at sample {
+  slot4~(1.0).reset_if~(b at (sample / 2))
+}
+
+pub flow slow_when(b: Bool at block) -> F32 at sample {
+  slot4~(1.0).when~(true).reset_if~(b at (sample / 2))
+}
+
+test "two whens inside a reset: the stage at sample / 2 writes first at the frame of the reset" {
+  // r at the frame 4 (a frame of the grid): the grid writes s = 3, the reset takes it back, n starts again: 101 102 203 204 1 2 103 104.
+  // r at the frame 3: s is 0 until the grid at 4, which writes 1: 101 102 203 1 102 103 204 205.
+  let r4: [Bool; 8] = [false, false, false, false, true, false, false, false]
+  let r3: [Bool; 8] = [false, false, false, true, false, false, false, false]
+  let at4: [F32; 8] = [101.0, 102.0, 203.0, 204.0, 1.0, 2.0, 103.0, 104.0]
+  let at3: [F32; 8] = [101.0, 102.0, 203.0, 1.0, 102.0, 103.0, 204.0, 205.0]
+  var a: [F32; 8] = [0.0; 8]
+  var b: [F32; 8] = [0.0; 8]
+  var c: [F32; 8] = [0.0; 8]
+  var sa = plain.init(8.0)
+  var sb = two_whens.init(8.0)
+  var sc = two_true_whens.init(8.0)
+  plain.process(inout sa, r4, inout a)
+  two_whens.process(inout sb, two_whens.Params { b: true }, r4, inout b)
+  two_true_whens.process(inout sc, r4, inout c)
+  assert a == at4
+  assert b == at4
+  assert c == at4
+  var d: [F32; 8] = [0.0; 8]
+  var e: [F32; 8] = [0.0; 8]
+  var sd = plain.init(8.0)
+  var se = two_whens.init(8.0)
+  plain.process(inout sd, r3, inout d)
+  two_whens.process(inout se, two_whens.Params { b: true }, r3, inout e)
+  assert d == at3
+  assert e == at3
+}
+
+test "a when inside a reset inside an up: the dealt array is reset after the slower stage writes it" {
+  // mk4 runs at sample / 2 of the caller and deals its four values; the reset (once a sample of the caller, before the two runs, S-1218) comes after
+  // it and puts the array back, so every read is 0.0 with the when~(true) as without it.
+  var a: [F32; 6] = [0.0; 6]
+  var b: [F32; 6] = [0.0; 6]
+  var sa = up_plain.init(8.0)
+  var sb = up_when.init(8.0)
+  up_plain.process(inout sa, inout a)
+  up_when.process(inout sb, inout b)
+  assert a == [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+  assert b == a
+}
+
+test "a reset at sample / 2 after a stage of the part at sample / 4 moved by a when" {
+  // The stage of acc (sample / 4, the frames 0 4) writes s = 1 first, the reset at 0 2 4 6 takes s and n back: s stays 0, n counts 1 2: 1 2 1 2 ....
+  var a: [F32; 8] = [0.0; 8]
+  var b: [F32; 8] = [0.0; 8]
+  var sa = slow_plain.init(8.0)
+  var sb = slow_when.init(8.0)
+  slow_plain.process(inout sa, slow_plain.Params { b: true }, inout a)
+  slow_when.process(inout sb, slow_when.Params { b: true }, inout b)
+  assert a == [1.0, 2.0, 1.0, 2.0, 1.0, 2.0, 1.0, 2.0]
+  assert b == a
+}
+
+test "a when inside an up inside a reset, with and without a when between (the implementer's forms 4 and 5)" {
+  // In the frame of the up~ the stage of acc is sample / 8 of the part, sample / 4 of the caller; the reset at sample / 2 of the caller comes after it
+  // and before the two runs, so s stays 0 and n counts the runs from 0 at each even frame: [1, 2] gives 2001, [3, 4] gives 4003 (worked out by the
+  // implementer of W7-10 U2b/i3 and the advisor's model from the text). A when~(true), and a when~(p) with p true, are no when~ (S-1209).
+  var a: [F32; 8] = [0.0; 8]
+  var b: [F32; 8] = [0.0; 8]
+  var c: [F32; 8] = [0.0; 8]
+  var sa = up_slow_plain.init(8.0)
+  var sb = up_slow_when.init(8.0)
+  var sc = up_slow_when_when.init(8.0)
+  up_slow_plain.process(inout sa, up_slow_plain.Params { p: true }, inout a)
+  up_slow_when.process(inout sb, up_slow_when.Params { p: true }, inout b)
+  up_slow_when_when.process(inout sc, up_slow_when_when.Params { p: true }, inout c)
+  assert a == [2001.0, 4003.0, 2001.0, 4003.0, 2001.0, 4003.0, 2001.0, 4003.0]
+  assert b == a
+  assert c == a
+}
+
+test "a reset outside a when that stops: the slower stage on the moved grid writes first, a stopped frame is reset too" {
+  // c = T T F T T F T T, p true. stopping_inner: the moved count m runs at the true frames; acc writes at m = 0 4 (the frames 0 6), the reset at the
+  // even frames comes after it, also at the stopped frame 2 (the held output back to 0.0): 1 2 0 1 1 1 1 2.
+  // reset_when_reset: the inner reset at m = 0 4 of the moved grid (the frames 0 6) and the outer at the even frames: the same values.
+  // (Worked out by the parent from the text; the advisor's model gives the same.)
+  let c: [Bool; 8] = [true, true, false, true, true, false, true, true]
+  let want: [F32; 8] = [1.0, 2.0, 0.0, 1.0, 1.0, 1.0, 1.0, 2.0]
+  var a: [F32; 8] = [0.0; 8]
+  var b: [F32; 8] = [0.0; 8]
+  var sa = stopping_inner.init(8.0)
+  var sb = reset_when_reset.init(8.0)
+  stopping_inner.process(inout sa, stopping_inner.Params { p: true }, c, inout a)
+  reset_when_reset.process(inout sb, reset_when_reset.Params { p: true }, c, inout b)
+  assert a == want
+  assert b == want
+}

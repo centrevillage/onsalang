@@ -1,0 +1,257 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.10", "§11.9", "§11.6", "§11.4", "§11.3", "§13.4"]
+
+// `.reset_if~(r)` where the condition is read at the clock of the call (W = P, §11.10; W7-10 U2b/t; S-559, S-1186, S-1196, S-1209, S-1218, S-1222). Worked out by hand from the text. `rs` is a running sum (its input is `ramp()` = 1 2 3 ...
+// the frame + 1, so the output is the sum of the inputs since the last reset); a frame where `r` holds puts the state of `rs` back to its initial value BEFORE that frame's stages, so the frame gives its own input (the level is read:
+// every true frame resets). `slot(f)` is the head of when_values.onsa: its stage of `sample / 2` writes the field `s` (acc~ under `.down~(2)`: s = 1 at the frames 0 1, 2 at 2 3 ...), the stage of `sample` reads it, `n` counts the
+// frames: 100 s + n = 101 102 203 204 305 .... A reset puts `n`, the state of the child and the field `s` back (T.default(), 0, and it stays 0 until the next grid), but not the phase counter (the next grid is at the same frame as
+// without it); a grid that is at the frame of the reset writes first and the reset takes the value back (a tick slower than the condition's tick, §11.10).
+
+flow ramp() -> F32 at sample {
+  let t = prev~(^t) + 1.0
+  t
+}
+
+flow rs(x: F32 at sample) -> F32 at sample {
+  let y = x + prev~(^y)
+  y
+}
+
+flow acc(f: F32 at block) -> F32 at sample {
+  let n = f + prev~(^n)
+  n
+}
+
+flow slot(f: F32 at block) -> F32 at sample {
+  let s = acc~(f).down~(2)
+  let n = prev~(^n) + 1.0
+  (s at sample) * 100.0 + n
+}
+
+flow gk(x: F32 at sample, g: F32 at block, k: F32 at init) -> F32 at sample {
+  let h = g * 3.0
+  let y = x * h + k + prev~(^y)
+  y
+}
+
+flow tm() -> U32 at sample {
+  sample_tick()
+}
+
+pub flow plain() -> F32 at sample {
+  rs~(ramp~())
+}
+
+pub flow never() -> F32 at sample {
+  rs~(ramp~()).reset_if~(false)
+}
+
+pub flow by_signal(r: Bool at sample) -> F32 at sample {
+  rs~(ramp~()).reset_if~(r)
+}
+
+pub flow by_block(r: Bool at block) -> F32 at sample {
+  rs~(ramp~()).reset_if~(r)
+}
+
+pub flow by_edge(s: Bool at sample) -> F32 at sample {
+  let pb = prev~(s)
+  rs~(ramp~()).reset_if~(s && !pb)
+}
+
+pub flow by_grid(c: Bool at block) -> F32 at sample {
+  rs~(ramp~()).reset_if~(c at (sample / 4))
+}
+
+pub flow in_when(w: Bool at sample, c: Bool at block) -> F32 at sample {
+  rs~(ramp~()).reset_if~(c at (sample / 2)).when~(w)
+}
+
+pub flow kept(g: F32 at block, k: F32 at init, r: Bool at sample) -> F32 at sample {
+  gk~(ramp~(), g, k).reset_if~(r)
+}
+
+pub flow time_reset(r: Bool at sample) -> U32 at sample {
+  tm~().reset_if~(r)
+}
+
+pub flow slot_reset(r: Bool at sample) -> F32 at sample {
+  slot~(1.0).reset_if~(r)
+}
+
+pub flow slot_when_block(c: Bool at block, r: Bool at sample) -> F32 at sample {
+  slot~(1.0).when~(c).reset_if~(r)
+}
+
+pub flow slot_when_true(r: Bool at sample) -> F32 at sample {
+  slot~(1.0).when~(true).reset_if~(r)
+}
+
+pub flow when_then_reset(c: Bool at sample, r: Bool at sample) -> F32 at sample {
+  slot~(1.0).when~(c).reset_if~(r)
+}
+
+pub flow reset_then_when(c: Bool at sample, r: Bool at sample) -> F32 at sample {
+  slot~(1.0).reset_if~(r).when~(c)
+}
+
+test "a condition that never holds is no condition" {
+  var a: [F32; 8] = [0.0; 8]
+  var b: [F32; 8] = [0.0; 8]
+  var sa = plain.init(8.0)
+  var sb = never.init(8.0)
+  plain.process(inout sa, inout a)
+  never.process(inout sb, inout b)
+  assert a == [1.0, 3.0, 6.0, 10.0, 15.0, 21.0, 28.0, 36.0]
+  assert b == a
+}
+
+test "the condition is a level: every true frame resets, and the frame gives its own input" {
+  // r at the frames 3 and 6: the sum starts again there (4 and 7), the other frames add: 1 3 6 | 4 9 15 | 7 15. r at the frames 1 2 3: 2 3 4, then 4 + 5 = 9, 15, 22, 30.
+  let r1: [Bool; 8] = [false, false, false, true, false, false, true, false]
+  let r2: [Bool; 8] = [false, true, true, true, false, false, false, false]
+  var a: [F32; 8] = [0.0; 8]
+  var b: [F32; 8] = [0.0; 8]
+  var sa = by_signal.init(8.0)
+  var sb = by_signal.init(8.0)
+  by_signal.process(inout sa, r1, inout a)
+  by_signal.process(inout sb, r2, inout b)
+  assert a == [1.0, 3.0, 6.0, 4.0, 9.0, 15.0, 7.0, 15.0]
+  assert b == [1.0, 2.0, 3.0, 4.0, 9.0, 15.0, 22.0, 30.0]
+}
+
+test "a rising edge resets once: let pb = prev~(start) and reset_if~(start && !pb)" {
+  // start = 0 1 1 1 0 1 1 0 gives pb = 0 0 1 1 1 0 1 1 and the edge 0 1 0 0 0 1 0 0: 1, 2 (reset), 2 + 3 = 5, 9, 14, 6 (reset), 13, 21. The condition `start` as it is resets at each of the frames 1 2 3, 5, 6: 1 2 3 4 9 6 7 15.
+  let start: [Bool; 8] = [false, true, true, true, false, true, true, false]
+  var a: [F32; 8] = [0.0; 8]
+  var b: [F32; 8] = [0.0; 8]
+  var sa = by_edge.init(8.0)
+  var sb = by_signal.init(8.0)
+  by_edge.process(inout sa, start, inout a)
+  by_signal.process(inout sb, start, inout b)
+  assert a == [1.0, 2.0, 5.0, 9.0, 14.0, 6.0, 13.0, 21.0]
+  assert b == [1.0, 2.0, 3.0, 4.0, 9.0, 6.0, 7.0, 15.0]
+}
+
+test "a condition of the kind block is read at each frame: the frames of a call where it is true all reset, the calls cut where it changes" {
+  // r is true for the frames 0 .. 2 (1 2 3), false for 3 .. 5 (the sum goes on from 3: 7 12 18), true for 6 and 7 (7 8).
+  var out: [F32; 8] = [0.0; 8]
+  var st = by_block.init(8.0)
+  by_block.process(inout st, by_block.Params { r: true }, inout out.slice(0, 3))
+  by_block.process(inout st, by_block.Params { r: false }, inout out.slice(3, 6))
+  by_block.process(inout st, by_block.Params { r: true }, inout out.slice(6, 8))
+  assert out == [1.0, 2.0, 3.0, 7.0, 12.0, 18.0, 7.0, 8.0]
+}
+
+test "reset_if~(c at (sample / 4)) reads the condition at the grid of sample / 4 only: it resets at the frames 0 and 4 and not at 5" {
+  // c is true for the frames 0 .. 5 and false after: the grids 0 and 4 reset (1 3 6 10, then 5 11), the frame 5 does not (11, not 6), the grid 8 reads false: 7 + 11 = 18, 26, 35, 45, 56, 68.
+  var out: [F32; 12] = [0.0; 12]
+  var st = by_grid.init(8.0)
+  by_grid.process(inout st, by_grid.Params { c: true }, inout out.slice(0, 6))
+  by_grid.process(inout st, by_grid.Params { c: false }, inout out.slice(6, 12))
+  assert out == [1.0, 3.0, 6.0, 10.0, 5.0, 11.0, 18.0, 26.0, 35.0, 45.0, 56.0, 68.0]
+}
+
+test "the values of the kinds block and init are not put back (the copy of the input and the part computed at block), the state is" {
+  // y = 6 x + 10 + the last y (g = 2: h = 6, k = 10): 16 38 66, then the reset at the frame 3 gives 24 + 10 = 34, 74, 120. A copy of g, k or h put back to 0 would give 0 or 10 at the frame 3.
+  let r: [Bool; 6] = [false, false, false, true, false, false]
+  var out: [F32; 6] = [0.0; 6]
+  var st = kept.init(kept.Config { k: 10.0 }, 8.0)
+  kept.process(inout st, kept.Params { g: 2.0 }, r, inout out)
+  assert out == [16.0, 38.0, 66.0, 34.0, 74.0, 120.0]
+}
+
+test "reset_if~ does not touch the phase counter: sample_tick() goes on" {
+  let r: [Bool; 6] = [false, true, false, true, true, false]
+  var out: [U32; 6] = [9; 6]
+  var st = time_reset.init(8.0)
+  time_reset.process(inout st, r, inout out)
+  assert out == [0, 1, 2, 3, 4, 5]
+}
+
+test "a field written at a tick and read at sample is T.default() after the reset until the next tick; the counter goes on" {
+  // r at the frame 3 (no grid there): the reset leaves s = 0, n = 0 and the child at 0: the frame 3 gives 1; the next grid is the frame 4 (the counter did not move): s = 1, n = 2: 102, 103, then 204, 205. A reset at the frame 4 (a grid):
+  // the grid writes s = 3 first and the reset takes it back: 1 and 2 at the frames 4 and 5, then the grid 6 gives s = 1, n = 3: 103, 104.
+  let r3: [Bool; 8] = [false, false, false, true, false, false, false, false]
+  let r4: [Bool; 8] = [false, false, false, false, true, false, false, false]
+  var a: [F32; 8] = [0.0; 8]
+  var b: [F32; 8] = [0.0; 8]
+  var sa = slot_reset.init(8.0)
+  var sb = slot_reset.init(8.0)
+  slot_reset.process(inout sa, r3, inout a)
+  slot_reset.process(inout sb, r4, inout b)
+  assert a == [101.0, 102.0, 203.0, 1.0, 102.0, 103.0, 204.0, 205.0]
+  assert b == [101.0, 102.0, 203.0, 204.0, 1.0, 2.0, 103.0, 104.0]
+}
+
+test "x.when~(c).reset_if~(r) resets the stopped frames too and the held output; x.reset_if~(r).when~(c) resets only the frames that run" {
+  // c = 1 1 0 1 0 0 1 1 (the runs j = 0 .. 4 at the frames 0 1 3 6 7), r = 0 0 1 1 0 1 0 0. The counter of the runs goes on in both.
+  // When then reset: the frame 2 (stopped, r) reads T.default() 0 and resets; the frame 3 is the run j = 2 (a grid: the child writes s = 1) and r takes the state back: n = 1, s = 0: 1; the frame 4 holds 1; the frame 5 (stopped, r) is 0 and resets; the
+  // run j = 3 (frame 6, no grid) is 1 (n = 1, s = 0); the run j = 4 (frame 7, a grid) is s = 1, n = 2: 102.
+  // Reset then when: the stopped frames are not read: the frame 2 keeps 102; the run j = 2 at the frame 3 is 1 as above, the frames 4 and 5 hold 1, the run j = 3 is 2 (n = 2, s = 0), the run j = 4 is s = 1, n = 3: 103.
+  let c: [Bool; 8] = [true, true, false, true, false, false, true, true]
+  let r: [Bool; 8] = [false, false, true, true, false, true, false, false]
+  var a: [F32; 8] = [0.0; 8]
+  var b: [F32; 8] = [0.0; 8]
+  var sa = when_then_reset.init(8.0)
+  var sb = reset_then_when.init(8.0)
+  when_then_reset.process(inout sa, when_then_reset.In { c: c, r: r }, inout a)
+  reset_then_when.process(inout sb, reset_then_when.In { c: c, r: r }, inout b)
+  assert a == [101.0, 102.0, 0.0, 1.0, 1.0, 0.0, 1.0, 102.0]
+  assert b == [101.0, 102.0, 102.0, 1.0, 1.0, 1.0, 2.0, 103.0]
+}
+
+test "x.when~(true).reset_if~(r) and x.when~(c).reset_if~(r) with c always true are x.reset_if~(r): the same values" {
+  let r: [Bool; 8] = [false, false, false, false, true, false, false, false]
+  var a: [F32; 8] = [0.0; 8]
+  var b: [F32; 8] = [0.0; 8]
+  var c: [F32; 8] = [0.0; 8]
+  var sa = slot_reset.init(8.0)
+  var sb = slot_when_true.init(8.0)
+  var sc = slot_when_block.init(8.0)
+  slot_reset.process(inout sa, r, inout a)
+  slot_when_true.process(inout sb, r, inout b)
+  slot_when_block.process(inout sc, slot_when_block.Params { c: true }, r, inout c)
+  assert a == [101.0, 102.0, 203.0, 204.0, 1.0, 2.0, 103.0, 104.0]
+  assert b == a
+  assert c == a
+}
+
+test "the grid of a reset_if~ inside a when~ counts the runs of the part, not the frames" {
+  // x is 1 2 3 ... the frame + 1 read at the runs (the frames 0 1 3 6 7: 1 2 4 7 8). The condition is true at the grid of sample / 2 of the part: the runs j = 0, 2, 4 (the frames 0, 3, 7) reset: 1, 3 (1 + 2), 4 (reset), 11 (4 + 7), 8 (reset).
+  // A grid of the frames would reset at the frames 0 2 4 6 (the runs 0, none, none, 3).
+  let w: [Bool; 8] = [true, true, false, true, false, false, true, true]
+  var out: [F32; 8] = [0.0; 8]
+  var st = in_when.init(8.0)
+  in_when.process(inout st, in_when.Params { c: true }, w, inout out)
+  assert out == [1.0, 3.0, 3.0, 4.0, 4.0, 4.0, 11.0, 8.0]
+}
+
+test "the calls of process cut the frames anywhere, and a reset in the middle of a grid starts over, with the counter (§13.4, §11.6)" {
+  // r at the frames 3 and 9 of 12: 101 102 203 1 102 103 204 205 306 1 102 103 (the grids at the even frames; after the reset at the frame 3 the child counts again, so the frame 8 gives s = 3, n = 6).
+  let r: [Bool; 12] = [false, false, false, true, false, false, false, false, false, true, false, false]
+  let want: [F32; 12] = [101.0, 102.0, 203.0, 1.0, 102.0, 103.0, 204.0, 205.0, 306.0, 1.0, 102.0, 103.0]
+  var whole: [F32; 12] = [0.0; 12]
+  var cut: [F32; 12] = [0.0; 12]
+  var junk: [F32; 3] = [0.0; 3]
+  var again: [F32; 12] = [0.0; 12]
+  let idle: [Bool; 3] = [false, false, false]
+  var s1 = slot_reset.init(8.0)
+  slot_reset.process(inout s1, r, inout whole)
+  assert whole == want
+  var s2 = slot_reset.init(8.0)
+  slot_reset.process(inout s2, r.slice(0, 1), inout cut.slice(0, 1))
+  slot_reset.process(inout s2, r.slice(1, 2), inout cut.slice(1, 2))
+  slot_reset.process(inout s2, r.slice(2, 5), inout cut.slice(2, 5))
+  slot_reset.process(inout s2, r.slice(5, 9), inout cut.slice(5, 9))
+  slot_reset.process(inout s2, r.slice(9, 12), inout cut.slice(9, 12))
+  assert cut == want
+  // 3 frames leave the next frame in the middle of a grid; the generated `reset` puts the counter back to 0, which reset_if~ does not do.
+  var s3 = slot_reset.init(8.0)
+  slot_reset.process(inout s3, idle, inout junk)
+  slot_reset.reset(inout s3)
+  slot_reset.process(inout s3, r, inout again)
+  assert again == want
+}

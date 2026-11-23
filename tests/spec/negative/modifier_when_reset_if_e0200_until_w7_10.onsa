@@ -3,30 +3,48 @@
 // spec = ["§2.6", "§11.10", "§18.1"]
 // fixes = 0
 
-// W7-09 U3a/t, rewritten for W7-10 U1/t and U2a/t: this file fixes the output of this version, not a sentence of the spec, and it changes when W7-10 U2b and U3 land. The forms `lp~(x).reset_if~(c)` and `prev~(x).when~(c)` are correct
-// forms of §11.10 ("受け手は flow の呼び出し（組込みの遅延を含む）か修飾子の連鎖である"). Since W7-10 U1 a `.when~(c)` on an instance has its meaning and no diagnostic (flow_clock/when_forms_accepted.onsa, flow_semantics/when_values.onsa), and
-// since U2a the conditions that were still E0200 here (slower than W, an `at`, `sample_tick()`) and the head with an input slower than W have their meaning too (flow_clock/when_condition_accepted.onsa, flow_semantics/when_condition_values.onsa
-// and when_slow_head_values.onsa). What the flow stage still stops with E0200 (Q-09): every `.reset_if~(r)` (until U2b; also in a chain after or before a `.when~`), and a `.when~(c)` on a built-in delay (until U3). There is no candidate
-// (`fixes = 0`). When those units land each flow below changes to the correct form (a value, no diagnostic, or the errors of the clocks of §11.10) and this file is rewritten or removed with it. The `down` and `up` forms are in
-// flow_clock/modifier_down_forms.onsa. One error per flow (P-01).
+// W7-09 U3a/t, rewritten for W7-10 U1/t, U2a/t and U2b/t: this file fixes the output of this version, not a sentence of the spec, and it changes when W7-10 U3 lands. The forms `prev~(x).when~(c)` and `prev~(x).reset_if~(r)` are correct
+// forms of §11.10 ("受け手は flow の呼び出し（組込みの遅延を含む）か修飾子の連鎖である"). Since W7-10 U1 a `.when~(c)` on an instance has its meaning and no diagnostic (flow_clock/when_forms_accepted.onsa, flow_semantics/when_values.onsa), since U2a the
+// conditions that were E0200 here (slower than W, an `at`, `sample_tick()`) have theirs (flow_clock/when_condition_accepted.onsa, flow_semantics/when_condition_values.onsa and when_slow_head_values.onsa), and since U2b the `.reset_if~(r)` of an
+// instance has its meaning too, alone or in a chain with a `.when~` (flow_clock/reset_if_forms_accepted.onsa, flow_semantics/reset_if_values.onsa and reset_if_slow_values.onsa). What the flow stage still stops with E0200 (Q-09): a `.when~(c)` or a `.reset_if~(r)`
+// whose receiver is a built-in delay (`prev~`, `delay~`, `vdelay~`; until U3), and a `.reset_if~` inside a `.up~` whose condition ticks at `sample / 2147483648` (in the frame of P, the clock of the `.up~`, the tick is `sample / 2^32`, which this version does not
+// hold: found is the condition; with or without a `.when~`). There is no candidate (`fixes = 0`). When U3 lands each flow below changes to the correct form (a value or no diagnostic), and this file is rewritten or removed with it.
+// The `down` and `up` forms are in flow_clock/modifier_down_forms.onsa. One error per flow (P-01).
 
-pub flow lp(x: F32 at sample) -> F32 at sample {
-  x * 0.5 + prev~(x) * 0.5
+flow cnt() -> F32 at sample {
+  let n = prev~(^n) + 1.0
+  n
 }
 
-pub flow reset_if_on_an_instance(x: F32 at sample, c: Bool at sample) -> F32 at sample {
-  lp~(x).reset_if~(c)                               //~ E0200
+flow g2(x: F32 at (sample * 2)) -> F32 at sample {
+  x[0] + x[1] * 10.0
 }
 
 pub flow when_on_a_builtin_delay(x: F32 at sample, c: Bool at sample) -> F32 at sample {
   prev~(x).when~(c)                                 //~ E0200
 }
 
-pub flow two_modifiers_on_an_instance(x: F32 at sample, c: Bool at sample, r: Bool at sample) -> F32 at sample {
-  let a = lp~(x).when~(c).reset_if~(r)              //~ E0200
+pub flow reset_if_on_a_builtin_delay(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  prev~(x).reset_if~(c)                             //~ E0200
+}
+
+pub flow when_on_delay(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  delay~(x, 4).when~(c)                             //~ E0200
+}
+
+pub flow reset_if_on_vdelay(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  vdelay~(x, 2.0, 4).reset_if~(c)                   //~ E0200
+}
+
+pub flow two_modifiers_on_a_builtin_delay(x: F32 at sample, c: Bool at sample, r: Bool at sample) -> F32 at sample {
+  let a = prev~(x).when~(c).reset_if~(r)            //~ E0200
   a
 }
 
-pub flow reset_if_then_when(x: F32 at sample, c: Bool at sample, r: Bool at sample) -> F32 at sample {
-  lp~(x).reset_if~(r).when~(c)                      //~ E0200
+pub flow a_tick_of_2_pow_32_in_an_up(c: Bool at block) -> F32 at sample {
+  g2~(cnt~().reset_if~(c at (sample / 2147483648)).up~(2))        //~ E0200
+}
+
+pub flow a_tick_of_2_pow_32_in_an_up_with_a_when(c: Bool at block, d: Bool at sample) -> F32 at sample {
+  g2~(cnt~().reset_if~(c at (sample / 2147483648)).when~(d).up~(2)) //~ E0200
 }

@@ -1,0 +1,291 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.10", "§11.9", "§11.6", "§11.3", "§13.4"]
+
+// `.reset_if~(r)` where W is not the clock of the call: a part that is slower than the call (a conversion flow, `.down~`), a part that deals or gathers (inside and outside the boundary of a conversion flow), and `.up~(N)` (W7-10 U2b/t; S-559,
+// S-1186, S-1209, S-1218, S-1222). Worked out by hand from §11.9 and §11.10. The grid positions are the frames 0, 4, 8 ... (m = 0, 1, 2 ...); a condition of the kind `block` is read at the ticks of W (so a call of `process` that is
+// `true` at a grid resets there). `dws4` gathers the 4 samples before its tick (N samples late): with x = 1 2 3 ... the ticks give 0, 10, 26, 42, 58 (1 + 2 + 3 + 4, 5 + .. + 8 ...). A reset at a tick puts the ring that gathers back to
+// the defaults BEFORE the tick's stage, so that the tick sums the 4 defaults (T.default(), §11.9) and the frames after it fill the ring again. `dsum` adds the sum of its 4 samples to its own running total.
+
+flow ramp() -> F32 at sample {
+  let t = prev~(^t) + 1.0
+  t
+}
+
+flow acc(f: F32 at block) -> F32 at sample {
+  let n = f + prev~(^n)
+  n
+}
+
+flow slot(f: F32 at block) -> F32 at sample {
+  let s = acc~(f).down~(2)
+  let n = prev~(^n) + 1.0
+  (s at sample) * 100.0 + n
+}
+
+flow sum4(x: F32 at (sample * 4)) -> F32 at sample {
+  x[0] + x[1] + x[2] + x[3]
+}
+
+flow dws4(x: F32 at sample) -> F32 at (sample / 4) {
+  sum4~(x).down~(4)
+}
+
+flow dsum(x: F32 at (sample * 4)) -> F32 at sample {
+  let t = x[0] + x[1] + x[2] + x[3]
+  let a = t + prev~(^a)
+  a
+}
+
+// The run n of the head gives the 4 elements 10 n .. 10 n + 3 (the head is at `sample * 4`: dealt over the 4 frames of the grid).
+flow cnt4() -> F32 at (sample * 4) {
+  let n = prev~(^n) + 1.0
+  [n * 10.0, n * 10.0 + 1.0, n * 10.0 + 2.0, n * 10.0 + 3.0]
+}
+
+flow cnt() -> F32 at sample {
+  let n = prev~(^n) + 1.0
+  n
+}
+
+flow g2(x: F32 at (sample * 2)) -> F32 at sample {
+  x[0] + x[1] * 10.0
+}
+
+pub flow dws_plain() -> F32 at sample {
+  dws4~(ramp~()) at sample
+}
+
+pub flow dws_reset(r: Bool at block) -> F32 at sample {
+  dws4~(ramp~()).reset_if~(r) at sample
+}
+
+pub flow dws_reset_at_w(r: Bool at block) -> F32 at sample {
+  dws4~(ramp~()).reset_if~(r at (sample / 4)) at sample
+}
+
+pub flow dws_when_reset(c: Bool at block, r: Bool at block) -> F32 at sample {
+  dws4~(ramp~()).when~(c).reset_if~(r) at sample
+}
+
+pub flow dsum_none() -> F32 at sample {
+  dsum~(ramp~()).down~(4) at sample
+}
+
+pub flow dsum_outer(r: Bool at block) -> F32 at sample {
+  dsum~(ramp~()).down~(4).reset_if~(r) at sample
+}
+
+pub flow dsum_inner(r: Bool at block) -> F32 at sample {
+  dsum~(ramp~()).reset_if~(r).down~(4) at sample
+}
+
+pub flow deal_outer(r: Bool at sample) -> F32 at sample {
+  cnt4~().down~(4).reset_if~(r)
+}
+
+pub flow deal_outer_block(r: Bool at block) -> F32 at sample {
+  cnt4~().down~(4).reset_if~(r)
+}
+
+pub flow deal_inner_block(r: Bool at block) -> F32 at sample {
+  cnt4~().reset_if~(r).down~(4)
+}
+
+pub flow up_inner(r: Bool at sample) -> F32 at sample {
+  g2~(cnt~().reset_if~(r).up~(2))
+}
+
+pub flow up_outer(r: Bool at sample) -> F32 at sample {
+  g2~(cnt~().up~(2).reset_if~(r))
+}
+
+pub flow up_inner_block(r: Bool at block) -> F32 at sample {
+  g2~(cnt~().reset_if~(r).up~(2))
+}
+
+pub flow up_outer_block(r: Bool at block) -> F32 at sample {
+  g2~(cnt~().up~(2).reset_if~(r))
+}
+
+pub flow up_held(c: Bool at sample, r: Bool at sample) -> F32 at sample {
+  g2~(cnt~().up~(2).when~(c).reset_if~(r))
+}
+
+pub flow slow_plain() -> F32 at sample {
+  slot~(1.0).down~(2) at sample
+}
+
+pub flow slow_reset(r: Bool at block) -> F32 at sample {
+  slot~(1.0).down~(2).reset_if~(r) at sample
+}
+
+pub flow slow_when_reset(c: Bool at block, r: Bool at block) -> F32 at sample {
+  slot~(1.0).down~(2).when~(c).reset_if~(r) at sample
+}
+
+pub flow slow_true_reset(r: Bool at block) -> F32 at sample {
+  slot~(1.0).down~(2).when~(true).reset_if~(r) at sample
+}
+
+test "a condition of the kind block at the grid resets the ring of the conversion flow: the tick gives T.default(), the next tick sums the frames since" {
+  // r is true for the frames 8 .. 11 (the tick 8): the ring that held 5 6 7 8 is put back, the tick 8 sums 0 0 0 0 = 0 and the frames 8 .. 11 fill it: the tick 12 gives 9 + 10 + 11 + 12 = 42, the tick 16 58.
+  // r true for 8 .. 15 (the ticks 8 and 12 both): 0 at 8, the ring of 8 .. 11 is put back at 12: 0, the tick 16 sums 13 .. 16 = 58.
+  var plain: [F32; 20] = [9.0; 20]
+  var once: [F32; 20] = [9.0; 20]
+  var twice: [F32; 20] = [9.0; 20]
+  var sp = dws_plain.init(8.0)
+  var s1 = dws_reset.init(8.0)
+  var s2 = dws_reset.init(8.0)
+  dws_plain.process(inout sp, inout plain)
+  dws_reset.process(inout s1, dws_reset.Params { r: false }, inout once.slice(0, 8))
+  dws_reset.process(inout s1, dws_reset.Params { r: true }, inout once.slice(8, 12))
+  dws_reset.process(inout s1, dws_reset.Params { r: false }, inout once.slice(12, 20))
+  dws_reset.process(inout s2, dws_reset.Params { r: false }, inout twice.slice(0, 8))
+  dws_reset.process(inout s2, dws_reset.Params { r: true }, inout twice.slice(8, 16))
+  dws_reset.process(inout s2, dws_reset.Params { r: false }, inout twice.slice(16, 20))
+  assert plain == [0.0, 0.0, 0.0, 0.0, 10.0, 10.0, 10.0, 10.0, 26.0, 26.0, 26.0, 26.0, 42.0, 42.0, 42.0, 42.0, 58.0, 58.0, 58.0, 58.0]
+  assert once == [0.0, 0.0, 0.0, 0.0, 10.0, 10.0, 10.0, 10.0, 0.0, 0.0, 0.0, 0.0, 42.0, 42.0, 42.0, 42.0, 58.0, 58.0, 58.0, 58.0]
+  assert twice == [0.0, 0.0, 0.0, 0.0, 10.0, 10.0, 10.0, 10.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 58.0, 58.0, 58.0, 58.0]
+}
+
+test "reset_if~ does not touch what when~ remembers: the frames of the window go on being gathered after the reset at the grid" {
+  // c is true all along (a block value, so the when~ stays): the values of the case above with a reset at the tick 8. If the reset put back the remembered "runs", the frames 8 .. 11 would not be gathered and the tick 12 would give 0.
+  var out: [F32; 20] = [9.0; 20]
+  var st = dws_when_reset.init(8.0)
+  dws_when_reset.process(inout st, dws_when_reset.Params { c: true, r: false }, inout out.slice(0, 8))
+  dws_when_reset.process(inout st, dws_when_reset.Params { c: true, r: true }, inout out.slice(8, 12))
+  dws_when_reset.process(inout st, dws_when_reset.Params { c: true, r: false }, inout out.slice(12, 20))
+  assert out == [0.0, 0.0, 0.0, 0.0, 10.0, 10.0, 10.0, 10.0, 0.0, 0.0, 0.0, 0.0, 42.0, 42.0, 42.0, 42.0, 58.0, 58.0, 58.0, 58.0]
+}
+
+test "a reset_if~ outside the boundary of a conversion flow puts back the ring that gathers; inside it does not (§11.9)" {
+  // The ticks of dsum (the running total of the window sums): 0, 10, 36 (26), 78 (42), 136 (58). With r at the tick 8:
+  // outside: the ring and the total are put back, the tick sums 0: 0; the next windows are 42 (9 .. 12) and 58: 0 + 42 = 42, 100.
+  // inside: only the total is put back; the ring (the gathered values belong to the caller) still holds 5 .. 8: 26, then 26 + 42 = 68, 126.
+  var none: [F32; 20] = [9.0; 20]
+  var outer: [F32; 20] = [9.0; 20]
+  var inner: [F32; 20] = [9.0; 20]
+  var s0 = dsum_none.init(8.0)
+  var s1 = dsum_outer.init(8.0)
+  var s2 = dsum_inner.init(8.0)
+  dsum_none.process(inout s0, inout none)
+  dsum_outer.process(inout s1, dsum_outer.Params { r: false }, inout outer.slice(0, 8))
+  dsum_outer.process(inout s1, dsum_outer.Params { r: true }, inout outer.slice(8, 12))
+  dsum_outer.process(inout s1, dsum_outer.Params { r: false }, inout outer.slice(12, 20))
+  dsum_inner.process(inout s2, dsum_inner.Params { r: false }, inout inner.slice(0, 8))
+  dsum_inner.process(inout s2, dsum_inner.Params { r: true }, inout inner.slice(8, 12))
+  dsum_inner.process(inout s2, dsum_inner.Params { r: false }, inout inner.slice(12, 20))
+  assert none == [0.0, 0.0, 0.0, 0.0, 10.0, 10.0, 10.0, 10.0, 36.0, 36.0, 36.0, 36.0, 78.0, 78.0, 78.0, 78.0, 136.0, 136.0, 136.0, 136.0]
+  assert outer == [0.0, 0.0, 0.0, 0.0, 10.0, 10.0, 10.0, 10.0, 0.0, 0.0, 0.0, 0.0, 42.0, 42.0, 42.0, 42.0, 100.0, 100.0, 100.0, 100.0]
+  assert inner == [0.0, 0.0, 0.0, 0.0, 10.0, 10.0, 10.0, 10.0, 26.0, 26.0, 26.0, 26.0, 68.0, 68.0, 68.0, 68.0, 126.0, 126.0, 126.0, 126.0]
+}
+
+test "a reset_if~ outside a boundary that deals puts back the array that is dealt, in the middle of a window and at a tick" {
+  // cnt4 gives 10 11 12 13 | 20 21 22 23 | 30 .. 33 over the windows. r at the frame 6 (W is sample, the call): the frames 6 and 7 read T.default(), and the head starts again: the tick 8 gives its run 1 = 10 11 12 13.
+  // r at the frame 4 (a tick): the tick (slower than the condition) writes 20 .. 23 first and the reset takes them back: 0 for the frames 4 .. 7, then 10 11 12 13 at the tick 8.
+  // r (block) true for the frames 8 .. 11: the tick 8 writes 30 first and every frame resets: 0 0 0 0, then the tick 12 gives 10 .. 13. Inside the boundary the condition is read at the tick only and the dealt frames are not touched:
+  // the tick 8 starts the head again (10 .. 13) and the tick 12 gives its run 2 (20 .. 23).
+  let a: [Bool; 12] = [false, false, false, false, false, false, true, false, false, false, false, false]
+  let b: [Bool; 12] = [false, false, false, false, true, false, false, false, false, false, false, false]
+  var oa: [F32; 12] = [9.0; 12]
+  var ob: [F32; 12] = [9.0; 12]
+  var oc: [F32; 16] = [9.0; 16]
+  var od: [F32; 16] = [9.0; 16]
+  var sa = deal_outer.init(8.0)
+  var sb = deal_outer.init(8.0)
+  var sc = deal_outer_block.init(8.0)
+  var sd = deal_inner_block.init(8.0)
+  deal_outer.process(inout sa, a, inout oa)
+  deal_outer.process(inout sb, b, inout ob)
+  deal_outer_block.process(inout sc, deal_outer_block.Params { r: false }, inout oc.slice(0, 8))
+  deal_outer_block.process(inout sc, deal_outer_block.Params { r: true }, inout oc.slice(8, 12))
+  deal_outer_block.process(inout sc, deal_outer_block.Params { r: false }, inout oc.slice(12, 16))
+  deal_inner_block.process(inout sd, deal_inner_block.Params { r: false }, inout od.slice(0, 8))
+  deal_inner_block.process(inout sd, deal_inner_block.Params { r: true }, inout od.slice(8, 12))
+  deal_inner_block.process(inout sd, deal_inner_block.Params { r: false }, inout od.slice(12, 16))
+  assert oa == [10.0, 11.0, 12.0, 13.0, 20.0, 21.0, 0.0, 0.0, 10.0, 11.0, 12.0, 13.0]
+  assert ob == [10.0, 11.0, 12.0, 13.0, 0.0, 0.0, 0.0, 0.0, 10.0, 11.0, 12.0, 13.0]
+  assert oc == [10.0, 11.0, 12.0, 13.0, 20.0, 21.0, 22.0, 23.0, 0.0, 0.0, 0.0, 0.0, 10.0, 11.0, 12.0, 13.0]
+  assert od == [10.0, 11.0, 12.0, 13.0, 20.0, 21.0, 22.0, 23.0, 10.0, 11.0, 12.0, 13.0, 20.0, 21.0, 22.0, 23.0]
+}
+
+test "x.up~(2) with reset_if~ inside or outside: the condition is read once for the frame, before the first of its 2 runs (S-1218)" {
+  // The head cnt gives 1 2 3 4 ... at the runs, 2 a frame: g2 = e0 + 10 e1. Without a reset: 21 43 65 87. r at the frames 2 and 5: the runs of that frame are 1 2 again, one reset a frame: 21 43 21 43 65 21 (both orders: W is sample * 2 inside the up and sample outside it, and the condition is read at the
+  // caller's sample). A block value true for all the frames: 21 each frame (a reset before each run would give 1 1: 11). True for the frames 0 and 1, false after: 21 21, then the runs 3 4, 5 6, 7 8: 43 65 87.
+  let r: [Bool; 6] = [false, false, true, false, false, true]
+  var a: [F32; 6] = [0.0; 6]
+  var b: [F32; 6] = [0.0; 6]
+  var c: [F32; 4] = [0.0; 4]
+  var d: [F32; 4] = [0.0; 4]
+  var e: [F32; 5] = [0.0; 5]
+  var f: [F32; 5] = [0.0; 5]
+  var sa = up_inner.init(8.0)
+  var sb = up_outer.init(8.0)
+  var sc = up_inner_block.init(8.0)
+  var sd = up_outer_block.init(8.0)
+  var se = up_inner_block.init(8.0)
+  var sf = up_outer_block.init(8.0)
+  up_inner.process(inout sa, r, inout a)
+  up_outer.process(inout sb, r, inout b)
+  up_inner_block.process(inout sc, up_inner_block.Params { r: true }, inout c)
+  up_outer_block.process(inout sd, up_outer_block.Params { r: true }, inout d)
+  up_inner_block.process(inout se, up_inner_block.Params { r: true }, inout e.slice(0, 2))
+  up_inner_block.process(inout se, up_inner_block.Params { r: false }, inout e.slice(2, 5))
+  up_outer_block.process(inout sf, up_outer_block.Params { r: true }, inout f.slice(0, 2))
+  up_outer_block.process(inout sf, up_outer_block.Params { r: false }, inout f.slice(2, 5))
+  assert a == [21.0, 43.0, 21.0, 43.0, 65.0, 21.0]
+  assert b == a
+  assert c == [21.0, 21.0, 21.0, 21.0]
+  assert d == c
+  assert e == [21.0, 21.0, 43.0, 65.0, 87.0]
+  assert f == e
+}
+
+test "the held output of a part that is stopped is put back by a reset_if~ outside the when~: all N values are T.default() (S-1222)" {
+  // c = 1 1 0 0 1 1, r = 0 0 0 1 0 0: the runs 1 2, 3 4 give 21, 43; the stopped frame 2 reads the last value 4 twice (the array is [4; 2]: 4 + 40 = 44); the stopped frame 3 resets: [0; 2] = 0; the frames 4 and 5 run the head from the start: 21 43.
+  let c: [Bool; 6] = [true, true, false, false, true, true]
+  let r: [Bool; 6] = [false, false, false, true, false, false]
+  var out: [F32; 6] = [9.0; 6]
+  var st = up_held.init(8.0)
+  up_held.process(inout st, up_held.In { c: c, r: r }, inout out)
+  assert out == [21.0, 43.0, 44.0, 0.0, 21.0, 43.0]
+}
+
+test "the stage of the part that is slower than the part's own W is written first, and a reset at W takes it back; the same with a when~ before it (the stage moved to W)" {
+  // `slot~(1.0).down~(2)`: the body runs at sample / 2 (W), its stage of `sample / 2` (the grid of the child) at sample / 4. b = frame / 2 is the body's sample: 101 102 203 204 305 ...; r is read at W (b = 0, 1, ..): true for the frames 4 and 5 (b = 2).
+  // The grid at b = 2 writes s = 2 first, the reset puts back n, s and the child: b = 2 gives 1 (n = 1, s = 0), b = 3 gives 2, the grid b = 4 gives s = 1, n = 3: 103, then 104, and b = 6 gives s = 2, n = 5: 205.
+  // x.down~(2).when~(true).reset_if~(r) and the same with a condition that is a block value that holds are x.down~(2).reset_if~(r) (the stage that the when~ moves to W is written before the reset, as it is without it).
+  var plain: [F32; 14] = [9.0; 14]
+  var a: [F32; 14] = [9.0; 14]
+  var b: [F32; 14] = [9.0; 14]
+  var c: [F32; 14] = [9.0; 14]
+  var sp = slow_plain.init(8.0)
+  var sa = slow_reset.init(8.0)
+  var sb = slow_true_reset.init(8.0)
+  var sc = slow_when_reset.init(8.0)
+  slow_plain.process(inout sp, inout plain)
+  slow_reset.process(inout sa, slow_reset.Params { r: false }, inout a.slice(0, 4))
+  slow_reset.process(inout sa, slow_reset.Params { r: true }, inout a.slice(4, 6))
+  slow_reset.process(inout sa, slow_reset.Params { r: false }, inout a.slice(6, 14))
+  slow_true_reset.process(inout sb, slow_true_reset.Params { r: false }, inout b.slice(0, 4))
+  slow_true_reset.process(inout sb, slow_true_reset.Params { r: true }, inout b.slice(4, 6))
+  slow_true_reset.process(inout sb, slow_true_reset.Params { r: false }, inout b.slice(6, 14))
+  slow_when_reset.process(inout sc, slow_when_reset.Params { c: true, r: false }, inout c.slice(0, 4))
+  slow_when_reset.process(inout sc, slow_when_reset.Params { c: true, r: true }, inout c.slice(4, 6))
+  slow_when_reset.process(inout sc, slow_when_reset.Params { c: true, r: false }, inout c.slice(6, 14))
+  assert plain == [101.0, 101.0, 102.0, 102.0, 203.0, 203.0, 204.0, 204.0, 305.0, 305.0, 306.0, 306.0, 407.0, 407.0]
+  assert a == [101.0, 101.0, 102.0, 102.0, 1.0, 1.0, 2.0, 2.0, 103.0, 103.0, 104.0, 104.0, 205.0, 205.0]
+  assert b == a
+  assert c == a
+}
+
+test "an at to the clock of W, the tick of the grid of sample / 4, is the condition read at W: the same values as with no at" {
+  var out: [F32; 20] = [9.0; 20]
+  var st = dws_reset_at_w.init(8.0)
+  dws_reset_at_w.process(inout st, dws_reset_at_w.Params { r: false }, inout out.slice(0, 8))
+  dws_reset_at_w.process(inout st, dws_reset_at_w.Params { r: true }, inout out.slice(8, 12))
+  dws_reset_at_w.process(inout st, dws_reset_at_w.Params { r: false }, inout out.slice(12, 20))
+  assert out == [0.0, 0.0, 0.0, 0.0, 10.0, 10.0, 10.0, 10.0, 0.0, 0.0, 0.0, 0.0, 42.0, 42.0, 42.0, 42.0, 58.0, 58.0, 58.0, 58.0]
+}

@@ -9,7 +9,7 @@ use super::*;
 use crate::clock::{Base, ClockName, ClockRef, Ratio};
 use crate::def::Bound;
 use crate::deferred::DeferredKind;
-use crate::flow_names::{FlowBuiltin, Modifier};
+use crate::flow_names::FlowBuiltin;
 use crate::names::body::{ModifierCall, NoFlowForm, Origin, PathRes, no_flow_form};
 use crate::requirement::Required;
 use crate::resolve::{Callee, NameKind};
@@ -460,7 +460,7 @@ impl<'a> Checker<'a> {
     /// receiver, and one argument, the N of `.down~` and `.up~` (a constant
     /// expression of type `U32`, a power of 2 that is 2 or more, else the
     /// E0808 of the flow stage, S-969, S-1077) or the `Bool` condition of
-    /// `.when~` (§11.10) and `.reset_if~` (the E0200 of W7-10 U2b). Each is
+    /// `.when~` and `.reset_if~` (§11.10). Each is
     /// recorded once in the chain of its head ([`ModifierChain`]).
     fn check_modifier(&mut self, e: ExprId, m: ModifierCall, args: &[Arg], expected: Option<TyId>) -> R<TyId> {
         let t = self.check_expr(m.receiver, expected)?;
@@ -470,29 +470,25 @@ impl<'a> Checker<'a> {
             let msg = format!("the modifier `{}~` takes 1 argument but {} were given", m.modifier.name(), args.len());
             return Err(self.err(Code::E0412, self.expr(e).span, msg));
         };
-        // Its ratio (none of `when~` and `reset_if~`, whose meaning is the
-        // E0200 of W7-10), `Err` of an N in error.
-        let (ratio, gate) = match m.modifier.ratio_op() {
+        // Its ratio (none of `when~` and `reset_if~`), `Err` of an N in error.
+        let ratio = match m.modifier.ratio_op() {
             Some(op) => match self.flow_const_u32(arg.expr)?.map(|n| Ratio::of_n(op, n)) {
-                Some(Some(r)) => (Ok(Some(r)), None),
+                Some(Some(r)) => Ok(Some(r)),
                 Some(None) => {
                     let msg =
                         format!("the N of `.{}~(N)` is a power of 2 that is 2 or more (§11.9)", m.modifier.name());
                     self.flow_hold_at(Code::E0808, self.expr(arg.expr).span, msg);
-                    (Err(()), None)
+                    Err(())
                 }
                 // A failed constant (§18.1) or a gate of its own.
-                None => (Err(()), None),
+                None => Err(()),
             },
+            // The rest of `.when~` and `.reset_if~`: [`gated`] of the chain, the walk of
+            // the clocks of its condition.
             None => {
                 let bool = self.bool_();
                 self.check_expr(arg.expr, Some(bool))?;
-                // `.reset_if~` is W7-10 U2b's (the rest of `.when~`: [`gated`] of
-                // the chain, the walk of the clocks of its condition).
-                let gate = (m.modifier != Modifier::When).then(|| {
-                    Feature::InstanceModifiers.diagnostic(Stage::Flow, m.name, &[]).with_found(self.src(m.name))
-                });
-                (Ok(None), gate)
+                Ok(None)
             }
         };
         let fresh = ModifierChain { ratio: Some(Ratio(0)), size: 0, mods: Vec::new(), gate: None };
@@ -501,9 +497,8 @@ impl<'a> Checker<'a> {
         let r = ratio.ok().flatten();
         chain.size = chain.size.saturating_add(r.map_or(0, |r| r.0.unsigned_abs()));
         chain.ratio = chain.ratio.zip(ratio.ok()).map(|(a, r)| Ratio(a.0.saturating_add(r.map_or(0, |r| r.0))));
-        chain.gate = chain.gate.take().or(gate);
         let cond = m.modifier.ratio_op().is_none().then_some(arg.expr);
-        let plan = PlanModifier { modifier: m.modifier, ratio: r, cond, name: m.name };
+        let plan = PlanModifier { modifier: m.modifier, ratio: r, cond, name: m.name, reset: None };
         chain.mods.push(ChainModifier { call: e, receiver: m.receiver, plan });
         Ok(t)
     }

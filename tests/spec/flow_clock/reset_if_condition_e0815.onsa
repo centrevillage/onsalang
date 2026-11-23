@@ -1,0 +1,92 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§11.9", "§11.10", "§18.1"]
+
+// W7-10 U2b/t, S-559, S-1196, S-1209 (spec §11.10: "W より速い周期のクロックの条件は E0815 である（`x.down~(4).reset_if~(r)` と `x.reset_if~(r).down~(4)` の `sample` の `r`。下げる変換は利用者の flow で書く）"; W is the output clock
+// of the part when it is slower than the place of the modifier P, and P otherwise, as for a `.when~`). The condition of a `.reset_if~` ticks at its own clock (an `at` included), and a tick that is faster than W is E0815 whatever the form
+// of the part is (a conversion flow, `.down~` before or after the modifier, a second modifier, a `.when~` before it), at the condition, in a `let`, in an argument, in an arm of `if~`, in a `par~`. The notes and the column are not
+// fixed. What is read at W or slower is accepted: reset_if_forms_accepted.onsa (also `c at (sample / 4)` where W is `sample`, which is a slower tick). One error per flow (P-01), so each form is a flow of its own.
+// `x` and `c` are `sample` inputs, `p` is a `block` input, `l` is `sample / 4`, `m` is `sample / 8`, `b` is a `block` Bool.
+
+pub flow lp(x: F32 at sample) -> F32 at sample {
+  x * 0.5 + prev~(x) * 0.5
+}
+
+flow sum4(x: F32 at (sample * 4)) -> F32 at sample {
+  x[0] + x[1] + x[2] + x[3]
+}
+
+flow dws4(x: F32 at sample) -> F32 at (sample / 4) {
+  sum4~(x).down~(4)
+}
+
+pub flow conversion_flow_with_a_sample_condition(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  dws4~(x).reset_if~(c) at sample                             //~ E0815
+}
+
+pub flow down_then_reset_if_with_a_sample_condition(p: F32 at block, c: Bool at sample) -> F32 at sample {
+  lp~(p).down~(4).reset_if~(c) at sample                      //~ E0815
+}
+
+pub flow reset_if_then_down_with_a_sample_condition(p: F32 at block, c: Bool at sample) -> F32 at sample {
+  lp~(p).reset_if~(c).down~(4) at sample                      //~ E0815
+}
+
+pub flow a_computed_sample_condition(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  lp~(p).down~(4).reset_if~(x > 0.5) at sample                //~ E0815
+}
+
+pub flow slow_and_fast_in_one_condition(p: F32 at block, l: Bool at (sample / 4), c: Bool at sample) -> F32 at sample {
+  lp~(p).down~(4).reset_if~(l && c) at sample                 //~ E0815
+}
+
+pub flow a_let_of_a_sample_value(p: F32 at block, c: Bool at sample, d: Bool at sample) -> F32 at sample {
+  let f = c || d
+  lp~(p).down~(4).reset_if~(f) at sample                      //~ E0815
+}
+
+pub flow the_second_modifier_of_a_chain(p: F32 at block, l: Bool at (sample / 4), c: Bool at sample) -> F32 at sample {
+  lp~(p).down~(4).reset_if~(l).reset_if~(c) at sample         //~ E0815
+}
+
+pub flow after_a_when(p: F32 at block, l: Bool at (sample / 4), c: Bool at sample) -> F32 at sample {
+  lp~(p).down~(4).when~(l).reset_if~(c) at sample             //~ E0815
+}
+
+pub flow in_a_let(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  let a = dws4~(x).reset_if~(c)                               //~ E0815
+  a at sample
+}
+
+pub flow in_an_argument(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  lp~(dws4~(x).reset_if~(c) at sample)                        //~ E0815
+}
+
+pub flow in_an_arm_of_if_tilde(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  if~ c { dws4~(x).reset_if~(c) at sample } else { x }        //~ E0815
+}
+
+pub flow in_a_par_body(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  let ys = par~ i in 0 ..< 2 { dws4~(x * F32.round_from(i + 1)).reset_if~(c) at sample } //~ E0815
+  ys[0] + ys[1]
+}
+
+// ---------------------------------------------------------------- an `at` that makes the tick faster than W
+
+pub flow an_at_to_sample_where_w_is_slower(x: F32 at sample, b: Bool at block) -> F32 at sample {
+  dws4~(x).reset_if~(b at sample) at sample                   //~ E0815
+}
+
+pub flow an_at_to_a_faster_tick(p: F32 at block, m: Bool at (sample / 8)) -> F32 at sample {
+  lp~(p).down~(4).reset_if~(m at (sample / 2)) at sample      //~ E0815
+}
+
+pub flow an_at_of_a_slow_value_to_sample(p: F32 at block, l: Bool at (sample / 4)) -> F32 at sample {
+  lp~(p).down~(4).reset_if~(l at sample) at sample            //~ E0815
+}
+
+// A nested `at` that leaves the operands of `&&` at two tick clocks is the E0815 of §11.3 ("周期の刻みのクロックの被演算子は揃っていること"), as in
+// a body (W7-10 U2b, the parent's reading; `when~(l && c)` is the same in when_condition_e0815.onsa).
+pub flow a_nested_at_mixed_with_a_value_at_w(x: F32 at sample, b: Bool at block, c: Bool at sample) -> F32 at sample {
+  lp~(x).reset_if~((b at (sample / 4)) && c)                  //~ E0815
+}

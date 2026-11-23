@@ -5,6 +5,7 @@
 //! |---|---|
 //! | `init(cfg, sample_rate) -> State` | `_tick = 0` and the fields of a tick read faster at `T.default()`, `Init`-rate `let`s in order (state ones stored) and the `Init` hoisted fields (below), node initialisation, sub `init`s, `_poisoned = false`, `_initialized = true` last |
 //! | `reset(inout s)` | `_tick = 0` and the fields of a tick read faster at `T.default()`, `prev` / `delay` / `vdelay` back to their `init` values, `w = 0`, sub `reset`s, `_poisoned = false` |
+//! | `_reset_kept(inout s)` | of a flow a `.reset_if~` resets (§11.10): `reset` with no counter, no `_poisoned` and no condition or count of a `.when~`, sub `_reset_kept`s |
 //! | `ctl(inout s, p: Params)` | `Ctl`-rate `let`s in order (those read at `Sig` stored) and the `Ctl` hoisted fields, sub `ctl`s with the sub's `Params` |
 //! | `tick(inout s, [t], <Sig inputs>) -> out` | `Sig`-rate `let`s in order, the output, the stages of the callees run there ([`chain::entry`], [`phases::call_stage`]), then the stores of §11.4 in node order, the counter of a grid advanced last; the time `t` (and `t_hi`) of a stage that takes it (`FlowInfo::time_words`) |
 //! | `tick_<N>(inout s, [t], <its inputs>)` | of each tick `sample / N` of the body (`FlowInfo::stages`, those of its callees too): as `tick`, the output of an output at `sample / N` (§11.9) |
@@ -137,6 +138,10 @@ pub struct FlowFns {
     pub process_inplace: Option<FnId>,
     pub render: Option<FnId>,
     pub params_default: Option<FnId>,
+    /// `<flow>._reset_kept(inout s)`, the reset of a `.reset_if~` (§11.10):
+    /// made when a caller first lowers one of an instance of the flow
+    /// ([`phases::ensure_reset_kept`]), not an entry.
+    pub reset_kept: Option<FnId>,
 }
 
 impl FlowFns {
@@ -145,6 +150,7 @@ impl FlowFns {
         [self.init, self.reset, self.ctl, self.tick]
             .into_iter()
             .chain(self.process)
+            .chain(self.reset_kept)
             .chain(self.render)
             .chain(self.stages.iter().map(|s| s.1))
             .chain(self.process_inplace)
@@ -549,6 +555,7 @@ fn lower_flow<'b>(lw: &mut Lowerer<'b>, flow: DefId, fd: FlowDef, span: Span) ->
         process_inplace,
         render,
         params_default,
+        reset_kept: None,
     };
 
     hoist::checked(lw, info, |lw| {

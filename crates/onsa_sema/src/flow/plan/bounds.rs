@@ -78,27 +78,39 @@ pub(in crate::flow) fn head_stage<'a>(
     }
 }
 
+/// A `.reset_if~` of a chain (§11.10): the place `at` of its modifier in
+/// the `chain` and the exponent `w` of the clock W of its frame, as of a
+/// guard ([`PlanGuard::w`]). The walk of the clocks alone reads it, to find
+/// the tick of its condition ([`PlanModifier::reset`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(in crate::flow) struct PlanReset {
+    pub at: u32,
+    pub w: Ratio,
+}
+
 /// The boundaries of the chain `chain` of an instance of `f`, inner first
 /// ([`PlanBound`]): of each modifier with a ratio (not `.when~` and
 /// `.reset_if~`), the ports of the part it wraps, the inputs it gathers
 /// with the stage of the ring, and whether it deals; no stage, which the
-/// walk of the table adds. With them its guards ([`PlanGuard`]): of each
-/// `.when~`, the clock W it reads its condition at (§11.10, S-1209), that
-/// of the output of the part it wraps where it is slower than the `sample`
-/// of its frame, else that `sample`. O(modifiers × inputs).
+/// walk of the table adds. With them its guards ([`PlanGuard`]) and its
+/// `.reset_if~`s ([`PlanReset`]): of each, the clock W it reads its
+/// condition at (§11.10, S-1209), that of the output of the part it wraps
+/// where it is slower than the `sample` of its frame, else that `sample`.
+/// O(modifiers × inputs).
 pub(in crate::flow) fn bounds<'a>(
     chain: impl IntoIterator<Item = &'a PlanModifier>,
     f: &FlowDef,
-) -> (Vec<PlanBound>, Vec<PlanGuard>) {
+) -> (Vec<PlanBound>, Vec<PlanGuard>, Vec<PlanReset>) {
     let mut ins: Vec<Option<Ratio>> = f.inputs.iter().map(|i| exponent(i.caller_clock())).collect();
     let mut out = exponent(f.out_clock);
-    let (mut list, mut guards) = (Vec::new(), Vec::new());
+    let (mut list, mut guards, mut resets) = (Vec::new(), Vec::new(), Vec::new());
     for (at, m) in (0u32..).zip(chain) {
         let Some(r) = m.ratio else {
-            // `.reset_if~` is the E0200 of W7-10 U2, which makes no plan.
-            if let (Modifier::When, Some(cond)) = (m.modifier, m.cond) {
-                let w = out.filter(|k| k.slower_than_body()).unwrap_or(Ratio(0));
-                guards.push(PlanGuard { at, cond, w, out });
+            let w = out.filter(|k| k.slower_than_body()).unwrap_or(Ratio(0));
+            match (m.modifier, m.cond) {
+                (Modifier::When, Some(cond)) => guards.push(PlanGuard { at, cond, w, out }),
+                (Modifier::ResetIf, _) => resets.push(PlanReset { at, w }),
+                _ => {}
             }
             continue;
         };
@@ -110,5 +122,5 @@ pub(in crate::flow) fn bounds<'a>(
         out = out.map(|k| bound.outside(k));
         list.push(bound);
     }
-    (list, guards)
+    (list, guards, resets)
 }

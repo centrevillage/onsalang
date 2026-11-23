@@ -129,6 +129,10 @@ features! {
         Some("write `at` on the names it reads, so that it is computed where it is read (`(a at sample) > 0.0`)");
     /// §11.10: the meaning of `.when~(c)` and `.reset_if~(r)` (W7-10).
     InstanceModifiers: Language, "the modifiers `.when~(c)` and `.reset_if~(r)` of an instance", None;
+    /// §11.10, S-1225: `{}`: the clock. A `.reset_if~` whose condition
+    /// resets at a tick that, in a frame of the chain inside the caller
+    /// (after an `.up~` outside it), is slower than `sample / 2^31`.
+    ResetTicksPastU32: Language, "a `.reset_if~` whose condition resets at a tick slower than `sample / 2^31` in the frame of the part it wraps (`sample / 2^{}`)", None;
     Iteration: Language, "iteration over types other than arrays, `Span`, `Buf` and `Array`", None;
     Equality: Language, "equality on this type", None;
     OrderingAggregates: Language, "ordering comparisons of aggregate values", None;

@@ -955,6 +955,9 @@ fn drawn_ops(ops: &[super::Op]) -> String {
             format!("W({guard},{cond}{due}{})[{}]", if *advance { "+" } else { "" }, drawn_ops(ops))
         }
         Op::Hold { guard, out: o } => format!("Hold({guard},{})", out(o)),
+        Op::Reset { at } => format!("Reset({at})"),
+        Op::Arm { at } => format!("Arm({at})"),
+        Op::Fire { at } => format!("Fire({at})"),
         Op::Ring { bound, input, from: Feed::Arg } => format!("G({bound},{input},arg)"),
         Op::Ring { bound, input, from: Feed::Ring(r) } => format!("G({bound},{input},ring{r})"),
         // `@by` of a copy in the window of `by` not that of its array (§11.9: the narrower).
@@ -1376,6 +1379,83 @@ pub flow w10(c: Bool at init) -> F32 at sample { pick0~(mk2~().down~(2).when~(c)
             "w10",
             "0*: Each(2,j)[0: Each(1,j)[0: W(0,r)[], W(0,l@-1)[R(0,D(0))], W(0,l+)[Deal(H(0)<-0@1)], Hold(0,V)]]   read=Run",
             "._deal_0 ._tick_0 .held",
+        ),
+    ];
+    for (name, want, fields) in rows {
+        let f = flow(&a, name);
+        let id = f.nodes.iter().position(|n| !n.guards.is_empty()).unwrap_or_else(|| panic!("{name}: no guard"));
+        let n = &f.nodes[id];
+        assert_eq!(drawn(n), want, "{name}");
+        let own = |x: &&super::Field| matches!(x.of, super::FieldOf::Node(k, p) if k.0 as usize == id && p != super::Part::Own);
+        let got: Vec<_> = f.fields.iter().filter(own).map(|x| x.name.trim_start_matches(n.path.as_str())).collect();
+        assert_eq!(got.join(" "), fields, "{name}");
+    }
+}
+
+/// The table of a chain with `.reset_if~` around a `.when~` that moves a
+/// stage slower than the tick R of its condition to its W (§11.10, S-1209,
+/// W7-10 U2b): each row of the table model of the advisor's stage 2 (its L,
+/// the rule of its chapter 3, `table_model.py show`), not of the output of
+/// the implementation. The condition read at R into the flag, the reset
+/// after the last op that is or holds the slower work in each list (in the
+/// run of an `.up~` and after it, in a guard outside and after it, two
+/// `.reset_if~`s); with no slower work after it, the reset as it was. The
+/// flag of a `.reset_if~` among the fields of the guards by its place in
+/// the chain (S-1220, provisional).
+#[test]
+fn the_table_of_a_reset_if_around_a_when() {
+    let src = "flow cnt() -> F32 at sample {
+  let n = prev~(^n) + 1.0
+  n
+}
+flow acc(f: F32 at block) -> F32 at sample {
+  let n = f + prev~(^n)
+  n
+}
+flow slot4(f: F32 at block) -> F32 at sample {
+  let s = acc~(f).down~(4)
+  (s at sample) + cnt~()
+}
+flow slot8(f: F32 at block) -> F32 at sample {
+  let s = acc~(f).down~(8)
+  (s at sample) + cnt~()
+}
+flow g2(x: F32 at (sample * 2)) -> F32 at sample { x[0] + x[1] }
+pub flow r1(p: Bool at block, c: Bool at sample) -> F32 at sample { slot4~(1.0).when~(c).reset_if~(p at (sample / 2)) }
+pub flow r2(p: Bool at block, c: Bool at sample) -> F32 at sample {
+  g2~(slot8~(1.0).when~(c).up~(2).reset_if~(p at (sample / 2)))
+}
+pub flow r3(p: Bool at block, q: Bool at block, c: Bool at sample) -> F32 at sample {
+  slot4~(1.0).when~(c).reset_if~(p at (sample / 2)).when~(q)
+}
+pub flow r4(c: Bool at sample, r: Bool at sample) -> F32 at sample { cnt~().when~(c).reset_if~(r) }
+pub flow r5(p: Bool at block, q: Bool at block, c: Bool at sample) -> F32 at sample {
+  slot8~(1.0).when~(c).reset_if~(p at (sample / 4)).when~(q).reset_if~(p at (sample / 2))
+}
+";
+    let a = check(src);
+    assert!(a.diagnostics.is_empty(), "{:?}", a.diagnostics);
+    let rows = [
+        (
+            "r1",
+            "-1: Arm(1) | 0*: W(0,r)[], W(0,l@-2)[R(-2,-)], Fire(1), W(0,l+)[R(0,H(0))], Hold(0,V)   read=Run",
+            "._tick_0 .held ._flag_1",
+        ),
+        (
+            "r2",
+            "-1: Arm(2) | 0*: Each(0,j)[0: W(0,r)[], W(0,l@-3)[R(-3,-)], Fire(2), W(0,l+)[R(0,H(0))], Hold(0,V)], Fire(2)   read=Run",
+            "._tick_0 .held ._flag_2",
+        ),
+        (
+            "r3",
+            "0*: W(1,r)[], W(1,l@-1)[Arm(1)], W(1,l+)[W(0,r)[], W(0,l@-2)[R(-2,-)], Fire(1), W(0,l+)[R(0,H(0))], Hold(0,H(1))], Hold(1,V)   read=Run",
+            "._tick_0 ._held_0 ._flag_1 ._tick_1 .held",
+        ),
+        ("r4", "0*: Reset(1), W(0,r)[R(0,H(0))], Hold(0,V)   read=Run", ".held"),
+        (
+            "r5",
+            "-1: Arm(3) | 0*: W(1,r)[], W(1,l@-2)[Arm(1)], W(1,l+)[W(0,r)[], W(0,l@-3)[R(-3,-)], Fire(1), Fire(3), W(0,l+)[R(0,H(0))], Hold(0,H(1))], Fire(3), Hold(1,V)   read=Run",
+            "._tick_0 ._held_0 ._flag_1 ._tick_1 .held ._flag_3",
         ),
     ];
     for (name, want, fields) in rows {

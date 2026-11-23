@@ -826,48 +826,38 @@ impl Walk<'_> {
         if call.is_some() && frame.is_some() && !held { c } else { Some(Clock::Error) }
     }
 
-    /// The condition of the `.when~` `e` of the chain of the head `head`, an
-    /// instance of `g` (§11.10, S-1209): read at W, the clock of its guard
+    /// The condition of the `.when~` or the `.reset_if~` `e` of the chain of
+    /// the head `head`, an instance of `g` (§11.10, S-1209), of its clock W
     /// ([`super::plan::bounds::bounds`]) moved out of the ratios outside it
-    /// (`w`, a `sample * N` read at the `sample` of the body, §11.4), by its
-    /// head's node ([`ArgRead`]) in the stage of the caller that reads it
-    /// ([`super::plan::bounds::cond_stage`]): hoisted and kept as the other
-    /// arguments are, a value of a slower tick held. An `at` in it to another
-    /// clock than W (not in an argument of a flow, read at its port) and a
-    /// condition faster than W are E0815, one of an event the E0200 of
-    /// W7-11: whether it is opened, its condition walked; none of `.down~`
-    /// and `.up~`, whose argument the caller walks.
+    /// (`w`, a `sample * N` read at the `sample` of the body, §11.4). Of
+    /// `.when~` read at W; of `.reset_if~` read at the tick R it resets at,
+    /// that of the clock of its condition (an `at` too), of a parameter kind
+    /// (or `sample_tick()`) W ([`Self::reset_tick`]). By its head's node
+    /// ([`ArgRead`]) in the stage of the caller that reads it
+    /// ([`super::plan::bounds::run_at`]): hoisted and kept as the other
+    /// arguments are, a value of a slower tick held. A condition faster than
+    /// W, and of `.when~` an `at` in it to another clock than W (not in an
+    /// argument of a flow, read at its port), are E0815, one of an event the
+    /// E0200 of W7-11: whether it is opened, its condition walked; none of
+    /// `.down~` and `.up~`, whose argument the caller walks.
     fn guard_cond(&mut self, e: ExprId, head: ExprId, g: DefId) -> Option<bool> {
         let (chain, f) = (self.cx.chains.get(&head)?, self.a.def(g).as_flow()?);
         let i = chain.mods.iter().position(|m| m.call == e)?;
-        let (_, guards) = super::plan::bounds::bounds(chain.mods.iter().map(|m| &m.plan), f);
-        let (guard, cond) = (guards.iter().find(|x| x.at == i as u32)?, chain.mods[i].plan.cond?);
-        let outside = chain.mods[i + 1..].iter().filter_map(|m| m.plan.ratio);
-        let w = Ratio(guard.w.0.saturating_add(outside.map(|r| r.0).sum::<i32>()));
+        let (_, guards, resets) = super::plan::bounds::bounds(chain.mods.iter().map(|m| &m.plan), f);
+        let cond = chain.mods[i].plan.cond?;
+        let outside = chain.mods[i + 1..].iter().filter_map(|m| m.plan.ratio).map(|r| r.0).sum::<i32>();
+        let (own, reset) = match resets.iter().find(|x| x.at == i as u32) {
+            Some(r) => (r.w, true),
+            None => (guards.iter().find(|x| x.at == i as u32)?.w, false),
+        };
+        let w = Ratio(own.0.saturating_add(outside));
         let c = self.cut(cond);
-        let apart = self.at_apart(cond, Clock::Tick(w));
+        // §11.10: the condition of `.reset_if~` resets at the tick of its clock, `at` too.
+        let apart = !reset && self.at_apart(cond, Clock::Tick(w));
         let faster = matches!(c, Some(Clock::Tick(k)) if k > w);
         let name = chain.mods[i].plan.name;
         if (apart || faster) && self.checking() {
-            let wc = Clock::Tick(w).shown(name);
-            let msg = match apart {
-                true => format!(
-                    "the condition of `.when~` reads a value `at` another clock than `{wc}`, the clock it is read at; `when~` reads a slower value with no `at` (§11.10)"
-                ),
-                false => format!(
-                    "the condition of `.when~` is at a clock faster than `{wc}`, the clock it is read at (§11.10)"
-                ),
-            };
-            let of =
-                if guard.w.slower_than_body() { "the output of its receiver" } else { "the place of the modifier" };
-            let receiver = self.ast.expr(chain.mods[i].receiver).span;
-            let span = self.ast.expr(cond).span;
-            let mut d = Diagnostic::new(Stage::Flow, Code::E0815, span, msg).with_found(self.src(span));
-            d = d.with_note(receiver, format!("`.when~` reads its condition at `{wc}`, the clock of {of}"));
-            if faster && !apart {
-                d = d.with_rule("a value is made slower by a flow of the writer: `.when~(dws~(c))`");
-            }
-            self.report(d);
+            self.cond_e0815(chain, i, (own, w), apart);
             return Some(false);
         }
         if matches!(c, Some(Clock::Event(_))) {
@@ -875,14 +865,80 @@ impl Walk<'_> {
             self.report(d.with_found(self.src(name)));
             return Some(false);
         }
-        if let (true, Some(&k)) = (self.checking(), self.node_of.get(&head)) {
-            let mods = chain.mods.iter().map(|m| &m.plan);
-            let stage = super::plan::bounds::cond_stage(mods, &guards, guard);
-            let at = Clock::Tick(Ratio(w.0.min(0)));
+        if !self.checking() {
+            return Some(true);
+        }
+        let mods = || chain.mods.iter().map(|m| &m.plan);
+        let (at, from, r) = match reset {
+            false => (Clock::Tick(Ratio(w.0.min(0))), ClockStage::Tick(own), None),
+            true => {
+                let r = match c {
+                    Some(Clock::Tick(k)) => k,
+                    _ => Ratio(w.0.min(0)),
+                };
+                let rp = Ratio(r.0.saturating_sub(outside));
+                if !self.reset_tick(chain, i, &guards, rp) {
+                    return Some(false);
+                }
+                (Clock::Tick(r), ClockStage::Tick(rp), Some(rp))
+            }
+        };
+        if let Some(&k) = self.node_of.get(&head) {
+            let stage = super::plan::bounds::run_at(mods(), &guards, i as u32, from);
             let stage = (at.stage() != Some(stage)).then_some(stage);
             self.node_clocks[k].args.push(ArgRead { expr: cond, at, stage });
+            self.node_clocks[k].resets.extend(r.map(|r| (i as u32, r)));
         }
         Some(true)
+    }
+
+    /// Whether the tick `rp` the `.reset_if~` at `i` of `chain` resets at,
+    /// in its frame, is a tick of a counter of one `U32` word
+    /// ([`Ratio::made_n`]) in each frame from its own out to the caller's
+    /// ([`super::plan::bounds::run_at`]); else the E0200 of S-1225.
+    // SPEC-GAP(S-1225): a tick slower than `sample / 2^31` in a frame of the
+    // chain (of an `.up~` outside it) is an E0200 (provisional), whether or
+    // not a `.when~` outside it drives it.
+    fn reset_tick(&mut self, chain: &ModifierChain, i: usize, guards: &[PlanGuard], rp: Ratio) -> bool {
+        let mods = || chain.mods.iter().map(|m| &m.plan);
+        let frames = (i..chain.mods.len())
+            .map(|j| super::plan::bounds::run_at(mods().take(j + 1), guards, i as u32, ClockStage::Tick(rp)));
+        let past = frames.filter_map(|s| match s {
+            ClockStage::Tick(k) if k.made_n().is_none() => Some(k),
+            _ => None,
+        });
+        let Some(k) = past.min() else { return true };
+        let name = chain.mods[i].plan.name;
+        let d = Feature::ResetTicksPastU32.diagnostic(Stage::Flow, name, &[&k.0.unsigned_abs().to_string()]);
+        self.report(d.with_found(self.src(name)));
+        false
+    }
+
+    /// The E0815 of the condition of the modifier `i` of `chain` (§11.10),
+    /// whose W is `own` in its frame and `w` in the caller's: an `at` in it
+    /// to another clock than W (`apart`, of `.when~`), else a clock faster
+    /// than W.
+    fn cond_e0815(&mut self, chain: &ModifierChain, i: usize, (own, w): (Ratio, Ratio), apart: bool) {
+        let (m, receiver) = (chain.mods[i].plan, self.ast.expr(chain.mods[i].receiver).span);
+        let (n, span) = (m.modifier.name(), m.cond.map_or(m.name, |c| self.ast.expr(c).span));
+        let wc = Clock::Tick(w).shown(m.name);
+        let (w_is, reads) = match m.modifier {
+            crate::flow_names::Modifier::ResetIf => ("its clock W, the fastest it resets at", "resets at most at"),
+            _ => ("the clock it is read at", "reads its condition at"),
+        };
+        let msg = match apart {
+            true => format!(
+                "the condition of `.when~` reads a value `at` another clock than `{wc}`, the clock it is read at; `when~` reads a slower value with no `at` (§11.10)"
+            ),
+            false => format!("the condition of `.{n}~` is at a clock faster than `{wc}`, {w_is} (§11.10)"),
+        };
+        let of = if own.slower_than_body() { "the output of its receiver" } else { "the place of the modifier" };
+        let mut d = Diagnostic::new(Stage::Flow, Code::E0815, span, msg).with_found(self.src(span));
+        d = d.with_note(receiver, format!("`.{n}~` {reads} `{wc}`, the clock of {of}"));
+        if !apart {
+            d = d.with_rule(format!("a value is made slower by a flow of the writer: `.{n}~(dws~(c))`"));
+        }
+        self.report(d);
     }
 
     /// Whether the condition `cond` has an `at` to another clock than `w` in
@@ -917,7 +973,7 @@ impl Walk<'_> {
         let span = self.ast.expr(e).span;
         let slot = (self.mode == Mode::Check).then(|| {
             self.node_of.insert(e, self.node_clocks.len());
-            self.node_clocks.push(NodeClock { clock: Clock::Error, args: Vec::new() });
+            self.node_clocks.push(NodeClock { clock: Clock::Error, args: Vec::new(), resets: Vec::new() });
             let chain = self.cx.chains.get(&e);
             (self.node_clocks.len() - 1, self.recorder.node((self.a, self.body), e, call, chain, span))
         });
@@ -940,7 +996,7 @@ impl Walk<'_> {
                 let found = self.src(span);
                 self.report(d.with_found(found));
             }
-            self.node_clocks[k] = NodeClock { clock: clock.unwrap_or(Clock::Const), args };
+            self.node_clocks[k] = NodeClock { clock: clock.unwrap_or(Clock::Const), args, resets: Vec::new() };
         }
         clock
     }
@@ -981,7 +1037,7 @@ impl Walk<'_> {
     fn head_stages(&self, e: ExprId, f: &crate::def::FlowDef, reads: &mut [ArgRead]) {
         let Some(chain) = self.cx.chains.get(&e).filter(|c| c.gate.is_none()) else { return };
         let mods = || chain.mods.iter().map(|m| &m.plan);
-        let (_, guards) = super::plan::bounds::bounds(mods(), f);
+        let (_, guards, _) = super::plan::bounds::bounds(mods(), f);
         if guards.is_empty() {
             return;
         }

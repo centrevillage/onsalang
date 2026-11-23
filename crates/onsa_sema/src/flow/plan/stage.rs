@@ -162,6 +162,20 @@ impl PlanNode {
         let gathers = |b: &(u32, &PlanBound)| b.1.gathers.iter().any(|g| g.0 == input);
         (0u32..).zip(&self.bounds).skip(from).find(gathers).map(|b| b.0)
     }
+
+    /// What the `.reset_if~` at the place `at` of its chain sets back to
+    /// `T.default()` (§11.10): the rings and the array of each boundary
+    /// inside it and the held output of each guard inside it, not the
+    /// conditions and the counts. The one list of it (D-15).
+    pub fn reset_parts(&self, at: u32) -> Vec<Part> {
+        let mut parts = Vec::new();
+        for (b, x) in (0u32..).zip(&self.bounds).filter(|b| b.1.at < at) {
+            parts.extend(x.gathers.iter().map(|&(input, _)| Part::Gather { bound: b, input }));
+            parts.extend(x.deals.then_some(Part::Deal(b)));
+        }
+        parts.extend((0u32..).zip(&self.guards).filter(|g| g.1.at < at).map(|g| Part::Held(g.0)));
+        parts
+    }
 }
 
 /// The ticks of the body of `info` slower than its `sample`, slowest

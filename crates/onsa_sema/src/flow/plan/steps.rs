@@ -15,8 +15,8 @@ use super::*;
 /// first: each op with its tag, the stage of the part it is of in that
 /// frame (of the head, moved out of each `.down~` with it; of an op an arm
 /// adds, the stage it puts it in). An op keeps the place of its stage among
-/// those put in one stage, which `.reset_if~` reads (§11.10: the slower
-/// stages write first). The entries have no tag.
+/// those put in one stage, which `.reset_if~` reads ([`reset`], §11.10:
+/// the slower stages write first). The entries have no tag.
 type Level = BTreeMap<ClockStage, Vec<(ClockStage, Op)>>;
 
 /// The entries and the read of the instance `n` of the callee whose table
@@ -38,6 +38,10 @@ pub(super) fn table(n: &PlanNode, g: &FlowInfo) -> (Vec<Entry>, Read) {
         } else if let Some(guard) = n.guards.get(g as usize).filter(|x| x.at == at) {
             level = when(n, g, guard, level, &mut dealt);
             g += 1;
+        } else if let Some(m) = n.chain.get(at as usize).filter(|m| m.modifier == Modifier::ResetIf) {
+            // The walk of the clocks gives the tick of each of a chain with no diagnostic.
+            let Some(r) = m.reset else { onsa_diag::internal::bug(Some(m.name), "a `.reset_if~` of no tick") };
+            level = reset(n, at, r, level);
         }
     }
     // The outermost that deals is read from, unless an `.up~` outside it
@@ -57,6 +61,11 @@ pub(super) fn table(n: &PlanNode, g: &FlowInfo) -> (Vec<Entry>, Read) {
                 Op::Run { out: Out::Deal(b), .. }
                 | Op::Hold { out: Out::Deal(b), .. }
                 | Op::Deal { to: To::Array(b), .. } => read == Read::Array(b) && read_at == Some(caller),
+                // A reset of the array read, before it is read (§11.10).
+                Op::Reset { at } | Op::Fire { at } => {
+                    matches!(read, Read::Array(b) if n.reset_parts(at).contains(&Part::Deal(b)))
+                        && read_at == Some(caller)
+                }
                 _ => false,
             }
         });
@@ -133,7 +142,7 @@ fn arm(n: &PlanNode, b: u32, bound: &PlanBound, level: Level, dealt: &mut Option
 /// that array is copied into the array of the boundary just outside it or
 /// the value, which [`Op::Hold`] holds. Each
 /// stage slower than W keeps its tag in its own [`Op::When`] (where
-/// `.reset_if~` goes between, W7-10 U2).
+/// `.reset_if~` goes between, [`reset`]).
 fn when(n: &PlanNode, g: u32, guard: &PlanGuard, level: Level, dealt: &mut Option<u32>) -> Level {
     let (w, burst, nb) = (ClockStage::Tick(guard.w), burst(guard), inside(n, guard));
     // The array of a boundary inside it the caller read: of a burst copied where the
@@ -189,6 +198,91 @@ fn when(n: &PlanNode, g: u32, guard: &PlanGuard, level: Level, dealt: &mut Optio
         next.insert(s, vec![(s, guarded(CondRead::Kept, None, Vec::new(), true))]);
     }
     next
+}
+
+/// The work of the part the `.reset_if~` at `at` of `n` wraps (`level`)
+/// with its reset at the tick `r` of its frame (§11.10, the review of the
+/// memo of W7-10, its high 1): at p0, in the stage `r` before the first op
+/// of a stage as fast as `r` or faster, so that a slower stage at the same
+/// place writes first and is reset after. When an op after p0 (in the
+/// stage `r` or a faster one) runs work of a tick slower than `r` (a guard
+/// moved it to its W, S-1209: [`Slower`]), the condition is read at p0
+/// into its flag ([`Op::Arm`]), and the part is reset after that work: in
+/// each list of ops after p0, of a stage, of a guard or of a run of an
+/// `.up~`, after the last op that is or holds such work ([`Op::Fire`],
+/// [`fire`]; the advisor's L, its stage 2, the rule of its chapter 3).
+fn reset(n: &PlanNode, at: u32, r: Ratio, mut level: Level) -> Level {
+    let (s, slower) = (ClockStage::Tick(r), Slower { n, at, r });
+    let i = level.entry(s).or_default().iter().position(|t| t.0 >= s);
+    let i = i.unwrap_or(level[&s].len());
+    let from = |y| if y == s { i } else { 0 };
+    let after = |(&y, ops): (&ClockStage, &Vec<(ClockStage, Op)>)| ops[from(y)..].iter().any(|t| slower.holds(&t.1));
+    if !level.range(s..).any(after) {
+        level.entry(s).or_default().insert(i, (s, Op::Reset { at }));
+        return level;
+    }
+    for (&y, ops) in level.range_mut(s..) {
+        let Some(last) = ops.iter().rposition(|t| slower.holds(&t.1)).filter(|&k| k >= from(y)) else { continue };
+        ops[from(y)..].iter_mut().for_each(|t| fire(&slower, &mut t.1));
+        // Its tag the later of `r` and that before it: the tags in their order.
+        ops.insert(last + 1, (s.max(ops[last].0), Op::Fire { at }));
+    }
+    level.entry(s).or_default().insert(i, (s, Op::Arm { at }));
+    level
+}
+
+/// The work of a tick slower than the tick `r` of the `.reset_if~` at `at`
+/// of `n`, in the frame of the part it wraps (§11.10, S-1209): a guard's
+/// stage `due` driven by its count, or a `.reset_if~` inside it, of a tick
+/// slower than `r` when moved out of the boundaries between (their ratios
+/// summed, not cut).
+struct Slower<'a> {
+    n: &'a PlanNode,
+    at: u32,
+    r: Ratio,
+}
+
+impl Slower<'_> {
+    /// Whether `op` is such work.
+    fn is(&self, op: &Op) -> bool {
+        let (inner, k) = match *op {
+            Op::When { guard, due: Some(ClockStage::Tick(y)), .. } => (self.n.guards[guard as usize].at, y),
+            Op::Reset { at } | Op::Arm { at } | Op::Fire { at } => match self.n.chain[at as usize].reset {
+                Some(k) => (at, k),
+                None => return false,
+            },
+            _ => return false,
+        };
+        let between = self.n.bounds.iter().filter(|b| inner < b.at && b.at < self.at);
+        i64::from(k.0) + between.map(|b| i64::from(b.ratio.0)).sum::<i64>() < i64::from(self.r.0)
+    }
+
+    /// Whether `op` is such work or one in its ops and groups is.
+    fn holds(&self, op: &Op) -> bool {
+        self.is(op)
+            || match op {
+                Op::Each { groups, .. } => groups.iter().flat_map(|g| &g.1).any(|op| self.holds(op)),
+                Op::When { ops, .. } => ops.iter().any(|op| self.holds(op)),
+                _ => false,
+            }
+    }
+}
+
+/// The [`Op::Fire`] of the `.reset_if~` of `slower` in the ops and the
+/// groups of `op`, not such work itself: in each list, after the last op
+/// that is or holds that work ([`reset`]).
+fn fire(slower: &Slower, op: &mut Op) {
+    let lists: Vec<&mut Vec<Op>> = match op {
+        _ if slower.is(op) => return,
+        Op::Each { groups, .. } => groups.iter_mut().map(|g| &mut g.1).collect(),
+        Op::When { ops, .. } => vec![ops],
+        _ => return,
+    };
+    for ops in lists {
+        let Some(last) = ops.iter().rposition(|op| slower.holds(op)) else { continue };
+        ops.iter_mut().for_each(|op| fire(slower, op));
+        ops.insert(last + 1, Op::Fire { at: slower.at });
+    }
 }
 
 /// Whether the part the guard `guard` wraps is a burst (its output faster

@@ -217,6 +217,19 @@ pub enum Op {
     /// (`Part::Count`), else run each time; `advance`: that count goes on
     /// after them.
     When { guard: u32, cond: CondRead, due: Option<ClockStage>, ops: Vec<Op>, advance: bool },
+    /// The state of the part the `.reset_if~` at `at` of the chain wraps
+    /// back to its start where its condition is true (§11.10): the soft
+    /// reset of its head, and the rings, the arrays and the held outputs of
+    /// the boundaries and the guards inside it at `T.default()`, not the
+    /// conditions and the counts of the guards.
+    Reset { at: u32 },
+    /// Of a `.reset_if~` at `at` whose part runs work of a tick slower than
+    /// its own after p0 ([`steps`], S-1209): its condition read at its tick
+    /// into its flag ([`Part::Flag`]).
+    Arm { at: u32 },
+    /// After that work: where the flag is true, the flag set false and the
+    /// part reset as [`Op::Reset`].
+    Fire { at: u32 },
     /// The value of the part the guard `guard` wraps (§11.10): of one that
     /// is not a burst its held output, which the ops of its runs wrote;
     /// of a burst the array the runs made when it ran (and its last
@@ -418,6 +431,10 @@ pub struct PlanModifier {
     pub cond: Option<ExprId>,
     /// The name of the modifier (`down`).
     pub name: Span,
+    /// Of `.reset_if~`, the exponent of the tick R its condition resets at
+    /// in its frame (§11.10), written by the walk of the clocks (the one
+    /// writer of it, [`build`]); none of another and of a chain in error.
+    pub reset: Option<Ratio>,
 }
 
 /// A value of the body the state may keep beside its nodes (S-05).
@@ -515,9 +532,15 @@ pub(super) fn build(
         let Some(list) = list else { onsa_diag::internal::bug(Some(r.span), "a node of an owner the flow has not") };
         list.push(id);
     }
-    let nodes = recorded.into_iter().zip(children).map(|(r, ch)| {
+    let nodes = recorded.into_iter().zip(children).map(|(mut r, ch)| {
         let (clock, args) = match (w.node_of.get(&r.expr), info.clocks.exprs.get(&r.expr)) {
-            (Some(&k), _) => (w.nodes[k].clock, w.nodes[k].args.clone()),
+            (Some(&k), _) => {
+                // The tick of each `.reset_if~` the walk found (§11.10).
+                for &(at, tick) in &w.nodes[k].resets {
+                    r.chain.get_mut(at as usize).into_iter().for_each(|m| m.reset = Some(tick));
+                }
+                (w.nodes[k].clock, w.nodes[k].args.clone())
+            }
             (None, Some(&c)) => (c, Vec::new()),
             (None, None) => onsa_diag::internal::bug(Some(r.span), "a node the walk gave no clock"),
         };

@@ -1,0 +1,164 @@
+// onsa.toml
+// [test]
+// spec = ["§11.2", "§11.3", "§11.9", "§11.10", "§18.1"]
+
+// W7-10 U2b/t, S-559, S-1196, S-1209, S-1218 (spec §11.10: "条件の刻みは、条件の式のクロック（`at` で付けたクロックを含む）で決まり、パラメータの種類なら `when~` と同じ条件を読むクロック W の刻み、刻みのクロックならそのクロックの刻み
+// （`.reset_if~(c at (sample / 4))`（`c` は `block`）は `sample / 4` の刻み）"; "W より速い周期のクロックの条件は E0815"): the forms of a `.reset_if~(r)` that are read with no diagnostic. A condition at W, of the kind `block`, slower than W (a
+// tick that is slower is a tick of its own, also when it is written with an `at`), a `.reset_if~` in a chain with a `.when~` in both orders, inside and outside a `.up~` and a `.down~`, in a conversion flow's ring (inside and outside the
+// boundary), in a `let`, in an argument, in an arm of `if~`, in a `par~`. Before W7-10 U2b these were the E0200 of the flow stage (negative/modifier_when_reset_if_e0200_until_w7_10.onsa); the values are in flow_semantics/reset_if_values.onsa and
+// reset_if_slow_values.onsa, the errors in reset_if_condition_e0815.onsa. `x`, `c` and `r` are `sample` inputs, `p` and `b` are `block` inputs, `l` is `sample / 4`, `m` is `sample / 8`.
+
+flow lp(x: F32 at sample) -> F32 at sample {
+  x * 0.5 + prev~(x) * 0.5
+}
+
+flow cnt() -> F32 at sample {
+  let n = prev~(^n) + 1.0
+  n
+}
+
+flow sum4(x: F32 at (sample * 4)) -> F32 at sample {
+  x[0] + x[1] + x[2] + x[3]
+}
+
+flow dws4(x: F32 at sample) -> F32 at (sample / 4) {
+  sum4~(x).down~(4)
+}
+
+flow g2(x: F32 at (sample * 2)) -> F32 at sample {
+  x[0] + x[1] * 10.0
+}
+
+flow cnt4() -> F32 at (sample * 4) {
+  let n = prev~(^n) + 1.0
+  [n * 10.0, n * 10.0 + 1.0, n * 10.0 + 2.0, n * 10.0 + 3.0]
+}
+
+// ---------------------------------------------------------------- at W, of the kind block, slower than W
+
+pub flow an_instance(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  lp~(x).reset_if~(c)
+}
+
+pub flow a_literal(x: F32 at sample) -> F32 at sample {
+  lp~(x).reset_if~(false)
+}
+
+pub flow a_block_condition(x: F32 at sample, b: Bool at block) -> F32 at sample {
+  lp~(x).reset_if~(b)
+}
+
+pub flow a_computed_condition(x: F32 at sample) -> F32 at sample {
+  lp~(x).reset_if~(x > 0.5)
+}
+
+pub flow a_slower_condition(x: F32 at sample, l: Bool at (sample / 4)) -> F32 at sample {
+  lp~(x).reset_if~(l)
+}
+
+pub flow an_at_to_a_slower_tick(x: F32 at sample, b: Bool at block) -> F32 at sample {
+  lp~(x).reset_if~(b at (sample / 4))
+}
+
+pub flow an_at_of_a_slow_value_to_a_tick_that_is_still_slower(x: F32 at sample, l: Bool at (sample / 4)) -> F32 at sample {
+  lp~(x).reset_if~(l at (sample / 2))
+}
+
+pub flow an_at_to_w(x: F32 at sample, b: Bool at block) -> F32 at sample {
+  lp~(x).reset_if~(b at sample)
+}
+
+// An `at` inside the condition is a part of the expression whose clock §11.3 finds (W7-10 U2b, the parent's reading): `(b at (sample / 4)) && l` is
+// `sample / 4`, slower than W, so it is the tick of the reset; the rule of `when~` ("W 以外のクロックへの `at` は E0815") is not that of `reset_if~`.
+pub flow a_nested_at_to_a_slower_tick(x: F32 at sample, b: Bool at block, l: Bool at (sample / 4)) -> F32 at sample {
+  lp~(x).reset_if~((b at (sample / 4)) && l)
+}
+
+// ---------------------------------------------------------------- with a when~, in both orders
+
+pub flow when_then_reset_if(x: F32 at sample, c: Bool at sample, r: Bool at sample) -> F32 at sample {
+  let a = lp~(x).when~(c).reset_if~(r)
+  a
+}
+
+pub flow reset_if_then_when(x: F32 at sample, c: Bool at sample, r: Bool at sample) -> F32 at sample {
+  lp~(x).reset_if~(r).when~(c)
+}
+
+pub flow a_slower_tick_inside_a_when(x: F32 at sample, c: Bool at sample, b: Bool at block) -> F32 at sample {
+  lp~(x).reset_if~(b at (sample / 2)).when~(c)
+}
+
+// ---------------------------------------------------------------- the part is slower than the call (W is sample / 4)
+
+pub flow a_conversion_flow_with_a_block_condition(x: F32 at sample, b: Bool at block) -> F32 at sample {
+  dws4~(x).reset_if~(b) at sample
+}
+
+pub flow a_conversion_flow_with_a_slower_condition(x: F32 at sample, m: Bool at (sample / 8)) -> F32 at sample {
+  dws4~(x).reset_if~(m) at sample
+}
+
+pub flow a_conversion_flow_with_a_condition_at_w(x: F32 at sample, b: Bool at block) -> F32 at sample {
+  dws4~(x).reset_if~(b at (sample / 4)) at sample
+}
+
+pub flow a_conversion_flow_with_a_when(x: F32 at sample, b: Bool at block, d: Bool at block) -> F32 at sample {
+  dws4~(x).when~(d).reset_if~(b) at sample
+}
+
+pub flow down_with_a_condition_at_w(p: F32 at block, l: Bool at (sample / 4)) -> F32 at sample {
+  lp~(p).down~(4).reset_if~(l) at sample
+}
+
+pub flow down_with_a_block_condition(p: F32 at block, b: Bool at block) -> F32 at sample {
+  lp~(p).down~(4).reset_if~(b) at sample
+}
+
+pub flow before_a_down_with_a_block_condition(p: F32 at block, b: Bool at block) -> F32 at sample {
+  lp~(p).reset_if~(b).down~(4) at sample
+}
+
+pub flow around_the_boundary_of_a_deal(r: Bool at sample, b: Bool at block) -> F32 at sample {
+  let a = cnt4~().down~(4).reset_if~(r)
+  let c = cnt4~().reset_if~(b).down~(4)
+  a + c
+}
+
+// ---------------------------------------------------------------- the part is faster than the call (W is sample * 2 in the burst, sample outside it)
+
+pub flow inside_an_up(r: Bool at sample) -> F32 at sample {
+  g2~(cnt~().reset_if~(r).up~(2))
+}
+
+pub flow outside_an_up(r: Bool at sample) -> F32 at sample {
+  g2~(cnt~().up~(2).reset_if~(r))
+}
+
+pub flow inside_an_up_with_a_block_condition(b: Bool at block) -> F32 at sample {
+  g2~(cnt~().reset_if~(b).up~(2))
+}
+
+pub flow outside_a_when_of_an_up(c: Bool at sample, r: Bool at sample) -> F32 at sample {
+  g2~(cnt~().up~(2).when~(c).reset_if~(r))
+}
+
+// ---------------------------------------------------------------- where the call is written
+
+pub flow in_an_argument(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  lp~(lp~(x).reset_if~(c))
+}
+
+pub flow in_a_let(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  let a = lp~(x).reset_if~(c)
+  a
+}
+
+pub flow in_an_arm_of_if_tilde(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  if~ c { lp~(x).reset_if~(c) } else { x }
+}
+
+pub flow in_a_par_body(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  let ys = par~ i in 0 ..< 2 { lp~(x * F32.round_from(i + 1)).reset_if~(c) }
+  ys[0] + ys[1]
+}

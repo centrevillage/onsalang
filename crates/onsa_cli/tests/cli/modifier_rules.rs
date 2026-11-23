@@ -84,6 +84,23 @@ fn the_program_after_a_candidate_of_a_when_on_an_instance_has_no_diagnostic() {
         ("lp~(x).when!(c)", "E0806"),
         ("lp~(x).when!(c).when~(c)", "E0806"),
     ];
+    no_diagnostic_after_the_candidate(&forms);
+}
+
+/// §11.10 (W7-10 U2b; S-559, S-1209): the same for a `.reset_if~(r)` on an instance, alone and in a chain with a `.when~` (it was the E0200 of the flow stage until U2b).
+#[test]
+fn the_program_after_a_candidate_of_a_reset_if_on_an_instance_has_no_diagnostic() {
+    let forms = [
+        ("lp~(x).reset_if(c)", "E0811"),
+        ("lp~(x).reset_if!(c)", "E0806"),
+        ("lp~(x).reset_if~(c).when(c)", "E0811"),
+        ("lp~(x).when~(c).reset_if!(c)", "E0806"),
+        ("lp~(lp~(x).reset_if(c))", "E0811"),
+    ];
+    no_diagnostic_after_the_candidate(&forms);
+}
+
+fn no_diagnostic_after_the_candidate(forms: &[(&str, &str)]) {
     for (body, code) in forms {
         let after = one_candidate(&flow(body), code);
         let ds = diags(&after);
@@ -91,14 +108,15 @@ fn the_program_after_a_candidate_of_a_when_on_an_instance_has_no_diagnostic() {
     }
 }
 
-/// The modifiers that stay E0200 until the later units of W7-10 (`.reset_if~` until U2b, a `.when~` on a built-in delay until U3) are still E0200 after the candidate (Q-09: the flow stage stops at the meaning it has not).
+/// The modifiers whose receiver is a built-in delay stay E0200 until the last unit of W7-10 (U3), `.when~` and `.reset_if~` alike, and are still E0200 after the candidate (Q-09: the flow stage stops at the meaning it has not).
 #[test]
-fn the_program_after_a_candidate_of_a_reset_if_or_a_delay_receiver_is_e0200_until_the_later_units() {
+fn the_program_after_a_candidate_of_a_delay_receiver_is_e0200_until_the_last_unit() {
     let forms = [
-        ("lp~(x).reset_if(c)", "E0811"),
         ("prev~(x).when(c)", "E0811"),
-        ("lp~(x).reset_if!(c)", "E0806"),
         ("prev~(x).when!(c)", "E0806"),
+        ("prev~(x).reset_if(c)", "E0811"),
+        ("prev~(x).reset_if!(c)", "E0806"),
+        ("delay~(x, 2).reset_if(c)", "E0811"),
     ];
     for (body, code) in forms {
         let after = one_candidate(&flow(body), code);
