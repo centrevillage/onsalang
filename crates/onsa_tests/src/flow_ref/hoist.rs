@@ -25,6 +25,8 @@
 //! reads a `^name` is left where it is (a feedback has the clock of the reader, §11.3). The order inside a stage is the order the parts are written (S-1159, provisional): `flow::stage` walks the `let`s in order and
 //! each `let` from the left.
 
+use std::collections::HashMap;
+
 use onsa_diag::Span;
 use onsa_sema::Target;
 use onsa_sema::flow_names::FlowBuiltin;
@@ -421,9 +423,9 @@ fn walk(f: &mut Frame, known: &Known, root: ExprId, e: ExprId, here: Clock, guar
     if made == here && kept(&body, known, e).map_err(stop)? {
         // The value of the call before is stale: made again by this stage (the parts it holds that a slower stage kept stay).
         let replicas = f.run.as_ref().map(|r| r.replicas.clone()).unwrap_or_default();
-        f.hoisted.entry(e).or_default().remove(&replicas);
+        f.hoisted.entry(e).or_insert((here, HashMap::new())).1.remove(&replicas);
         let v = f.eval(e)?;
-        f.hoisted.entry(e).or_default().insert(replicas, v);
+        f.hoisted.entry(e).or_insert((here, HashMap::new())).1.insert(replicas, v);
         return Ok(());
     }
     // A chain that this stage makes (not a part that is kept): the call reads its arguments itself, and what it gathers is made by `gathered` at each stage from its own.

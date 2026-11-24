@@ -11,7 +11,7 @@ use onsa_syntax::ast::ExprId;
 
 use super::expr::{Eval, Frame, LOW_STACK, Stop};
 use super::flow::{Ctx, Inst, enter};
-use super::rate::{Level, When, counted, dealt, elements, n_of, on_tick, phase, slice, time_of};
+use super::rate::{Guard, Level, caller_stage, counted, dealt, elements, n_of, on_tick, phase, slice, time_of};
 use super::scalar::{Fault, Fault::Internal};
 use super::sema_view::{Called, Stage, input_stage};
 use super::state::{NodeKey, Role, Store};
@@ -20,11 +20,13 @@ use super::value::Value;
 const NO_GATE: &str = "a `when~` with no state";
 
 /// What a `.when~(c)` of a chain keeps (§11.9, §11.10): the condition the caller read for it, whether it read true at the last tick of W, the frames the part ran (the counter of the grid of the part), and the output it holds,
-/// `start` (`T.default()`, a burst of them for an output at `sample * N`) until the part makes one. `init` and the generated `reset` put them back (`InstState::reset`).
+/// `start` (`T.default()`, a burst of them for an output at `sample * N`) until the part makes one. `init` and the generated `reset` put them back (`InstState::reset`), a `reset_if~` the output alone. A `.reset_if~(c)` keeps
+/// the condition and whether its part is `due` to be put back (`Frame::cut`).
 #[derive(Clone, Debug)]
 pub(super) struct Gate {
     cond: Value,
     on: bool,
+    due: bool,
     runs: u64,
     held: Value,
     start: Value,
@@ -32,11 +34,14 @@ pub(super) struct Gate {
 
 impl Gate {
     pub(super) fn new(start: Value) -> Gate {
-        Gate { cond: Value::Unit, on: false, runs: 0, held: start.clone(), start }
+        Gate { cond: Value::Unit, on: false, due: false, runs: 0, held: start.clone(), start }
     }
 
-    pub(super) fn reset(&mut self) {
-        *self = Gate::new(self.start.clone());
+    pub(super) fn reset(&mut self, soft: bool) {
+        match soft {
+            true => self.held = self.start.clone(),
+            false => *self = Gate::new(self.start.clone()),
+        }
     }
 }
 
@@ -138,23 +143,32 @@ impl<'a> Frame<'a> {
             return Ok(());
         }
         if b == 0 {
+            self.cut(key, levels, 0, s, at)?;
             return self.run_head(key, &levels[0], s, ctx, &ins);
         }
         let (lv, inside) = (&levels[b], &levels[b - 1]);
-        if lv.when.is_some() {
+        if lv.when().is_some() {
             return self.run_when(key, levels, b, s, ctx, ins);
+        }
+        if lv.reset().is_some() {
+            return self.run_reset(key, levels, b, s, ctx, ins);
         }
         let r = lv.ratio;
         let n = r.unsigned_abs();
         if r < 0 {
             let y = s + n as i32;
             if y <= 0 && inside.stages.contains(&y) {
+                // The run reads the rings it gathers: a part due to be put back is put back first.
+                if !lv.gathers.is_empty() {
+                    self.cut(key, levels, b, s, at)?;
+                }
                 let mut now = Vec::new();
                 for (i, v) in ins.iter().enumerate() {
                     now.push(if lv.gathers.contains(&i) { self.ring(key, b, i, at)? } else { v.clone() });
                 }
                 self.run_level(key, levels, b - 1, y, time_of(ctx, r, 0), now)?;
             }
+            // No `cut` before the array is dealt: a reset due at this tick put the part back at a work of the run of the part inside just before (its stage 0 makes the output), or puts it back, the array too, at the end of this stage.
             if lv.deals && s == r {
                 let Value::Burst(es) = self.level_out(key, levels, b - 1, time_of(ctx, r, 0), at)? else {
                     return Err(here(Internal("an output at `sample * N` that is not a burst")));
@@ -167,6 +181,7 @@ impl<'a> Frame<'a> {
             // The ring of the last boundary is written after the frame (`save_gathers`).
             for &i in lv.gathers.iter().filter(|_| b + 1 < levels.len()) {
                 if lv.ins[i].is_some_and(|k| k.min(0) == s) {
+                    self.cut(key, levels, b, s, at)?;
                     let items = match &ins[i] {
                         Value::Burst(es) => es.clone(),
                         v => vec![v.clone()],
@@ -191,6 +206,7 @@ impl<'a> Frame<'a> {
                     self.run_level(key, levels, b - 1, y, cj, now.clone())?;
                 }
                 if lv.out > 0 && s == 0 && lv.made == 0 {
+                    self.cut(key, levels, b, s, at)?;
                     match self.level_out(key, levels, b - 1, cj, at)? {
                         Value::Burst(es) => outs.extend(es),
                         v if inside.out >= 0 || on_tick(cj, inside.out) => outs.push(v),
@@ -206,11 +222,11 @@ impl<'a> Frame<'a> {
         Ok(())
     }
 
-    /// The condition of each `when~` of the chain at `key` that is read in the stage `sx` of this one (`When::at`, §11.10: at its W, where the arguments of the head of that clock are read).
-    // SPEC-GAP(S-1221): the condition of a `when~` inside another is read at its W whether or not the outer one runs the part (provisional, as the arguments of the head are; only a panic shows it).
+    /// The condition of each `when~` and `reset_if~` of the chain at `key` that is read in the stage `sx` of this one (`Guard::at`, §11.10: at its W or its tick, where the arguments of the head of that clock are read).
+    // SPEC-GAP(S-1221): the condition of a `when~` or `reset_if~` inside a `when~` is read at its W or tick whether or not the outer one runs the part (provisional, as the arguments of the head are; only a panic shows it).
     fn read_conds(&mut self, key: &NodeKey, levels: &[Level], sx: i32) -> Result<(), Stop> {
         let at = self.body.ast.expr(key.call).span;
-        for (b, when) in levels.iter().enumerate().filter_map(|(b, lv)| lv.when.map(|w| (b, w))) {
+        for (b, when) in levels.iter().enumerate().filter_map(|(b, lv)| lv.guard.map(|w| (b, w))) {
             if when.at == sx {
                 let v = self.eval_staged(key.call, when.cond, Stage::Tick(sx))?;
                 self.gate(key, b, at)?.cond = v;
@@ -238,7 +254,11 @@ impl<'a> Frame<'a> {
         ins: Vec<Value>,
     ) -> Result<(), Stop> {
         let at = self.body.ast.expr(key.call).span;
-        let Some(When { w, .. }) = levels[b].when else { return Err(Stop { fault: Internal(NO_GATE), at }) };
+        let Some(Guard { w, .. }) = levels[b].when() else { return Err(Stop { fault: Internal(NO_GATE), at }) };
+        // A stage slower than W is the tick an input of the head is read at by the caller (`rate::when_level`); the part reads it in W.
+        if s < w {
+            return Ok(());
+        }
         if s == w {
             let gate = self.gate(key, b, at)?;
             let Value::Bool(on) = gate.cond else {
@@ -256,6 +276,7 @@ impl<'a> Frame<'a> {
             }
         }
         if s == w {
+            self.cut(key, levels, b, w, at)?;
             let held = match (on, &self.gate(key, b, at)?.held) {
                 (true, _) => self.level_out(key, levels, b - 1, part, at)?,
                 (false, Value::Burst(es)) => {
@@ -271,6 +292,70 @@ impl<'a> Frame<'a> {
             gate.runs = gate.runs.wrapping_add(1);
         }
         Ok(())
+    }
+
+    /// The stage `s` of the part `b`, a `.reset_if~(c)` (§11.10, S-1186, S-1218), in its frame at the time `ctx`: at its tick it takes the condition the caller read (`read_conds`), and if it holds the part is due to be put
+    /// back before the first work of it that is not of a slower tick (`cut`), or else after its last stage of the frame (a part with no such work here: one that a `when~` inside stops).
+    fn run_reset(
+        &mut self,
+        key: &NodeKey,
+        levels: &Rc<[Level]>,
+        b: usize,
+        s: i32,
+        ctx: Ctx,
+        ins: Vec<Value>,
+    ) -> Result<(), Stop> {
+        let at = self.body.ast.expr(key.call).span;
+        if levels[b].reset().is_some_and(|r| r.w == s) {
+            let gate = self.gate(key, b, at)?;
+            let Value::Bool(due) = gate.cond else {
+                return Err(Stop { fault: Internal("a condition of a `reset_if~` that was not read at its tick"), at });
+            };
+            gate.due = due;
+        }
+        if levels[b - 1].stages.contains(&s) {
+            self.run_level(key, levels, b - 1, s, ctx, ins)?;
+        }
+        if levels[b].stages.last() == Some(&s) {
+            self.put_back(key, b, at)?;
+        }
+        Ok(())
+    }
+
+    /// Before a work of the part `b` at its stage `s` (the stage of a head, the rings it reads and writes, the output a `when~` holds), each `reset_if~` outside it that is due and whose tick is not faster than that of
+    /// the work puts its part back: the slower ticks write first (§11.10, "条件の刻みより遅い刻みは、格子の上の位置でも、その位置で先に書いた後に戻す"). The tick of the work is `s` moved out of the boundaries between
+    /// (`caller_stage`, the stage of the frame it runs in), and not by a `when~` that runs it in its W.
+    fn cut(&mut self, key: &NodeKey, levels: &[Level], b: usize, s: i32, at: Span) -> Result<(), Stop> {
+        let mut label = s;
+        for (c, lv) in levels.iter().enumerate().skip(b + 1) {
+            label = caller_stage(label, lv.ratio);
+            if lv.reset().is_some_and(|r| label >= r.w) {
+                self.put_back(key, c, at)?;
+            }
+        }
+        Ok(())
+    }
+
+    /// The part inside the `reset_if~` `c` of the chain at `key`, if it is due, back to its start (§11.10, S-1186): the rings of the boundaries inside (their elements; the place goes on, so the frames after write
+    /// in order) and the arrays they deal, the output each `when~` inside holds, and the head as the generated `reset` puts it back but for the phase counters and what the `when~`s remember (`InstState::reset`), with
+    /// the fields that a tick writes and a faster stage reads at `T.default()` (`Frame::restart`).
+    fn put_back(&mut self, key: &NodeKey, c: usize, at: Span) -> Result<(), Stop> {
+        let gate = self.gate(key, c, at)?;
+        if !std::mem::take(&mut gate.due) {
+            return Ok(());
+        }
+        let run = self.run.as_mut().ok_or(Stop { fault: Internal("no run"), at })?;
+        let inside = |k: &NodeKey| match k.role {
+            Role::Gather { bound, .. } | Role::Deal(bound) => {
+                k.call == key.call && k.replicas == key.replicas && bound < c
+            }
+            _ => false,
+        };
+        run.state.cells.iter_mut().filter(|(k, _)| inside(k)).for_each(|(_, cell)| cell.back(true));
+        let child = self.child_mut(key, at)?;
+        child.whens.iter_mut().take(c).flatten().for_each(|g| g.reset(true));
+        child.state.reset(true);
+        self.restart(key, false)
     }
 
     /// A burst of the stream at `sample * 2^q` is not made of more elements than the evaluator holds (`Limits`): a run of `.up~(N)`s, or an input of a parameter kind, of a large N.
@@ -329,8 +414,11 @@ impl<'a> Frame<'a> {
         let child = run.state.children.get(key).ok_or(here(Internal("an instance with no state")))?;
         let (lv, burst) = (&levels[b], |es: Vec<Value>, m| counted(&es, m).map(|()| Value::Burst(es)).map_err(here));
         let r = lv.ratio;
-        if lv.when.is_some() {
+        if lv.when().is_some() {
             return child.whens.get(b).and_then(Option::as_ref).map(|g| g.held.clone()).ok_or(here(Internal(NO_GATE)));
+        }
+        if lv.reset().is_some() {
+            return self.level_out(key, levels, b - 1, ctx, at);
         }
         match (b, r.cmp(&0)) {
             (0, _) if lv.out > 0 => burst(elements(lv.out, &child.out).map_err(here)?, lv.out),

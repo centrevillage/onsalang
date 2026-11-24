@@ -35,6 +35,10 @@ mod twin;
 mod twin_match;
 #[path = "flow_ref/twin_pan.rs"]
 mod twin_pan;
+#[path = "flow_ref/twin_reset.rs"]
+mod twin_reset;
+#[path = "flow_ref/twin_reset_tests.rs"]
+mod twin_reset_tests;
 #[path = "flow_ref/twin_tests.rs"]
 mod twin_tests;
 #[path = "flow_ref/twin_when.rs"]

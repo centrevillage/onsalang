@@ -1,0 +1,20 @@
+# flow_ref 1 source=tests/spec/flow_semantics/reset_if_tick_fields_values.onsa tests=4 evaluated=4 unavailable=0 skipped=0 waiting=0
+@ the slow input of a when inside the part is T.default() after the reset until the caller writes it again
+init 0 reset_if_tick_fields_values.nested_slow_input sr=0x41000000
+process 0 frames=8 in c=[false true true true true true true true]
+out=[0x00000000 0x40000000 0x40000000 0x40400000 0x00000000 0x3f800000 0x3f800000 0x40000000]
+@ the copy of an input of a tick in the part is T.default() after the reset
+init 0 reset_if_tick_fields_values.slow_input sr=0x41000000
+process 0 params dummy=false frames=8
+out=[0x40000000 0x40000000 0x40400000 0x3f800000 0x40800000 0x40800000 0x40a00000 0x40a00000]
+@ a part computed at sample / 4 and read at sample is T.default() after the reset until the next tick
+init 0 reset_if_tick_fields_values.tick_part sr=0x41000000
+process 0 params p=0x3f800000 c=true frames=8 in r=[false false true false false false false false]
+out=[0x40000000 0x40800000 0x00000000 0x00000000 0x40c00000 0x41000000 0x41200000 0x41400000]
+@ sample_tick() in the condition of a reset whose W is sample / 4 is read at the ticks of W
+init 0 reset_if_tick_fields_values.at_w_four sr=0x41000000
+init 1 reset_if_tick_fields_values.at_w_five sr=0x41000000
+process 0 frames=12
+out=[0x3f800000 0x3f800000 0x3f800000 0x3f800000 0x3f800000 0x3f800000 0x3f800000 0x3f800000 0x40000000 0x40000000 0x40000000 0x40000000]
+process 1 frames=12
+out=[0x3f800000 0x3f800000 0x3f800000 0x3f800000 0x40000000 0x40000000 0x40000000 0x40000000 0x40400000 0x40400000 0x40400000 0x40400000]

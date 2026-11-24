@@ -24,18 +24,19 @@ pub(super) struct Chain {
     pub bounds: Vec<Bound>,
 }
 
-/// A modifier of a chain: `.down~(N)` and `.up~(N)` by the ratio they give, `.when~(c)` by its condition (it keeps the rate, §11.9).
+/// A modifier of a chain: `.down~(N)` and `.up~(N)` by the ratio they give, `.when~(c)` and `.reset_if~(c)` by their condition (they keep the rate, §11.9).
 #[derive(Clone, Copy, Debug)]
 pub(super) enum Bound {
     Rate(i32),
     When(ExprId),
+    ResetIf(ExprId),
 }
 
 impl Bound {
     fn ratio(self) -> i32 {
         match self {
             Bound::Rate(r) => r,
-            Bound::When(_) => 0,
+            Bound::When(_) | Bound::ResetIf(_) => 0,
         }
     }
 }
@@ -46,10 +47,10 @@ impl Chain {
         self.bounds.iter().map(|b| b.ratio()).sum()
     }
 
-    /// The conditions of its `when~`s, innermost first: parts of the call, as its head's arguments are.
+    /// The conditions of its `when~`s and `reset_if~`s, innermost first: parts of the call, as its head's arguments are.
     pub(super) fn conds(&self) -> impl Iterator<Item = ExprId> + '_ {
         self.bounds.iter().filter_map(|b| match b {
-            Bound::When(c) => Some(*c),
+            Bound::When(c) | Bound::ResetIf(c) => Some(*c),
             Bound::Rate(_) => None,
         })
     }
@@ -132,7 +133,7 @@ pub(super) fn elements(m: i32, v: &Value) -> Result<Vec<Value>, Fault> {
 }
 
 /// The chain that the call `e` ends, if it is a modifier (the record of the names stage, its head included, R-512): a boundary of `-log2 N` and of `log2 N` for each `.down~(N)` and `.up~(N)` (§11.9, S-1207), and the
-/// condition of each `.when~(c)` (§11.10), innermost first; `reset_if~` is W7-10 U2e's.
+/// condition of each `.when~(c)` and `.reset_if~(c)` (§11.10), innermost first.
 pub(super) fn chain_of(body: &Body, e: ExprId) -> Result<Option<Chain>, Fault> {
     let Some((_, _, head)) = body.modifier(e) else { return Ok(None) };
     let (mut at, mut bounds) = (e, Vec::new());
@@ -143,7 +144,7 @@ pub(super) fn chain_of(body: &Body, e: ExprId) -> Result<Option<Chain>, Fault> {
             Modifier::Down => Bound::Rate(-exponent(body, n)?),
             Modifier::Up => Bound::Rate(exponent(body, n)?),
             Modifier::When => Bound::When(n),
-            Modifier::ResetIf => return Err(Fault::Unavailable("a modifier of W7-10 U2e (`reset_if~`)")),
+            Modifier::ResetIf => Bound::ResetIf(n),
         });
         at = receiver;
     }
@@ -215,21 +216,40 @@ pub(super) struct Level {
     /// The stages of the caller of this part that it runs in, the slowest first (`caller_stage` of those inside, the stage a ring is written at, the stage it deals at), and the stage it makes its output in.
     pub stages: Vec<i32>,
     pub made: i32,
-    /// Of a `.when~(c)`: its condition and the clock W it is read at (§11.10).
-    pub when: Option<When>,
+    /// Of a `.when~(c)` and a `.reset_if~(c)`: its condition and the tick it is read at.
+    pub guard: Option<Guard>,
 }
 
-/// A `.when~(c)` of a chain (§11.10, S-1209): `w` is the clock W as its part reads it, the output of the part inside when that is slower than P (`sample` here) and P else, and `at` the stage of the caller the condition is
-/// read in (`w` moved out of the boundaries outside, as the arguments of the head are).
+impl Level {
+    /// The `.when~(c)` that makes this part, if one does.
+    pub(super) fn when(&self) -> Option<Guard> {
+        self.guard.filter(|g| g.kind == Modifier::When)
+    }
+
+    /// The `.reset_if~(c)` that makes this part, if one does.
+    pub(super) fn reset(&self) -> Option<Guard> {
+        self.guard.filter(|g| g.kind == Modifier::ResetIf)
+    }
+}
+
+/// A `.when~(c)` or a `.reset_if~(c)` of a chain (§11.10, S-1209): of a `.when~`, `w` is the clock W as its part reads it, the output of the part inside when that is slower than P (`sample` here) and P else; of a
+/// `.reset_if~`, the tick R of the condition (`reset_level`). `at` is the stage of the caller the condition is read in (`w` moved out of the boundaries outside, as the arguments of the head are).
 #[derive(Clone, Copy, Debug)]
-pub(super) struct When {
+pub(super) struct Guard {
+    pub kind: Modifier,
     pub cond: ExprId,
     pub w: i32,
     pub at: i32,
 }
 
-/// The parts of a chain of the boundaries `bounds` (innermost first) of the flow `decl` that has the ticks `slow` of its own: `[head, ..]`, one more than the modifiers.
-pub(super) fn levels(decl: &FlowDef, slow: &[i32], bounds: &[Bound]) -> Result<Rc<[Level]>, Fault> {
+/// The parts of a chain of the boundaries `bounds` (innermost first) of the flow `decl` that has the ticks `slow` of its own: `[head, ..]`, one more than the modifiers. `clock` gives the clock of the condition of
+/// a `.reset_if~` in the caller (§11.3, its `at` included).
+pub(super) fn levels(
+    decl: &FlowDef,
+    slow: &[i32],
+    bounds: &[Bound],
+    clock: &dyn Fn(ExprId) -> Result<Clock, Fault>,
+) -> Result<Rc<[Level]>, Fault> {
     let m = out_ratio(decl)?;
     let head = Level {
         ratio: 0,
@@ -239,15 +259,20 @@ pub(super) fn levels(decl: &FlowDef, slow: &[i32], bounds: &[Bound]) -> Result<R
         deals: false,
         stages: slow.iter().copied().chain([0]).collect(),
         made: body_out_stage(m),
-        when: None,
+        guard: None,
     };
     let mut all = vec![head];
-    for &bound in bounds {
+    for (i, &bound) in bounds.iter().enumerate() {
         let prev = &all[all.len() - 1];
         let r = match bound {
             Bound::Rate(r) => r,
             Bound::When(cond) => {
-                all.push(when_level(prev, cond)?);
+                all.push(when_level(prev, cond));
+                continue;
+            }
+            Bound::ResetIf(cond) => {
+                let outside = bounds[i + 1..].iter().map(|b| b.ratio()).sum();
+                all.push(reset_level(prev, cond, clock(cond)?, outside));
                 continue;
             }
         };
@@ -267,31 +292,29 @@ pub(super) fn levels(decl: &FlowDef, slow: &[i32], bounds: &[Bound]) -> Result<R
             deals,
             stages: stages.into_iter().collect(),
             made,
-            when: None,
+            guard: None,
         };
         all.push(next);
     }
-    // The stage of the caller each condition is read in: its W moved out of the parts outside it as their stages are (`caller_stage`, `when_level`).
+    // The stage of the caller each condition is read in: its W (or R) moved out of the parts outside it as their stages are (`caller_stage`, `when_level`; a `reset_if~` keeps them).
     for b in 1..all.len() {
-        let out = |x, l: &Level| l.when.map_or(caller_stage(x, l.ratio), |o| x.max(o.w));
-        let at = all[b].when.map(|when| all[b + 1..].iter().fold(when.w, out));
-        if let (Some(when), Some(at)) = (all[b].when.as_mut(), at) {
-            when.at = at;
+        let out = |x, l: &Level| l.when().map_or(caller_stage(x, l.ratio), |o| x.max(o.w));
+        let at = all[b].guard.map(|m| all[b + 1..].iter().fold(m.w, out));
+        if let (Some(m), Some(at)) = (all[b].guard.as_mut(), at) {
+            m.at = at;
         }
     }
     Ok(all.into())
 }
 
 /// The part that a `.when~(c)` makes of the part `inside` (§11.10, S-1209): the same ports and output; it reads `c` at W and runs the part at the ticks of P it holds for, so the stages of the part slower than W are run in W (their
-/// grid counts the frames it ran), and its `sample` counts them. It makes its output, which it holds, at W. An input of the part slower than W, read
-/// at the ticks of the part, is W7-10 U2e's.
-fn when_level(inside: &Level, cond: ExprId) -> Result<Level, Fault> {
+/// grid counts the frames it ran), and its `sample` counts them. It makes its output, which it holds, at W. An input of the part slower than W is a stage of it too: the caller reads it at its own tick
+/// (`feed`), and the part at the tick of its grid, in W (§11.10: "呼び出し側の値を、部品の中の刻みの時点で読む").
+fn when_level(inside: &Level, cond: ExprId) -> Level {
     let w = inside.out.min(0);
-    if inside.ins.iter().flatten().any(|&k| k < w) {
-        return Err(Fault::Unavailable("an input slower than the W of a `.when~` (W7-10 U2e)"));
-    }
-    let stages: BTreeSet<i32> = inside.stages.iter().map(|y| (*y).max(w)).chain([w, 0]).collect();
-    Ok(Level {
+    let slow = inside.ins.iter().flatten().copied().filter(|k| *k < w);
+    let stages: BTreeSet<i32> = inside.stages.iter().map(|y| (*y).max(w)).chain([w, 0]).chain(slow).collect();
+    Level {
         ratio: 0,
         ins: inside.ins.clone(),
         out: inside.out,
@@ -299,8 +322,29 @@ fn when_level(inside: &Level, cond: ExprId) -> Result<Level, Fault> {
         deals: false,
         stages: stages.into_iter().collect(),
         made: w,
-        when: Some(When { cond, w, at: w }),
-    })
+        guard: Some(Guard { kind: Modifier::When, cond, w, at: w }),
+    }
+}
+
+/// The part that a `.reset_if~(c)` makes of the part `inside` (§11.10): the same ports, stages and output (made again at R where that is later), and the tick R of `c`, a stage of it: the clock of `c` in the caller moved in by the ratios `outside` it (not cut at
+/// 0), and for a value of the parameter kinds W (the output of the part inside, if slower than P), the caller's `sample` where W is faster (once a frame, before the first run of an `.up~(N)`).
+fn reset_level(inside: &Level, cond: ExprId, clock: Clock, outside: i32) -> Level {
+    // `sample_tick()` alone has the clock of the place that reads it (§11.4), as a value of the parameter kinds does here: W.
+    let tick = match clock {
+        Clock::Tick(k) if clock != Clock::AMBIENT => k - outside,
+        _ => inside.out.min(0).min(-outside),
+    };
+    let stages: BTreeSet<i32> = inside.stages.iter().copied().chain([tick]).collect();
+    Level {
+        ratio: 0,
+        ins: inside.ins.clone(),
+        out: inside.out,
+        gathers: Vec::new(),
+        deals: false,
+        stages: stages.into_iter().collect(),
+        made: inside.made.max(tick),
+        guard: Some(Guard { kind: Modifier::ResetIf, cond, w: tick, at: tick }),
+    }
 }
 
 /// The time of the head of a chain that its caller runs at `ctx` (`init`, `block`; the run of a stage takes it from `time_of` boundary by boundary, §11.4).
@@ -310,16 +354,20 @@ pub(super) fn child_time(levels: &[Level], ctx: Ctx) -> Ctx {
 
 /// The ticks slower than `sample` that the stages of a body are of, in the order they run: the larger N (the slower tick) first (§11.9, S-1079): the clock of each step, the clocks of its parts,
 /// and the stage of the body of each instance it calls that is in this one (`caller_stage` of each of its slow ticks and of its `sample`, moved out of each boundary of the chain it is called by, `levels`).
-pub(super) fn slow_ticks(view: View, body: &Body, steps: &[Step], plans: &Plans) -> Result<Rc<[i32]>, Stop> {
-    let mut all = BTreeSet::new();
+/// With them, the clock of the condition of each `.reset_if~` of the body (`clock_of`, the clock that `levels` reads).
+pub(super) fn slow_ticks(view: View, body: &Body, steps: &[Step], plans: &Plans) -> Result<(Rc<[i32]>, Conds), Stop> {
+    let (mut all, mut conds) = (BTreeSet::new(), HashMap::new());
     for s in steps {
         all.extend(Some(s.clock).into_iter().filter_map(slow));
-        visit(view, body, &s.known, s.init, s.init, plans, &mut all)?;
+        visit(view, body, &s.known, s.init, s.init, plans, &mut (&mut all, &mut conds))?;
     }
     let mut ticks: Vec<i32> = all.into_iter().collect();
     ticks.sort_by_key(|r| std::cmp::Reverse(n_of(*r)));
-    Ok(ticks.into())
+    Ok((ticks.into(), Rc::new(conds)))
 }
+
+/// The clock of the condition of each `.reset_if~` of a body, in the caller (§11.3).
+pub(super) type Conds = Rc<HashMap<ExprId, Clock>>;
 
 /// The sets of the `lets` that read each other (§11.3: "互いに頼る `let`", a `^name` among the reads), each with whether it is a loop (more than one `let`, or one that reads itself), the ones read
 /// by the others first: the strongly connected components of the graph of the reads, so that the clock of a loop is made once, after those of what enters it.
@@ -461,7 +509,7 @@ fn visit(
     root: ExprId,
     e: ExprId,
     plans: &Plans,
-    out: &mut BTreeSet<i32>,
+    out: &mut (&mut BTreeSet<i32>, &mut HashMap<ExprId, Clock>),
 ) -> Result<(), Stop> {
     let at = body.ast.expr(e).span;
     let here = |fault| Stop { fault, at };
@@ -470,14 +518,18 @@ fn visit(
     }
     // The clock `at` gives a part of `block` (`p at (sample / 4)`) is a tick too (a loop it enters ticks with it, `ring_clock`).
     let read = clock_of(body, known, root, e).map_err(here)?;
-    out.extend([stage_of(body, known, root, e).map_err(here)?, read].into_iter().filter_map(slow));
+    out.0.extend([stage_of(body, known, root, e).map_err(here)?, read].into_iter().filter_map(slow));
     let chain = chain_of(body, e).map_err(here)?;
     // The stages of an instance that is called here are stages of this one: those of the last part of its chain (`levels`; of the head alone for no modifier).
     let (call, bounds) = chain.as_ref().map_or((e, &[][..]), |c| (c.head, &c.bounds[..]));
+    for c in bounds.iter().filter_map(|b| if let Bound::ResetIf(c) = b { Some(*c) } else { None }) {
+        out.1.insert(c, clock_of(body, known, root, c).map_err(here)?);
+    }
     if let Ok(Called::Flow(def)) = body.called(call) {
         let body_ticks = Inst::planned(view, def, plans)?.slow;
-        let parts = levels(view.flow(def).map_err(here)?, &body_ticks, bounds).map_err(here)?;
-        out.extend(parts[parts.len() - 1].stages.iter().copied().filter(|s| *s < 0));
+        let clock = |c| clock_of(body, known, root, c);
+        let parts = levels(view.flow(def).map_err(here)?, &body_ticks, bounds, &clock).map_err(here)?;
+        out.0.extend(parts[parts.len() - 1].stages.iter().copied().filter(|s| *s < 0));
     }
     let inside = match &chain {
         Some(c) => args_of(body, c.head).into_iter().chain(c.conds()).collect(),

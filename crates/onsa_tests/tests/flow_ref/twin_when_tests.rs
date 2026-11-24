@@ -34,7 +34,7 @@ const EXOTIC_COVER: &str =
 
 /// The tests of a program run in the interpreter (name and failure), or why the program does not run: the checker's
 /// diagnostics (a form that U1 keeps as E0200 is one), or an error of the lowering.
-fn interpreted(src: &str) -> Result<Vec<(String, Option<String>)>, String> {
+pub fn interpreted(src: &str) -> Result<Vec<(String, Option<String>)>, String> {
     let src = src.to_string();
     onsa_diag::stack::run(move || {
         let mut loaded = Loaded::from_input(PackageInput::single_file("when.onsa", &src)).map_err(|e| e.to_string())?;
@@ -55,7 +55,7 @@ fn interpreted(src: &str) -> Result<Vec<(String, Option<String>)>, String> {
 }
 
 /// The checker's verdict on a program: the first diagnostic or error of the lowering, if any.
-fn analysis(src: &str) -> Result<(), String> {
+pub fn analysis(src: &str) -> Result<(), String> {
     let src = src.to_string();
     onsa_diag::stack::run(move || {
         let mut loaded = Loaded::from_input(PackageInput::single_file("when.onsa", &src)).map_err(|e| e.to_string())?;
@@ -69,7 +69,7 @@ fn analysis(src: &str) -> Result<(), String> {
 
 /// The seeds of a family run in the interpreter alone: the number of tests that ran, and a message for each seed that is wrong
 /// (the program does not run; or, for a mutant (`rot`), no assert fails, and otherwise one does).
-fn interpreter_failures(make: Maker, seeds: impl IntoIterator<Item = u64>, rot: bool) -> (usize, Vec<String>) {
+pub fn interpreter_failures(make: Maker, seeds: impl IntoIterator<Item = u64>, rot: bool) -> (usize, Vec<String>) {
     let (mut bad, mut ran) = (Vec::new(), 0);
     for seed in seeds {
         let (src, tags) = make(seed, rot);
@@ -96,7 +96,7 @@ fn interpreter_failures(make: Maker, seeds: impl IntoIterator<Item = u64>, rot: 
 }
 
 /// The first three failures, with how many there are.
-fn shown(bad: &[String]) -> String {
+pub fn shown(bad: &[String]) -> String {
     format!(
         "{} failures, the first three:\n{}",
         bad.len(),
@@ -104,13 +104,13 @@ fn shown(bad: &[String]) -> String {
     )
 }
 
-fn assert_held(make: Maker, seeds: &[u64], rot: bool) {
+pub fn assert_held(make: Maker, seeds: &[u64], rot: bool) {
     assert!(!seeds.is_empty(), "no seed was run");
     let (ran, bad) = interpreter_failures(make, seeds.iter().copied(), rot);
     assert!(bad.is_empty() && ran == 2 * seeds.len(), "{ran} tests ran. {}", shown(&bad));
 }
 
-fn assert_covered(make: Maker, seeds: &[u64], cover: &str) {
+pub fn assert_covered(make: Maker, seeds: &[u64], cover: &str) {
     let held: BTreeSet<&str> = seeds.iter().flat_map(|s| make(*s, false).1).collect();
     let missing: Vec<_> = cover.split_whitespace().filter(|t| !held.contains(t)).collect();
     assert!(missing.is_empty(), "the seeds of the gate do not hold {missing:?}: choose them again");

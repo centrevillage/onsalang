@@ -18,7 +18,7 @@ use onsa_syntax::ast::{Arg, CallKind, ExprId, ExprKind};
 use super::call::parts;
 use super::chain::Gate;
 use super::expr::{Eval, Frame, LOW_STACK, Stop, evaluates};
-use super::flow::{Ctx, Inst, Plans, enter};
+use super::flow::{Clock, Ctx, Inst, Plans, enter};
 use super::rate::{Bound, Level, chain_of, child_time, counted, levels, n_of, on_tick};
 use super::scalar::{Fault, Fault::Internal};
 use super::sema_view::{Called, Stage, input_stage};
@@ -67,6 +67,16 @@ pub struct Cell {
     pub current: Store,
 }
 
+impl Cell {
+    /// Back to the value it started from; `soft` (`reset_if~`, which leaves the phase counters) keeps the place a ring is written next, so that the frames after it write the ring of a boundary in order (§11.9).
+    pub(super) fn back(&mut self, soft: bool) {
+        match (&mut self.current, &self.initial, soft) {
+            (Store::Ring { buf, .. }, Store::Ring { buf: start, .. }, true) => buf.clone_from(start),
+            _ => self.current = self.initial.clone(),
+        }
+    }
+}
+
 /// The state of one instance: its own nodes, and the instances it calls (whole, with their `let`s).
 #[derive(Debug, Default)]
 pub struct InstState {
@@ -77,13 +87,16 @@ pub struct InstState {
 }
 
 impl InstState {
-    /// Every node back to what it started from (§11.6 `reset`), the instances inside too.
-    pub fn reset(&mut self) {
-        self.cells.values_mut().for_each(|c| c.current = c.initial.clone());
+    /// Every node back to what it started from (§11.6 `reset`), the instances inside too. `soft` is the `reset_if~` (§11.10, S-1186): the phase counters (the stage each instance last ran, the ring's next place) and
+    /// what each `when~` remembers stay, its held output does not; the fields of the ticks are `Frame::restart`'s.
+    pub fn reset(&mut self, soft: bool) {
+        self.cells.values_mut().for_each(|c| c.back(soft));
         self.children.values_mut().for_each(|c| {
-            c.done = None;
-            c.whens.iter_mut().flatten().for_each(Gate::reset);
-            c.state.reset();
+            if !soft {
+                c.done = None;
+            }
+            c.whens.iter_mut().flatten().for_each(|g| g.reset(soft));
+            c.state.reset(soft);
         });
     }
 }
@@ -459,7 +472,12 @@ impl<'a> Frame<'a> {
         let plans = self.run.as_ref().map(|r| r.plans.clone()).ok_or(Stop { fault: Internal("no run"), at })?;
         let slow = Inst::planned(self.body.view, def, &plans)?.slow;
         let decl = self.body.view.flow(def).map_err(|fault| Stop { fault, at })?;
-        levels(decl, &slow, bounds).map_err(|fault| Stop { fault, at })
+        // The clock of a condition of a `reset_if~` is that of the plan of this body (`rate::slow_ticks`).
+        let clock = |c| {
+            let conds = Inst::planned(self.body.view, self.body.def, &plans).map_err(|stop| stop.fault)?.conds;
+            conds.get(&c).copied().ok_or(Internal("a condition of a `reset_if~` with no clock"))
+        };
+        levels(decl, &slow, bounds, &clock).map_err(|fault| Stop { fault, at })
     }
 
     /// The instance of the flow `def` that the call `e` makes: kept in the state, then its `init` (the arguments of that clock).
@@ -477,13 +495,13 @@ impl<'a> Frame<'a> {
         self.in_child(&key, |f, inst, decl| enter(f, inst, decl, Stage::Init, &config))
     }
 
-    /// What each `when~` of the chain whose head is `e` keeps (§11.10): the output it holds is `T.default()` at first, a burst of them for an output at `sample * N` (S-1222), and its places are held first.
+    /// What each `when~` and `reset_if~` of the chain whose head is `e` keeps (§11.10): the output a `when~` holds is `T.default()` at first, a burst of them for an output at `sample * N` (S-1222), and its places are held first.
     fn gates(&mut self, e: ExprId, parts: &[Level], at: Span) -> Result<Vec<Option<Gate>>, Stop> {
         let here = |fault| Stop { fault, at };
         let mut gates = Vec::new();
         for lv in parts {
-            if lv.when.is_none() {
-                gates.push(None);
+            if lv.when().is_none() {
+                gates.push(lv.reset().map(|_| Gate::new(Value::Unit)));
                 continue;
             }
             let shape = self.shape(self.body.ty(e).map_err(here)?, at)?;
@@ -493,6 +511,50 @@ impl<'a> Frame<'a> {
             gates.push(Some(Gate::new(if lv.out > 0 { Value::Burst(vec![one; n]) } else { one })));
         }
         Ok(gates)
+    }
+
+    /// The fields of the instance at `key` and of those it calls that a tick slower than `sample` writes and a faster stage reads, at `T.default()` (§11.10, §11.3: its `let`s and inputs of such a tick, the parts of its
+    /// body that such a stage made, and its output where its caller reads it between its ticks), for `reset_if~`. A type with no default is not read by a faster stage (E0816), so its field is left as it is.
+    /// `fed` is for an instance whose caller is in the part too: what it keeps of its caller's values of a tick (`Inst::fed`, which a `when~` reads in its W) is that caller's field, and goes back with it.
+    pub(super) fn restart(&mut self, key: &NodeKey, fed: bool) -> Result<(), Stop> {
+        self.in_child(key, |f, inst, decl| {
+            let at = f.body.ast.expr(decl.body).span;
+            let here = |fault| Stop { fault, at };
+            let slow = |c: Clock| matches!(c.rooted(), Clock::Tick(r) if r < 0);
+            let top = inst.levels.last().ok_or(here(Internal("an instance with no parts")))?;
+            for (n, i) in decl.inputs.iter().enumerate() {
+                let mine = matches!(input_stage(i).map_err(here)?, Stage::Tick(r) if r < 0);
+                let theirs = fed && top.ins[n].is_some_and(|q| q < 0) && !top.gathers.contains(&n);
+                let Some(d) = f.shape(f.body.view.ty(i.ty), at)?.default_value().filter(|_| mine || theirs) else {
+                    continue;
+                };
+                if theirs {
+                    inst.fed[n] = d.clone();
+                }
+                if mine {
+                    f.locals.insert(f.body.input(&i.name).ok_or(here(Internal("an input with no local")))?, d);
+                }
+            }
+            let between = inst.levels.last().is_some_and(|top| top.made < 0);
+            for st in inst.steps.iter().filter(|st| slow(st.clock) || (st.pat.is_none() && between)) {
+                let ty = f.body.ty(st.init).map_err(here)?;
+                match (st.pat, f.shape(ty, at)?.default_value()) {
+                    (Some(pat), Some(d)) => f.destructure(pat, &d, ty)?,
+                    (None, Some(d)) => inst.out = d,
+                    _ => {}
+                }
+            }
+            let made: Vec<ExprId> = f.hoisted.iter().filter(|(_, (c, _))| slow(*c)).map(|(e, _)| *e).collect();
+            for e in made {
+                let d = f.shape(f.body.ty(e).map_err(here)?, at)?.default_value();
+                if let (Some(d), Some((_, vs))) = (d, f.hoisted.get_mut(&e)) {
+                    vs.values_mut().for_each(|v| *v = d.clone());
+                }
+            }
+            let calls: Vec<NodeKey> =
+                f.run.as_ref().map(|r| r.state.children.keys().cloned().collect()).unwrap_or_default();
+            calls.iter().try_for_each(|k| f.restart(k, true))
+        })
     }
 
     /// The arguments of the call `call` of the flow `decl`: one for each of its inputs (the checker sees to it).

@@ -113,9 +113,10 @@ file r242_const_let_block_and_sample.tsv rows=4 tests=1 evaluated=1 unavailable=
 file r242_const_let_chain.tsv rows=4 tests=1 evaluated=1 unavailable=0 skipped=0 waiting=0
 file r242_const_let_three_stages.tsv rows=4 tests=1 evaluated=1 unavailable=0 skipped=0 waiting=0
 file reset_boundary.tsv rows=30 tests=3 evaluated=3 unavailable=0 skipped=0 waiting=0
-file reset_if_regressions.tsv rows=6 tests=5 evaluated=0 unavailable=5 skipped=0 waiting=0
-file reset_if_slow_values.tsv rows=9 tests=8 evaluated=0 unavailable=8 skipped=0 waiting=0
-file reset_if_values.tsv rows=13 tests=12 evaluated=0 unavailable=12 skipped=0 waiting=0
+file reset_if_regressions.tsv rows=48 tests=5 evaluated=5 unavailable=0 skipped=0 waiting=0
+file reset_if_slow_values.tsv rows=123 tests=8 evaluated=7 unavailable=0 skipped=1 waiting=0
+file reset_if_tick_fields_values.tsv rows=20 tests=4 evaluated=4 unavailable=0 skipped=0 waiting=0
+file reset_if_values.tsv rows=87 tests=12 evaluated=11 unavailable=0 skipped=1 waiting=0
 file reset_replay.tsv rows=58 tests=9 evaluated=9 unavailable=0 skipped=0 waiting=0
 file sample_tick_at_a_slower_tick_values.tsv rows=59 tests=10 evaluated=10 unavailable=0 skipped=0 waiting=0
 file sample_tick_child_values.tsv rows=73 tests=11 evaluated=11 unavailable=0 skipped=0 waiting=0
@@ -147,7 +148,7 @@ file when_boundary_hold_values.tsv rows=21 tests=5 evaluated=5 unavailable=0 ski
 file when_condition_values.tsv rows=76 tests=11 evaluated=9 unavailable=0 skipped=2 waiting=0
 file when_grid_and_time_values.tsv rows=13 tests=3 evaluated=3 unavailable=0 skipped=0 waiting=0
 file when_identity_regressions.tsv rows=78 tests=5 evaluated=5 unavailable=0 skipped=0 waiting=0
-file when_slow_head_values.tsv rows=6 tests=5 evaluated=0 unavailable=5 skipped=0 waiting=0
+file when_slow_head_values.tsv rows=47 tests=5 evaluated=5 unavailable=0 skipped=0 waiting=0
 file when_slow_values.tsv rows=86 tests=9 evaluated=9 unavailable=0 skipped=0 waiting=0
 file when_values.tsv rows=77 tests=10 evaluated=10 unavailable=0 skipped=0 waiting=0
-total files=151 rows=4895 tests=1096 evaluated=975 unavailable=31 skipped=90 waiting=6
+total files=152 rows=5186 tests=1100 evaluated=1007 unavailable=1 skipped=92 waiting=6

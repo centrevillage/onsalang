@@ -1,6 +1,47 @@
-# flow_ref 1 source=tests/spec/flow_semantics/when_slow_head_values.onsa tests=5 evaluated=0 unavailable=5 skipped=0 waiting=0
-? with no condition, or one that always holds, the head reads its input at the frames 0, 2, 4 ...	unavailable an input slower than the W of a `.when~` (W7-10 U2e)
-? a part that is stopped reads nothing, and the one that runs again reads the value of the frame where its own grid ticks (not the grid of the caller)	unavailable an input slower than the W of a `.when~` (W7-10 U2e)
-? a slow head input and a slow condition: the first run reads the caller's value of its frame	unavailable an input slower than the W of a `.when~` (W7-10 U2e)
-? the time that the head reads is the caller's time at its own tick of sample / 2, held and read at the tick of the part's grid	unavailable an input slower than the W of a `.when~` (W7-10 U2e)
-? the calls of process cut the frames at a tick of the part, in a stopped stretch and at 0 frames, and a reset starts over: the same values (§13.4, §11.6)	unavailable an input slower than the W of a `.when~` (W7-10 U2e)
+# flow_ref 1 source=tests/spec/flow_semantics/when_slow_head_values.onsa tests=5 evaluated=5 unavailable=0 skipped=0 waiting=0
+@ with no condition, or one that always holds, the head reads its input at the frames 0, 2, 4 ...
+init 0 when_slow_head_values.head_plain sr=0x41000000
+init 1 when_slow_head_values.head_true sr=0x41000000
+init 2 when_slow_head_values.head_gated sr=0x41000000
+process 0 frames=12
+out=[0x40000000 0x40000000 0x40400000 0x40400000 0x40800000 0x40800000 0x40a00000 0x40a00000 0x40c00000 0x40c00000 0x40e00000 0x40e00000]
+process 1 frames=12
+out=[0x40000000 0x40000000 0x40400000 0x40400000 0x40800000 0x40800000 0x40a00000 0x40a00000 0x40c00000 0x40c00000 0x40e00000 0x40e00000]
+process 2 frames=12 in c=[true true true true true true true true true true true true]
+out=[0x40000000 0x40000000 0x40400000 0x40400000 0x40800000 0x40800000 0x40a00000 0x40a00000 0x40c00000 0x40c00000 0x40e00000 0x40e00000]
+@ a part that is stopped reads nothing, and the one that runs again reads the value of the frame where its own grid ticks (not the grid of the caller)
+init 0 when_slow_head_values.head_gated sr=0x41000000
+process 0 frames=12 in c=[false true true false false true true true false true true true]
+out=[0x00000000 0x40000000 0x40000000 0x40000000 0x40000000 0x40800000 0x40800000 0x40a00000 0x40a00000 0x40a00000 0x40e00000 0x40e00000]
+@ a slow head input and a slow condition: the first run reads the caller's value of its frame
+init 0 when_slow_head_values.head_with_a_slow_condition sr=0x41000000
+process 0 frames=12
+out=[0x00000000 0x00000000 0x00000000 0x00000000 0x40800000 0x40800000 0x40a00000 0x40a00000 0x40c00000 0x40c00000 0x40e00000 0x40e00000]
+@ the time that the head reads is the caller's time at its own tick of sample / 2, held and read at the tick of the part's grid
+init 0 when_slow_head_values.head_time_plain sr=0x41000000
+init 1 when_slow_head_values.head_time sr=0x41000000
+process 0 frames=12
+out=[0x3f800000 0x3f800000 0x40400000 0x40400000 0x40a00000 0x40a00000 0x40e00000 0x40e00000 0x41100000 0x41100000 0x41300000 0x41300000]
+process 1 frames=12 in c=[false true true false false true true true false true true true]
+out=[0x00000000 0x3f800000 0x3f800000 0x3f800000 0x3f800000 0x40a00000 0x40a00000 0x40e00000 0x40e00000 0x40e00000 0x41300000 0x41300000]
+init 2 when_slow_head_values.head_time_at sr=0x41000000
+process 2 frames=12 in c=[false true true false false true true true false true true true]
+out=[0x00000000 0x3f800000 0x3f800000 0x3f800000 0x3f800000 0x40a00000 0x40a00000 0x40e00000 0x40e00000 0x40e00000 0x41300000 0x41300000]
+@ the calls of process cut the frames at a tick of the part, in a stopped stretch and at 0 frames, and a reset starts over: the same values (§13.4, §11.6)
+init 0 when_slow_head_values.head_gated sr=0x41000000
+process 0 frames=1 in c=[false]
+out=[0x00000000]
+process 0 frames=0 in c=[]
+out=[]
+process 0 frames=3 in c=[true true false]
+out=[0x40000000 0x40000000 0x40000000]
+process 0 frames=2 in c=[false true]
+out=[0x40000000 0x40800000]
+process 0 frames=6 in c=[true true false true true true]
+out=[0x40800000 0x40a00000 0x40a00000 0x40a00000 0x40e00000 0x40e00000]
+init 1 when_slow_head_values.head_gated sr=0x41000000
+process 1 frames=3 in c=[false true true]
+out=[0x00000000 0x40000000 0x40000000]
+reset 1
+process 1 frames=12 in c=[false true true false false true true true false true true true]
+out=[0x00000000 0x40000000 0x40000000 0x40000000 0x40000000 0x40800000 0x40800000 0x40a00000 0x40a00000 0x40a00000 0x40e00000 0x40e00000]

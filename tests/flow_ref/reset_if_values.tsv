@@ -1,13 +1,87 @@
-# flow_ref 1 source=tests/spec/flow_semantics/reset_if_values.onsa tests=12 evaluated=0 unavailable=12 skipped=0 waiting=0
-? a condition that never holds is no condition	unavailable a modifier of W7-10 U2e (`reset_if~`)
-? the condition is a level: every true frame resets, and the frame gives its own input	unavailable a modifier of W7-10 U2e (`reset_if~`)
-? a rising edge resets once: let pb = prev~(start) and reset_if~(start && !pb)	unavailable a modifier of W7-10 U2e (`reset_if~`)
-? a condition of the kind block is read at each frame: the frames of a call where it is true all reset, the calls cut where it changes	unavailable a modifier of W7-10 U2e (`reset_if~`)
-? reset_if~(c at (sample / 4)) reads the condition at the grid of sample / 4 only: it resets at the frames 0 and 4 and not at 5	unavailable a modifier of W7-10 U2e (`reset_if~`)
-? the values of the kinds block and init are not put back (the copy of the input and the part computed at block), the state is	unavailable a modifier of W7-10 U2e (`reset_if~`)
-? reset_if~ does not touch the phase counter: sample_tick() goes on	unavailable a modifier of W7-10 U2e (`reset_if~`)
-? a field written at a tick and read at sample is T.default() after the reset until the next tick; the counter goes on	unavailable a modifier of W7-10 U2e (`reset_if~`)
-? x.when~(c).reset_if~(r) resets the stopped frames too and the held output; x.reset_if~(r).when~(c) resets only the frames that run	unavailable a modifier of W7-10 U2e (`reset_if~`)
-? x.when~(true).reset_if~(r) and x.when~(c).reset_if~(r) with c always true are x.reset_if~(r): the same values	unavailable a modifier of W7-10 U2e (`reset_if~`)
-? the grid of a reset_if~ inside a when~ counts the runs of the part, not the frames	unavailable a modifier of W7-10 U2e (`reset_if~`)
-? the calls of process cut the frames anywhere, and a reset in the middle of a grid starts over, with the counter (§13.4, §11.6)	unavailable a modifier of W7-10 U2e (`reset_if~`)
+# flow_ref 1 source=tests/spec/flow_semantics/reset_if_values.onsa tests=12 evaluated=11 unavailable=0 skipped=1 waiting=0
+@ a condition that never holds is no condition
+init 0 reset_if_values.plain sr=0x41000000
+init 1 reset_if_values.never sr=0x41000000
+process 0 frames=8
+out=[0x3f800000 0x40400000 0x40c00000 0x41200000 0x41700000 0x41a80000 0x41e00000 0x42100000]
+process 1 frames=8
+out=[0x3f800000 0x40400000 0x40c00000 0x41200000 0x41700000 0x41a80000 0x41e00000 0x42100000]
+@ the condition is a level: every true frame resets, and the frame gives its own input
+init 0 reset_if_values.by_signal sr=0x41000000
+init 1 reset_if_values.by_signal sr=0x41000000
+process 0 frames=8 in r=[false false false true false false true false]
+out=[0x3f800000 0x40400000 0x40c00000 0x40800000 0x41100000 0x41700000 0x40e00000 0x41700000]
+process 1 frames=8 in r=[false true true true false false false false]
+out=[0x3f800000 0x40000000 0x40400000 0x40800000 0x41100000 0x41700000 0x41b00000 0x41f00000]
+@ a rising edge resets once: let pb = prev~(start) and reset_if~(start && !pb)
+init 0 reset_if_values.by_edge sr=0x41000000
+init 1 reset_if_values.by_signal sr=0x41000000
+process 0 frames=8 in s=[false true true true false true true false]
+out=[0x3f800000 0x40000000 0x40a00000 0x41100000 0x41600000 0x40c00000 0x41500000 0x41a80000]
+process 1 frames=8 in r=[false true true true false true true false]
+out=[0x3f800000 0x40000000 0x40400000 0x40800000 0x41100000 0x40c00000 0x40e00000 0x41700000]
+@ a condition of the kind block is read at each frame: the frames of a call where it is true all reset, the calls cut where it changes
+init 0 reset_if_values.by_block sr=0x41000000
+process 0 params r=true frames=3
+out=[0x3f800000 0x40000000 0x40400000]
+process 0 params r=false frames=3
+out=[0x40e00000 0x41400000 0x41900000]
+process 0 params r=true frames=2
+out=[0x40e00000 0x41000000]
+@ reset_if~(c at (sample / 4)) reads the condition at the grid of sample / 4 only: it resets at the frames 0 and 4 and not at 5
+init 0 reset_if_values.by_grid sr=0x41000000
+process 0 params c=true frames=6
+out=[0x3f800000 0x40400000 0x40c00000 0x41200000 0x40a00000 0x41300000]
+process 0 params c=false frames=6
+out=[0x41900000 0x41d00000 0x420c0000 0x42340000 0x42600000 0x42880000]
+@ the values of the kinds block and init are not put back (the copy of the input and the part computed at block), the state is
+init 0 reset_if_values.kept sr=0x41000000 cfg k=0x41200000
+process 0 params g=0x40000000 frames=6 in r=[false false false true false false]
+out=[0x41800000 0x42180000 0x42840000 0x42080000 0x42940000 0x42f00000]
+@ reset_if~ does not touch the phase counter: sample_tick() goes on
+init 0 reset_if_values.time_reset sr=0x41000000
+process 0 frames=6 in r=[false true false true true false]
+out=[0 1 2 3 4 5]
+@ a field written at a tick and read at sample is T.default() after the reset until the next tick; the counter goes on
+init 0 reset_if_values.slot_reset sr=0x41000000
+init 1 reset_if_values.slot_reset sr=0x41000000
+process 0 frames=8 in r=[false false false true false false false false]
+out=[0x42ca0000 0x42cc0000 0x434b0000 0x3f800000 0x42cc0000 0x42ce0000 0x434c0000 0x434d0000]
+process 1 frames=8 in r=[false false false false true false false false]
+out=[0x42ca0000 0x42cc0000 0x434b0000 0x434c0000 0x3f800000 0x40000000 0x42ce0000 0x42d00000]
+- x.when~(c).reset_if~(r) resets the stopped frames too and the held output; x.reset_if~(r).when~(c) resets only the frames that run	skipped layout
+@ x.when~(true).reset_if~(r) and x.when~(c).reset_if~(r) with c always true are x.reset_if~(r): the same values
+init 0 reset_if_values.slot_reset sr=0x41000000
+init 1 reset_if_values.slot_when_true sr=0x41000000
+init 2 reset_if_values.slot_when_block sr=0x41000000
+process 0 frames=8 in r=[false false false false true false false false]
+out=[0x42ca0000 0x42cc0000 0x434b0000 0x434c0000 0x3f800000 0x40000000 0x42ce0000 0x42d00000]
+process 1 frames=8 in r=[false false false false true false false false]
+out=[0x42ca0000 0x42cc0000 0x434b0000 0x434c0000 0x3f800000 0x40000000 0x42ce0000 0x42d00000]
+process 2 params c=true frames=8 in r=[false false false false true false false false]
+out=[0x42ca0000 0x42cc0000 0x434b0000 0x434c0000 0x3f800000 0x40000000 0x42ce0000 0x42d00000]
+@ the grid of a reset_if~ inside a when~ counts the runs of the part, not the frames
+init 0 reset_if_values.in_when sr=0x41000000
+process 0 params c=true frames=8 in w=[true true false true false false true true]
+out=[0x3f800000 0x40400000 0x40400000 0x40800000 0x40800000 0x40800000 0x41300000 0x41000000]
+@ the calls of process cut the frames anywhere, and a reset in the middle of a grid starts over, with the counter (§13.4, §11.6)
+init 0 reset_if_values.slot_reset sr=0x41000000
+process 0 frames=12 in r=[false false false true false false false false false true false false]
+out=[0x42ca0000 0x42cc0000 0x434b0000 0x3f800000 0x42cc0000 0x42ce0000 0x434c0000 0x434d0000 0x43990000 0x3f800000 0x42cc0000 0x42ce0000]
+init 1 reset_if_values.slot_reset sr=0x41000000
+process 1 frames=1 in r=[false]
+out=[0x42ca0000]
+process 1 frames=1 in r=[false]
+out=[0x42cc0000]
+process 1 frames=3 in r=[false true false]
+out=[0x434b0000 0x3f800000 0x42cc0000]
+process 1 frames=4 in r=[false false false false]
+out=[0x42ce0000 0x434c0000 0x434d0000 0x43990000]
+process 1 frames=3 in r=[true false false]
+out=[0x3f800000 0x42cc0000 0x42ce0000]
+init 2 reset_if_values.slot_reset sr=0x41000000
+process 2 frames=3 in r=[false false false]
+out=[0x42ca0000 0x42cc0000 0x434b0000]
+reset 2
+process 2 frames=12 in r=[false false false true false false false false false true false false]
+out=[0x42ca0000 0x42cc0000 0x434b0000 0x3f800000 0x42cc0000 0x42ce0000 0x434c0000 0x434d0000 0x43990000 0x3f800000 0x42cc0000 0x42ce0000]

@@ -17,6 +17,7 @@ use onsa_sema::{ConstValue, DefId, LocalId, Target, Ty};
 use onsa_syntax::ast::{BinOp, Block, CallKind, ExprId, ExprKind, Lit, PatId, StmtKind, UnOp};
 use onsa_syntax::{FloatWidth, float_value};
 
+use super::flow::Clock;
 use super::host::FnHost;
 use super::scalar::{Bin, Fault, Un, binary, cast, unary};
 use super::sema_view::{Body, View};
@@ -63,8 +64,8 @@ impl Limits {
     }
 }
 
-/// The parts a stage made: by expression, then by the replicas it is in (empty outside a `par~`).
-pub(super) type Hoisted = HashMap<ExprId, HashMap<Vec<u32>, Value>>;
+/// The parts a stage made: by expression, the stage (`reset_if~` puts back those of a tick, `Frame::restart`), then by the replicas it is in (empty outside a `par~`).
+pub(super) type Hoisted = HashMap<ExprId, (Clock, HashMap<Vec<u32>, Value>)>;
 
 pub(super) const LOW_STACK: Fault = Fault::Unavailable("the stack is nearly used up");
 
@@ -200,7 +201,7 @@ impl<'a> Frame<'a> {
     pub fn eval(&mut self, e: ExprId) -> Eval {
         if let Some(kept) = self.hoisted.get(&e) {
             let replicas = self.run.as_ref().map_or(&[][..], |r| &r.replicas[..]);
-            if let Some(v) = kept.get(replicas) {
+            if let Some(v) = kept.1.get(replicas) {
                 return Ok(v.clone());
             }
         }

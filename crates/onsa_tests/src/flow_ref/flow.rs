@@ -26,7 +26,7 @@ use super::chain::Gate;
 use super::expr::{Frame, Hoisted, Stop};
 use super::hoist::{gathered, pre, seen_of, stage_of};
 use super::host::FnHost;
-use super::rate::{Level, chain_of, components, derived, levels, on_tick, ring_clock, slow_ticks};
+use super::rate::{Conds, Level, chain_of, components, derived, levels, on_tick, ring_clock, slow_ticks};
 use super::scalar::{Fault, PanicKind};
 use super::sema_view::{Body, Called, Stage, View, clock_stage, input_stage, inputs_at, output_stage};
 use super::state::{InstState, Run};
@@ -48,7 +48,7 @@ impl Clock {
     #[allow(non_upper_case_globals)]
     pub const Sample: Clock = Clock::Tick(0);
     /// The clock of `sample_tick()` (§11.4): that of the place that reads it, so it is below every tick, and a `let` of it alone is rooted at `sample`.
-    const AMBIENT: Clock = Clock::Tick(i32::MIN);
+    pub(super) const AMBIENT: Clock = Clock::Tick(i32::MIN);
 
     /// The clock of a `let`, or of the output, whose expression has this one (§11.4: the lower bound of a tick is the `sample` of the body).
     pub(super) fn rooted(self) -> Clock {
@@ -206,11 +206,12 @@ pub(super) struct Step {
     pub(super) known: Rc<Known>,
 }
 
-/// What is the same at each call of a flow: its steps, and the ticks slower than `sample` its stages are of (`rate::slow_ticks`).
+/// What is the same at each call of a flow: its steps, the ticks slower than `sample` its stages are of, and the clock of the condition of each `reset_if~` (`rate::slow_ticks`).
 #[derive(Clone)]
 pub(super) struct Plan {
     pub(super) steps: Rc<[Step]>,
     pub(super) slow: Rc<[i32]>,
+    pub(super) conds: Conds,
 }
 
 /// The plans made so far for a tree of instances, one for each flow: the clocks of a body are the same at each call.
@@ -432,7 +433,8 @@ impl Inst {
         let unavailable = |fault| Stop { fault, at: view.name_span(def) };
         let (body, decl) = (view.body(def).map_err(unavailable)?, view.flow(def).map_err(unavailable)?);
         let steps = Inst::steps(&body, decl)?;
-        let plan = Plan { slow: slow_ticks(view, &body, &steps, plans)?, steps };
+        let (slow, conds) = slow_ticks(view, &body, &steps, plans)?;
+        let plan = Plan { slow, conds, steps };
         plans.borrow_mut().insert(def, plan.clone());
         Ok(plan)
     }
@@ -441,8 +443,9 @@ impl Inst {
     pub(super) fn plan<'a>(view: View<'a>, def: DefId, plans: &Plans) -> Result<(Inst, Body<'a>, &'a FlowDef), Stop> {
         let unavailable = |fault| Stop { fault, at: view.name_span(def) };
         let (body, decl) = (view.body(def).map_err(unavailable)?, view.flow(def).map_err(unavailable)?);
-        let Plan { steps, slow } = Inst::planned(view, def, plans)?;
-        let levels = levels(decl, &slow, &[]).map_err(unavailable)?;
+        let Plan { steps, slow, .. } = Inst::planned(view, def, plans)?;
+        let levels =
+            levels(decl, &slow, &[], &|_| Err(Fault::Internal("a modifier of no chain"))).map_err(unavailable)?;
         Ok((
             Inst {
                 def,
@@ -675,7 +678,7 @@ impl<'a> Instance<'a> {
     /// `reset` (§11.6): every delay and every instance it calls is as `init` made it, the time is 0. The `let`s of `init`
     /// keep their values; those of a faster clock are made again by the next `process` before they are read.
     pub fn reset(&mut self) {
-        self.me.state.reset();
+        self.me.state.reset(false);
         self.ctx = Ctx::at(self.ctx.sample_rate, 0);
     }
 

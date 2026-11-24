@@ -1,0 +1,100 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.10", "§11.3", "§11.4"]
+
+// W7-10 U2e, the break side's high 1 and middle 1 and two of its probes that kill mutants of the reference evaluator (S-1186, S-1209, S-1218), worked
+// out by the parent from the text. §11.10: a `.reset_if~` puts back to `T.default()` the fields written at a tick and read at a faster stage (an input
+// of a tick, a `let` of a tick, a part computed at a tick), and those stay `T.default()` until that tick writes them again; a condition of a parameter
+// kind (`sample_tick()` alone is one, §11.4: the clock of the place that reads it) resets at the ticks of W.
+
+flow cnt() -> F32 at sample {
+  let n = prev~(^n) + 1.0
+  n
+}
+
+flow acc(f: F32 at block) -> F32 at sample {
+  let n = f + prev~(^n)
+  n
+}
+
+flow inner(q: F32 at (sample / 2)) -> F32 at sample {
+  let h = q + 1.0
+  h at sample
+}
+
+flow outer2(c: Bool at sample) -> F32 at sample {
+  let q = cnt~().down~(2)
+  inner~(q).when~(c)
+}
+
+flow rd(p: F32 at (sample / 2)) -> F32 at sample {
+  (p at sample) + 1.0
+}
+
+flow h2(p: F32 at block, c: Bool at block) -> F32 at sample {
+  let n = prev~(^n) + 1.0
+  n * ((if (c at (sample / 4)) { p * 2.0 } else { 0.0 }) at sample)
+}
+
+pub flow nested_slow_input(c: Bool at sample) -> F32 at sample {
+  outer2~(c).reset_if~(sample_tick() == 4)
+}
+
+pub flow slow_input(dummy: Bool at block) -> F32 at sample {
+  let q = cnt~().down~(2)
+  rd~(q).reset_if~(sample_tick() == 3)
+}
+
+pub flow tick_part(p: F32 at block, c: Bool at block, r: Bool at sample) -> F32 at sample {
+  h2~(p, c).reset_if~(r)
+}
+
+pub flow at_w_four() -> F32 at sample {
+  acc~(1.0).down~(4).reset_if~(sample_tick() == 4) at sample
+}
+
+pub flow at_w_five() -> F32 at sample {
+  acc~(1.0).down~(4).reset_if~(sample_tick() == 5) at sample
+}
+
+test "the slow input of a when inside the part is T.default() after the reset until the caller writes it again" {
+  // q = 1 2 3 4 at the frames 0 2 4 6 (cnt at sample / 2); the when~ runs from the frame 1 (m = 0 1 2 ...), inner reads q at its own grid m = 0 2 4 6
+  // (the frames 1 3 5 7): h = 2 at 1, 3 at 3. The reset at the frame 4 comes after cnt writes q = 3 and puts q, cnt, h and the held output back: 0 at 4,
+  // then at 5 inner reads q = 0 (q is written again at 6): h = 1; at 6 cnt gives 1, at 7 inner reads it: h = 2.
+  let c: [Bool; 8] = [false, true, true, true, true, true, true, true]
+  var out: [F32; 8] = [0.0; 8]
+  var st = nested_slow_input.init(8.0)
+  nested_slow_input.process(inout st, c, inout out)
+  assert out == [0.0, 2.0, 2.0, 3.0, 0.0, 1.0, 1.0, 2.0]
+}
+
+test "the copy of an input of a tick in the part is T.default() after the reset" {
+  // p = 1 2 3 4 at the frames 0 2 4 6; the reset at the frame 3 puts the field of p in rd back to 0.0 (q in the caller is not in the part): 2 2 3 1 4 4 5 5.
+  var out: [F32; 8] = [0.0; 8]
+  var st = slow_input.init(8.0)
+  slow_input.process(inout st, slow_input.Params { dummy: false }, inout out)
+  assert out == [2.0, 2.0, 3.0, 1.0, 4.0, 4.0, 5.0, 5.0]
+}
+
+test "a part computed at sample / 4 and read at sample is T.default() after the reset until the next tick" {
+  // The part is 2.0 at the frames 0 4; n counts. The reset at the frame 2 puts n and the part back: 2 4 | 1 * 0 2 * 0 | 3 * 2 4 * 2 5 * 2 6 * 2.
+  let r: [Bool; 8] = [false, false, true, false, false, false, false, false]
+  var out: [F32; 8] = [0.0; 8]
+  var st = tick_part.init(8.0)
+  tick_part.process(inout st, tick_part.Params { p: 1.0, c: true }, r, inout out)
+  assert out == [2.0, 4.0, 0.0, 0.0, 6.0, 8.0, 10.0, 12.0]
+}
+
+test "sample_tick() in the condition of a reset whose W is sample / 4 is read at the ticks of W" {
+  // W is sample / 4 (the frames 0 4 8); sample_tick() there is 0 4 8. `== 4` resets at the frame 4 before acc runs there (acc is at the tick of the
+  // reset, not slower): 1 at 0..3, 1 at 4..7, 2 at 8..11. `== 5` never holds at a tick of W: 1 2 3.
+  var a: [F32; 12] = [0.0; 12]
+  var b: [F32; 12] = [0.0; 12]
+  var sa = at_w_four.init(8.0)
+  var sb = at_w_five.init(8.0)
+  at_w_four.process(inout sa, inout a)
+  at_w_five.process(inout sb, inout b)
+  assert a == [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 2.0, 2.0, 2.0, 2.0]
+  assert b == [1.0, 1.0, 1.0, 1.0, 2.0, 2.0, 2.0, 2.0, 3.0, 3.0, 3.0, 3.0]
+}

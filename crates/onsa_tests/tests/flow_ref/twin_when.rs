@@ -60,6 +60,18 @@ pub flow g2(x: F32 at (sample * 2)) -> F32 at sample {
 pub flow g4(x: F32 at (sample * 4)) -> F32 at sample {
   x[0] + x[1] * 10.0 + x[2] * 100.0 + x[3] * 1000.0
 }
+pub flow sl(p: F32 at (sample / 2)) -> F32 at sample {
+  let h = p + 1.0
+  h at sample
+}
+pub flow inner(q: F32 at (sample / 2)) -> F32 at sample {
+  let h = q + 1.0
+  h at sample
+}
+pub flow outer2(c: Bool at sample) -> F32 at sample {
+  let q = cnt~().down~(2)
+  inner~(q).when~(c)
+}
 pub flow lb2(c: Bool at (sample * 2)) -> Bool at sample {
   c[1]
 }
@@ -71,16 +83,17 @@ pub flow lb8(c: Bool at (sample * 8)) -> Bool at sample {
 }
 ";
 /// The inputs of `fa` and `fb`: `c` is the one signal (`sample`); `cb` and `ci` change with the call and the grid (a condition
-/// reads them); `ct` and `cti` are true in every call (only a condition that always holds reads them).
-pub const SIGNATURE: &str =
-    "(c: Bool at sample, cb: Bool at block, ct: Bool at block, ci: Bool at init, cti: Bool at init)";
+/// reads them); `ct` and `cti` are true in every call (only a condition that always holds reads them), `cf` and `cfi` false
+/// in every call (only a condition that never holds reads them).
+pub const SIGNATURE: &str = "(c: Bool at sample, cb: Bool at block, ct: Bool at block, cf: Bool at block, ci: Bool at init, \
+     cti: Bool at init, cfi: Bool at init)";
 /// How many frames a test runs.
-const FRAMES: usize = 16;
+pub const FRAMES: usize = 16;
 
 /// The heads, by what they need of the chain. `Slot`, `Tk` and `Acc` have no input; `Lp` and `Dws` take a signal at `sample`
 /// of the chain (so the chain rate is `sample`); `Mk2` and `Mk4` give a burst that a `.down~` of the chain deals out.
 #[derive(Clone, Copy, PartialEq, Debug)]
-enum Head {
+pub enum Head {
     Slot,
     Tk,
     Acc,
@@ -88,17 +101,23 @@ enum Head {
     Dws,
     Mk2,
     Mk4,
+    /// Heads whose input is slower than the chain (`sample / 2`): a value of the caller's own, or the time (W7-10 U2e/t).
+    Sl,
+    SlTk,
+    /// A head with a `when~` of its own inside, whose part has an input slower than it (`inner~(q).when~(c)`, `q` at `sample / 2`
+    /// made in the head): the slow input of a `when~` that a `reset_if~` has to put back (W7-10 U2e/t2).
+    Outer,
 }
 
 impl Head {
-    const ALL: [Head; 7] = [Head::Slot, Head::Tk, Head::Acc, Head::Lp, Head::Dws, Head::Mk2, Head::Mk4];
+    pub const ALL: [Head; 7] = [Head::Slot, Head::Tk, Head::Acc, Head::Lp, Head::Dws, Head::Mk2, Head::Mk4];
     /// The heads a seed picks from: `Slot` (a stage at `sample / 2` that writes a field the stage at `sample` reads) is the
     /// head of a third of the programs.
-    const WEIGHTED: [Head; 10] =
+    pub const WEIGHTED: [Head; 10] =
         [Head::Slot, Head::Slot, Head::Slot, Head::Tk, Head::Acc, Head::Lp, Head::Dws, Head::Mk2, Head::Mk2, Head::Mk4];
 
     /// The call, and the tag.
-    fn text(self) -> (&'static str, &'static str) {
+    pub fn text(self) -> (&'static str, &'static str) {
         match self {
             Head::Slot => ("slot~(1.0)", "h_slot"),
             Head::Tk => ("tk~()", "h_tk"),
@@ -107,11 +126,14 @@ impl Head {
             Head::Dws => ("dws4~(xv)", "h_dws"),
             Head::Mk2 => ("mk2~()", "h_mk2"),
             Head::Mk4 => ("mk4~()", "h_mk4"),
+            Head::Sl => ("sl~(q)", "h_sl"),
+            Head::SlTk => ("sl~(F32.round_from(sample_tick()))", "h_sltk"),
+            Head::Outer => ("outer2~(c)", "h_outer"),
         }
     }
 
     /// The exponent of the clock of its output, to the chain rate (`sample * 2^e`).
-    fn out(self) -> i32 {
+    pub fn out(self) -> i32 {
         match self {
             Head::Dws => -2,
             Head::Mk2 => 1,
@@ -121,105 +143,126 @@ impl Head {
     }
 
     /// Whether it has an input at the chain rate.
-    fn input(self) -> bool {
-        matches!(self, Head::Lp | Head::Dws)
+    pub fn input(self) -> bool {
+        matches!(self, Head::Lp | Head::Dws | Head::Sl | Head::SlTk | Head::Outer)
     }
 }
 
 /// A condition: its text, the `sample / N` signals it names (`c2`, `c4`, `c8`, each bound by a `let` of the flow), its tags.
 #[derive(Clone, Debug, Default)]
-struct Cond {
-    text: String,
-    signals: BTreeSet<u32>,
-    tags: BTreeSet<&'static str>,
+pub struct Cond {
+    pub text: String,
+    pub signals: BTreeSet<u32>,
+    /// The `k<F>` it names (`let k<F> = acc~(1.0).down~(<F>)`: a value slower than the chain, that a `when~` holds).
+    pub slow: BTreeSet<u32>,
+    pub tags: BTreeSet<&'static str>,
 }
 
 impl Cond {
-    fn lit(text: &str, tag: &'static str) -> Cond {
-        Cond { text: text.to_string(), signals: BTreeSet::new(), tags: BTreeSet::from([tag]) }
+    pub fn lit(text: &str, tag: &'static str) -> Cond {
+        Cond { text: text.to_string(), tags: BTreeSet::from([tag]), ..Cond::default() }
     }
 
     /// The signal at W (`w` is at most 0): `c` at `sample`, `c<N>` at `sample / N`.
-    fn signal(w: i32) -> Cond {
-        let n = 1u32 << (-w);
+    pub fn signal(w: i32) -> Cond {
+        Cond::signal_n(1u32 << (-w))
+    }
+
+    /// The signal at `sample / n`.
+    pub fn signal_n(n: u32) -> Cond {
         if n == 1 {
             return Cond::lit("c", "c_sig");
         }
-        Cond { text: format!("c{n}"), signals: BTreeSet::from([n]), tags: BTreeSet::from(["c_sig", "c_sig_slow"]) }
+        Cond {
+            text: format!("c{n}"),
+            signals: BTreeSet::from([n]),
+            tags: BTreeSet::from(["c_sig", "c_sig_slow"]),
+            ..Cond::default()
+        }
     }
 
-    fn join(&self, op: &str, other: &Cond) -> Cond {
+    pub fn join(&self, op: &str, other: &Cond) -> Cond {
         let tags = self.tags.union(&other.tags).copied().chain([if op == "&&" { "c_and" } else { "c_or" }]).collect();
-        Cond { text: format!("{} {op} {}", self.text, other.text), signals: &self.signals | &other.signals, tags }
+        let (signals, slow) = (&self.signals | &other.signals, &self.slow | &other.slow);
+        Cond { text: format!("{} {op} {}", self.text, other.text), signals, slow, tags }
     }
 
-    fn not(&self) -> Cond {
+    pub fn not(&self) -> Cond {
         let tags = self.tags.iter().copied().chain(["c_not"]).collect();
         let text = if self.text.starts_with('!') { format!("!({})", self.text) } else { format!("!{}", self.text) };
-        Cond { text, signals: self.signals.clone(), tags }
+        Cond { text, tags, ..self.clone() }
     }
 
     /// With the parentheses that a `&&` or `||` needs inside another expression.
-    fn wrapped(&self) -> Cond {
+    pub fn wrapped(&self) -> Cond {
         Cond { text: format!("({})", self.text), ..self.clone() }
     }
 }
 
 /// A modifier of the chain.
 #[derive(Clone, Debug)]
-enum Mod {
+pub enum Mod {
     Down(u32),
     Up(u32),
     When(Cond),
+    /// `.reset_if~` (W7-10 U2e/t): it changes no rate, as `when~`.
+    Reset(Cond),
 }
 
 impl Mod {
     /// The exponent of the rate it changes (`.down~(4)` is -2).
-    fn exp(&self) -> i32 {
+    pub fn exp(&self) -> i32 {
         match self {
             Mod::Down(n) => -(n.trailing_zeros() as i32),
             Mod::Up(n) => n.trailing_zeros() as i32,
-            Mod::When(_) => 0,
+            Mod::When(_) | Mod::Reset(_) => 0,
         }
     }
 
-    fn is_when(&self) -> bool {
+    pub fn is_when(&self) -> bool {
         matches!(self, Mod::When(_))
     }
 
-    fn text(&self) -> String {
+    /// The condition of a `when~` or a `reset_if~`.
+    pub fn cond(&self) -> Option<&Cond> {
+        if let Mod::When(c) | Mod::Reset(c) = self { Some(c) } else { None }
+    }
+
+    pub fn text(&self) -> String {
         match self {
             Mod::Down(n) => format!(".down~({n})"),
             Mod::Up(n) => format!(".up~({n})"),
             Mod::When(c) => format!(".when~({})", c.text),
+            Mod::Reset(c) => format!(".reset_if~({})", c.text),
         }
     }
 }
 
 /// The clock W (as the exponent of `sample`) at which the `when~` at `i` reads its condition (§11.10): the output clock of
 /// the part it wraps when that is slower than P, the clock of the place of the modifier, otherwise P.
-fn w_of(head: Head, mods: &[Mod], i: usize) -> i32 {
+pub fn w_of(head: Head, mods: &[Mod], i: usize) -> i32 {
     let p: i32 = mods[i + 1..].iter().map(Mod::exp).sum();
     let receiver = head.out() + mods[..i].iter().map(Mod::exp).sum::<i32>();
     if receiver < 0 { p + receiver } else { p }
 }
 
 /// The exponent of the clock of the whole chain, at the `sample` of the flow that calls it.
-fn net(head: Head, mods: &[Mod]) -> i32 {
+pub fn net(head: Head, mods: &[Mod]) -> i32 {
     head.out() + mods.iter().map(Mod::exp).sum::<i32>()
 }
 
 /// The chains that U1 keeps as E0200 (S-1209; U2 and U3 open them): a `when~` with an `.up~` and then a `.down~` outside it
 /// (a modifier inside a block), and a `when~` of a burst with an `.up~` outside it.
-fn gated(head: Head, mods: &[Mod]) -> Option<&'static str> {
+pub fn gated(head: Head, mods: &[Mod]) -> Option<&'static str> {
     let sum = |m: &[Mod]| m.iter().map(Mod::exp).sum::<i32>();
     let is_up = |m: &Mod| matches!(m, Mod::Up(_));
     let is_down = |m: &Mod| matches!(m, Mod::Down(_));
-    mods.iter().enumerate().filter(|(_, m)| m.is_when()).find_map(|(i, _)| {
+    mods.iter().enumerate().filter(|(_, m)| m.cond().is_some()).find_map(|(i, m)| {
         let (left, right) = (&mods[..i], &mods[i + 1..]);
         let block = right.iter().enumerate().any(|(j, m)| is_up(m) && right[j + 1..].iter().any(is_down));
         let receiver = head.out() + sum(left);
-        match (block, receiver >= 1 && right.iter().any(is_up)) {
+        // A `reset_if~` of a burst with an `.up~` outside it is not kept (U2b): only the block is.
+        match (block, m.is_when() && receiver >= 1 && right.iter().any(is_up)) {
             (true, _) => Some("in_block"),
             (_, true) => Some("burst_under_up"),
             _ => None,
@@ -229,7 +272,7 @@ fn gated(head: Head, mods: &[Mod]) -> Option<&'static str> {
 
 /// Whether the head can have this chain: a head with an input needs the chain rate `sample` (its argument is a signal at
 /// `sample`), and no running sum of the rates (from the left or from the right) or the output leaves `-3 ..= 2`.
-fn in_range(head: Head, mods: &[Mod]) -> bool {
+pub fn in_range(head: Head, mods: &[Mod]) -> bool {
     let all: i32 = mods.iter().map(Mod::exp).sum();
     let sum = |m: &[Mod]| m.iter().map(Mod::exp).sum::<i32>();
     let sums = (0..=mods.len()).flat_map(|i| [sum(&mods[..i]), sum(&mods[i..])]);
@@ -237,13 +280,13 @@ fn in_range(head: Head, mods: &[Mod]) -> bool {
 }
 
 /// What the generator makes: a chain in range that U1 passes and lowers.
-fn fits(head: Head, mods: &[Mod]) -> bool {
+pub fn fits(head: Head, mods: &[Mod]) -> bool {
     in_range(head, mods) && gated(head, mods).is_none()
 }
 
 /// A condition read at W (`w`): a `block` or `init` value or a literal (a `when~` read at `sample * N` has nothing else, U1),
 /// and when W is `sample` or slower also the signal at W; negated or joined with another leaf at random.
-fn cond_at(rng: &mut Rng, w: i32) -> Cond {
+pub fn cond_at(rng: &mut Rng, w: i32) -> Cond {
     let leaf = |rng: &mut Rng| {
         if w <= 0 && rng.chance(60) {
             return Cond::signal(w);
@@ -260,7 +303,7 @@ fn cond_at(rng: &mut Rng, w: i32) -> Cond {
 }
 
 /// A condition that always holds (every call of the tests gives `ct` and `cti` true; `c || ct` has the signal at W too).
-fn always_true(rng: &mut Rng, w: i32) -> Cond {
+pub fn always_true(rng: &mut Rng, w: i32) -> Cond {
     match rng.below(if w <= 0 { 5 } else { 4 }) {
         0 => Cond::lit("true", "t_lit"),
         1 => Cond::lit("ct", "t_block"),
@@ -274,17 +317,17 @@ fn always_true(rng: &mut Rng, w: i32) -> Cond {
 }
 
 /// The plan of a program: the twin's name, the head, and the modifiers of `fa` and of `fb`.
-struct Plan {
-    kind: &'static str,
-    head: Head,
-    fa: Vec<Mod>,
-    fb: Vec<Mod>,
+pub struct Plan {
+    pub kind: &'static str,
+    pub head: Head,
+    pub fa: Vec<Mod>,
+    pub fb: Vec<Mod>,
     /// Where the always-true `when~` were put in `fa` (the twin `id`), or the two `when~` that `merge` joins.
-    at: Vec<usize>,
+    pub at: Vec<usize>,
 }
 
 /// The `when~` of `mods` with no condition yet, filled in at their clock W.
-fn fill(rng: &mut Rng, head: Head, mods: &mut [Mod]) {
+pub fn fill(rng: &mut Rng, head: Head, mods: &mut [Mod]) {
     for i in 0..mods.len() {
         if matches!(&mods[i], Mod::When(c) if c.text.is_empty()) {
             mods[i] = Mod::When(cond_at(rng, w_of(head, mods, i)));
@@ -293,12 +336,12 @@ fn fill(rng: &mut Rng, head: Head, mods: &mut [Mod]) {
 }
 
 /// A random rate modifier.
-fn rate(rng: &mut Rng) -> Mod {
+pub fn rate(rng: &mut Rng) -> Mod {
     rng.pick_in(&[Mod::Down(2), Mod::Down(2), Mod::Down(4), Mod::Down(8), Mod::Up(2), Mod::Up(2)]).clone()
 }
 
 /// A chain of `len` modifiers, `whens` of them `when~` with no condition yet, and a head of `heads` that fits it.
-fn chain(rng: &mut Rng, len: usize, whens: usize, heads: &[Head]) -> (Head, Vec<Mod>) {
+pub fn chain(rng: &mut Rng, len: usize, whens: usize, heads: &[Head]) -> (Head, Vec<Mod>) {
     loop {
         let mut mods: Vec<Mod> = (0..len).map(|_| rate(rng)).collect();
         for _ in 0..whens {
@@ -395,16 +438,17 @@ fn plan_merge(rng: &mut Rng, rot: bool) -> Plan {
 
 /// The body of a flow for a chain: the `let`s its conditions and its head need, and the chain (wrapped in `g2` or `g4` when
 /// it gives a burst, with `at sample` when its output is slower).
-fn flow_body(head: Head, mods: &[Mod]) -> String {
+pub fn flow_body(head: Head, mods: &[Mod]) -> String {
     let chain = format!("{}{}", head.text().0, mods.iter().map(Mod::text).collect::<String>());
-    let signals: BTreeSet<u32> = mods
-        .iter()
-        .filter_map(|m| if let Mod::When(c) = m { Some(c.signals.iter().copied()) } else { None })
-        .flatten()
-        .collect();
+    let conds = || mods.iter().filter_map(Mod::cond);
+    let signals: BTreeSet<u32> = conds().flat_map(|c| c.signals.iter().copied()).collect();
+    let slow: BTreeSet<u32> = conds().flat_map(|c| c.slow.iter().copied()).collect();
     let mut lets: Vec<String> = signals.iter().map(|n| format!("let c{n} = lb{n}~(c).down~({n})")).collect();
-    if head.input() {
-        lets.push("let xv = tk~() * 0.25 + (if c { 1.0 } else { -0.5 })".to_string());
+    lets.extend(slow.iter().map(|f| format!("let k{f} = acc~(1.0).down~({f})")));
+    match head {
+        Head::Lp | Head::Dws => lets.push("let xv = tk~() * 0.25 + (if c { 1.0 } else { -0.5 })".to_string()),
+        Head::Sl => lets.push("let q = cnt~().down~(2)".to_string()),
+        _ => {}
     }
     let value = match net(head, mods) {
         0 => chain,
@@ -415,12 +459,15 @@ fn flow_body(head: Head, mods: &[Mod]) -> String {
 }
 
 /// The forms a plan holds (the tags that the seeds of the gate have to cover).
-fn tags_of(plan: &Plan) -> BTreeSet<&'static str> {
+pub fn tags_of(plan: &Plan) -> BTreeSet<&'static str> {
     let (head, mods) = (plan.head, &plan.fa);
     let mut tags: BTreeSet<&'static str> = BTreeSet::from([head.text().1]);
     tags.insert(match plan.kind {
         "id" => "k_id",
         "commute" => "k_commute",
+        "rid" => "k_rid",
+        "slowc" => "k_slowc",
+        "rmerge" => "k_rmerge",
         _ => "k_merge",
     });
     tags.insert(["len_0", "len_1", "len_2", "len_3", "len_4", "len_5", "len_6"][mods.len().min(6)]);
@@ -454,7 +501,7 @@ fn tags_of(plan: &Plan) -> BTreeSet<&'static str> {
         tags.extend((i > 0 && mods[i - 1].is_when()).then_some("double_when"));
         tags.extend((head.out() > 0 && mods[i..].iter().any(|m| matches!(m, Mod::Down(_)))).then_some("deal_when"));
     }
-    if plan.kind == "id" {
+    if matches!(plan.kind, "id" | "rid") {
         let (first, last) = (plan.at.iter().min().copied(), plan.at.iter().max().copied());
         tags.extend((first == Some(0)).then_some("ins_front"));
         tags.extend((last == Some(mods.len() - 1)).then_some("ins_end"));
@@ -465,12 +512,12 @@ fn tags_of(plan: &Plan) -> BTreeSet<&'static str> {
 }
 
 /// The values `cb` takes in the parts of a `process`.
-const BOOLS: &[&str] = &["true", "true", "false"];
+pub const BOOLS: &[&str] = &["true", "true", "false"];
 
 /// The tests: `render` of `fa` and `fb` on a grid of `ci` and `cb` (`ct` and `cti` always true), and `process` of both cut at
 /// three places with `cb` changing between the parts, a `reset` before the last. Every output of `fa` is asserted equal to the
 /// one of `fb`.
-fn tests(rng: &mut Rng) -> String {
+pub fn tests(rng: &mut Rng) -> String {
     let signal = |rng: &mut Rng| {
         let mut v = rng.chance(50);
         let bits: Vec<&str> = (0..FRAMES)
@@ -484,8 +531,8 @@ fn tests(rng: &mut Rng) -> String {
     let mut t = format!("test \"render\" {{\n  let cs: [Bool; {FRAMES}] = [{}]\n", signal(rng));
     for (k, (ci, cb)) in [(true, true), (true, false), (false, true)].into_iter().enumerate() {
         for f in ["fa", "fb"] {
-            let config = format!("{f}.Config {{ ci: {ci}, cti: true }}");
-            let params = format!("{f}.Params {{ cb: {cb}, ct: true }}");
+            let config = format!("{f}.Config {{ ci: {ci}, cti: true, cfi: false }}");
+            let params = format!("{f}.Params {{ cb: {cb}, ct: true, cf: false }}");
             t += &format!("  let {f}{k} = {f}.render({config}, {params}, cs, 8.0)\n");
         }
         (0..FRAMES).for_each(|i| t += &format!("  assert fa{k}.out[{i}] == fb{k}.out[{i}]\n"));
@@ -497,12 +544,12 @@ fn tests(rng: &mut Rng) -> String {
         let ci = rng.chance(50);
         let cbs: Vec<&str> = spans.iter().map(|_| rng.pick(BOOLS)).collect();
         for f in ["fa", "fb"] {
-            t += &format!("  var s{f}{n} = {f}.init({f}.Config {{ ci: {ci}, cti: true }}, 8.0)\n");
+            t += &format!("  var s{f}{n} = {f}.init({f}.Config {{ ci: {ci}, cti: true, cfi: false }}, 8.0)\n");
             for (m, ((from, to), cb)) in spans.iter().zip(&cbs).enumerate() {
                 t += &if m == 2 { format!("  {f}.reset(inout s{f}{n})\n") } else { String::new() };
                 t += &format!("  var o{f}{n}_{m}: [F32; {0}] = [0.0; {0}]\n", to - from);
                 t += &format!(
-                    "  {f}.process(inout s{f}{n}, {f}.Params {{ cb: {cb}, ct: true }}, cs.slice({from}, {to}), inout o{f}{n}_{m})\n"
+                    "  {f}.process(inout s{f}{n}, {f}.Params {{ cb: {cb}, ct: true, cf: false }}, cs.slice({from}, {to}), inout o{f}{n}_{m})\n"
                 );
             }
         }
@@ -514,7 +561,7 @@ fn tests(rng: &mut Rng) -> String {
 }
 
 /// The program of a plan: the flows `fa` and `fb` and the tests.
-fn program(rng: &mut Rng, plan: &Plan) -> String {
+pub fn program(rng: &mut Rng, plan: &Plan) -> String {
     let flow = |name: &str, mods: &[Mod]| {
         format!("pub flow {name}{SIGNATURE} -> F32 at sample {{\n  {}\n}}\n", flow_body(plan.head, mods))
     };

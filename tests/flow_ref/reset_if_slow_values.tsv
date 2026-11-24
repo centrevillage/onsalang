@@ -1,9 +1,123 @@
-# flow_ref 1 source=tests/spec/flow_semantics/reset_if_slow_values.onsa tests=8 evaluated=0 unavailable=8 skipped=0 waiting=0
-? a condition of the kind block at the grid resets the ring of the conversion flow: the tick gives T.default(), the next tick sums the frames since	unavailable a modifier of W7-10 U2e (`reset_if~`)
-? reset_if~ does not touch what when~ remembers: the frames of the window go on being gathered after the reset at the grid	unavailable a modifier of W7-10 U2e (`reset_if~`)
-? a reset_if~ outside the boundary of a conversion flow puts back the ring that gathers; inside it does not (§11.9)	unavailable a modifier of W7-10 U2e (`reset_if~`)
-? a reset_if~ outside a boundary that deals puts back the array that is dealt, in the middle of a window and at a tick	unavailable a modifier of W7-10 U2e (`reset_if~`)
-? x.up~(2) with reset_if~ inside or outside: the condition is read once for the frame, before the first of its 2 runs (S-1218)	unavailable a modifier of W7-10 U2e (`reset_if~`)
-? the held output of a part that is stopped is put back by a reset_if~ outside the when~: all N values are T.default() (S-1222)	unavailable a modifier of W7-10 U2e (`reset_if~`)
-? the stage of the part that is slower than the part's own W is written first, and a reset at W takes it back; the same with a when~ before it (the stage moved to W)	unavailable a modifier of W7-10 U2e (`reset_if~`)
-? an at to the clock of W, the tick of the grid of sample / 4, is the condition read at W: the same values as with no at	unavailable a modifier of W7-10 U2e (`reset_if~`)
+# flow_ref 1 source=tests/spec/flow_semantics/reset_if_slow_values.onsa tests=8 evaluated=7 unavailable=0 skipped=1 waiting=0
+@ a condition of the kind block at the grid resets the ring of the conversion flow: the tick gives T.default(), the next tick sums the frames since
+init 0 reset_if_slow_values.dws_plain sr=0x41000000
+init 1 reset_if_slow_values.dws_reset sr=0x41000000
+init 2 reset_if_slow_values.dws_reset sr=0x41000000
+process 0 frames=20
+out=[0x00000000 0x00000000 0x00000000 0x00000000 0x41200000 0x41200000 0x41200000 0x41200000 0x41d00000 0x41d00000 0x41d00000 0x41d00000 0x42280000 0x42280000 0x42280000 0x42280000 0x42680000 0x42680000 0x42680000 0x42680000]
+process 1 params r=false frames=8
+out=[0x00000000 0x00000000 0x00000000 0x00000000 0x41200000 0x41200000 0x41200000 0x41200000]
+process 1 params r=true frames=4
+out=[0x00000000 0x00000000 0x00000000 0x00000000]
+process 1 params r=false frames=8
+out=[0x42280000 0x42280000 0x42280000 0x42280000 0x42680000 0x42680000 0x42680000 0x42680000]
+process 2 params r=false frames=8
+out=[0x00000000 0x00000000 0x00000000 0x00000000 0x41200000 0x41200000 0x41200000 0x41200000]
+process 2 params r=true frames=8
+out=[0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000]
+process 2 params r=false frames=4
+out=[0x42680000 0x42680000 0x42680000 0x42680000]
+@ reset_if~ does not touch what when~ remembers: the frames of the window go on being gathered after the reset at the grid
+init 0 reset_if_slow_values.dws_when_reset sr=0x41000000
+process 0 params c=true r=false frames=8
+out=[0x00000000 0x00000000 0x00000000 0x00000000 0x41200000 0x41200000 0x41200000 0x41200000]
+process 0 params c=true r=true frames=4
+out=[0x00000000 0x00000000 0x00000000 0x00000000]
+process 0 params c=true r=false frames=8
+out=[0x42280000 0x42280000 0x42280000 0x42280000 0x42680000 0x42680000 0x42680000 0x42680000]
+@ a reset_if~ outside the boundary of a conversion flow puts back the ring that gathers; inside it does not (§11.9)
+init 0 reset_if_slow_values.dsum_none sr=0x41000000
+init 1 reset_if_slow_values.dsum_outer sr=0x41000000
+init 2 reset_if_slow_values.dsum_inner sr=0x41000000
+process 0 frames=20
+out=[0x00000000 0x00000000 0x00000000 0x00000000 0x41200000 0x41200000 0x41200000 0x41200000 0x42100000 0x42100000 0x42100000 0x42100000 0x429c0000 0x429c0000 0x429c0000 0x429c0000 0x43080000 0x43080000 0x43080000 0x43080000]
+process 1 params r=false frames=8
+out=[0x00000000 0x00000000 0x00000000 0x00000000 0x41200000 0x41200000 0x41200000 0x41200000]
+process 1 params r=true frames=4
+out=[0x00000000 0x00000000 0x00000000 0x00000000]
+process 1 params r=false frames=8
+out=[0x42280000 0x42280000 0x42280000 0x42280000 0x42c80000 0x42c80000 0x42c80000 0x42c80000]
+process 2 params r=false frames=8
+out=[0x00000000 0x00000000 0x00000000 0x00000000 0x41200000 0x41200000 0x41200000 0x41200000]
+process 2 params r=true frames=4
+out=[0x41d00000 0x41d00000 0x41d00000 0x41d00000]
+process 2 params r=false frames=8
+out=[0x42880000 0x42880000 0x42880000 0x42880000 0x42fc0000 0x42fc0000 0x42fc0000 0x42fc0000]
+@ a reset_if~ outside a boundary that deals puts back the array that is dealt, in the middle of a window and at a tick
+init 0 reset_if_slow_values.deal_outer sr=0x41000000
+init 1 reset_if_slow_values.deal_outer sr=0x41000000
+init 2 reset_if_slow_values.deal_outer_block sr=0x41000000
+init 3 reset_if_slow_values.deal_inner_block sr=0x41000000
+process 0 frames=12 in r=[false false false false false false true false false false false false]
+out=[0x41200000 0x41300000 0x41400000 0x41500000 0x41a00000 0x41a80000 0x00000000 0x00000000 0x41200000 0x41300000 0x41400000 0x41500000]
+process 1 frames=12 in r=[false false false false true false false false false false false false]
+out=[0x41200000 0x41300000 0x41400000 0x41500000 0x00000000 0x00000000 0x00000000 0x00000000 0x41200000 0x41300000 0x41400000 0x41500000]
+process 2 params r=false frames=8
+out=[0x41200000 0x41300000 0x41400000 0x41500000 0x41a00000 0x41a80000 0x41b00000 0x41b80000]
+process 2 params r=true frames=4
+out=[0x00000000 0x00000000 0x00000000 0x00000000]
+process 2 params r=false frames=4
+out=[0x41200000 0x41300000 0x41400000 0x41500000]
+process 3 params r=false frames=8
+out=[0x41200000 0x41300000 0x41400000 0x41500000 0x41a00000 0x41a80000 0x41b00000 0x41b80000]
+process 3 params r=true frames=4
+out=[0x41200000 0x41300000 0x41400000 0x41500000]
+process 3 params r=false frames=4
+out=[0x41a00000 0x41a80000 0x41b00000 0x41b80000]
+@ x.up~(2) with reset_if~ inside or outside: the condition is read once for the frame, before the first of its 2 runs (S-1218)
+init 0 reset_if_slow_values.up_inner sr=0x41000000
+init 1 reset_if_slow_values.up_outer sr=0x41000000
+init 2 reset_if_slow_values.up_inner_block sr=0x41000000
+init 3 reset_if_slow_values.up_outer_block sr=0x41000000
+init 4 reset_if_slow_values.up_inner_block sr=0x41000000
+init 5 reset_if_slow_values.up_outer_block sr=0x41000000
+process 0 frames=6 in r=[false false true false false true]
+out=[0x41a80000 0x422c0000 0x41a80000 0x422c0000 0x42820000 0x41a80000]
+process 1 frames=6 in r=[false false true false false true]
+out=[0x41a80000 0x422c0000 0x41a80000 0x422c0000 0x42820000 0x41a80000]
+process 2 params r=true frames=4
+out=[0x41a80000 0x41a80000 0x41a80000 0x41a80000]
+process 3 params r=true frames=4
+out=[0x41a80000 0x41a80000 0x41a80000 0x41a80000]
+process 4 params r=true frames=2
+out=[0x41a80000 0x41a80000]
+process 4 params r=false frames=3
+out=[0x422c0000 0x42820000 0x42ae0000]
+process 5 params r=true frames=2
+out=[0x41a80000 0x41a80000]
+process 5 params r=false frames=3
+out=[0x422c0000 0x42820000 0x42ae0000]
+- the held output of a part that is stopped is put back by a reset_if~ outside the when~: all N values are T.default() (S-1222)	skipped layout
+@ the stage of the part that is slower than the part's own W is written first, and a reset at W takes it back; the same with a when~ before it (the stage moved to W)
+init 0 reset_if_slow_values.slow_plain sr=0x41000000
+init 1 reset_if_slow_values.slow_reset sr=0x41000000
+init 2 reset_if_slow_values.slow_true_reset sr=0x41000000
+init 3 reset_if_slow_values.slow_when_reset sr=0x41000000
+process 0 frames=14
+out=[0x42ca0000 0x42ca0000 0x42cc0000 0x42cc0000 0x434b0000 0x434b0000 0x434c0000 0x434c0000 0x43988000 0x43988000 0x43990000 0x43990000 0x43cb8000 0x43cb8000]
+process 1 params r=false frames=4
+out=[0x42ca0000 0x42ca0000 0x42cc0000 0x42cc0000]
+process 1 params r=true frames=2
+out=[0x3f800000 0x3f800000]
+process 1 params r=false frames=8
+out=[0x40000000 0x40000000 0x42ce0000 0x42ce0000 0x42d00000 0x42d00000 0x434d0000 0x434d0000]
+process 2 params r=false frames=4
+out=[0x42ca0000 0x42ca0000 0x42cc0000 0x42cc0000]
+process 2 params r=true frames=2
+out=[0x3f800000 0x3f800000]
+process 2 params r=false frames=8
+out=[0x40000000 0x40000000 0x42ce0000 0x42ce0000 0x42d00000 0x42d00000 0x434d0000 0x434d0000]
+process 3 params c=true r=false frames=4
+out=[0x42ca0000 0x42ca0000 0x42cc0000 0x42cc0000]
+process 3 params c=true r=true frames=2
+out=[0x3f800000 0x3f800000]
+process 3 params c=true r=false frames=8
+out=[0x40000000 0x40000000 0x42ce0000 0x42ce0000 0x42d00000 0x42d00000 0x434d0000 0x434d0000]
+@ an at to the clock of W, the tick of the grid of sample / 4, is the condition read at W: the same values as with no at
+init 0 reset_if_slow_values.dws_reset_at_w sr=0x41000000
+process 0 params r=false frames=8
+out=[0x00000000 0x00000000 0x00000000 0x00000000 0x41200000 0x41200000 0x41200000 0x41200000]
+process 0 params r=true frames=4
+out=[0x00000000 0x00000000 0x00000000 0x00000000]
+process 0 params r=false frames=8
+out=[0x42280000 0x42280000 0x42280000 0x42280000 0x42680000 0x42680000 0x42680000 0x42680000]
