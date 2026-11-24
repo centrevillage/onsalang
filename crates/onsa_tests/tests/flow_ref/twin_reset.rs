@@ -4,7 +4,8 @@
 //! the chain, `sl`; one with a `when~` inside whose part has a slow input, `outer2`) and 1 to 5 modifiers of `.down~`, `.up~`, `.when~` and `.reset_if~`. The twins are what §11.10 says is equal:
 //!
 //! - `rid`: `X.reset_if~(false)` and `X.when~(true)` put in at any place of a chain that has `reset_if~` of its own (`fa` has them
-//!   in, `fb` has not; inside or outside a `reset_if~`, a `.up~`, a `.when~`);
+//!   in, `fb` has not; inside or outside a `reset_if~`, a `.up~`, a `.when~`), but a `when~(true)` only where S-1228 keeps it a twin
+//!   (`when_twin_ok`: with a `reset_if~` outside it, only for a part that has no stage slower than the reset's tick);
 //! - `slowc`: a condition slower than W is held at W, so `.when~(k > 1.5)` (`k` counts the ticks of a slower grid) and
 //!   `.when~(sample_tick() >= N)` (true from the tick where `k` is 2) are the same (not inside a block, where a `sample_tick()`
 //!   is gathered with the inputs and `k` is read at its own tick);
@@ -43,6 +44,19 @@ const HEADS: [Head; 15] = [
     Head::Outer,
 ];
 
+/// Whether `X.when~(true)` put in before `chain[p]` is the twin of the chain without it (§11.10: "その `when~` の外（右）の `reset_if~` は
+/// その前に戻し、中の遅い刻みが動く位置では戻した後に書く", S-1228). A `when~` moves the stages of the part to its left that are slower
+/// than its W to W's stage (§11.9), and a `reset_if~` outside it goes back before that stage, whereas with no `when~` the stage of
+/// the part writes first and the reset takes it back: so the two chains differ where the reset's tick is a tick of such a stage
+/// (a slow stage of the head `slot`, a slow input, a copy of a slower condition, a burst dealt, the ring and the array of a block).
+/// With a `reset_if~` outside it the `when~(true)` is put in only where the part to its left has none: the head `tk` or `acc` with
+/// `.down~` alone to its left. With no `reset_if~` outside it, anywhere.
+fn when_twin_ok(head: Head, chain: &[Mod], p: usize) -> bool {
+    let reset_outside = chain[p..].iter().any(|m| matches!(m, Mod::Reset(_)));
+    let fast = matches!(head, Head::Tk | Head::Acc) && chain[..p].iter().all(|m| matches!(m, Mod::Down(_)));
+    !reset_outside || fast
+}
+
 /// A condition that never holds, read at W (`w`): a literal, a `block` or `init` input that is false, `c && cf`, or `cf` at a
 /// clock that is not faster than W.
 fn never(rng: &mut Rng, w: i32) -> Cond {
@@ -74,7 +88,7 @@ fn tick_cond(rng: &mut Rng, w: i32) -> Cond {
 
 /// The condition of a `reset_if~` read at W: what a `when~` has, a `block` value `at` a slower clock, a signal slower than W,
 /// the time alone (`sample_tick()` against a number, where W is `sample` or slower).
-fn reset_cond(rng: &mut Rng, w: i32) -> Cond {
+pub fn reset_cond(rng: &mut Rng, w: i32) -> Cond {
     let wn = 1u32 << (-w).max(0);
     match rng.below(10) {
         0 | 1 => at_cond(rng, w, "cb", "c_at"),
@@ -142,7 +156,9 @@ fn plan_rid(rng: &mut Rng, rot: bool) -> Plan {
         let with = |fa: &[Mod], p: usize, m: Mod| [&fa[..p], &[m], &fa[p..]].concat();
         let hole = if reset { Mod::Reset(Cond::default()) } else { Mod::When(Cond::default()) };
         // The places where one more modifier leaves a chain that U2b passes.
-        let places: Vec<usize> = (0..=fa.len()).filter(|&p| fits(head, &with(&fa, p, hole.clone()))).collect();
+        let places: Vec<usize> = (0..=fa.len())
+            .filter(|&p| fits(head, &with(&fa, p, hole.clone())) && (reset || when_twin_ok(head, &fa, p)))
+            .collect();
         let Some(&p) = places.get(rng.below(places.len().max(1))) else { continue };
         let (w, blk) =
             (w_of(head, &with(&fa, p, hole.clone()), p), form_at(head, &with(&fa, p, hole), p) == Some("in_block"));
@@ -230,7 +246,7 @@ fn plan_atid(rng: &mut Rng, rot: bool) -> Plan {
 
 /// The forms of a plan that the seeds of the gate have to hold: those of `twin_when.rs`, and what its `reset_if~` are. A modifier
 /// to the left of a `reset_if~` is inside what it puts back, one to the right wraps it.
-fn tags(plan: &Plan) -> BTreeSet<&'static str> {
+pub fn tags(plan: &Plan) -> BTreeSet<&'static str> {
     let (head, mods) = (plan.head, &plan.fa);
     let mut tags = tags_of(plan);
     let resets: Vec<usize> = (0..mods.len()).filter(|&i| matches!(mods[i], Mod::Reset(_))).collect();
@@ -309,7 +325,9 @@ fn exotic_cases() -> &'static [Case] {
                 }
                 for (p, reset) in (0..=base.len()).flat_map(|p| [(p, true), (p, false)]) {
                     let hole = if reset { Mod::Reset(Cond::default()) } else { Mod::When(Cond::default()) };
-                    if fits(head, &[&base[..p], &[hole], &base[p..]].concat()) {
+                    if fits(head, &[&base[..p], &[hole], &base[p..]].concat())
+                        && (reset || when_twin_ok(head, &base, p))
+                    {
                         cases.push((head, base.clone(), p, reset));
                     }
                 }

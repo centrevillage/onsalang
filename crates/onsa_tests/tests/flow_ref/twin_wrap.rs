@@ -45,8 +45,8 @@ fn modifier(rng: &mut Rng) -> Mod {
     if when { Mod::When(c) } else { Mod::Reset(c) }
 }
 
-/// What a seed makes: the head, the modifiers before the block, its ratio, the modifiers of a block inside it (the block that
-/// holds them is `.up~(2).down~(2)`, if there is one), and the modifiers after it.
+/// What a seed makes: the head, the modifiers before the block, its ratio (0: no block, only with `p`), the modifiers of a block
+/// inside it (the block that holds them is `.up~(2).down~(2)`, if there is one), and the modifiers after it.
 pub struct Shape {
     pub head: Head,
     pub inside: Vec<Mod>,
@@ -59,7 +59,7 @@ impl Shape {
     /// The chain of `fa`, and where the body of `w` ends in it (everything before the last block).
     fn chain(&self) -> (Vec<Mod>, usize) {
         let block = |n| [Mod::Up(n), Mod::Down(n)];
-        let mut all = [self.inside.clone(), block(self.n).to_vec()].concat();
+        let mut all = [self.inside.clone(), if self.n > 0 { block(self.n).to_vec() } else { Vec::new() }].concat();
         let mut split = self.inside.len();
         if let Some(nest) = &self.nest {
             all.extend(nest.iter().cloned());
@@ -71,13 +71,17 @@ impl Shape {
     }
 }
 
-/// A shape from a seed's generator.
-pub fn shape(rng: &mut Rng) -> Shape {
+/// A shape from a seed's generator. With `p` (S-1228: a `reset_if~` goes back before the stages that a `when~` to its left moves to W,
+/// so a chain and a named flow that wraps part of it give the same values) the two shapes that the old reading did not give the same
+/// values are made: a part with a `when~` and a `reset_if~` outside it that ticks every 2 frames under a block of 4 (the block of `w` is slower than
+/// the reset: it is written first and the reset takes it back, as with no `when~`), and no block at all (`w~(cb).reset_if~(r)`).
+pub fn shape(rng: &mut Rng, p: bool) -> Shape {
     loop {
         let many = |rng: &mut Rng, n: usize| (0..rng.below(n)).map(|_| modifier(rng)).collect::<Vec<_>>();
-        let (head, n) = (rng.pick(&HEADS), rng.pick(&[2, 2, 4]));
+        let head = rng.pick(&HEADS);
+        let n = if p && rng.chance(25) { 0 } else { rng.pick(&[2, 2, 4]) };
         let inside = many(rng, 4);
-        let nest = rng.chance(25).then(|| many(rng, 3));
+        let nest = (n > 0 && rng.chance(25)).then(|| many(rng, 3));
         let mut outside = many(rng, 2);
         // Not the twin (a gap candidate of U3ae/t): a signal slower than the clock in `w` and a modifier outside it. `w~(c4).reset_if~(r)`
         // keeps what the head of the chain holds of its slower input, `x.when~(c4).reset_if~(r)` puts back the held condition.
@@ -87,7 +91,7 @@ pub fn shape(rng: &mut Rng) -> Shape {
         }
         // Not the twin either: a block of 4 in `w`, the outer block of 2 and a `reset_if~` outside it that ticks every 2 frames
         // (the part is put back before its 4 runs are gathered: `fa` never gathers them, `fb` does).
-        if nest.is_some() && n == 4 {
+        if !p && nest.is_some() && n == 4 {
             outside
                 .retain(|m| !m.cond().is_some_and(|c| c.tags.contains("c_sig_slow") || c.tags.contains("c_at_slow")));
         }
@@ -149,7 +153,7 @@ pub fn program(rng: &mut Rng, s: &Shape, rot: bool) -> String {
 
 /// The forms of a shape that the seeds of the gate have to hold.
 pub fn tags(s: &Shape) -> BTreeSet<&'static str> {
-    let mut tags = BTreeSet::from([s.head.text().1, if s.n == 2 { "n_2" } else { "n_4" }]);
+    let mut tags = BTreeSet::from([s.head.text().1, ["n_0", "", "n_2", "", "n_4"][s.n as usize]]);
     let (all, split) = s.chain();
     let (inside, outside) = (&all[..split], &all[split..]);
     tags.insert(
@@ -182,12 +186,25 @@ pub fn tags(s: &Shape) -> BTreeSet<&'static str> {
     tags.extend(order(false, true).then_some("reset_when"));
     tags.extend(order(true, true).then_some("when_when"));
     tags.extend(order(false, false).then_some("reset_reset"));
+    // The forms of S-1228: a `when~` in `w` and a `reset_if~` outside it (the reset is before the stages that the `when~` moves), and the one that ticks
+    // more often than the block of 4 in `w`.
+    let reset_out = outside.iter().any(|m| matches!(m, Mod::Reset(_)));
+    tags.extend((reset_out && inside.iter().any(Mod::is_when)).then_some("p_reset_over_when"));
+    let often = |m: &Mod| matches!(m, Mod::Reset(c) if c.tags.contains("c_sig_slow") || c.tags.contains("c_at_slow"));
+    tags.extend((s.nest.is_some() && s.n == 4 && outside.iter().any(often)).then_some("p_n4_reset_often"));
     tags
 }
 
 /// The program of a seed (with `rot`, the mutant of the twin), and the forms it holds.
 pub fn make(seed: u64, rot: bool) -> (String, BTreeSet<&'static str>) {
     let mut rng = Rng::new(seed);
-    let s = shape(&mut rng);
+    let s = shape(&mut rng, false);
+    (program(&mut rng, &s, rot), tags(&s))
+}
+
+/// The program of a seed with the shapes that S-1228 (P) makes twins (`shape` with `p`), and the forms it holds.
+pub fn make_p(seed: u64, rot: bool) -> (String, BTreeSet<&'static str>) {
+    let mut rng = Rng::new(seed);
+    let s = shape(&mut rng, true);
     (program(&mut rng, &s, rot), tags(&s))
 }

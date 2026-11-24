@@ -3,8 +3,9 @@
 //! every value is worked out by hand from §11.10 as in the case files. The head `slot(f)` gives at its frame j (0, 1, 2 ...) 100 s + n, s = f (j / 2 + 1) (the field written by its stage of `sample / 2`, read by its stage of `sample`) and n = j + 1:
 //! - `slot~(1.0).reset_if~(x == 4.0)` (the frame 3): the reset puts n, the child and the field s back, not the counter: the frame 3 gives 1, the grid at the frame 4 gives s = 1, n = 2: 101 102 203 1 102 103 204 205 306 307.
 //! - `slot~(1.0).reset_if~(x == 5.0)` (the frame 4, a grid): the grid writes first and the reset takes it back: 101 102 203 204 1 2 103 104 205 206.
-//! - `slot~(1.0).when~(c).reset_if~(r)` and `slot~(1.0).reset_if~(r).when~(c)` with c = x != 3, 5, 6 (the frames 2, 4, 5 stop) and r = x == 3, 4, 6 (the frames 2, 3, 5): the first resets the stopped frames and the held output too:
-//!   101 102 0 1 1 0 1 102 103 204; the second only the frames that run: 101 102 102 1 1 1 2 103 104 205.
+//! - `slot~(1.0).when~(c).reset_if~(r)` and `slot~(1.0).reset_if~(r).when~(c)` with c = x != 3, 5, 6 (the frames 2, 4, 5 stop) and r = x == 3, 4, 6 (the frames 2, 3, 5): the first resets the stopped frames and the held output too, and the reset
+//!   is before the stage that the `when~` moves to W (S-1228: the frame 3 resets and then the grid writes): 101 102 0 101 101 0 1 102 103 204; the second only the frames that run, the reset after the stage of the part that is slower than its tick:
+//!   101 102 102 1 1 1 2 103 104 205. The `when~` in a named flow with the `reset_if~` outside it is the first chain.
 
 use crate::down_two_boundaries_c_commands::{build_flows, driver, frames_of};
 
@@ -33,6 +34,15 @@ pub flow reset_at_a_grid(x: F32 at sample) -> F32 at sample {
 @export
 pub flow when_then_reset(x: F32 at sample) -> F32 at sample {
   slot~(1.0).when~(x != 3.0 && x != 5.0 && x != 6.0).reset_if~(x == 3.0 || x == 4.0 || x == 6.0)
+}
+
+flow ws(c: Bool at sample) -> F32 at sample {
+  slot~(1.0).when~(c)
+}
+
+@export
+pub flow wrapped_when_then_reset(x: F32 at sample) -> F32 at sample {
+  ws~(x != 3.0 && x != 5.0 && x != 6.0).reset_if~(x == 3.0 || x == 4.0 || x == 6.0)
 }
 
 @export
@@ -70,13 +80,15 @@ fn a_reset_if_read_at_the_call_gives_the_values_of_the_case_files_in_c() {
     );
 }
 
-/// The order of a `when~` and a `reset_if~`: the one outside also resets the stopped frames and the held output (the frames 2 and 5 read 0 after the reset), the one inside only the frames that run.
+/// The order of a `when~` and a `reset_if~`: the one outside also resets the stopped frames and the held output (the frames 2 and 5 read 0 after the reset) and is before the stage that the `when~` moves to W (the frames 3 and 4 are 101), the one inside
+/// only the frames that run and after the slower stage.
 #[test]
 fn a_reset_if_and_a_when_in_both_orders_give_the_values_of_the_case_files_in_c() {
     same_in_c(
         "reset_if_c_order",
         &[
-            ("when_then_reset", vec![101, 102, 0, 1, 1, 0, 1, 102, 103, 204]),
+            ("wrapped_when_then_reset", vec![101, 102, 0, 101, 101, 0, 1, 102, 103, 204]),
+            ("when_then_reset", vec![101, 102, 0, 101, 101, 0, 1, 102, 103, 204]),
             ("reset_then_when", vec![101, 102, 102, 1, 1, 1, 2, 103, 104, 205]),
         ],
     );

@@ -370,21 +370,9 @@ fn ops(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, w: &mut Walk, list:
                     out.push(stmt(span, StmtKind::If(on, Block { stmts: body, value: None }, Block::default())));
                 }
             }
-            // The condition read into the flag, then, after the slower work, read from it (§11.10).
-            Op::Arm { at } => {
-                let v = w.cond(lw, cx, out, at)?;
-                assign(out, &w.field(lw, Part::Flag(at))?, v)?;
-            }
-            Op::Reset { at } | Op::Fire { at } => {
+            Op::Reset { at } => {
+                let on = w.cond(lw, cx, out, at)?;
                 let mut body = Vec::new();
-                let on = match *op {
-                    Op::Fire { .. } => {
-                        let flag = w.field(lw, Part::Flag(at))?;
-                        assign(&mut body, &flag, lit(Ty::Bool, span, Lit::Bool(false)))?;
-                        flag
-                    }
-                    _ => w.cond(lw, cx, out, at)?,
-                };
                 reset(lw, &mut body, w, at)?;
                 out.push(stmt(span, StmtKind::If(on, Block { stmts: body, value: None }, Block::default())));
             }
@@ -510,7 +498,7 @@ fn prelower(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, w: &mut Walk, 
         Op::Ring { port: Port::Cond(at), from: Feed::Arg, .. } => conds.push((Ok(at), true)),
         Op::Run { body, .. } => bodies.push(body),
         Op::When { guard, cond: CondRead::Read, .. } => conds.push((Err(guard), false)),
-        Op::Reset { at } | Op::Arm { at } => conds.push((Ok(at), false)),
+        Op::Reset { at } => conds.push((Ok(at), false)),
         _ => {}
     });
     let conds = conds.into_iter().map(|(c, ring)| Ok((c.or_else(|g| Ok(w.guard(g)?.at))?, ring)));

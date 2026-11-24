@@ -129,6 +129,14 @@ pub flow slow_true_reset(r: Bool at block) -> F32 at sample {
   slot~(1.0).down~(2).when~(true).reset_if~(r) at sample
 }
 
+flow wd(c: Bool at block) -> F32 at (sample / 2) {
+  slot~(1.0).down~(2).when~(c)
+}
+
+pub flow slow_wrapped(c: Bool at block, r: Bool at block) -> F32 at sample {
+  wd~(c).reset_if~(r) at sample
+}
+
 test "a condition of the kind block at the grid resets the ring of the conversion flow: the tick gives T.default(), the next tick sums the frames since" {
   // r is true for the frames 8 .. 11 (the tick 8): the ring that held 5 6 7 8 is put back, the tick 8 sums 0 0 0 0 = 0 and the frames 8 .. 11 fill it: the tick 12 gives 9 + 10 + 11 + 12 = 42, the tick 16 58.
   // r true for 8 .. 15 (the ticks 8 and 12 both): 0 at 8, the ring of 8 .. 11 is put back at 12: 0, the tick 16 sums 13 .. 16 = 58.
@@ -253,18 +261,21 @@ test "the held output of a part that is stopped is put back by a reset_if~ outsi
   assert out == [21.0, 43.0, 44.0, 0.0, 21.0, 43.0]
 }
 
-test "the stage of the part that is slower than the part's own W is written first, and a reset at W takes it back; the same with a when~ before it (the stage moved to W)" {
+test "the stage of the part that is slower than the part's own W is written first and a reset at W takes it back; a when~ before the reset moves that stage to W and the reset is before it (S-1228)" {
   // `slot~(1.0).down~(2)`: the body runs at sample / 2 (W), its stage of `sample / 2` (the grid of the child) at sample / 4. b = frame / 2 is the body's sample: 101 102 203 204 305 ...; r is read at W (b = 0, 1, ..): true for the frames 4 and 5 (b = 2).
-  // The grid at b = 2 writes s = 2 first, the reset puts back n, s and the child: b = 2 gives 1 (n = 1, s = 0), b = 3 gives 2, the grid b = 4 gives s = 1, n = 3: 103, then 104, and b = 6 gives s = 2, n = 5: 205.
-  // x.down~(2).when~(true).reset_if~(r) and the same with a condition that is a block value that holds are x.down~(2).reset_if~(r) (the stage that the when~ moves to W is written before the reset, as it is without it).
+  // With no `when~` the grid at b = 2 writes s = 2 first, the reset puts back n, s and the child: b = 2 gives 1 (n = 1, s = 0), b = 3 gives 2, the grid b = 4 gives s = 1, n = 3: 103, then 104, and b = 6 gives s = 2, n = 5: 205.
+  // With `x.down~(2).when~(true).reset_if~(r)` (and `when~(c)` with a block value that holds, and a named flow that wraps the `when~`) the stage that the `when~` moves is in W's stage and the reset is before it: b = 2 is reset and then the grid writes
+  // (the child is at 0: s = 1, n = 1): 101, b = 3 gives 102, the grid b = 4 gives s = 2, n = 3: 203, then 204, and b = 6 gives s = 3, n = 5: 305.
   var plain: [F32; 14] = [9.0; 14]
   var a: [F32; 14] = [9.0; 14]
   var b: [F32; 14] = [9.0; 14]
   var c: [F32; 14] = [9.0; 14]
+  var w: [F32; 14] = [9.0; 14]
   var sp = slow_plain.init(8.0)
   var sa = slow_reset.init(8.0)
   var sb = slow_true_reset.init(8.0)
   var sc = slow_when_reset.init(8.0)
+  var sw = slow_wrapped.init(8.0)
   slow_plain.process(inout sp, inout plain)
   slow_reset.process(inout sa, slow_reset.Params { r: false }, inout a.slice(0, 4))
   slow_reset.process(inout sa, slow_reset.Params { r: true }, inout a.slice(4, 6))
@@ -275,10 +286,14 @@ test "the stage of the part that is slower than the part's own W is written firs
   slow_when_reset.process(inout sc, slow_when_reset.Params { c: true, r: false }, inout c.slice(0, 4))
   slow_when_reset.process(inout sc, slow_when_reset.Params { c: true, r: true }, inout c.slice(4, 6))
   slow_when_reset.process(inout sc, slow_when_reset.Params { c: true, r: false }, inout c.slice(6, 14))
+  slow_wrapped.process(inout sw, slow_wrapped.Params { c: true, r: false }, inout w.slice(0, 4))
+  slow_wrapped.process(inout sw, slow_wrapped.Params { c: true, r: true }, inout w.slice(4, 6))
+  slow_wrapped.process(inout sw, slow_wrapped.Params { c: true, r: false }, inout w.slice(6, 14))
   assert plain == [101.0, 101.0, 102.0, 102.0, 203.0, 203.0, 204.0, 204.0, 305.0, 305.0, 306.0, 306.0, 407.0, 407.0]
   assert a == [101.0, 101.0, 102.0, 102.0, 1.0, 1.0, 2.0, 2.0, 103.0, 103.0, 104.0, 104.0, 205.0, 205.0]
-  assert b == a
-  assert c == a
+  assert b == [101.0, 101.0, 102.0, 102.0, 101.0, 101.0, 102.0, 102.0, 203.0, 203.0, 204.0, 204.0, 305.0, 305.0]
+  assert c == b
+  assert w == b
 }
 
 test "an at to the clock of W, the tick of the grid of sample / 4, is the condition read at W: the same values as with no at" {

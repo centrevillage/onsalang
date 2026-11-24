@@ -12,11 +12,11 @@ use onsa_syntax::ast::ExprId;
 use super::expr::{Eval, Frame, LOW_STACK, Stop};
 use super::flow::{Ctx, Inst, enter};
 use super::rate::{
-    Guard, Level, caller_stage, counted, dealt, elements, n_of, on_tick, phase, port_exprs, slice, time_of,
+    Guard, Level, counted, dealt, elements, n_of, on_tick, phase, port_exprs, port_stage, slice, time_of,
 };
 use super::scalar::{Fault, Fault::Internal};
 use super::sema_view::{Called, Stage, input_stage};
-use super::state::{Cell, NodeKey, Role, Store};
+use super::state::{NodeKey, Role, Store};
 use super::value::Value;
 
 const NO_GATE: &str = "a `when~` with no state";
@@ -106,14 +106,16 @@ impl<'a> Frame<'a> {
     }
 
     /// The arguments of the ports of the head that this frame reads at the stage `sx` of this one (the inputs of the head and the conditions a boundary gathers, `rate::port_exprs`): those the last boundary does not gather, at
-    /// the clock `q` they have in the call (the stage `q`, `sample` for `q > 0`, S-1131: the bindings of an arm they read are those of the stage). A burst is `2^q` values for `q > 0` (a value of the parameter kinds is each of them).
+    /// the clock `q` they have in the call (at the stage `rate::port_stage`: `q`, `sample` for `q > 0`, S-1131: the bindings of an arm they read are those of the stage). A burst is `2^q` values for `q > 0` (a value of the parameter kinds is each of them).
     fn feed(&mut self, key: &NodeKey, decl: &'a FlowDef, levels: &[Level], sx: i32) -> Result<(), Stop> {
         let at = self.body.ast.expr(key.call).span;
         let here = |fault| Stop { fault, at };
         let top = &levels[levels.len() - 1];
         let args = port_exprs(self.args_of_call(key.call, decl)?.iter().map(|a| a.expr), levels);
         for (n, a) in args.into_iter().enumerate() {
-            let Some(q) = top.ins[n].filter(|q| (*q).min(0) == sx && !top.gathers.contains(&n)) else { continue };
+            let Some(q) = top.ins[n].filter(|q| port_stage(levels, n, *q) == sx && !top.gathers.contains(&n)) else {
+                continue;
+            };
             let v = match self.eval_staged(key.call, a, Stage::Tick(sx))? {
                 Value::Burst(es) => counted(&es, q).map(|()| Value::Burst(es)).map_err(here)?,
                 // The elements are made after the limit has been asked: `x: F32 at (sample * 2147483648)` of a value of the parameter kinds is not 2^31 of them.
@@ -146,9 +148,7 @@ impl<'a> Frame<'a> {
             return Ok(());
         }
         if b == 0 {
-            self.cut(key, levels, 0, s, at, false)?;
-            let ins =
-                (0..ins.len()).map(|n| self.now_of(key, levels, 0, n, &ins[n], at)).collect::<Result<Vec<_>, _>>()?;
+            self.cut(key, levels, 0, s, at)?;
             return self.run_head(key, &levels[0], s, ctx, &ins);
         }
         let (lv, inside) = (&levels[b], &levels[b - 1]);
@@ -163,9 +163,9 @@ impl<'a> Frame<'a> {
         if r < 0 {
             let y = s + n as i32;
             if y <= 0 && inside.stages.contains(&y) {
-                // The run reads the rings it gathers: a part due to be put back is put back first (`cut`); one put back in the run reads them put back where it uses them (`now_of`).
+                // The runs read the rings it gathers: a part due to be put back at this tick is put back first (`cut`), its rings too, so that all the runs read them put back (S-1226 (γ)).
                 if !lv.gathers.is_empty() {
-                    self.cut(key, levels, b, s, at, true)?;
+                    self.cut(key, levels, b, s, at)?;
                 }
                 let mut now = Vec::new();
                 for (i, v) in ins.iter().enumerate() {
@@ -186,10 +186,10 @@ impl<'a> Frame<'a> {
             // The ring of the last boundary is written after the frame (`save_gathers`).
             for &i in lv.gathers.iter().filter(|_| b + 1 < levels.len()) {
                 if lv.ins[i].is_some_and(|k| k.min(0) == s) {
-                    self.cut(key, levels, b, s, at, false)?;
-                    let items = match self.now_of(key, levels, b, i, &ins[i], at)? {
-                        Value::Burst(es) => es,
-                        v => vec![v],
+                    self.cut(key, levels, b, s, at)?;
+                    let items = match &ins[i] {
+                        Value::Burst(es) => es.clone(),
+                        v => vec![v.clone()],
                     };
                     self.write_ring(key, b, i, items, at)?;
                 }
@@ -211,7 +211,7 @@ impl<'a> Frame<'a> {
                     self.run_level(key, levels, b - 1, y, cj, now.clone())?;
                 }
                 if lv.out > 0 && s == 0 && lv.made == 0 {
-                    self.cut(key, levels, b, s, at, false)?;
+                    self.cut(key, levels, b, s, at)?;
                     match self.level_out(key, levels, b - 1, cj, at)? {
                         Value::Burst(es) => outs.extend(es),
                         v if inside.out >= 0 || on_tick(cj, inside.out) => outs.push(v),
@@ -228,11 +228,12 @@ impl<'a> Frame<'a> {
     }
 
     /// The condition of each `when~` and `reset_if~` of the chain at `key` that is read in the stage `sx` of this one (`Guard::at`, §11.10: at its W or its tick, where the arguments of the head of that clock are read), but one that
-    /// a boundary gathers, which its part reads from its port (`cond_of`).
-    // SPEC-GAP(S-1221): the condition of a `when~` or `reset_if~` inside a `when~` is read at its W or tick whether or not the outer one runs the part (provisional, as the arguments of the head are; only a panic shows it).
+    /// a boundary gathers, which its part reads from its port (`cond_of`). Those of one stage are read outermost first.
+    // SPEC-GAP(S-1221): the condition of a `when~` or `reset_if~` inside a `when~` is read at its W or tick whether or not the outer one runs the part (provisional, as the arguments of the head are; only a panic shows it), and
+    // the conditions of a stage outermost first (the order the spec does not say either).
     fn read_conds(&mut self, key: &NodeKey, levels: &[Level], sx: i32) -> Result<(), Stop> {
         let at = self.body.ast.expr(key.call).span;
-        for (b, when) in levels.iter().enumerate().filter_map(|(b, lv)| lv.guard.map(|w| (b, w))) {
+        for (b, when) in levels.iter().enumerate().rev().filter_map(|(b, lv)| lv.guard.map(|w| (b, w))) {
             if when.at == sx && when.port.is_none() {
                 let v = self.eval_staged(key.call, when.cond, Stage::Tick(sx))?;
                 self.gate(key, b, at)?.cond = v;
@@ -244,28 +245,9 @@ impl<'a> Frame<'a> {
     /// The condition of the modifier that makes the part `b` of the chain at `key`, whose ports are `ins`: from its port where a boundary gathers it (`rate::gathered`), else what the caller read (`read_conds`).
     fn cond_of(&mut self, key: &NodeKey, levels: &[Level], b: usize, ins: &[Value], at: Span) -> Eval {
         match levels[b].guard.and_then(|g| g.port) {
-            Some(n) => self.now_of(key, levels, b, n, &ins[n], at),
+            Some(n) => Ok(ins[n].clone()),
             None => Ok(self.gate(key, b, at)?.cond.clone()),
         }
-    }
-
-    /// The value `v` of the port `n` of the part `b` (of the chain at `key`) where it is used (S-1226 (α)): one that the ring of a boundary outside gathered (the first that gathers it) is the ring's as it is now, which only a
-    /// `reset_if~` changes in the run that read it (`put_back`): `v`, or its start (`T.default()`) once it is put back.
-    // SPEC-GAP(S-1226): the runs after a reset in the tick that gathered the ring read it put back, those before it what was gathered (provisional (α)).
-    fn now_of(&self, key: &NodeKey, levels: &[Level], b: usize, n: usize, v: &Value, at: Span) -> Eval {
-        let Some(g) = (b + 1..levels.len()).find(|g| levels[*g].gathers.contains(&n)) else { return Ok(v.clone()) };
-        let run = self.run.as_ref().ok_or(Stop { fault: Internal("no run"), at })?;
-        let cell = run.state.cells.get(&key.role(Role::Gather { bound: g, input: n }));
-        let Some(Cell { initial: Store::Ring { buf: start, .. }, current: Store::Ring { buf, .. } }) = cell else {
-            return Err(Stop { fault: Internal("a gather with no ring"), at });
-        };
-        let Some(d) = start.first().filter(|_| buf.iter().zip(start).all(|(a, b)| a.same(b))) else {
-            return Ok(v.clone());
-        };
-        Ok(match v {
-            Value::Burst(es) => Value::Burst(vec![d.clone(); es.len()]),
-            _ => d.clone(),
-        })
     }
 
     /// What the `when~` that makes the part `b` of the chain at `key` keeps.
@@ -308,7 +290,7 @@ impl<'a> Frame<'a> {
             }
         }
         if s == w {
-            self.cut(key, levels, b, w, at, false)?;
+            self.cut(key, levels, b, w, at)?;
             let held = match (on, &self.gate(key, b, at)?.held) {
                 (true, _) => self.level_out(key, levels, b - 1, part, at)?,
                 (false, Value::Burst(es)) => {
@@ -327,7 +309,7 @@ impl<'a> Frame<'a> {
     }
 
     /// The stage `s` of the part `b`, a `.reset_if~(c)` (§11.10, S-1186, S-1218), in its frame at the time `ctx`: at its tick it takes its condition (`cond_of`), and if it holds the part is due to be put back before the first
-    /// work of it that is not of a slower tick (`cut`), or else after the stage it makes its output in (`Level::made`, before the caller reads it there) or its last stage of the frame (a part with no such work here: one that a
+    /// work of it that is not in a slower stage (`cut`), or else after the stage it makes its output in (`Level::made`, before the caller reads it there) or its last stage of the frame (a part with no such work here: one that a
     /// `when~` inside stops, a boundary that deals an array made at a slower tick).
     fn run_reset(
         &mut self,
@@ -354,21 +336,15 @@ impl<'a> Frame<'a> {
         Ok(())
     }
 
-    /// Before a work of the part `b` at its stage `s` (the stage of a head, the rings it reads and writes, the output a `when~` holds), each `reset_if~` outside it that is due and whose tick is not faster than that of
-    /// the work puts its part back: the slower ticks write first (§11.10, "条件の刻みより遅い刻みは、格子の上の位置でも、その位置で先に書いた後に戻す"). The tick of the work is `s` moved out of the boundaries between
-    /// (`caller_stage`, the stage of the frame it runs in), and not by a `when~` that runs it in its W. Before the boundary `b` reads its `rings`, not one whose part has a `when~` inside `b` that runs the work of a tick
-    /// slower than its R in its W (`rate::when_level`): that work comes after the `when~` reads its condition, of a ring too, so the part is put back at its next work, in the run (S-1226 (α)).
-    fn cut(&mut self, key: &NodeKey, levels: &[Level], b: usize, s: i32, at: Span, rings: bool) -> Result<(), Stop> {
-        let moved = |c: usize, r: i32| {
-            (1..b).filter_map(|w| levels[w].when().map(|g| (w, g.w))).any(|(w, gw)| {
-                let label = |y: i32| levels[w + 1..=c].iter().fold(y, |x, l| caller_stage(x, l.ratio));
-                levels[w - 1].stages.iter().any(|y| *y < gw && label(*y) < r)
-            })
-        };
+    /// Before a work of the part `b` at its stage `s` (the stage of a head, the rings it reads and writes, the output a `when~` holds), each `reset_if~` outside it that is due and whose tick is not faster than the stage
+    /// of its caller the work is in puts its part back (§11.10: "その刻みに続く x の段の前に"; S-1228 (P)): the work of a slower stage writes first ("条件の刻みより遅い刻みは、…その位置で先に書いた後に戻す"). That stage is
+    /// `s` moved out of the parts between as their stages are (`Level::outer`): out of a boundary by `caller_stage`, and to W by a `when~`, which runs the work of the slower ticks inside in its W (§11.9,
+    /// `rate::when_level`), so a `reset_if~` outside it puts the part back before that work, and one inside it after.
+    fn cut(&mut self, key: &NodeKey, levels: &[Level], b: usize, s: i32, at: Span) -> Result<(), Stop> {
         let mut label = s;
         for (c, lv) in levels.iter().enumerate().skip(b + 1) {
-            label = caller_stage(label, lv.ratio);
-            if lv.reset().is_some_and(|r| label >= r.w && !(rings && moved(c, r.w))) {
+            label = lv.outer(label);
+            if lv.reset().is_some_and(|r| label >= r.w) {
                 self.put_back(key, c, at)?;
             }
         }

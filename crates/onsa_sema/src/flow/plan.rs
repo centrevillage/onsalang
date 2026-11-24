@@ -223,13 +223,6 @@ pub enum Op {
     /// the boundaries and the guards inside it at `T.default()`, not the
     /// conditions and the counts of the guards.
     Reset { at: u32 },
-    /// Of a `.reset_if~` at `at` whose part runs work of a tick slower than
-    /// its own after p0 ([`steps`], S-1209): its condition read at its tick
-    /// into its flag ([`Part::Flag`]).
-    Arm { at: u32 },
-    /// After that work: where the flag is true, the flag set false and the
-    /// part reset as [`Op::Reset`].
-    Fire { at: u32 },
     /// The value of the part the guard `guard` wraps (§11.10): of one that
     /// is not a burst its held output, which the ops of its runs wrote;
     /// of a burst the array the runs made when it ran (and its last

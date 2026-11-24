@@ -901,6 +901,12 @@ impl Walk<'_> {
             let ring = port.and_then(|p| super::plan::bounds::cond_ring(mods(), i as u32, p));
             let (j, from) = ring.unwrap_or((i as u32, from));
             let stage = super::plan::bounds::run_at(mods(), &guards, j, from);
+            // §11.4: `sample_tick()` alone is evaluated in the stage that reads it, one an outer guard
+            // moved W to too, and not hoisted to the grid of W (the break side of W7-10 U3ae, its F2).
+            let at = match (c, stage) {
+                (Some(Clock::Ambient), ClockStage::Tick(k)) => Clock::Tick(k),
+                _ => at,
+            };
             let stage = (at.stage() != Some(stage)).then_some(stage);
             self.node_clocks[k].args.push(ArgRead { expr: cond, at, stage });
             self.node_clocks[k].resets.extend(r.map(|r| (i as u32, r)));

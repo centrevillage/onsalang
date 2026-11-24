@@ -3,10 +3,11 @@
 // mode = "test"
 // spec = ["§11.10", "§11.9", "§11.4"]
 
-// W7-10 U2b, the break side's high 1 and high 2 and the parent's variant of high 2 (S-1209, S-1218): a `.reset_if~` that wraps a `.when~` which moves a
-// stage of the part slower than the condition's tick to its W. §11.10: "条件の刻みより遅い刻みは、格子の上の位置でも、その位置で先に書いた後に戻す", and
-// a `.when~(true)` is no `.when~` (S-1209), so each pair gives the same values; the values are those of reset_if_values.onsa and reset_if_slow_values.onsa
-// or worked out here. `slot` writes the field `s` at `sample / 2` (1 2 3 4 at the frames 0 2 4 6) and `n` counts the frames: 100 s + n.
+// W7-10 U2b, the break side's high 1 and high 2 and the parent's variant of high 2 (S-1209, S-1218), as S-1228 (P) has them: a `.reset_if~` goes back before the work of its tick and of the stages that
+// follow it, and a `.when~` that is to its left moves the stage of the part that is slower than the `when~`'s W to W's stage (§11.9: "W より遅い中の刻みは、その W の段の中で先に動く"), so that the reset is before it.
+// §11.10 (the sentence of S-1228): "その `when~` の外（右）の `reset_if~` はその前に戻し、中の遅い刻みが動く位置では戻した後に書く". A part with no `when~` writes its slower stage first and the reset takes it back
+// ("条件の刻みより遅い刻みは、格子の上の位置でも、その位置で先に書いた後に戻す"), so `x.reset_if~(r)` and `x.when~(true).reset_if~(r)` differ where the reset is at a tick of that stage; `when~(true)` is no exception (S-1228).
+// The values are worked out here from the text. `slot` writes the field `s` at `sample / 2` (1 2 3 4 at the frames 0 2 4 6) and `n` counts the frames: 100 s + n.
 
 flow acc(f: F32 at block) -> F32 at sample {
   let n = f + prev~(^n)
@@ -97,91 +98,160 @@ pub flow slow_when(b: Bool at block) -> F32 at sample {
   slot4~(1.0).when~(true).reset_if~(b at (sample / 2))
 }
 
-test "two whens inside a reset: the stage at sample / 2 writes first at the frame of the reset" {
-  // r at the frame 4 (a frame of the grid): the grid writes s = 3, the reset takes it back, n starts again: 101 102 203 204 1 2 103 104.
-  // r at the frame 3: s is 0 until the grid at 4, which writes 1: 101 102 203 1 102 103 204 205.
+// The same parts with the `when~` in a named flow: the flow that wraps part of a chain gives the values of the chain written out (S-1228). The condition of a `when~` is a port at W.
+flow w_plain(c: Bool at block) -> F32 at sample {
+  slot~(1.0).when~(c)
+}
+
+flow w4(c: Bool at block) -> F32 at sample {
+  slot4~(1.0).when~(c)
+}
+
+flow w4s(c: Bool at sample) -> F32 at sample {
+  slot4~(1.0).when~(c)
+}
+
+flow w8(c: Bool at block) -> F32 at sample {
+  slot8~(1.0).when~(c)
+}
+
+flow wm(c: Bool at block) -> F32 at sample {
+  mk4~().down~(4).when~(c)
+}
+
+pub flow wrapped_plain(r: Bool at sample) -> F32 at sample {
+  w_plain~(true).reset_if~(r)
+}
+
+pub flow wrapped_up(p: Bool at block) -> F32 at sample {
+  g2k~(w8~(true).up~(2).reset_if~(p at (sample / 2)))
+}
+
+pub flow wrapped_deal() -> F32 at sample {
+  g2~(wm~(true).reset_if~(true).up~(2))
+}
+
+pub flow wrapped_slow(b: Bool at block) -> F32 at sample {
+  w4~(true).reset_if~(b at (sample / 2))
+}
+
+pub flow wrapped_stopping(c: Bool at sample, p: Bool at block) -> F32 at sample {
+  w4s~(c).reset_if~(p at (sample / 2))
+}
+
+test "two whens inside a reset: the reset is before the stage at sample / 2 that the whens move to W, so the grid at the frame of the reset writes after it" {
+  // r at the frame 4 (a frame of the grid). With no `when~` the grid writes s = 3 and the reset takes it back, n starts again: 101 102 203 204 1 2 103 104. With a `when~` (also two, also with a condition that is true, also a named flow that wraps it) the reset
+  // is first: the grid at the frame 4 writes s = 1 (the child is back at 0) and n = 1: 101 102 203 204 101 102 203 204 (s = 2 at the frame 6).
+  // r at the frame 3 (no grid there): s is 0 until the grid at 4, which writes 1, in all of them: 101 102 203 1 102 103 204 205.
   let r4: [Bool; 8] = [false, false, false, false, true, false, false, false]
   let r3: [Bool; 8] = [false, false, false, true, false, false, false, false]
-  let at4: [F32; 8] = [101.0, 102.0, 203.0, 204.0, 1.0, 2.0, 103.0, 104.0]
+  let plain4: [F32; 8] = [101.0, 102.0, 203.0, 204.0, 1.0, 2.0, 103.0, 104.0]
+  let moved4: [F32; 8] = [101.0, 102.0, 203.0, 204.0, 101.0, 102.0, 203.0, 204.0]
   let at3: [F32; 8] = [101.0, 102.0, 203.0, 1.0, 102.0, 103.0, 204.0, 205.0]
   var a: [F32; 8] = [0.0; 8]
   var b: [F32; 8] = [0.0; 8]
   var c: [F32; 8] = [0.0; 8]
+  var w: [F32; 8] = [0.0; 8]
   var sa = plain.init(8.0)
   var sb = two_whens.init(8.0)
   var sc = two_true_whens.init(8.0)
+  var sw = wrapped_plain.init(8.0)
   plain.process(inout sa, r4, inout a)
   two_whens.process(inout sb, two_whens.Params { b: true }, r4, inout b)
   two_true_whens.process(inout sc, r4, inout c)
-  assert a == at4
-  assert b == at4
-  assert c == at4
+  wrapped_plain.process(inout sw, r4, inout w)
+  assert a == plain4
+  assert b == moved4
+  assert c == moved4
+  assert w == moved4
   var d: [F32; 8] = [0.0; 8]
   var e: [F32; 8] = [0.0; 8]
+  var f: [F32; 8] = [0.0; 8]
   var sd = plain.init(8.0)
   var se = two_whens.init(8.0)
+  var sf = wrapped_plain.init(8.0)
   plain.process(inout sd, r3, inout d)
   two_whens.process(inout se, two_whens.Params { b: true }, r3, inout e)
+  wrapped_plain.process(inout sf, r3, inout f)
   assert d == at3
   assert e == at3
+  assert f == at3
 }
 
-test "a when inside a reset inside an up: the dealt array is reset after the slower stage writes it" {
-  // mk4 runs at sample / 2 of the caller and deals its four values; the reset (once a sample of the caller, before the two runs, S-1218) comes after
-  // it and puts the array back, so every read is 0.0 with the when~(true) as without it.
+test "a when inside a reset inside an up: the dealt array is reset, then the slower stage that the when moves writes it, and the next frame resets it again" {
+  // mk4 runs at sample / 2 of the caller (the frames 0 2 4) and deals its four values 10 n .. 10 n + 3 to the 4 runs of two frames; g2 reads two of them: x[0] + 10 x[1]. The reset (once a sample of the caller, before the two runs, S-1218) puts the part and the array back:
+  // with no `when~` it comes after the stage that writes (the stage is slower than the reset's tick), so every read is 0.0. With `when~(true)` the stage is moved to W (the runs) and the reset is before it: at a frame of the stage the array is written after the reset
+  // and the part (its counter n too) is at its start, so n = 1: x = 10 11 and g2 = 120; the next frame resets the array before its runs (the elements 12 and 13 are lost): 0.
   var a: [F32; 6] = [0.0; 6]
   var b: [F32; 6] = [0.0; 6]
+  var c: [F32; 6] = [0.0; 6]
   var sa = up_plain.init(8.0)
   var sb = up_when.init(8.0)
+  var sc = wrapped_deal.init(8.0)
   up_plain.process(inout sa, inout a)
   up_when.process(inout sb, inout b)
+  wrapped_deal.process(inout sc, inout c)
   assert a == [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-  assert b == a
+  assert b == [120.0, 0.0, 120.0, 0.0, 120.0, 0.0]
+  assert c == b
 }
 
-test "a reset at sample / 2 after a stage of the part at sample / 4 moved by a when" {
-  // The stage of acc (sample / 4, the frames 0 4) writes s = 1 first, the reset at 0 2 4 6 takes s and n back: s stays 0, n counts 1 2: 1 2 1 2 ....
-  var a: [F32; 8] = [0.0; 8]
-  var b: [F32; 8] = [0.0; 8]
-  var sa = slow_plain.init(8.0)
-  var sb = slow_when.init(8.0)
-  slow_plain.process(inout sa, slow_plain.Params { b: true }, inout a)
-  slow_when.process(inout sb, slow_when.Params { b: true }, inout b)
-  assert a == [1.0, 2.0, 1.0, 2.0, 1.0, 2.0, 1.0, 2.0]
-  assert b == a
-}
-
-test "a when inside an up inside a reset, with and without a when between (the implementer's forms 4 and 5)" {
-  // In the frame of the up~ the stage of acc is sample / 8 of the part, sample / 4 of the caller; the reset at sample / 2 of the caller comes after it
-  // and before the two runs, so s stays 0 and n counts the runs from 0 at each even frame: [1, 2] gives 2001, [3, 4] gives 4003 (worked out by the
-  // implementer of W7-10 U2b/i3 and the advisor's model from the text). A when~(true), and a when~(p) with p true, are no when~ (S-1209).
+test "a reset at sample / 2 and a stage of the part at sample / 4 that a when moves to W: with no when the stage writes first, with it the reset is first" {
+  // The stage of acc (sample / 4, the frames 0 4) and the reset at 0 2 4 6. With no `when~` the stage writes s = 1 first and the reset takes s and n back: s stays 0, n counts 1 2: 1 2 1 2 ....
+  // With `when~(true)` (and with a named flow that wraps it) the stage is moved to W, which is a stage faster than the reset's (sample / 2): the reset is first at 0 2 4 6 and the stage (the frames 0 and 4) writes s = 1 after it: 101 102 | 1 2 | 101 102 | 1 2.
   var a: [F32; 8] = [0.0; 8]
   var b: [F32; 8] = [0.0; 8]
   var c: [F32; 8] = [0.0; 8]
+  var sa = slow_plain.init(8.0)
+  var sb = slow_when.init(8.0)
+  var sc = wrapped_slow.init(8.0)
+  slow_plain.process(inout sa, slow_plain.Params { b: true }, inout a)
+  slow_when.process(inout sb, slow_when.Params { b: true }, inout b)
+  wrapped_slow.process(inout sc, wrapped_slow.Params { b: true }, inout c)
+  assert a == [1.0, 2.0, 1.0, 2.0, 1.0, 2.0, 1.0, 2.0]
+  assert b == [101.0, 102.0, 1.0, 2.0, 101.0, 102.0, 1.0, 2.0]
+  assert c == b
+}
+
+test "a when inside an up inside a reset, with and without a when between: the stage that a when moves is written after the reset" {
+  // In the frame of the up~ the stage of acc is sample / 8 of the part, sample / 4 of the caller (the frames 0 4); the reset at sample / 2 of the caller (the frames 0 2 4 6) is before the two runs and, with no `when~`, after that stage, so s stays 0 and n counts the runs
+  // from 0 at each even frame: [1, 2] gives 1 + 1000 * 2 = 2001, [3, 4] gives 4003. With `when~(true)` (and a `when~(p)` with p true on top of it, and a named flow that wraps the first one) the stage is moved to W, which is faster than the reset's tick, so it writes
+  // after the reset at the frames 0 and 4: s = 1 and the runs give [101, 102] = 102101 and at the odd frames, where nothing resets, [103, 104] = 104103. The frames 2 and 6 are as with no `when~`.
+  var a: [F32; 8] = [0.0; 8]
+  var b: [F32; 8] = [0.0; 8]
+  var c: [F32; 8] = [0.0; 8]
+  var d: [F32; 8] = [0.0; 8]
   var sa = up_slow_plain.init(8.0)
   var sb = up_slow_when.init(8.0)
   var sc = up_slow_when_when.init(8.0)
+  var sd = wrapped_up.init(8.0)
   up_slow_plain.process(inout sa, up_slow_plain.Params { p: true }, inout a)
   up_slow_when.process(inout sb, up_slow_when.Params { p: true }, inout b)
   up_slow_when_when.process(inout sc, up_slow_when_when.Params { p: true }, inout c)
+  wrapped_up.process(inout sd, wrapped_up.Params { p: true }, inout d)
   assert a == [2001.0, 4003.0, 2001.0, 4003.0, 2001.0, 4003.0, 2001.0, 4003.0]
-  assert b == a
-  assert c == a
+  assert b == [102101.0, 104103.0, 2001.0, 4003.0, 102101.0, 104103.0, 2001.0, 4003.0]
+  assert c == b
+  assert d == b
 }
 
-test "a reset outside a when that stops: the slower stage on the moved grid writes first, a stopped frame is reset too" {
-  // c = T T F T T F T T, p true. stopping_inner: the moved count m runs at the true frames; acc writes at m = 0 4 (the frames 0 6), the reset at the
-  // even frames comes after it, also at the stopped frame 2 (the held output back to 0.0): 1 2 0 1 1 1 1 2.
-  // reset_when_reset: the inner reset at m = 0 4 of the moved grid (the frames 0 6) and the outer at the even frames: the same values.
-  // (Worked out by the parent from the text; the advisor's model gives the same.)
+test "a reset outside a when that stops: the reset is before the stage that the when moves to W, and a stopped frame is reset too" {
+  // c = T T F T T F T T, p true. The moved count m runs at the true frames (0 1 3 4 6 7: m = 0 .. 5).
+  // stopping_inner (slot4, its stage writes at m = 0 4, the frames 0 and 6): the reset at the even frames is first, so the stage writes after it at the frames 0 and 6 (s = 1, n = 1: 101), the frame 1 is 102, the frame 2 (stopped, reset) is 0, the frame 3 is the run m = 2 (n = 1, s = 0: 1),
+  // the frame 4 is reset and runs (1), the frame 5 holds 1, the frames 6 and 7: 101 102. A named flow that wraps the `when~` gives the same.
+  // reset_when_reset (slot8, its stage at m = 0 8, the inner reset at m = 0 4 and the outer at the even frames): the inner reset is outside the `when~(true)` that moves the stage, so it is before it at m = 0 (the frame 0: 101), and the frames are
+  // 101 102 | 0 | 1 | 1 | hold 1 | m = 4 (the frame 6: the reset at the even frames puts back; no stage there) 1 | 2.
   let c: [Bool; 8] = [true, true, false, true, true, false, true, true]
-  let want: [F32; 8] = [1.0, 2.0, 0.0, 1.0, 1.0, 1.0, 1.0, 2.0]
   var a: [F32; 8] = [0.0; 8]
   var b: [F32; 8] = [0.0; 8]
+  var w: [F32; 8] = [0.0; 8]
   var sa = stopping_inner.init(8.0)
   var sb = reset_when_reset.init(8.0)
+  var sw = wrapped_stopping.init(8.0)
   stopping_inner.process(inout sa, stopping_inner.Params { p: true }, c, inout a)
   reset_when_reset.process(inout sb, reset_when_reset.Params { p: true }, c, inout b)
-  assert a == want
-  assert b == want
+  wrapped_stopping.process(inout sw, wrapped_stopping.Params { p: true }, c, inout w)
+  assert a == [101.0, 102.0, 0.0, 1.0, 1.0, 1.0, 101.0, 102.0]
+  assert w == a
+  assert b == [101.0, 102.0, 0.0, 1.0, 1.0, 1.0, 1.0, 2.0]
 }

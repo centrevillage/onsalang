@@ -88,11 +88,12 @@ out=[0x41a80000 0x41a80000]
 process 5 params r=false frames=3
 out=[0x422c0000 0x42820000 0x42ae0000]
 - the held output of a part that is stopped is put back by a reset_if~ outside the when~: all N values are T.default() (S-1222)	skipped layout
-@ the stage of the part that is slower than the part's own W is written first, and a reset at W takes it back; the same with a when~ before it (the stage moved to W)
+@ the stage of the part that is slower than the part's own W is written first and a reset at W takes it back; a when~ before the reset moves that stage to W and the reset is before it (S-1228)
 init 0 reset_if_slow_values.slow_plain sr=0x41000000
 init 1 reset_if_slow_values.slow_reset sr=0x41000000
 init 2 reset_if_slow_values.slow_true_reset sr=0x41000000
 init 3 reset_if_slow_values.slow_when_reset sr=0x41000000
+init 4 reset_if_slow_values.slow_wrapped sr=0x41000000
 process 0 frames=14
 out=[0x42ca0000 0x42ca0000 0x42cc0000 0x42cc0000 0x434b0000 0x434b0000 0x434c0000 0x434c0000 0x43988000 0x43988000 0x43990000 0x43990000 0x43cb8000 0x43cb8000]
 process 1 params r=false frames=4
@@ -104,15 +105,21 @@ out=[0x40000000 0x40000000 0x42ce0000 0x42ce0000 0x42d00000 0x42d00000 0x434d000
 process 2 params r=false frames=4
 out=[0x42ca0000 0x42ca0000 0x42cc0000 0x42cc0000]
 process 2 params r=true frames=2
-out=[0x3f800000 0x3f800000]
+out=[0x42ca0000 0x42ca0000]
 process 2 params r=false frames=8
-out=[0x40000000 0x40000000 0x42ce0000 0x42ce0000 0x42d00000 0x42d00000 0x434d0000 0x434d0000]
+out=[0x42cc0000 0x42cc0000 0x434b0000 0x434b0000 0x434c0000 0x434c0000 0x43988000 0x43988000]
 process 3 params c=true r=false frames=4
 out=[0x42ca0000 0x42ca0000 0x42cc0000 0x42cc0000]
 process 3 params c=true r=true frames=2
-out=[0x3f800000 0x3f800000]
+out=[0x42ca0000 0x42ca0000]
 process 3 params c=true r=false frames=8
-out=[0x40000000 0x40000000 0x42ce0000 0x42ce0000 0x42d00000 0x42d00000 0x434d0000 0x434d0000]
+out=[0x42cc0000 0x42cc0000 0x434b0000 0x434b0000 0x434c0000 0x434c0000 0x43988000 0x43988000]
+process 4 params c=true r=false frames=4
+out=[0x42ca0000 0x42ca0000 0x42cc0000 0x42cc0000]
+process 4 params c=true r=true frames=2
+out=[0x42ca0000 0x42ca0000]
+process 4 params c=true r=false frames=8
+out=[0x42cc0000 0x42cc0000 0x434b0000 0x434b0000 0x434c0000 0x434c0000 0x43988000 0x43988000]
 @ an at to the clock of W, the tick of the grid of sample / 4, is the condition read at W: the same values as with no at
 init 0 reset_if_slow_values.dws_reset_at_w sr=0x41000000
 process 0 params r=false frames=8

@@ -103,6 +103,8 @@ mod probe_tests;
 #[cfg(test)]
 mod render_tests;
 #[cfg(test)]
+mod reset_order_tests;
+#[cfg(test)]
 mod reset_tests;
 #[cfg(test)]
 mod sequence_tests;

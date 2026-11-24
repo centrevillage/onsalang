@@ -956,8 +956,6 @@ fn drawn_ops(ops: &[super::Op]) -> String {
         }
         Op::Hold { guard, out: o } => format!("Hold({guard},{})", out(o)),
         Op::Reset { at } => format!("Reset({at})"),
-        Op::Arm { at } => format!("Arm({at})"),
-        Op::Fire { at } => format!("Fire({at})"),
         Op::Ring { bound, port, from } => {
             let port = match port {
                 super::Port::Input(i) => i.to_string(),
@@ -1412,14 +1410,11 @@ pub flow w10(c: Bool at init) -> F32 at sample { pick0~(mk2~().down~(2).when~(c)
 
 /// The table of a chain with `.reset_if~` around a `.when~` that moves a
 /// stage slower than the tick R of its condition to its W (§11.10, S-1209,
-/// W7-10 U2b): each row of the table model of the advisor's stage 2 (its L,
-/// the rule of its chapter 3, `table_model.py show`), not of the output of
-/// the implementation. The condition read at R into the flag, the reset
-/// after the last op that is or holds the slower work in each list (in the
-/// run of an `.up~` and after it, in a guard outside and after it, two
-/// `.reset_if~`s); with no slower work after it, the reset as it was. The
-/// flag of a `.reset_if~` among the fields of the guards by its place in
-/// the chain (S-1220, provisional).
+/// S-1228): the reset first in the stage R, before all the work of the part
+/// there, the slower stages the guard runs in its W too (outside the run of
+/// an `.up~`, before a guard outside, two `.reset_if~`s); worked out from
+/// the rule of S-1228, the work of a guard being the work of its W. No
+/// field of a `.reset_if~` (the flag of W7-10 U2b is gone).
 #[test]
 fn the_table_of_a_reset_if_around_a_when() {
     let src = "flow cnt() -> F32 at sample {
@@ -1456,24 +1451,24 @@ pub flow r5(p: Bool at block, q: Bool at block, c: Bool at sample) -> F32 at sam
     let rows = [
         (
             "r1",
-            "-1: Arm(1) | 0*: W(0,r)[], W(0,l@-2)[R(-2,-)], Fire(1), W(0,l+)[R(0,H(0))], Hold(0,V)   read=Run",
-            "._tick_0 .held ._flag_1",
+            "-1: Reset(1) | 0*: W(0,r)[], W(0,l@-2)[R(-2,-)], W(0,l+)[R(0,H(0))], Hold(0,V)   read=Run",
+            "._tick_0 .held",
         ),
         (
             "r2",
-            "-1: Arm(2) | 0*: Each(0,j)[0: W(0,r)[], W(0,l@-3)[R(-3,-)], Fire(2), W(0,l+)[R(0,H(0))], Hold(0,V)], Fire(2)   read=Run",
-            "._tick_0 .held ._flag_2",
+            "-1: Reset(2) | 0*: Each(0,j)[0: W(0,r)[], W(0,l@-3)[R(-3,-)], W(0,l+)[R(0,H(0))], Hold(0,V)]   read=Run",
+            "._tick_0 .held",
         ),
         (
             "r3",
-            "0*: W(1,r)[], W(1,l@-1)[Arm(1)], W(1,l+)[W(0,r)[], W(0,l@-2)[R(-2,-)], Fire(1), W(0,l+)[R(0,H(0))], Hold(0,H(1))], Hold(1,V)   read=Run",
-            "._tick_0 ._held_0 ._flag_1 ._tick_1 .held",
+            "0*: W(1,r)[], W(1,l@-1)[Reset(1)], W(1,l+)[W(0,r)[], W(0,l@-2)[R(-2,-)], W(0,l+)[R(0,H(0))], Hold(0,H(1))], Hold(1,V)   read=Run",
+            "._tick_0 ._held_0 ._tick_1 .held",
         ),
         ("r4", "0*: Reset(1), W(0,r)[R(0,H(0))], Hold(0,V)   read=Run", ".held"),
         (
             "r5",
-            "-1: Arm(3) | 0*: W(1,r)[], W(1,l@-2)[Arm(1)], W(1,l+)[W(0,r)[], W(0,l@-3)[R(-3,-)], Fire(1), Fire(3), W(0,l+)[R(0,H(0))], Hold(0,H(1))], Fire(3), Hold(1,V)   read=Run",
-            "._tick_0 ._held_0 ._flag_1 ._tick_1 .held ._flag_3",
+            "-1: Reset(3) | 0*: W(1,r)[], W(1,l@-2)[Reset(1)], W(1,l+)[W(0,r)[], W(0,l@-3)[R(-3,-)], W(0,l+)[R(0,H(0))], Hold(0,H(1))], Hold(1,V)   read=Run",
+            "._tick_0 ._held_0 ._tick_1 .held",
         ),
     ];
     for (name, want, fields) in rows {
@@ -1492,7 +1487,7 @@ pub flow r5(p: Bool at block, q: Bool at block, c: Bool at sample) -> F32 at sam
 /// side of U2a): each condition is read where the table lowers it. Its
 /// [`super::ArgRead`] (the stage the marking evaluates its expression at) is
 /// the stage of the entry of the op that lowers that expression: the ring
-/// written from it, else the read of its guard, its reset or its flag.
+/// written from it, else the read of its guard or its reset.
 #[test]
 fn a_condition_is_read_at_the_stage_of_the_op_that_lowers_it() {
     let heads = "flow cnt() -> F32 at sample {\n  let n = prev~(^n) + 1.0\n  n\n}
@@ -1554,7 +1549,7 @@ flow h2(c: Bool at sample) -> Bool at (sample / 2) { pk2~(c).down~(2) }
                         Some(at)
                     }
                     super::Op::When { guard, cond: super::CondRead::Read, .. } => Some(n.guards[guard as usize].at),
-                    super::Op::Reset { at } | super::Op::Arm { at } => Some(at),
+                    super::Op::Reset { at } => Some(at),
                     _ => None,
                 }
                 .filter(|&at| matches!(op, super::Op::Ring { .. }) || !ringed(at));

@@ -34,8 +34,6 @@ pub enum Part {
     On(u32),
     Count(u32),
     Held(u32),
-    /// Of the `.reset_if~` at this place of the chain, its flag ([`Op::Arm`]).
-    Flag(u32),
 }
 
 /// What a field of the state holds.
@@ -209,8 +207,7 @@ impl Structs<'_> {
             }
             PlanKind::Instance { .. } => {
                 // §11.6 (S-1208, S-1220): after its state, by the modifiers of its chain inner
-                // first, the rings then the array of a boundary, of a guard what its table reads,
-                // and the flag of a `.reset_if~` that has one.
+                // first, the rings then the array of a boundary, of a guard what its table reads.
                 push(Part::Own);
                 let mut parts = Vec::new();
                 for (b, at) in (0u32..).zip(&n.bounds) {
@@ -222,7 +219,6 @@ impl Structs<'_> {
                     let of = [Part::On(g), Part::Count(g), Part::Held(g)];
                     parts.extend(of.into_iter().filter(|p| read.contains(p)).map(|p| (at.at, p)));
                 }
-                parts.extend(read.iter().filter_map(|&p| if let Part::Flag(at) = p { Some((at, p)) } else { None }));
                 parts.sort_by_key(|p| p.0);
                 parts.into_iter().for_each(|p| push(p.1));
                 None
@@ -253,8 +249,7 @@ impl Structs<'_> {
 
 /// The fields of the guards of the chain of `n` its table reads (§11.10,
 /// S-1220): [`Part::On`] of a guard read where its condition is not, its
-/// [`Part::Count`] of one that counts, its [`Part::Held`] of one that holds;
-/// and the [`Part::Flag`] of a `.reset_if~` that has one.
+/// [`Part::Count`] of one that counts, its [`Part::Held`] of one that holds.
 fn guard_parts(n: &PlanNode) -> Vec<Part> {
     let mut read = Vec::new();
     for e in &n.entries {
@@ -264,7 +259,6 @@ fn guard_parts(n: &PlanNode) -> Vec<Part> {
                 read.extend((advance || due.is_some()).then_some(Part::Count(guard)));
             }
             Op::Hold { guard, .. } => read.push(Part::Held(guard)),
-            Op::Arm { at } => read.push(Part::Flag(at)),
             _ => {}
         });
     }

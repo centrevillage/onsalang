@@ -1,2 +1,2 @@
 # flow_ref 1 source=tests/spec/flow_semantics/reset_ring_order_s1226.onsa tests=1 evaluated=0 unavailable=0 skipped=1 waiting=0
-- (α) S-1226: a reset at the tick 4 after the first run read the ring as gathered: the 2nd run reads the ring put back and is stopped	skipped layout
+- (γ) S-1226: a reset at the tick 4, which is also a tick of the block, puts the ring back before the runs: both runs of the tick read false and are stopped, and the part is at its start	skipped layout

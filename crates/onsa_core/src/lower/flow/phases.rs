@@ -313,16 +313,6 @@ fn reset_node(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, id: NodeId, 
                     }
                 }
             }
-            // And the flag of each `.reset_if~` that has one.
-            for k in 0..n.chain.len() as u32 {
-                if info.field_at(at(Part::Flag(k))).is_some() {
-                    assign(
-                        out,
-                        &sfield(lw, info, state, at(Part::Flag(k)), span)?,
-                        lit(Ty::Bool, span, Lit::Bool(false)),
-                    )?;
-                }
-            }
         }
         PlanKind::Par { .. } => {}
     }

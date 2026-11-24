@@ -10,7 +10,7 @@
 use super::twin::{Family, run};
 use super::twin_tests::{check, heavy_seeds};
 use super::twin_when_tests::{assert_covered, assert_held, interpreter_failures, shown};
-use super::twin_wrap::make;
+use super::twin_wrap::{make, make_p};
 
 const WRAP: Family = ("wrap_twins", make);
 
@@ -79,4 +79,53 @@ fn a_mutant_of_the_twin_of_a_block_is_caught_by_the_evaluator() {
 #[ignore = "heavy: the gate item `heavy` runs it"]
 fn heavy_wrap_twins() {
     println!("{:?}", check(heavy_seeds(200), WRAP));
+}
+
+// The shapes of S-1228 (P) (`make_p`, W7-10 (P)/t): a chain and a named flow that wraps part of it give the same values when the `reset_if~` outside
+// the flow is before the stages that a `when~` in it moves to W: the shape with no block (`slot~(1.0).when~(cb).reset_if~(r)` and `ws~(cb).reset_if~(r)`,
+// F1 of the break side of U3ae, which differed in the interpreter before S-1228), and a block of 4 in `w` with a `reset_if~` outside that ticks more
+// often than it (the data of a seed does not often put the reset on a tick of the block).
+
+const WRAP_P: Family = ("wrap_p_twins", make_p);
+/// The seeds of the gate that hold today and whose mutants are caught: no block at all (`n_0`), a `reset_if~` outside `w` over a `when~` in it, and
+/// one that ticks more often than the block of 4 in `w` (`p_n4_reset_often`).
+const GATE_P: [u64; 7] = [1, 2, 4, 5, 10, 14, 107];
+const COVER_P: &str =
+    "n_0 n_2 n_4 p_reset_over_when p_n4_reset_often h_slot h_tk h_acc h_lp in_when in_reset out_mod nest nest_n4";
+/// The seeds that differed before S-1228 (`n_0`, head `slot`, a `when~` in `w` and a `reset_if~` outside it that ticks at a stage that the `when~`
+/// moves): the reset went after the stage in the chain written out and before it in the flow that wraps the `when~`; with the order of S-1228 they agree.
+const LATER_P: [u64; 3] = [702, 743, 1139];
+
+#[test]
+fn the_gate_seeds_of_the_shapes_of_s1228_hold_every_form_of_the_table_of_what_is_covered() {
+    assert_covered(make_p, &GATE_P, COVER_P);
+    assert_covered(make_p, &LATER_P, "n_0 p_reset_over_when h_slot out_mod");
+}
+
+#[test]
+fn the_shapes_of_s1228_that_hold_today_hold_in_the_interpreter_and_their_mutants_are_caught() {
+    assert_held(make_p, &GATE_P, false);
+    assert_held(make_p, &GATE_P, true);
+}
+
+#[test]
+fn the_shapes_of_s1228_that_hold_today_agree_on_the_evaluator_and_in_the_interpreter() {
+    println!("{:?}", check(GATE_P.to_vec(), WRAP_P));
+}
+
+/// The chain written out and the flow that wraps its `when~` give the same values when the reset outside it is before the moved stage (S-1228).
+#[test]
+fn a_reset_outside_a_flow_that_wraps_a_when_is_before_the_moved_stage_in_the_chain_written_out_too() {
+    assert_held(make_p, &LATER_P, false);
+}
+
+#[test]
+fn a_reset_outside_a_flow_that_wraps_a_when_agrees_on_the_evaluator_and_in_the_interpreter() {
+    println!("{:?}", check(LATER_P.to_vec(), WRAP_P));
+}
+
+#[test]
+#[ignore = "heavy: the gate item `heavy` runs it"]
+fn heavy_wrap_p_twins() {
+    println!("{:?}", check(heavy_seeds(200), WRAP_P));
 }

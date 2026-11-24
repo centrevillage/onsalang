@@ -89,7 +89,7 @@ fn node_field_ty(lw: &mut Lowerer, flow: DefId, decls: &Decls, info: &FlowInfo, 
             Ok(Ty::Array(Box::new(ty), super::chain::len(n, part, span)?))
         }
         // Of a guard (§11.10, S-1220): its condition, its count, its held output.
-        (PlanKind::Instance { .. }, Part::On(_) | Part::Flag(_)) => Ok(Ty::Bool),
+        (PlanKind::Instance { .. }, Part::On(_)) => Ok(Ty::Bool),
         (PlanKind::Instance { .. }, Part::Count(_)) => Ok(Ty::u32()),
         (PlanKind::Instance { callee, .. }, Part::Held(_)) => {
             let out = lw.a.def(*callee).as_flow().map(|f| f.out);

@@ -230,6 +230,11 @@ impl Level {
     pub(super) fn reset(&self) -> Option<Guard> {
         self.guard.filter(|g| g.kind == Modifier::ResetIf)
     }
+
+    /// The stage of the caller of this part that a work of the part inside at its stage `x` is in (§11.9, §11.10): `caller_stage` out of a boundary, and at least W out of a `when~` (it runs the slower ticks inside in its W).
+    pub(super) fn outer(&self, x: i32) -> i32 {
+        self.when().map_or(caller_stage(x, self.ratio), |w| x.max(w.w))
+    }
 }
 
 /// A `.when~(c)` or a `.reset_if~(c)` of a chain (§11.10, S-1209): of a `.when~`, `w` is the clock W as its part reads it, the output of the part inside when that is slower than P (`sample` here) and P else; of a
@@ -249,6 +254,11 @@ pub(super) struct Guard {
 pub(super) struct CondClock {
     pub clock: Clock,
     pub tick: bool,
+}
+
+/// The stage of the caller of the chain of the parts `levels` that the port `n` of its head (`Level::ins`), at the clock `q` there, is made at: the `Guard::at` of a condition, else the stage of `q`.
+pub(super) fn port_stage(levels: &[Level], n: usize, q: i32) -> i32 {
+    levels.iter().find_map(|l| l.guard.filter(|g| g.port == Some(n))).map_or(q.min(0), |g| g.at)
 }
 
 /// The expressions of the ports of the parts of a chain (`Level::ins`): the arguments `args` of its head, then the condition of each modifier that has one, innermost first.
@@ -291,7 +301,7 @@ pub(super) fn levels(
         made: body_out_stage(m),
         guard: None,
     };
-    let mut all = vec![head];
+    let (mut all, mut timed) = (vec![head], Vec::new());
     for (i, &bound) in bounds.iter().enumerate() {
         let r = match bound {
             Bound::Rate(r) => r,
@@ -306,6 +316,7 @@ pub(super) fn levels(
                 let n = part.ins.len() - 1;
                 if let (true, Some(g)) = (cc.tick && gathered(tick, outside), part.guard.as_mut()) {
                     (g.port, part.ins[n]) = (Some(n), Some(tick));
+                    timed.extend((cc.clock == Clock::AMBIENT).then_some(n));
                 }
                 all.push(part);
                 continue;
@@ -332,11 +343,21 @@ pub(super) fn levels(
         };
         all.push(next);
     }
-    // The stage of the caller each condition is read in: its W (or R) moved out of the parts outside it as their stages are (`caller_stage`, `when_level`; a `reset_if~` keeps them).
+    // The stage of the caller each condition is read in: its W (or R) moved out of the parts outside it as their stages are (`Level::outer`; a `reset_if~` keeps them). One that a boundary gathers is made where the
+    // caller makes the port (`Frame::feed`): at its clock, as an input of the head (§11.10: "同じクロックの頭の入力と同じ時点"), but `sample_tick()` alone (a value of the parameter kinds with it too), whose value is the time of
+    // the place that reads it (§11.4), at the stage the outermost ring that gathers it is written in, moved out the same way: where an outer `when~` runs that ring, at the frames it ran.
+    let top = all.len() - 1;
     for b in 1..all.len() {
-        let out = |x, l: &Level| l.when().map_or(caller_stage(x, l.ratio), |o| x.max(o.w));
-        let at = all[b].guard.map(|m| all[b + 1..].iter().fold(m.w, out));
-        if let (Some(m), Some(at)) = (all[b].guard.as_mut(), at) {
+        let Some(m) = all[b].guard else { continue };
+        let ring = |n: usize| (b + 1..all.len()).rev().find(|g| all[*g].gathers.contains(&n));
+        let (from, x) = match m.port {
+            None => (b, Some(m.w)),
+            Some(n) if timed.contains(&n) => ring(n).map_or((top, None), |g| (g, all[g].ins[n].map(|k| k.min(0)))),
+            Some(n) => (top, all[top].ins[n].map(|k| k.min(0))),
+        };
+        let x = x.ok_or(Fault::Internal("a port of a condition with no clock"))?;
+        let at = all[from + 1..].iter().fold(x, |x, l| l.outer(x));
+        if let Some(m) = all[b].guard.as_mut() {
             m.at = at;
         }
     }

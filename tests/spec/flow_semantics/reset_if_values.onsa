@@ -7,7 +7,8 @@
 // the frame + 1, so the output is the sum of the inputs since the last reset); a frame where `r` holds puts the state of `rs` back to its initial value BEFORE that frame's stages, so the frame gives its own input (the level is read:
 // every true frame resets). `slot(f)` is the head of when_values.onsa: its stage of `sample / 2` writes the field `s` (acc~ under `.down~(2)`: s = 1 at the frames 0 1, 2 at 2 3 ...), the stage of `sample` reads it, `n` counts the
 // frames: 100 s + n = 101 102 203 204 305 .... A reset puts `n`, the state of the child and the field `s` back (T.default(), 0, and it stays 0 until the next grid), but not the phase counter (the next grid is at the same frame as
-// without it); a grid that is at the frame of the reset writes first and the reset takes the value back (a tick slower than the condition's tick, §11.10).
+// without it); a grid that is at the frame of the reset writes first and the reset takes the value back (a tick slower than the condition's tick, §11.10), unless a `when~` to the left of the reset moves that stage to W's
+// stage (§11.9): then the reset is before it (S-1228, the sentence of §11.10 on a `when~` and the `reset_if~` outside it).
 
 flow ramp() -> F32 at sample {
   let t = prev~(^t) + 1.0
@@ -87,6 +88,22 @@ pub flow slot_when_block(c: Bool at block, r: Bool at sample) -> F32 at sample {
 
 pub flow slot_when_true(r: Bool at sample) -> F32 at sample {
   slot~(1.0).when~(true).reset_if~(r)
+}
+
+flow ws_block(c: Bool at block) -> F32 at sample {
+  slot~(1.0).when~(c)
+}
+
+flow ws_signal(c: Bool at sample) -> F32 at sample {
+  slot~(1.0).when~(c)
+}
+
+pub flow wrapped_block(c: Bool at block, r: Bool at sample) -> F32 at sample {
+  ws_block~(c).reset_if~(r)
+}
+
+pub flow wrapped_signal(c: Bool at sample, r: Bool at sample) -> F32 at sample {
+  ws_signal~(c).reset_if~(r)
 }
 
 pub flow when_then_reset(c: Bool at sample, r: Bool at sample) -> F32 at sample {
@@ -186,37 +203,62 @@ test "a field written at a tick and read at sample is T.default() after the rese
   assert b == [101.0, 102.0, 203.0, 204.0, 1.0, 2.0, 103.0, 104.0]
 }
 
-test "x.when~(c).reset_if~(r) resets the stopped frames too and the held output; x.reset_if~(r).when~(c) resets only the frames that run" {
+test "x.when~(c).reset_if~(r) resets the stopped frames too and the held output, before the stage that the when moves; x.reset_if~(r).when~(c) resets only the frames that run" {
   // c = 1 1 0 1 0 0 1 1 (the runs j = 0 .. 4 at the frames 0 1 3 6 7), r = 0 0 1 1 0 1 0 0. The counter of the runs goes on in both.
-  // When then reset: the frame 2 (stopped, r) reads T.default() 0 and resets; the frame 3 is the run j = 2 (a grid: the child writes s = 1) and r takes the state back: n = 1, s = 0: 1; the frame 4 holds 1; the frame 5 (stopped, r) is 0 and resets; the
-  // run j = 3 (frame 6, no grid) is 1 (n = 1, s = 0); the run j = 4 (frame 7, a grid) is s = 1, n = 2: 102.
-  // Reset then when: the stopped frames are not read: the frame 2 keeps 102; the run j = 2 at the frame 3 is 1 as above, the frames 4 and 5 hold 1, the run j = 3 is 2 (n = 2, s = 0), the run j = 4 is s = 1, n = 3: 103.
+  // When then reset (S-1228, the reset outside a `when~` is before the stage that the `when~` moves to W): the frame 2 (stopped, r) reads T.default() 0 and resets; the frame 3 is the run j = 2 (a grid: the child writes s = 1) and r is true: the state is put back
+  // first, then the grid writes: n = 1, s = 1: 101; the frame 4 holds 101; the frame 5 (stopped, r) is 0 and resets; the run j = 3 (frame 6, no grid) is 1 (n = 1, s = 0); the run j = 4 (frame 7, a grid) is s = 1, n = 2: 102. A named flow that wraps the `when~`
+  // (`ws_signal~(c).reset_if~(r)`) is the same chain: the same values.
+  // Reset then when (the reset inside the `when~`: the stage of the part that is slower than the reset's tick writes first and the reset takes it back): the stopped frames are not read: the frame 2 keeps 102; the run j = 2 at the frame 3 is 1 (n = 1, s = 0),
+  // the frames 4 and 5 hold 1, the run j = 3 is 2 (n = 2, s = 0), the run j = 4 is s = 1, n = 3: 103.
   let c: [Bool; 8] = [true, true, false, true, false, false, true, true]
   let r: [Bool; 8] = [false, false, true, true, false, true, false, false]
   var a: [F32; 8] = [0.0; 8]
   var b: [F32; 8] = [0.0; 8]
+  var w: [F32; 8] = [0.0; 8]
   var sa = when_then_reset.init(8.0)
   var sb = reset_then_when.init(8.0)
+  var sw = wrapped_signal.init(8.0)
   when_then_reset.process(inout sa, when_then_reset.In { c: c, r: r }, inout a)
   reset_then_when.process(inout sb, reset_then_when.In { c: c, r: r }, inout b)
-  assert a == [101.0, 102.0, 0.0, 1.0, 1.0, 0.0, 1.0, 102.0]
+  wrapped_signal.process(inout sw, wrapped_signal.In { c: c, r: r }, inout w)
+  assert a == [101.0, 102.0, 0.0, 101.0, 101.0, 0.0, 1.0, 102.0]
+  assert w == a
   assert b == [101.0, 102.0, 102.0, 1.0, 1.0, 1.0, 2.0, 103.0]
 }
 
-test "x.when~(true).reset_if~(r) and x.when~(c).reset_if~(r) with c always true are x.reset_if~(r): the same values" {
-  let r: [Bool; 8] = [false, false, false, false, true, false, false, false]
+test "x.when~(true).reset_if~(r) is not x.reset_if~(r) where the reset is at a tick of a slower stage of x: the reset is before the stage that the when moves (S-1228)" {
+  // r at the frame 4, a grid: x = slot has the field s written at `sample / 2` first and the reset takes it back (1 2 103 104 after it), but a `when~` moves that stage to W and the reset is before it: the stage writes after the reset (s = 1, n = 1): 101 102 203 204.
+  // `when~(true)`, `when~(c)` with c a block value that holds, and a named flow that wraps the `when~` are the same chain, the same values. r at the frame 3 (no stage there): all give 101 102 203 1 102 103 204 205.
+  let r4: [Bool; 8] = [false, false, false, false, true, false, false, false]
+  let r3: [Bool; 8] = [false, false, false, true, false, false, false, false]
   var a: [F32; 8] = [0.0; 8]
   var b: [F32; 8] = [0.0; 8]
   var c: [F32; 8] = [0.0; 8]
+  var w: [F32; 8] = [0.0; 8]
   var sa = slot_reset.init(8.0)
   var sb = slot_when_true.init(8.0)
   var sc = slot_when_block.init(8.0)
-  slot_reset.process(inout sa, r, inout a)
-  slot_when_true.process(inout sb, r, inout b)
-  slot_when_block.process(inout sc, slot_when_block.Params { c: true }, r, inout c)
+  var sw = wrapped_block.init(8.0)
+  slot_reset.process(inout sa, r4, inout a)
+  slot_when_true.process(inout sb, r4, inout b)
+  slot_when_block.process(inout sc, slot_when_block.Params { c: true }, r4, inout c)
+  wrapped_block.process(inout sw, wrapped_block.Params { c: true }, r4, inout w)
   assert a == [101.0, 102.0, 203.0, 204.0, 1.0, 2.0, 103.0, 104.0]
-  assert b == a
-  assert c == a
+  assert b == [101.0, 102.0, 203.0, 204.0, 101.0, 102.0, 203.0, 204.0]
+  assert c == b
+  assert w == b
+  var d: [F32; 8] = [0.0; 8]
+  var e: [F32; 8] = [0.0; 8]
+  var f: [F32; 8] = [0.0; 8]
+  var sd = slot_reset.init(8.0)
+  var se = slot_when_true.init(8.0)
+  var sf = wrapped_block.init(8.0)
+  slot_reset.process(inout sd, r3, inout d)
+  slot_when_true.process(inout se, r3, inout e)
+  wrapped_block.process(inout sf, wrapped_block.Params { c: true }, r3, inout f)
+  assert d == [101.0, 102.0, 203.0, 1.0, 102.0, 103.0, 204.0, 205.0]
+  assert e == d
+  assert f == d
 }
 
 test "the grid of a reset_if~ inside a when~ counts the runs of the part, not the frames" {

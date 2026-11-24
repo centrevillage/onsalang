@@ -21,7 +21,7 @@ const EXOTIC: Family = ("reset_exotic", make_exotic);
 /// `sample_tick()` condition, `h_outer_tick`; `sample_tick()` at a W slower than `sample`, `c_tick_slow`) are in `COVER`. W7-10 U3a/t2
 /// chose the seeds again: the twin `slowc` is not made inside a block (a `sample_tick()` there is gathered, and a slower value is read
 /// at its own tick), and the twin `atid` was added.
-const GATE: [u64; 11] = [339, 1934, 46, 1336, 2426, 177, 17, 117, 20, 25, 87];
+const GATE: [u64; 12] = [339, 1934, 46, 1336, 2426, 177, 17, 117, 20, 25, 87, 1988];
 /// The seeds of the twin `atid` at a place inside a block (`at_blk`), as in twin_when_tests.rs: they fail until U3a keeps an `at`
 /// on a parameter kind from making a ring.
 const AT_BLOCK: [u64; 3] = [95, 194, 247];
@@ -39,9 +39,9 @@ const COVER: &str = "h_slot h_sl h_sltk h_tk h_acc h_lp h_dws h_mk2 h_mk4 h_oute
     o_burst o_slow w_slow w_pos w_p r_in_block blk burst_up k_atid c_at_sample";
 /// The seeds of the gate for the matrix of `exotic`, and what they hold: the forms of the breaker's two highs (a state given back
 /// before a slow stage wrote, a deal array read before it was given back) and the head with a `when~` inside.
-const EXOTIC_GATE: [u64; 6] = [344, 527, 1098, 1404, 1779, 2082];
+const EXOTIC_GATE: [u64; 7] = [307, 489, 983, 137, 853, 1308, 1611];
 const EXOTIC_COVER: &str = "h_tk h_slot h_sl h_mk2 h_mk4 h_outer r_1 r_2 r_3 r_has_when r_slow_has_when r_in_when r_has_up r_in_up r_has_down \
-    r_in_down r_has_two_when r_deal_up f_block t_block o_plain o_burst o_slow ins_front ins_mid ins_end len_3 len_4 r_in_block";
+    r_in_down r_has_two_when f_block t_block o_plain o_burst o_slow ins_front ins_mid ins_end len_3 len_4 r_in_block";
 
 #[test]
 fn the_flows_of_the_gate_seeds_pass_the_checker_and_the_twins_hold_in_the_interpreter() {

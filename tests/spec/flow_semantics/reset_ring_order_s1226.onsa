@@ -3,12 +3,13 @@
 // mode = "test"
 // spec = ["§11.10", "§11.9"]
 
-// The order in which an outer `reset_if~` puts back the ring of the condition of a `when~` inside a block and the later run of the same tick reads it (W7-10 U3a/t2; S-1226, S-1209). THE VALUES ARE THE PROVISIONAL READING (α) of S-1226, not what the spec fixes: the spec leaves
-// open whether the run that follows the reset in the tick reads the ring as it was gathered or as it was put back; the case is to change with the decision. The three readings of the review (target/notes/181/w710/u3a/adv_report.md, chapter 4) give
-//   (α) executes in order: the runs before the reset read the gathered value, the ones after it the ring put back (false)  0 0 101 102 1 1 2 3 4 5 6 107
-//   (β) the ring is copied at the start of the tick (excluded by §11.9: "次の遅い刻みが集める配列は、初期化の前の所が `T.default()`")  0 0 101 102 1 2 3 4 5 6 107 108
-//   (γ) the ring is put back before the tick: the runs of the tick read false  0 0 101 102 0 0 1 2 3 4 5 6.
-// Worked out by hand with the order of §11.10: at a position the condition of the `when~` is read, then the work of a stage slower than the clock R of the `reset_if~`, then the reset, then the rest of the run.
+// The order in which an outer `reset_if~` puts back the ring of the condition of a `when~` inside a block and the run of the same tick reads it (S-1226 decided as (γ) by S-1228 (P); W7-10 U3a/t2, redone by W7-10 (P)/t). A `reset_if~` goes back
+// before the work of its tick and of the stages after it, so when its tick is also a tick of the block that holds the `when~`, the ring of the condition is put back before the runs of the tick and every run of the tick reads the ring as it was put back (false).
+// §11.9: "次の遅い刻みが集める配列は、初期化の前の所が `T.default()`" and §11.10: "境界の内に書いた修飾子の条件は、同じクロックの頭の入力と同じ時点の値を読む". The other readings of the review (target/notes/181/w710/u3a/adv_report.md, chapter 4):
+//   (α) the runs before the reset read the gathered value, the ones after it the ring put back: 0 0 101 102 1 1 2 3 4 5 6 107   (not the text: the ring is read at the time of the run, and the runs of one tick are one time of the reset)
+//   (β) the ring is copied at the start of the tick: 0 0 101 102 1 2 3 4 5 6 107 108   (excluded by §11.9, as above)
+//   (γ) the ring is put back before the tick: 0 0 101 102 0 0 1 2 3 4 5 6   (this file)
+// Worked out by hand: at a position the reset (the condition read at its tick) is first, then the `when~`'s condition is read from the ring, the stages and the runs follow.
 
 flow accb(f: F32 at block) -> F32 at sample {
   let n = f + prev~(^n)
@@ -33,16 +34,16 @@ pub flow ring_order(c: Bool at sample, r: Bool at sample) -> F32 at sample {
   slot8~(1.0).when~(c).up~(2).down~(2).reset_if~(h2~(r))
 }
 
-test "(α) S-1226: a reset at the tick 4 after the first run read the ring as gathered: the 2nd run reads the ring put back and is stopped" {
+test "(γ) S-1226: a reset at the tick 4, which is also a tick of the block, puts the ring back before the runs: both runs of the tick read false and are stopped, and the part is at its start" {
   // c is true all along and r is true at the frame 3 only; `h2~(r)` is r(p - 1) at the even position p, so the reset is at the position 4. The tick 0 gathers the defaults of c (false): the frames 0, 1 are stopped (0).
   // The tick 2 gathers c(0), c(1) = 1 1: the 1st and the 2nd run made, 101 102 (the head `slot8` has a stage of `sample / 8` that counts the runs made: its first run is a tick of it, s = 1, n = 1, 2).
-  // The tick 4 gathers c(2), c(3) = 1 1: the run 0 reads true, the stage that is slower than the clock R of the reset has no work at this run (the 3rd run made is not a multiple of 8), the part is put back (n = 0, the field s = 0, the ring false, the held output 0)
-  // and the run gives n = 1 with s = 0: 1. The run 1 reads the ring put back (false) and is stopped: it holds the last output 1. The ticks 6, 8, 10 gather true: n = 2 3, 4 5, 6 and the 8th run made (the counter of the grid is not put back, §11.9) is a tick of `sample / 8`:
-  // the sum of `accb` was put back (0 + 1): s = 1 and n = 7: 107.
+  // The tick 4: the reset is first (the condition is read at the tick 4), it puts the part back (n = 0, the field s = 0, the ring false, the held output 0, the dealt array 0); then both runs of the tick read the ring (false) and are stopped, and hold the output 0: the frames 4, 5 are 0 0.
+  // The frames 4 and 5 write c(4), c(5) = 1 1 into the ring: the tick 6 makes the runs 3 and 4 made (the counter of the grid is not put back, §11.9, and there is no stage at them): n = 1, 2, with s = 0: 1 2. The ticks 8 and 10 give 3 4 and 5 6 (the 8th run made would be a tick
+  // of `sample / 8`, and the runs made are 7 at the frame 11).
   let cs: [Bool; 12] = [true; 12]
   let rs: [Bool; 12] = [false, false, false, true, false, false, false, false, false, false, false, false]
   var out: [F32; 12] = [9.0; 12]
   var st = ring_order.init(8.0)
   ring_order.process(inout st, ring_order.In { c: cs, r: rs }, inout out)
-  assert out == [0.0, 0.0, 101.0, 102.0, 1.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 107.0]
+  assert out == [0.0, 0.0, 101.0, 102.0, 0.0, 0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0]
 }

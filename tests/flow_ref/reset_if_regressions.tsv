@@ -1,48 +1,66 @@
 # flow_ref 1 source=tests/spec/flow_semantics/reset_if_regressions.onsa tests=5 evaluated=5 unavailable=0 skipped=0 waiting=0
-@ two whens inside a reset: the stage at sample / 2 writes first at the frame of the reset
+@ two whens inside a reset: the reset is before the stage at sample / 2 that the whens move to W, so the grid at the frame of the reset writes after it
 init 0 reset_if_regressions.plain sr=0x41000000
 init 1 reset_if_regressions.two_whens sr=0x41000000
 init 2 reset_if_regressions.two_true_whens sr=0x41000000
+init 3 reset_if_regressions.wrapped_plain sr=0x41000000
 process 0 frames=8 in r=[false false false false true false false false]
 out=[0x42ca0000 0x42cc0000 0x434b0000 0x434c0000 0x3f800000 0x40000000 0x42ce0000 0x42d00000]
 process 1 params b=true frames=8 in r=[false false false false true false false false]
-out=[0x42ca0000 0x42cc0000 0x434b0000 0x434c0000 0x3f800000 0x40000000 0x42ce0000 0x42d00000]
+out=[0x42ca0000 0x42cc0000 0x434b0000 0x434c0000 0x42ca0000 0x42cc0000 0x434b0000 0x434c0000]
 process 2 frames=8 in r=[false false false false true false false false]
-out=[0x42ca0000 0x42cc0000 0x434b0000 0x434c0000 0x3f800000 0x40000000 0x42ce0000 0x42d00000]
-init 3 reset_if_regressions.plain sr=0x41000000
-init 4 reset_if_regressions.two_whens sr=0x41000000
-process 3 frames=8 in r=[false false false true false false false false]
+out=[0x42ca0000 0x42cc0000 0x434b0000 0x434c0000 0x42ca0000 0x42cc0000 0x434b0000 0x434c0000]
+process 3 frames=8 in r=[false false false false true false false false]
+out=[0x42ca0000 0x42cc0000 0x434b0000 0x434c0000 0x42ca0000 0x42cc0000 0x434b0000 0x434c0000]
+init 4 reset_if_regressions.plain sr=0x41000000
+init 5 reset_if_regressions.two_whens sr=0x41000000
+init 6 reset_if_regressions.wrapped_plain sr=0x41000000
+process 4 frames=8 in r=[false false false true false false false false]
 out=[0x42ca0000 0x42cc0000 0x434b0000 0x3f800000 0x42cc0000 0x42ce0000 0x434c0000 0x434d0000]
-process 4 params b=true frames=8 in r=[false false false true false false false false]
+process 5 params b=true frames=8 in r=[false false false true false false false false]
 out=[0x42ca0000 0x42cc0000 0x434b0000 0x3f800000 0x42cc0000 0x42ce0000 0x434c0000 0x434d0000]
-@ a when inside a reset inside an up: the dealt array is reset after the slower stage writes it
+process 6 frames=8 in r=[false false false true false false false false]
+out=[0x42ca0000 0x42cc0000 0x434b0000 0x3f800000 0x42cc0000 0x42ce0000 0x434c0000 0x434d0000]
+@ a when inside a reset inside an up: the dealt array is reset, then the slower stage that the when moves writes it, and the next frame resets it again
 init 0 reset_if_regressions.up_plain sr=0x41000000
 init 1 reset_if_regressions.up_when sr=0x41000000
+init 2 reset_if_regressions.wrapped_deal sr=0x41000000
 process 0 frames=6
 out=[0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000]
 process 1 frames=6
-out=[0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000]
-@ a reset at sample / 2 after a stage of the part at sample / 4 moved by a when
+out=[0x42f00000 0x00000000 0x42f00000 0x00000000 0x42f00000 0x00000000]
+process 2 frames=6
+out=[0x42f00000 0x00000000 0x42f00000 0x00000000 0x42f00000 0x00000000]
+@ a reset at sample / 2 and a stage of the part at sample / 4 that a when moves to W: with no when the stage writes first, with it the reset is first
 init 0 reset_if_regressions.slow_plain sr=0x41000000
 init 1 reset_if_regressions.slow_when sr=0x41000000
+init 2 reset_if_regressions.wrapped_slow sr=0x41000000
 process 0 params b=true frames=8
 out=[0x3f800000 0x40000000 0x3f800000 0x40000000 0x3f800000 0x40000000 0x3f800000 0x40000000]
 process 1 params b=true frames=8
-out=[0x3f800000 0x40000000 0x3f800000 0x40000000 0x3f800000 0x40000000 0x3f800000 0x40000000]
-@ a when inside an up inside a reset, with and without a when between (the implementer's forms 4 and 5)
+out=[0x42ca0000 0x42cc0000 0x3f800000 0x40000000 0x42ca0000 0x42cc0000 0x3f800000 0x40000000]
+process 2 params b=true frames=8
+out=[0x42ca0000 0x42cc0000 0x3f800000 0x40000000 0x42ca0000 0x42cc0000 0x3f800000 0x40000000]
+@ a when inside an up inside a reset, with and without a when between: the stage that a when moves is written after the reset
 init 0 reset_if_regressions.up_slow_plain sr=0x41000000
 init 1 reset_if_regressions.up_slow_when sr=0x41000000
 init 2 reset_if_regressions.up_slow_when_when sr=0x41000000
+init 3 reset_if_regressions.wrapped_up sr=0x41000000
 process 0 params p=true frames=8
 out=[0x44fa2000 0x457a3000 0x44fa2000 0x457a3000 0x44fa2000 0x457a3000 0x44fa2000 0x457a3000]
 process 1 params p=true frames=8
-out=[0x44fa2000 0x457a3000 0x44fa2000 0x457a3000 0x44fa2000 0x457a3000 0x44fa2000 0x457a3000]
+out=[0x47c76a80 0x47cb5380 0x44fa2000 0x457a3000 0x47c76a80 0x47cb5380 0x44fa2000 0x457a3000]
 process 2 params p=true frames=8
-out=[0x44fa2000 0x457a3000 0x44fa2000 0x457a3000 0x44fa2000 0x457a3000 0x44fa2000 0x457a3000]
-@ a reset outside a when that stops: the slower stage on the moved grid writes first, a stopped frame is reset too
+out=[0x47c76a80 0x47cb5380 0x44fa2000 0x457a3000 0x47c76a80 0x47cb5380 0x44fa2000 0x457a3000]
+process 3 params p=true frames=8
+out=[0x47c76a80 0x47cb5380 0x44fa2000 0x457a3000 0x47c76a80 0x47cb5380 0x44fa2000 0x457a3000]
+@ a reset outside a when that stops: the reset is before the stage that the when moves to W, and a stopped frame is reset too
 init 0 reset_if_regressions.stopping_inner sr=0x41000000
 init 1 reset_if_regressions.reset_when_reset sr=0x41000000
+init 2 reset_if_regressions.wrapped_stopping sr=0x41000000
 process 0 params p=true frames=8 in c=[true true false true true false true true]
-out=[0x3f800000 0x40000000 0x00000000 0x3f800000 0x3f800000 0x3f800000 0x3f800000 0x40000000]
+out=[0x42ca0000 0x42cc0000 0x00000000 0x3f800000 0x3f800000 0x3f800000 0x42ca0000 0x42cc0000]
 process 1 params p=true frames=8 in c=[true true false true true false true true]
-out=[0x3f800000 0x40000000 0x00000000 0x3f800000 0x3f800000 0x3f800000 0x3f800000 0x40000000]
+out=[0x42ca0000 0x42cc0000 0x00000000 0x3f800000 0x3f800000 0x3f800000 0x3f800000 0x40000000]
+process 2 params p=true frames=8 in c=[true true false true true false true true]
+out=[0x42ca0000 0x42cc0000 0x00000000 0x3f800000 0x3f800000 0x3f800000 0x42ca0000 0x42cc0000]

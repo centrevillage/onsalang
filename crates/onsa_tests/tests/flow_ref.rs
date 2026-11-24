@@ -31,6 +31,10 @@ mod print_tests;
 mod shrink;
 #[path = "flow_ref/twin.rs"]
 mod twin;
+#[path = "flow_ref/twin_chain.rs"]
+mod twin_chain;
+#[path = "flow_ref/twin_chain_tests.rs"]
+mod twin_chain_tests;
 #[path = "flow_ref/twin_match.rs"]
 mod twin_match;
 #[path = "flow_ref/twin_pan.rs"]

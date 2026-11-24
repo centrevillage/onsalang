@@ -49,17 +49,29 @@ process 0 frames=8 in r=[false false false true false false false false]
 out=[0x42ca0000 0x42cc0000 0x434b0000 0x3f800000 0x42cc0000 0x42ce0000 0x434c0000 0x434d0000]
 process 1 frames=8 in r=[false false false false true false false false]
 out=[0x42ca0000 0x42cc0000 0x434b0000 0x434c0000 0x3f800000 0x40000000 0x42ce0000 0x42d00000]
-- x.when~(c).reset_if~(r) resets the stopped frames too and the held output; x.reset_if~(r).when~(c) resets only the frames that run	skipped layout
-@ x.when~(true).reset_if~(r) and x.when~(c).reset_if~(r) with c always true are x.reset_if~(r): the same values
+- x.when~(c).reset_if~(r) resets the stopped frames too and the held output, before the stage that the when moves; x.reset_if~(r).when~(c) resets only the frames that run	skipped layout
+@ x.when~(true).reset_if~(r) is not x.reset_if~(r) where the reset is at a tick of a slower stage of x: the reset is before the stage that the when moves (S-1228)
 init 0 reset_if_values.slot_reset sr=0x41000000
 init 1 reset_if_values.slot_when_true sr=0x41000000
 init 2 reset_if_values.slot_when_block sr=0x41000000
+init 3 reset_if_values.wrapped_block sr=0x41000000
 process 0 frames=8 in r=[false false false false true false false false]
 out=[0x42ca0000 0x42cc0000 0x434b0000 0x434c0000 0x3f800000 0x40000000 0x42ce0000 0x42d00000]
 process 1 frames=8 in r=[false false false false true false false false]
-out=[0x42ca0000 0x42cc0000 0x434b0000 0x434c0000 0x3f800000 0x40000000 0x42ce0000 0x42d00000]
+out=[0x42ca0000 0x42cc0000 0x434b0000 0x434c0000 0x42ca0000 0x42cc0000 0x434b0000 0x434c0000]
 process 2 params c=true frames=8 in r=[false false false false true false false false]
-out=[0x42ca0000 0x42cc0000 0x434b0000 0x434c0000 0x3f800000 0x40000000 0x42ce0000 0x42d00000]
+out=[0x42ca0000 0x42cc0000 0x434b0000 0x434c0000 0x42ca0000 0x42cc0000 0x434b0000 0x434c0000]
+process 3 params c=true frames=8 in r=[false false false false true false false false]
+out=[0x42ca0000 0x42cc0000 0x434b0000 0x434c0000 0x42ca0000 0x42cc0000 0x434b0000 0x434c0000]
+init 4 reset_if_values.slot_reset sr=0x41000000
+init 5 reset_if_values.slot_when_true sr=0x41000000
+init 6 reset_if_values.wrapped_block sr=0x41000000
+process 4 frames=8 in r=[false false false true false false false false]
+out=[0x42ca0000 0x42cc0000 0x434b0000 0x3f800000 0x42cc0000 0x42ce0000 0x434c0000 0x434d0000]
+process 5 frames=8 in r=[false false false true false false false false]
+out=[0x42ca0000 0x42cc0000 0x434b0000 0x3f800000 0x42cc0000 0x42ce0000 0x434c0000 0x434d0000]
+process 6 params c=true frames=8 in r=[false false false true false false false false]
+out=[0x42ca0000 0x42cc0000 0x434b0000 0x3f800000 0x42cc0000 0x42ce0000 0x434c0000 0x434d0000]
 @ the grid of a reset_if~ inside a when~ counts the runs of the part, not the frames
 init 0 reset_if_values.in_when sr=0x41000000
 process 0 params c=true frames=8 in w=[true true false true false false true true]

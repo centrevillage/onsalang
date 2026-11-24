@@ -1,5 +1,5 @@
-//! The tests of `.reset_if~(r)` on the evaluator (W7-10 U2e; §11.10, §11.9, S-1186, S-1218, S-1222) and of a head input slower than the W of a `.when~`: the part is put back at the tick of its condition, after
-//! the slower ticks wrote (also those a `when~` inside runs in its W) and before the first work of a tick that is not slower, once a frame before the first run of an `.up~`, and at a stopped frame of a `when~` inside; the phase
+//! The tests of `.reset_if~(r)` on the evaluator (W7-10 U2e; §11.10, §11.9, S-1186, S-1218, S-1222, S-1228) and of a head input slower than the W of a `.when~`: the part is put back at the tick of its condition, after
+//! the slower stages wrote (not those a `when~` inside runs in its W, `reset_order_tests`) and before the first work of a stage that is not slower, once a frame before the first run of an `.up~`, and at a stopped frame of a `when~` inside; the phase
 //! counters and what a `when~` remembers go on. The values are worked out by hand from the spec, in the comment of each test. `slot(f)` writes `s` at `sample / 2` (its grid) and counts the frames in `n`: 100 s + n.
 
 use super::expr_tests::{def_named, with_checked};
@@ -63,24 +63,27 @@ fn a_reset_at_a_frame_of_the_grid_comes_after_the_slower_stage_wrote_and_one_bet
 
 #[test]
 fn a_reset_outside_a_when_puts_back_the_stopped_frames_and_the_held_output_and_one_inside_only_the_frames_that_run() {
-    // c = 1 1 0 1 0 0 1 1 (the runs 0 .. 4 at the frames 0 1 3 6 7), r = 0 0 1 1 0 1 0 0. Outside: the stopped frame 2 resets (the held output 0); the run 2 at the frame 3 is a grid of the part (s = 1 is written first) and
-    // is put back: n = 1, s = 0: 1; the frame 4 holds 1; the stopped frame 5 is 0; the run 3 (no grid) is 1; the run 4 (a grid) s = 1, n = 2: 102.
+    // c = 1 1 0 1 0 0 1 1 (the runs 0 .. 4 at the frames 0 1 3 6 7), r = 0 0 1 1 0 1 0 0. Outside: the stopped frame 2 resets (the held output 0); the run 2 at the frame 3 is a grid of the part, which the `when~` runs in
+    // its W: the part is put back before it (S-1228), and it writes s = 1 from the start: n = 1, 101; the frame 4 holds 101; the stopped frame 5 is reset to 0; the run 3 (no grid) is 1; the run 4 (a grid) s = 1, n = 2: 102.
     // Inside: the stopped frames are not reset: the frame 2 holds 102; the run 2 is 1, held at 4 and 5; the run 3 is 2; the run 4 is s = 1, n = 3: 103.
     let cols: [(&str, &[u8]); 2] = [("c", &[1, 1, 0, 1, 0, 0, 1, 1]), ("r", &[0, 0, 1, 1, 0, 1, 0, 0])];
     let outside =
         "flow top(c: Bool at sample, r: Bool at sample) -> F32 at sample { slot~(1.0).when~(c).reset_if~(r) }";
     let inside = "flow top(c: Bool at sample, r: Bool at sample) -> F32 at sample { slot~(1.0).reset_if~(r).when~(c) }";
-    same(&outs(outside, "top", None, &cols), &[101.0, 102.0, 0.0, 1.0, 1.0, 0.0, 1.0, 102.0]);
+    same(&outs(outside, "top", None, &cols), &[101.0, 102.0, 0.0, 101.0, 101.0, 0.0, 1.0, 102.0]);
     same(&outs(inside, "top", None, &cols), &[101.0, 102.0, 102.0, 1.0, 1.0, 1.0, 2.0, 103.0]);
 }
 
 #[test]
-fn a_reset_at_sample_over_two_comes_after_the_stage_that_a_when_inside_moves_to_its_w() {
-    // `slot4` writes s at `sample / 4` of the grid of the part, which the `when~` runs in its W (`sample`); p is read at the frames 0 2 4 6 (`sample / 2`). c = 1 1 0 1 1 0 1 1: the runs at the frames 0 1 3 4 6 7, the grid of the
-    // part at the runs 0 and 4 (the frames 0 and 6), where s = 1 is written and taken back by the reset after it: s stays 0, and n starts again at each even frame that runs: 1 2, the stopped frame 2 is reset to 0, 1 (the frame
-    // 3, n from the reset at 2), 1, held 1 at 5, 1 2.
+fn a_reset_at_sample_over_two_comes_before_the_stage_that_a_when_inside_moves_to_its_w() {
+    // `slot4` writes s at `sample / 4` of the grid of the part, which the `when~` runs in its W (`sample`), a stage after R; p is read at the frames 0 2 4 6 (`sample / 2`). c = 1 1 0 1 1 0 1 1: the runs at the frames 0 1 3 4 6 7,
+    // the grid of the part at the runs 0 and 4 (the frames 0 and 6), where the reset comes first (S-1228) and s = 1 is written from the start; n starts again at each even frame: 101 102, the stopped frame 2 is reset to 0,
+    // 1 (the frame 3, n from the reset at 2), 1, held 1 at 5, 101 102.
     let src = "flow top(c: Bool at sample, p: Bool at block) -> F32 at sample { slot4~(1.0).when~(c).reset_if~(p at (sample / 2)) }";
-    same(&outs(src, "top", Some(true), &[("c", &[1, 1, 0, 1, 1, 0, 1, 1])]), &[1.0, 2.0, 0.0, 1.0, 1.0, 1.0, 1.0, 2.0]);
+    same(
+        &outs(src, "top", Some(true), &[("c", &[1, 1, 0, 1, 1, 0, 1, 1])]),
+        &[101.0, 102.0, 0.0, 1.0, 1.0, 1.0, 101.0, 102.0],
+    );
 }
 
 #[test]
