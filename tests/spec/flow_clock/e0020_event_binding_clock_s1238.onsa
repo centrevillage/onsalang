@@ -1,0 +1,18 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§11.11", "§18.1"]
+
+// W7-11 U1a/t, S-560, S-1238 (spec §11.3: "束縛の側の `at` は、型注釈の有無によらず構文の段の E0020"; §11.11: "`at event` は入出力の宣言にだけ書く"): the clock `event` written on the binding side of a `let`
+// (after the name, after the type annotation) is E0020, as `at sample` is. The candidate is not fixed (S-1238: the candidate of §11.3 moves the clock to the value, and `let w = m at event` is E0815
+// whatever it is, so the form that the candidate takes, to remove the clock or to give none, is open; the provisional one removes the clock), so `fixes` is not written and the file does not count the candidates. The
+// error is at the `at`. One error per flow (§18.1).
+
+pub flow binding_clock_after_the_name(m: U32 at event) -> U32 at sample {
+  let w at event = m   //~ E0020
+  w
+}
+
+pub flow binding_clock_after_the_type(m: U32 at event) -> U32 at sample {
+  let w: U32 at event = m   //~ E0020
+  w
+}

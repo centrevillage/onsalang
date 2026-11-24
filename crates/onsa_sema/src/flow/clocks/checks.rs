@@ -224,20 +224,83 @@ impl Walk<'_> {
     pub(super) fn report_clash(&mut self, e: ExprId, ops: Clashed, looped: bool) {
         let span = self.ast.expr(e).span;
         let [a, b] = ops.map(|(_, c)| shown(c, span));
+        let events = ops.iter().all(|(_, c)| matches!(c, Clock::Event(_)));
         let what = if looped { "operands that enter a loop of `let`s, which has one clock," } else { "operands" };
         let msg = match ops.iter().find(|(_, c)| c.burst()) {
             Some((_, c)) => format!(
                 "a value at `{}` takes no operation at the call side for now; a conversion flow takes it (§11.9)",
                 c.shown(span)
             ),
+            None if events => {
+                format!(
+                    "the {what} are at the clocks of two events, which have no order and do not meet (§11.3, §11.11)"
+                )
+            }
             None => format!("the {what} are at the clocks `{a}` and `{b}`, which do not meet (§11.3, §11.9)"),
         };
         let mut d = Diagnostic::new(Stage::Flow, Code::E0815, span, msg).with_found(self.src(span));
         for (x, c) in ops.iter().filter_map(|&(x, c)| Some((x?, c))) {
-            d = d.with_note(self.ast.expr(x).span, format!("this operand is at `{}`", shown(c, span)));
+            let at = self.event_name(c).unwrap_or_else(|| format!("`{}`", shown(c, span)));
+            d = d.with_note(self.ast.expr(x).span, format!("this operand is at {at}"));
+        }
+        if events {
+            let rule = "write `at` on each event value, which reads its last value at that clock (`(a at sample) + b`, §11.11); `at` around the expression does not help";
+            return self.report(d.with_rule(rule));
         }
         let rule = "a slower value is read at a faster clock with `at` (`a at sample`), and a value at `sample * N` meets no other for now (§11.3, §11.9)";
         self.report(d.with_rule(rule));
+    }
+
+    /// The event clock `c` as a note names it, by its source: none of another
+    /// clock.
+    fn event_name(&self, c: Clock) -> Option<String> {
+        let Clock::Event(src) = c else { return None };
+        Some(match src.place(self.cx.inputs.len()) {
+            Err(i) => {
+                let l = self.cx.inputs.get(i)?;
+                format!("the event clock of `{}`", self.body.locals[l.0 as usize].name)
+            }
+            Ok(i) => match self.cx.calls.get(i)?.kind {
+                NodeKind::Instance(g) => {
+                    format!("the event clock of the output of this call of `{}`", self.a.def(g).name)
+                }
+                NodeKind::Delay(..) => return None,
+            },
+        })
+    }
+
+    /// The E0815 of the `par~` at `e` whose body gives out the event of the
+    /// call at `call` in it (§11.5, S-1096).
+    pub(super) fn report_par_event(&mut self, e: ExprId, call: Span) {
+        let span = self.ast.expr(e).span;
+        let msg = "the event of a call in the body of a `par~` is at a clock of its own in each replica, which have no order, so it is no value of the `par~` (§11.5, §11.11)";
+        let d = Diagnostic::new(Stage::Flow, Code::E0815, span, msg).with_found(self.src(span));
+        let d = d.with_note(call, "this call gives out the event");
+        self.report(d.with_rule(
+            "give the event to an event input in the body, or write `at sample` on it in the body; `at` outside the `par~` does not help (§11.5)",
+        ));
+    }
+
+    /// The clock the event input `input` of `g` reads its argument `x`, at
+    /// the clock `c`, at: the clock of an event value itself (§11.11). Of
+    /// another value E0815 at `x`, and in error.
+    pub(super) fn bound_event(&mut self, x: ExprId, c: Clock, input: &FlowInput, g: DefId) -> Clock {
+        if matches!(c, Clock::Event(_) | Clock::Error) {
+            return c;
+        }
+        let span = self.ast.expr(x).span;
+        let msg = format!(
+            "this argument is at the clock `{}` but the input `{}` of `{}` is at `{}`, which takes an event value (§11.11)",
+            shown(c, span),
+            input.name,
+            self.a.def(g).name,
+            crate::clock::EVENT
+        );
+        let d = Diagnostic::new(Stage::Flow, Code::E0815, span, msg).with_found(self.src(span));
+        self.report(d.with_rule(
+            "an event value is an event input of the flow, the event output of a call, or an expression of one of them with values at `block`, `init` or of constants",
+        ));
+        Clock::Error
     }
 
     /// The `if~` / `match~` (`of` and its `~` `tilde`) whose branches or
@@ -452,6 +515,9 @@ impl Walk<'_> {
         let span = self.ast.expr(x).span;
         let (shown, to, name) = (shown(c, span), at.shown(span), &self.a.def(g).name);
         let how = match (promotable(c, at), at.burst()) {
+            _ if matches!(c, Clock::Event(_)) && !at.burst() => {
+                "an event is read at `sample` and `(sample / N)`, never slower (§11.11)".into()
+            }
             (true, _) => format!("read it at `{to}` with `at` (§11.3)"),
             (false, true) => "a conversion flow takes it (§11.9)".into(),
             (false, false) => "a value is never made slower (§11.3)".into(),
@@ -461,6 +527,7 @@ impl Walk<'_> {
             input.name
         );
         let d = Diagnostic::new(Stage::Flow, Code::E0815, span, msg).with_found(self.src(span));
+        let d = self.to_sample_input(c, input, g).into_iter().fold(d, Diagnostic::with_fix);
         self.report(if time { d.with_note(span, SAMPLE_TICK_AT_BURSTS) } else { d });
     }
 
@@ -542,9 +609,13 @@ impl Walk<'_> {
         }
         let span = self.ast.expr(d).span;
         let (shown, to) = (shown(c, span), at.shown(span));
-        let msg = format!(
-            "the `d` of `vdelay~` is at the clock `{shown}` but the delay is at `{to}`; read it at `{to}` with `at` (§11.3, §11.4)"
-        );
+        let how = match at {
+            Clock::Event(_) => {
+                "a delay of an event reads values of that event and of the parameter kinds (§11.4, §11.11)".into()
+            }
+            _ => format!("read it at `{to}` with `at` (§11.3, §11.4)"),
+        };
+        let msg = format!("the `d` of `vdelay~` is at the clock `{shown}` but the delay is at `{to}`; {how}");
         self.err(Code::E0815, span, msg);
     }
 

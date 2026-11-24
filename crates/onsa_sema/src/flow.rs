@@ -113,9 +113,9 @@ use serde::{Deserialize, Serialize};
 use crate::body::{BodyInfo, Checker, Frame, LocalId, R, Target};
 use crate::clock::{Clock, ClockStage, Ratio};
 use crate::consteval::{self, ConstValue};
-use crate::def::FlowInput;
+use crate::def::{FlowDef, FlowInput};
 use crate::ty::{FloatKind, IntKind, Len, Ty, TyId};
-use crate::{Analysis, DefId, Module};
+use crate::{Analysis, DefId, Module, Package};
 
 use crate::flow_names::Delay;
 mod branching;
@@ -341,6 +341,8 @@ pub struct FlowInfo {
     /// around it.
     pub store_bindings: HashSet<LocalId>,
     pub output: Option<ExprId>,
+    /// It has an event clock (§11.11, `clocks::has_events`).
+    pub events: bool,
     pub complete: bool,
 }
 

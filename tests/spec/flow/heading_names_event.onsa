@@ -5,14 +5,30 @@
 
 // S-664, S-665 (§11.6, §11.11, §15.1): the type of an event input and of an event output of a flow is written in
 // its head too, so it cannot be narrower than the flow (the same rule as `heading_names` has for the `sample`,
-// `block` and `init` ones). This file is apart from that one because the `event` clock is not in this version
-// (W7-11), so a flow with an event input is not read until then. The types here are aliases of `U8`, and an
-// alias makes no new type and is judged by the type it stands for (§4.4, S-700), so no head is narrower.
+// `block` and `init` ones): `pub flow f(p: Pair at event)` is E0303 when `Pair` has no word, in an input and in an
+// output, inside an option or an array, and the one error is on the name that was written (`fixes = 0` checks that
+// there is no candidate). A `priv` flow names any type, a flow with no word the types of the package, and a type that
+// reaches as far as the flow does is fine. The aliases of `U8` make no new type and are judged by the type they stand
+// for (§4.4, S-700), so no head with them is narrower. The bodies of the flows that are no error give out the events
+// at their own clock and read none at `sample` (a struct with no `Default` needs none there, §11.11).
 type Note = U8
 
 pub type PubNote = U8
 
 priv type ModNote = U8
+
+struct Pair {
+  a: F32,
+  b: F32,
+}
+
+priv struct Hid {
+  a: F32,
+}
+
+pub struct Open {
+  a: F32,
+}
 
 // No error: the type reaches as far as the flow does.
 pub flow pub_event_in(n: PubNote at event) -> U8 at sample {
@@ -59,4 +75,68 @@ flow package_event_module(n: ModNote at event) -> U8 at sample {
 // An event and a `block` input of aliases with narrower words: no error.
 pub flow event_and_block(n: Note at event, g: ModNote at block) -> U8 at sample {
   n
+}
+
+// A struct that reaches as far as the flow does, as an event: no error.
+pub flow open_event_in(o: Open at event) -> F32 at event {
+  Some(o.a)
+}
+
+pub flow open_event_out(x: F32 at sample) -> Open at event {
+  Some(Open { a: x })
+}
+
+flow package_pair_event_in(p: Pair at event) -> F32 at event {
+  Some(p.a)
+}
+
+flow package_pair_event_out(x: F32 at sample) -> Pair at event {
+  Some(Pair { a: x, b: x })
+}
+
+priv flow module_hid_event_in(h: Hid at event) -> F32 at event {
+  Some(h.a)
+}
+
+priv flow module_hid_event_out(x: F32 at sample) -> Hid at event {
+  Some(Hid { a: x })
+}
+
+// The `pub` flow names a struct with no word or a `priv` one: E0303.
+pub flow pair_event_in(p: Pair at event) -> F32 at event {   //~ E0303
+  Some(p.a)
+}
+
+pub flow pair_event_out(x: F32 at sample) -> Pair at event {   //~ E0303
+  Some(Pair { a: x, b: x })
+}
+
+pub flow hid_event_in(h: Hid at event) -> F32 at event {   //~ E0303
+  Some(h.a)
+}
+
+pub flow hid_event_out(x: F32 at sample) -> Hid at event {   //~ E0303
+  Some(Hid { a: x })
+}
+
+pub flow option_of_a_narrow_event(p: Option[Pair] at event) -> F32 at event {   //~ E0303
+  Some(0.0)
+}
+
+pub flow array_of_a_narrow_event(h: [Hid; 2] at event) -> F32 at event {   //~ E0303
+  Some(0.0)
+}
+
+// The flow with no word names a type of the module: E0303 on a `priv` struct.
+flow package_hid_event_in(h: Hid at event) -> F32 at event {   //~ E0303
+  Some(h.a)
+}
+
+flow package_hid_event_out(x: F32 at sample) -> Hid at event {   //~ E0303
+  Some(Hid { a: x })
+}
+
+// Two narrow names in one head, an event and a `block` input, give the one error.
+pub flow narrow_event_and_block(p: Pair at event, h: Hid at block) -> F32 at event {   //~ E0303
+  Some(p.a)
 }

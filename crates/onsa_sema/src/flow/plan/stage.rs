@@ -5,6 +5,13 @@
 use super::*;
 
 impl FlowInfo {
+    /// Whether the tables of the plan are made, the entries and the fields
+    /// of its state too: of a complete flow with no event (W7-11 U2 makes
+    /// them, [`crate::Analysis::event_gate`]).
+    pub fn planned(&self) -> bool {
+        self.complete && !self.events
+    }
+
     /// The stage of the local `l` (of an input its `body_clock`, of a `let`
     /// its stage, S-1196); `None` of a constant or a local the walk gave no
     /// clock ([`ClockInfo::own_stage`]).
@@ -21,12 +28,12 @@ impl FlowInfo {
     pub fn starts_default(&self, of: FieldOf) -> bool {
         let read_faster = |l: LocalId| {
             let reads = self.read_at.get(&l).into_iter().flatten();
-            self.own_stage(l).is_some_and(|own| reads.into_iter().any(|&s| own.tick_slower_than(s)))
+            self.own_stage(l).is_some_and(|own| reads.into_iter().any(|&s| own.stored_slower_than(s)))
         };
         self.field_at(of).is_some()
             && match of {
                 FieldOf::Hoist(h) => match self.hoist(h).stage {
-                    ClockStage::Tick(_) => true,
+                    ClockStage::Event(_) | ClockStage::Tick(_) => true,
                     ClockStage::Init | ClockStage::Block => false,
                 },
                 FieldOf::Input(l) | FieldOf::Let(l) => read_faster(l),
@@ -72,7 +79,7 @@ impl FlowInfo {
     pub fn run_stage(&self, s: ClockStage) -> ClockStage {
         match s {
             ClockStage::Tick(k) if k.faster_than_body() => ClockStage::SAMPLE,
-            ClockStage::Init | ClockStage::Block | ClockStage::Tick(_) => s,
+            ClockStage::Init | ClockStage::Block | ClockStage::Event(_) | ClockStage::Tick(_) => s,
         }
     }
 
@@ -199,7 +206,7 @@ pub(super) fn slow_stages(info: &FlowInfo) -> Vec<ClockStage> {
     // value of a parameter kind it reads is the one of that tick until the next.
     let inputs = info.inputs.iter().filter_map(|&l| info.own_stage(l)).chain(info.out_stage);
     let all = inputs.chain(info.eval_at.iter().copied());
-    let slow: BTreeSet<ClockStage> = all.filter(|s| s.tick_slower_than(ClockStage::SAMPLE)).collect();
+    let slow: BTreeSet<ClockStage> = all.filter(|s| s.slow_tick()).collect();
     slow.into_iter().collect()
 }
 

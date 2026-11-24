@@ -1,0 +1,37 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§11.11", "§18.1"]
+// fixes = 0
+
+// W7-11 U1a/t, S-560, S-564 (spec §11.3: "`sample` でない底（`block`・`init`・`event`）は、入出力の宣言では E0810"; "出力のクロックは `sample`、イベントの出力の `event`…それ以外は E0810"; "信号の値型 `T` は Copy でなければ
+// ならない（E0810）"、"入出力の値型…は…関数型を含まない（E0810）"; §11.11: "値は利用者の型を含む Copy の型で、関数型を含まない"): the heading of an event. The clock of an input or an output that is derived from the event
+// (`event / 2`, `event * 2`) is E0810, and so is the type of the event when it is not Copy (`Str`) or holds a function type, in an input and in an output. The error is at the type or the clock written in the heading,
+// there is no candidate (`fixes = 0`), and it is the one error of the flow (§18.1). The events whose type is Copy (a struct, an enum, an array, an option, an alias) are in event_clock_accepted.onsa.
+
+pub flow input_over_the_event(m: U32 at (event / 4)) -> U32 at sample {   //~ E0810
+  m
+}
+
+pub flow input_times_the_event(m: U32 at (event * 2)) -> U32 at sample {   //~ E0810
+  m
+}
+
+pub flow output_over_the_event(x: U32 at sample) -> U32 at (event / 2) {   //~ E0810
+  x
+}
+
+pub flow text_input(s: Str at event) -> U32 at sample {   //~ E0810
+  0
+}
+
+pub flow text_output(x: U32 at sample) -> Str at event {   //~ E0810
+  None
+}
+
+pub flow function_input(f: (rt fn(F32) -> F32) at event) -> U32 at sample {   //~ E0810
+  0
+}
+
+pub flow function_output(x: U32 at sample) -> (rt fn(F32) -> F32) at event {   //~ E0810
+  None
+}

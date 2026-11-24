@@ -1,0 +1,190 @@
+// onsa.toml
+// [test]
+// spec = ["§11.2", "§11.3", "§11.4", "§11.5", "§11.11"]
+// fixes = 0
+
+// W7-11 U1a/t, S-560, S-563, S-564, S-1232 (spec §11.2: "イベントの入力は `at event`、イベントの出力は `-> E at event` と書く"; §11.11: "イベントの値は `block` と同じく暗黙に読め"、"周期の刻みのクロックの被演算子の無い
+// イベントの値の式は、そのイベントのクロックの式で"、"パラメータの種類と `sample_tick()` は読める"、"同じクロックを二つの入力に渡してもよい"): the event clock in a head and in a body, in the forms that are accepted. `check` reads
+// the file with no diagnostic. A flow that has an event heading is lowered from W7-11 U2, so `build`, `test`, `graph` and `interface` of it are E0200 until then (crates/onsa_cli/tests/cli/event_gate_rules.rs). The type of an event is
+// a Copy type: a struct, an enum with no `Default` (it is never read at `sample`, so it needs none, §11.3), an array, an option, an alias. The errors of the same forms are in e0815_event_mixes.onsa, e0815_event_calls.onsa,
+// e0815_event_arguments.onsa, e0815_event_at_forms.onsa, e0810_event_heading_forms.onsa and e0020_event_*.onsa.
+
+pub enum Mode {
+  Off,
+  On,
+}
+
+pub struct Note: Default {
+  pitch: U8,
+  vel: U8,
+}
+
+pub type Vel = U8
+
+pub rt fn is_on(n: Note) -> Bool {
+  n.vel > 0
+}
+
+pub rt fn scale(v: U32, k: U32) -> U32 {
+  v * k
+}
+
+pub flow smooth(x: F32 at sample) -> F32 at sample {
+  x * 0.5
+}
+
+pub flow slow(l: F32 at (sample / 4)) -> F32 at sample {
+  l at sample
+}
+
+pub flow either(a: U32 at event, b: U32 at event) -> U32 at sample {
+  (a at sample) + b
+}
+
+pub flow det(x: F32 at sample, limit: F32 at block) -> U32 at event {
+  if x > limit {
+    Some(1)
+  } else {
+    None
+  }
+}
+
+pub flow acc(e: U32 at event) -> U32 at sample {
+  let n = prev~(^n) + e
+  n
+}
+
+pub flow fwd(m: U32 at event) -> U32 at event {
+  Some(m)
+}
+
+// ---- the head: an event of each kind of type, in and out, read at its own clock.
+pub flow read_as_sample(m: U32 at event) -> U32 at sample {
+  m
+}
+
+pub flow struct_event(m: Note at event) -> U8 at sample {
+  m.pitch
+}
+
+pub flow enum_event(m: Mode at event) -> Mode at event {
+  Some(m)
+}
+
+pub flow array_event(m: [U8; 2] at event) -> [U8; 2] at event {
+  Some(m)
+}
+
+pub flow alias_event(m: Vel at event) -> Vel at event {
+  Some(m)
+}
+
+pub flow option_event(m: Option[U8] at event) -> Option[U8] at event {
+  Some(m)
+}
+
+pub flow tuple_event(m: U32 at event) -> (U32, U32) at event {
+  Some((m, sample_tick()))
+}
+
+// One input as often as written is one clock.
+pub flow one_input_twice(m: Note at event) -> U8 at event {
+  Some(m.pitch + m.vel)
+}
+
+// ---- state of an event: the delay of the value is the last event (§11.4), with an `init` or with `Default` of the type.
+pub flow delay_of_an_event(m: U32 at event) -> U32 at event {
+  Some(prev~(m))
+}
+
+pub flow delay_of_a_mode(m: Mode at event) -> Mode at event {
+  Some(prev~(m, Mode.Off))
+}
+
+pub flow long_delays(m: F32 at event, d: F32 at block) -> F32 at event {
+  Some(delay~(m, 2) + vdelay~(m, d, 8))
+}
+
+pub flow last_nonzero(m: U32 at event) -> U32 at sample {
+  let pv = prev~(^v)
+  let v = if m != 0 { m } else { pv }
+  v
+}
+
+// ---- arguments: an event value to an event input, to a `sample` input and to a `sample / N` input (the last value), the output of a call, one clock to two inputs.
+pub flow to_a_sample_input(v: F32 at event) -> F32 at sample {
+  smooth~(v)
+}
+
+pub flow to_a_slow_input(v: F32 at event) -> F32 at sample {
+  slow~(v)
+}
+
+pub flow one_clock_to_two_inputs(m: U32 at event) -> U32 at sample {
+  either~(m, m)
+}
+
+pub flow two_clocks_to_two_inputs(a: U32 at event, b: U32 at event) -> U32 at sample {
+  either~(a, b)
+}
+
+pub flow a_call_output_to_an_input(x: F32 at sample) -> U32 at sample {
+  acc~(det~(x, 0.5))
+}
+
+// ---- the stage of an event reads parameters, constants and `sample_tick()` (§11.11, S-1232).
+pub flow stage_reads_parameters(m: U32 at event, p: U32 at block, q: U32 at init) -> U32 at event {
+  Some(scale(m, p) + q + 1)
+}
+
+pub flow time_since_the_last_note(m: Note at event) -> U32 at event {
+  let pl = prev~(^last)
+  let last = if is_on(m) { sample_tick() } else { pl }
+  Some(sample_tick() -% last)
+}
+
+// ---- the output: with the clock of the expression: each `sample`, each event of an input, each tick of a `at`.
+pub flow out_each_sample(p: U32 at block) -> U32 at event {
+  Some(p)
+}
+
+pub flow out_each_quarter(p: U32 at block) -> U32 at event {
+  Some(p) at (sample / 4)
+}
+
+pub flow out_when_big(x: F32 at sample) -> F32 at event {
+  if x > 0.5 {
+    Some(x)
+  } else {
+    None
+  }
+}
+
+// ---- `at` on an event value: `v at sample` and `v at (sample / N)` are the same as reading it (§11.11).
+pub flow at_forms(v: F32 at event) -> F32 at sample {
+  let q = v at (sample / 4)
+  (q at sample) + (v at sample) + ((v at (sample / 4)) at sample)
+}
+
+// ---- an event input or a `let` named `event`: the clock is a name of the clocks and only after `at`.
+pub flow input_named_event(event: U32 at event) -> U32 at sample {
+  event at sample
+}
+
+pub flow let_named_event(m: U32 at event) -> U32 at sample {
+  let event = m + 1
+  event at sample
+}
+
+pub fn event_arg(event: U32) -> U32 {
+  event + 1
+}
+
+// ---- a modifier whose receiver gives out events: `when~` stops no event, so it is no error (§11.10); the receiver is a flow of the user.
+pub flow forwarded_when(m: U32 at event, c: Bool at sample) -> U32 at sample {
+  fwd~(m).when~(c)
+}
+
+pub flow detected_when_true(x: F32 at sample) -> U32 at sample {
+  det~(x, 0.5).when~(true)
+}

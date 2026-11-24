@@ -186,10 +186,12 @@ fn body_of(a: &mut Analysis, id: DefId) -> Option<(Option<TyId>, ExprId, TyId)> 
         BodyKind::Test(body) => (None, body, None),
         BodyKind::Initializer(c) => (self_ty, c.value?, Some(c.ty)),
         // Flow bodies (T3-1): the same inference, in flow mode (`flow.rs`),
-        // of the body's view of the output (an array of N at `sample * N`, §11.9).
+        // of the body's view of the output (an array of N at `sample * N`,
+        // §11.9; the `Option` of an event, §11.11).
         BodyKind::Flow(f) => {
-            let (body, clock, out) = (f.body, f.out_clock, f.out);
-            (None, body, Some(crate::def::body_ty(clock, out, &mut a.types)))
+            let (body, events, clock, out) = (f.body, f.gives_events(), f.out_clock, f.out);
+            let option = a.modules.lang.option();
+            (None, body, Some(crate::def::body_out_ty(events, clock, out, &mut a.types, option)))
         }
     };
     Some((self_ty, body, ret.unwrap_or_else(|| a.types.unit())))
@@ -364,7 +366,7 @@ fn check_one(a: &mut Analysis, flat: &[&Package], bound: &mut HashMap<ModId, Has
     }
     a.names.insert(id, names);
     match fcx {
-        Some(fcx) => crate::flow::finish_flow(a, module, id, info, fcx),
+        Some(fcx) => crate::flow::finish_flow(a, flat, module, id, info, fcx),
         None => {
             a.bodies.insert(id, info);
         }

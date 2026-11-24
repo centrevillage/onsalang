@@ -1,0 +1,65 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§11.5", "§11.11", "§18.1"]
+// fixes = 0
+
+// W7-11 U1a/i2, S-1095, S-1096 (spec §11.5: "`e` のクロックが、`e` の中の呼び出しのイベントの出力のクロックのときは、複製ごとに別のクロックで最大が無いので E0815"; §11.3: "最大が無ければ E0815（部分式ごとに確かめ…）";
+// §18.1: an expression in error makes no second error): the event of a call in the body of a `par~` is E0815 at the `par~`, the event of a call outside it is one clock in each replica and is fine. The value of the `par~` in error and an
+// argument in error are no error of what reads them: the flow has one E0815. With an operand at `sample` beside them, two events meet there (in an `if` and in an array).
+
+pub rt fn limit_of(i: U32) -> F32 {
+  F32.round_from(i) * 0.5
+}
+
+pub flow det(x: F32 at sample, limit: F32 at block) -> U32 at event {
+  if x > limit {
+    Some(1)
+  } else {
+    None
+  }
+}
+
+pub flow acc(e: U32 at event) -> U32 at sample {
+  let n = prev~(^n) + e
+  n
+}
+
+pub flow on_block(p: U32 at block) -> U32 at sample {
+  p
+}
+
+// ---- the error: one, at the expression that has no greatest clock.
+pub flow a_par_in_error_and_its_reader(x: F32 at sample) -> U32 at sample {
+  let e = par~ i in 0 ..< 2 { prev~(det~(x, limit_of(i))) }   //~ E0815
+  on_block~(e[0])
+}
+
+// The reader is written before the `par~`: the one error is still the one of the `par~`.
+pub flow a_reader_before_the_par_in_error(x: F32 at sample) -> U32 at sample {
+  let r = on_block~(prev~(^e)[0])
+  let e: [U32; 2] = par~ i in 0 ..< 2 { prev~(det~(x, limit_of(i))) }   //~ E0815
+  r + e[1]
+}
+
+pub flow an_argument_in_error(m: U32 at event, n: U32 at event) -> U32 at sample {
+  acc~(m + n)   //~ E0815
+}
+
+// ---- no error: the event of a call outside the `par~`.
+pub flow a_call_outside_the_par(x: F32 at sample) -> [U32; 2] at sample {
+  let d = det~(x, 0.5)
+  par~ i in 0 ..< 2 { prev~(d) + i }
+}
+
+pub flow an_input_in_the_par(m: U32 at event) -> [U32; 2] at sample {
+  par~ i in 0 ..< 2 { prev~(m) + i }
+}
+
+// ---- no error: two events and a `sample` operand.
+pub flow two_events_in_an_if_of_a_sample(m: F32 at event, n: F32 at event, z: F32 at sample) -> F32 at sample {
+  if z > 0.0 { m } else { n }
+}
+
+pub flow two_events_and_a_sample_in_an_array(m: F32 at event, n: F32 at event, z: F32 at sample) -> [F32; 3] at sample {
+  [m, n, z]
+}

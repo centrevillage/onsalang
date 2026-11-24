@@ -115,6 +115,9 @@ pub const SIZED: &str = "Sized";
 /// they are not found. The one list.
 pub const RATE_TYPES: [&str; 3] = ["Init", "Ctl", "Sig"];
 
+/// The name of the event clocks after `at` (§11.11). The one literal.
+pub const EVENT: &str = "event";
+
 /// The rule of a derive (§6.4): the note of the old `@derive` (the row
 /// `derive_attribute`) and of a trait that cannot be derived (E0416, whose
 /// other note lists the traits, `onsa_sema`). The one text.

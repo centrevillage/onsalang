@@ -34,11 +34,12 @@ use super::plan::bounds::Ports;
 use super::plan::{Edge, Owner};
 use super::*;
 use crate::body::LocalKind;
-use crate::clock::{self, ClockFrame, Ratio, delay_out, grounded, loop_clock, rebase, rooted};
+use crate::clock::{self, ClockFrame, EventSrc, Ratio, delay_out, grounded, loop_clock, rebase, rooted};
 use crate::names::body::BodyNames;
 
 mod checks;
 mod stages;
+mod to_sample;
 
 use checks::Branching;
 
@@ -51,7 +52,14 @@ use checks::Branching;
 /// has the held error only when that check reported none (a type error
 /// comes first, §18.1; it stopped with no diagnostic at a name held as an
 /// error).
-pub(crate) fn finish_flow(a: &mut Analysis, module: &Module, id: DefId, body: BodyInfo, mut fcx: FlowCx) {
+pub(crate) fn finish_flow(
+    a: &mut Analysis,
+    flat: &[&Package],
+    module: &Module,
+    id: DefId,
+    body: BodyInfo,
+    mut fcx: FlowCx,
+) {
     let _flow = onsa_diag::timing::phase(onsa_diag::timing::Phase::Flow);
     let mut info = FlowInfo {
         inputs: fcx.inputs.clone(),
@@ -60,6 +68,7 @@ pub(crate) fn finish_flow(a: &mut Analysis, module: &Module, id: DefId, body: Bo
         modifiers: fcx.node_exprs().into_iter().filter_map(|(e, r)| Some((e, r?))).collect(),
         output: fcx.output,
         derived_port: a.def(id).as_flow().and_then(|f| f.derived_port(a.def(id).name_span)),
+        events: has_events(a, id, &fcx),
         complete: false,
         ..Default::default()
     };
@@ -76,7 +85,7 @@ pub(crate) fn finish_flow(a: &mut Analysis, module: &Module, id: DefId, body: Bo
     }
     let error = a.types.error();
     let (ast, text) = (&module.parsed.ast, module.text.as_str());
-    let mut w = walk(a, ast, text, id, &body, &fcx, error);
+    let mut w = walk(a, flat, (ast, text), id, &body, &fcx, error);
     if w.diag.is_none() {
         w.post_check(&fcx, ast, a.diagnostics.is_empty() && fcx.held.is_none() && !fcx.unread);
     }
@@ -94,7 +103,7 @@ pub(crate) fn finish_flow(a: &mut Analysis, module: &Module, id: DefId, body: Bo
         state: false,
     });
     info.lets = lets.collect();
-    let out = a.def(id).as_flow().map_or(Clock::SAMPLE, |f| f.body_out_clock());
+    let out = w.output;
     let mut m = super::reads::mark_all(a, (ast, text), &body, &fcx, &w, &info.lets, out);
     (info.read_at, info.bound_at, info.sample_rate_at) = (m.read_at, m.bound_at, m.sample_rate_at);
     (info.eval_at, info.time_at, info.writes) = (m.eval_at, m.time_at, m.writes);
@@ -111,6 +120,7 @@ pub(crate) fn finish_flow(a: &mut Analysis, module: &Module, id: DefId, body: Bo
         (info.tilde_matches, info.store_bindings) = (std::mem::take(&mut w.tilde), std::mem::take(&mut w.store));
         let out = match out {
             Clock::Tick(k) => ClockStage::Tick(k),
+            Clock::Event(s) => ClockStage::Event(s),
             _ => ClockStage::SAMPLE,
         };
         info.out_stage = Some(info.run_stage(out));
@@ -125,6 +135,14 @@ pub(crate) fn finish_flow(a: &mut Analysis, module: &Module, id: DefId, body: Bo
         a.diagnostics.push(d);
     }
     a.flows.insert(id, info);
+}
+
+/// Whether the flow `id` has an event clock ([`FlowInfo::events`]): of an
+/// input, of its output or of a call of an event output.
+fn has_events(a: &Analysis, id: DefId, cx: &FlowCx) -> bool {
+    let emits = |g: DefId| a.def(g).as_flow().is_some_and(FlowDef::gives_events);
+    a.def(id).as_flow().is_some_and(|f| f.event_port().is_some())
+        || cx.calls.iter().any(|c| matches!(c.kind, NodeKind::Instance(g) if emits(g)))
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -148,6 +166,9 @@ pub(super) struct Walked {
     pub(super) lets: Vec<Clock>,
     /// Stage 2: the clock of each `let`.
     pub(super) checked: Vec<Clock>,
+    /// Stage 2: the clock the body writes the output at
+    /// ([`crate::def::FlowDef::body_out_clock`]).
+    pub(super) output: Clock,
     /// The stage of each `let` ([`FlowLet::stage`]).
     pub(super) stages: Vec<Clock>,
     /// Stage 2: the clocks of the expressions and the locals.
@@ -197,6 +218,8 @@ enum Site {
 
 pub(super) struct Walk<'a> {
     a: &'a Analysis,
+    /// The packages, for the body of a called flow ([`to_sample`]).
+    flat: &'a [&'a Package],
     /// The flow.
     def: DefId,
     ast: &'a Ast,
@@ -253,6 +276,8 @@ pub(super) struct Walk<'a> {
     loop_clash: Vec<Option<Clashed>>,
     /// The stages of the `let`s checked, in their order ([`stages::of_params`]).
     let_stages: Vec<Clock>,
+    /// [`Walked::output`].
+    output: Clock,
 }
 
 /// An operand of a join: its expression (none of the `init` that the index
@@ -271,11 +296,11 @@ fn lift_frame(call: &NodeCall, frame: ClockFrame) -> Option<ClockFrame> {
 }
 
 /// Runs the two stages over the body of the flow `id` of the module of
-/// `ast` and `text`; `error` is the error type.
+/// `ast` and `text`, of the packages `flat`; `error` is the error type.
 pub(super) fn walk(
     a: &Analysis,
-    ast: &Ast,
-    text: &str,
+    flat: &[&Package],
+    (ast, text): (&Ast, &str),
     id: DefId,
     body: &BodyInfo,
     cx: &FlowCx,
@@ -291,6 +316,7 @@ pub(super) fn walk(
     let n = cx.pending.len();
     let mut w = Walk {
         a,
+        flat,
         def: id,
         ast,
         text,
@@ -328,6 +354,7 @@ pub(super) fn walk(
         clash: None,
         loop_clash: vec![None; n],
         let_stages: Vec::new(),
+        output: Clock::SAMPLE,
     };
     for (l, input) in cx.inputs.iter().zip(&decl.inputs) {
         w.out.locals.insert(*l, input.body_clock());
@@ -347,6 +374,7 @@ pub(super) fn walk(
     Walked {
         lets: w.lets.into_iter().map(solved).collect(),
         checked: w.checked.into_iter().map(solved).collect(),
+        output: w.output,
         stages,
         info: w.out,
         diag: w.diag,
@@ -422,7 +450,8 @@ impl Walk<'_> {
             self.recorder.owner(Owner::Output);
             self.stmt = Some(Stmt { root: out, start: self.ast.expr(out).span.start });
             if let (Some(c), Some(f)) = (self.expr(out), self.a.def(self.def).as_flow()) {
-                let at = f.body_out_clock();
+                let at = f.body_out_clock(c);
+                self.output = at;
                 let c = rooted(c, at);
                 self.settle(out, c);
                 self.check_out(out, c, at);
@@ -680,7 +709,19 @@ impl Walk<'_> {
             self.out.exprs.insert(l.at, c.unwrap_or(Clock::Const));
         }
         ops.extend(last);
-        self.join(e, &ops)
+        let arms: Vec<Op> = ops.iter().skip(1).step_by(2).copied().chain(last).collect();
+        self.join_arms(e, tilde.is_some(), &arms, &ops)
+    }
+
+    /// The join of the operands `ops` of the branching `e` (`tilde`: an `if~`
+    /// or a `match~`), whose branches are `arms`.
+    // SPEC-GAP(S-1239): the branches of an `if~` or a `match~` at the clocks of
+    // two events are E0815 (§11.11) also where a condition or the scrutinee
+    // is at a tick, the largest operand of §11.3 (provisional).
+    fn join_arms(&mut self, e: ExprId, tilde: bool, arms: &[Op], ops: &[Op]) -> Option<Clock> {
+        let event = |(_, c): (usize, Clock)| matches!(c, Clock::Event(_));
+        let apart = || clock::join_by(arms, |o| o.1).is_err_and(|x| event(x.first) && event(x.second));
+        self.join(e, if tilde && apart() { arms } else { ops })
     }
 
     /// `match` / `match~` (§11.3, §11.5), `tilde` its `~`: the scrutinee, the
@@ -698,6 +739,7 @@ impl Walk<'_> {
         }
         let s = self.expr(scrutinee);
         let (mut ops, mut chosen, mut bound) = (vec![(Some(scrutinee), s)], s, Vec::new());
+        let mut bodies: Vec<Op> = Vec::with_capacity(arms.len());
         for (k, arm) in arms.iter().enumerate() {
             self.bind_pat(arm.pat, s);
             if let Some(g) = arm.guard {
@@ -721,11 +763,12 @@ impl Walk<'_> {
                 }
             };
             ops.push((Some(arm.body), body));
+            bodies.push((Some(arm.body), body));
         }
         if record {
             self.tilde.insert(e, TildeMatch { arms: bound, pars: self.recorder.pars() });
         }
-        self.join(e, &ops)
+        self.join_arms(e, tilde.is_some(), &bodies, &ops)
     }
 
     /// `par` / `par~` (§11.5), `tilde` its `~`: the `~` its body asks for
@@ -751,6 +794,15 @@ impl Walk<'_> {
         if check {
             self.recorder.leave_par(e, span);
             self.check_par(e);
+        }
+        // S-1096: the event of a call in the body is of a clock of its own in each replica.
+        if let Some(Clock::Event(src)) = b
+            && let Some(call) = self.event_call(src).filter(|&x| self.ast.expr(body).span.contains(x.start))
+        {
+            if check {
+                self.report_par_event(e, call);
+            }
+            return Some(Clock::Error);
         }
         self.join(e, &[(Some(body), b), (None, Some(Clock::Init))])
     }
@@ -843,8 +895,10 @@ impl Walk<'_> {
     /// ([`super::plan::bounds::run_at`]): hoisted and kept as the other
     /// arguments are, a value of a slower tick held. A condition faster than
     /// W, and of `.when~` an `at` in it to another clock than W (not in an
-    /// argument of a flow, read at its port), are E0815 (this version makes
-    /// no event clock, W7-11): whether it is opened, its condition walked; none of
+    /// argument of a flow, read at its port), are E0815. An event in the
+    /// condition of `.when~` is read at W (its last value), in that of
+    /// `.reset_if~` at its own clock (§11.11; its checks are W7-11 U1b's and
+    /// its plan W7-17's): whether it is opened, its condition walked; none of
     /// `.down~` and `.up~`, whose argument the caller walks.
     fn guard_cond(&mut self, e: ExprId, head: ExprId, ports: Ports) -> Option<bool> {
         let chain = self.cx.chains.get(&head)?;
@@ -861,15 +915,17 @@ impl Walk<'_> {
         // §11.10: the condition of `.reset_if~` resets at the tick of its clock, `at` too.
         let apart = !reset && self.at_apart(cond, Clock::Tick(w));
         let faster = matches!(c, Some(Clock::Tick(k)) if k > w);
-        let name = chain.mods[i].plan.name;
         if (apart || faster) && self.checking() {
             self.cond_e0815(chain, i, (own, w), apart);
             return Some(false);
         }
-        if matches!(c, Some(Clock::Event(_))) {
-            onsa_diag::internal::bug(Some(name), "the condition of a modifier of an event clock, which W7-11 makes");
-        }
         if !self.checking() {
+            return Some(true);
+        }
+        if let Some(at @ Clock::Event(_)) = c.filter(|_| reset) {
+            if let Some(&k) = self.node_of.get(&head) {
+                self.node_clocks[k].args.push(ArgRead { expr: cond, at, stage: None });
+            }
             return Some(true);
         }
         let mods = || chain.mods.iter().map(|m| &m.plan);
@@ -925,7 +981,7 @@ impl Walk<'_> {
             .map(|j| super::plan::bounds::run_at(mods().take(j + 1), guards, i as u32, ClockStage::Tick(rp)));
         let past = frames.filter_map(|s| match s {
             ClockStage::Tick(k) if k.made_n().is_none() => Some(k),
-            ClockStage::Init | ClockStage::Block | ClockStage::Tick(_) => None,
+            ClockStage::Init | ClockStage::Block | ClockStage::Event(_) | ClockStage::Tick(_) => None,
         });
         let Some(k) = past.min() else { return true };
         let name = chain.mods[i].plan.name;
@@ -1034,7 +1090,9 @@ impl Walk<'_> {
     }
 
     /// `g~(args)` (§11.5): each argument read at the clock of its input in
-    /// the frame of the call, and the output of `g` in it. The head of a
+    /// the frame of the call (of an event input, at the event clock of the
+    /// argument, §11.11), and the output of `g` in it (an event output, at
+    /// the event clock of the call). The head of a
     /// chain runs in the frame of the sum of its ratios (§11.9), which a
     /// chain with an N in error has not: its arguments and its output are
     /// then in error (§18.1).
@@ -1048,8 +1106,11 @@ impl Walk<'_> {
         let mut reads = Vec::new();
         let outer = std::mem::replace(&mut self.frame, frame.unwrap_or(ClockFrame::BODY));
         for (&x, input) in call.args.iter().zip(&f.inputs) {
-            let at = rebased(input.caller_clock());
             if let Some(c) = self.cut(x) {
+                let at = match input.caller_clock() {
+                    Clock::Event(_) => self.bound_event(x, c, input, g),
+                    at => rebased(at),
+                };
                 self.check_arg(x, c, at, input, g);
                 reads.push(ArgRead { expr: x, at, stage: None });
             }
@@ -1060,7 +1121,19 @@ impl Walk<'_> {
             self.check_gather_deal(e, g, &call.args);
             self.head_stages(e, f, &mut reads);
         }
-        (Some(rebased(f.out_clock)), reads)
+        let out = match self.calls.get(&e) {
+            _ if !f.gives_events() => rebased(f.out_clock),
+            Some(&i) if frame.is_some() => Clock::Event(EventSrc::call(self.cx.inputs.len(), i)),
+            _ => Clock::Error,
+        };
+        (Some(out), reads)
+    }
+
+    /// The place of the call whose output the source `src` is of; none of an
+    /// input.
+    fn event_call(&self, src: EventSrc) -> Option<Span> {
+        let i = src.place(self.cx.inputs.len()).ok()?;
+        Some(self.ast.expr(self.cx.calls.get(i)?.expr).span)
     }
 
     /// The stages the arguments `reads` of the head `e` of a chain, an

@@ -5,7 +5,7 @@ use onsa_diag::Span;
 use onsa_syntax::ast::{ExprId, ItemId, Mode, Vis};
 use serde::{Deserialize, Serialize};
 
-use crate::clock::{Clock, ClockName, ClockRef};
+use crate::clock::{Clock, ClockName, ClockRef, emit_clock};
 use crate::ty::{EffectSet, Len, Ty, TyId, Types};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
@@ -430,6 +430,8 @@ pub struct FlowInput {
     /// The clock written as the names stage reads it; none of no clock or a
     /// name not found.
     pub(crate) written: Option<ClockRef>,
+    /// The name of the clock as written (the base of a derived clock).
+    pub(crate) clock_span: Option<Span>,
     /// Value type (without the clock).
     pub ty: TyId,
     pub param: Option<ParamMeta>,
@@ -497,6 +499,18 @@ pub(crate) fn body_ty(c: Clock, ty: TyId, types: &mut Types) -> TyId {
     }
 }
 
+/// The type of the body of a flow of the output `ty` at the clock `c`: its
+/// view ([`body_ty`]), and of an event output (`events`,
+/// [`FlowDef::gives_events`]) the `Option` of `ty` (§11.11, of the lang item
+/// `option`; with none, the error type).
+pub(crate) fn body_out_ty(events: bool, c: Clock, ty: TyId, types: &mut Types, option: Option<DefId>) -> TyId {
+    match option {
+        _ if !events => body_ty(c, ty, types),
+        Some(o) => types.intern(Ty::Named(o, vec![ty])),
+        None => types.error(),
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FlowDef {
     pub inputs: Vec<FlowInput>,
@@ -504,8 +518,11 @@ pub struct FlowDef {
     pub out: TyId,
     /// The clock of the output as a caller reads it (§11.9): `sample`, or a
     /// derived clock by its ratio, or `Clock::Error` when the clock written
-    /// has a diagnostic ([`FlowDef::body_out_clock`] is the body's).
+    /// has a diagnostic ([`FlowDef::body_out_clock`] is the body's). Of an
+    /// event output [`EventSrc::OUTPUT`]: at a call, the clock of the call.
     pub out_clock: Clock,
+    /// The name of that clock as written.
+    pub(crate) out_clock_span: Option<Span>,
     pub body: ExprId,
     /// Generated namespace items (§11.6): `State`, `Config`, ..., `process`, ...
     pub members: Vec<(String, DefId)>,
@@ -528,9 +545,22 @@ pub struct FlowDef {
 }
 
 impl FlowDef {
-    /// The clock the body writes the output at ([`body_view`]).
-    pub fn body_out_clock(&self) -> Clock {
-        body_view(self.out_clock).0
+    /// The clock the body writes the output of the expression at the clock
+    /// `c` at ([`body_view`]): of an event output, the one whose ticks give
+    /// out the events (§11.11).
+    pub(crate) fn body_out_clock(&self, c: Clock) -> Clock {
+        if self.gives_events() { emit_clock(c) } else { body_view(self.out_clock).0 }
+    }
+
+    /// Whether its output is at the event clock (§11.11).
+    pub(crate) fn gives_events(&self) -> bool {
+        matches!(self.out_clock, Clock::Event(_))
+    }
+
+    /// The name `event` of its first port at the event clock.
+    pub(crate) fn event_port(&self) -> Option<Span> {
+        let input = self.inputs.iter().find(|i| matches!(i.clock, Clock::Event(_)));
+        input.map(|i| i.clock_span).or_else(|| self.gives_events().then_some(self.out_clock_span)).flatten()
     }
 
     /// The first port of a derived clock (§11.9: `sample / N`, `sample *

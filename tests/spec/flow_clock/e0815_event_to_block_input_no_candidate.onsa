@@ -1,0 +1,206 @@
+// onsa.toml
+// [test]
+// spec = ["§11.5", "§11.6", "§11.11", "§18.1"]
+// fixes = 0
+
+// W7-11 U1a/i2 (spec §18.1: "この約束を満たす候補を作れなければ、候補を出さない"): an event value given to a `block` input whose declaration `at sample` would make an error of the flow called has no candidate. The flow reads the input under
+// `at block` (a value is never made slower, §11.3), gives it to an input at `block` or `init`, reads it at a slower clock or at an event (its output, an event input), or the type or the `@param` is of no `sample` input
+// (§11.6: an input at `sample` is a scalar or an array of scalars; §11.7). A read through a `let`, in a condition of a chain and in a replication has none either. Some flows are called before they are declared: the order is the same.
+
+pub struct Point: Default {
+  x: U32,
+  y: U32,
+}
+
+pub rt fn held(v: Option[U32]) -> Bool {
+  match v {
+    Some(_) => true,
+    None => false,
+  }
+}
+
+pub flow on_block(q: U32 at block) -> U32 at sample {
+  q
+}
+
+pub flow on_init(q: U32 at init) -> U32 at sample {
+  q
+}
+
+pub flow on_event(e: U32 at event) -> U32 at sample {
+  e
+}
+
+pub flow smooth(x: U32 at sample) -> U32 at sample {
+  prev~(x)
+}
+
+pub flow body_at_block(p: U32 at block) -> U32 at sample {
+  (p at block) + 1
+}
+
+pub flow through_lets(p: U32 at block) -> U32 at sample {
+  let q = p + 1
+  let r = q at block
+  r
+}
+
+pub flow through_a_let(p: U32 at block, x: U32 at sample) -> U32 at sample {
+  let g = p * 2
+  x * g
+}
+
+pub flow to_another_block(p: U32 at block) -> U32 at sample {
+  on_block~(p) + p
+}
+
+pub flow at_a_slow_clock(p: U32 at block) -> U32 at sample {
+  (p at (sample / 2)) at sample
+}
+
+pub flow slow_output(p: U32 at block) -> U32 at (sample / 2) {
+  p
+}
+
+pub flow event_output(p: U32 at block) -> U32 at event {
+  Some(p)
+}
+
+pub flow to_an_event_input(p: U32 at block, e: U32 at event) -> U32 at sample {
+  on_event~(p + e)
+}
+
+pub flow in_a_condition(p: U32 at block, x: U32 at sample) -> U32 at sample {
+  smooth~(x).when~(p > 1)
+}
+
+pub flow in_a_replication(p: U32 at block, x: U32 at sample) -> U32 at sample {
+  (par~ i in 0 ..< 2 { smooth~(x) + p })[1]
+}
+
+pub flow struct_input(p: Point at block) -> U32 at sample {
+  p.x
+}
+
+pub flow option_input(p: Option[U32] at block, x: U32 at sample) -> U32 at sample {
+  if held(p) { x } else { 0 }
+}
+
+pub flow param_input(@param(min: 0.0, max: 1.0, default: 0.5) p: F32 at block) -> F32 at sample {
+  p * 2.0
+}
+
+pub flow plain(p: U32 at block) -> U32 at sample {
+  p
+}
+
+pub flow first(d: U32 at (sample * 2)) -> U32 at sample {
+  d[0]
+}
+
+pub flow to_body_at_block(m: U32 at event) -> U32 at sample {
+  body_at_block~(m)   //~ E0815
+}
+
+pub flow to_to_another_block(m: U32 at event) -> U32 at sample {
+  to_another_block~(m)   //~ E0815
+}
+
+pub flow to_through_lets(m: U32 at event) -> U32 at sample {
+  through_lets~(m)   //~ E0815
+}
+
+pub flow to_through_a_let(m: U32 at event, x: U32 at sample) -> U32 at sample {
+  through_a_let~(m, x)   //~ E0815
+}
+
+pub flow to_at_a_slow_clock(m: U32 at event) -> U32 at sample {
+  at_a_slow_clock~(m)   //~ E0815
+}
+
+pub flow to_slow_output(m: U32 at event) -> U32 at sample {
+  slow_output~(m) at sample   //~ E0815
+}
+
+pub flow to_event_output(m: U32 at event) -> U32 at sample {
+  event_output~(m)   //~ E0815
+}
+
+pub flow to_to_an_event_input(m: U32 at event) -> U32 at sample {
+  to_an_event_input~(m, m)   //~ E0815
+}
+
+pub flow to_in_a_condition(m: U32 at event, x: U32 at sample) -> U32 at sample {
+  in_a_condition~(m, x)   //~ E0815
+}
+
+pub flow to_in_a_replication(m: U32 at event, x: U32 at sample) -> U32 at sample {
+  in_a_replication~(m, x)   //~ E0815
+}
+
+pub flow to_struct_input(m: Point at event) -> U32 at sample {
+  struct_input~(m)   //~ E0815
+}
+
+pub flow to_option_input(m: Option[U32] at event, x: U32 at sample) -> U32 at sample {
+  option_input~(m, x)   //~ E0815
+}
+
+pub flow to_param_input(m: F32 at event) -> F32 at sample {
+  param_input~(m)   //~ E0815
+}
+
+// An input at `sample` is not read at the ticks of `sample * 2` of the call either.
+pub flow to_an_up(m: U32 at event) -> U32 at sample {
+  first~(plain~(m).up~(2))   //~ E0815
+}
+
+pub flow to_below_at_block(m: U32 at event) -> U32 at sample {
+  below_at_block~(m)   //~ E0815
+}
+
+pub flow to_below_to_init(m: U32 at event) -> U32 at sample {
+  below_to_init~(m)   //~ E0815
+}
+
+pub flow below_at_block(p: U32 at block) -> U32 at sample {
+  (p at block) + 1
+}
+
+// An `init` input takes no `block` value: the flow has an error of its own.
+pub flow below_to_init(p: U32 at block) -> U32 at sample {
+  on_init~(p)   //~ E0815
+}
+
+// A flow with an error of its own in its heading or of an earlier stage: the edit would leave it.
+pub flow unknown_attribute(p: U32 at block, @nope x: U32 at sample) -> U32 at sample {   //~ E0005
+  x * p
+}
+
+pub flow unknown_type(p: U32 at block, x: Nope at sample) -> U32 at sample {   //~ E0302
+  p
+}
+
+pub flow text_input(p: U32 at block, x: Str at sample) -> U32 at sample {   //~ E0810
+  p
+}
+
+pub flow unknown_name(p: U32 at block) -> U32 at sample {
+  p + nope   //~ E0302
+}
+
+pub flow to_unknown_attribute(m: U32 at event, x: U32 at sample) -> U32 at sample {
+  unknown_attribute~(m, x)   //~ E0815
+}
+
+pub flow to_unknown_type(m: U32 at event, x: U32 at sample) -> U32 at sample {
+  unknown_type~(m, x)   //~ E0815
+}
+
+pub flow to_text_input(m: U32 at event, x: U32 at sample) -> U32 at sample {
+  text_input~(m, x)   //~ E0815
+}
+
+pub flow to_unknown_name(m: U32 at event) -> U32 at sample {
+  unknown_name~(m)   //~ E0815
+}

@@ -85,13 +85,14 @@ pub(crate) fn walk(pkg: &Package, a: &mut Analysis) {
 fn close(pkg: &Package, a: &mut Analysis, f: DefId, marks: &HashMap<DefId, Mark>, most: &HashMap<DefId, Most>) -> Most {
     let info = a.flows.get(&f)?;
     let mut time = own_time(info);
-    if !info.complete {
+    // The entries of a flow with events are W7-11 U2's; its gate stops what reads them.
+    if !info.planned() {
         if let Some(info) = a.flows.get_mut(&f) {
             info.time = time;
         }
         return None;
     }
-    let table = |g: DefId| a.flows.get(&g).filter(|t| marks.get(&g) == Some(&Mark::Done) && t.complete);
+    let table = |g: DefId| a.flows.get(&g).filter(|t| marks.get(&g) == Some(&Mark::Done) && t.planned());
     let mut tables = Vec::with_capacity(info.nodes.len());
     let mut stages: BTreeSet<ClockStage> = info.stages.iter().copied().collect();
     let (mut count, mut counted) = ((0, None), true);
@@ -138,7 +139,7 @@ fn close(pkg: &Package, a: &mut Analysis, f: DefId, marks: &HashMap<DefId, Mark>
         }
     }
     let callers = tables.iter().flatten().flat_map(|t| &t.0).map(|e| e.caller);
-    stages.extend(callers.filter(|s| s.tick_slower_than(ClockStage::SAMPLE)));
+    stages.extend(callers.filter(|s| s.slow_tick()));
     let Some(flow) = a.flows.get_mut(&f) else { onsa_diag::internal::bug(None, "a flow closed out of the table") };
     let set = |n: &mut PlanNode, (e, read)| (n.entries, n.read) = (e, read);
     flow.nodes.iter_mut().zip(tables).for_each(|(n, t)| t.into_iter().for_each(|t| set(n, t)));
@@ -170,7 +171,7 @@ fn unmade(n: &PlanNode, g: &FlowInfo) -> Option<(Span, Ratio, Over)> {
     let past = |k: Ratio| k.made_n().is_none();
     let slow = |s: &ClockStage| match *s {
         ClockStage::Tick(k) if k.slower_than_body() && !past(k) => Some((k, k)),
-        ClockStage::Init | ClockStage::Block | ClockStage::Tick(_) => None,
+        ClockStage::Init | ClockStage::Block | ClockStage::Event(_) | ClockStage::Tick(_) => None,
     };
     let mut stages: Vec<(Ratio, Ratio)> = g.stages.iter().filter_map(slow).collect();
     for b in &n.bounds {
@@ -223,7 +224,7 @@ fn past_u32(pkg: &Package, a: &Analysis, f: DefId, (id, at, k, mut over): Unmade
 fn source(g: &FlowInfo, s: Ratio) -> Option<(NodeId, Over)> {
     let run = |(body, at)| match body {
         ClockStage::Tick(k) if at == ClockStage::Tick(s) && k.slower_than_body() => Some(Over::Stage(k)),
-        ClockStage::Init | ClockStage::Block | ClockStage::Tick(_) => None,
+        ClockStage::Init | ClockStage::Block | ClockStage::Event(_) | ClockStage::Tick(_) => None,
     };
     let instances = (0u32..).zip(&g.nodes).filter(|(_, n)| matches!(n.kind, PlanKind::Instance { .. }));
     instances.into_iter().find_map(|(i, n)| Some((NodeId(i), Entry::runs(&n.entries).into_iter().find_map(run)?)))

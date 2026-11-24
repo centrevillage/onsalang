@@ -1,0 +1,123 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§11.5", "§11.11", "§18.1"]
+// fixes = 0
+
+// W7-11 U1a/t, S-560, S-1095 (spec §11.3: "別の入力のイベントのクロックどうしは比べられない（`a.x + b.y` は E0815）"、"最大が無ければ E0815（部分式ごとに確かめ、外の式の被演算子と使う所のクロックは数えない）"; §11.11: "より大きい式の
+// 部分式でも、周期のクロックで読む所に書いても同じで、`(a.x + b.y) + z`（`z` は周期の刻みの値）、`(a.x + b.y) at sample`、`sample` の入力への `lp~(a.x + b.y)` は内側が E0815。`(a.x + z) + b.y` は通る。直すときはイベントの値の側に `at`
+// を書く: `(a.x at sample) + b.y`"): the events of two inputs are not comparable, so the operands `a` and `b` of one expression have no greatest clock: E0815 at the expression, and it is the inner expression that is the error
+// (the clock of a sum is the one of its own operands: not the clock of the larger expression, a `let` or the place where it is read), so `(a + b) + z`, `(a + b) at sample`, `smooth~(a + b)`, a condition and a `let` of it are the same error. The sum
+// with a `sample` operand between the two is the clock `sample` and is fine: `(a + z) + b`, `z + a + b`, and the one with `at` on a side. There is no candidate (S-1095: the note says an `at` on each event value, `fixes = 0` checks it).
+// The length `d` of `vdelay~` is the clock of its first argument or a parameter kind (§11.4), so the event of another input there is the same error. The binding of an arm of `match~` is as fast as its scrutinee and the guards up to its arm (§11.5), so a guard on another event makes it have no clock. One error per flow (§18.1). `a` and `b` are the events of two inputs,
+// `z` and `x` are `sample` values.
+
+pub struct Note: Default {
+  pitch: U8,
+  vel: U8,
+}
+
+pub flow smooth(x: F32 at sample) -> F32 at sample {
+  x * 0.5
+}
+
+// ---- the error: two events with no `sample` operand between them, in each place they can be written.
+pub flow two_events(a: F32 at event, b: F32 at event) -> F32 at sample {
+  a + b   //~ E0815
+}
+
+pub flow fields_of_two_events(a: Note at event, b: Note at event) -> U8 at sample {
+  a.pitch + b.pitch   //~ E0815
+}
+
+pub flow inside_a_sum_with_a_sample(a: F32 at event, b: F32 at event, z: F32 at sample) -> F32 at sample {
+  (a + b) + z   //~ E0815
+}
+
+pub flow the_sum_in_the_order_written(a: F32 at event, b: F32 at event, z: F32 at sample) -> F32 at sample {
+  a + b + z   //~ E0815
+}
+
+pub flow with_an_at_outside(a: F32 at event, b: F32 at event) -> F32 at sample {
+  (a + b) at sample   //~ E0815
+}
+
+pub flow into_a_sample_input(a: F32 at event, b: F32 at event) -> F32 at sample {
+  smooth~(a + b)   //~ E0815
+}
+
+pub flow in_a_when_condition(a: F32 at event, b: F32 at event, x: F32 at sample) -> F32 at sample {
+  smooth~(x).when~(a > 0.0 && b > 0.0)   //~ E0815
+}
+
+pub flow in_an_array(a: F32 at event, b: F32 at event) -> [F32; 2] at sample {
+  [a, b]   //~ E0815
+}
+
+pub flow in_a_tuple(a: F32 at event, b: F32 at event) -> F32 at sample {
+  let t = (a, b)   //~ E0815
+  t.0 + t.1
+}
+
+pub flow the_condition_of_an_if(a: F32 at event, b: F32 at event) -> F32 at sample {
+  if a > 0.0 { b } else { 0.0 }   //~ E0815
+}
+
+pub flow through_a_let(a: F32 at event, b: F32 at event, z: F32 at sample) -> F32 at sample {
+  let s = a + b   //~ E0815
+  s + z
+}
+
+pub flow binding_of_an_arm_and_a_guard_of_another_event(a: F32 at event, b: F32 at event, x: F32 at sample) -> F32 at sample {
+  match~ a { n if b > 0.0 => n + smooth~(x), _ => 0.0 }   //~ E0815
+}
+
+// §11.4: "`d` は第 1 引数と同じクロックか、暗黙に読めるもの（パラメータの種類、イベントの値）": `d` is the clock of the first argument or the parameter kinds, and the event of another input has no order with it.
+pub flow length_of_another_event(m: F32 at event, n: F32 at event) -> F32 at sample {
+  vdelay~(m, n, 8)   //~ E0815
+}
+
+// ---- no error: the clock of each sum has a greatest one.
+pub flow length_of_the_same_event(m: F32 at event) -> F32 at sample {
+  vdelay~(m, m, 8)
+}
+
+pub flow length_of_a_parameter(m: F32 at event, d: F32 at block) -> F32 at sample {
+  vdelay~(m, d, 8)
+}
+
+pub flow a_sample_between(a: F32 at event, b: F32 at event, z: F32 at sample) -> F32 at sample {
+  (a + z) + b
+}
+
+pub flow the_sample_first(a: F32 at event, b: F32 at event, z: F32 at sample) -> F32 at sample {
+  z + a + b
+}
+
+pub flow at_on_one_side(a: F32 at event, b: F32 at event) -> F32 at sample {
+  (a at sample) + b
+}
+
+pub flow at_on_both_sides(a: F32 at event, b: F32 at event) -> F32 at sample {
+  (a at sample) + (b at sample)
+}
+
+pub flow at_in_a_let(a: F32 at event, b: F32 at event, z: F32 at sample) -> F32 at sample {
+  let s = (a at sample) + b
+  s + z
+}
+
+pub flow in_an_array_with_at(a: F32 at event, b: F32 at event) -> [F32; 2] at sample {
+  [a at sample, b at sample]
+}
+
+pub flow one_event_twice(a: F32 at event, z: F32 at sample) -> F32 at sample {
+  (a + a) + z
+}
+
+pub flow fields_of_one_event(a: Note at event, z: U8 at sample) -> U8 at sample {
+  (a.pitch + a.vel) + z
+}
+
+pub flow binding_and_a_guard_of_one_event(a: F32 at event, x: F32 at sample) -> F32 at sample {
+  match~ a { n if a > 0.0 => n + smooth~(x), _ => 0.0 }
+}

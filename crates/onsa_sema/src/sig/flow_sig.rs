@@ -62,7 +62,7 @@ impl<'p> Sema<'p> {
             let tspan = cx.ast.ty(t).span;
             // The clock after the type (§11.3).
             let (written, clock) = match &p.clock {
-                Some(c) => self.port_clock(&cx, c),
+                Some(c) => self.port_clock(&cx, c, EventSrc::input(inputs.len())),
                 None => {
                     self.report(
                         id,
@@ -80,7 +80,9 @@ impl<'p> Sema<'p> {
             // An input whose type or clock is in error stays, as the error
             // type, so that the body sees its name (no cascade in the unit, R-71).
             // An input of the error type keeps its clock (§18.1, S-692).
-            let input = |clock, ty| FlowInput { name, clock, written, ty, param: None, span: p.span, name_span };
+            let clock_span = p.clock.as_ref().map(|c| c.name.span);
+            let input =
+                |clock, ty| FlowInput { name, clock, written, clock_span, ty, param: None, span: p.span, name_span };
             let Some(clock) = clock else {
                 inputs.push(input(Clock::Error, self.a.types.error()));
                 continue;
@@ -97,10 +99,10 @@ impl<'p> Sema<'p> {
         let out_error = matches!(self.a.types.get(out_lowered), Ty::Error);
         let clock = match &f.ret_clock {
             _ if out_error => None,
-            Some(c) => match self.port_clock(&cx, c).1 {
-                Some(k @ Clock::Tick(_)) => Some(k),
+            Some(c) => match self.port_clock(&cx, c, EventSrc::OUTPUT).1 {
+                Some(k @ (Clock::Tick(_) | Clock::Event(_))) => Some(k),
                 Some(_) => {
-                    let msg = "the output of a flow is at the clock `sample`, `(sample / N)` or `(sample * N)` in this version (§11.3, §11.6)";
+                    let msg = "the output of a flow is at the clock `sample`, `(sample / N)`, `(sample * N)` or `event` in this version (§11.3, §11.6)";
                     self.report(
                         id,
                         Diagnostic::new(Stage::Names, Code::E0810, c.span, msg).with_found(src(&cx, c.span)),
@@ -128,18 +130,24 @@ impl<'p> Sema<'p> {
             fd.inputs = inputs;
             fd.out = out;
             fd.out_clock = clock;
+            fd.out_clock_span = f.ret_clock.as_ref().map(|c| c.name.span);
         }
         Some(heading)
     }
 
     /// The clock `c` written after the type of an input or the output of a
     /// flow (§11.3, S-359, S-1078): what the names stage reads of it, and
-    /// the clock, none with a diagnostic (reported). A name of the clocks,
-    /// or a derived clock of `sample` whose N is a constant expression of
+    /// the clock, none with a diagnostic (reported). A name of the clocks
+    /// (`event`, the clock of the port, of the source `event`, §11.11), or a derived clock of `sample` whose N is a constant expression of
     /// `U32`, as an array length is (§4.5: E0401, E0408, E0417), a power of 2
     /// that is 2 or more (E0808, §11.9); another base is E0810 at the clock,
     /// and a name not found E0302.
-    fn port_clock(&mut self, cx: &Cx<'p>, c: &onsa_syntax::ast::Clock) -> (Option<ClockRef>, Option<Clock>) {
+    fn port_clock(
+        &mut self,
+        cx: &Cx<'p>,
+        c: &onsa_syntax::ast::Clock,
+        event: EventSrc,
+    ) -> (Option<ClockRef>, Option<Clock>) {
         let written = match crate::clock::resolve_at(c) {
             Ok(r) => r,
             Err(d) => {
@@ -149,6 +157,7 @@ impl<'p> Sema<'p> {
         };
         let clock = match written {
             ClockRef::Name(n) => Some(n.clock()),
+            ClockRef::Event => Some(Clock::Event(event)),
             ClockRef::Derived(Base::Clock(ClockName::Sample), op, n) => self.port_ratio(cx, op, n),
             ClockRef::Derived(base, op, _) => {
                 let msg = format!(

@@ -615,6 +615,21 @@ impl Analysis {
         Some(onsa_diag::unsupported::Feature::ConversionFlowBoundary.diagnostic(stage, span, &[&what]))
     }
 
+    /// The E0200 of the forms this version checks and does not run
+    /// (§11.11): the event clock, at the first `event` in the heading of a
+    /// flow (of this package first). The check does not report it; what
+    /// reads the plan of the flows stops at it before it reads one: the
+    /// lowering, `onsa graph` and `onsa interface`. A flow with events in
+    /// its body only calls one of those headings. The one test of it (D-15).
+    pub fn event_gate(&self) -> Option<Diagnostic> {
+        let [own, others] = [true, false].map(|own| {
+            let flows = self.defs.iter().filter(move |d| self.modules.is_own(d.module) == own);
+            flows.filter_map(|d| d.as_flow()?.event_port())
+        });
+        let at = own.chain(others).next()?;
+        Some(onsa_diag::unsupported::Feature::EventClocks.diagnostic(onsa_diag::Stage::Flow, at, &[]))
+    }
+
     /// The def is an alias of the error type (§18.1, R-271): a struct, a
     /// variant or a member written through it is not known.
     pub fn error_alias(&self, id: DefId) -> bool {

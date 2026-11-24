@@ -1,0 +1,15 @@
+// onsa.toml
+// [test]
+// spec = ["§11.5", "§11.11", "§15.1", "§18.1"]
+// fixes = 1
+
+// W7-11 U1a/i2 (spec §11.11, §18.1): the flow of an event value given to a `block` input is of another module of the package: the candidate is in its file, by what its body reads. `scaled` has it and `held` has not.
+use util
+
+pub flow to_scaled(m: U32 at event, x: U32 at sample) -> U32 at sample {
+  util.scaled~(m, x)   //~ E0815
+}
+
+pub flow to_held(m: U32 at event) -> U32 at sample {
+  util.held~(m)   //~ E0815
+}

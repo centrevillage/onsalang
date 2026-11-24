@@ -25,6 +25,16 @@ pub(crate) fn pkg(files: &[(&str, &str)]) -> Package {
     Package::new("t", modules, vec![std_package()])
 }
 
+/// A package of the modules `files`, their files numbered from `first`.
+pub(crate) fn pkg_at(name: &str, first: u32, files: &[(&str, &str)], deps: Vec<Arc<Package>>) -> Package {
+    let p = pkg(files);
+    let file = |k: usize| FileId(first + k as u32);
+    let parsed = |(k, m): (usize, Module)| {
+        Module::new(m.segments, file(k), m.text.clone(), onsa_syntax::parse(file(k), &m.text))
+    };
+    Package::new(name, p.modules.into_iter().enumerate().map(parsed).collect(), deps)
+}
+
 /// The embedded standard library (D-07, R-80 (4)), so that the spec examples
 /// (`use std.math.{exp, cos}`) check here as they do in the driver.
 pub(crate) fn std_package() -> Arc<Package> {

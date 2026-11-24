@@ -1,0 +1,105 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§11.5", "§11.11", "§18.1"]
+
+// W7-11 U1a/t, S-560, S-563 (spec §11.11: "イベントの入力への引数はイベントの値で、インスタンスのその入力のクロックは引数のクロックに結び付く（同じインスタンスの別の入力は別のクロックでよく、同じクロックを二つの入力に渡してもよい）。
+// イベントの値を `sample`・`sample / N` の入力へ渡すと最後の値で読み、`block`・`init`・`sample * N` の入力へは E0815"; §11.5: "flow の呼び出しの引数のクロックは、入力の宣言のクロック以下でなければならない"、"周期の刻みの
+// クロックの間は `at` が要り"): an argument of an input of an event is an event value (an input of the caller, or the output of a call); a value of a periodic clock (`sample`, `sample / N`) is faster than the input and
+// is E0815 (a value is never made slower, §11.3), and an event value given to an input at `init` or at `sample * N` is E0815 (the one at `block` is in e0815_event_to_block_input.onsa, it has a candidate). The error is at the argument.
+// An event value to an input at `sample` or `sample / N`, an event to an event input, the events of two inputs to the two inputs of one call, and the events of two calls are fine. One error per flow (§18.1). `m` and `n` are
+// the events of two inputs, `s` is a `sample` value and `l` a `sample / 4` value, all `U32`.
+// A value of a parameter kind (`block`, `init`, a constant) makes no event, and is E0815 too (S-567 E2, the answer the user agreed to).
+
+pub flow on_event(m: U32 at event) -> U32 at sample {
+  m
+}
+
+pub flow on_init(q: U32 at init) -> U32 at sample {
+  q
+}
+
+pub flow on_sample(s: U32 at sample) -> U32 at sample {
+  s
+}
+
+pub flow on_quarter(l: U32 at (sample / 4)) -> U32 at sample {
+  l at sample
+}
+
+pub flow on_double(d: U32 at (sample * 2)) -> U32 at sample {
+  d[0] + d[1]
+}
+
+pub flow on_two_events(a: U32 at event, b: U32 at event) -> U32 at sample {
+  (a at sample) + b
+}
+
+// ---- the error: the argument is not an event value of a clock at most the one of the input.
+pub flow sample_to_an_event_input(s: U32 at sample) -> U32 at sample {
+  on_event~(s)   //~ E0815
+}
+
+pub flow quarter_to_an_event_input(l: U32 at (sample / 4)) -> U32 at sample {
+  on_event~(l)   //~ E0815
+}
+
+pub flow event_and_sample_to_an_event_input(m: U32 at event, s: U32 at sample) -> U32 at sample {
+  on_event~(m + s)   //~ E0815
+}
+
+pub flow event_to_an_init_input(m: U32 at event) -> U32 at sample {
+  on_init~(m)   //~ E0815
+}
+
+pub flow event_to_a_fast_input(m: U32 at event) -> U32 at sample {
+  on_double~(m)   //~ E0815
+}
+
+pub flow block_to_an_event_input(p: U32 at block) -> U32 at sample {
+  on_event~(p)   //~ E0815
+}
+
+pub flow init_to_an_event_input(q: U32 at init) -> U32 at sample {
+  on_event~(q)   //~ E0815
+}
+
+pub flow constant_to_an_event_input() -> U32 at sample {
+  on_event~(1)   //~ E0815
+}
+
+pub flow time_to_an_event_input() -> U32 at sample {
+  on_event~(sample_tick())   //~ E0815
+}
+
+pub flow second_input_is_a_sample(m: U32 at event, s: U32 at sample) -> U32 at sample {
+  on_two_events~(m, s)   //~ E0815
+}
+
+// ---- no error.
+pub flow event_to_an_event_input(m: U32 at event) -> U32 at sample {
+  on_event~(m)
+}
+
+pub flow other_event_to_an_event_input(m: U32 at event, n: U32 at event) -> U32 at sample {
+  on_event~(n) + on_event~(m)
+}
+
+pub flow event_to_a_sample_input(m: U32 at event) -> U32 at sample {
+  on_sample~(m)
+}
+
+pub flow event_to_a_quarter_input(m: U32 at event) -> U32 at sample {
+  on_quarter~(m)
+}
+
+pub flow event_computed_to_a_sample_input(m: U32 at event) -> U32 at sample {
+  on_sample~(m + 1)
+}
+
+pub flow events_of_two_inputs_to_one_call(m: U32 at event, n: U32 at event) -> U32 at sample {
+  on_two_events~(m, n)
+}
+
+pub flow one_event_to_two_inputs(m: U32 at event) -> U32 at sample {
+  on_two_events~(m, m)
+}

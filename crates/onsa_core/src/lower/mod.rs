@@ -219,6 +219,9 @@ pub fn lower(pkg: &Package, a: &Analysis) -> Result<Module, LowerFailure> {
 /// then dropped, so no placeholder leaves this function. The first internal
 /// failure stops lowering, unless it is a consequence of a placeholder.
 pub fn lower_with(pkg: &Package, a: &Analysis, opts: &LowerOptions) -> Result<Module, LowerFailure> {
+    if let Some(gate) = a.event_gate() {
+        return Err(LowerFailure::Diagnostics(vec![gate]));
+    }
     let flat = onsa_sema::flatten(pkg);
     let places: usize =
         flat.iter().flat_map(|p| p.modules.iter()).map(|m| m.parsed.ast.exprs.len() + m.parsed.ast.pats.len()).sum();

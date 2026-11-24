@@ -352,11 +352,13 @@ fn to_value(cst: &Cst, text: &str, clock: NodeId, stmt: NodeId, (marks, side, se
     while cst.kind(inner) == NodeKind::ParenExpr {
         inner = first_expr(inner)?;
     }
-    if cst.kind(inner) == NodeKind::AtExpr {
+    let at = clock_text(cst, text, clock);
+    // SPEC-GAP(S-1238): `at event`, which no value takes (§11.11, E0815), is
+    // taken out (provisional).
+    if cst.kind(inner) == NodeKind::AtExpr || at.strip_prefix(" at ") == Some(super::EVENT) {
         return Some(vec![Fix::new("remove the clock", out.edits(""))]);
     }
     let s = cst.span(value);
-    let at = clock_text(cst, text, clock);
     let kinds: Vec<TokenKind> = cst.token_range(value).map(|i| cst.tokens()[i].kind).collect();
     let mut edits = out.edits("");
     match cst.kind(value) {

@@ -1,0 +1,17 @@
+// onsa.toml
+// [test]
+// spec = ["§11.5", "§11.11", "§18.1"]
+// fixes = 1
+
+// W7-11 U1a/t, S-560 (spec §11.11: "イベントの値を `sample`・`sample / N` の入力へ渡すと最後の値で読み、`block`・`init`・`sample * N` の入力へは E0815（`block` の入力への候補は、入力の宣言を `at sample` にする形）"):
+// an event value given to an input at `block` is E0815 at the argument, and the diagnostic has the one candidate, which writes the declaration of the input at `sample`. The file has this one error (the candidate is
+// the edit of the heading of `on_block`, and a file with other errors is no clean one). The text of the file after the candidate is the `.fix1` that the implementation makes; the spec does not fix the place
+// of the diagnostic in the line, so there is no `[[test.fix]]`.
+
+pub flow on_block(p: U32 at sample) -> U32 at sample {
+  p
+}
+
+pub flow event_to_a_block_input(m: U32 at event) -> U32 at sample {
+  on_block~(m)   //~ E0815
+}

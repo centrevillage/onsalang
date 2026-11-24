@@ -1,0 +1,44 @@
+// onsa.toml
+// [test]
+// spec = ["§11.11", "§18.1"]
+
+// W7-11 U1a/t, S-564 (spec §11.11: "flow のイベントの出力 `-> E at event`: 本体の出力の式は `Option[E]` で…`Some(v)` のときに一つのイベント `v` を出す…`None` は出さない"; §18.1: "型の不一致（E0401）は、型の組み合わせごとには分けない"):
+// the body of a flow that gives out events of the type `E` is an `Option[E]`. A body of the type `E` (the value), of another type, a literal, or the `Option[E]` of the event when `E` is an option itself, is a
+// type mismatch, E0401 (the type stage, before the stage of the clocks), at the expression. `None` and `Some(v)` and an `if` of them are the right body. One error per flow (§18.1).
+
+pub flow body_is_the_value(m: U32 at event) -> U32 at event {
+  m   //~ E0401
+}
+
+pub flow body_is_a_literal(x: F32 at sample) -> U32 at event {
+  1   //~ E0401
+}
+
+pub flow body_is_an_option_of_another_type(x: F32 at sample) -> U32 at event {
+  Some(x)   //~ E0401
+}
+
+pub flow body_is_the_value_of_an_option_event(m: Option[U32] at event) -> Option[U32] at event {
+  m   //~ E0401
+}
+
+// ---- no error
+pub flow body_is_some(m: U32 at event) -> U32 at event {
+  Some(m)
+}
+
+pub flow body_is_none(x: F32 at sample) -> U32 at event {
+  None
+}
+
+pub flow body_is_an_if(x: F32 at sample) -> U32 at event {
+  if x > 0.5 {
+    Some(1)
+  } else {
+    None
+  }
+}
+
+pub flow body_is_some_of_an_option(m: Option[U32] at event) -> Option[U32] at event {
+  Some(m)
+}

@@ -247,7 +247,7 @@ fn check_stages(info: &FlowInfo, span: Span) -> R<()> {
         kept.chain(hoisted).chain(time).chain(info.read_stages().map(Some)).collect();
     for s in stages {
         let s = info.run_stage(s.ok_or_else(|| internal(span, "a stored local with no stage"))?);
-        if s.tick_slower_than(ClockStage::SAMPLE) && !info.stages.contains(&s) {
+        if s.slow_tick() && !info.stages.contains(&s) {
             return Err(internal(span, format!("no function of the stage {s:?}")));
         }
     }
@@ -420,7 +420,7 @@ pub(crate) fn implicit_params(lw: &mut Lowerer, member: DefId, span: Span) -> R<
 fn lower_flow<'b>(lw: &mut Lowerer<'b>, flow: DefId, fd: FlowDef, span: Span) -> R<FlowFns> {
     let a: &'b onsa_sema::Analysis = lw.a;
     let Some(info) = a.flows.get(&flow) else { return Err(internal(span, "flow body was not checked")) };
-    if !info.complete {
+    if !info.planned() {
         return Err(internal(span, "flow body has errors"));
     }
     let need = |f: FlowFn| generated_fn(a, &fd, f).ok_or_else(|| internal(span, format!("flow without {f:?}")));
@@ -481,7 +481,7 @@ fn lower_flow<'b>(lw: &mut Lowerer<'b>, flow: DefId, fd: FlowDef, span: Span) ->
     for &s in &info.stages {
         let n = match s {
             ClockStage::Tick(k) => k.n(),
-            ClockStage::Init | ClockStage::Block => None,
+            ClockStage::Init | ClockStage::Block | ClockStage::Event(_) => None,
         };
         let n = n.ok_or_else(|| internal(span, format!("a slower tick of the stage {s:?}")))?;
         stages.push((s, push_fn(lw, format!("{base}.tick_{n}"), true, span)));
@@ -501,7 +501,7 @@ fn lower_flow<'b>(lw: &mut Lowerer<'b>, flow: DefId, fd: FlowDef, span: Span) ->
         match stage {
             ClockStage::Block => params.push((i.name.clone(), ty, a.param_info(i))),
             &ClockStage::SAMPLE => sig_inputs.push((i.name.clone(), ty)),
-            ClockStage::Init | ClockStage::Tick(_) => {}
+            ClockStage::Init | ClockStage::Event(_) | ClockStage::Tick(_) => {}
         }
     }
     // Of the C API alone, when every `block` input has a `default` (§11.7, §14.2, S-625).

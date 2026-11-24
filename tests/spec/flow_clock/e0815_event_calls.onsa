@@ -1,0 +1,85 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§11.5", "§11.11", "§18.1"]
+
+// W7-11 U1a/t, S-564, S-1096 (spec §11.11: "呼び出しの出力のイベントのクロックは、呼び出しごとに別のクロックで、別の入力のクロックと同じく互いに比べられない（`[det~(x, a), det~(x, b)]` と `if~` の腕に並べた形は E0815。
+// `par~` の複製は §11.5）"; §11.5: "`e` のクロックが、`e` の中の呼び出しのイベントの出力のクロックのときは、複製ごとに別のクロックで最大が無いので E0815（複製が一つでも同じ）。イベントは複製の中で受け手に渡すか、
+// 複製の中で `at sample` を付ける（`par~` の外に付けた `at` では直らない）"): the event that a call of a flow gives out has a clock of its own, so two calls (an array, the arms of `if~`, a sum) have no greatest clock, and the copies of a
+// `par~` are as many calls (even one). A call is read where it is made, or given to an input of an event, or marked `at sample` inside the copy, and then there is no error. The error is at the expression that has no greatest clock. One
+// error per flow (§18.1). `x` is the `sample` input; `det` gives out an event when `x` is above its limit.
+
+pub rt fn limit_of(i: U32) -> F32 {
+  F32.round_from(i) * 0.5
+}
+
+pub flow det(x: F32 at sample, limit: F32 at block) -> U32 at event {
+  if x > limit {
+    Some(1)
+  } else {
+    None
+  }
+}
+
+pub flow acc(e: U32 at event) -> U32 at sample {
+  let n = prev~(^n) + e
+  n
+}
+
+// ---- the error: the events of two calls, or of the copies of a `par~`.
+pub flow two_calls_in_an_array(x: F32 at sample) -> [U32; 2] at sample {
+  [det~(x, 0.2), det~(x, 0.7)]   //~ E0815
+}
+
+pub flow one_call_written_twice_in_an_array(x: F32 at sample) -> [U32; 2] at sample {
+  [det~(x, 0.2), det~(x, 0.2)]   //~ E0815
+}
+
+pub flow two_calls_in_the_arms_of_if(x: F32 at sample, c: Bool at sample) -> U32 at sample {
+  if~ c { det~(x, 0.2) } else { det~(x, 0.7) }   //~ E0815
+}
+
+pub flow two_calls_in_a_sum(x: F32 at sample) -> U32 at sample {
+  det~(x, 0.2) + det~(x, 0.7)   //~ E0815
+}
+
+pub flow copies_of_a_par(x: F32 at sample) -> [U32; 2] at sample {
+  par~ i in 0 ..< 2 { det~(x, limit_of(i)) }   //~ E0815
+}
+
+pub flow one_copy_of_a_par(x: F32 at sample) -> [U32; 1] at sample {
+  par~ i in 0 ..< 1 { det~(x, limit_of(i)) }   //~ E0815
+}
+
+pub flow at_outside_the_par(x: F32 at sample) -> [U32; 2] at sample {
+  (par~ i in 0 ..< 2 { det~(x, limit_of(i)) }) at sample   //~ E0815
+}
+
+// ---- no error: the call is read where it is made, in the body of a copy, or given on.
+pub flow one_call_read_twice(x: F32 at sample) -> U32 at sample {
+  let e = det~(x, 0.2)
+  e + e
+}
+
+pub flow a_call_and_a_sample(x: F32 at sample, z: U32 at sample) -> U32 at sample {
+  det~(x, 0.2) + z
+}
+
+pub flow a_call_into_an_event_input(x: F32 at sample) -> U32 at sample {
+  acc~(det~(x, 0.2))
+}
+
+pub flow copies_that_give_it_on(x: F32 at sample) -> [U32; 2] at sample {
+  par~ i in 0 ..< 2 { acc~(det~(x, limit_of(i))) }
+}
+
+pub flow copies_with_an_at_inside(x: F32 at sample) -> [U32; 2] at sample {
+  par~ i in 0 ..< 2 { det~(x, limit_of(i)) at sample }
+}
+
+pub flow calls_with_an_at_in_an_array(x: F32 at sample) -> [U32; 2] at sample {
+  [det~(x, 0.2) at sample, det~(x, 0.7) at sample]
+}
+
+pub flow calls_with_an_at_in_the_arms(x: F32 at sample, c: Bool at sample) -> U32 at sample {
+  if~ c { det~(x, 0.2) at sample } else { det~(x, 0.7) at sample }
+}

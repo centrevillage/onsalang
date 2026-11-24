@@ -589,10 +589,27 @@ impl<'a> Checker<'a> {
         let t = self.check_expr_as(inner, expected, self.joining)?;
         let clock = match self.names_record(e, self.names.clocks.get(&e).copied())? {
             ClockRef::Name(name) => name.clock(),
+            // §11.11: in error, as a derived clock no expression writes.
+            ClockRef::Event => {
+                let span = self.at_clock(e);
+                let msg = "`at event` is no clock of an expression: it is written at the inputs and the output of a flow only (§11.3, §11.11)";
+                let rule = "an event value is at the clock of its event; `at sample` and `at (sample / N)` read its last value";
+                let found = self.src(span);
+                self.flow_hold(Diagnostic::new(Stage::Flow, Code::E0815, span, msg).with_found(found).with_rule(rule));
+                Clock::Error
+            }
             ClockRef::Derived(base, op, n) => self.derived_clock(e, base, op, n)?,
         };
         self.fcx().at_clocks.insert(e, clock);
         Ok(t)
+    }
+
+    /// The place of the clock of the `at` `e`.
+    fn at_clock(&self, e: ExprId) -> Span {
+        match &self.expr(e).kind {
+            ExprKind::At { clock, .. } => clock.span,
+            _ => onsa_diag::internal::bug(Some(self.expr(e).span), "a clock of no `at`"),
+        }
     }
 
     /// The clock of the derived clock `(base op n)` of `e at k` (§11.3,
@@ -605,16 +622,13 @@ impl<'a> Checker<'a> {
     /// (S-1133 (1)).
     fn derived_clock(&mut self, e: ExprId, base: Base, op: RatioOp, n: ExprId) -> R<Clock> {
         let value = self.flow_const_u32(n)?;
-        let ExprKind::At { clock, .. } = &self.expr(e).kind else {
-            onsa_diag::internal::bug(Some(self.expr(e).span), "a derived clock of no `at`")
-        };
         if base != Base::Clock(ClockName::Sample) || op == RatioOp::Mul {
             let msg = format!(
                 "the derived clock of an expression is `(sample / N)`, never faster than the `sample` of the body; `({} {} N)` stands in the inputs and the output of a flow (§11.3, §11.9)",
                 base.name(),
                 op.symbol()
             );
-            self.flow_hold_at(Code::E0815, clock.span, msg);
+            self.flow_hold_at(Code::E0815, self.at_clock(e), msg);
             return Ok(Clock::Error);
         }
         let Some(value) = value else { return Ok(Clock::Error) };

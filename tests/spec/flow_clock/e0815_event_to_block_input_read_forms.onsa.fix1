@@ -1,0 +1,65 @@
+// onsa.toml
+// [test]
+// spec = ["§11.5", "§11.11", "§18.1"]
+// fixes = 1
+
+// W7-11 U1a/i2 (spec §11.11: "`block` の入力への候補は、入力の宣言を `at sample` にする形"; §18.1: the candidate leaves no error of the same stage or an earlier one in the units its edits touch, or there is no candidate): an event
+// value given to a `block` input whose flow reads it as an operand of its output has the candidate, in each form, whatever the order of the declarations (the last flows are called before they are declared). A call with a `when~`, of a copy
+// of a `par~` and of a flow with other nodes is the same. The forms with no candidate are in e0815_event_to_block_input_no_candidate.onsa.
+
+pub rt fn twice(i: U32) -> U32 {
+  i * 2
+}
+
+pub flow smooth(x: U32 at sample) -> U32 at sample {
+  prev~(x)
+}
+
+pub flow product(p: U32 at sample, x: U32 at sample) -> U32 at sample {
+  x * p
+}
+
+pub flow in_a_call(p: U32 at sample, x: U32 at sample) -> U32 at sample {
+  (twice(p) + 1) +% x
+}
+
+pub flow in_an_if(p: U32 at sample, x: U32 at sample) -> U32 at sample {
+  if p > 2 { x } else { p }
+}
+
+pub flow beside_nodes(p: U32 at sample, x: U32 at sample) -> U32 at sample {
+  let y = smooth~(x)
+  smooth~(y).when~(y > 1) + p
+}
+
+pub flow of_an_array(p: [U32; 2] at sample) -> U32 at sample {
+  p[0] + p[1]
+}
+
+pub flow to_product(m: U32 at event, x: U32 at sample) -> U32 at sample {
+  product~(m, x)   //~ E0815
+}
+
+pub flow to_in_a_call(m: U32 at event, x: U32 at sample) -> U32 at sample {
+  in_a_call~(m, x).when~(x > 1)   //~ E0815
+}
+
+pub flow to_in_an_if(m: U32 at event, x: U32 at sample) -> U32 at sample {
+  (par~ i in 0 ..< 2 { in_an_if~(m + i, x) })[0]   //~ E0815
+}
+
+pub flow to_beside_nodes(m: U32 at event, x: U32 at sample) -> U32 at sample {
+  beside_nodes~(m, x)   //~ E0815
+}
+
+pub flow to_of_an_array(m: [U32; 2] at event) -> U32 at sample {
+  of_an_array~(m)   //~ E0815
+}
+
+pub flow to_below(m: U32 at event) -> U32 at sample {
+  below~(m)   //~ E0815
+}
+
+pub flow below(p: U32 at sample) -> U32 at sample {
+  p
+}

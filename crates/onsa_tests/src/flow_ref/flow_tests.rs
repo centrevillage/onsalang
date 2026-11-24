@@ -627,3 +627,22 @@ fn the_counter_goes_round_at_2_pow_32() {
         assert_eq!(me.ctx.tick, 0);
     });
 }
+
+#[test]
+fn a_flow_with_an_event_is_unavailable_and_not_evaluated() {
+    // §11.11: the evaluator has no event clock until W7-11 U2. A flow with an event input, with an event output, and one that calls an event output (the check passes each) stop as `Unavailable`.
+    let src = "flow det(x: F32 at sample) -> U32 at event { if x > 0.5 { Some(1) } else { None } }
+flow acc(e: U32 at event) -> U32 at sample {
+  let n = prev~(^n) + e
+  n
+}
+flow calls(x: F32 at sample) -> U32 at sample { acc~(det~(x)) }
+flow reads(x: F32 at sample) -> U32 at sample { det~(x) }";
+    for name in ["det", "acc", "calls", "reads"] {
+        let stopped = with_checked(src, true, move |a| {
+            let mut me = Instance::init(View::new(a), def_named(a, name), 48000.0, &[], None).map_err(|s| s.fault)?;
+            me.process(&[], &[("x", &[Value::F32(1.0)])], 1, None).map(|_| ()).map_err(|s| s.fault)
+        });
+        assert!(matches!(stopped, Err(Fault::Unavailable(_))), "{name}: {stopped:?}");
+    }
+}

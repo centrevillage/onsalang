@@ -102,6 +102,28 @@ pub(crate) fn listed_fn(name: &str) -> bool {
 }
 
 impl Analysis {
+    /// §11.6: the scalar and, of an array, the length of the channel a value
+    /// of the type `t` crosses the boundary as: the one judgment of the type
+    /// of an input and of each part of an output.
+    fn channel(&self, t: TyId) -> Result<(TyId, Option<Len>), Unfit> {
+        let is_scalar =
+            |t: TyId| matches!(self.types.get(t), Ty::Int(_) | Ty::Float(_) | Ty::Bool | Ty::Char | Ty::Error);
+        match self.types.get(t) {
+            // S-1110, S-407: N is 1 at least.
+            Ty::Array(e, Len::Const(0)) if is_scalar(*e) => Err(Unfit::NoChannel(Some((None, t)))),
+            Ty::Array(e, len) if is_scalar(*e) => Ok((*e, Some(*len))),
+            _ if is_scalar(t) => Ok((t, None)),
+            Ty::Array(e, _) => Err(Unfit::Form(matches!(self.types.get(*e), Ty::Array(..)))),
+            _ => Err(Unfit::Form(false)),
+        }
+    }
+
+    /// Whether a `sample` input is of the type `t` (§11.6), a value type of a
+    /// signal with no error.
+    pub(crate) fn crosses_as_input(&self, t: TyId) -> bool {
+        self.channel(t).is_ok()
+    }
+
     /// The E0302 `d` of the item `name` that `flow` does not generate, with
     /// the notes of why (§11.6, R-480): of `process_inplace`, the types of
     /// the `sample` inputs and of the outputs that do not pair up, and the
@@ -317,20 +339,10 @@ impl<'p> Sema<'p> {
             Ty::Error => return Ok(Vec::new()),
             _ => None,
         };
-        let is_scalar =
-            |t: TyId| matches!(self.a.types.get(t), Ty::Int(_) | Ty::Float(_) | Ty::Bool | Ty::Char | Ty::Error);
-        let one = |field: Option<&str>, t: TyId| -> Result<(String, TyId, Option<Len>), Unfit> {
-            let name = field.unwrap_or("out").to_string();
-            match self.a.types.get(t) {
-                // S-1110, S-407: N is 1 at least.
-                Ty::Array(e, Len::Const(0)) if is_scalar(*e) => {
-                    Err(Unfit::NoChannel(Some((field.map(str::to_string), t))))
-                }
-                Ty::Array(e, len) if is_scalar(*e) => Ok((name, *e, Some(*len))),
-                _ if is_scalar(t) => Ok((name, t, None)),
-                Ty::Array(e, _) => Err(Unfit::Form(matches!(self.a.types.get(*e), Ty::Array(..)))),
-                _ => Err(Unfit::Form(false)),
-            }
+        let one = |field: Option<&str>, t: TyId| match self.a.channel(t) {
+            Ok((e, len)) => Ok((field.unwrap_or("out").to_string(), e, len)),
+            Err(Unfit::NoChannel(_)) => Err(Unfit::NoChannel(Some((field.map(str::to_string), t)))),
+            Err(u) => Err(u),
         };
         match fields {
             Some(fs) => fs.iter().map(|(name, t)| one(Some(name), *t)).collect(),
@@ -392,8 +404,10 @@ impl<'p> Sema<'p> {
             }
             if let Some(span) = h.out {
                 let out = self.flow_def(h.flow).out;
-                let clock = self.flow_def(h.flow).out_clock;
-                in_error |= self.check_rate_value_type(h.flow, out, span, Boundary::Output(clock));
+                let f = self.flow_def(h.flow);
+                // The forms of the boundary of an event are W10-07's (§11.11).
+                let place = if f.gives_events() { Boundary::Inside } else { Boundary::Output(f.out_clock) };
+                in_error |= self.check_rate_value_type(h.flow, out, span, place);
             }
             if let DefKind::Flow(fd) = &mut self.a.defs[h.flow.0 as usize].kind {
                 fd.ports_in_error = in_error;

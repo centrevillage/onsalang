@@ -486,7 +486,7 @@ pub(super) fn drive(runs: Vec<(ClockStage, Vec<Stmt>)>, c: &Expr, span: Span, ou
         }
         let mask = match stage {
             ClockStage::Tick(k) => k.made_n().and_then(|n| u32::try_from(n - 1).ok()),
-            ClockStage::Init | ClockStage::Block => None,
+            ClockStage::Init | ClockStage::Block | ClockStage::Event(_) => None,
         };
         let mask = mask.ok_or_else(|| internal(span, format!("no counter of the tick {stage:?}")))?;
         let low = checked_binary(BinOp::BitAnd, c.clone(), u32_lit(span, mask));

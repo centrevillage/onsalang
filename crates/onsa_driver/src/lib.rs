@@ -216,6 +216,14 @@ fn analyze(
     })
 }
 
+/// The E0200 of [`onsa_sema::Analysis::event_gate`], which stops `onsa
+/// graph` and `onsa interface` (the lowering asks it itself).
+pub(crate) fn event_gate(analyzed: &Analyzed) -> Option<Diagnostic> {
+    let mut gate: Vec<Diagnostic> = analyzed.analysis.event_gate().into_iter().collect();
+    fill_found_with(&mut gate, |file| package_text(&analyzed.pkg, file));
+    gate.pop()
+}
+
 /// Lower a checked package to Core (T3-3). Only meaningful when
 /// `Analyzed::diagnostics` is empty; lowering diagnostics (E0200 for
 /// features outside the core, every one once, S-67) come back as the

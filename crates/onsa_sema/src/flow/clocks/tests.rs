@@ -611,3 +611,22 @@ fn sample_tick_takes_the_clock_of_its_place() {
     let out = o.a.flows[&o.flow].output.expect("the output");
     assert_eq!(o.walked.info.exprs[&out], Clock::Tick(Ratio(-2)));
 }
+
+/// §18.1: the candidate of an event given to a `block` input (§11.11) edits
+/// the flow called, so one of another package has none.
+#[test]
+fn an_event_to_a_block_input_of_another_package_has_no_candidate() {
+    let held = "pub flow held(p: U32 at block) -> U32 at sample {\n  p\n}\n";
+    let caller = "pub flow f(m: U32 at event) -> U32 at sample {\n  held~(m)\n}\n";
+    let candidates = |a: Analysis| {
+        let [d] = &a.diagnostics[..] else { panic!("{:?}", a.diagnostics) };
+        assert_eq!(d.code, onsa_diag::Code::E0815);
+        d.fixes.len()
+    };
+    let main = format!("use d.m.{{held}}\n\n{caller}");
+    let d = crate::tests::pkg_at("d", 10, &[("m", held)], vec![crate::tests::std_package()]);
+    let deps = vec![std::sync::Arc::new(d), crate::tests::std_package()];
+    let user = crate::tests::pkg_at("t", 20, &[("main", &main)], deps);
+    assert_eq!(candidates(crate::analyze(&user)), 0);
+    assert_eq!(candidates(check(&format!("{held}\n{caller}"))), 1);
+}

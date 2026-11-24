@@ -221,6 +221,7 @@ impl<'p> Sema<'p> {
                     inputs: Vec::new(),
                     out: at.error,
                     out_clock: crate::clock::Clock::Error,
+                    out_clock_span: None,
                     body: f.body,
                     members: Vec::new(),
                     absent: Vec::new(),

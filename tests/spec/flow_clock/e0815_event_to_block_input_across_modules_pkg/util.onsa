@@ -1,0 +1,7 @@
+pub flow scaled(p: U32 at block, x: U32 at sample) -> U32 at sample {
+  x * p
+}
+
+pub flow held(p: U32 at block) -> U32 at sample {
+  p at block
+}

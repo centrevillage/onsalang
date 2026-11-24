@@ -21,11 +21,11 @@ fn exponent(c: Clock) -> Option<Ratio> {
 /// The stage `s` of the caller of a part, moved out of a boundary of the
 /// ratio `r` (§11.9): `Tick(min(s + r, 0))`, a stage faster than the
 /// `sample` of its own caller being of that `sample` (an `.up~` runs it
-/// there 2^r times); `init` and `block` as they are. The one rule of it.
+/// there 2^r times); `init`, `block` and an event as they are. The one rule of it.
 pub(in crate::flow) fn step(s: ClockStage, r: Ratio) -> ClockStage {
     match s {
         ClockStage::Tick(k) => ClockStage::Tick(Ratio(k.0.saturating_add(r.0).min(0))),
-        ClockStage::Init | ClockStage::Block => s,
+        ClockStage::Init | ClockStage::Block | ClockStage::Event(_) => s,
     }
 }
 
@@ -43,6 +43,8 @@ pub(in crate::flow) fn run_at<'a>(
     let outside = (0u32..).zip(chain).skip(from as usize + 1);
     outside.fold(s, |s, (at, m)| match m.ratio {
         Some(r) => step(s, r),
+        // No guard stops an event (§11.10).
+        None if matches!(s, ClockStage::Event(_)) => s,
         None => guards.iter().find(|g| g.at == at).map_or(s, |g| s.max(ClockStage::Tick(g.w))),
     })
 }
@@ -74,7 +76,7 @@ pub(in crate::flow) fn head_stage<'a>(
     let conds = guards.iter().map(|g| cond_stage(chain.clone(), guards, g));
     match s {
         ClockStage::Tick(_) => conds.fold(s, ClockStage::max),
-        ClockStage::Init | ClockStage::Block => s,
+        ClockStage::Init | ClockStage::Block | ClockStage::Event(_) => s,
     }
 }
 

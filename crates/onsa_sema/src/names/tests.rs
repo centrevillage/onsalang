@@ -1,10 +1,10 @@
 //! Unit tests of the names stage (§15.1): the names of the prelude, the
 //! name diagnostics, and the modules and packages a `use` and a body name.
 
-use onsa_diag::{Code, FileId};
+use onsa_diag::Code;
 
-use crate::tests::{analyze, check, codes, pkg};
-use crate::{Analysis, Package};
+use crate::Analysis;
+use crate::tests::{analyze, check, codes, pkg, pkg_at};
 
 /// The guard-form candidates of the syntax stage bind names no identifier of
 /// the file spells (`onsa_syntax::foreign::guard_name`, S-253): visible
@@ -54,16 +54,6 @@ fn a_use_takes_the_module_of_a_directory_only_and_goes_through_it() {
     }
     let a = analyze(&pkg(&[c, ("main", "use a.b.c.{f}\n\npub fn g() -> I32 {\n  f()\n}\n")]));
     assert_eq!(codes(&a), [], "{:?}", a.diagnostics);
-}
-
-/// A package of the modules `files`, their files numbered from `first`.
-fn pkg_at(name: &str, first: u32, files: &[(&str, &str)], deps: Vec<std::sync::Arc<Package>>) -> Package {
-    let p = pkg(files);
-    let file = |k: usize| FileId(first + k as u32);
-    let parsed = |(k, m): (usize, crate::Module)| {
-        crate::Module::new(m.segments, file(k), m.text.clone(), onsa_syntax::parse(file(k), &m.text))
-    };
-    Package::new(name, p.modules.into_iter().enumerate().map(parsed).collect(), deps)
 }
 
 /// R-39, R-88: a body names another module or a package through a `use`

@@ -326,6 +326,8 @@ fn find_flow(analyzed: &Analyzed, name: &str, scope: Option<&str>) -> Result<Def
 pub enum GraphError {
     /// No such flow, or it does not check (the command could not work).
     Usage(String),
+    /// The E0200 of what this version does not run ([`crate::event_gate`]).
+    Diagnostics(Vec<onsa_diag::Diagnostic>),
     Internal(crate::InternalError),
 }
 
@@ -333,6 +335,9 @@ pub enum GraphError {
 /// name) in `scope`: the module of the file passed
 /// ([`crate::Loaded::focus_module`]), or the whole package (`None`).
 pub fn graph(analyzed: &Analyzed, flow: &str, scope: Option<&str>) -> Result<String, GraphError> {
+    if let Some(gate) = crate::guard(|| crate::event_gate(analyzed)).map_err(GraphError::Internal)? {
+        return Err(GraphError::Diagnostics(vec![gate]));
+    }
     crate::guard(|| graph_of(analyzed, flow, scope)).map_err(GraphError::Internal)?.map_err(GraphError::Usage)
 }
 
@@ -347,7 +352,7 @@ fn draw(analyzed: &Analyzed, id: DefId) -> Result<Drawing, String> {
     let Some(info) = a.flows.get(&id) else {
         return Err(format!("flow `{}` was not checked (it has diagnostics)", def.name));
     };
-    if !info.complete {
+    if !info.planned() {
         return Err(format!("flow `{}` has diagnostics; fix them first", def.name));
     }
     let Some(module) = a.ast(&analyzed.pkg, def.module) else {
@@ -513,7 +518,7 @@ pub fn check_graphs(analyzed: &Analyzed) -> Result<GraphCheck, crate::InternalEr
     crate::guard(|| {
         let a = &analyzed.analysis;
         let mut check = GraphCheck::default();
-        for id in own_flows(a).filter(|id| a.flows.get(id).is_some_and(|f| f.complete)) {
+        for id in own_flows(a).filter(|id| a.flows.get(id).is_some_and(|f| f.planned())) {
             match draw(analyzed, id).map(|d| d.solid_cycle()) {
                 Ok(cycle) => {
                     check.flows += 1;

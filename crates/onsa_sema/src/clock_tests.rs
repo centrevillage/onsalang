@@ -5,8 +5,8 @@ use onsa_diag::internal::InternalBug;
 use onsa_diag::{FileId, Span};
 
 use crate::clock::{
-    Clash, Clock, ClockFrame, ClockName, ClockStage, Ratio, delay_out, join, keeps_delay_state, loop_clock, promote,
-    readable_at, rebase,
+    Clash, Clock, ClockFrame, ClockName, ClockStage, EventSrc, Ratio, delay_out, emit_clock, join, keeps_delay_state,
+    loop_clock, promote, readable_at, rebase,
 };
 
 #[test]
@@ -43,6 +43,7 @@ fn the_text_of_a_clock() {
     let shown = [Clock::Const, Clock::Init, Clock::Block, Clock::SAMPLE, Clock::Tick(Ratio(-2)), Clock::Tick(Ratio(1))]
         .map(|c| c.shown(at));
     assert_eq!(shown, ["constant", "init", "block", "sample", "sample / 4", "sample * 2"]);
+    assert_eq!(event(0).shown(at), "event");
 }
 
 #[test]
@@ -56,8 +57,8 @@ fn a_clock_with_no_text_is_an_internal_error_at_its_place() {
 }
 
 // The comparisons (W7-02 U2a). The expectations follow the table of the
-// design (§11.3, §11.4, §11.9, S-567 P3 and K6); no row of an event clock
-// (S-1095, S-1096).
+// design (§11.3, §11.4, §11.9, S-567 P3 and K6); the rows of an event
+// clock are after them.
 
 const S: Clock = Clock::SAMPLE;
 
@@ -311,14 +312,206 @@ fn out_of_the_table_is_an_internal_error_and_nothing_else() {
     assert!(is_internal_error(|| promote(Clock::Init, Clock::Const)));
 }
 
-/// A clock in error does not hide an event clock, whose rows are W7-11's.
+// The rows of an event clock (§11.11, §11.3), by hand from the letter: the
+// order `constant < init < block < event < sample / N < sample < sample * N`,
+// and two events of two sources have none.
+
+/// The event clock of the input `i`.
+fn event(i: usize) -> Clock {
+    Clock::Event(EventSrc::input(i))
+}
+
+/// The sources of a body of two inputs: its inputs, then its calls; that of
+/// an output of a heading is none of them.
 #[test]
-fn an_event_clock_with_a_clock_in_error_is_an_internal_error() {
-    let ev = Clock::Event(crate::clock::EventSrc(0));
-    assert!(is_internal_error(move || join(&[Some(ev), Some(Clock::Error)])));
-    assert!(is_internal_error(move || join(&[Some(Clock::Error), Some(ev)])));
-    assert!(is_internal_error(move || readable_at(Clock::Error, ev)));
-    assert!(is_internal_error(move || promote(ev, Clock::Error)));
+fn the_source_of_an_event_is_an_input_or_a_call() {
+    assert_eq!(EventSrc::input(0).place(2), Err(0));
+    assert_eq!(EventSrc::input(1).place(2), Err(1));
+    assert_eq!(EventSrc::call(2, 0).place(2), Ok(0));
+    assert_eq!(EventSrc::call(2, 3).place(2), Ok(3));
+    assert_ne!(EventSrc::call(2, 0), EventSrc::input(1));
+    assert!(EventSrc::OUTPUT.place(2).is_ok_and(|i| i > 1 << 24));
+}
+
+/// "イベントのクロックは全ての周期の刻みのクロックの下で、パラメータの種類の上にある";
+/// a value of it read faster is stored, whichever the tick.
+#[test]
+fn the_stage_of_an_event_is_between_block_and_every_tick() {
+    let of = |c: Clock| c.stage().expect("a stage");
+    assert_eq!(event(1).stage(), Some(ClockStage::Event(EventSrc::input(1))));
+    assert!(of(Clock::Block) < of(event(0)) && of(event(7)) < of(tick(-31)));
+    for k in [-31, -2, 0, 1] {
+        assert!(of(event(0)).stored_slower_than(of(tick(k))), "{k}");
+        assert!(!of(tick(k)).stored_slower_than(of(event(0))), "{k}");
+    }
+    assert!(!of(event(0)).stored_slower_than(of(event(0))));
+    assert!(!of(event(0)).stored_slower_than(of(event(1))) && !of(event(1)).stored_slower_than(of(event(0))));
+    assert!(!of(Clock::Block).stored_slower_than(of(event(0))));
+    assert!(of(tick(-2)).stored_slower_than(of(Clock::SAMPLE)));
+    assert!(of(tick(-1)).slow_tick());
+    assert!(![of(event(0)), of(Clock::SAMPLE), of(tick(1)), of(Clock::Block)].into_iter().any(ClockStage::slow_tick));
+}
+
+/// "パラメータの種類とイベントの値は自由に混ざること", "最大が無ければ E0815"; S-1232: `sample_tick()`
+/// is of the event beside it.
+#[test]
+fn a_join_of_an_event_is_the_tick_or_the_event() {
+    let (a, b) = (event(0), event(1));
+    for slow in [Clock::Const, Clock::Init, Clock::Block, Clock::Ambient] {
+        assert_eq!(joined(&[a, slow]), Ok(Some(a)), "{slow:?}");
+        assert_eq!(joined(&[slow, a]), Ok(Some(a)), "{slow:?}");
+    }
+    for k in [0, -2] {
+        assert_eq!(joined(&[a, tick(k)]), Ok(Some(tick(k))), "{k}");
+        // Two events and a tick in one expression: the tick is the largest.
+        for ops in [[a, b, tick(k)], [a, tick(k), b], [tick(k), a, b]] {
+            assert_eq!(joined(&ops), Ok(Some(tick(k))), "{ops:?}");
+        }
+    }
+    assert_eq!(joined(&[a, a]), Ok(Some(a)));
+    assert_eq!(join(&[Some(a), None]), Ok(Some(a)));
+    assert_eq!(joined(&[a, b, Clock::Error]), Ok(Some(Clock::Error)));
+}
+
+/// S-1095: two events with no tick in the expression do not meet, whatever
+/// is slower beside them; nor do ticks of two ratios beside them.
+#[test]
+fn a_join_of_two_events_with_no_tick_clashes() {
+    let (a, b) = (event(0), event(1));
+    assert_eq!(joined(&[a, b]), Err(clash_of(0, a, 1, b)));
+    assert_eq!(joined(&[b, a]), Err(clash_of(0, b, 1, a)));
+    assert_eq!(joined(&[Clock::Block, a, Clock::Ambient, b]), Err(clash_of(1, a, 3, b)));
+    assert_eq!(joined(&[a, b, event(2)]), Err(clash_of(0, a, 1, b)));
+    assert!(joined(&[a, b, tick(0), tick(-2)]).is_err());
+    assert!(joined(&[a, tick(1)]).is_err());
+}
+
+/// A join with events is the same in every order of its operands.
+#[test]
+fn a_join_with_events_does_not_depend_on_the_order() {
+    let mut cs = grid();
+    cs.extend([event(0), event(1)]);
+    for &a in &cs {
+        for &b in &cs {
+            assert!(agree(joined(&[a, b]), joined(&[b, a])), "{a:?} {b:?}");
+            for &c in &cs {
+                for d in [event(0), event(2)] {
+                    let flat = joined(&[a, b, c, d]);
+                    for p in [[d, a, b, c], [a, d, c, b], [c, b, a, d], [b, d, a, c], [c, d, b, a]] {
+                        assert!(agree(flat, joined(&p)), "{p:?}");
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// The join of up to 4 operands with events against a model by hand from the
+/// letter (§11.3, §11.11, S-1095, S-567 K6): an operand in error gives
+/// error; `sample * N` meets no other operand, ticks of two ratios clash; with
+/// a tick, the tick; two events with no tick clash; else the event, else
+/// `sample_tick()`, else the largest parameter kind.
+#[test]
+fn a_join_with_events_is_the_one_of_the_letter_over_every_operands() {
+    fn model(ops: &[Option<Clock>]) -> Result<Option<Clock>, ()> {
+        let given: Vec<Clock> = ops.iter().flatten().copied().collect();
+        if given.contains(&Clock::Error) {
+            return Ok(Some(Clock::Error));
+        }
+        if given.len() > 1 && given.contains(&tick(1)) {
+            return Err(());
+        }
+        let mut of = given.iter().filter(|c| matches!(c, Clock::Tick(_)));
+        if let Some(t) = of.next() {
+            return if of.all(|x| x == t) { Ok(Some(*t)) } else { Err(()) };
+        }
+        let mut of = given.iter().filter(|c| matches!(c, Clock::Event(_)));
+        if let Some(e) = of.next() {
+            return if of.all(|x| x == e) { Ok(Some(*e)) } else { Err(()) };
+        }
+        let largest = [Clock::Ambient, Clock::Block, Clock::Init, Clock::Const];
+        Ok(largest.into_iter().find(|c| given.contains(c)))
+    }
+    let mut cs: Vec<Option<Clock>> = vec![None, Some(Clock::Const), Some(Clock::Init), Some(Clock::Block)];
+    cs.extend([Clock::Ambient, Clock::Error, tick(-2), tick(0), tick(1), event(0), event(1), event(2)].map(Some));
+    let mut lists: Vec<Vec<Option<Clock>>> = vec![Vec::new()];
+    for n in 1..=4 {
+        let longer = |l: &Vec<Option<Clock>>| cs.iter().map(|&c| [&l[..], &[c]].concat()).collect::<Vec<_>>();
+        lists = lists.iter().flat_map(longer).collect();
+        assert_eq!(lists.len(), cs.len().pow(n));
+        for ops in &lists {
+            assert_eq!(join(ops).map_err(|_| ()), model(ops), "{ops:?}");
+        }
+    }
+}
+
+/// "イベントの値は `block` と同じく暗黙に読め、使う所の周期の刻みのクロックの刻みで"; to an input at `init`,
+/// `block`, `sample * N` E0815; "イベントの段の式では、周期の刻みのクロックの値は読めず"; "別の入力のイベントの
+/// クロックどうしは比べられない".
+#[test]
+fn an_event_is_read_at_itself_and_at_the_ticks_of_the_body() {
+    let a = event(0);
+    for (place, ok) in [
+        (Clock::Init, false),
+        (Clock::Block, false),
+        (a, true),
+        (event(1), false),
+        (tick(-2), true),
+        (tick(0), true),
+        (tick(1), false),
+        (Clock::Error, true),
+    ] {
+        assert_eq!(readable_at(a, place).is_ok(), ok, "{place:?}");
+    }
+    for (value, ok) in [
+        (Clock::Const, true),
+        (Clock::Init, true),
+        (Clock::Block, true),
+        (Clock::Ambient, true),
+        (tick(-2), false),
+        (tick(0), false),
+        (tick(1), false),
+        (Clock::Error, true),
+    ] {
+        assert_eq!(readable_at(value, a).is_ok(), ok, "{value:?}");
+    }
+}
+
+/// "`v at sample`・`v at (sample / N)` と書いても同じ意味"; `block` and `init` are slower.
+#[test]
+fn at_takes_an_event_to_a_tick_of_the_body_only() {
+    let a = event(0);
+    assert_eq!(promote(a, tick(0)), Ok(tick(0)));
+    assert_eq!(promote(a, tick(-2)), Ok(tick(-2)));
+    for to in [Clock::Init, Clock::Block, tick(1)] {
+        assert!(promote(a, to).is_err(), "{to:?}");
+    }
+    assert_eq!(promote(a, Clock::Error), Ok(Clock::Error));
+    assert!(is_internal_error(move || promote(Clock::Block, a)));
+}
+
+/// §11.4: a delay counts the ticks of an event, and is of its clock; the
+/// clock of a loop is the event that enters it.
+#[test]
+fn a_delay_and_a_loop_of_an_event() {
+    let a = event(0);
+    assert!(keeps_delay_state(a));
+    assert_eq!(delay_out(Some(a), false), Some(a));
+    assert_eq!(loop_clock(Some(a)), a);
+    assert!(is_internal_error(move || rebase(a, ClockFrame::BODY)));
+}
+
+/// S-1196: the ticks that give out the events of an output are of the clock
+/// of its expression; "パラメータの種類だけなら本体の `sample` の刻みで".
+#[test]
+fn the_clock_that_gives_out_events() {
+    for c in [tick(0), tick(-2), event(3), Clock::Error] {
+        assert_eq!(emit_clock(c), c);
+    }
+    for c in [Clock::Const, Clock::Init, Clock::Block, Clock::Ambient] {
+        assert_eq!(emit_clock(c), Clock::SAMPLE, "{c:?}");
+    }
+    assert_eq!(emit_clock(tick(1)), Clock::SAMPLE);
 }
 
 /// S-1077: the N of a derived clock and of `.down~` / `.up~` is a power of

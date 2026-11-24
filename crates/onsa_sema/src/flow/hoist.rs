@@ -40,7 +40,8 @@ impl Cond {
         match s {
             ClockStage::Init => Cond::Init,
             ClockStage::Block => Cond::Block,
-            ClockStage::Tick(_) => Cond::Late,
+            // Of an event, until `Cond::Tick` (W7-11 U1b).
+            ClockStage::Event(_) | ClockStage::Tick(_) => Cond::Late,
         }
     }
 
@@ -135,7 +136,7 @@ impl Choose<'_> {
             Some(Clock::Const) if g != Cond::None && self.computed(e) => {
                 return g.stage().filter(|&s| s < at).map_or(Place::Const, Place::Check);
             }
-            Some(Clock::Tick(r)) if ClockStage::Tick(r).tick_slower_than(at) && self.tick_field(e) => {
+            Some(Clock::Tick(r)) if ClockStage::Tick(r).stored_slower_than(at) && self.tick_field(e) => {
                 let d = ClockStage::Tick(r);
                 return match g {
                     // SPEC-GAP(S-1195): of a type that is not Copy, E0200

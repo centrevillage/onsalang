@@ -1,0 +1,52 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§11.11", "§18.1"]
+
+// W7-11 U1a/t, S-560 (spec §11.11: "`at event` は入出力の宣言にだけ書く（式の `e at event` は E0815 の範囲）"; §11.3: "`sample` でない底（`block`・`init`・`event`）は、入出力の宣言では E0810、式では E0815である"、"`e at k` は…
+// `k` が…遅ければ E0815"、"式の `e at (sample * N)` は E0815"): in an expression the clock after `at` is `sample` or `(sample / N)` (an event value is read at them, so `v at sample` and `v at (sample / 4)` are the same as
+// reading it and are fine). The clock `event` and the one derived from it (`m at event`, `m at (event / 2)`) are E0815 whatever the value is (an event, a `sample` value, a `block` value), `block` is slower than the event, and
+// `(sample * 2)` is not a clock of an expression. The error is at the `at`. One error per flow (§18.1). The head with `(event / 2)` is E0810 (e0810_event_heading_forms.onsa).
+
+// ---- the error
+pub flow event_at_event(m: U32 at event) -> U32 at sample {
+  m at event   //~ E0815
+}
+
+pub flow event_at_half_the_event(m: U32 at event) -> U32 at sample {
+  m at (event / 2)   //~ E0815
+}
+
+pub flow sample_at_event(s: U32 at sample) -> U32 at sample {
+  s at event   //~ E0815
+}
+
+pub flow block_at_event(p: U32 at block) -> U32 at sample {
+  p at event   //~ E0815
+}
+
+pub flow event_at_block(m: U32 at event) -> U32 at sample {
+  m at block   //~ E0815
+}
+
+pub flow event_at_sample_times_2(m: U32 at event) -> U32 at sample {
+  m at (sample * 2)   //~ E0815
+}
+
+pub flow event_at_event_in_a_let(m: U32 at event) -> U32 at sample {
+  let w = m at event   //~ E0815
+  w
+}
+
+// ---- no error
+pub flow event_at_sample(m: U32 at event) -> U32 at sample {
+  m at sample
+}
+
+pub flow event_at_a_quarter(m: U32 at event) -> U32 at sample {
+  (m at (sample / 4)) at sample
+}
+
+pub flow event_at_a_quarter_in_a_let(m: U32 at event) -> U32 at sample {
+  let w = m at (sample / 4)
+  w at sample
+}

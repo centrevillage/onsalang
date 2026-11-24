@@ -301,7 +301,7 @@ impl Marker<'_> {
                 if g != Cond::None {
                     self.read_conds(s);
                 }
-                if s.tick_slower_than(at) {
+                if s.stored_slower_than(at) {
                     self.no_default(e, s, SlowField::Part);
                 }
                 s
@@ -330,7 +330,9 @@ impl Marker<'_> {
                 if let Some(&Target::Local(id)) = self.body.targets.get(&e) {
                     self.out.read_at.entry(id).or_default().insert(at);
                     self.read_select(id, at);
-                    let own = self.clocks.info.own_stage(id).filter(|s| s.tick_slower_than(at));
+                    // The E0816 of an event read at a tick comes with its hoisted parts (W7-11 U1b).
+                    let own = self.clocks.info.own_stage(id).filter(|s| s.stored_slower_than(at));
+                    let own = own.filter(|s| !matches!(s, ClockStage::Event(_)));
                     if let Some(s) = own.filter(|_| self.body.locals[id.0 as usize].kind != LocalKind::MatchBind) {
                         let name = expr.span.text_in(self.text);
                         self.no_default(e, s, SlowField::Name(name));

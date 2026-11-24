@@ -520,8 +520,9 @@ impl Inst {
         }
         let out = seen_of(body, &known, tail, tail).map_err(at(tail))?;
         let ambient = stage_of(body, &known, tail, tail).map_err(at(tail))? == Clock::AMBIENT;
-        let clock = match output_stage(decl) {
-            Ok(Stage::Tick(m)) if ambient && m < 0 => Clock::Tick(m),
+        // An event output is of no stage here (W7-11 U2): not evaluated.
+        let clock = match output_stage(decl).map_err(at(tail))? {
+            Stage::Tick(m) if ambient && m < 0 => Clock::Tick(m),
             _ => out.stage,
         };
         steps.push(Step { pat: None, init: tail, clock, known: Rc::new(known) });
