@@ -75,6 +75,27 @@ fn an_output_with_no_default_through_a_down_and_an_up_and_through_an_up_is_built
     assert_lowers("chain_core_up_nodef", flows, &[]);
 }
 
+/// W7-10 U3a (S-1207, S-1209, S-1222; it was E0200 until then, Q-09): a `.when~` and a `.reset_if~` inside a block (`x.when~(c).up~(2).down~(2)`: an `.up~` outside the modifier and a `.down~` outside that) and a `.when~` of a burst
+/// under an `.up~` (`mk2~().when~(c).up~(2)`) are read by `check` with no diagnostic, and `build`, `dump --core` and `test` end with 0 and no internal error. The values are in `tests/spec/flow_semantics/when_block_values.onsa`,
+/// `reset_if_block_values.onsa` and `when_burst_up_values.onsa`; the test of each package here is the first of them (worked out by hand there) so that a lowering that runs the wrong part also fails.
+const ACC: &str = "flow acc(k: F32 at sample) -> F32 at sample {\n  let s = prev~(^s) + k\n  s\n}\n\n";
+const MK2: &str = "flow mk2() -> F32 at (sample * 2) {\n  let n = prev~(^n) + 1.0\n  [n, n + 0.5]\n}\n\nflow g4(x: F32 at (sample * 4)) -> F32 at sample {\n  x[0] + x[1] * 10.0 + x[2] * 100.0 + x[3] * 1000.0\n}\n\n";
+
+#[test]
+fn a_modifier_inside_a_block_is_lowered_by_build_dump_core_and_test() {
+    let when = "pub flow f(x: F32 at sample, c: Bool at sample) -> F32 at sample {\n  acc~(x).when~(c).up~(2).down~(2)\n}\n\ntest \"values\" {\n  let xs: [F32; 8] = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]\n  let cs: [Bool; 8] = [true, false, true, true, false, true, true, true]\n  var o: [F32; 8] = [9.0; 8]\n  var s = f.init(8.0)\n  f.process(inout s, f.In { x: xs, c: cs }, inout o)\n  assert o == [0.0, 0.0, 1.0, 1.0, 4.0, 8.0, 8.0, 14.0]\n}\n";
+    let reset = "pub flow f(x: F32 at sample, r: Bool at block) -> F32 at sample {\n  acc~(x).reset_if~(r).up~(2).down~(2)\n}\n\ntest \"values\" {\n  let xs: [F32; 8] = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]\n  var o: [F32; 8] = [9.0; 8]\n  var s = f.init(8.0)\n  f.process(inout s, f.Params { r: true }, xs, inout o)\n  assert o == [0.0, 0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0]\n}\n";
+    for (k, body) in [when, reset].iter().enumerate() {
+        assert_lowers_and_passes(&format!("chain_core_block_modifier_{k}"), &format!("{ACC}{body}"), "values");
+    }
+}
+
+#[test]
+fn a_when_of_a_burst_under_an_up_is_lowered_by_build_dump_core_and_test() {
+    let body = "pub flow f(c: Bool at sample) -> F32 at sample {\n  g4~(mk2~().when~(c).up~(2))\n}\n\ntest \"values\" {\n  let cs: [Bool; 3] = [true, false, true]\n  var o: [F32; 3] = [9.0; 3]\n  var s = f.init(8.0)\n  f.process(inout s, cs, inout o)\n  assert o == [2716.0, 2777.5, 4938.0]\n}\n";
+    assert_lowers_and_passes("chain_core_burst_under_up", &format!("{MK2}{body}"), "values");
+}
+
 /// `onsa interface` reads the signatures and the kinds, not the Core: the flow with a chain is listed, the command ends with 0 and no
 /// internal error (the size of the state is W7-16's, so no text of it is read here; the state of a down chain is in `slow_stage_commands.rs`).
 #[test]

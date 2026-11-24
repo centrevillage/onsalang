@@ -1,0 +1,156 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.10", "§11.9", "§11.3", "§11.4", "§13.4"]
+
+// The three forms that the review of W7-10 U3a found wrong in a modifier inside a block (W7-10 U3a/t2; S-1209, S-1218, S-1222). Worked out by hand from §11.10, §11.9 and §11.3, not from what an implementation gives.
+// (1) A `.when~` of a burst inside a block, with a run that is stopped: the stopped run reads its values equal to the last one, whatever the boundary that deals the burst is.
+// The forms of the same rules that already give these values (and are to keep them) are in modifier_block_regress_kept.onsa, apart: this file is the one that fails until U3a is fixed.
+// (2) A condition that is a value of the kind `block` with an `at` put on it (`p at sample`, `p at (sample / 2)`): "パラメータの種類の値だけで決まる式は、`at` で付けたクロックによらず、その値が決まる段の式として扱う" and
+//     "`at` は値も評価の段も変えず、状態も作らない" (§11.3), so the condition is read when it is read without the `at` (at the time of the run, "パラメータの種類とイベントの値は走りの時点で読む", §11.10) and is not gathered with the inputs of the block (which would make it N samples late).
+//     The tick of a `reset_if~` is the clock the condition has, `at` included (§11.10), so `p at (sample / 2)` is read at the grid of `sample / 2`; it is the same value as a flow of its own that has the `reset_if~` and is run under the block.
+// (3) A `reset_if~` inside a block that puts back the array that its `.down~` deals: a reset at the second of the 2 samples of a dealt burst gives the array of the default for that sample ("配る配列は `T.default()` に戻り", §11.9), and what was dealt before it stays.
+// A block `.up~(N).down~(N)` makes a tick at the frames 0, N, 2N ...; the tick t gathers the N samples t - N .. t - 1 of the inputs and of a condition that is faster than the tick (phase 0: the defaults, `false`), the run j reads the entry j, and the N outputs are dealt to the frames t .. t + N - 1.
+// A run that is stopped gives the last output of the part ("止まっている間は最後の出力を保つ", `T.default()` before the first run), a burst read by a stopped run is the last value of the last output, repeated. `cnt` counts the runs that were made.
+
+flow cnt() -> F32 at sample {
+  let n = prev~(^n) + 1.0
+  n
+}
+
+flow mk4() -> F32 at (sample * 4) {
+  let n = cnt~() * 10.0
+  [n, n + 1.0, n + 2.0, n + 3.0]
+}
+
+flow g2(x: F32 at (sample * 2)) -> F32 at sample {
+  x[0] + x[1] * 1000.0
+}
+
+flow xr(b: Bool at block) -> F32 at sample {
+  cnt~().reset_if~(b at (sample / 2))
+}
+
+pub flow burst_dealt(c: Bool at sample) -> F32 at sample {
+  g2~(mk4~().down~(2).when~(c).up~(4).down~(4))
+}
+
+pub flow when_at(p: Bool at block) -> F32 at sample {
+  cnt~().when~(p at sample).up~(2).down~(2)
+}
+
+pub flow when_plain(p: Bool at block) -> F32 at sample {
+  cnt~().when~(p).up~(2).down~(2)
+}
+
+pub flow reset_at(p: Bool at block) -> F32 at sample {
+  cnt~().reset_if~(p at sample).up~(2).down~(2)
+}
+
+pub flow reset_plain(p: Bool at block) -> F32 at sample {
+  cnt~().reset_if~(p).up~(2).down~(2)
+}
+
+pub flow reset_grid(p: Bool at block) -> F32 at sample {
+  cnt~().reset_if~(p at (sample / 2)).up~(4).down~(4)
+}
+
+pub flow reset_grid_twin(p: Bool at block) -> F32 at sample {
+  xr~(p).up~(4).down~(4)
+}
+
+pub flow deal_reset(r: Bool at sample) -> F32 at sample {
+  g2~(cnt~().up~(2).up~(2).down~(2).reset_if~(r).up~(2).down~(2))
+}
+
+test "(1) a burst that a .down~(2) deals, a when~ after it inside .up~(4).down~(4): a stopped run reads the last value twice, and the runs that follow go on from the burst that was dealt" {
+  // `mk4~().down~(2)` makes a burst of 4 for every 2 runs that are made, dealt to those 2 runs as the pairs (10, 11), (12, 13) (the first run of the grid gives the pair 0 1 of the burst, the second 2 3); the next burst is (20 .. 23), then (30 .. 33). g2 reads a + 1000 b.
+  // The tick 0 gathers the defaults of c (false): the frames 0 .. 3 are stopped before any run and give T.default(): 0. The tick 4 gathers c(0 .. 3) = 1 0 1 1: the run 0 is the 1st run made (pair (10, 11): 11010), the run 1 is stopped and reads (11, 11): 11011,
+  // the run 2 is the 2nd run made (the pair (12, 13): 13012) and the run 3 is the 3rd, where the grid ticks again (the pair (20, 21): 21020). The tick 8 gathers c(4 .. 7) = 0 1 1 1: the run 0 is stopped (21, 21): 21021, then the 4th run (22, 23): 23022,
+  // the 5th, a new burst (30, 31): 31030, the 6th (32, 33): 33032.
+  let cs: [Bool; 12] = [true, false, true, true, false, true, true, true, true, true, true, true]
+  var out: [F32; 12] = [9.0; 12]
+  var st = burst_dealt.init(8.0)
+  burst_dealt.process(inout st, cs, inout out)
+  assert out == [0.0, 0.0, 0.0, 0.0, 11010.0, 11011.0, 13012.0, 21020.0, 21021.0, 23022.0, 31030.0, 33032.0]
+  var cut: [F32; 12] = [9.0; 12]
+  var sc = burst_dealt.init(8.0)
+  burst_dealt.process(inout sc, cs.slice(0, 4), inout cut.slice(0, 4))
+  burst_dealt.process(inout sc, cs.slice(4, 12), inout cut.slice(4, 12))
+  assert cut == out
+}
+
+test "(2) a when~ of a value of the kind block with an at sample is the when~ with no at: read at the time of the run, not gathered (so not N samples late)" {
+  // p is true for the frames 0, 1, false for 2, 3 and true for 4 .. 7 (the calls are cut at the ticks of the block, every 2 frames). The runs of the frames 0, 1 are made (cnt 1, 2), those of the frames 2, 3 are stopped (the last output, 2) and those of 4 .. 7 go on (3, 4, 5, 6).
+  var a: [F32; 8] = [9.0; 8]
+  var b: [F32; 8] = [9.0; 8]
+  var sa = when_at.init(8.0)
+  var sb = when_plain.init(8.0)
+  when_at.process(inout sa, when_at.Params { p: true }, inout a.slice(0, 2))
+  when_at.process(inout sa, when_at.Params { p: false }, inout a.slice(2, 4))
+  when_at.process(inout sa, when_at.Params { p: true }, inout a.slice(4, 8))
+  when_plain.process(inout sb, when_plain.Params { p: true }, inout b.slice(0, 2))
+  when_plain.process(inout sb, when_plain.Params { p: false }, inout b.slice(2, 4))
+  when_plain.process(inout sb, when_plain.Params { p: true }, inout b.slice(4, 8))
+  assert a == [1.0, 2.0, 2.0, 2.0, 3.0, 4.0, 5.0, 6.0]
+  assert b == a
+  var all: [F32; 8] = [9.0; 8]
+  var sl = when_at.init(8.0)
+  when_at.process(inout sl, when_at.Params { p: true }, inout all)
+  assert all == [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]
+}
+
+test "(2) a reset_if~ of a value of the kind block with an at sample is the reset_if~ with no at: it resets before each run of the calls with p true" {
+  // The part is put back before each run (the clock of the condition is `sample`, the clock W of the position) while p is true: cnt gives 1 each time; with p false the runs go on from the last (2, 3).
+  var a: [F32; 6] = [9.0; 6]
+  var b: [F32; 6] = [9.0; 6]
+  var sa = reset_at.init(8.0)
+  var sb = reset_plain.init(8.0)
+  reset_at.process(inout sa, reset_at.Params { p: true }, inout a.slice(0, 2))
+  reset_at.process(inout sa, reset_at.Params { p: false }, inout a.slice(2, 4))
+  reset_at.process(inout sa, reset_at.Params { p: true }, inout a.slice(4, 6))
+  reset_plain.process(inout sb, reset_plain.Params { p: true }, inout b.slice(0, 2))
+  reset_plain.process(inout sb, reset_plain.Params { p: false }, inout b.slice(2, 4))
+  reset_plain.process(inout sb, reset_plain.Params { p: true }, inout b.slice(4, 6))
+  assert a == [1.0, 1.0, 2.0, 3.0, 1.0, 1.0]
+  assert b == a
+}
+
+test "(2) a reset_if~(p at (sample / 2)) under .up~(4).down~(4) is read at the grid of sample / 2, and is the value of a flow of its own with that reset_if~" {
+  // The runs of a tick are the frames t .. t + 3 and the grid of `sample / 2` is the even frames. With p true the part is put back before the runs of the frames 0, 2, 4 ..: cnt gives 1 2 1 2 1 2 ...
+  // The calls are cut at the ticks (every 4 frames): p true, false, true. The tick 4 (p false) puts nothing back: 3 4 5 6 go on from the 2 that the frame 3 gave; the tick 8 puts back before the runs 0 and 2: 1 2 1 2.
+  var a: [F32; 12] = [9.0; 12]
+  var b: [F32; 12] = [9.0; 12]
+  var sa = reset_grid.init(8.0)
+  var sb = reset_grid_twin.init(8.0)
+  reset_grid.process(inout sa, reset_grid.Params { p: true }, inout a.slice(0, 4))
+  reset_grid.process(inout sa, reset_grid.Params { p: false }, inout a.slice(4, 8))
+  reset_grid.process(inout sa, reset_grid.Params { p: true }, inout a.slice(8, 12))
+  reset_grid_twin.process(inout sb, reset_grid_twin.Params { p: true }, inout b.slice(0, 4))
+  reset_grid_twin.process(inout sb, reset_grid_twin.Params { p: false }, inout b.slice(4, 8))
+  reset_grid_twin.process(inout sb, reset_grid_twin.Params { p: true }, inout b.slice(8, 12))
+  assert a == [1.0, 2.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 1.0, 2.0, 1.0, 2.0]
+  assert b == a
+  var all: [F32; 8] = [9.0; 8]
+  var sl = reset_grid.init(8.0)
+  reset_grid.process(inout sl, reset_grid.Params { p: true }, inout all)
+  assert all == [1.0, 2.0, 1.0, 2.0, 1.0, 2.0, 1.0, 2.0]
+}
+
+test "(3) a reset_if~ at the second sample of a dealt burst: that sample reads the default, what was dealt before stays, and the burst after starts from the part put back" {
+  // `cnt~().up~(2).up~(2).down~(2)` makes 4 runs of cnt for every tick of its `.down~(2)`, dealt to the 2 samples of the tick as the pairs (4 k + 1, 4 k + 2), (4 k + 3, 4 k + 4); the tick is at the even samples of the part under `.up~(2).down~(2)`, which
+  // are the frames (the 2 runs of a tick of the outer block are the frames t, t + 1). The outer tick t gathers r(t - 2), r(t - 1) and the run j puts the part back before it when entry j is true. g2 reads a + 1000 b.
+  // r is true at the frames 3 and 5: the reset is before the run of the frame 5 (entry 1 of the tick 4) and of the frame 7 (entry 1 of the tick 6). No reset before: the frames 0 .. 4 are the pairs (1, 2) (3, 4) (5, 6) (7, 8) (9, 10).
+  // At the frame 5 the part is put back before its stage and the `.down~(2)` does not tick at an odd sample, so the sample reads the array dealt, put back: (0, 0): 0. The frame 6 ticks again from cnt put back: (1, 2), then the frame 7 is put back again: 0.
+  // The frames 8 .. 11 are from cnt put back at the frame 7: (1, 2) (3, 4) (5, 6) (7, 8).
+  let rs: [Bool; 12] = [false, false, false, true, false, true, false, false, false, false, false, false]
+  var out: [F32; 12] = [9.0; 12]
+  var st = deal_reset.init(8.0)
+  deal_reset.process(inout st, rs, inout out)
+  assert out == [2001.0, 4003.0, 6005.0, 8007.0, 10009.0, 0.0, 2001.0, 0.0, 2001.0, 4003.0, 6005.0, 8007.0]
+  var cut: [F32; 12] = [9.0; 12]
+  var sc = deal_reset.init(8.0)
+  deal_reset.process(inout sc, rs.slice(0, 6), inout cut.slice(0, 6))
+  deal_reset.process(inout sc, rs.slice(6, 12), inout cut.slice(6, 12))
+  assert cut == out
+}

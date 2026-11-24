@@ -1,0 +1,29 @@
+// onsa.toml
+// [test]
+// spec = ["§11.10", "§11.3", "§18.1"]
+// fixes = 0
+
+// A value of a parameter kind with an `at` that is not the clock of the condition of a modifier inside a block (`x.when~(p at …).up~(2).down~(2)`) (W7-10 U3a/t2; S-1209). The `at` does not change the stage of the value (§11.3) but is a clock that the condition has (§11.10: "条件の刻みは、
+// 条件の式のクロック（`at` で付けたクロックを含む、§11.3）で決まり"), so a `when~` whose W is `sample` (§11.10: "W 以外のクロックへの `at` は E0815") reads no other clock, and a `reset_if~` whose W is `sample` has no condition that is faster ("W より速い周期のクロックの条件は E0815"; an `at (sample * N)` in an
+// expression is E0815, §11.3). The same conditions with `at sample` are values: flow_semantics/modifier_block_regress.onsa. No candidate (`fixes = 0`). One error per flow.
+
+flow cnt() -> F32 at sample {
+  let n = prev~(^n) + 1.0
+  n
+}
+
+pub flow when_at_slower(p: Bool at block) -> F32 at sample {
+  cnt~().when~(p at (sample / 2)).up~(2).down~(2) //~ E0815
+}
+
+pub flow when_at_slower_init(p: Bool at init) -> F32 at sample {
+  cnt~().when~(p at (sample / 4)).up~(2).down~(2) //~ E0815
+}
+
+pub flow when_at_faster(p: Bool at block) -> F32 at sample {
+  cnt~().when~(p at (sample * 2)).up~(2).down~(2) //~ E0815
+}
+
+pub flow reset_at_faster(p: Bool at block) -> F32 at sample {
+  cnt~().reset_if~(p at (sample * 2)).up~(2).down~(2) //~ E0815
+}

@@ -1,0 +1,87 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.10", "§11.9", "§13.4"]
+
+// A `.when~(c)` whose receiver gives a burst (an output at `sample * N`) with an `.up~(N)` outside it (W7-10 U3a/t; S-1209, S-1222, S-1207). Worked out by hand from §11.10: "出力が P を基準に `sample * N` の受け手 … でも、出力の刻みごとに読む。止まっている P の
+// 1 刻みに読む N 個は、全て同じ最後の出力（最後に動いた P の刻みに読んだ N 個のうち最後の値）で、その N 個の並びは繰り返さない" (P is the clock of the position of the modifier, `sample * 2` under an `.up~(2)`; a run that is stopped reads its N values
+// all equal to the last value read at the last run that was made, `T.default()` before). W is P (the receiver is faster than P), so a condition of the kind `sample` (slower than W) is read held at each of the runs. `g4` reads the 4 elements of a frame: e0 + 10 e1 + 100 e2 + 1000 e3.
+// `mk2` gives n, n + 0.5 at its run n; `mk4` gives 10 n .. 10 n + 3.
+
+flow cnt() -> F32 at sample {
+  let n = prev~(^n) + 1.0
+  n
+}
+
+flow mk2() -> F32 at (sample * 2) {
+  let n = prev~(^n) + 1.0
+  [n, n + 0.5]
+}
+
+flow mk4() -> F32 at (sample * 4) {
+  let n = prev~(^n) + 1.0
+  [n * 10.0, n * 10.0 + 1.0, n * 10.0 + 2.0, n * 10.0 + 3.0]
+}
+
+flow g4(x: F32 at (sample * 4)) -> F32 at sample {
+  x[0] + x[1] * 10.0 + x[2] * 100.0 + x[3] * 1000.0
+}
+
+pub flow burst_up(c: Bool at sample) -> F32 at sample {
+  g4~(mk2~().when~(c).up~(2))
+}
+
+pub flow burst_up_block(c: Bool at block) -> F32 at sample {
+  g4~(mk2~().when~(c).up~(2))
+}
+
+pub flow burst_dealt_inside(c: Bool at sample) -> F32 at sample {
+  g4~(mk4~().when~(c).down~(2).up~(2))
+}
+
+pub flow up_when_up(c: Bool at sample) -> F32 at sample {
+  g4~(cnt~().up~(2).when~(c).up~(2))
+}
+
+test "when~ of a burst under an .up~(2): both runs of a frame are made or both are stopped, and a stopped run reads its 2 values equal to the last one" {
+  // c = 1 0 1: the frame 0 makes the runs n = 1 (1, 1.5) and n = 2 (2, 2.5): x = 1 1.5 2 2.5 and g4 = 1 + 15 + 200 + 2500 = 2716. The frame 1 is stopped: each run reads (2.5, 2.5): x = 2.5 four times, 2.5 * 1111 = 2777.5.
+  // The frame 2 makes n = 3 (3, 3.5) and n = 4 (4, 4.5): 3 + 35 + 400 + 4500 = 4938. With c = 0 1 0 the frame 0 is stopped and holds T.default() (0): 0; the frame 1 gives 2716; the frame 2 holds 2.5: 2777.5.
+  let a: [Bool; 3] = [true, false, true]
+  let b: [Bool; 3] = [false, true, false]
+  var oa: [F32; 3] = [9.0; 3]
+  var ob: [F32; 3] = [9.0; 3]
+  var sa = burst_up.init(8.0)
+  var sb = burst_up.init(8.0)
+  burst_up.process(inout sa, a, inout oa)
+  burst_up.process(inout sb, b, inout ob)
+  assert oa == [2716.0, 2777.5, 4938.0]
+  assert ob == [0.0, 2716.0, 2777.5]
+}
+
+test "a condition of the kind block reads the frame it is in: the same values, and a call of process cut at a frame" {
+  var out: [F32; 3] = [9.0; 3]
+  var st = burst_up_block.init(8.0)
+  burst_up_block.process(inout st, burst_up_block.Params { c: true }, inout out.slice(0, 1))
+  burst_up_block.process(inout st, burst_up_block.Params { c: false }, inout out.slice(1, 2))
+  burst_up_block.process(inout st, burst_up_block.Params { c: true }, inout out.slice(2, 3))
+  assert out == [2716.0, 2777.5, 4938.0]
+}
+
+test "a when~ inside the boundary that deals a burst, under an .up~(2): the burst of a frame is dealt to its 2 runs with no delay, and a stopped frame reads the last element 4 times" {
+  // The `.down~(2)` ticks once for each frame (every 2 runs) and the condition (a value of sample, the clock of P) is read at that tick. The run n of the head gives 10 n .. 10 n + 3: the frame 0 reads 10 11 12 13 (the runs get (10, 11) and (12, 13)):
+  // 10 + 110 + 1200 + 13000 = 14320. The frame 1 is stopped: 13 four times, 14443. The frame 2 makes the run 2: 20 + 210 + 2200 + 23000 = 25430.
+  let cs: [Bool; 3] = [true, false, true]
+  var out: [F32; 3] = [9.0; 3]
+  var st = burst_dealt_inside.init(8.0)
+  burst_dealt_inside.process(inout st, cs, inout out)
+  assert out == [14320.0, 14443.0, 25430.0]
+}
+
+test "x.up~(2).when~(c).up~(2): the 2 runs of the inner up are one tick of the when~, and a stopped tick reads the last value four times" {
+  // The head counts the runs of the inner up: the frame 0 makes (1, 2) and (3, 4): 1 + 20 + 300 + 4000 = 4321. The frame 1 is stopped: 4 * 1111 = 4444. The frame 2 makes (5, 6) and (7, 8): 5 + 60 + 700 + 8000 = 8765.
+  let cs: [Bool; 3] = [true, false, true]
+  var out: [F32; 3] = [9.0; 3]
+  var st = up_when_up.init(8.0)
+  up_when_up.process(inout st, cs, inout out)
+  assert out == [4321.0, 4444.0, 8765.0]
+}

@@ -480,7 +480,7 @@ impl Walk<'_> {
         let Some(f) = a.def(g).as_flow().filter(|f| !f.ports_in_error) else { return };
         let Some(chain) = self.cx.chains.get(&e) else { return };
         let (bounds, guards, _) = super::super::plan::bounds::bounds(chain.mods.iter().map(|m| &m.plan), f);
-        let gathered = |i: usize| bounds.iter().any(|b| b.gathers.iter().any(|g| g.0 as usize == i));
+        let gathered = |i: usize| bounds.iter().any(|b| b.gathers.iter().any(|g| g.0 == Port::Input(i as u32)));
         let mut found = Vec::new();
         for (_, (&x, input)) in args.iter().zip(&f.inputs).enumerate().filter(|&(i, _)| gathered(i)) {
             let what = format!("the part of the input `{}` of `{name}` gathered before the first samples", input.name);

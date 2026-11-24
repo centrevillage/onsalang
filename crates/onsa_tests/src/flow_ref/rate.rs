@@ -264,6 +264,14 @@ pub(super) fn levels(
     let mut all = vec![head];
     for (i, &bound) in bounds.iter().enumerate() {
         let prev = &all[all.len() - 1];
+        // A modifier in a block, and a burst a `.when~` holds under an `.up~` (§11.10):
+        // the evaluator does not run them yet.
+        let up = bounds[i + 1..].iter().position(|b| b.ratio() > 0).map(|u| i + 1 + u);
+        let burst = matches!(bound, Bound::When(_)) && prev.out > 0;
+        let block = up.is_some_and(|u| bounds[u..].iter().any(|b| b.ratio() < 0));
+        if !matches!(bound, Bound::Rate(_)) && up.is_some() && (burst || block) {
+            return Err(Fault::Unavailable("a modifier in a block or over a burst under an `.up~` (W7-10 U3ae)"));
+        }
         let r = match bound {
             Bound::Rate(r) => r,
             Bound::When(cond) => {

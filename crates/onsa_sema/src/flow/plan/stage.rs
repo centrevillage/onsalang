@@ -155,12 +155,19 @@ impl PlanNode {
     }
 
     /// The innermost boundary from the boundary `from` out that gathers the
-    /// input `input` of its head (§11.9): of `from` 0, the ring the head
-    /// reads it from; of the one outside a boundary, the ring that ring is
-    /// written from ([`Feed`]). The one walk of it (D-15).
-    pub fn ring_of(&self, from: usize, input: u32) -> Option<u32> {
-        let gathers = |b: &(u32, &PlanBound)| b.1.gathers.iter().any(|g| g.0 == input);
+    /// port `port` (§11.9): of `from` 0, the ring the head reads an input
+    /// from; of the frame of a modifier, the ring it reads its condition
+    /// from; of the one outside a boundary, the ring that ring is written
+    /// from ([`Feed`]). The one walk of it (D-15).
+    pub fn ring_of(&self, from: usize, port: Port) -> Option<u32> {
+        let gathers = |b: &(u32, &PlanBound)| b.1.gathers.iter().any(|g| g.0 == port);
         (0u32..).zip(&self.bounds).skip(from).find(gathers).map(|b| b.0)
+    }
+
+    /// The count of its boundaries inside its modifier at the place `at`:
+    /// of the boundary just outside it, its index. The one count of it (D-15).
+    pub fn inside(&self, at: u32) -> u32 {
+        self.bounds.iter().filter(|b| b.at < at).count() as u32
     }
 
     /// What the `.reset_if~` at the place `at` of its chain sets back to
@@ -170,7 +177,7 @@ impl PlanNode {
     pub fn reset_parts(&self, at: u32) -> Vec<Part> {
         let mut parts = Vec::new();
         for (b, x) in (0u32..).zip(&self.bounds).filter(|b| b.1.at < at) {
-            parts.extend(x.gathers.iter().map(|&(input, _)| Part::Gather { bound: b, input }));
+            parts.extend(x.gathers.iter().map(|&(port, _)| Part::Gather { bound: b, port }));
             parts.extend(x.deals.then_some(Part::Deal(b)));
         }
         parts.extend((0u32..).zip(&self.guards).filter(|g| g.1.at < at).map(|g| Part::Held(g.0)));

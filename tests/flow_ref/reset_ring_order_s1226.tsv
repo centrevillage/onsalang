@@ -1,0 +1,2 @@
+# flow_ref 1 source=tests/spec/flow_semantics/reset_ring_order_s1226.onsa tests=1 evaluated=0 unavailable=1 skipped=0 waiting=0
+? (α) S-1226: a reset at the tick 4 after the first run read the ring as gathered: the 2nd run reads the ring put back and is stopped	unavailable a modifier in a block or over a burst under an `.up~` (W7-10 U3ae)

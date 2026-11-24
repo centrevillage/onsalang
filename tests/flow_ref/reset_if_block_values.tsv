@@ -1,0 +1,9 @@
+# flow_ref 1 source=tests/spec/flow_semantics/reset_if_block_values.onsa tests=8 evaluated=0 unavailable=8 skipped=0 waiting=0
+? a condition of the kind block resets at each run: both runs of the tick that reads it (the sum is put back before each, S-1218)	unavailable a modifier in a block or over a burst under an `.up~` (W7-10 U3ae)
+? a condition of the signal at sample is gathered with the input: the run j resets for the sample of its own frame	unavailable a modifier in a block or over a burst under an `.up~` (W7-10 U3ae)
+? reset_if~ after a when~ puts the part back at a stopped run too (and the held output is T.default()); before it, only at the runs that are made	unavailable a modifier in a block or over a burst under an `.up~` (W7-10 U3ae)
+? with an .up~(4) and a .down~(2) a condition of the kind block resets once for each frame, before the first of its 2 runs	unavailable a modifier in a block or over a burst under an `.up~` (W7-10 U3ae)
+? a condition of the kind block at the clock sample / 4 is read at the grid, before the runs of that position	unavailable a modifier in a block or over a burst under an `.up~` (W7-10 U3ae)
+? a head with a stage of sample / 2: the stage that is slower than the condition writes first, the reset takes it back (S-1222)	unavailable a modifier in a block or over a burst under an `.up~` (W7-10 U3ae)
+? a reset_if~ outside the block puts back the rings and the array that is dealt too (§11.10), and the part starts again from the next sample	unavailable a modifier in a block or over a burst under an `.up~` (W7-10 U3ae)
+? reset_if~(false) anywhere changes nothing: inside and outside a when~, the same values as with none	unavailable a modifier in a block or over a burst under an `.up~` (W7-10 U3ae)

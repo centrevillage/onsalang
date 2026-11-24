@@ -1,0 +1,38 @@
+// onsa.toml
+// [test]
+// spec = ["§11.10", "§11.9", "§11.4", "§18.1"]
+// fixes = 0
+
+// The conditions of the modifiers that are inside a block (`x.when~(c).up~(2).down~(4)`: the chain has an `.up~` outside the modifier and a `.down~` outside that) with a clock that the modifier does not read (W7-10 U3a/t; S-1209, S-1218; they were the E0200 of the
+// gate of the modifiers inside a block until U3a, a gate that stood before the check of the clocks of the conditions of such a chain). §11.10: "W より速い条件（下げる変換は利用者の flow で書く）と、W 以外のクロックへの `at` は E0815" and "W より速い周期のクロックの条件は
+// E0815 である（`x.down~(4).reset_if~(r)` と `x.reset_if~(r).down~(4)` の `sample` の `r`）". W is the clock of the position of the modifier, the chain start with the modifiers outside it applied (§11.10: "その修飾子より外（右）の `.down~`・`.up~`"):
+// `sample / 2` in `.up~(2).down~(4)`, `sample / 4` in `.down~(4)` alone. There is no candidate (`fixes = 0`). One error per flow (P-01). The same chains with a condition that W reads are in flow_semantics/when_block_values.onsa and reset_if_block_values.onsa.
+
+flow cnt() -> F32 at sample {
+  let n = prev~(^n) + 1.0
+  n
+}
+
+pub flow when_faster_than_w(c: Bool at sample) -> F32 at sample {
+  cnt~().when~(c).up~(2).down~(4) at sample //~ E0815
+}
+
+pub flow reset_faster_than_w(r: Bool at sample) -> F32 at sample {
+  cnt~().reset_if~(r).up~(2).down~(4) at sample //~ E0815
+}
+
+pub flow when_between_up_and_down(c: Bool at sample) -> F32 at sample {
+  cnt~().up~(2).when~(c).down~(4) at sample //~ E0815
+}
+
+pub flow reset_between_up_and_down(r: Bool at sample) -> F32 at sample {
+  cnt~().up~(2).reset_if~(r).down~(4) at sample //~ E0815
+}
+
+pub flow when_with_an_at_to_another_clock(c: Bool at block) -> F32 at sample {
+  cnt~().when~(c at (sample / 2)).up~(2).down~(2) //~ E0815
+}
+
+pub flow reset_faster_after_a_when(c: Bool at block, r: Bool at sample) -> F32 at sample {
+  cnt~().when~(c).reset_if~(r).up~(2).down~(4) at sample //~ E0815
+}

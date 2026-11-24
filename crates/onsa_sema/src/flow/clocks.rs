@@ -250,6 +250,8 @@ pub(super) struct Walk<'a> {
     clash: Option<Clashed>,
     /// The clash of a loop by the `let` it is reported at (S-1198).
     loop_clash: Vec<Option<Clashed>>,
+    /// The stages of the `let`s checked, in their order ([`stages::of_params`]).
+    let_stages: Vec<Clock>,
 }
 
 /// An operand of a join: its expression (none of the `init` that the index
@@ -324,6 +326,7 @@ pub(super) fn walk(
         first: 0,
         clash: None,
         loop_clash: vec![None; n],
+        let_stages: Vec::new(),
     };
     for (l, input) in cx.inputs.iter().zip(&decl.inputs) {
         w.out.locals.insert(*l, input.body_clock());
@@ -883,11 +886,25 @@ impl Walk<'_> {
                 (Clock::Tick(r), ClockStage::Tick(rp), Some(rp))
             }
         };
+        // Its port in its frame, of a periodic value (§11.10, R3: `sample_tick()` alone of
+        // W): read at the stage of the ring that gathers it, else at its own. Not of a value
+        // of the parameter kinds `at` a tick (§11.3: the `at` makes no state).
+        // SPEC-GAP(S-1227): a condition mixing a signal and a value of the parameter
+        // kinds (`c && b`) is of the signal's clock: the whole of it is gathered (provisional).
+        let port = match c {
+            Some(Clock::Tick(k)) if !stages::of_params(self, cond) => Some(k),
+            Some(Clock::Ambient) => Some(Ratio(w.0.min(0))),
+            _ => None,
+        };
+        let port = port.map(|k| Ratio(k.0.saturating_sub(outside)));
         if let Some(&k) = self.node_of.get(&head) {
-            let stage = super::plan::bounds::run_at(mods(), &guards, i as u32, from);
+            let ring = port.and_then(|p| super::plan::bounds::cond_ring(mods(), i as u32, p));
+            let (j, from) = ring.unwrap_or((i as u32, from));
+            let stage = super::plan::bounds::run_at(mods(), &guards, j, from);
             let stage = (at.stage() != Some(stage)).then_some(stage);
             self.node_clocks[k].args.push(ArgRead { expr: cond, at, stage });
             self.node_clocks[k].resets.extend(r.map(|r| (i as u32, r)));
+            self.node_clocks[k].ports.extend(port.map(|p| (i as u32, p)));
         }
         Some(true)
     }
@@ -973,7 +990,12 @@ impl Walk<'_> {
         let span = self.ast.expr(e).span;
         let slot = (self.mode == Mode::Check).then(|| {
             self.node_of.insert(e, self.node_clocks.len());
-            self.node_clocks.push(NodeClock { clock: Clock::Error, args: Vec::new(), resets: Vec::new() });
+            self.node_clocks.push(NodeClock {
+                clock: Clock::Error,
+                args: Vec::new(),
+                resets: Vec::new(),
+                ports: Vec::new(),
+            });
             let chain = self.cx.chains.get(&e);
             (self.node_clocks.len() - 1, self.recorder.node((self.a, self.body), e, call, chain, span))
         });
@@ -996,7 +1018,8 @@ impl Walk<'_> {
                 let found = self.src(span);
                 self.report(d.with_found(found));
             }
-            self.node_clocks[k] = NodeClock { clock: clock.unwrap_or(Clock::Const), args, resets: Vec::new() };
+            self.node_clocks[k] =
+                NodeClock { clock: clock.unwrap_or(Clock::Const), args, resets: Vec::new(), ports: Vec::new() };
         }
         clock
     }

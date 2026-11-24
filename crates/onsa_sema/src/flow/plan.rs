@@ -193,9 +193,9 @@ pub struct Entry {
 /// then the ticks of `sample`), which the Core lowers as it is.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Op {
-    /// The slot of the ring of the input `input` of the boundary `bound`,
+    /// The slot of the ring of the port `port` of the boundary `bound`,
     /// at its phase, written from `from`.
-    Ring { bound: u32, input: u32, from: Feed },
+    Ring { bound: u32, port: Port, from: Feed },
     /// The stage `body` of the head run (its function called); its result
     /// to `out`.
     Run { body: ClockStage, out: Out },
@@ -247,8 +247,19 @@ pub enum CondRead {
     Kept,
 }
 
-/// Where a ring is written from: the argument of the call, or the ring of
-/// the boundary outside that gathers the same input.
+/// A port of the part a boundary wraps that it gathers (§11.9, §11.10): the
+/// input of the head by its index, or the condition of the `.when~` or the
+/// `.reset_if~` at this place of the chain, an input of the part at its
+/// place (the memo of W7-10 U3, 2.3).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+pub enum Port {
+    Input(u32),
+    Cond(u32),
+}
+
+/// Where a ring is written from: the argument of the call (of a condition,
+/// its expression), or the ring of the boundary outside that gathers the
+/// same port.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Feed {
     Arg,
@@ -344,11 +355,16 @@ pub struct PlanBound {
     pub ins: Vec<Option<Ratio>>,
     /// The exponent of the output of that part.
     pub out: Option<Ratio>,
-    /// The inputs it gathers (a `.down~` of an input of the part faster than
-    /// its `sample`), each by its index with the stage that writes its ring,
-    /// of the frame around it (the caller of the part it makes; of this
-    /// flow, that of the [`Op::Ring`] of the entries).
-    pub gathers: Vec<(u32, ClockStage)>,
+    /// The exponent of the condition of each `.when~` and `.reset_if~`
+    /// inside it with a port ([`PlanModifier::port`]), by its place in the
+    /// chain, in that frame.
+    pub conds: Vec<(u32, Ratio)>,
+    /// The ports it gathers (a `.down~` of an input of the part faster than
+    /// its `sample`, [`bounds::gathers`]): the inputs by their index, then
+    /// the conditions, each with the stage that writes its ring, of the frame
+    /// around it (the caller of the part it makes; of this flow, that of the
+    /// [`Op::Ring`] of the entries).
+    pub gathers: Vec<(Port, ClockStage)>,
     /// It deals the output of the part (a `.down~` of an output faster than
     /// its `sample`), at its own tick.
     pub deals: bool,
@@ -435,6 +451,10 @@ pub struct PlanModifier {
     /// in its frame (§11.10), written by the walk of the clocks (the one
     /// writer of it, [`build`]); none of another and of a chain in error.
     pub reset: Option<Ratio>,
+    /// Of `.when~` and `.reset_if~`, the exponent in its frame of the clock
+    /// of its condition, a port of the part at its place (§11.10: read as an
+    /// input of the head is); of the same writer; none of a parameter kind.
+    pub port: Option<Ratio>,
 }
 
 /// A value of the body the state may keep beside its nodes (S-05).
@@ -539,6 +559,11 @@ pub(super) fn build(
                 for &(at, tick) in &w.nodes[k].resets {
                     r.chain.get_mut(at as usize).into_iter().for_each(|m| m.reset = Some(tick));
                 }
+                // The port of each condition (§11.10), gathered as an input is.
+                for &(at, port) in &w.nodes[k].ports {
+                    r.chain.get_mut(at as usize).into_iter().for_each(|m| m.port = Some(port));
+                }
+                bounds::conds(&r.chain, &mut r.bounds);
                 (w.nodes[k].clock, w.nodes[k].args.clone())
             }
             (None, Some(&c)) => (c, Vec::new()),

@@ -1,0 +1,10 @@
+# flow_ref 1 source=tests/spec/flow_semantics/when_block_values.onsa tests=9 evaluated=0 unavailable=9 skipped=0 waiting=0
+? a condition of the signal at sample is gathered with the input: the run j reads the entry j, a stopped run holds the last output	unavailable a modifier in a block or over a burst under an `.up~` (W7-10 U3ae)
+? a condition of the kind block is read at the time of the run, and the head still gathers its input while the part is stopped	unavailable a modifier in a block or over a burst under an `.up~` (W7-10 U3ae)
+? a condition slower than the tick is read at its own tick: the entry j >> 1 of the 4 runs	unavailable a modifier in a block or over a burst under an `.up~` (W7-10 U3ae)
+? sample_tick() alone in a condition is the value of the frame, gathered with the input (not the tick of the run)	unavailable a modifier in a block or over a burst under an `.up~` (W7-10 U3ae)
+? a head with a stage of sample / 2 counts the runs that were made, and the stopped runs hold its last output	unavailable a modifier in a block or over a burst under an `.up~` (W7-10 U3ae)
+? with an .up~(4) and a .down~(2) the clock W is sample * 2 and the condition (a value of sample) is read per run, 2 entries of its ring for 4 runs	unavailable a modifier in a block or over a burst under an `.up~` (W7-10 U3ae)
+? the first tick of a ring is the defaults: a head that has no input still waits for its first block when the condition is a signal (S-1218)	unavailable a modifier in a block or over a burst under an `.up~` (W7-10 U3ae)
+? the calls of process cut the frames in the middle of a tick and a reset starts over: the same values (§13.4)	unavailable a modifier in a block or over a burst under an `.up~` (W7-10 U3ae)
+? a when~(true) put in anywhere of the chain is no when~: before, between and outside the block (the literal is not gathered)	unavailable a modifier in a block or over a burst under an `.up~` (W7-10 U3ae)

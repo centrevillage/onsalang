@@ -57,12 +57,12 @@ impl<'a> Checker<'a> {
         // in error has that error alone (its ratio is not known, §18.1). The
         // E0200 of this version is of a chain with no N in error (§11.9).
         let (mut past, mut gates) = (Vec::new(), Vec::new());
-        let (a, flow) = (&*self.a, self.flow.as_ref().expect("flow mode"));
+        let flow = self.flow.as_ref().expect("flow mode");
         let heads: HashMap<ExprId, &NodeKind> = flow.calls.iter().map(|c| (c.expr, &c.kind)).collect();
         let mut held = Vec::new();
         for (head, c) in &flow.chains {
             // The first in the text of the gate of a modifier and that of the chain.
-            let at = [c.gate.as_ref().map(|d| d.span), gated(a, &c.mods, heads.get(head).copied())];
+            let at = [c.gate.as_ref().map(|d| d.span), gated(&c.mods, heads.get(head).copied())];
             if let Some(at) = at.into_iter().flatten().min_by_key(|s| (s.start, s.end)) {
                 held.push((*head, at));
             }
@@ -498,7 +498,7 @@ impl<'a> Checker<'a> {
         chain.size = chain.size.saturating_add(r.map_or(0, |r| r.0.unsigned_abs()));
         chain.ratio = chain.ratio.zip(ratio.ok()).map(|(a, r)| Ratio(a.0.saturating_add(r.map_or(0, |r| r.0))));
         let cond = m.modifier.ratio_op().is_none().then_some(arg.expr);
-        let plan = PlanModifier { modifier: m.modifier, ratio: r, cond, name: m.name, reset: None };
+        let plan = PlanModifier { modifier: m.modifier, ratio: r, cond, name: m.name, reset: None, port: None };
         chain.mods.push(ChainModifier { call: e, receiver: m.receiver, plan });
         Ok(t)
     }
@@ -700,27 +700,11 @@ pub(super) fn hold_vdelay_max(a: &Analysis, module: &Module, body: &BodyInfo, fc
 }
 
 /// The name of the first `.when~` or `.reset_if~` of the modifiers `mods`
-/// of a chain whose head is the node `head` W7-10 U1 does not open by the
-/// form of the chain (§11.10, S-1207; U3): of the head of a built-in delay,
-/// and of one with an `.up~` outside it and either a `.down~` outside that
-/// (in a block) or a burst it wraps (of the record, [`super::plan::bounds`]:
-/// run N times). The one judgement of the form of a chain (D-15): the walk
-/// of the clocks opens the rest by the clock of the condition alone.
-fn gated(a: &Analysis, mods: &[ChainModifier], head: Option<&NodeKind>) -> Option<Span> {
-    let guards = match head {
-        Some(NodeKind::Delay(..)) => return mods.iter().find(|m| m.plan.ratio.is_none()).map(|m| m.plan.name),
-        Some(NodeKind::Instance(g)) => {
-            a.def(*g).as_flow().map(|f| super::plan::bounds::bounds(mods.iter().map(|m| &m.plan), f).1)
-        }
-        None => None,
-    };
-    let guards = guards.unwrap_or_default();
-    let shut = |i: usize| {
-        let up = mods[i..].iter().position(|m| m.plan.ratio.is_some_and(Ratio::faster_than_body));
-        let guard = guards.iter().find(|g| g.at as usize == i);
-        let burst = guard.is_some_and(|g| g.out.is_some_and(Ratio::faster_than_body));
-        up.is_some_and(|u| burst || mods[i + u..].iter().any(|m| m.plan.ratio.is_some_and(Ratio::slower_than_body)))
-    };
-    let mut at = mods.iter().enumerate().filter(|(_, m)| m.plan.ratio.is_none());
-    at.find(|&(i, _)| shut(i)).map(|(_, m)| m.plan.name)
+/// of a chain whose head is the node `head` W7-10 U3a does not open (§11.10;
+/// U3b): of the head of a built-in delay. The one judgement of the form of a
+/// chain (D-15): the walk of the clocks opens the rest by the clock of the
+/// condition alone.
+fn gated(mods: &[ChainModifier], head: Option<&NodeKind>) -> Option<Span> {
+    let delay = matches!(head, Some(NodeKind::Delay(..)));
+    mods.iter().find(|m| delay && m.plan.ratio.is_none()).map(|m| m.plan.name)
 }

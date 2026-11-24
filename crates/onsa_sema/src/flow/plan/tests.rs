@@ -416,7 +416,7 @@ pub flow h1(x: F32 at sample, p: F32 at block) -> F32 at sample {
         assert_eq!(callers, st.iter().map(|&k| tick(k)).collect::<Vec<_>>(), "{name} {chain}");
         assert_eq!(made_at(n), tick(made), "{name} {chain}");
         let got: Vec<(Vec<u32>, bool)> =
-            n.bounds.iter().map(|b| (b.gathers.iter().map(|g| g.0).collect(), b.deals)).collect();
+            n.bounds.iter().map(|b| (b.gathers.iter().map(|g| input(g.0)).collect(), b.deals)).collect();
         let want: Vec<(Vec<u32>, bool)> = bounds.iter().map(|(g, d)| (g.to_vec(), *d)).collect();
         assert_eq!(got, want, "{name} {chain}");
         // The slow stages of `St_L` are the caller's.
@@ -507,7 +507,7 @@ fn downs_that_gather_and_deal(heads: &str) {
                 (
                     b.ins.iter().map(|k| k.map(|k| k.0)).collect(),
                     b.out.map_or(9, |k| k.0),
-                    b.gathers.iter().map(|g| (g.0, st(g.1))).collect(),
+                    b.gathers.iter().map(|g| (input(g.0), st(g.1))).collect(),
                     b.deals,
                 )
             })
@@ -516,8 +516,8 @@ fn downs_that_gather_and_deal(heads: &str) {
         let mut written = Vec::new();
         for e in &n.entries {
             super::Op::walk(&e.ops, &mut |op| {
-                if let super::Op::Ring { bound: 0, input, .. } = *op {
-                    written.push((input, e.caller));
+                if let super::Op::Ring { bound: 0, port, .. } = *op {
+                    written.push((input(port), e.caller));
                 }
             });
         }
@@ -589,7 +589,7 @@ pub flow m8u(p: F32 at block) -> F32 at sample { g4~(mk8~(p).down~(2).up~(2).dow
         for n in &f.nodes {
             for e in &n.entries {
                 super::Op::walk(&e.ops, &mut |op| {
-                    if let super::Op::Ring { input, from: super::Feed::Arg, .. } = *op {
+                    if let super::Op::Ring { port: super::Port::Input(input), from: super::Feed::Arg, .. } = *op {
                         let at = n.args[input as usize].at.stage().map(|s| f.run_stage(s));
                         assert_eq!(at, Some(e.caller), "{}", n.path);
                         seen += 1;
@@ -958,8 +958,17 @@ fn drawn_ops(ops: &[super::Op]) -> String {
         Op::Reset { at } => format!("Reset({at})"),
         Op::Arm { at } => format!("Arm({at})"),
         Op::Fire { at } => format!("Fire({at})"),
-        Op::Ring { bound, input, from: Feed::Arg } => format!("G({bound},{input},arg)"),
-        Op::Ring { bound, input, from: Feed::Ring(r) } => format!("G({bound},{input},ring{r})"),
+        Op::Ring { bound, port, from } => {
+            let port = match port {
+                super::Port::Input(i) => i.to_string(),
+                super::Port::Cond(at) => format!("c{at}"),
+            };
+            let from = match from {
+                Feed::Arg => "arg".to_string(),
+                Feed::Ring(r) => format!("ring{r}"),
+            };
+            format!("G({bound},{port},{from})")
+        }
         // `@by` of a copy in the window of `by` not that of its array (§11.9: the narrower).
         Op::Deal { to, from, by } => match to {
             To::Array(b) if *b == *by => format!("Deal({b}<-{from})"),
@@ -973,6 +982,15 @@ fn drawn_ops(ops: &[super::Op]) -> String {
         }
     };
     ops.iter().map(op).collect::<Vec<_>>().join(", ")
+}
+
+/// The index of the input `port` of a head (none of these chains gathers a
+/// condition).
+fn input(port: super::Port) -> u32 {
+    match port {
+        super::Port::Input(i) => i,
+        super::Port::Cond(at) => panic!("a ring of the condition at {at}"),
+    }
 }
 
 /// The table of the work of the node `n` drawn ([`steps_of_a_chain`]).
@@ -1467,4 +1485,112 @@ pub flow r5(p: Bool at block, q: Bool at block, c: Bool at sample) -> F32 at sam
         let got: Vec<_> = f.fields.iter().filter(own).map(|x| x.name.trim_start_matches(n.path.as_str())).collect();
         assert_eq!(got.join(" "), fields, "{name}");
     }
+}
+
+/// Of chains whose conditions are gathered in a block, read at its runs or
+/// at a stage of their own (§11.10, the memo of W7-10 U3, 2.6; the break
+/// side of U2a): each condition is read where the table lowers it. Its
+/// [`super::ArgRead`] (the stage the marking evaluates its expression at) is
+/// the stage of the entry of the op that lowers that expression: the ring
+/// written from it, else the read of its guard, its reset or its flag.
+#[test]
+fn a_condition_is_read_at_the_stage_of_the_op_that_lowers_it() {
+    let heads = "flow cnt() -> F32 at sample {\n  let n = prev~(^n) + 1.0\n  n\n}
+flow acc(f: F32 at block) -> F32 at sample {\n  let n = f + prev~(^n)\n  n\n}
+flow slot2(f: F32 at block) -> F32 at sample {\n  let s = acc~(f).down~(2)\n  (s at sample) + cnt~()\n}
+flow mk4() -> F32 at (sample * 4) {\n  let n = cnt~()\n  [n, n, n, n]\n}
+flow g2(x: F32 at (sample * 2)) -> F32 at sample { x[0] + x[1] }
+flow pk2(x: Bool at (sample * 2)) -> Bool at sample { x[1] }
+flow h2(c: Bool at sample) -> Bool at (sample / 2) { pk2~(c).down~(2) }
+";
+    let chains = [
+        "cnt~().when~(c).up~(2).down~(2)",
+        "cnt~().when~(p).up~(2).down~(2)",
+        "cnt~().when~(h2~(c)).up~(2).down~(2)",
+        "cnt~().when~(h2~(c)).up~(4).down~(4)",
+        "g2~(cnt~().when~(c).up~(4).down~(2))",
+        "cnt~().reset_if~(p).up~(2).down~(2)",
+        "cnt~().reset_if~(r).up~(2).down~(2)",
+        "cnt~().reset_if~(h2~(r)).up~(2).down~(2)",
+        "cnt~().reset_if~(p at (sample / 2)).up~(2).down~(2)",
+        "cnt~().when~(c).up~(2).down~(2).reset_if~(r)",
+        "cnt~().when~(sample_tick() % 3 == 0).up~(2).down~(2)",
+        "cnt~().when~(c).up~(2).down~(2).when~(c)",
+        "cnt~().when~(c).up~(2).up~(2).down~(2).down~(2)",
+        "cnt~().when~(c).up~(2).down~(2).up~(2).down~(2)",
+        "slot2~(1.0).when~(c).up~(2).down~(2).when~(h2~(c)).reset_if~(p at (sample / 2))",
+        "g2~(slot2~(1.0).reset_if~(r).when~(c).up~(4).down~(2).when~(c))",
+        "g2~(mk4~().down~(2).when~(c).up~(4).down~(4))",
+        "cnt~().up~(2).reset_if~(h2~(r)).down~(2)",
+        "cnt~().up~(2).when~(h2~(c)).down~(2)",
+        "cnt~().when~(p at sample).up~(2).down~(2)",
+        "cnt~().reset_if~(p at sample).up~(2).down~(2)",
+        "cnt~().reset_if~(p at (sample / 2)).up~(4).down~(4)",
+    ];
+    let mut src = heads.to_string();
+    for (k, ch) in chains.iter().enumerate() {
+        src += &format!(
+            "pub flow t{k}(p: Bool at block, c: Bool at sample, r: Bool at sample) -> F32 at sample {{ {ch} }}\n"
+        );
+    }
+    let a = check(&src);
+    assert!(a.diagnostics.is_empty(), "{:?}", a.diagnostics);
+    let mut seen = (0, 0);
+    for (k, chain) in chains.iter().enumerate() {
+        let f = flow(&a, &format!("t{k}"));
+        let n = f.nodes.iter().find(|n| n.chain.len() > 1).unwrap_or_else(|| panic!("t{k}: no chain"));
+        let frame = |place: u32| n.inside(place) as usize;
+        let ringed = |place: u32| n.ring_of(frame(place), super::Port::Cond(place)).is_some();
+        let read_at = |place: u32| {
+            let cond = n.chain[place as usize].cond.expect("a condition");
+            let r = n.args.iter().find(|r| r.expr == cond).expect("a read of the condition");
+            r.stage.or(r.at.stage()).map(|s| f.run_stage(s))
+        };
+        for e in &n.entries {
+            super::Op::walk(&e.ops, &mut |op| {
+                let place = match *op {
+                    super::Op::Ring { port: super::Port::Cond(at), from: super::Feed::Arg, .. } => {
+                        seen.0 += 1;
+                        Some(at)
+                    }
+                    super::Op::When { guard, cond: super::CondRead::Read, .. } => Some(n.guards[guard as usize].at),
+                    super::Op::Reset { at } | super::Op::Arm { at } => Some(at),
+                    _ => None,
+                }
+                .filter(|&at| matches!(op, super::Op::Ring { .. }) || !ringed(at));
+                if let Some(at) = place {
+                    assert_eq!(read_at(at), Some(e.caller), "t{k} `{chain}` at {at}");
+                    seen.1 += 1;
+                }
+            });
+        }
+    }
+    assert!(seen.0 > 10 && seen.1 > seen.0, "{seen:?}");
+}
+
+/// §11.3: a value of the parameter kinds alone `at` a tick (through a `let`
+/// too) is not gathered into a ring in a block, as with no `at`; a signal
+/// is (the review of W7-10 U3a, its 1b).
+#[test]
+fn a_condition_of_the_parameter_kinds_at_a_tick_has_no_port() {
+    let src = "flow cnt() -> F32 at sample {\n  let n = prev~(^n) + 1.0\n  n\n}
+pub flow t(p: Bool at block, q: Bool at block, c: Bool at sample) -> F32 at sample {
+  let b = p at sample
+  let x = cnt~().when~(p at sample).up~(2).down~(2)
+  let y = cnt~().reset_if~(p at (sample / 2)).up~(4).down~(4)
+  let z = cnt~().when~(b).reset_if~((p && q) at sample).up~(2).down~(2)
+  let s = cnt~().when~(c && (p at sample)).up~(2).down~(2)
+  x + y + z + s
+}
+";
+    let a = check(src);
+    assert!(a.diagnostics.is_empty(), "{:?}", a.diagnostics);
+    let f = flow(&a, "t");
+    let ports: Vec<Vec<bool>> = f
+        .nodes
+        .iter()
+        .filter(|n| n.chain.len() > 1)
+        .map(|n| n.chain.iter().filter(|m| m.cond.is_some()).map(|m| m.port.is_some()).collect())
+        .collect();
+    assert_eq!(ports, [vec![false], vec![false], vec![false, false], vec![true]]);
 }

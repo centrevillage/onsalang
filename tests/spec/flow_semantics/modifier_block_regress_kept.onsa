@@ -1,0 +1,65 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.10", "§11.9"]
+
+// The forms of modifier_block_regress.onsa whose values were already right when the review of W7-10 U3a found the others wrong, kept apart so that a regression of them is not hidden by that file's wait for the fix (W7-10 U3a/t2; S-1209, S-1218, S-1222). Worked out by hand from §11.10 and §11.9; see that file for the rules and the way a block ticks.
+// (1) A `.when~` of a burst under `.up~(2).down~(2)` with a stopped run. (3) A `reset_if~` of the clock `sample` before the `.down~(2)` that deals, under `.up~(4).down~(2)`: the reset is before the first of the 2 runs of a frame, which is a tick of the `.down~(2)`.
+
+flow cnt() -> F32 at sample {
+  let n = prev~(^n) + 1.0
+  n
+}
+
+flow mk2() -> F32 at (sample * 2) {
+  let n = cnt~() * 10.0
+  [n, n + 1.0]
+}
+
+flow g2(x: F32 at (sample * 2)) -> F32 at sample {
+  x[0] + x[1] * 1000.0
+}
+
+flow lo4(x: F32 at (sample * 4)) -> F32 at sample {
+  x[0] + x[1] * 100.0
+}
+
+flow hi4(x: F32 at (sample * 4)) -> F32 at sample {
+  x[2] + x[3] * 100.0
+}
+
+pub flow burst_plain(c: Bool at sample) -> F32 at sample {
+  g2~(mk2~().when~(c).up~(2).down~(2))
+}
+
+pub flow deal_reset_lo(r: Bool at sample) -> F32 at sample {
+  lo4~(cnt~().up~(2).up~(2).down~(2).reset_if~(r).up~(4).down~(2))
+}
+
+pub flow deal_reset_hi(r: Bool at sample) -> F32 at sample {
+  hi4~(cnt~().up~(2).up~(2).down~(2).reset_if~(r).up~(4).down~(2))
+}
+
+test "(1) a burst under .up~(2).down~(2) with a stopped run: the same rule with no boundary that deals inside" {
+  // `mk2~()` gives (10 n, 10 n + 1) at its run n, one run for each run of the block that is made. The tick 0 is stopped (0). The tick 2 gathers c(0), c(1) = 1 0: the run 0 is the 1st run (10, 11): 11010, the run 1 is stopped (11, 11): 11011.
+  // The tick 4 gathers 1 1: the 2nd run (20, 21): 21020, the 3rd (30, 31): 31030. The tick 6 gathers c(4), c(5) = 0 1: stopped (31, 31): 31031, then the 4th (40, 41): 41040.
+  let cs: [Bool; 8] = [true, false, true, true, false, true, true, true]
+  var out: [F32; 8] = [9.0; 8]
+  var st = burst_plain.init(8.0)
+  burst_plain.process(inout st, cs, inout out)
+  assert out == [0.0, 0.0, 11010.0, 11011.0, 21020.0, 31030.0, 31031.0, 41040.0]
+}
+
+test "(3) the same with .up~(4).down~(2): the reset is once for a frame (the clock of r is sample), before the first of its 2 runs, and the part gives 4 values for each frame" {
+  // The 2 runs of a frame are the 2 samples of the tick of `.down~(2)` that deals, so the reset is before a tick of it and the burst is made again from cnt put back. The tick t gathers r(t - 2), r(t - 1): the frame f reads r(f - 2).
+  // No reset: the frame f is (4 f + 1, 4 f + 2, 4 f + 3, 4 f + 4). r is true at the frame 3: the reset is before the frame 5, which is (1, 2, 3, 4), then the frames 6, 7 are (5 .. 8), (9 .. 12). lo is a + 100 b of the first 2, hi of the last 2.
+  let rs: [Bool; 8] = [false, false, false, true, false, false, false, false]
+  var lo: [F32; 8] = [9.0; 8]
+  var hi: [F32; 8] = [9.0; 8]
+  var sl = deal_reset_lo.init(8.0)
+  var sh = deal_reset_hi.init(8.0)
+  deal_reset_lo.process(inout sl, rs, inout lo)
+  deal_reset_hi.process(inout sh, rs, inout hi)
+  assert lo == [201.0, 605.0, 1009.0, 1413.0, 1817.0, 201.0, 605.0, 1009.0]
+  assert hi == [403.0, 807.0, 1211.0, 1615.0, 2019.0, 403.0, 807.0, 1211.0]
+}

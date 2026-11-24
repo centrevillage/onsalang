@@ -74,11 +74,19 @@ fn node_field_ty(lw: &mut Lowerer, flow: DefId, decls: &Decls, info: &FlowInfo, 
         (PlanKind::Instance { callee, .. }, Part::Gather { .. } | Part::Deal(_)) => {
             let fd = lw.a.def(*callee).as_flow();
             let ty = match part {
-                Part::Gather { input, .. } => fd.and_then(|f| f.inputs.get(input as usize)).map(|i| i.ty),
+                Part::Gather { port: Port::Input(input), .. } => {
+                    fd.and_then(|f| f.inputs.get(input as usize)).map(|i| i.ty)
+                }
                 _ => fd.map(|f| f.out),
             };
-            let ty = ty.ok_or_else(|| internal(span, format!("a ring or an array {part:?} of no port")))?;
-            Ok(Ty::Array(Box::new(lw.core_ty(ty, &[], span)?), super::chain::len(n, part, span)?))
+            let ty = ty.ok_or_else(|| internal(span, format!("a ring or an array {part:?} of no port")));
+            // The ring of a condition (§11.10).
+            let ty = if let Part::Gather { port: Port::Cond(_), .. } = part {
+                Ty::Bool
+            } else {
+                lw.core_ty(ty?, &[], span)?
+            };
+            Ok(Ty::Array(Box::new(ty), super::chain::len(n, part, span)?))
         }
         // Of a guard (§11.10, S-1220): its condition, its count, its held output.
         (PlanKind::Instance { .. }, Part::On(_) | Part::Flag(_)) => Ok(Ty::Bool),

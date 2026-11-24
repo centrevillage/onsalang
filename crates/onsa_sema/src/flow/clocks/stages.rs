@@ -37,11 +37,7 @@ struct Stages<'w, 'a> {
 /// `let`s in their order. Each expression is made once (memoized), of the
 /// stages of its parts: linear in the body.
 pub(super) fn of_walk(w: &Walk) -> (HashMap<ExprId, Clock>, HashMap<LocalId, Clock>, Vec<Clock>) {
-    let mut s = Stages { w, memo: HashMap::default(), lets: Vec::with_capacity(w.cx.pending.len()) };
-    for k in 0..w.cx.pending.len() {
-        let c = s.of_let(k);
-        s.lets.push(c);
-    }
+    let mut s = Stages::new(w);
     for &e in w.out.exprs.keys() {
         s.of(e);
     }
@@ -52,7 +48,35 @@ pub(super) fn of_walk(w: &Walk) -> (HashMap<ExprId, Clock>, HashMap<LocalId, Clo
     (s.memo, locals, lets)
 }
 
-impl Stages<'_, '_> {
+/// Whether `e`, recorded by the walk `w`, is of a stage of the parameter
+/// kinds, of the `let`s it checked: of a condition of a modifier as it is
+/// checked ([`Walk::guard_cond`]). The stages of those `let`s are kept in
+/// the walk and each made once: linear in the body over all the calls.
+// SPEC-GAP(S-1227): of `c && b` (a signal and a value of the parameter
+// kinds), the stage of the signal: the whole condition is gathered (provisional).
+pub(super) fn of_params(w: &mut Walk, e: ExprId) -> bool {
+    let lets = std::mem::take(&mut w.let_stages);
+    let mut s = Stages { w: &*w, memo: HashMap::default(), lets };
+    while s.w.checked.get(s.lets.len()).is_some_and(Option::is_some) {
+        let c = s.of_let(s.lets.len());
+        s.lets.push(c);
+    }
+    let of = s.of(e).and_then(param).is_some();
+    w.let_stages = s.lets;
+    of
+}
+
+impl<'w, 'a> Stages<'w, 'a> {
+    /// The stages of the `let`s of the walk `w`, in their order.
+    fn new(w: &'w Walk<'a>) -> Self {
+        let mut s = Stages { w, memo: HashMap::default(), lets: Vec::with_capacity(w.cx.pending.len()) };
+        for k in 0..w.cx.pending.len() {
+            let c = s.of_let(k);
+            s.lets.push(c);
+        }
+        s
+    }
+
     /// The stage of `e`, as a clock; none of one the walk did not record.
     fn of(&mut self, e: ExprId) -> Option<Clock> {
         let c = *self.w.out.exprs.get(&e)?;

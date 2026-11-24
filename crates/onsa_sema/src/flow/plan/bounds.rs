@@ -78,6 +78,52 @@ pub(in crate::flow) fn head_stage<'a>(
     }
 }
 
+/// The stage of the ring of a port of the exponent `k` of the part a
+/// boundary of the ratio `r` wraps, in the frame around it, when it gathers
+/// it (§11.9): a `.down~` of a port faster than its `sample`. The one
+/// judgement of it (D-15): of the inputs of the head, the conditions of the
+/// modifiers ([`conds`], [`cond_ring`]) and the output it deals.
+pub(in crate::flow) fn gathers(k: Ratio, r: Ratio) -> Option<ClockStage> {
+    (r.slower_than_body() && k.faster_than_body()).then(|| step(ClockStage::Tick(k), r))
+}
+
+/// The port `k` of the condition of the modifier at `at` of a chain in the
+/// frame inside each boundary outside it, with the place and the ratio of
+/// that boundary (§11.10: read as an input of the head at its place is).
+fn frames<'a>(
+    chain: impl IntoIterator<Item = &'a PlanModifier>,
+    at: u32,
+    k: Ratio,
+) -> impl Iterator<Item = (u32, Ratio, Ratio)> {
+    let outside = (0u32..).zip(chain).skip(at as usize + 1).filter_map(|(j, m)| Some((j, m.ratio?)));
+    outside.scan(k, |k, (j, r)| Some((j, std::mem::replace(k, Ratio(k.0.saturating_add(r.0))), r)))
+}
+
+/// The ring the condition of the port `k` of the modifier at `at` of a
+/// chain is written into from its expression (§11.10): of the outermost
+/// boundary that gathers it, by its place, with the stage of the ring in
+/// the frame around it; none of one no boundary gathers.
+pub(in crate::flow) fn cond_ring<'a>(
+    chain: impl IntoIterator<Item = &'a PlanModifier>,
+    at: u32,
+    k: Ratio,
+) -> Option<(u32, ClockStage)> {
+    frames(chain, at, k).filter_map(|(j, k, r)| Some((j, gathers(k, r)?))).last()
+}
+
+/// The conditions of the modifiers of `chain` with a port in its
+/// boundaries `bounds` ([`PlanBound::conds`]), each gathered as an input of
+/// the head is ([`gathers`]); after the walk of the clocks writes the ports.
+pub(in crate::flow) fn conds(chain: &[PlanModifier], bounds: &mut [PlanBound]) {
+    for (at, m) in (0u32..).zip(chain) {
+        for (j, k, r) in m.port.into_iter().flat_map(|k| frames(chain, at, k)) {
+            let Some(b) = bounds.iter_mut().find(|b| b.at == j) else { continue };
+            b.conds.push((at, k));
+            b.gathers.extend(gathers(k, r).map(|q| (Port::Cond(at), q)));
+        }
+    }
+}
+
 /// A `.reset_if~` of a chain (§11.10): the place `at` of its modifier in
 /// the `chain` and the exponent `w` of the clock W of its frame, as of a
 /// guard ([`PlanGuard::w`]). The walk of the clocks alone reads it, to find
@@ -86,6 +132,13 @@ pub(in crate::flow) fn head_stage<'a>(
 pub(in crate::flow) struct PlanReset {
     pub at: u32,
     pub w: Ratio,
+}
+
+/// The exponent of W of a modifier with a condition (§11.10), of that of
+/// the output of the part it wraps, `out`: it where slower than the
+/// `sample` of the frame, else 0 (D-15: [`bounds`], [`super::steps`]).
+pub(in crate::flow) fn reads_at(out: Option<Ratio>) -> Ratio {
+    out.filter(|k| k.slower_than_body()).unwrap_or(Ratio(0))
 }
 
 /// The boundaries of the chain `chain` of an instance of `f`, inner first
@@ -106,7 +159,7 @@ pub(in crate::flow) fn bounds<'a>(
     let (mut list, mut guards, mut resets) = (Vec::new(), Vec::new(), Vec::new());
     for (at, m) in (0u32..).zip(chain) {
         let Some(r) = m.ratio else {
-            let w = out.filter(|k| k.slower_than_body()).unwrap_or(Ratio(0));
+            let w = reads_at(out);
             match (m.modifier, m.cond) {
                 (Modifier::When, Some(cond)) => guards.push(PlanGuard { at, cond, w, out }),
                 (Modifier::ResetIf, _) => resets.push(PlanReset { at, w }),
@@ -114,10 +167,10 @@ pub(in crate::flow) fn bounds<'a>(
             }
             continue;
         };
-        let fast = |k: Option<Ratio>| k.filter(|k| r.slower_than_body() && k.faster_than_body());
-        let gathers = (0u32..).zip(&ins).filter_map(|(i, &k)| fast(k).map(|k| (i, step(ClockStage::Tick(k), r))));
-        let gathers = gathers.collect();
-        let bound = PlanBound { at, ratio: r, ins: ins.clone(), out, gathers, deals: fast(out).is_some() };
+        let ring = |(i, k): (u32, &Option<Ratio>)| Some((Port::Input(i), gathers((*k)?, r)?));
+        let gathers = (0u32..).zip(&ins).filter_map(ring).collect();
+        let deals = out.and_then(|k| self::gathers(k, r)).is_some();
+        let bound = PlanBound { at, ratio: r, ins: ins.clone(), out, conds: Vec::new(), gathers, deals };
         ins.iter_mut().for_each(|k| *k = k.map(|k| bound.outside(k)));
         out = out.map(|k| bound.outside(k));
         list.push(bound);

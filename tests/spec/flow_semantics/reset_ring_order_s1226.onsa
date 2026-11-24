@@ -1,0 +1,48 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.10", "§11.9"]
+
+// The order in which an outer `reset_if~` puts back the ring of the condition of a `when~` inside a block and the later run of the same tick reads it (W7-10 U3a/t2; S-1226, S-1209). THE VALUES ARE THE PROVISIONAL READING (α) of S-1226, not what the spec fixes: the spec leaves
+// open whether the run that follows the reset in the tick reads the ring as it was gathered or as it was put back; the case is to change with the decision. The three readings of the review (target/notes/181/w710/u3a/adv_report.md, chapter 4) give
+//   (α) executes in order: the runs before the reset read the gathered value, the ones after it the ring put back (false)  0 0 101 102 1 1 2 3 4 5 6 107
+//   (β) the ring is copied at the start of the tick (excluded by §11.9: "次の遅い刻みが集める配列は、初期化の前の所が `T.default()`")  0 0 101 102 1 2 3 4 5 6 107 108
+//   (γ) the ring is put back before the tick: the runs of the tick read false  0 0 101 102 0 0 1 2 3 4 5 6.
+// Worked out by hand with the order of §11.10: at a position the condition of the `when~` is read, then the work of a stage slower than the clock R of the `reset_if~`, then the reset, then the rest of the run.
+
+flow accb(f: F32 at block) -> F32 at sample {
+  let n = f + prev~(^n)
+  n
+}
+
+flow slot8(f: F32 at block) -> F32 at sample {
+  let s = accb~(f).down~(8)
+  let n = prev~(^n) + 1.0
+  (s at sample) * 100.0 + n
+}
+
+flow pk2(x: Bool at (sample * 2)) -> Bool at sample {
+  x[1]
+}
+
+flow h2(c: Bool at sample) -> Bool at (sample / 2) {
+  pk2~(c).down~(2)
+}
+
+pub flow ring_order(c: Bool at sample, r: Bool at sample) -> F32 at sample {
+  slot8~(1.0).when~(c).up~(2).down~(2).reset_if~(h2~(r))
+}
+
+test "(α) S-1226: a reset at the tick 4 after the first run read the ring as gathered: the 2nd run reads the ring put back and is stopped" {
+  // c is true all along and r is true at the frame 3 only; `h2~(r)` is r(p - 1) at the even position p, so the reset is at the position 4. The tick 0 gathers the defaults of c (false): the frames 0, 1 are stopped (0).
+  // The tick 2 gathers c(0), c(1) = 1 1: the 1st and the 2nd run made, 101 102 (the head `slot8` has a stage of `sample / 8` that counts the runs made: its first run is a tick of it, s = 1, n = 1, 2).
+  // The tick 4 gathers c(2), c(3) = 1 1: the run 0 reads true, the stage that is slower than the clock R of the reset has no work at this run (the 3rd run made is not a multiple of 8), the part is put back (n = 0, the field s = 0, the ring false, the held output 0)
+  // and the run gives n = 1 with s = 0: 1. The run 1 reads the ring put back (false) and is stopped: it holds the last output 1. The ticks 6, 8, 10 gather true: n = 2 3, 4 5, 6 and the 8th run made (the counter of the grid is not put back, §11.9) is a tick of `sample / 8`:
+  // the sum of `accb` was put back (0 + 1): s = 1 and n = 7: 107.
+  let cs: [Bool; 12] = [true; 12]
+  let rs: [Bool; 12] = [false, false, false, true, false, false, false, false, false, false, false, false]
+  var out: [F32; 12] = [9.0; 12]
+  var st = ring_order.init(8.0)
+  ring_order.process(inout st, ring_order.In { c: cs, r: rs }, inout out)
+  assert out == [0.0, 0.0, 101.0, 102.0, 1.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 107.0]
+}

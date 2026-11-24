@@ -81,7 +81,7 @@ use onsa_sema::clock::{Clock, ClockStage, Ratio};
 use onsa_sema::def::{DefKind, Fields, FlowDef, FlowFn, FlowInput, FlowTy, ParamInfo, ParamKey, ParamNumber};
 use onsa_sema::flow::Counter;
 use onsa_sema::flow::{
-    Entry, Feed, Field, FieldOf, FlowInfo, InitArg, Kept, NodeId, Op, Out, Part, PlanKind, PlanNode, Read, To,
+    Entry, Feed, Field, FieldOf, FlowInfo, InitArg, Kept, NodeId, Op, Out, Part, PlanKind, PlanNode, Port, Read, To,
 };
 use onsa_sema::ty::{BuiltinTy, Len, Ty as STy};
 use onsa_syntax::ast::ExprId;

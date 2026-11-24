@@ -1,0 +1,255 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.10", "§11.9", "§11.4", "§13.4"]
+
+// The twins of when_block_values.onsa and reset_if_block_values.onsa (W7-10 U3a/t; S-1207, S-1209, S-1218): a modifier inside a block has the value it has when it is put in a flow of its own with its condition as an input of that flow, and the block is put
+// outside it (§11.10: "境界の内に書いた修飾子の条件は、同じクロックの頭の入力と同じ時点の値を読む"; §11.9 "連鎖は合成で読む"). Each flow below is the named flow of one flow of those cases with the same arrays (`acc~(x).when~(c).up~(2).down~(2)` is
+// `accw~(x, c).up~(2).down~(2)`, with `flow accw(k, c) { acc~(k).when~(c) }`), so it runs on every version, and the equality of the two is the equality of the arrays: a form that the cases give another value than this file does is wrong. A
+// condition of the kind `block` is an input at `block`, one at `sample` is an input at `sample`, `sample_tick()` is an argument, the condition at `sample / 2` is an input at `sample / 2`; a part whose W is `sample * 2` takes its condition as
+// an input at `sample / 2` (a head input slower than W is read at W, held, §11.10). The arrays are the ones of the cases, worked out by hand there. (`reset_frame` has no input: its `.up~(4).down~(2)` is `.up~(2)`, the frames of the part are those of the caller, and the reset once for each frame is the one of reset_if_slow_values.onsa.)
+
+flow acc(k: F32 at sample) -> F32 at sample {
+  let s = prev~(^s) + k
+  s
+}
+
+flow cnt() -> F32 at sample {
+  let n = prev~(^n) + 1.0
+  n
+}
+
+flow accb(f: F32 at block) -> F32 at sample {
+  let n = f + prev~(^n)
+  n
+}
+
+flow slot(f: F32 at block) -> F32 at sample {
+  let s = accb~(f).down~(2)
+  let n = prev~(^n) + 1.0
+  (s at sample) * 100.0 + n
+}
+
+flow g2(x: F32 at (sample * 2)) -> F32 at sample {
+  x[0] + x[1] * 10.0
+}
+
+flow accw(k: F32 at sample, c: Bool at sample) -> F32 at sample {
+  acc~(k).when~(c)
+}
+
+flow accwb(k: F32 at sample, c: Bool at block) -> F32 at sample {
+  acc~(k).when~(c)
+}
+
+flow accws(k: F32 at sample, l: Bool at (sample / 2)) -> F32 at sample {
+  acc~(k).when~(l)
+}
+
+flow cntw(c: Bool at sample) -> F32 at sample {
+  cnt~().when~(c)
+}
+
+flow cntws(c: Bool at (sample / 2)) -> F32 at sample {
+  cnt~().when~(c)
+}
+
+flow cntwb(c: Bool at block) -> F32 at sample {
+  cnt~().when~(c)
+}
+
+flow slotw(c: Bool at sample) -> F32 at sample {
+  slot~(1.0).when~(c)
+}
+
+flow accr(k: F32 at sample, r: Bool at block) -> F32 at sample {
+  acc~(k).reset_if~(r)
+}
+
+flow accrs(k: F32 at sample, r: Bool at sample) -> F32 at sample {
+  acc~(k).reset_if~(r)
+}
+
+flow accwr(k: F32 at sample, c: Bool at sample, r: Bool at sample) -> F32 at sample {
+  acc~(k).when~(c).reset_if~(r)
+}
+
+flow accrw(k: F32 at sample, c: Bool at sample, r: Bool at sample) -> F32 at sample {
+  acc~(k).reset_if~(r).when~(c)
+}
+
+flow cntr4(r: Bool at block) -> F32 at sample {
+  cnt~().reset_if~(r at (sample / 4))
+}
+
+flow slotr(r: Bool at block) -> F32 at sample {
+  slot~(1.0).reset_if~(r)
+}
+
+flow blk(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  accw~(x, c).up~(2).down~(2)
+}
+
+pub flow gate_signal(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  accw~(x, c).up~(2).down~(2)
+}
+
+pub flow gate_block(x: F32 at sample, c: Bool at block) -> F32 at sample {
+  accwb~(x, c).up~(2).down~(2)
+}
+
+pub flow gate_slower(x: F32 at sample) -> F32 at sample {
+  let k = cnt~().down~(2)
+  accws~(x, k == 1.0 || k == 4.0).up~(4).down~(4)
+}
+
+pub flow gate_time(x: F32 at sample) -> F32 at sample {
+  accw~(x, sample_tick() % 4 < 2).up~(2).down~(2)
+}
+
+pub flow gate_slot(c: Bool at sample) -> F32 at sample {
+  slotw~(c).up~(2).down~(2)
+}
+
+pub flow gate_wider(c: Bool at sample) -> F32 at sample {
+  g2~(cntws~(c).up~(4).down~(2))
+}
+
+pub flow first_signal(c: Bool at sample) -> F32 at sample {
+  cntw~(c).up~(2).down~(2)
+}
+
+pub flow first_block(c: Bool at block) -> F32 at sample {
+  cntwb~(c).up~(2).down~(2)
+}
+
+pub flow reset_run(x: F32 at sample, r: Bool at block) -> F32 at sample {
+  accr~(x, r).up~(2).down~(2)
+}
+
+pub flow reset_signal(x: F32 at sample, r: Bool at sample) -> F32 at sample {
+  accrs~(x, r).up~(2).down~(2)
+}
+
+pub flow reset_after_when(x: F32 at sample, c: Bool at sample, r: Bool at sample) -> F32 at sample {
+  accwr~(x, c, r).up~(2).down~(2)
+}
+
+pub flow reset_before_when(x: F32 at sample, c: Bool at sample, r: Bool at sample) -> F32 at sample {
+  accrw~(x, c, r).up~(2).down~(2)
+}
+
+pub flow reset_frame(r: Bool at block) -> F32 at sample {
+  g2~(cnt~().reset_if~(r).up~(2))
+}
+
+pub flow reset_grid(r: Bool at block) -> F32 at sample {
+  cntr4~(r).up~(2).down~(2)
+}
+
+pub flow reset_slot(r: Bool at block) -> F32 at sample {
+  slotr~(r).up~(2).down~(2)
+}
+
+pub flow reset_outside(x: F32 at sample, c: Bool at sample, r: Bool at sample) -> F32 at sample {
+  blk~(x, c).reset_if~(r)
+}
+
+test "the twins of the when~ in a block give the arrays of when_block_values.onsa" {
+  let xs: [F32; 8] = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]
+  let cs: [Bool; 8] = [true, false, true, true, false, true, true, true]
+  var a: [F32; 8] = [9.0; 8]
+  var b: [F32; 8] = [9.0; 8]
+  var c: [F32; 8] = [9.0; 8]
+  var d: [F32; 8] = [9.0; 8]
+  var e: [F32; 8] = [9.0; 8]
+  var f: [F32; 8] = [9.0; 8]
+  var sa = gate_signal.init(8.0)
+  var sb = gate_block.init(8.0)
+  var sc = gate_time.init(8.0)
+  var sd = gate_slot.init(8.0)
+  var se = gate_wider.init(8.0)
+  var sf = first_signal.init(8.0)
+  gate_signal.process(inout sa, gate_signal.In { x: xs, c: cs }, inout a)
+  gate_block.process(inout sb, gate_block.Params { c: true }, xs.slice(0, 4), inout b.slice(0, 4))
+  gate_block.process(inout sb, gate_block.Params { c: false }, xs.slice(4, 6), inout b.slice(4, 6))
+  gate_block.process(inout sb, gate_block.Params { c: true }, xs.slice(6, 8), inout b.slice(6, 8))
+  gate_time.process(inout sc, xs, inout c)
+  gate_slot.process(inout sd, cs, inout d)
+  gate_wider.process(inout se, cs, inout e)
+  first_signal.process(inout sf, [true; 8], inout f)
+  assert a == [0.0, 0.0, 1.0, 1.0, 4.0, 8.0, 8.0, 14.0]
+  assert b == [0.0, 0.0, 1.0, 3.0, 3.0, 3.0, 8.0, 14.0]
+  assert c == b
+  assert d == [0.0, 0.0, 101.0, 101.0, 102.0, 203.0, 203.0, 204.0]
+  assert e == [0.0, 0.0, 21.0, 22.0, 43.0, 65.0, 66.0, 87.0]
+  assert f == [0.0, 0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0]
+}
+
+test "a condition slower than the tick, and a condition of the kind block at the first tick" {
+  let xs: [F32; 12] = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0]
+  var a: [F32; 12] = [9.0; 12]
+  var b: [F32; 8] = [9.0; 8]
+  var sa = gate_slower.init(8.0)
+  var sb = first_block.init(8.0)
+  gate_slower.process(inout sa, xs, inout a)
+  first_block.process(inout sb, first_block.Params { c: true }, inout b)
+  assert a == [0.0, 0.0, 0.0, 0.0, 1.0, 3.0, 3.0, 3.0, 3.0, 3.0, 10.0, 18.0]
+  assert b == [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]
+}
+
+test "the twins of the reset_if~ in a block give the arrays of reset_if_block_values.onsa" {
+  let xs: [F32; 8] = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]
+  let cs: [Bool; 8] = [true, false, true, true, false, true, true, true]
+  let rs: [Bool; 8] = [false, true, false, true, false, false, false, false]
+  let r2: [Bool; 8] = [false, false, true, false, false, false, false, false]
+  var a: [F32; 8] = [9.0; 8]
+  var b: [F32; 8] = [9.0; 8]
+  var c: [F32; 8] = [9.0; 8]
+  var d: [F32; 8] = [9.0; 8]
+  var e: [F32; 8] = [9.0; 8]
+  var f: [F32; 8] = [9.0; 8]
+  var g: [F32; 8] = [9.0; 8]
+  var sa = reset_run.init(8.0)
+  var sb = reset_signal.init(8.0)
+  var sc = reset_after_when.init(8.0)
+  var sd = reset_before_when.init(8.0)
+  var se = reset_frame.init(8.0)
+  var sf = reset_slot.init(8.0)
+  var sg = reset_run.init(8.0)
+  reset_run.process(inout sa, reset_run.Params { r: false }, xs.slice(0, 2), inout a.slice(0, 2))
+  reset_run.process(inout sa, reset_run.Params { r: true }, xs.slice(2, 4), inout a.slice(2, 4))
+  reset_run.process(inout sa, reset_run.Params { r: false }, xs.slice(4, 8), inout a.slice(4, 8))
+  reset_signal.process(inout sb, reset_signal.In { x: xs, r: r2 }, inout b)
+  reset_after_when.process(inout sc, reset_after_when.In { x: xs, c: cs, r: rs }, inout c)
+  reset_before_when.process(inout sd, reset_before_when.In { x: xs, c: cs, r: rs }, inout d)
+  reset_frame.process(inout se, reset_frame.Params { r: false }, inout e.slice(0, 2))
+  reset_frame.process(inout se, reset_frame.Params { r: true }, inout e.slice(2, 4))
+  reset_frame.process(inout se, reset_frame.Params { r: false }, inout e.slice(4, 8))
+  reset_slot.process(inout sf, reset_slot.Params { r: false }, inout f.slice(0, 2))
+  reset_slot.process(inout sf, reset_slot.Params { r: true }, inout f.slice(2, 4))
+  reset_slot.process(inout sf, reset_slot.Params { r: false }, inout f.slice(4, 8))
+  reset_run.process(inout sg, reset_run.Params { r: true }, xs, inout g)
+  assert a == [0.0, 0.0, 1.0, 2.0, 5.0, 9.0, 14.0, 20.0]
+  assert b == [0.0, 0.0, 1.0, 3.0, 3.0, 7.0, 12.0, 18.0]
+  assert c == [0.0, 0.0, 1.0, 0.0, 3.0, 4.0, 4.0, 10.0]
+  assert d == [0.0, 0.0, 1.0, 1.0, 4.0, 4.0, 4.0, 10.0]
+  assert e == [21.0, 43.0, 21.0, 21.0, 43.0, 65.0, 87.0, 109.0]
+  assert f == [101.0, 102.0, 1.0, 1.0, 102.0, 103.0, 204.0, 205.0]
+  assert g == [0.0, 0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0]
+}
+
+test "a reset at the grid of sample / 4, and a reset outside a block that holds a when~ (the rings and the dealt array are put back)" {
+  let xs: [F32; 12] = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0]
+  let rs: [Bool; 12] = [false, false, false, false, false, true, false, false, false, false, false, false]
+  var a: [F32; 12] = [9.0; 12]
+  var b: [F32; 12] = [9.0; 12]
+  var sa = reset_grid.init(8.0)
+  var sb = reset_outside.init(8.0)
+  reset_grid.process(inout sa, reset_grid.Params { r: false }, inout a.slice(0, 4))
+  reset_grid.process(inout sa, reset_grid.Params { r: true }, inout a.slice(4, 8))
+  reset_grid.process(inout sa, reset_grid.Params { r: false }, inout a.slice(8, 12))
+  reset_outside.process(inout sb, reset_outside.In { x: xs, c: [true; 12], r: rs }, inout b)
+  assert a == [1.0, 2.0, 3.0, 4.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]
+  assert b == [0.0, 0.0, 1.0, 3.0, 6.0, 0.0, 0.0, 6.0, 13.0, 21.0, 30.0, 40.0]
+}

@@ -108,7 +108,7 @@ fn no_diagnostic_after_the_candidate(forms: &[(&str, &str)]) {
     }
 }
 
-/// The modifiers whose receiver is a built-in delay stay E0200 until the last unit of W7-10 (U3), `.when~` and `.reset_if~` alike, and are still E0200 after the candidate (Q-09: the flow stage stops at the meaning it has not).
+/// The modifiers whose receiver is a built-in delay stay E0200 until the last unit of W7-10 (U3b), `.when~` and `.reset_if~` alike, and are still E0200 after the candidate (Q-09: the flow stage stops at the meaning it has not).
 #[test]
 fn the_program_after_a_candidate_of_a_delay_receiver_is_e0200_until_the_last_unit() {
     let forms = [

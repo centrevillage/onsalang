@@ -20,11 +20,11 @@ pub enum Part {
     Buf,
     /// The write index of the ring.
     W,
-    /// The ring that gathers the input `input` at the boundary `bound` of
+    /// The ring that gathers the port `port` at the boundary `bound` of
     /// the chain of an instance ([`PlanNode::bounds`], §11.9, S-1208).
     Gather {
         bound: u32,
-        input: u32,
+        port: Port,
     },
     /// The array that deals the output at the boundary of the chain.
     Deal(u32),
@@ -214,7 +214,7 @@ impl Structs<'_> {
                 push(Part::Own);
                 let mut parts = Vec::new();
                 for (b, at) in (0u32..).zip(&n.bounds) {
-                    parts.extend(at.gathers.iter().map(|&(input, _)| (at.at, Part::Gather { bound: b, input })));
+                    parts.extend(at.gathers.iter().map(|&(port, _)| (at.at, Part::Gather { bound: b, port })));
                     parts.extend(at.deals.then_some((at.at, Part::Deal(b))));
                 }
                 let read = guard_parts(n);

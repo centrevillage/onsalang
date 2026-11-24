@@ -47,14 +47,42 @@ impl<'a> Walk<'a> {
         self.n.guards.get(g as usize).ok_or_else(|| internal(self.span, format!("no guard {g}")))
     }
 
-    /// The condition of the modifier at `at` of the chain, lowered before
-    /// the ops ([`prelower`]) or here.
-    fn cond(&self, lw: &mut Lowerer, cx: &mut FnCx, at: u32) -> R<Expr> {
-        if let Some(v) = self.conds.iter().find(|x| x.0 == at) {
+    /// The condition of the modifier at `place` of the chain, as its op reads
+    /// it (§11.10): the slot of the ring that gathers it in the frame of the
+    /// modifier ([`Walk::ring`]; one element, its port being no faster than
+    /// W) in a local, which a reset of the ring after does not change; else
+    /// its expression ([`Walk::cond_expr`]).
+    fn cond(&self, lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, place: u32) -> R<Expr> {
+        let Some(o) = self.ring(place) else { return self.cond_expr(lw, cx, place) };
+        let (part, f, span) = (Part::Gather { bound: o, port: Port::Cond(place) }, self.frame(place), self.span);
+        let x = self.n.chain.get(place as usize).and_then(|m| m.port);
+        let (x, e) = (x.ok_or_else(|| internal(span, "a ring of a condition of no port"))?, exp(self.n, part, span)?);
+        let v = index(self.field(lw, part)?, at(lw, cx, self, (f, o as usize), x, e)?)?;
+        let l = cx.temp("__on", Ty::Bool);
+        out.push(stmt(span, StmtKind::Let(l, v)));
+        Ok(local_expr(cx, l, span))
+    }
+
+    /// The expression of the condition of the modifier at `place`, lowered
+    /// before the ops ([`prelower`]) or here.
+    fn cond_expr(&self, lw: &mut Lowerer, cx: &mut FnCx, place: u32) -> R<Expr> {
+        if let Some(v) = self.conds.iter().find(|x| x.0 == place) {
             return Ok(v.1.clone());
         }
-        let cond = self.n.chain.get(at as usize).and_then(|m| m.cond);
+        let cond = self.n.chain.get(place as usize).and_then(|m| m.cond);
         lower_expr(lw, cx, cond.ok_or_else(|| internal(self.span, "a modifier of no condition"))?)
+    }
+
+    /// The frame of the modifier at `place`: the count of the boundaries
+    /// inside it.
+    fn frame(&self, place: u32) -> usize {
+        self.n.inside(place) as usize
+    }
+
+    /// The boundary whose ring the condition of the modifier at `place` is
+    /// read from in its frame ([`PlanNode::ring_of`]), if one gathers it.
+    fn ring(&self, place: u32) -> Option<u32> {
+        self.n.ring_of(self.frame(place), Port::Cond(place))
     }
 
     /// The frame a guard is in, by the count of the boundaries inside it,
@@ -62,7 +90,7 @@ impl<'a> Walk<'a> {
     fn guard_frame(&self, g: u32) -> R<(usize, Ratio)> {
         let guard = self.guard(g)?;
         let out = guard.out.ok_or_else(|| internal(self.span, "a held output of no clock"))?;
-        Ok((self.n.bounds.iter().filter(|b| b.at < guard.at).count(), out))
+        Ok((self.n.inside(guard.at) as usize, out))
     }
 
     /// The exponent of the output of the head in the frame of the call of
@@ -186,7 +214,12 @@ fn whole(x: Ratio, e: Ratio) -> bool {
 /// an input the boundary gathers, of the output it deals.
 fn exp(n: &PlanNode, part: Part, span: Span) -> R<Ratio> {
     let e = match part {
-        Part::Gather { bound, input } => n.bounds.get(bound as usize).and_then(|b| *b.ins.get(input as usize)?),
+        Part::Gather { bound, port: Port::Input(i) } => {
+            n.bounds.get(bound as usize).and_then(|b| *b.ins.get(i as usize)?)
+        }
+        Part::Gather { bound, port: Port::Cond(at) } => {
+            n.bounds.get(bound as usize).and_then(|b| b.conds.iter().find(|c| c.0 == at).map(|c| c.1))
+        }
         Part::Deal(bound) => n.bounds.get(bound as usize).and_then(|b| b.out),
         _ => None,
     };
@@ -248,19 +281,20 @@ fn ops(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, w: &mut Walk, list:
     let mut read: Vec<(u32, Expr)> = Vec::new();
     for op in list {
         match *op {
-            Op::Ring { bound: b, input, from } => {
-                let part = Part::Gather { bound: b, input };
+            Op::Ring { bound: b, port, from } => {
+                let part = Part::Gather { bound: b, port };
                 let k = exp(n, part, span)?;
                 let (x, f) = (w.bound(b)?.outside(k), b as usize + 1);
                 let (dst, pos) = (w.field(lw, part)?, at(lw, cx, w, (f, b as usize), x, k)?);
                 let caller = n.bounds.len();
-                let src = match from {
-                    Feed::Arg => match arg_value(lw, cx, out, w, input)? {
+                let src = match (from, port) {
+                    (Feed::Arg, Port::Input(input)) => match arg_value(lw, cx, out, w, input)? {
                         (v, Some(q)) => Src::At(v, at(lw, cx, w, (f, caller), x, q)?, q),
                         (v, None) => Src::Value(v),
                     },
-                    Feed::Ring(o) => {
-                        let part = Part::Gather { bound: o, input };
+                    (Feed::Arg, Port::Cond(place)) => Src::Value(w.cond_expr(lw, cx, place)?),
+                    (Feed::Ring(o), _) => {
+                        let part = Part::Gather { bound: o, port };
                         let q = exp(n, part, span)?;
                         Src::At(w.field(lw, part)?, at(lw, cx, w, (f, o as usize), x, q)?, q)
                     }
@@ -279,18 +313,21 @@ fn ops(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, w: &mut Walk, list:
                     value = put(lw, cx, out, w, to, held, |_| Ok((from, o)))?.or(value);
                     continue;
                 }
-                // A burst, made in the local of the value or the array that deals it: its last
-                // element held when it ran, else that N times, each tick of its output reading
-                // the last element (§11.10, S-1222).
-                let v = match to {
-                    Out::Deal(b) => Some(w.field(lw, Part::Deal(b))?),
-                    _ => w.value.clone(),
+                // A burst, made in the window of its frame of the local of the value or the
+                // array that deals it: its last element held when it ran, else that N times,
+                // each tick of its output reading the last element (§11.10, S-1222).
+                let (v, e, own) = target(lw, w, if let Out::Deal(b) = to { To::Array(b) } else { To::Value })?;
+                let (pos, n) = (at(lw, cx, w, (from, own), o, e)?, count(o, span)?);
+                let last = if whole(o, e) {
+                    u32_lit(span, n - 1)
+                } else {
+                    checked_binary(BinOp::Add, pos.clone(), u32_lit(span, n - 1))
                 };
-                let (v, n) = (v.ok_or_else(|| internal(span, "a burst held of no local"))?, count(o, span)?);
                 let (mut ran, mut not) = (Vec::new(), Vec::new());
-                assign(&mut ran, &held, index(v.clone(), u32_lit(span, n - 1))?)?;
-                let all = Expr::new(v.ty.clone(), span, ExprKind::Repeat { elem: Box::new(held), n });
-                assign(&mut not, &v, all)?;
+                assign(&mut ran, &held, index(v.clone(), last)?)?;
+                let ty = Ty::Array(Box::new(held.ty.clone()), n);
+                let all = Expr::new(ty, span, ExprKind::Repeat { elem: Box::new(held), n });
+                copy(cx, &mut not, (v, e), pos, Src::Value(all), o, span)?;
                 let (ran, not) = (Block { stmts: ran, value: None }, Block { stmts: not, value: None });
                 out.push(stmt(span, StmtKind::If(on, ran, not)));
             }
@@ -300,7 +337,7 @@ fn ops(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, w: &mut Walk, list:
                 }
                 let on = match cond {
                     CondRead::Read => {
-                        let v = w.cond(lw, cx, w.guard(g)?.at)?;
+                        let v = w.cond(lw, cx, out, w.guard(g)?.at)?;
                         let v = materialize(cx, v, out, "__on");
                         if w.info.field_at(FieldOf::Node(w.id, Part::On(g))).is_some() {
                             assign(out, &w.field(lw, Part::On(g))?, v.clone())?;
@@ -335,7 +372,7 @@ fn ops(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, w: &mut Walk, list:
             }
             // The condition read into the flag, then, after the slower work, read from it (§11.10).
             Op::Arm { at } => {
-                let v = w.cond(lw, cx, at)?;
+                let v = w.cond(lw, cx, out, at)?;
                 assign(out, &w.field(lw, Part::Flag(at))?, v)?;
             }
             Op::Reset { at } | Op::Fire { at } => {
@@ -346,7 +383,7 @@ fn ops(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, w: &mut Walk, list:
                         assign(&mut body, &flag, lit(Ty::Bool, span, Lit::Bool(false)))?;
                         flag
                     }
-                    _ => w.cond(lw, cx, at)?,
+                    _ => w.cond(lw, cx, out, at)?,
                 };
                 reset(lw, &mut body, w, at)?;
                 out.push(stmt(span, StmtKind::If(on, Block { stmts: body, value: None }, Block::default())));
@@ -464,20 +501,24 @@ fn target(lw: &Lowerer, w: &Walk, to: To) -> R<(Expr, Ratio, usize)> {
 /// would be in it, which the reads after it do not see.
 fn prelower(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, w: &mut Walk, list: &[Op]) -> R<()> {
     let (mut read, mut bodies, mut conds) = (BTreeSet::new(), Vec::new(), Vec::new());
-    // A condition by the place of its modifier in the chain: of a guard, by its index first.
+    // A condition by the place of its modifier in the chain: of a guard, by its index first;
+    // that of a ring written from it, and of an op that does not read it from a ring.
     Op::walk(list, &mut |op| match *op {
-        Op::Ring { input, from: Feed::Arg, .. } => {
+        Op::Ring { port: Port::Input(input), from: Feed::Arg, .. } => {
             read.insert(input);
         }
+        Op::Ring { port: Port::Cond(at), from: Feed::Arg, .. } => conds.push((Ok(at), true)),
         Op::Run { body, .. } => bodies.push(body),
-        Op::When { guard, cond: CondRead::Read, .. } => conds.push(Err(guard)),
-        Op::Reset { at } | Op::Arm { at } => conds.push(Ok(at)),
+        Op::When { guard, cond: CondRead::Read, .. } => conds.push((Err(guard), false)),
+        Op::Reset { at } | Op::Arm { at } => conds.push((Ok(at), false)),
         _ => {}
     });
-    let conds = conds.into_iter().map(|c| c.or_else(|g| Ok(w.guard(g)?.at)));
-    let mut conds: Vec<u32> = conds.collect::<R<_>>()?;
+    let conds = conds.into_iter().map(|(c, ring)| Ok((c.or_else(|g| Ok(w.guard(g)?.at))?, ring)));
+    let conds: Vec<(u32, bool)> = conds.collect::<R<_>>()?;
+    let mut conds: Vec<u32> =
+        conds.into_iter().filter(|&(at, ring)| ring || w.ring(at).is_none()).map(|c| c.0).collect();
     for body in bodies {
-        read.extend(head_inputs(lw, w, body)?.into_iter().filter(|&i| w.n.ring_of(0, i).is_none()));
+        read.extend(head_inputs(lw, w, body)?.into_iter().filter(|&i| w.n.ring_of(0, Port::Input(i)).is_none()));
     }
     // Lowered once: those of an op before (a guard and a loop, §11.10: read while it stops).
     read.retain(|i| w.args.iter().all(|x| x.0 != *i));
@@ -485,7 +526,7 @@ fn prelower(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, w: &mut Walk, 
     // SPEC-GAP(S-1221): the condition of a guard or a `.reset_if~` inside one that stops
     // it is read too, as the arguments of the head are (provisional).
     for at in conds {
-        let v = w.cond(lw, cx, at)?;
+        let v = w.cond_expr(lw, cx, at)?;
         w.conds.push((at, materialize(cx, v, out, "__cond")));
     }
     for input in read {
@@ -632,9 +673,9 @@ fn run(lw: &mut Lowerer, cx: &mut FnCx, w: &Walk, body: ClockStage) -> R<Expr> {
     let time = if words > 0 { child_time(cx, &mut lets, w, words)? } else { Vec::new() };
     let mut given = Vec::new();
     for input in head_inputs(lw, w, body)? {
-        let (src, e, owner) = match (n.ring_of(0, input), w.args.iter().find(|x| x.0 == input)) {
+        let (src, e, owner) = match (n.ring_of(0, Port::Input(input)), w.args.iter().find(|x| x.0 == input)) {
             (Some(bound), _) => {
-                let part = Part::Gather { bound, input };
+                let part = Part::Gather { bound, port: Port::Input(input) };
                 (w.field(lw, part)?, exp(n, part, span)?, bound as usize)
             }
             (None, Some((_, v, q))) => (v.clone(), q.unwrap_or(Ratio(0)), n.bounds.len()),

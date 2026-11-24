@@ -135,7 +135,7 @@ pub use branching::{Chain, Link, chain};
 pub use hoist::{Cond, Hoist, HoistId};
 pub use plan::{
     CondRead, Edge, Entry, Feed, Field, FieldOf, Kept, NodeId, Op, Out, Owner, Part, PlanBound, PlanGuard, PlanKind,
-    PlanModifier, PlanNode, Read, To, Vertex,
+    PlanModifier, PlanNode, Port, Read, To, Vertex,
 };
 pub use plan::{Counter, Words};
 
@@ -237,6 +237,7 @@ pub(super) struct NodeClock {
     pub(super) clock: Clock,
     pub(super) args: Vec<ArgRead>,
     pub(super) resets: Vec<(u32, crate::clock::Ratio)>,
+    pub(super) ports: Vec<(u32, crate::clock::Ratio)>,
 }
 
 /// An argument of a node and the clock of the place it is read at (§11.3,

@@ -1,0 +1,11 @@
+# flow_ref 1 source=tests/spec/flow_semantics/modifier_block_twins.onsa tests=4 evaluated=1 unavailable=0 skipped=3 waiting=0
+- the twins of the when~ in a block give the arrays of when_block_values.onsa	skipped layout
+@ a condition slower than the tick, and a condition of the kind block at the first tick
+init 0 modifier_block_twins.gate_slower sr=0x41000000
+init 1 modifier_block_twins.first_block sr=0x41000000
+process 0 frames=12 in x=[0x3f800000 0x40000000 0x40400000 0x40800000 0x40a00000 0x40c00000 0x40e00000 0x41000000 0x41100000 0x41200000 0x41300000 0x41400000]
+out=[0x00000000 0x00000000 0x00000000 0x00000000 0x3f800000 0x40400000 0x40400000 0x40400000 0x40400000 0x40400000 0x41200000 0x41900000]
+process 1 params c=true frames=8
+out=[0x3f800000 0x40000000 0x40400000 0x40800000 0x40a00000 0x40c00000 0x40e00000 0x41000000]
+- the twins of the reset_if~ in a block give the arrays of reset_if_block_values.onsa	skipped layout
+- a reset at the grid of sample / 4, and a reset outside a block that holds a when~ (the rings and the dealt array are put back)	skipped layout

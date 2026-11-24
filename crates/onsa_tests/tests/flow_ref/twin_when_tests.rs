@@ -5,7 +5,8 @@
 //! Three things hold them. The checker passes every program and the interpreter holds its asserts (a twin that the interpreter
 //! does not hold is a failure of the interpreter or of the generator), and a mutant of each twin is caught by the asserts: both
 //! run today. The evaluator gives what the interpreter gives (`twin::run`: it evaluates every test and the interpreter is
-//! compared with it): these wait for the evaluator to have `when~` (W7-10 U1e).
+//! compared with it): these wait for the evaluator to have a modifier inside a block and a `when~` of a burst under an `.up~` (W7-10 U3ae).
+//! The checker and the interpreter pass the programs of every seed once U3a is in (the tests that run them are marked `W7-10 U3a` until then).
 
 use std::collections::BTreeSet;
 
@@ -19,18 +20,23 @@ const WHEN: Family = ("when_twins", make);
 const EXOTIC: Family = ("when_exotic", make_exotic);
 
 /// The seeds of the gate: chosen again when a change of the generator moves what they make and `COVER` breaks. Each gives a
-/// mutant that the asserts catch.
-const GATE: [u64; 8] = [1, 2, 3, 30, 54, 61, 261, 339];
+/// mutant that the asserts catch (W7-10 U3a/t2 chose them again: a signal in a block is gathered, so a `when~(c || ct)` there is
+/// not `when~(true)` and the generator no longer puts one in a block; the twin `atid` was added). None has the twin `atid` at a place
+/// inside a block (`AT_BLOCK`).
+const GATE: [u64; 7] = [1215, 461, 98, 18, 239, 10, 25];
+/// The seeds of the twin `atid` whose `at` is at a place inside a block (`at_blk`): a value of a parameter kind with `at sample` is
+/// the value (§11.3), not a signal gathered with the inputs. They fail until U3a keeps an `at` on a parameter kind from making a ring.
+const AT_BLOCK: [u64; 2] = [7, 210];
 /// The forms the seeds of the gate hold: every head, every twin, every modifier, the places a `when~` that always holds is put
 /// in, the clocks W the conditions are read at and the kinds of condition, a burst and a slow output, a `when~` between an
-/// `.up~` and a `.down~`, a `when~` that deals a burst head out, two `.up~` and a `.down~`.
+/// `.up~` and a `.down~`, a `when~` that deals a burst head out, two `.up~` and a `.down~`, a modifier inside a block (`blk`) and
+/// a `when~` of a burst under an `.up~` (`burst_up`; U3a opened both).
 const COVER: &str = "h_slot h_tk h_acc h_lp h_dws h_mk2 h_mk4 k_id k_commute k_merge m_down2 m_down4 m_down8 m_up2 len_2 len_3 len_4 len_5 \
     when_1 when_2 when_3 o_plain o_burst o_slow w_p w_slow w_pos c_sig c_sig_slow c_block c_init c_lit c_not c_and c_or t_lit \
-    t_block t_init t_both t_or_sig ins_front ins_end ins_mid ins_two double_when deal_when in_block stacked";
+    t_block t_init t_both t_or_sig ins_front ins_end ins_mid ins_two double_when deal_when in_block stacked blk burst_up k_atid c_at_sample";
 /// The seeds of the gate for the matrix of `exotic`, and what they hold: a stack of blocks with the `when~` in it and at its end.
-const EXOTIC_GATE: [u64; 6] = [6, 54, 58, 89, 367, 414];
-const EXOTIC_COVER: &str =
-    "h_tk h_slot stacked in_block ins_front ins_mid ins_end t_lit t_block o_plain o_burst o_slow len_3 len_4";
+const EXOTIC_GATE: [u64; 4] = [60, 577, 6, 14];
+const EXOTIC_COVER: &str = "h_tk h_slot stacked in_block ins_front ins_mid ins_end t_lit t_block o_plain o_burst o_slow len_3 len_4 blk burst_up";
 
 /// The tests of a program run in the interpreter (name and failure), or why the program does not run: the checker's
 /// diagnostics (a form that U1 keeps as E0200 is one), or an error of the lowering.
@@ -126,6 +132,13 @@ fn the_flows_of_the_gate_seeds_pass_the_checker_and_the_twins_hold_in_the_interp
 fn the_gate_seeds_hold_every_form_of_the_table_of_what_is_covered() {
     assert_covered(make, &GATE, COVER);
     assert_covered(make_exotic, &EXOTIC_GATE, EXOTIC_COVER);
+    assert_covered(make, &AT_BLOCK, "k_atid c_at_sample at_blk");
+}
+
+#[test]
+fn a_value_of_a_parameter_kind_with_an_at_inside_a_block_is_the_value_in_the_interpreter() {
+    assert_held(make, &AT_BLOCK, false);
+    assert_held(make, &AT_BLOCK, true);
 }
 
 #[test]
@@ -135,34 +148,34 @@ fn a_mutant_of_each_twin_is_caught_by_its_asserts_in_the_interpreter() {
 }
 
 #[test]
-fn the_chains_the_generator_leaves_out_are_the_ones_that_u1_does_not_run() {
+fn the_checker_passes_every_chain_in_range_of_up_to_three_modifiers_the_forms_that_u1_stopped_too() {
     // Every chain of up to 3 modifiers over every head, with the condition at W and with an `init` one: the checker passes (and
-    // lowers) exactly what the generator makes, and says E0200 of what it leaves out.
-    let (mut made, mut left, mut wrong) = (0, 0, Vec::new());
+    // lowers) every one, a modifier inside a block and a `when~` of a burst under an `.up~` (`form`) too (E0200 until U3a).
+    let (mut made, mut opened, mut wrong) = (0, 0, Vec::new());
     for cond in ["sig", "ci"] {
-        for (what, src, gated) in chains(3, cond) {
-            let verdict = analysis(&src);
-            let e0200 = verdict.as_ref().is_err_and(|e| e.contains("E0200"));
-            match (gated, &verdict) {
-                (None, Ok(())) => made += 1,
-                (Some("in_block" | "burst_under_up"), Err(_)) if e0200 => left += 1,
-                _ => {
-                    let first = verdict.map_err(|e| e.lines().next().unwrap_or_default().to_string());
-                    wrong.push(format!("{what} ({gated:?}): {first:?}"));
-                }
+        for (what, src, form) in chains(3, cond) {
+            match analysis(&src) {
+                Ok(()) => (made, opened) = (made + 1, opened + usize::from(form.is_some())),
+                Err(e) => wrong.push(format!("{what} ({form:?}): {}", e.lines().next().unwrap_or_default())),
             }
         }
     }
-    assert!(wrong.is_empty() && made > 100 && left > 30, "{made} made, {left} left out: {}", wrong.join("\n"));
+    assert!(
+        wrong.is_empty() && made > 100 && opened > 30,
+        "{made} made, {opened} of a form of U3a: {}",
+        wrong.join("\n")
+    );
 }
 
 #[test]
+#[ignore = "W7-10 U3ae: S-1209"]
 fn the_twins_of_when_agree_on_the_evaluator_and_in_the_interpreter() {
     println!("{:?}", check(GATE.to_vec(), WHEN));
     println!("{:?}", check(EXOTIC_GATE.to_vec(), EXOTIC));
 }
 
 #[test]
+#[ignore = "W7-10 U3ae: S-1209"]
 fn a_mutant_of_a_twin_of_when_is_caught_by_the_evaluator() {
     // The interpreter is not run on a mutant: the evaluator has to evaluate every test, and an assert fails in each program.
     for (family, seeds) in [(WHEN, GATE.to_vec()), (EXOTIC, EXOTIC_GATE.to_vec())] {
@@ -204,21 +217,12 @@ fn heavy_when_exotic_in_the_interpreter() {
 
 #[test]
 #[ignore = "heavy: the gate item `heavy` runs it"]
-fn heavy_the_chains_the_generator_leaves_out_of_up_to_five_modifiers_are_stopped() {
+fn heavy_the_checker_passes_every_chain_in_range_of_up_to_five_modifiers() {
     let mut wrong = Vec::new();
     for cond in ["sig", "ci"] {
-        for (what, src, gated) in chains(5, cond) {
-            let verdict = analysis(&src);
-            let e0200 = verdict.as_ref().is_err_and(|e| e.contains("E0200"));
-            let right = match gated {
-                None => verdict.is_ok(),
-                Some(_) => e0200,
-            };
-            if !right {
-                wrong.push(format!(
-                    "{what} ({gated:?}): {:?}",
-                    verdict.map_err(|e| e.lines().next().unwrap_or_default().to_string())
-                ));
+        for (what, src, form) in chains(5, cond) {
+            if let Err(e) = analysis(&src) {
+                wrong.push(format!("{what} ({form:?}): {}", e.lines().next().unwrap_or_default()));
             }
         }
     }
@@ -226,8 +230,8 @@ fn heavy_the_chains_the_generator_leaves_out_of_up_to_five_modifiers_are_stopped
 }
 
 #[test]
-#[ignore = "heavy: the gate item `heavy` runs it"]
-fn heavy_when_twins() {
+#[ignore = "W7-10 U3ae: S-1209"]
+fn many_when_twins_on_the_evaluator() {
     println!("{:?}", check(heavy_seeds(200), WHEN));
     println!("{:?}", check((0..exotic_count()).collect(), EXOTIC));
 }

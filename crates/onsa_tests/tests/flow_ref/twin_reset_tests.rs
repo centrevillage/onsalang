@@ -5,7 +5,8 @@
 //! Three things hold them. The checker passes every program and the interpreter holds its asserts (a twin that the interpreter
 //! does not hold is a failure of the interpreter or of the generator), and a mutant of each twin is caught by the asserts: both
 //! run today. The evaluator gives what the interpreter gives (`twin::run`: it evaluates every test and the interpreter is
-//! compared with it): these wait for the evaluator to have `reset_if~` and heads slower than W (W7-10 U2e).
+//! compared with it): these wait for the evaluator to have a modifier inside a block and a `when~` of a burst under an `.up~` (W7-10 U3ae).
+//! The checker and the interpreter pass the programs of every seed once U3a is in (the tests that run them are marked `W7-10 U3a` until then).
 
 use super::twin::{Family, run};
 use super::twin_reset::{chains, exotic_count, make, make_exotic};
@@ -16,9 +17,14 @@ const RESET: Family = ("reset_twins", make);
 const EXOTIC: Family = ("reset_exotic", make_exotic);
 
 /// The seeds of the gate: chosen again when a change of the generator moves what they make and `COVER` breaks. Each gives a
-/// mutant that the asserts catch. 1249 (a head with a `when~` inside and a `sample_tick()` condition) and 284 (`sample_tick()`
-/// at a W slower than `sample`) are the forms the breaker of U2e found the evaluator wrong on.
-const GATE: [u64; 11] = [1914, 1333, 80, 216, 1249, 536, 34, 1857, 22, 26, 284];
+/// mutant that the asserts catch. The forms the breaker of U2e found the evaluator wrong on (a head with a `when~` inside and a
+/// `sample_tick()` condition, `h_outer_tick`; `sample_tick()` at a W slower than `sample`, `c_tick_slow`) are in `COVER`. W7-10 U3a/t2
+/// chose the seeds again: the twin `slowc` is not made inside a block (a `sample_tick()` there is gathered, and a slower value is read
+/// at its own tick), and the twin `atid` was added.
+const GATE: [u64; 11] = [339, 1934, 46, 1336, 2426, 177, 17, 117, 20, 25, 87];
+/// The seeds of the twin `atid` at a place inside a block (`at_blk`), as in twin_when_tests.rs: they fail until U3a keeps an `at`
+/// on a parameter kind from making a ring.
+const AT_BLOCK: [u64; 3] = [95, 194, 247];
 /// The forms the seeds of the gate hold: every head (a slow stage that writes a field, a slow input, the time as the input, a
 /// burst, a head with a `when~` of its own inside whose part has a slow input: `h_outer`, with a `sample_tick()` condition:
 /// `h_outer_tick`), the three twins, a `when~` inside and outside a `reset_if~` (also with a slow head), a `.up~` and a `.down~`
@@ -30,12 +36,12 @@ const COVER: &str = "h_slot h_sl h_sltk h_tk h_acc h_lp h_dws h_mk2 h_mk4 h_oute
     r_3 r_has_when r_slow_has_when r_in_when r_has_up r_in_up r_has_down r_in_down r_has_two_when c_at c_slower c_slowk c_tick \
     c_tick_eq c_tick_ge c_tick_slow c_tick_fast c_block c_init c_lit c_not c_and c_or f_lit f_block f_init f_both f_at t_lit \
     t_block t_init t_both t_or_sig ins_front ins_mid ins_end ins_two double_when m_down2 m_down4 m_down8 m_up2 stacked o_plain \
-    o_burst o_slow w_slow w_pos w_p";
+    o_burst o_slow w_slow w_pos w_p r_in_block blk burst_up k_atid c_at_sample";
 /// The seeds of the gate for the matrix of `exotic`, and what they hold: the forms of the breaker's two highs (a state given back
 /// before a slow stage wrote, a deal array read before it was given back) and the head with a `when~` inside.
-const EXOTIC_GATE: [u64; 6] = [571, 21, 1264, 993, 1693, 1910];
+const EXOTIC_GATE: [u64; 6] = [344, 527, 1098, 1404, 1779, 2082];
 const EXOTIC_COVER: &str = "h_tk h_slot h_sl h_mk2 h_mk4 h_outer r_1 r_2 r_3 r_has_when r_slow_has_when r_in_when r_has_up r_in_up r_has_down \
-    r_in_down r_has_two_when r_deal_up f_block t_block o_plain o_burst o_slow ins_front ins_mid ins_end len_3 len_4";
+    r_in_down r_has_two_when r_deal_up f_block t_block o_plain o_burst o_slow ins_front ins_mid ins_end len_3 len_4 r_in_block";
 
 #[test]
 fn the_flows_of_the_gate_seeds_pass_the_checker_and_the_twins_hold_in_the_interpreter() {
@@ -47,6 +53,13 @@ fn the_flows_of_the_gate_seeds_pass_the_checker_and_the_twins_hold_in_the_interp
 fn the_gate_seeds_hold_every_form_of_the_table_of_what_is_covered() {
     assert_covered(make, &GATE, COVER);
     assert_covered(make_exotic, &EXOTIC_GATE, EXOTIC_COVER);
+    assert_covered(make, &AT_BLOCK, "k_atid c_at_sample at_blk");
+}
+
+#[test]
+fn a_value_of_a_parameter_kind_with_an_at_inside_a_block_is_the_value_in_the_interpreter() {
+    assert_held(make, &AT_BLOCK, false);
+    assert_held(make, &AT_BLOCK, true);
 }
 
 #[test]
@@ -55,39 +68,35 @@ fn a_mutant_of_each_twin_is_caught_by_its_asserts_in_the_interpreter() {
     assert_held(make_exotic, &EXOTIC_GATE, true);
 }
 
-/// Every chain of up to `len` modifiers over the heads: the checker passes (and lowers) exactly what the generator makes, and
-/// says E0200 of what it leaves out (a `reset_if~` with an `.up~` and then a `.down~` outside it, a `when~` of a burst with an
-/// `.up~` outside it: U3 opens them). The numbers of both, and what is wrong.
-fn matrix(len: usize) -> (usize, usize, Vec<String>) {
-    let (mut made, mut left, mut wrong) = (0, 0, Vec::new());
-    for (what, src, fits) in chains(len) {
-        let verdict = analysis(&src);
-        let e0200 = verdict.as_ref().is_err_and(|e| e.contains("E0200"));
-        match (fits, e0200, &verdict) {
-            (true, _, Ok(())) => made += 1,
-            (false, true, _) => left += 1,
-            _ => wrong.push(format!(
-                "{what} (made {fits}): {:?}",
-                verdict.map_err(|e| e.lines().next().unwrap_or_default().to_string())
-            )),
+/// Every chain of up to `len` modifiers over the heads: the checker passes (and lowers) every one, a `reset_if~` with an `.up~` and
+/// then a `.down~` outside it and a `when~` of a burst with an `.up~` outside it too (they were E0200 until U3a). How many
+/// there are, and what is wrong.
+fn matrix(len: usize) -> (usize, Vec<String>) {
+    let (mut made, mut wrong) = (0, Vec::new());
+    for (what, src) in chains(len) {
+        match analysis(&src) {
+            Ok(()) => made += 1,
+            Err(e) => wrong.push(format!("{what}: {}", e.lines().next().unwrap_or_default())),
         }
     }
-    (made, left, wrong)
+    (made, wrong)
 }
 
 #[test]
-fn the_chains_the_generator_leaves_out_are_the_ones_that_u2b_does_not_run() {
-    let (made, left, wrong) = matrix(3);
-    assert!(wrong.is_empty() && made > 250 && left > 10, "{made} made, {left} left out: {}", wrong.join("\n"));
+fn the_checker_passes_every_chain_of_up_to_three_modifiers_the_forms_that_u2b_stopped_too() {
+    let (made, wrong) = matrix(3);
+    assert!(wrong.is_empty() && made > 260, "{made} made: {}", wrong.join("\n"));
 }
 
 #[test]
+#[ignore = "W7-10 U3ae: S-1209"]
 fn the_twins_of_reset_agree_on_the_evaluator_and_in_the_interpreter() {
     println!("{:?}", check(GATE.to_vec(), RESET));
     println!("{:?}", check(EXOTIC_GATE.to_vec(), EXOTIC));
 }
 
 #[test]
+#[ignore = "W7-10 U3ae: S-1209"]
 fn a_mutant_of_a_twin_of_reset_is_caught_by_the_evaluator() {
     // The interpreter is not run on a mutant: the evaluator has to evaluate every test, and an assert fails in each program.
     for (family, seeds) in [(RESET, GATE.to_vec()), (EXOTIC, EXOTIC_GATE.to_vec())] {
@@ -129,19 +138,16 @@ fn heavy_reset_exotic_in_the_interpreter() {
 
 #[test]
 #[ignore = "heavy: the gate item `heavy` runs it"]
-fn heavy_the_chains_of_up_to_four_modifiers_are_stopped_where_the_generator_leaves_them_out() {
-    let (made, left, wrong) = matrix(4);
-    assert!(
-        wrong.is_empty() && made > 1000 && left > 100,
-        "{made} made, {left} left out: {:?}",
-        &wrong[..wrong.len().min(5)]
-    );
+fn heavy_the_checker_passes_every_chain_of_up_to_four_modifiers() {
+    let (made, wrong) = matrix(4);
+    assert!(wrong.is_empty() && made > 1100, "{made} made: {:?}", &wrong[..wrong.len().min(5)]);
 }
 
 #[test]
-#[ignore = "heavy: the gate item `heavy` runs it"]
-fn heavy_reset_twins() {
-    // Becomes `heavy_reset_twins` when the evaluator runs `reset_if~` (the gate item `heavy` runs it).
+#[ignore = "W7-10 U3ae: S-1209"]
+fn many_reset_twins_on_the_evaluator() {
+    // Becomes `heavy_reset_twins` (the gate item `heavy` runs it) when the evaluator runs the modifiers inside a block and
+    // the `when~` of a burst under an `.up~` (W7-10 U3ae).
     println!("{:?}", check(heavy_seeds(200), RESET));
     println!("{:?}", check((0..exotic_count()).collect(), EXOTIC));
 }

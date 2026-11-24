@@ -1,0 +1,6 @@
+# flow_ref 1 source=tests/spec/flow_semantics/modifier_block_regress.onsa tests=5 evaluated=0 unavailable=5 skipped=0 waiting=0
+? (1) a burst that a .down~(2) deals, a when~ after it inside .up~(4).down~(4): a stopped run reads the last value twice, and the runs that follow go on from the burst that was dealt	unavailable a modifier in a block or over a burst under an `.up~` (W7-10 U3ae)
+? (2) a when~ of a value of the kind block with an at sample is the when~ with no at: read at the time of the run, not gathered (so not N samples late)	unavailable a modifier in a block or over a burst under an `.up~` (W7-10 U3ae)
+? (2) a reset_if~ of a value of the kind block with an at sample is the reset_if~ with no at: it resets before each run of the calls with p true	unavailable a modifier in a block or over a burst under an `.up~` (W7-10 U3ae)
+? (2) a reset_if~(p at (sample / 2)) under .up~(4).down~(4) is read at the grid of sample / 2, and is the value of a flow of its own with that reset_if~	unavailable a modifier in a block or over a burst under an `.up~` (W7-10 U3ae)
+? (3) a reset_if~ at the second sample of a dealt burst: that sample reads the default, what was dealt before stays, and the burst after starts from the part put back	unavailable a modifier in a block or over a burst under an `.up~` (W7-10 U3ae)

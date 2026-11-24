@@ -5,13 +5,20 @@
 //! - `id`: `X.when~(true)` and `X` (a condition that always holds, wherever it is put in the chain: `fa` is the chain with one
 //!   or two `when~` of such a condition put in, `fb` the chain);
 //! - `commute`: `x.down~(N).when~(c)` and `x.when~(c).down~(N)` (the head has its input and output at `sample`, §11.10 "合成");
-//! - `merge`: `x.when~(a).when~(b)` and `x.when~(a && b)` (both read at the clock W).
+//! - `merge`: `x.when~(a).when~(b)` and `x.when~(a && b)` (both read at the clock W; inside a block not for a signal and a `block`
+//!   value, which one expression gathers whole, `kinds_apart`);
+//! - `atid`: `x.when~(p at sample)` and `x.when~(p)` for a value `p` of a parameter kind, where W is `sample` (§11.3: an `at` does not
+//!   change the stage of such a value, so also inside a block it is no signal that is gathered, `at_pair`).
+//!
+//! A signal inside a block (`x.when~(c).up~(2).down~(2)`) is gathered with the inputs of the head and its phase 0 is `false` (§11.9,
+//! §11.10), so the twins that equal a condition to a literal or to a time (`when~(c || ct)` and `when~(true)`) are not made there.
 //!
 //! The chain is a head and 1 to 5 modifiers (`.down~`, `.up~`, `.when~`). The condition of a `when~` is read at its clock W
 //! (the output clock of the part it wraps when that is slower than the place of the modifier, §11.10) or is a `block` or
-//! `init` value, a literal: the forms that the check passes in U1 only (a condition faster or slower than W, `reset_if~`, a
-//! delay as the head are E0200 there and never made). Both writings are made from one plan and printed, and the expectation of
-//! the asserts is the spec (a twin); what the plan gives on the evaluator is compared with the interpreter by `twin::run`.
+//! `init` value, a literal: the forms that the check passes (a delay as the head is E0200 until U3b and never made; a modifier
+//! inside a block and a `when~` of a burst under an `.up~` are made since U3a). Both writings are made from one plan and printed,
+//! and the expectation of the asserts is the spec (a twin); what the plan gives on the evaluator is compared with the interpreter
+//! by `twin::run`.
 
 use std::collections::BTreeSet;
 use std::sync::OnceLock;
@@ -251,23 +258,27 @@ pub fn net(head: Head, mods: &[Mod]) -> i32 {
     head.out() + mods.iter().map(Mod::exp).sum::<i32>()
 }
 
-/// The chains that U1 keeps as E0200 (S-1209; U2 and U3 open them): a `when~` with an `.up~` and then a `.down~` outside it
-/// (a modifier inside a block), and a `when~` of a burst with an `.up~` outside it.
-pub fn gated(head: Head, mods: &[Mod]) -> Option<&'static str> {
+/// The forms that U1 and U2 kept as E0200 and U3a opened (S-1209): a modifier inside a block (an `.up~` outside it and a `.down~`
+/// outside that, `x.when~(c).up~(2).down~(2)`), and a `when~` of a burst with an `.up~` outside it (`mk2~().when~(c).up~(2)`).
+/// The form of the modifier at `i`; the checker passes both since U3a, so the generator makes them (`fits`).
+pub fn form_at(head: Head, mods: &[Mod], i: usize) -> Option<&'static str> {
     let sum = |m: &[Mod]| m.iter().map(Mod::exp).sum::<i32>();
     let is_up = |m: &Mod| matches!(m, Mod::Up(_));
     let is_down = |m: &Mod| matches!(m, Mod::Down(_));
-    mods.iter().enumerate().filter(|(_, m)| m.cond().is_some()).find_map(|(i, m)| {
-        let (left, right) = (&mods[..i], &mods[i + 1..]);
-        let block = right.iter().enumerate().any(|(j, m)| is_up(m) && right[j + 1..].iter().any(is_down));
-        let receiver = head.out() + sum(left);
-        // A `reset_if~` of a burst with an `.up~` outside it is not kept (U2b): only the block is.
-        match (block, m.is_when() && receiver >= 1 && right.iter().any(is_up)) {
-            (true, _) => Some("in_block"),
-            (_, true) => Some("burst_under_up"),
-            _ => None,
-        }
-    })
+    let (left, right) = (&mods[..i], &mods[i + 1..]);
+    let block = right.iter().enumerate().any(|(j, m)| is_up(m) && right[j + 1..].iter().any(is_down));
+    let receiver = head.out() + sum(left);
+    // A `reset_if~` of a burst with an `.up~` outside it is no form of its own: only the block is.
+    match (block, mods[i].is_when() && receiver >= 1 && right.iter().any(is_up)) {
+        (true, _) => Some("in_block"),
+        (_, true) => Some("burst_under_up"),
+        _ => None,
+    }
+}
+
+/// The first of the forms of the chain, if it has one.
+pub fn form(head: Head, mods: &[Mod]) -> Option<&'static str> {
+    (0..mods.len()).filter(|&i| mods[i].cond().is_some()).find_map(|i| form_at(head, mods, i))
 }
 
 /// Whether the head can have this chain: a head with an input needs the chain rate `sample` (its argument is a signal at
@@ -279,9 +290,9 @@ pub fn in_range(head: Head, mods: &[Mod]) -> bool {
     (!head.input() || all == 0) && sums.chain([net(head, mods)]).all(|s| (-3..=2).contains(&s))
 }
 
-/// What the generator makes: a chain in range that U1 passes and lowers.
+/// What the generator makes: a chain in range, which the checker passes and lowers (every form of `form` is open since U3a).
 pub fn fits(head: Head, mods: &[Mod]) -> bool {
-    in_range(head, mods) && gated(head, mods).is_none()
+    in_range(head, mods)
 }
 
 /// A condition read at W (`w`): a `block` or `init` value or a literal (a `when~` read at `sample * N` has nothing else, U1),
@@ -302,9 +313,11 @@ pub fn cond_at(rng: &mut Rng, w: i32) -> Cond {
     }
 }
 
-/// A condition that always holds (every call of the tests gives `ct` and `cti` true; `c || ct` has the signal at W too).
-pub fn always_true(rng: &mut Rng, w: i32) -> Cond {
-    match rng.below(if w <= 0 { 5 } else { 4 }) {
+/// A condition that always holds (every call of the tests gives `ct` and `cti` true; `c || ct` has the signal at W too, but not
+/// inside a block (`in_block`): a signal there is gathered with the inputs and phase 0 is `false`, so the first tick does not run
+/// the part, and `when~(c || ct)` is not `when~(true)` (§11.9, §11.10: R2 of W7-10 U3)).
+pub fn always_true(rng: &mut Rng, w: i32, in_block: bool) -> Cond {
+    match rng.below(if w <= 0 && !in_block { 5 } else { 4 }) {
         0 => Cond::lit("true", "t_lit"),
         1 => Cond::lit("ct", "t_block"),
         2 => Cond::lit("cti", "t_init"),
@@ -371,7 +384,8 @@ fn plan_id(rng: &mut Rng, rot: bool) -> Plan {
                 .collect();
             let Some(&p) = places.get(rng.below(places.len().max(1))) else { break };
             fa.insert(p, Mod::When(Cond::default()));
-            let c = if rot { Cond::lit("!ct", "t_mutant") } else { always_true(rng, w_of(head, &fa, p)) };
+            let blk = form_at(head, &fa, p) == Some("in_block");
+            let c = if rot { Cond::lit("!ct", "t_mutant") } else { always_true(rng, w_of(head, &fa, p), blk) };
             fa[p] = Mod::When(c);
             at.iter_mut().filter(|a| **a >= p).for_each(|a| *a += 1);
             at.push(p);
@@ -412,6 +426,15 @@ fn plan_commute(rng: &mut Rng, rot: bool) -> Plan {
     }
 }
 
+/// Whether two conditions read at the same W inside a block are not the twin of their `&&`: a signal is gathered with the inputs and a
+/// value of a `block` kind is read when the run is made, so two modifiers keep them apart, but one expression of both is a signal that
+/// is gathered whole, with the `block` value of the call that gathered it (§11.10: the clock of an expression is the fastest of its
+/// parts, and a call of `process` that is cut gives the later frames of a tick another value of `cb`).
+pub fn kinds_apart(a: &Cond, b: &Cond) -> bool {
+    let (sig, blk) = (|c: &Cond| c.tags.contains("c_sig"), |c: &Cond| c.tags.contains("c_block"));
+    (sig(a) && !sig(b) && blk(b)) || (sig(b) && !sig(a) && blk(a))
+}
+
 /// `x.when~(a).when~(b)` and `x.when~(a && b)`: two `when~` side by side, at the clock W, put in a chain of 0 to 3 modifiers.
 fn plan_merge(rng: &mut Rng, rot: bool) -> Plan {
     let len = rng.below(4);
@@ -426,14 +449,61 @@ fn plan_merge(rng: &mut Rng, rot: bool) -> Plan {
             break (head, fa, at);
         }
     };
-    fill(rng, head, &mut fa);
-    let (Mod::When(a), Mod::When(b)) = (fa[at].clone(), fa[at + 1].clone()) else {
-        unreachable!("two when~ were put in")
+    let (holes, blk) = (fa.clone(), form_at(head, &fa, at) == Some("in_block"));
+    let (a, b) = loop {
+        fa = holes.clone();
+        fill(rng, head, &mut fa);
+        let (Mod::When(a), Mod::When(b)) = (fa[at].clone(), fa[at + 1].clone()) else {
+            unreachable!("two when~ were put in")
+        };
+        if !(blk && kinds_apart(&a, &b)) {
+            break (a, b);
+        }
     };
     let both = a.join(if rot { "||" } else { "&&" }, &b);
     let mut fb = fa.clone();
     fb.splice(at..at + 2, [Mod::When(both)]);
     Plan { kind: "merge", head, fa, fb, at: vec![at, at + 1] }
+}
+
+/// The two chains of the twin `atid` made from a chain with all its conditions filled in: at the modifiers (a `when~` or a `reset_if~`)
+/// whose W is `sample` (so that an `at sample` names W, §11.10 and not E0815), a value of the kind `block` or `init` (`cb`, `ci`, now
+/// and then negated), with `at sample` in `fa` and without in `fb`. §11.3: the stage of a value that only parameter kinds decide does
+/// not change with an `at`, so it is read as it is read without it, also inside a block. With `rot` the one in `fa` is negated.
+/// The chains and the places, or `None` if no place has W of `sample` (or none was drawn).
+pub fn at_pair(rng: &mut Rng, head: Head, base: &[Mod], rot: bool) -> Option<(Vec<Mod>, Vec<Mod>, Vec<usize>)> {
+    let (mut fa, mut fb, mut at) = (base.to_vec(), base.to_vec(), Vec::new());
+    for i in (0..base.len()).filter(|&i| base[i].cond().is_some() && w_of(head, base, i) == 0) {
+        if !rng.chance(70) {
+            continue;
+        }
+        let (name, kind) = rng.pick(&[("cb", "c_block"), ("ci", "c_init")]);
+        let neg = rng.chance(25);
+        let plain = Cond::lit(name, kind);
+        // A place inside a block is the one where a value that is told from a signal by its stage only is gathered with the inputs.
+        let blk = form_at(head, base, i) == Some("in_block");
+        let tags = [Some(kind), Some("c_at_sample"), blk.then_some("at_blk")].into_iter().flatten().collect();
+        let with = Cond { text: format!("({name} at sample)"), tags, ..Cond::default() };
+        let (plain, with) = (if neg { plain.not() } else { plain }, if neg != rot { with.not() } else { with });
+        let put = |m: &Mod, c: Cond| if m.is_when() { Mod::When(c) } else { Mod::Reset(c) };
+        fa[i] = put(&base[i], with);
+        fb[i] = put(&base[i], plain);
+        at.push(i);
+    }
+    (!at.is_empty()).then_some((fa, fb, at))
+}
+
+/// `X.when~(p at sample)` and `X.when~(p)` (`p` a `block` or `init` value), in a chain of 1 to 4 modifiers with 1 or 2 `when~`.
+fn plan_atid(rng: &mut Rng, rot: bool) -> Plan {
+    loop {
+        let len = 1 + rng.below(4);
+        let whens = 1 + rng.below(2);
+        let (head, mut base) = chain(rng, len, whens, &Head::WEIGHTED);
+        fill(rng, head, &mut base);
+        if let Some((fa, fb, at)) = at_pair(rng, head, &base, rot) {
+            return Plan { kind: "atid", head, fa, fb, at };
+        }
+    }
 }
 
 /// The body of a flow for a chain: the `let`s its conditions and its head need, and the chain (wrapped in `g2` or `g4` when
@@ -466,6 +536,7 @@ pub fn tags_of(plan: &Plan) -> BTreeSet<&'static str> {
         "id" => "k_id",
         "commute" => "k_commute",
         "rid" => "k_rid",
+        "atid" => "k_atid",
         "slowc" => "k_slowc",
         "rmerge" => "k_rmerge",
         _ => "k_merge",
@@ -499,6 +570,7 @@ pub fn tags_of(plan: &Plan) -> BTreeSet<&'static str> {
         let up_before = mods[..i].iter().any(|m| matches!(m, Mod::Up(_)));
         tags.extend((up_before && mods[i..].iter().any(|m| matches!(m, Mod::Down(_)))).then_some("in_block"));
         tags.extend((i > 0 && mods[i - 1].is_when()).then_some("double_when"));
+        tags.extend(form_at(head, mods, i).map(|f| if f == "in_block" { "blk" } else { "burst_up" }));
         tags.extend((head.out() > 0 && mods[i..].iter().any(|m| matches!(m, Mod::Down(_)))).then_some("deal_when"));
     }
     if matches!(plan.kind, "id" | "rid") {
@@ -572,10 +644,11 @@ pub fn program(rng: &mut Rng, plan: &Plan) -> String {
 /// negated, `||` for `&&`), and the forms it holds.
 pub fn make(seed: u64, rot: bool) -> (String, BTreeSet<&'static str>) {
     let mut rng = Rng::new(seed);
-    let plan = match rng.below(10) {
+    let plan = match rng.below(12) {
         0..=4 => plan_id(&mut rng, rot),
         5..=7 => plan_commute(&mut rng, rot),
-        _ => plan_merge(&mut rng, rot),
+        8 | 9 => plan_merge(&mut rng, rot),
+        _ => plan_atid(&mut rng, rot),
     };
     (program(&mut rng, &plan), tags_of(&plan))
 }
@@ -630,7 +703,7 @@ pub fn make_exotic(seed: u64, rot: bool) -> (String, BTreeSet<&'static str>) {
 }
 
 /// Every chain of up to `len` modifiers with a `when~` over every head, that is in range: what it is, its program (the flow `fa`
-/// only), and what `gated` says of it. The condition of a `when~` is the signal at W when `cond` is `sig` and W is `sample` or
+/// only), and which form `form` says it is. The condition of a `when~` is the signal at W when `cond` is `sig` and W is `sample` or
 /// slower, otherwise `cond` (an `init` input, `ci`).
 pub fn chains(len: usize, cond: &str) -> Vec<(String, String, Option<&'static str>)> {
     let words = [Mod::Down(2), Mod::Down(4), Mod::Up(2), Mod::When(Cond::default())];
@@ -658,7 +731,7 @@ pub fn chains(len: usize, cond: &str) -> Vec<(String, String, Option<&'static st
             }
             let text: String = mods.iter().map(Mod::text).collect();
             let src = format!("{HEADER}pub flow fa{SIGNATURE} -> F32 at sample {{\n  {}\n}}\n", flow_body(head, &mods));
-            out.push((format!("{}{text}", head.text().0), src, gated(head, &mods)));
+            out.push((format!("{}{text}", head.text().0), src, form(head, &mods)));
         }
     }
     out

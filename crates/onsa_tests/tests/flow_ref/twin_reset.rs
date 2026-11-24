@@ -6,7 +6,10 @@
 //! - `rid`: `X.reset_if~(false)` and `X.when~(true)` put in at any place of a chain that has `reset_if~` of its own (`fa` has them
 //!   in, `fb` has not; inside or outside a `reset_if~`, a `.up~`, a `.when~`);
 //! - `slowc`: a condition slower than W is held at W, so `.when~(k > 1.5)` (`k` counts the ticks of a slower grid) and
-//!   `.when~(sample_tick() >= N)` (true from the tick where `k` is 2) are the same;
+//!   `.when~(sample_tick() >= N)` (true from the tick where `k` is 2) are the same (not inside a block, where a `sample_tick()`
+//!   is gathered with the inputs and `k` is read at its own tick);
+//! - `atid`: a value of the kind `block` or `init` with the `at` of the clock W (`sample`) put on it, in a `when~` or a
+//!   `reset_if~`, is the value (§11.3: the stage of a value of a parameter kind does not change with an `at`), also inside a block;
 //! - `rmerge`: `x.reset_if~(a).reset_if~(b)` and `x.reset_if~(a || b)` (the same clock W: the state is given back at the same
 //!   ticks, and a state given back is given back once; this one follows from §11.10's composition and is not said in a line).
 //!
@@ -19,7 +22,7 @@ use std::sync::OnceLock;
 
 use super::twin::Rng;
 use super::twin_when::{Cond, HEADER, Head, Mod, Plan, SIGNATURE, always_true, cond_at, fits, flow_body, in_range};
-use super::twin_when::{program, rate, tags_of, w_of};
+use super::twin_when::{at_pair, form_at, kinds_apart, program, rate, tags_of, w_of};
 
 /// The heads a seed picks from: a third have a slow stage that writes a field (`slot`), a sixth a slow input (`sl`).
 const HEADS: [Head; 15] = [
@@ -90,7 +93,9 @@ fn fill(rng: &mut Rng, head: Head, mods: &mut [Mod], slow: usize) {
     for i in 0..mods.len() {
         let w = w_of(head, mods, i);
         let new = match &mods[i] {
-            Mod::When(c) if c.text.is_empty() && rng.chance(slow) => {
+            // Not inside a block: there `sample_tick()` is gathered with the inputs and a slower value is read at its own tick, so
+            // the two are not the same (R3 of W7-10 U3).
+            Mod::When(c) if c.text.is_empty() && rng.chance(slow) && form_at(head, mods, i) != Some("in_block") => {
                 let f = rng.pick(&[2u32, 4, 8]).max(1 << (-w).max(0));
                 let text = format!("(k{f} > {})", rng.pick(&["1.5", "2.5"]));
                 Mod::When(Cond {
@@ -139,11 +144,12 @@ fn plan_rid(rng: &mut Rng, rot: bool) -> Plan {
         // The places where one more modifier leaves a chain that U2b passes.
         let places: Vec<usize> = (0..=fa.len()).filter(|&p| fits(head, &with(&fa, p, hole.clone()))).collect();
         let Some(&p) = places.get(rng.below(places.len().max(1))) else { continue };
-        let w = w_of(head, &with(&fa, p, hole), p);
+        let (w, blk) =
+            (w_of(head, &with(&fa, p, hole.clone()), p), form_at(head, &with(&fa, p, hole), p) == Some("in_block"));
         let put = match (reset, rot) {
             (true, false) => Mod::Reset(never(rng, w)),
             (true, true) => Mod::Reset(Cond::lit("ct", "t_mutant")),
-            (false, false) => Mod::When(always_true(rng, w)),
+            (false, false) => Mod::When(always_true(rng, w, blk)),
             (false, true) => Mod::When(Cond::lit("!ct", "t_mutant")),
         };
         fa.insert(p, put);
@@ -196,13 +202,30 @@ fn plan_rmerge(rng: &mut Rng, rot: bool) -> Plan {
         }
     };
     let w = w_of(head, &fa, at);
-    let (a, b) = (cond_at(rng, w), cond_at(rng, w));
+    let blk = form_at(head, &fa, at) == Some("in_block");
+    let (a, b) = loop {
+        let (a, b) = (cond_at(rng, w), cond_at(rng, w));
+        if !(blk && kinds_apart(&a, &b)) {
+            break (a, b);
+        }
+    };
     fa[at] = Mod::Reset(a.clone());
     fa[at + 1] = Mod::Reset(b.clone());
     fill(rng, head, &mut fa, 0);
     let mut fb = fa.clone();
     fb.splice(at..at + 2, [Mod::Reset(a.join(if rot { "&&" } else { "||" }, &b))]);
     Plan { kind: "rmerge", head, fa, fb, at: vec![at, at + 1] }
+}
+
+/// `X.reset_if~(p at sample)` or `X.when~(p at sample)` and the same with `p`, in a chain with a `reset_if~` (`atid`, see `at_pair`).
+fn plan_atid(rng: &mut Rng, rot: bool) -> Plan {
+    loop {
+        let (head, mut base) = base(rng);
+        fill(rng, head, &mut base, 0);
+        if let Some((fa, fb, at)) = at_pair(rng, head, &base, rot) {
+            return Plan { kind: "atid", head, fa, fb, at };
+        }
+    }
 }
 
 /// The forms of a plan that the seeds of the gate have to hold: those of `twin_when.rs`, and what its `reset_if~` are. A modifier
@@ -232,6 +255,7 @@ fn tags(plan: &Plan) -> BTreeSet<&'static str> {
             (right.iter().any(up), "r_in_up"),
             (left.iter().any(down), "r_has_down"),
             (right.iter().any(down), "r_in_down"),
+            (form_at(head, mods, i) == Some("in_block"), "r_in_block"),
         ];
         tags.extend(found.iter().filter(|(on, _)| *on).map(|(_, t)| *t));
     }
@@ -241,10 +265,11 @@ fn tags(plan: &Plan) -> BTreeSet<&'static str> {
 /// The program of a seed (with `rot`, the mutant of the twin), and the forms it holds.
 pub fn make(seed: u64, rot: bool) -> (String, BTreeSet<&'static str>) {
     let mut rng = Rng::new(seed);
-    let plan = match rng.below(10) {
+    let plan = match rng.below(12) {
         0..=5 => plan_rid(&mut rng, rot),
         6 | 7 => plan_slowc(&mut rng, rot),
-        _ => plan_rmerge(&mut rng, rot),
+        8 | 9 => plan_rmerge(&mut rng, rot),
+        _ => plan_atid(&mut rng, rot),
     };
     (program(&mut rng, &plan), tags(&plan))
 }
@@ -315,9 +340,9 @@ pub fn make_exotic(seed: u64, rot: bool) -> (String, BTreeSet<&'static str>) {
 }
 
 /// Every chain of up to `len` modifiers (`.down~(2)`, `.down~(4)`, `.up~(2)`, `.when~`, `.reset_if~`) with a `reset_if~`, over
-/// the heads of the matrix, in range: what it is, its program (the flow `fa` only, every condition the `block` value `cb`), and
-/// whether the generator makes it (`fits`).
-pub fn chains(len: usize) -> Vec<(String, String, bool)> {
+/// the heads of the matrix, in range: what it is and its program (the flow `fa` only, every condition the `block` value `cb`).
+/// The checker passes every one of them since U3a (the generator makes them all: `fits` is the range).
+pub fn chains(len: usize) -> Vec<(String, String)> {
     let words = [Mod::Down(2), Mod::Down(4), Mod::Up(2), Mod::When(Cond::default()), Mod::Reset(Cond::default())];
     let (mut all, mut frontier) = (vec![Vec::new()], vec![Vec::new()]);
     for _ in 0..len {
@@ -338,7 +363,7 @@ pub fn chains(len: usize) -> Vec<(String, String, bool)> {
             let text: String = filled.iter().map(Mod::text).collect();
             let src =
                 format!("{HEADER}pub flow fa{SIGNATURE} -> F32 at sample {{\n  {}\n}}\n", flow_body(head, &filled));
-            out.push((format!("{}{text}", head.text().0), src, fits(head, mods)));
+            out.push((format!("{}{text}", head.text().0), src));
         }
     }
     out

@@ -1,0 +1,3 @@
+# flow_ref 1 source=tests/spec/flow_semantics/modifier_block_regress_kept.onsa tests=2 evaluated=0 unavailable=2 skipped=0 waiting=0
+? (1) a burst under .up~(2).down~(2) with a stopped run: the same rule with no boundary that deals inside	unavailable a modifier in a block or over a burst under an `.up~` (W7-10 U3ae)
+? (3) the same with .up~(4).down~(2): the reset is once for a frame (the clock of r is sample), before the first of its 2 runs, and the part gives 4 values for each frame	unavailable a modifier in a block or over a burst under an `.up~` (W7-10 U3ae)
