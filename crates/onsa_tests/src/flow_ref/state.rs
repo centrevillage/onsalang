@@ -17,6 +17,7 @@ use onsa_syntax::ast::{Arg, CallKind, ExprId, ExprKind};
 
 use super::call::parts;
 use super::chain::Gate;
+use super::delay_mods::DelayMods;
 use super::expr::{Eval, Frame, LOW_STACK, Stop, evaluates};
 use super::flow::{Clock, Ctx, Inst, Plans, enter};
 use super::rate::{Bound, Level, chain_of, child_time, counted, levels, n_of, on_tick, port_exprs};
@@ -84,6 +85,8 @@ pub struct InstState {
     pub children: BTreeMap<NodeKey, Inst>,
     /// What each `let` (by its initializer) holds beyond the one place of its step: part of the tree's places.
     held: BTreeMap<ExprId, usize>,
+    /// What each chain of modifiers on a delay keeps, by the node of the delay (`delay_mods.rs`).
+    pub(super) mods: BTreeMap<NodeKey, DelayMods>,
 }
 
 impl InstState {
@@ -91,6 +94,7 @@ impl InstState {
     /// what each `when~` remembers stay, its held output does not; the fields of the ticks are `Frame::restart`'s.
     pub fn reset(&mut self, soft: bool) {
         self.cells.values_mut().for_each(|c| c.back(soft));
+        self.mods.values_mut().for_each(|m| m.reset(soft));
         self.children.values_mut().for_each(|c| {
             if !soft {
                 c.done = None;
@@ -111,6 +115,8 @@ struct Save {
     call: Option<ExprId>,
     /// The clock `q` of the stream a ring gathers (`sample * 2^q`): the value is a burst of `2^q` elements, or one of the parameter kinds that is each of them; 0 for a delay, the one value.
     q: i32,
+    /// Is it stored? Not where a `when~` stops the delay: the value is evaluated all the same (§11.10, `delay_mods.rs`).
+    keep: bool,
 }
 
 /// What an evaluation of a flow body holds besides its locals: the state, what the delays save this tick, the time it is
@@ -121,7 +127,7 @@ pub struct Run {
     saves: Vec<Save>,
     pub ctx: Ctx,
     pub(super) used: usize,
-    plans: Plans,
+    pub(super) plans: Plans,
     /// The replica of each `par~` the evaluation is inside of, and the bindings of those (`i`, an arm of a `match~`).
     pub(super) replicas: Vec<u32>,
     pub(super) scope: Vec<(LocalId, Value)>,
@@ -151,6 +157,8 @@ enum Node {
     },
     /// The flow, and the parts of the chain of modifiers it is the head of (the head alone for none).
     Instance(DefId, Rc<[Level]>),
+    /// The modifiers of a chain on a delay, innermost first, with the node of the delay (`delay_mods.rs`).
+    Mods(Vec<Bound>),
 }
 
 /// What an expression makes at `init`: the node of a call, or the nodes of the body of a `par~`, each made for every replica.
@@ -178,6 +186,15 @@ fn interpolate(buf: &[Value], w: usize, d: &Value) -> Result<Value, Fault> {
     Ok(Value::float(kind, round(round(round(1.0 - f) * a) + round(f * b))))
 }
 
+/// What a delay gives now: the value it stored, or the one that `d` reads of the ring of a `vdelay~`.
+pub(super) fn read_store(store: &Store, d: Option<&Value>) -> Result<Value, Fault> {
+    match (store, d) {
+        (Store::Last(v), _) => Ok(v.clone()),
+        (Store::Ring { buf, w }, None) => Ok(buf[*w].clone()),
+        (Store::Ring { buf, w }, Some(d)) => interpolate(buf, *w, d),
+    }
+}
+
 impl<'a> Frame<'a> {
     /// The forms of a flow body that have state or a time: the calls of a flow and `^name` (the local, read in the second
     /// phase). One door for `Frame::form`.
@@ -185,7 +202,10 @@ impl<'a> Frame<'a> {
     pub(super) fn stateful(&mut self, e: ExprId, at: Span) -> Eval {
         let here = |fault| Stop { fault, at };
         if let Some(chain) = chain_of(&self.body, e).map_err(here)? {
-            return self.read_call(chain.head, at);
+            return match self.body.called(chain.head).map_err(here)? {
+                Called::Builtin(FlowBuiltin::Delay(d)) => self.delay_chain(chain.head, d, at),
+                _ => self.read_call(chain.head, at),
+            };
         }
         match &self.body.ast.expr(e).kind {
             ExprKind::Feedback(_) => self.name(e, at),
@@ -246,13 +266,16 @@ impl<'a> Frame<'a> {
         let key = self.key(e, Role::Delay);
         let run = self.run.as_mut().ok_or(here(Fault::Unavailable("a delay outside an instance of a flow")))?;
         let cell = run.state.cells.get(&key).ok_or(here(Internal("a delay with no state")))?;
-        let out = match (&cell.current, &dc) {
-            (Store::Last(v), _) => v.clone(),
-            (Store::Ring { buf, w }, None) => buf[*w].clone(),
-            (Store::Ring { buf, w }, Some(dc)) => interpolate(buf, *w, dc).map_err(here)?,
-        };
-        run.saves.push(Save { key, expr: arg(Delay::SAVED)?, scope: run.scope.clone(), call: None, q: 0 });
+        let out = read_store(&cell.current, dc.as_ref()).map_err(here)?;
+        self.save_delay(key, arg(Delay::SAVED)?, true, at)?;
         Ok(out)
+    }
+
+    /// The delay at `key` saves the value of `expr` for the second phase, which stores it if it is to `keep` it.
+    pub(super) fn save_delay(&mut self, key: NodeKey, expr: ExprId, keep: bool, at: Span) -> Result<(), Stop> {
+        let run = self.run.as_mut().ok_or(Stop { fault: Internal("no run"), at })?;
+        run.saves.push(Save { key, expr, scope: run.scope.clone(), call: None, q: 0, keep });
+        Ok(())
     }
 
     /// The second phase of a tick: what the delays saved (and the delays inside them), then every one stored.
@@ -264,12 +287,13 @@ impl<'a> Frame<'a> {
         for next in 0.. {
             let Some(save) = self.run.as_ref().ok_or(here(Internal("no run")))?.saves.get(next) else { break };
             let (key, expr, scope, call, q) = (save.key.clone(), save.expr, save.scope.clone(), save.call, save.q);
+            let keep = save.keep;
             let value = self.with_bindings(&key.replicas, scope, |f| match call {
                 Some(call) => f.eval_in_arms(call, expr),
                 None => f.eval(expr),
             })?;
             // A delay is stored once for a frame: a delay in the object of an arm that `eval_in_arms` evaluates again here saved its value in the frame already, the same one.
-            if !once.insert(key.clone()) {
+            if !keep || !once.insert(key.clone()) {
                 continue;
             }
             // A burst is the `2^q` elements of a stream at `sample * 2^q`; any other value is the one the parameter kinds give, each of them.
@@ -311,10 +335,18 @@ impl<'a> Frame<'a> {
             let ExprKind::Call { args, .. } = &ast.expr(chain.head).kind else {
                 return Err(here(Internal("a chain with no head call")));
             };
-            let Called::Flow(def) = self.body.called(chain.head).map_err(here)? else {
-                return Err(here(Fault::Unavailable("a modifier of a delay")));
-            };
             args.iter().map(|a| a.expr).chain(chain.conds()).try_for_each(|x| self.nodes(x, out))?;
+            let def = match self.body.called(chain.head).map_err(here)? {
+                Called::Flow(def) => def,
+                Called::Builtin(FlowBuiltin::Delay(d)) => {
+                    out.push(Site::Node(chain.head, Node::Delay(d), args.as_slice()));
+                    out.push(Site::Node(chain.head, Node::Mods(chain.bounds), args.as_slice()));
+                    return Ok(());
+                }
+                Called::Builtin(_) => {
+                    return Err(here(Internal("a chain whose head is not a call of a flow or a delay")));
+                }
+            };
             let parts = self.parts_of(def, &chain.bounds, at)?;
             let ports = port_exprs(args.iter().map(|a| a.expr), &parts);
             for (b, lv) in parts.iter().enumerate().skip(1) {
@@ -372,6 +404,7 @@ impl<'a> Frame<'a> {
                 }
                 Site::Node(e, Node::Deal { bound, m }, _) => self.make_deal(*e, *bound, *m)?,
                 Site::Node(e, Node::Instance(def, parts), _) => self.make_child(*e, *def, parts.clone())?,
+                Site::Node(e, Node::Mods(bounds), _) => self.make_mods(*e, bounds)?,
                 Site::Par(e, inner) => drop(self.replicate(*e, |_| 0, |f| f.build(inner))?),
             }
         }
@@ -396,7 +429,7 @@ impl<'a> Frame<'a> {
     }
 
     /// Adds `places` (none: more than a count holds) to those of the whole tree, which `Limits::most` holds.
-    fn hold(&mut self, places: Option<usize>, at: Span) -> Result<(), Stop> {
+    pub(super) fn hold(&mut self, places: Option<usize>, at: Span) -> Result<(), Stop> {
         let more = Stop { fault: Fault::Unavailable("the delays and instances are more than the evaluator holds"), at };
         let (limits, run) = (self.limits, self.run.as_mut().ok_or(more)?);
         run.used = places.and_then(|p| p.checked_add(run.used)).filter(|u| limits.holds(*u)).ok_or(more)?;
@@ -649,7 +682,14 @@ impl<'a> Frame<'a> {
                 }
                 let run = self.run.as_mut().ok_or(here(Internal("no run")))?;
                 let role = Role::Gather { bound: parts.len() - 1, input: n };
-                let save = Save { key: key.role(role), expr: args[n], scope: scope.clone(), call: Some(key.call), q };
+                let save = Save {
+                    key: key.role(role),
+                    expr: args[n],
+                    scope: scope.clone(),
+                    call: Some(key.call),
+                    q,
+                    keep: true,
+                };
                 run.saves.push(save);
             }
         }

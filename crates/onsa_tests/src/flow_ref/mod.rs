@@ -37,6 +37,7 @@
 //!   zeroes the outputs of a call and poisons the instance, and one that leaves it uninitialized.
 //! - [`rate`]: the rates (W7-09): the chain of `.down~(N)` and `.up~(N)` as its boundaries (S-1207), the ticks slower than `sample` a flow has stages for, and the time
 //!   an instance of a chain runs in (§11.4, §11.9).
+//! - `delay_mods`: a chain of `.when~` and `.reset_if~` on a built-in delay, a tick of it at the clock of its first argument (§11.10).
 //! - [`state`]: the state of an instance, a tree of cells and instances made for each place a delay or a flow is called,
 //!   the delays (`prev~`, `delay~`, `vdelay~`) with the two phases of a tick that `^` needs, the time (`sample_rate()`, `sample_tick()`).
 //! - [`walk`]: the `test` blocks of a case taken apart and run on the evaluator: the calls of `render` and the asserts (W7-19).
@@ -49,6 +50,7 @@ pub mod branch;
 pub mod call;
 mod chain;
 pub mod data;
+mod delay_mods;
 pub mod expr;
 pub mod flow;
 mod hoist;
@@ -80,6 +82,8 @@ mod chain_table_tests;
 mod conversion_tests;
 #[cfg(test)]
 mod data_tests;
+#[cfg(test)]
+mod delay_mods_tests;
 #[cfg(test)]
 mod expr_tests;
 #[cfg(test)]

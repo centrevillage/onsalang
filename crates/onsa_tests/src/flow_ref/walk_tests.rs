@@ -14,7 +14,11 @@ flow same(x: F32 at sample) -> F32 at sample { x }
 flow chans(x: F32 at sample) -> [F32; 2] at sample { [x, x + 1.0] }
 flow pair(x: F32 at sample) -> Pair at sample { Pair { l: x, r: x * 3.0 } }
 flow inv(x: I32 at sample) -> I32 at sample { 10 / x }
-flow closed(x: F32 at sample) -> [F32; 1] at sample { [x + (prev~(x at (sample / (1 + 1))) at sample)] }
+flow one() -> F32 at sample { 1.0 }
+flow first2(x: F32 at (sample * 2)) -> F32 at sample { x[0] }
+flow closed(x: F32 at sample) -> [F32; 1] at sample {
+  [x + first2~(one~().reset_if~(true at (sample / 2147483648)).up~(2)) + (par i in 0 ..< 2097152 { x })[0]]
+}
 flow acc(x: F32 at sample) -> F32 at sample {
   let y = x + prev~(^y)
   y
@@ -106,9 +110,9 @@ fn what_is_not_run_is_skipped_with_its_reason() {
 }
 
 #[test]
-fn a_body_the_tables_do_not_cover_is_unavailable_and_the_case_is_waiting() {
-    // The N of a clock computed by an expression in a flow body is E0200 today: the case is read and lowers no more, and the test that renders it is
-    // counted.
+fn a_case_with_an_e0200_lowers_no_more_and_a_render_the_evaluator_cannot_run_is_unavailable() {
+    // A `.reset_if~` in an `.up~` whose tick is past `sample / 2^31` there is E0200 in this version (S-1225): the case is read and lowers no more. The evaluator does not hold the `par` of
+    // 2^21 elements of `closed` (`Limits::most`), so the test that renders it is unavailable, and counted.
     let got = run("test \"closed\" {\n  let xs: [F32; 1] = [1.0]\n  let o = closed.render(xs, 8.0)\n  assert o.out[0][0] == 1.0\n}")
         .expect("the case is read");
     assert!(got.e0200 && !got.lowered, "{got:?}");

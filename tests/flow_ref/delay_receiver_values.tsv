@@ -1,16 +1,41 @@
-# flow_ref 1 source=tests/spec/flow_semantics/delay_receiver_values.onsa tests=15 evaluated=0 unavailable=15 skipped=0 waiting=0
-? prev~(x).when~(c) runs where c holds and keeps its last output where it does not (the output before the first run is T.default())	unavailable a chain whose head is not an instance of a flow
-? a delay that has not run reads T.default(), not its init; the first run reads the init (R4)	unavailable a chain whose head is not an instance of a flow
-? the length of a delay counts the frames it ran: delay~(x, 3).when~(c)	unavailable a chain whose head is not an instance of a flow
-? a condition of the kind block is read once for each call of process: the calls cut where the delay stops and runs again	unavailable a chain whose head is not an instance of a flow
-? delay~(x, 2).reset_if~(r) puts the values and the write position back before the stages of the frame, and the frame gives its own input	unavailable a chain whose head is not an instance of a flow
-? a reset puts the delay back to its init (a literal or a value of the kind init), not to T.default()	unavailable a chain whose head is not an instance of a flow
-? the order of the two modifiers: x.when~(c).reset_if~(r) resets the stopped frames and the held output too, x.reset_if~(r).when~(c) only the frames that run	unavailable a chain whose head is not an instance of a flow
-? vdelay~: the argument d is the caller's and is evaluated at the stopped frames too, the interpolation counts the runs	unavailable a chain whose head is not an instance of a flow
-? in a par~: each copy has its own delay, stopped by the same condition	unavailable a chain whose head is not an instance of a flow
-? a delay in the first argument of a delay, with the modifier on the inner or on the outer one	unavailable a chain whose head is not an instance of a flow
-? a first argument at sample / 4: the delay ticks at the grid, the condition is read there, and a stopped tick is no tick of the delay	unavailable a chain whose head is not an instance of a flow
-? a reset_if~ whose condition is slower than the delay resets before the stage of the delay at that frame	unavailable a chain whose head is not an instance of a flow
-? a slow delay with a reset_if~ slower than its tick: the grid of sample / 16 is every 4th tick of the delay	unavailable a chain whose head is not an instance of a flow
-? a slower reset_if~ inside a when~: its grid counts the ticks that the delay ran, not the ticks of the caller (§11.9)	unavailable a chain whose head is not an instance of a flow
-? the calls of process cut the frames anywhere, a call of 0 frames too, and a reset starts over (§13.4, §11.6)	unavailable a chain whose head is not an instance of a flow
+# flow_ref 1 source=tests/spec/flow_semantics/delay_receiver_values.onsa tests=15 evaluated=5 unavailable=0 skipped=10 waiting=0
+- prev~(x).when~(c) runs where c holds and keeps its last output where it does not (the output before the first run is T.default())	skipped layout
+- a delay that has not run reads T.default(), not its init; the first run reads the init (R4)	skipped layout
+- the length of a delay counts the frames it ran: delay~(x, 3).when~(c)	skipped layout
+@ a condition of the kind block is read once for each call of process: the calls cut where the delay stops and runs again
+init 0 delay_receiver_values.when_block sr=0x41000000
+process 0 params c=true frames=4 in x=[0x3f800000 0x40000000 0x40400000 0x40800000]
+out=[0x00000000 0x3f800000 0x40000000 0x40400000]
+process 0 params c=false frames=2 in x=[0x40a00000 0x40c00000]
+out=[0x40400000 0x40400000]
+process 0 params c=true frames=2 in x=[0x40e00000 0x41000000]
+out=[0x40800000 0x40e00000]
+- delay~(x, 2).reset_if~(r) puts the values and the write position back before the stages of the frame, and the frame gives its own input	skipped layout
+- a reset puts the delay back to its init (a literal or a value of the kind init), not to T.default()	skipped layout
+- the order of the two modifiers: x.when~(c).reset_if~(r) resets the stopped frames and the held output too, x.reset_if~(r).when~(c) only the frames that run	skipped layout
+- vdelay~: the argument d is the caller's and is evaluated at the stopped frames too, the interpolation counts the runs	skipped layout
+- in a par~: each copy has its own delay, stopped by the same condition	skipped layout
+- a delay in the first argument of a delay, with the modifier on the inner or on the outer one	skipped layout
+@ a first argument at sample / 4: the delay ticks at the grid, the condition is read there, and a stopped tick is no tick of the delay
+init 0 delay_receiver_values.when_slow sr=0x41000000
+process 0 frames=24
+out=[0x00000000 0x00000000 0x00000000 0x00000000 0x3f800000 0x3f800000 0x3f800000 0x3f800000 0x3f800000 0x3f800000 0x3f800000 0x3f800000 0x40000000 0x40000000 0x40000000 0x40000000 0x40800000 0x40800000 0x40800000 0x40800000 0x40a00000 0x40a00000 0x40a00000 0x40a00000]
+@ a reset_if~ whose condition is slower than the delay resets before the stage of the delay at that frame
+init 0 delay_receiver_values.reset_slower_than_the_delay sr=0x41000000
+init 1 delay_receiver_values.reset_at_the_grid sr=0x41000000
+init 2 delay_receiver_values.reset_at_the_grid sr=0x41000000
+process 0 frames=12 in x=[0x3f800000 0x40000000 0x40400000 0x40800000 0x40a00000 0x40c00000 0x40e00000 0x41000000 0x41100000 0x41200000 0x41300000 0x41400000]
+out=[0x00000000 0x3f800000 0x40000000 0x40400000 0x00000000 0x40a00000 0x40c00000 0x40e00000 0x41000000 0x41100000 0x41200000 0x41300000]
+process 1 params c=true frames=12 in x=[0x3f800000 0x40000000 0x40400000 0x40800000 0x40a00000 0x40c00000 0x40e00000 0x41000000 0x41100000 0x41200000 0x41300000 0x41400000]
+out=[0x00000000 0x3f800000 0x40000000 0x40400000 0x00000000 0x40a00000 0x40c00000 0x40e00000 0x00000000 0x41100000 0x41200000 0x41300000]
+process 2 params c=false frames=12 in x=[0x3f800000 0x40000000 0x40400000 0x40800000 0x40a00000 0x40c00000 0x40e00000 0x41000000 0x41100000 0x41200000 0x41300000 0x41400000]
+out=[0x00000000 0x3f800000 0x40000000 0x40400000 0x40800000 0x40a00000 0x40c00000 0x40e00000 0x41000000 0x41100000 0x41200000 0x41300000]
+@ a slow delay with a reset_if~ slower than its tick: the grid of sample / 16 is every 4th tick of the delay
+init 0 delay_receiver_values.reset_slow_delay sr=0x41000000
+process 0 params r=true frames=32
+out=[0x00000000 0x00000000 0x00000000 0x00000000 0x3f800000 0x3f800000 0x3f800000 0x3f800000 0x40000000 0x40000000 0x40000000 0x40000000 0x40400000 0x40400000 0x40400000 0x40400000 0x00000000 0x00000000 0x00000000 0x00000000 0x40a00000 0x40a00000 0x40a00000 0x40a00000 0x40c00000 0x40c00000 0x40c00000 0x40c00000 0x40e00000 0x40e00000 0x40e00000 0x40e00000]
+@ a slower reset_if~ inside a when~: its grid counts the ticks that the delay ran, not the ticks of the caller (§11.9)
+init 0 delay_receiver_values.reset_in_when sr=0x41000000
+process 0 params r=true frames=44
+out=[0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x3f800000 0x3f800000 0x3f800000 0x3f800000 0x40800000 0x40800000 0x40800000 0x40800000 0x40a00000 0x40a00000 0x40a00000 0x40a00000 0x00000000 0x00000000 0x00000000 0x00000000 0x40e00000 0x40e00000 0x40e00000 0x40e00000 0x41000000 0x41000000 0x41000000 0x41000000 0x41100000 0x41100000 0x41100000 0x41100000 0x00000000 0x00000000 0x00000000 0x00000000]
+- the calls of process cut the frames anywhere, a call of 0 frames too, and a reset starts over (§13.4, §11.6)	skipped layout

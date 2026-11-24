@@ -150,7 +150,9 @@ pub(super) fn clock_of(body: &Body, known: &Known, root: ExprId, e: ExprId) -> R
                         Stage::Tick(m) => Ok(Clock::Tick(m + chain.sum())),
                         _ => Err(Fault::Unavailable("a chain whose head is not an instance with an output at a tick")),
                     },
-                    _ => Err(Fault::Unavailable("a chain whose head is not an instance of a flow")),
+                    // §11.10: a chain on a delay ticks at K, the clock of its first argument (it takes no `.down~`/`.up~`, E0812, so P = W = K).
+                    Called::Builtin(FlowBuiltin::Delay(_)) => clock_of(body, known, root, chain.head),
+                    Called::Builtin(_) => Err(Fault::Internal("a chain whose head is not a call of a flow or a delay")),
                 };
             }
             Ok(match body.called(e)? {

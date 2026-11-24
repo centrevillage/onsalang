@@ -14,10 +14,11 @@ use onsa_driver::{Loaded, PackageInput, TestOptions, TestRun, analyze_loaded, lo
 
 use super::twin::{Family, Maker, run};
 use super::twin_tests::{check, heavy_seeds};
-use super::twin_when::{chains, exotic_count, make, make_exotic};
+use super::twin_when::{chains, delay_count, exotic_count, make, make_delay, make_exotic};
 
 const WHEN: Family = ("when_twins", make);
 const EXOTIC: Family = ("when_exotic", make_exotic);
+const DELAY: Family = ("delay_twins", make_delay);
 
 /// The seeds of the gate: chosen again when a change of the generator moves what they make and `COVER` breaks. Each gives a
 /// mutant that the asserts catch (W7-10 U3a/t2 chose them again: a signal in a block is gathered, so a `when~(c || ct)` there is
@@ -37,6 +38,14 @@ const COVER: &str = "h_slot h_tk h_acc h_lp h_dws h_mk2 h_mk4 k_id k_commute k_m
 /// The seeds of the gate for the matrix of `exotic`, and what they hold: a stack of blocks with the `when~` in it and at its end.
 const EXOTIC_GATE: [u64; 4] = [60, 577, 6, 14];
 const EXOTIC_COVER: &str = "h_tk h_slot stacked in_block ins_front ins_mid ins_end t_lit t_block o_plain o_burst o_slow len_3 len_4 blk burst_up";
+
+/// The seeds of the gate for the matrix of a delay as the head (`make_delay`: the seed is `126 k + 42 h + i` for the place `k` of the
+/// chain (none, in a `when~`, in a `reset_if~`, in both: `OUTER`), the head `h` (`prev~`, `delay~`, `vdelay~`) and the chain `i`, one
+/// modifier and then two), and what they hold: the three heads, a `when~` and a `reset_if~` alone, the four orders of two, the three
+/// kinds of condition of each and the four places.
+const DELAY_GATE: [u64; 10] = [0, 43, 86, 8, 65, 100, 25, 134, 317, 478];
+const DELAY_COVER: &str = "h_prev h_delay h_vdelay k_dtwin len_1 len_2 when_0 when_1 when_2 d_w d_r d_ww d_wr d_rw d_rr c_sig c_block \
+    c_init rc_sig rc_block rc_init x_none x_when x_reset x_both";
 
 /// The tests of a program run in the interpreter (name and failure), or why the program does not run: the checker's
 /// diagnostics (a form that U1 keeps as E0200 is one), or an error of the lowering.
@@ -232,4 +241,60 @@ fn heavy_the_checker_passes_every_chain_in_range_of_up_to_five_modifiers() {
 fn heavy_when_twins() {
     println!("{:?}", check(heavy_seeds(200), WHEN));
     println!("{:?}", check((0..exotic_count()).collect(), EXOTIC));
+}
+
+#[test]
+fn the_twins_of_a_delay_head_hold_in_the_interpreter_and_the_gate_seeds_hold_every_form() {
+    assert_held(make_delay, &DELAY_GATE, false);
+    assert_covered(make_delay, &DELAY_GATE, DELAY_COVER);
+}
+
+#[test]
+fn a_mutant_of_the_twin_of_a_delay_head_is_caught_by_its_asserts_in_the_interpreter() {
+    assert_held(make_delay, &DELAY_GATE, true);
+}
+
+#[test]
+fn the_twins_of_a_delay_head_agree_on_the_evaluator_and_in_the_interpreter() {
+    println!("{:?}", check(DELAY_GATE.to_vec(), DELAY));
+}
+
+#[test]
+fn a_mutant_of_the_twin_of_a_delay_head_is_caught_by_the_evaluator() {
+    let (s, bad) = run(DELAY_GATE.to_vec(), DELAY, true);
+    let caught = bad.iter().filter(|m| m.contains("does not hold")).count();
+    assert_eq!((s.programs, caught), (DELAY_GATE.len(), DELAY_GATE.len()), "{bad:?}");
+}
+
+#[test]
+#[ignore = "heavy: the gate item `heavy` runs it"]
+fn heavy_delay_twins_in_the_interpreter() {
+    // Every case of the matrix.
+    let (ran, bad) = interpreter_failures(make_delay, 0..delay_count(), false);
+    assert!(bad.is_empty() && ran > 0, "{}", shown(&bad));
+}
+
+#[test]
+#[ignore = "heavy: the gate item `heavy` runs it"]
+fn heavy_delay_mutants_in_the_interpreter() {
+    // The first condition of `fb` negated is caught in every chain that is not in a place of `OUTER` (each has a call where the two
+    // conditions differ and the delay shows it). In a place the caller's modifier can hide it (`prev~(x).when~(c).reset_if~(c)` in a
+    // `when~(c)`: the reset holds at every frame that runs and the mutant stops to give the same 0): at most one in five is not.
+    let count = delay_count();
+    assert_held(make_delay, &(0..count / 4).collect::<Vec<_>>(), true);
+    let seeds: Vec<u64> = (0..count).collect();
+    let (ran, bad) = interpreter_failures(make_delay, seeds.clone(), true);
+    let uncaught = bad.iter().filter(|m| m.contains("is not caught")).count();
+    assert!(
+        ran > 0 && uncaught == bad.len() && uncaught * 5 <= seeds.len(),
+        "{uncaught} of {}: {}",
+        seeds.len(),
+        shown(&bad)
+    );
+}
+
+#[test]
+#[ignore = "heavy: the gate item `heavy` runs it"]
+fn heavy_every_chain_of_a_delay_head_agrees_on_the_evaluator_and_in_the_interpreter() {
+    println!("{:?}", check((0..delay_count()).collect(), DELAY));
 }

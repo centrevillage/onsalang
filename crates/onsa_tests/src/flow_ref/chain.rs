@@ -23,14 +23,14 @@ const NO_GATE: &str = "a `when~` with no state";
 
 /// What a `.when~(c)` of a chain keeps (§11.9, §11.10): the condition the caller read for it, whether it read true at the last tick of W, the frames the part ran (the counter of the grid of the part), and the output it holds,
 /// `start` (`T.default()`, a burst of them for an output at `sample * N`) until the part makes one. `init` and the generated `reset` put them back (`InstState::reset`), a `reset_if~` the output alone. A `.reset_if~(c)` keeps
-/// the condition and whether its part is `due` to be put back (`Frame::cut`).
+/// the condition and whether its part is `due` to be put back (`Frame::cut`). A chain on a delay keeps the same (`delay_mods.rs`).
 #[derive(Clone, Debug)]
 pub(super) struct Gate {
     cond: Value,
     on: bool,
     due: bool,
-    runs: u64,
-    held: Value,
+    pub(super) runs: u64,
+    pub(super) held: Value,
     start: Value,
 }
 
@@ -53,7 +53,7 @@ impl<'a> Frame<'a> {
     pub(super) fn read_call(&mut self, head: ExprId, at: Span) -> Eval {
         let here = |fault| Stop { fault, at };
         let Called::Flow(_) = self.body.called(head).map_err(here)? else {
-            return Err(here(Fault::Unavailable("a modifier of a delay")));
+            return Err(here(Internal("a call of a delay read as an instance")));
         };
         let (key, caller) = (self.key(head, Role::Child), self.time(at)?);
         let levels = self.levels_of(&key, at)?;

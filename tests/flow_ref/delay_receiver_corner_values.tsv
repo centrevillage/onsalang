@@ -1,0 +1,43 @@
+# flow_ref 1 source=tests/spec/flow_semantics/delay_receiver_corner_values.onsa tests=9 evaluated=7 unavailable=0 skipped=2 waiting=0
+@ a feedback reference in the first argument: the delay gives y and stores y + 1 at the frames it runs, so it counts its runs
+init 0 delay_receiver_corner_values.fb_when sr=0x41000000
+process 0 frames=16 in c=[true true false true false false true true true false true false true true false true]
+out=[0x00000000 0x3f800000 0x3f800000 0x40000000 0x40000000 0x40000000 0x40400000 0x40800000 0x40a00000 0x40a00000 0x40c00000 0x40c00000 0x40e00000 0x41000000 0x41000000 0x41100000]
+@ a feedback reference with a reset_if~: the stored value is put back to 0 at the frames where r holds, the others count up
+init 0 delay_receiver_corner_values.fb_reset sr=0x41000000
+process 0 frames=16 in c=[true true false true false false true true true false true false true true false true]
+out=[0x00000000 0x00000000 0x3f800000 0x00000000 0x3f800000 0x40000000 0x00000000 0x00000000 0x00000000 0x3f800000 0x00000000 0x3f800000 0x00000000 0x00000000 0x3f800000 0x00000000]
+@ delay~(^y + 1.0, 2).when~(c): the ring of 2 is written at the runs only, the output of a run is what the run two before stored
+init 0 delay_receiver_corner_values.fb_delay2 sr=0x41000000
+process 0 frames=12 in c=[true true false true false false true true true false true false]
+out=[0x00000000 0x00000000 0x00000000 0x3f800000 0x3f800000 0x3f800000 0x3f800000 0x40000000 0x40000000 0x40000000 0x40400000 0x40400000]
+- an array as the value of a delay is stored and held as a whole: T.default() of an array is the zeros, the init is an array	skipped layout
+- the copies of a par~ have a state of their own (the flag of a delay that has run too): the condition differs by the copy	skipped layout
+@ sample_tick() as the condition: the time of the frame is read at the clock of the delay
+init 0 delay_receiver_corner_values.tick_when sr=0x41000000
+init 1 delay_receiver_corner_values.tick_reset sr=0x41000000
+process 0 frames=8 in x=[0x3f800000 0x40000000 0x40400000 0x40800000 0x40a00000 0x40c00000 0x40e00000 0x41000000]
+out=[0x00000000 0x00000000 0x3f800000 0x3f800000 0x40400000 0x40400000 0x40a00000 0x40a00000]
+process 1 frames=6 in x=[0x3f800000 0x40000000 0x40400000 0x40800000 0x40a00000 0x40c00000]
+out=[0x00000000 0x3f800000 0x40000000 0x00000000 0x40800000 0x40a00000]
+@ sample_tick() as the first argument: a value of the time is the caller's, evaluated at the stopped frames too
+init 0 delay_receiver_corner_values.tick_arg_when sr=0x41000000
+init 1 delay_receiver_corner_values.tick_arg_reset sr=0x41000000
+init 2 delay_receiver_corner_values.tick_both sr=0x41000000
+process 0 frames=8 in c=[true false true true false true false false]
+out=[0x00000000 0x00000000 0x00000000 0x40000000 0x40000000 0x40400000 0x40400000 0x40400000]
+process 1 frames=8 in r=[false false true false false true false false]
+out=[0x00000000 0x00000000 0x00000000 0x40000000 0x40400000 0x00000000 0x40a00000 0x40c00000]
+process 2 frames=8
+out=[0x00000000 0x00000000 0x00000000 0x00000000 0x40000000 0x40000000 0x40800000 0x40800000]
+@ inside a part that .down~(2) runs: the delay and its modifier count the ticks of the part, the output is held to the next tick
+init 0 delay_receiver_corner_values.in_down_when sr=0x41000000
+init 1 delay_receiver_corner_values.in_down_reset sr=0x41000000
+process 0 frames=12
+out=[0x00000000 0x00000000 0x3f800000 0x3f800000 0x3f800000 0x3f800000 0x40000000 0x40000000 0x40800000 0x40800000 0x40a00000 0x40a00000]
+process 1 frames=12
+out=[0x00000000 0x00000000 0x3f800000 0x3f800000 0x00000000 0x00000000 0x40400000 0x40400000 0x40800000 0x40800000 0x40a00000 0x40a00000]
+@ a chain in the argument of the head of a part that .down~(2) runs: the chain is at the clock of the part (a delay of sample / 2 with a when~)
+init 0 delay_receiver_corner_values.chain_in_the_head_argument sr=0x41000000
+process 0 frames=16
+out=[0x3f800000 0x3f800000 0x3f800000 0x3f800000 0x40000000 0x40000000 0x40000000 0x40000000 0x40000000 0x40000000 0x40400000 0x40400000 0x40c00000 0x40c00000 0x40e00000 0x40e00000]

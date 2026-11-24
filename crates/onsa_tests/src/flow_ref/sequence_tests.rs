@@ -8,7 +8,8 @@ use super::walk::{Panic, Skip, TestRun, Verdict, run_case};
 use onsa_driver::PackageInput;
 
 // `acc` is a running sum: 1 2 3 4 gives 1 3 6 10. `gain` multiplies by a `block` value, `off` adds an `init` one, `inv` is
-// 10 / x (it panics for 0), `ib` is x + 100 / n (it panics in `init` for n = 0), `closed` is E0200 today (the N of a clock computed by an expression in a flow body), `chans` has two
+// 10 / x (it panics for 0), `ib` is x + 100 / n (it panics in `init` for n = 0), `closed` is E0200 (a `.reset_if~` in an `.up~` whose tick is past `sample / 2^31` there, S-1225, a limit of this version) and has a `par` of
+// more elements than the evaluator holds (`Limits::most`), `chans` has two
 // channels (an output of views).
 const FLOWS: &str = "
 flow acc(x: F32 at sample) -> F32 at sample {
@@ -22,7 +23,11 @@ flow ib(n: I32 at init, x: F32 at sample) -> F32 at sample {
   let k = 100 / n
   x + F32.round_from(k)
 }
-flow closed(x: F32 at sample) -> [F32; 1] at sample { [x + (prev~(x at (sample / (1 + 1))) at sample)] }
+flow one() -> F32 at sample { 1.0 }
+flow first2(x: F32 at (sample * 2)) -> F32 at sample { x[0] }
+flow closed(x: F32 at sample) -> [F32; 1] at sample {
+  [x + first2~(one~().reset_if~(true at (sample / 2147483648)).up~(2)) + (par i in 0 ..< 2097152 { x })[0]]
+}
 flow chans(x: F32 at sample) -> [F32; 2] at sample { [x, x + 1.0] }
 fn ramp() -> [F32; 3] { [1.0, 2.0, 3.0] }
 ";
@@ -124,7 +129,7 @@ fn a_panic_ends_the_test_at_its_call_with_the_stage_and_nothing_runs_after_it() 
 
 #[test]
 fn an_unavailable_call_stops_the_test_and_a_wrong_assert_after_a_run_fails_it() {
-    // `closed` is E0200 today (the N of a clock computed by an expression in a flow body), so the body of the frame is the evaluator's `Unavailable` (`init` and `reset` go on, the frame does not) and `assert false` after it is not reached.
+    // `closed` has a `par` of 2^21 elements, more than the evaluator holds, so the body of the frame is the evaluator's `Unavailable` (`init` and `reset` go on, the frame does not) and `assert false` after it is not reached.
     let r = one(
         "test \"wait\" {\n  let xs: [F32; 1] = [1.0]\n  let o = closed.render(xs, 8.0)\n  assert o.out[0][0] == 1.0\n  assert false\n}",
     );

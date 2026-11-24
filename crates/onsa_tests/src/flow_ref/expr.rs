@@ -212,7 +212,7 @@ impl<'a> Frame<'a> {
         let v = self.form(e, at)?;
         match self.body.ty(e).and_then(|ty| v.agrees(ty, self.body.view)) {
             Ok(true) => Ok(v),
-            // A type the checker did not make (`Ty::Error`: a form the check gave an error, such as a modifier `when~`, E0200 until W7-10) is a body with tables that are not whole.
+            // A type the checker did not make (`Ty::Error`: a form the check gave an error, such as one of the E0200 of this version) is a body with tables that are not whole.
             Ok(false) if matches!(self.body.ty(e), Ok(Ty::Error)) => {
                 Err(Stop { fault: Fault::Unavailable("a body whose tables are not whole"), at })
             }

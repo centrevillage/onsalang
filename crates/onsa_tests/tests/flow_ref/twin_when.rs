@@ -15,10 +15,15 @@
 //!
 //! The chain is a head and 1 to 5 modifiers (`.down~`, `.up~`, `.when~`). The condition of a `when~` is read at its clock W
 //! (the output clock of the part it wraps when that is slower than the place of the modifier, §11.10) or is a `block` or
-//! `init` value, a literal: the forms that the check passes (a delay as the head is E0200 until U3b and never made; a modifier
-//! inside a block and a `when~` of a burst under an `.up~` are made since U3a). Both writings are made from one plan and printed,
-//! and the expectation of the asserts is the spec (a twin); what the plan gives on the evaluator is compared with the interpreter
-//! by `twin::run`.
+//! `init` value, a literal: the forms that the check passes (a modifier inside a block and a `when~` of a burst under an `.up~`
+//! are made since U3a). Both writings are made from one plan and printed, and the expectation of the asserts is the spec (a twin);
+//! what the plan gives on the evaluator is compared with the interpreter by `twin::run`.
+//!
+//! A built-in delay is the head of a chain of its own (`dtwin`, W7-10 U3be/t; S-1209, S-1217, S-1220; §11.10 "受け手は flow の呼び出し
+//! （組込みの遅延を含む）"): `fa` has `prev~(xv).when~(c).reset_if~(r)` and `fb` the delay put in a flow of its own (`pv~(xv)...`,
+//! `Head::twin`) with the same modifiers, and they give the same outputs. The matrix (`delay_cases`) is every chain of one or two
+//! `when~` and `reset_if~` (both orders) with the conditions `c`, `cb` and `ci`, over `prev~`, `delay~` with an `init` and `vdelay~`;
+//! the mutant negates the first condition of `fb`. A delay takes no `.down~` or `.up~`, so no rate modifier is in these chains.
 
 use std::collections::BTreeSet;
 use std::sync::OnceLock;
@@ -89,6 +94,18 @@ pub flow lb8(c: Bool at (sample * 8)) -> Bool at sample {
   c[7]
 }
 ";
+/// The flows that put a built-in delay in a flow of its own (the twin of a delay as the head of a chain, `Head::twin`): `pv` is
+/// `prev~`, `dl2` is `delay~` of 2 with an `init`, `vd` is `vdelay~` of at most 4.
+pub const DELAY_HEADER: &str = "pub flow pv(x: F32 at sample) -> F32 at sample {
+  prev~(x)
+}
+pub flow dl2(x: F32 at sample) -> F32 at sample {
+  delay~(x, 2, 7.0)
+}
+pub flow vd(x: F32 at sample, d: F32 at sample) -> F32 at sample {
+  vdelay~(x, d, 4)
+}
+";
 /// The inputs of `fa` and `fb`: `c` is the one signal (`sample`); `cb` and `ci` change with the call and the grid (a condition
 /// reads them); `ct` and `cti` are true in every call (only a condition that always holds reads them), `cf` and `cfi` false
 /// in every call (only a condition that never holds reads them).
@@ -114,6 +131,13 @@ pub enum Head {
     /// A head with a `when~` of its own inside, whose part has an input slower than it (`inner~(q).when~(c)`, `q` at `sample / 2`
     /// made in the head): the slow input of a `when~` that a `reset_if~` has to put back (W7-10 U2e/t2).
     Outer,
+    /// A built-in delay as the head (W7-10 U3be/t), and the flow of `DELAY_HEADER` that is its twin.
+    Prev,
+    PrevFlow,
+    Delay,
+    DelayFlow,
+    Vdelay,
+    VdelayFlow,
 }
 
 impl Head {
@@ -136,6 +160,27 @@ impl Head {
             Head::Sl => ("sl~(q)", "h_sl"),
             Head::SlTk => ("sl~(F32.round_from(sample_tick()))", "h_sltk"),
             Head::Outer => ("outer2~(c)", "h_outer"),
+            Head::Prev => ("prev~(xv)", "h_prev"),
+            Head::PrevFlow => ("pv~(xv)", "h_prev"),
+            Head::Delay => ("delay~(xv, 2, 7.0)", "h_delay"),
+            Head::DelayFlow => ("dl2~(xv)", "h_delay"),
+            Head::Vdelay => ("vdelay~(xv, tk~() * 0.25 + 1.0, 4)", "h_vdelay"),
+            Head::VdelayFlow => ("vd~(xv, tk~() * 0.25 + 1.0)", "h_vdelay"),
+        }
+    }
+
+    /// Whether it is a built-in delay or the flow that holds one.
+    pub fn is_delay(self) -> bool {
+        matches!(self, Head::Prev | Head::PrevFlow | Head::Delay | Head::DelayFlow | Head::Vdelay | Head::VdelayFlow)
+    }
+
+    /// The head of `fb`: a built-in delay in a flow of its own, the head itself for the others.
+    pub fn twin(self) -> Head {
+        match self {
+            Head::Prev => Head::PrevFlow,
+            Head::Delay => Head::DelayFlow,
+            Head::Vdelay => Head::VdelayFlow,
+            h => h,
         }
     }
 
@@ -151,7 +196,7 @@ impl Head {
 
     /// Whether it has an input at the chain rate.
     pub fn input(self) -> bool {
-        matches!(self, Head::Lp | Head::Dws | Head::Sl | Head::SlTk | Head::Outer)
+        matches!(self, Head::Lp | Head::Dws | Head::Sl | Head::SlTk | Head::Outer) || self.is_delay()
     }
 }
 
@@ -515,7 +560,9 @@ pub fn lets(head: Head, mods: &[Mod]) -> String {
     let mut lets: Vec<String> = signals.iter().map(|n| format!("let c{n} = lb{n}~(c).down~({n})")).collect();
     lets.extend(slow.iter().map(|f| format!("let k{f} = acc~(1.0).down~({f})")));
     match head {
-        Head::Lp | Head::Dws => lets.push("let xv = tk~() * 0.25 + (if c { 1.0 } else { -0.5 })".to_string()),
+        h if h.is_delay() || matches!(h, Head::Lp | Head::Dws) => {
+            lets.push("let xv = tk~() * 0.25 + (if c { 1.0 } else { -0.5 })".to_string());
+        }
         Head::Sl => lets.push("let q = cnt~().down~(2)".to_string()),
         _ => {}
     }
@@ -545,6 +592,7 @@ pub fn tags_of(plan: &Plan) -> BTreeSet<&'static str> {
         "atid" => "k_atid",
         "slowc" => "k_slowc",
         "rmerge" => "k_rmerge",
+        "dtwin" => "k_dtwin",
         _ => "k_merge",
     });
     tags.insert(["len_0", "len_1", "len_2", "len_3", "len_4", "len_5", "len_6"][mods.len().min(6)]);
@@ -640,10 +688,12 @@ pub fn tests(rng: &mut Rng) -> String {
 
 /// The program of a plan: the flows `fa` and `fb` and the tests.
 pub fn program(rng: &mut Rng, plan: &Plan) -> String {
-    let flow = |name: &str, mods: &[Mod]| {
-        format!("pub flow {name}{SIGNATURE} -> F32 at sample {{\n  {}\n}}\n", flow_body(plan.head, mods))
+    let flow = |name: &str, head: Head, mods: &[Mod]| {
+        format!("pub flow {name}{SIGNATURE} -> F32 at sample {{\n  {}\n}}\n", flow_body(head, mods))
     };
-    format!("{HEADER}{}{}{}", flow("fa", &plan.fa), flow("fb", &plan.fb), tests(rng))
+    let delays = if plan.head.is_delay() { DELAY_HEADER } else { "" };
+    let (fa, fb) = (flow("fa", plan.head, &plan.fa), flow("fb", plan.head.twin(), &plan.fb));
+    format!("{HEADER}{delays}{fa}{fb}{}", tests(rng))
 }
 
 /// The program of a seed (with `rot`, the mutant of the twin: an inserted condition that never holds, a condition that is
@@ -741,4 +791,86 @@ pub fn chains(len: usize, cond: &str) -> Vec<(String, String, Option<&'static st
         }
     }
     out
+}
+
+/// What wraps the flow that holds the chain of a delay (`ina` and `inb`, called by `fa` and `fb` with all their inputs): nothing, a
+/// `when~` or a `reset_if~` of the caller, or both (a delay chain in a part that is stopped or put back from outside) and its tag.
+const OUTER: [(&str, &str); 4] =
+    [("", "x_none"), (".when~(c)", "x_when"), (".reset_if~(c)", "x_reset"), (".when~(cb).reset_if~(c)", "x_both")];
+
+/// A case of the matrix of `make_delay`: the delay as the head, the chain of `when~` and `reset_if~` (every condition filled in)
+/// and what wraps it (an index of `OUTER`).
+type DelayCase = (Head, Vec<Mod>, usize);
+
+/// The matrix of the twin `dtwin`: every chain of one or two `when~` and `reset_if~` (both orders), each with one of the conditions
+/// `c` (the signal at W, which is `sample` for a delay of a `sample` value), `cb` and `ci`, over `prev~`, `delay~` with an `init`
+/// and `vdelay~` (3 times 42 chains), in the four places of `OUTER`: the case of the place `k`, the head `h` and the chain `i` is
+/// the seed `126 k + 42 h + i`.
+fn delay_cases() -> &'static [DelayCase] {
+    static CASES: OnceLock<Vec<DelayCase>> = OnceLock::new();
+    CASES.get_or_init(|| {
+        let conds = [Cond::signal(0), Cond::lit("cb", "c_block"), Cond::lit("ci", "c_init")];
+        let one = |c: &Cond| [Mod::When(c.clone()), Mod::Reset(c.clone())];
+        let ones: Vec<Vec<Mod>> = conds.iter().flat_map(one).map(|m| vec![m]).collect();
+        let pairs = ones.iter().flat_map(|a| ones.iter().map(move |b| [a.clone(), b.clone()].concat()));
+        let chains: Vec<Vec<Mod>> = ones.iter().cloned().chain(pairs).collect();
+        let heads = [Head::Prev, Head::Delay, Head::Vdelay];
+        let plain: Vec<(Head, Vec<Mod>)> =
+            heads.into_iter().flat_map(|h| chains.iter().map(move |c| (h, c.clone()))).collect();
+        (0..OUTER.len()).flat_map(|k| plain.iter().map(move |(h, c)| (*h, c.clone(), k))).collect()
+    })
+}
+
+/// How many programs `make_delay` has: the seeds `0 .. delay_count()` are all of its cases (a seed above it makes the same case with
+/// other inputs in the tests).
+pub fn delay_count() -> u64 {
+    delay_cases().len() as u64
+}
+
+/// The forms of a chain of a delay that the gate seeds hold: the order of the modifiers (`d_wr` is a `when~` and then a
+/// `reset_if~`), the kind of condition of a `reset_if~` (`tags_of` has those of a `when~`) and the place (`OUTER`).
+fn delay_tags(plan: &Plan, outer: usize) -> BTreeSet<&'static str> {
+    let order: String = plan.fa.iter().map(|m| if m.is_when() { 'w' } else { 'r' }).collect();
+    let mut tags = tags_of(plan);
+    tags.insert(OUTER[outer].1);
+    tags.insert(match order.as_str() {
+        "w" => "d_w",
+        "r" => "d_r",
+        "ww" => "d_ww",
+        "wr" => "d_wr",
+        "rw" => "d_rw",
+        _ => "d_rr",
+    });
+    for m in plan.fa.iter().filter(|m| !m.is_when()) {
+        let c = m.cond().expect("a reset_if~ has a condition");
+        let kinds = [("c_sig", "rc_sig"), ("c_block", "rc_block"), ("c_init", "rc_init")];
+        tags.extend(kinds.iter().filter(|(t, _)| c.tags.contains(t)).map(|(_, r)| *r));
+    }
+    tags
+}
+
+/// The program of the matrix that a seed picks (with `rot`, the first condition of `fb` is negated), and the forms it holds. Inside a
+/// place of `OUTER`, `ina` and `inb` hold the chains and `fa` and `fb` call them with the modifiers of the caller.
+pub fn make_delay(seed: u64, rot: bool) -> (String, BTreeSet<&'static str>) {
+    let (head, fa, outer) = delay_cases()[seed as usize % delay_cases().len()].clone();
+    let mut fb = fa.clone();
+    if rot {
+        fb[0] = match &fb[0] {
+            Mod::When(c) => Mod::When(c.not()),
+            Mod::Reset(c) => Mod::Reset(c.not()),
+            m => m.clone(),
+        };
+    }
+    let plan = Plan { kind: "dtwin", head, fa, fb, at: vec![0] };
+    let src = if outer == 0 {
+        program(&mut Rng::new(seed), &plan)
+    } else {
+        let flow = |name: &str, body: &str| format!("pub flow {name}{SIGNATURE} -> F32 at sample {{\n  {body}\n}}\n");
+        let call = |name: &str| format!("{name}~(c, cb, ct, cf, ci, cti, cfi){}", OUTER[outer].0);
+        let (ina, inb) = (flow_body(head, &plan.fa), flow_body(head.twin(), &plan.fb));
+        let flows = [("ina", ina), ("inb", inb), ("fa", call("ina")), ("fb", call("inb"))];
+        let flows: String = flows.iter().map(|(n, b)| flow(n, b)).collect();
+        format!("{HEADER}{DELAY_HEADER}{flows}{}", tests(&mut Rng::new(seed)))
+    };
+    (src, delay_tags(&plan, outer))
 }

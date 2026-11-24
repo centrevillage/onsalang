@@ -268,7 +268,7 @@ pub(super) fn port_exprs(args: impl IntoIterator<Item = ExprId>, levels: &[Level
 
 /// The tick of the condition of the clock `clock` of a modifier of a part whose output is at `out`, as the part reads it (§11.10): the clock moved in by the ratios `outside` the modifier (not cut at 0), and for `sample_tick()` alone
 /// (the clock of the place that reads it, §11.4) and a value of the parameter kinds W (the output, if slower than P), the caller's `sample` where W is faster ("W が `sample * N` なら、本体の `sample` の 1 刻みに 1 回").
-fn cond_tick(clock: Clock, out: i32, outside: &[Bound]) -> i32 {
+pub(super) fn cond_tick(clock: Clock, out: i32, outside: &[Bound]) -> i32 {
     let outside: i32 = outside.iter().map(|b| b.ratio()).sum();
     match clock {
         Clock::Tick(k) if clock != Clock::AMBIENT => k - outside,
@@ -418,7 +418,7 @@ pub(super) fn slow_ticks(view: View, body: &Body, steps: &[Step], plans: &Plans)
     Ok((ticks.into(), Rc::new(conds)))
 }
 
-/// The clock of the condition of each `.when~` and `.reset_if~` of a body, in the caller (`CondClock`).
+/// The clock of the condition of each `.when~` and `.reset_if~` of a body, in the caller (`CondClock`), and of the delay at the head of a chain on one (its K).
 pub(super) type Conds = Rc<HashMap<ExprId, CondClock>>;
 
 /// The sets of the `lets` that read each other (§11.3: "互いに頼る `let`", a `^name` among the reads), each with whether it is a loop (more than one `let`, or one that reads itself), the ones read
@@ -531,14 +531,12 @@ fn entering(body: &Body, known: &Known, root: ExprId, e: ExprId, inside: &[Local
     match &body.ast.expr(e).kind {
         ExprKind::Feedback(_) => Ok(Clock::Const),
         ExprKind::At { .. } => clock_of(body, known, root, e),
-        ExprKind::Call { kind: CallKind::Flow, args, .. } => match body.called(e)? {
-            Called::Builtin(FlowBuiltin::Delay(_)) => entering(
-                body,
-                known,
-                root,
-                args.get(Delay::SAVED).ok_or(Fault::Internal("a delay with no argument"))?.expr,
-                inside,
-            ),
+        // A chain on a delay has the clock of the delay (`clock_of`): what enters its first argument.
+        ExprKind::Call { kind: CallKind::Flow, .. } => match chain_of(body, e)?.map_or(e, |c| c.head) {
+            call if matches!(body.called(call)?, Called::Builtin(FlowBuiltin::Delay(_))) => {
+                let first = args_of(body, call).into_iter().nth(Delay::SAVED);
+                entering(body, known, root, first.ok_or(Fault::Internal("a delay with no argument"))?, inside)
+            }
             _ => clock_of(body, known, root, e),
         },
         _ => body.ast.sub_exprs(e).into_iter().try_fold(Clock::Const, |c, x| {
@@ -576,7 +574,9 @@ fn visit(
     let (call, bounds) = chain.as_ref().map_or((e, &[][..]), |c| (c.head, &c.bounds[..]));
     let tick = |c| Ok(matches!(stage_of(body, known, root, c)?, Clock::Tick(_)));
     let clock = |c| Ok(CondClock { clock: clock_of(body, known, root, c)?, tick: tick(c)? });
-    for c in chain.iter().flat_map(Chain::conds) {
+    // The clock K of a delay a chain is on is kept with them (§11.10: its W).
+    let delay = |c: &&Chain| matches!(body.called(c.head), Ok(Called::Builtin(FlowBuiltin::Delay(_))));
+    for c in chain.iter().flat_map(Chain::conds).chain(chain.iter().filter(delay).map(|c| c.head)) {
         out.1.insert(c, clock(c).map_err(here)?);
     }
     if let Ok(Called::Flow(def)) = body.called(call) {
