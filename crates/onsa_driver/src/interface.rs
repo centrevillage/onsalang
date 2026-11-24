@@ -669,9 +669,6 @@ impl Builder<'_> {
 /// Its other diagnostics are errors of the program (E0903, S-911) and stop the
 /// command, and so does an internal error (a Core the verifier rejects, R-82; S-67).
 pub fn interface(analyzed: &Analyzed) -> Result<Interface, crate::LowerError> {
-    if let Some(gate) = crate::guard(|| crate::event_gate(analyzed))? {
-        return Err(crate::LowerError::Diagnostics(vec![gate]));
-    }
     let core = match crate::lower_core(analyzed) {
         Ok(m) => Some(m),
         Err(crate::LowerError::Diagnostics(mut d)) => {

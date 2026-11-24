@@ -69,7 +69,7 @@ pub(crate) fn finish_flow(
         modifiers: fcx.node_exprs().into_iter().filter_map(|(e, r)| Some((e, r?))).collect(),
         output: fcx.output,
         derived_port: a.def(id).as_flow().and_then(|f| f.derived_port(a.def(id).name_span)),
-        events: has_events(a, id, &fcx),
+        event_form: first_event(a, id, &fcx),
         complete: false,
         ..Default::default()
     };
@@ -138,12 +138,15 @@ pub(crate) fn finish_flow(
     a.flows.insert(id, info);
 }
 
-/// Whether the flow `id` has an event clock ([`FlowInfo::events`]): of an
-/// input, of its output or of a call of an event output.
-fn has_events(a: &Analysis, id: DefId, cx: &FlowCx) -> bool {
-    let emits = |g: DefId| a.def(g).as_flow().is_some_and(FlowDef::gives_events);
-    a.def(id).as_flow().is_some_and(|f| f.event_port().is_some())
-        || cx.calls.iter().any(|c| matches!(c.kind, NodeKind::Instance(g) if emits(g)))
+/// The word `event` a flow has an event clock by: the first of the heading of
+/// the flow `id`, else of that of a flow with an event output it calls; none
+/// of a flow with no event clock.
+fn first_event(a: &Analysis, id: DefId, cx: &FlowCx) -> Option<Span> {
+    let callee = |c: &NodeCall| match c.kind {
+        NodeKind::Instance(g) => a.def(g).as_flow().filter(|f| f.gives_events())?.event_port(),
+        NodeKind::Delay(..) => None,
+    };
+    a.def(id).as_flow()?.event_port().or_else(|| cx.calls.iter().find_map(callee))
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

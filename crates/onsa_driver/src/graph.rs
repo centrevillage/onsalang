@@ -326,7 +326,7 @@ fn find_flow(analyzed: &Analyzed, name: &str, scope: Option<&str>) -> Result<Def
 pub enum GraphError {
     /// No such flow, or it does not check (the command could not work).
     Usage(String),
-    /// The E0200 of what this version does not run ([`crate::event_gate`]).
+    /// The E0200 of what this version does not run ([`onsa_sema::flow::FlowInfo::event_gate`]).
     Diagnostics(Vec<onsa_diag::Diagnostic>),
     Internal(crate::InternalError),
 }
@@ -335,14 +335,17 @@ pub enum GraphError {
 /// name) in `scope`: the module of the file passed
 /// ([`crate::Loaded::focus_module`]), or the whole package (`None`).
 pub fn graph(analyzed: &Analyzed, flow: &str, scope: Option<&str>) -> Result<String, GraphError> {
-    if let Some(gate) = crate::guard(|| crate::event_gate(analyzed)).map_err(GraphError::Internal)? {
-        return Err(GraphError::Diagnostics(vec![gate]));
-    }
-    crate::guard(|| graph_of(analyzed, flow, scope)).map_err(GraphError::Internal)?.map_err(GraphError::Usage)
+    crate::guard(|| graph_of(analyzed, flow, scope)).map_err(GraphError::Internal)?
 }
 
-fn graph_of(analyzed: &Analyzed, flow: &str, scope: Option<&str>) -> Result<String, String> {
-    Ok(draw(analyzed, find_flow(analyzed, flow, scope)?)?.dot())
+fn graph_of(analyzed: &Analyzed, flow: &str, scope: Option<&str>) -> Result<String, GraphError> {
+    let id = find_flow(analyzed, flow, scope).map_err(GraphError::Usage)?;
+    if let Some(gate) = analyzed.analysis.flows.get(&id).and_then(|f| f.event_gate()) {
+        let mut gate = vec![gate];
+        crate::fill_found_with(&mut gate, |file| crate::package_text(&analyzed.pkg, file));
+        return Err(GraphError::Diagnostics(gate));
+    }
+    Ok(draw(analyzed, id).map_err(GraphError::Usage)?.dot())
 }
 
 /// The drawing of the flow `id`, which checks.

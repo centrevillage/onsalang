@@ -1,0 +1,56 @@
+// onsa.toml
+// [test]
+// spec = ["§11.6", "§11.9", "§11.11", "§18.1"]
+// fixes = 0
+
+// W7-11 U2g/t, S-560 (spec §18.1: a part that could not be read is an error that nothing reads; §11.6: a `sample` input is a scalar or an array of scalars): a flow that has an event in its head and whose head is in
+// error for another reason reports that error alone. The mark `@export` of it and a use of its `process`, `process_inplace` or `render` have no E0200 of the border of the events (the same flows with a right head
+// are E0200 in e0200_event_boundary_export.onsa and e0200_event_boundary_uses.onsa). One error for each flow. No candidate (`fixes = 0`). `m` is the event input and `x` the `sample` input.
+
+pub struct Two {
+  a: F32,
+  b: F32,
+}
+
+// ---------------------------------------------------------------- `@export` of a flow whose head is in error
+
+@export
+pub flow exported_event_with_a_struct_input(m: U32 at event, x: Two at sample) -> F32 at sample {   //~ E0810
+  0.0
+}
+
+@export
+pub flow exported_event_with_an_unknown_clock(m: U32 at event, x: F32 at foo) -> F32 at sample {   //~ E0302
+  0.0
+}
+
+@export
+pub flow exported_event_out_with_a_slow_clock_of_three(x: F32 at (sample / 3)) -> U32 at event {   //~ E0808
+  None
+}
+
+// ---------------------------------------------------------------- the uses of a flow whose head is in error
+
+pub flow event_with_a_struct_input(m: U32 at event, x: Two at sample) -> F32 at sample {   //~ E0810
+  0.0
+}
+
+pub flow event_with_an_unknown_clock(m: U32 at event, x: F32 at foo) -> F32 at sample {   //~ E0302
+  0.0
+}
+
+pub flow event_out_with_a_struct_input(x: Two at sample) -> U32 at event {   //~ E0810
+  None
+}
+
+fn use_of_a_struct_input() {
+  let _ = event_with_a_struct_input.process
+}
+
+fn use_of_an_unknown_clock() {
+  let _ = event_with_an_unknown_clock.render
+}
+
+fn use_of_an_event_out_in_error() {
+  let _ = event_out_with_a_struct_input.process
+}

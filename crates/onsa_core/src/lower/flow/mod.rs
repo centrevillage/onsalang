@@ -420,6 +420,10 @@ pub(crate) fn implicit_params(lw: &mut Lowerer, member: DefId, span: Span) -> R<
 fn lower_flow<'b>(lw: &mut Lowerer<'b>, flow: DefId, fd: FlowDef, span: Span) -> R<FlowFns> {
     let a: &'b onsa_sema::Analysis = lw.a;
     let Some(info) = a.flows.get(&flow) else { return Err(internal(span, "flow body was not checked")) };
+    // Of a callee too, which the entries of this plan lack: the field of its state comes to it.
+    if let Some(d) = info.event_gate() {
+        return Err(super::gated(d));
+    }
     if !info.planned() {
         return Err(internal(span, "flow body has errors"));
     }

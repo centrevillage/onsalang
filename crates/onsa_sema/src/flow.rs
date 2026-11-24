@@ -341,8 +341,10 @@ pub struct FlowInfo {
     /// around it.
     pub store_bindings: HashSet<LocalId>,
     pub output: Option<ExprId>,
-    /// It has an event clock (§11.11, `clocks::has_events`).
-    pub events: bool,
+    /// The form of the event clock this version checks and does not run
+    /// (§11.11), at a word `event` of a heading: every one until W7-11 U2
+    /// (`clocks::first_event`). [`FlowInfo::event_gate`] is its E0200.
+    pub(crate) event_form: Option<Span>,
     pub complete: bool,
 }
 

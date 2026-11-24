@@ -85,7 +85,7 @@ pub(crate) fn walk(pkg: &Package, a: &mut Analysis) {
 fn close(pkg: &Package, a: &mut Analysis, f: DefId, marks: &HashMap<DefId, Mark>, most: &HashMap<DefId, Most>) -> Most {
     let info = a.flows.get(&f)?;
     let mut time = own_time(info);
-    // The entries of a flow with events are W7-11 U2's; its gate stops what reads them.
+    // The entries of a flow with events are W7-11 U2's; its gate (`FlowInfo::event_gate`) stops what reads them.
     if !info.planned() {
         if let Some(info) = a.flows.get_mut(&f) {
             info.time = time;

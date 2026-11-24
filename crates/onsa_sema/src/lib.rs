@@ -595,13 +595,16 @@ impl Analysis {
     }
 
     /// The E0200 at `span` of the boundary of a flow with a port of a
-    /// derived clock (§11.9: E0810 from W10-01, at the same places; X26-23):
-    /// of `d`, a generated function that crosses it (`process`,
-    /// `process_inplace`, `render`) at a path of a body, or the flow itself
-    /// at its `@export`; none of a flow with a port in error (§18.1,
+    /// derived clock (§11.9: E0810 from W10-01, at the same places; X26-23)
+    /// or of an event (§11.11, until W10-07): of `d`, a generated function
+    /// that crosses it (`process`, `process_inplace`, `render`) at a path of
+    /// a body, or the flow itself at its `@export`; of the first such port
+    /// of the heading, and none of a flow with a port in error (§18.1,
     /// [`def::FlowDef::ports_in_error`]). The one test of it (D-15).
     pub(crate) fn boundary_gate(&self, d: DefId, span: Span) -> Option<Diagnostic> {
+        use clock::Clock;
         use def::FlowFn;
+        use onsa_diag::unsupported::Feature;
         let (flow, what, stage) = match self.def(d).as_fn().and_then(|f| f.flow_fn) {
             Some(FlowFn::Process | FlowFn::ProcessInplace | FlowFn::Render) => {
                 let flow = self.def(d).owner?;
@@ -611,23 +614,12 @@ impl Analysis {
             _ => return None,
         };
         let fd = self.def(flow).as_flow().filter(|fd| !fd.ports_in_error)?;
-        fd.derived_port(span)?;
-        Some(onsa_diag::unsupported::Feature::ConversionFlowBoundary.diagnostic(stage, span, &[&what]))
-    }
-
-    /// The E0200 of the forms this version checks and does not run
-    /// (§11.11): the event clock, at the first `event` in the heading of a
-    /// flow (of this package first). The check does not report it; what
-    /// reads the plan of the flows stops at it before it reads one: the
-    /// lowering, `onsa graph` and `onsa interface`. A flow with events in
-    /// its body only calls one of those headings. The one test of it (D-15).
-    pub fn event_gate(&self) -> Option<Diagnostic> {
-        let [own, others] = [true, false].map(|own| {
-            let flows = self.defs.iter().filter(move |d| self.modules.is_own(d.module) == own);
-            flows.filter_map(|d| d.as_flow()?.event_port())
-        });
-        let at = own.chain(others).next()?;
-        Some(onsa_diag::unsupported::Feature::EventClocks.diagnostic(onsa_diag::Stage::Flow, at, &[]))
+        let mut ports = fd.inputs.iter().map(|i| i.clock).chain([fd.out_clock]);
+        let feature = ports.find_map(|c| match c {
+            Clock::Event(_) => Some(Feature::EventBoundary),
+            c => c.of_ratio().then_some(Feature::ConversionFlowBoundary),
+        })?;
+        Some(feature.diagnostic(stage, span, &[&what]))
     }
 
     /// The def is an alias of the error type (§18.1, R-271): a struct, a

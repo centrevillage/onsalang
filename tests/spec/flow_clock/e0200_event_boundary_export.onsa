@@ -1,0 +1,92 @@
+// onsa.toml
+// [test]
+// spec = ["§11.9", "§11.11", "§14.2", "§18.1"]
+// fixes = 0
+
+// W7-11 U2g/t, S-560 (spec §11.9: "誤りの位置は、その flow の `process`・`process_inplace`・`render` を使う所と `@export` の印で"; §11.11: "export の境界のイベントの入出力に出せる型は、§11.7 の `@param` と同じスカラ…"): until
+// the events run (W7-11 U2) this version reports E0200 at the mark `@export` of a flow that has an event input or an event output in its head (as it does at the mark of a flow with `sample * N`, the file
+// conversion_flow_boundary_until_w10_01). One error for each flow, at the line of the mark. The flows have the types of the events that §11.11 allows at the border (`U32`, `Bool`, `()`), no `block` input (that needs
+// `@param`, E0809) and are `pub` (E0303), so the error is the only one of the flow. The flows that have no event in their head (a `sample` flow, a flow that calls the flows with an event in its body) are exported
+// with no diagnostic, next to them. A flow that has both an event and `sample * N` in its ports has one E0200 and not two, whichever of the two it is that the compiler names (the text is not read).
+
+flow det(x: F32 at sample) -> U32 at event {
+  if x > 0.5 {
+    Some(1)
+  } else {
+    None
+  }
+}
+
+flow acc(e: U32 at event) -> U32 at sample {
+  let n = prev~(^n) + e
+  n
+}
+
+// ---------------------------------------------------------------- the mark on a flow with an event in its head
+
+@export                                                         //~ E0200
+pub flow exported_event_input(m: U32 at event) -> U32 at sample {
+  m
+}
+
+@export                                                         //~ E0200
+pub flow exported_event_input_and_sample(m: U32 at event, x: F32 at sample) -> F32 at sample {
+  x
+}
+
+@export                                                         //~ E0200
+pub flow exported_event_output(x: F32 at sample) -> U32 at event {
+  if x > 0.5 {
+    Some(1)
+  } else {
+    None
+  }
+}
+
+@export                                                         //~ E0200
+pub flow exported_event_relay(m: Bool at event) -> Bool at event {
+  Some(m)
+}
+
+@export                                                         //~ E0200
+pub flow exported_event_in_and_out(m: U32 at event, x: F32 at sample) -> U32 at event {
+  Some(m)
+}
+
+@export                                                         //~ E0200
+pub flow exported_with_a_second_event(a: U32 at event, b: Bool at event) -> U32 at sample {
+  a
+}
+
+// ---------------------------------------------------------------- a flow with both an event and `sample * N`: one error
+
+@export                                                         //~ E0200
+pub flow exported_event_then_gather(m: U32 at event, x: F32 at (sample * 2)) -> F32 at sample {
+  (x[0] + x[1]) * 0.5
+}
+
+@export                                                         //~ E0200
+pub flow exported_gather_then_event(x: F32 at (sample * 2), m: U32 at event) -> F32 at sample {
+  (x[0] + x[1]) * 0.5
+}
+
+@export                                                         //~ E0200
+pub flow exported_gather_and_event_output(x: F32 at (sample * 2)) -> U32 at event {
+  if x[0] + x[1] > 1.0 {
+    Some(1)
+  } else {
+    None
+  }
+}
+
+// ---------------------------------------------------------------- no event in the head: no error
+
+@export
+pub flow exported_plain(x: F32 at sample) -> F32 at sample {
+  x
+}
+
+@export
+pub flow exported_caller_of_an_event_output(x: F32 at sample) -> U32 at sample {
+  acc~(det~(x))
+}

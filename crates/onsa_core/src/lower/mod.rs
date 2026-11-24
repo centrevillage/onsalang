@@ -95,8 +95,12 @@ pub(crate) type R<T> = Result<T, Fail>;
 /// An unsupported feature at `span` (E0200), with the details its phrase
 /// takes (`onsa_diag::unsupported`).
 pub(crate) fn unsupported(span: Span, feature: Feature, details: &[&str]) -> Fail {
-    let d = feature.diagnostic(Stage::Build, span, details);
-    Fail { kind: FailKind::Unsupported, span, msg: d.message.clone(), hole: None, report: Some(Box::new(d)) }
+    gated(feature.diagnostic(Stage::Build, span, details))
+}
+
+/// The unsupported feature of the E0200 `d`.
+pub(crate) fn gated(d: Diagnostic) -> Fail {
+    Fail { kind: FailKind::Unsupported, span: d.span, msg: d.message.clone(), hole: None, report: Some(Box::new(d)) }
 }
 
 /// Why [`lower`] produced no Core.
@@ -219,9 +223,6 @@ pub fn lower(pkg: &Package, a: &Analysis) -> Result<Module, LowerFailure> {
 /// then dropped, so no placeholder leaves this function. The first internal
 /// failure stops lowering, unless it is a consequence of a placeholder.
 pub fn lower_with(pkg: &Package, a: &Analysis, opts: &LowerOptions) -> Result<Module, LowerFailure> {
-    if let Some(gate) = a.event_gate() {
-        return Err(LowerFailure::Diagnostics(vec![gate]));
-    }
     let flat = onsa_sema::flatten(pkg);
     let places: usize =
         flat.iter().flat_map(|p| p.modules.iter()).map(|m| m.parsed.ast.exprs.len() + m.parsed.ast.pats.len()).sum();

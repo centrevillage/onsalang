@@ -446,7 +446,7 @@ impl<'a> Checker<'a> {
 
     /// The E0200 of the path at `span` in the body to `d`, a generated
     /// function that crosses the boundary of a flow with a port of a derived
-    /// clock ([`crate::Analysis::boundary_gate`]).
+    /// clock or of an event ([`crate::Analysis::boundary_gate`]).
     pub(crate) fn boundary_at(&mut self, d: DefId, span: Span) -> R<()> {
         match self.a.boundary_gate(d, span) {
             Some(err) => Err(self.diag(err.with_found(self.src(span)))),

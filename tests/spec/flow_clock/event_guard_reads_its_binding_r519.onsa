@@ -1,0 +1,70 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§11.5", "§11.11"]
+// fixes = 0
+
+// R-519 (spec §11.11: the event values of the four places are followed through the `let`s, the `match` and the bindings of its arms): in a flow with an event, the guard of an arm that reads a binding of the same arm.
+// The search of the event values of a binding goes through the scrutinee and the guards, and so through the guard that reads the binding itself. It reads no event in the forms that pass (an option, a tuple, two
+// guards, a `match` in a guard, `match~`, a `let` of it, the four places); where the guard reads the event value beside the binding, it is mixed with the clock of the condition (E0815). `m` is the event.
+
+flow acc(x: F32 at sample) -> F32 at sample {
+  let y = x + prev~(^y) * 0.5
+  y
+}
+
+pub flow the_first_argument_of_a_delay(m: F32 at event, x: F32 at sample) -> F32 at sample {
+  let o: Option[F32] = if x > 2.0 { Some(x) } else { None }
+  prev~(match o { Some(v) if v > 3.0 => v, Some(v) => v * 2.0, None => 0.0 }) + m
+}
+
+pub flow a_let_of_the_match(m: F32 at event, x: F32 at sample) -> F32 at sample {
+  let o: Option[F32] = if x > 2.0 { Some(x) } else { None }
+  let y = match o { Some(v) if v > 3.0 => v, Some(v) => v * 2.0, None => 0.0 }
+  prev~(y) + m
+}
+
+pub flow a_tuple_and_two_guards(m: F32 at event, x: F32 at sample, y: F32 at sample) -> F32 at sample {
+  let z = match (x, y) { (a, b) if a > b => a, (a, b) if a < b && b > 0.5 => b, (a, _) => a }
+  prev~(z) + m
+}
+
+pub flow a_match_in_the_guard(m: F32 at event, x: F32 at sample) -> F32 at sample {
+  let o: Option[F32] = if x > 2.0 { Some(x) } else { None }
+  let z = match o { Some(v) if (match v > 3.0 { true if v < 9.0 => true, _ => false }) => v, _ => 0.0 }
+  prev~(z) + m
+}
+
+pub flow a_loop(m: F32 at event, x: F32 at sample) -> F32 at sample {
+  let back = prev~(^y)
+  let o: Option[F32] = if back > 2.0 { Some(x) } else { None }
+  let y = match o { Some(v) if v > 3.0 => v + back, _ => x }
+  y + m
+}
+
+pub flow arms_with_a_state(m: F32 at event, x: F32 at sample) -> F32 at sample {
+  let o: Option[F32] = if x > 2.0 { Some(x) } else { None }
+  let y = match~ o { Some(v) if v > 3.0 => acc~(v), Some(v) => prev~(v), None => 0.0 }
+  y + m
+}
+
+pub flow an_output_at_event(m: F32 at event) -> F32 at event {
+  let o: Option[F32] = if m > 2.0 { Some(m) } else { None }
+  match o { Some(v) if v > 3.0 => Some(v), _ => None }
+}
+
+pub flow a_reset_condition(m: F32 at event, x: F32 at sample) -> F32 at sample {
+  let o: Option[F32] = if x > 2.0 { Some(x) } else { None }
+  acc~(x).reset_if~(match o { Some(v) if v > 3.0 => true, _ => false }) + m
+}
+
+// The guard reads the event value beside its binding: it is mixed with the clock of the condition.
+
+pub flow a_reset_condition_with_the_event(m: F32 at event, x: F32 at sample) -> F32 at sample {
+  let o: Option[F32] = if x > 2.0 { Some(x) } else { None }
+  acc~(x).reset_if~(match o { Some(v) if v > m => true, _ => false })   //~ E0815
+}
+
+pub flow a_reset_condition_with_the_binding_of_it(m: F32 at event, x: F32 at sample) -> F32 at sample {
+  let o: Option[F32] = if x > 2.0 { Some(x) } else { None }
+  acc~(x).reset_if~(match o { Some(v) if v > m && v < 9.0 => v > 4.0, Some(v) => v > 8.0, None => false })   //~ E0815
+}

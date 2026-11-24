@@ -48,7 +48,7 @@ struct Mix<'w, 'a> {
 
 /// The E0815 of the first place in the order of the file (§18.1).
 pub(super) fn check(w: &mut Walk) {
-    if !has_events(w.a, w.def, w.cx) {
+    if first_event(w.a, w.def, w.cx).is_none() {
         return;
     }
     let mixed = Mix::new(w, None).mixed();
@@ -152,6 +152,8 @@ impl<'w, 'a> Mix<'w, 'a> {
             return made;
         }
         let ExprKind::Match { scrutinee, arms, .. } = &self.w.ast.expr(e).kind else { return None };
+        // The guard of the arm reads the binding too, which adds no other.
+        self.chosen.insert((e, arm), None);
         let parts = std::iter::once(*scrutinee).chain(arms[..=arm].iter().filter_map(|a| a.guard));
         let first = parts.filter_map(|x| self.first(x)).next();
         self.chosen.insert((e, arm), first);

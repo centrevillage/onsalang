@@ -1,0 +1,48 @@
+pub flow in_event(m: U32 at event) -> U32 at sample {
+  m
+}
+
+pub flow in_inplace(m: U32 at event, x: F32 at sample) -> F32 at sample {
+  x
+}
+
+pub flow in_render(m: U32 at event) -> U32 at sample {
+  m
+}
+
+pub flow out_event(x: F32 at sample) -> U32 at event {
+  if x > 0.5 {
+    Some(1)
+  } else {
+    None
+  }
+}
+
+pub flow acc(e: U32 at event) -> U32 at sample {
+  let n = prev~(^n) + e
+  n
+}
+
+pub flow plain(x: F32 at sample) -> F32 at sample {
+  x
+}
+
+pub flow caller(x: F32 at sample) -> U32 at sample {
+  acc~(out_event~(x))
+}
+
+// the mark `@export` in a module that is not the one the use is in
+@export                                                         //~ E0200
+pub flow exported_in(m: U32 at event) -> U32 at sample {
+  m
+}
+
+@export
+pub flow exported_caller(x: F32 at sample) -> U32 at sample {
+  acc~(out_event~(x))
+}
+
+// a use in the module of the flow itself
+fn own_use() {
+  let _ = in_event.process                                      //~ E0200
+}

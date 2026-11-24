@@ -1,0 +1,202 @@
+// onsa.toml
+// [test]
+// spec = ["§11.6", "§11.9", "§11.11", "§18.1"]
+// fixes = 0
+
+// W7-11 U2g/t, S-560 (spec §11.9: "境界（一番外の flow の入出力）…誤りの位置は、その flow の `process`・`process_inplace`・`render` を使う所と `@export` の印で、`init`・`reset`・`State` は使える"; §11.11 and §11.6: the
+// events of a flow are given at the border through the generated functions): until the events run (W7-11 U2) this version reports E0200 at the places that use `process`, `process_inplace` and `render` of a flow whose
+// head has an event input or an event output, the same places as the border of `sample * N` (conversion_flow_boundary_until_w10_01). `check` reads the flow itself with no diagnostic (W7-11 U1a), so the error is only at
+// the uses. The error is one per use and the forms of the use are a path bound with `let` and a call in a `test`; each flow has the use of its own so that a use is not hidden by another. The places that are no
+// error (`init`, `reset`, `State`, `Params`, `Config`, a flow that calls the event flow in its body) are in e0200_event_boundary_accepted.onsa; the mark `@export` is in e0200_event_boundary_export.onsa. The text of the
+// message is not read. The calls of `process` are not written here: the one of an event input takes `Span[f.Event]` and the one of an event output gives out a `Span` of positions and values (§11.6), which this version does not have yet, so the path stands for the use.
+
+flow in_process(m: U32 at event) -> U32 at sample {
+  m
+}
+
+flow in_inplace(m: U32 at event, x: F32 at sample) -> F32 at sample {
+  x
+}
+
+flow in_render(m: U32 at event) -> U32 at sample {
+  m
+}
+
+flow in_relay(m: U32 at event) -> U32 at event {
+  Some(m)
+}
+
+flow out_process(x: F32 at sample) -> U32 at event {
+  if x > 0.5 {
+    Some(1)
+  } else {
+    None
+  }
+}
+
+flow out_path(x: F32 at sample) -> U32 at event {
+  if x > 0.5 {
+    Some(1)
+  } else {
+    None
+  }
+}
+
+flow out_render(x: F32 at sample) -> U32 at event {
+  if x > 0.5 {
+    Some(1)
+  } else {
+    None
+  }
+}
+
+// ---------------------------------------------------------------- an event input
+
+fn use_in_process() {
+  let _ = in_process.process                                    //~ E0200
+}
+
+fn use_in_inplace() {
+  let _ = in_inplace.process_inplace                            //~ E0200
+}
+
+fn use_in_render() {
+  let _ = in_render.render                                      //~ E0200
+}
+
+fn use_in_relay_process() {
+  let _ = in_relay.process                                      //~ E0200
+}
+
+// ---------------------------------------------------------------- an event output
+
+fn use_out_process() {
+  let _ = out_process.process                                   //~ E0200
+}
+
+fn use_out_path() {
+  let _ = out_path.process                                      //~ E0200
+}
+
+test "render of a flow with an event output" {
+  let xs: [F32; 4] = [0.1, 0.9, 0.2, 0.8]
+  let _ = out_render.render(xs, 8.0)                            //~ E0200
+}
+
+// ---------------------------------------------------------------- the place of the use: a branch, a closure, a generic function
+
+flow out_branch(x: F32 at sample) -> U32 at event {
+  if x > 0.5 {
+    Some(1)
+  } else {
+    None
+  }
+}
+
+flow out_closure(x: F32 at sample) -> U32 at event {
+  if x > 0.5 {
+    Some(1)
+  } else {
+    None
+  }
+}
+
+flow out_generic(x: F32 at sample) -> U32 at event {
+  if x > 0.5 {
+    Some(1)
+  } else {
+    None
+  }
+}
+
+flow in_nested(m: U32 at event) -> U32 at sample {
+  m
+}
+
+fn in_a_branch(c: Bool) {
+  if c {
+    let _ = out_branch.process                                  //~ E0200
+  }
+}
+
+fn in_a_closure() {
+  let h = fn() {
+    let _ = out_closure.process                                 //~ E0200
+  }
+  h.()
+}
+
+fn in_a_generic[T](x: T) -> T {
+  let _ = out_generic.process                                   //~ E0200
+  x
+}
+
+fn in_nested_blocks(c: Bool, d: Bool) {
+  if c {
+    if d {
+      let _ = in_nested.render                                  //~ E0200
+    }
+  }
+}
+
+// ---------------------------------------------------------------- two uses of one flow are two errors (one at each place)
+
+flow out_twice(x: F32 at sample) -> U32 at event {
+  if x > 0.5 {
+    Some(1)
+  } else {
+    None
+  }
+}
+
+fn first_use() {
+  let _ = out_twice.process                                     //~ E0200
+}
+
+fn second_use() {
+  let _ = out_twice.process                                     //~ E0200
+}
+
+// ---------------------------------------------------------------- a flow with both an event and `sample * N` in its ports: one error at the use (the text is not read)
+
+flow gather_then_event(x: F32 at (sample * 2), m: U32 at event) -> F32 at sample {
+  (x[0] + x[1]) * 0.5
+}
+
+flow event_then_gather(m: U32 at event, x: F32 at (sample * 2)) -> F32 at sample {
+  (x[0] + x[1]) * 0.5
+}
+
+flow gather_and_event_output(x: F32 at (sample * 2)) -> U32 at event {
+  if x[0] + x[1] > 1.0 {
+    Some(1)
+  } else {
+    None
+  }
+}
+
+fn use_gather_then_event() {
+  let _ = gather_then_event.process                             //~ E0200
+}
+
+fn use_event_then_gather() {
+  let _ = event_then_gather.process                             //~ E0200
+}
+
+fn use_gather_and_event_output() {
+  let _ = gather_and_event_output.process                       //~ E0200
+}
+
+// ---------------------------------------------------------------- not generated: no border error, the name is not found (spec §11.6)
+
+flow no_inplace_of_an_event_output(x: F32 at sample) -> U32 at event {
+  if x > 0.5 {
+    Some(1)
+  } else {
+    None
+  }
+}
+
+fn use_of_a_function_that_is_not_generated() {
+  let _ = no_inplace_of_an_event_output.process_inplace         //~ E0302
+}

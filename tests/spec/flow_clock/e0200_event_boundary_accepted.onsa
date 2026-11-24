@@ -1,0 +1,107 @@
+// onsa.toml
+// [test]
+// spec = ["§11.6", "§11.9", "§11.11", "§18.1"]
+// fixes = 0
+
+// W7-11 U2g/t, S-560 (spec §11.9: "誤りの位置は、その flow の `process`・`process_inplace`・`render` を使う所と `@export` の印で、`init`・`reset`・`State` は使える"; §11.6: `Params` and `Config`): what the border of
+// the events does not refuse. The flows with an event in the head are read with no diagnostic (W7-11 U1a); `init`, `reset`, the types `State`, `Params` and `Config` of them are usable; and a flow with no event in its
+// head, whose body calls a flow with an event output or gives an event to a flow (`acc~(det~(x))`), has its `process`, `process_inplace` and `render` and may be exported: the events do not cross its border. The places that
+// are an error (the uses of the generated functions of a flow that has an event in the head, and the mark `@export` on it) are in e0200_event_boundary_uses.onsa and e0200_event_boundary_export.onsa.
+// No diagnostic.
+
+flow det(x: F32 at sample) -> U32 at event {
+  if x > 0.5 {
+    Some(1)
+  } else {
+    None
+  }
+}
+
+flow acc(e: U32 at event) -> U32 at sample {
+  let n = prev~(^n) + e
+  n
+}
+
+flow gate_in(m: U32 at event) -> U32 at sample {
+  m
+}
+
+flow with_params(p: F32 at block, m: U32 at event) -> F32 at sample {
+  p * F32.round_from(m)
+}
+
+flow with_config(c: U32 at init, m: U32 at event) -> U32 at sample {
+  c + m
+}
+
+// ---------------------------------------------------------------- `init`, `reset`, `State`, `Params`, `Config` of the flows with an event
+
+fn make_state() -> gate_in.State {
+  gate_in.init(8.0)
+}
+
+fn make_state_of_a_detector() -> det.State {
+  det.init(8.0)
+}
+
+fn reset_state(inout st: gate_in.State) {
+  gate_in.reset(inout st)
+}
+
+fn reset_state_of_a_detector(inout st: det.State) {
+  det.reset(inout st)
+}
+
+fn params_of_an_event_flow() -> with_params.Params {
+  with_params.Params { p: 0.5 }
+}
+
+fn state_with_a_config() -> with_config.State {
+  with_config.init(with_config.Config { c: 3 }, 8.0)
+}
+
+test "init and reset of the flows with an event are usable" {
+  var st = gate_in.init(8.0)
+  gate_in.reset(inout st)
+  var d = det.init(8.0)
+  det.reset(inout d)
+}
+
+// ---------------------------------------------------------------- a flow with no event in its head that calls the flows with an event
+
+flow counter(x: F32 at sample) -> U32 at sample {
+  acc~(det~(x))
+}
+
+flow gain_of_count(x: F32 at sample) -> F32 at sample {
+  let n = acc~(det~(x))
+  x * F32.round_from(n)
+}
+
+fn run_counter(inout st: counter.State, xs: Span[F32], inout ys: Span[U32]) {
+  counter.process(inout st, xs, inout ys)
+}
+
+fn run_gain_inplace(inout st: gain_of_count.State, inout buf: Span[F32]) {
+  gain_of_count.process_inplace(inout st, inout buf)
+}
+
+fn bound_process_of_the_caller() {
+  let _ = counter.process
+}
+
+test "render of a flow that calls the flows with an event" {
+  let xs: [F32; 4] = [0.1, 0.9, 0.2, 0.8]
+  let _ = counter.render(xs, 8.0)
+}
+
+@export
+pub flow exported_counter(x: F32 at sample) -> U32 at sample {
+  acc~(det~(x))
+}
+
+@export
+pub flow exported_gain_of_count(x: F32 at sample) -> F32 at sample {
+  let n = acc~(det~(x))
+  x * F32.round_from(n)
+}

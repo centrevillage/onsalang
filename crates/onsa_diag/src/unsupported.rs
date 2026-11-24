@@ -123,6 +123,10 @@ features! {
     /// `@export`, which is E0810 from W10-01.
     ConversionFlowBoundary: Language, "{} of a flow with an input or an output at `(sample / N)` or `(sample * N)`",
         Some("run the flow inside a flow at `sample` with `.down~(N)` or `.up~(N)`");
+    /// §11.11, §11.6: `{}`: the use. A flow with an input or an output at
+    /// `event` at the boundary, as [`Feature::ConversionFlowBoundary`], until
+    /// W10-07 makes the events of the generated API.
+    EventBoundary: Language, "{} of a flow with an input or an output at `event`", None;
     /// §11.11, S-560: a flow with an input or an output at `event`, which the
     /// check reads (W7-11 U2 runs the first forms).
     EventClocks: Language, "running a flow with an input or an output at `event`", None;

@@ -1,0 +1,50 @@
+// onsa.toml
+// [test]
+// spec = ["§11.6", "§11.9", "§15.1", "§18.1"]
+// fixes = 0
+
+// W7-11 U2g/t, S-560 (spec §11.9: the error is "その flow の `process`・`process_inplace`・`render` を使う所と `@export` の印"; §15.1: the path of a use is a path of the modules): the border of the events across the
+// modules of a package. The use of the generated functions of an event flow of another module is E0200 at the line of the use, by the path of the module (`voice.in_event.process`) and by the name that a `use` of the flow
+// brings in (`use voice.out_event`, `out_event.render`); the mark `@export` in the module of the flow and the use in the module of the flow itself are E0200 in `voice.onsa`. What does not cross the border (`init`,
+// `State` through the path of the module, and the flows with no event in their heads, which call the event flows in their bodies) has no diagnostic. One error for each use, and each flow has one use.
+use voice
+use voice.out_event
+use voice.in_render
+
+fn by_the_path_of_the_module() {
+  let _ = voice.in_event.process                                //~ E0200
+}
+
+fn by_the_path_inplace() {
+  let _ = voice.in_inplace.process_inplace                      //~ E0200
+}
+
+test "render by the name that a use brings in" {
+  let xs: [F32; 4] = [0.1, 0.9, 0.2, 0.8]
+  let _ = out_event.render(xs, 8.0)                             //~ E0200
+}
+
+fn by_the_name_of_a_use() {
+  let _ = in_render.render                                      //~ E0200
+}
+
+fn state_by_the_path_of_the_module() -> voice.in_event.State {
+  voice.in_event.init(8.0)
+}
+
+fn reset_by_the_path_of_the_module(inout st: voice.out_event.State) {
+  voice.out_event.reset(inout st)
+}
+
+fn no_event_in_the_head(inout st: voice.caller.State, xs: Span[F32], inout ys: Span[U32]) {
+  voice.caller.process(inout st, xs, inout ys)
+}
+
+test "render of the caller of the event flows" {
+  let xs: [F32; 4] = [0.1, 0.9, 0.2, 0.8]
+  let _ = voice.caller.render(xs, 8.0)
+}
+
+fn plain_of_another_module() {
+  let _ = voice.plain.process
+}
