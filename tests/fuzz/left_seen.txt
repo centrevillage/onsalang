@@ -100,6 +100,7 @@ fix|E0020|remove the `…`|E0002	expected a type, found integer literal
 fix|E0020|remove the `…`|E0002	expected an expression, found `…`
 fix|E0020|remove the `…`|E0002	expected newline after the declaration, found `…`
 fix|E0020|remove the `…`|E0002	this `…` is never closed
+fix|E0020|remove the `…`|E0020	a callee that is no path of names is a function value; it is called with `…`
 fix|E0020|remove the spaces|E0002	expected `…` or `…`, found `…`
 fix|E0020|remove the space|E0002	empty brackets are not written here
 fix|E0020|remove the space|E0002	expected `…` or `…`, found `…`
@@ -134,6 +135,7 @@ fix|E0411|call `…`|E0418	the type of this statement is `…`, not `…`; a sta
 fix|E0411|remove `…`|E0418	the type of this statement is `…`, not `…`; a statement gives no value (§#.#)
 fix|E0413|remove the call|E0418	the type of this statement is `…`, not `…`; a statement gives no value (§#.#)
 fix|E0418|discard the value with `…`|E0405	the type of this float literal cannot be determined; annotate it (§#.#)
+fix|E0418|discard the value with `…`|E0406	the const parameter `…` of `…` cannot be determined by the end of the function;
 fix|E0418|discard the value with `…`|E0413	`…` converts `…` to `…`, so there is no conversion function for this pair (§#.#)
 fix|E0601|add `…`|E0002	expected `…` (a function body), found `…`
 fix|E0714|remove `…`|E0418	the type of this statement is `…`, not `…`; a statement gives no value (§#.#)
