@@ -1,5 +1,24 @@
-# flow_ref 1 source=tests/spec/flow_semantics/when_burst_up_values.onsa tests=4 evaluated=0 unavailable=4 skipped=0 waiting=0
-? when~ of a burst under an .up~(2): both runs of a frame are made or both are stopped, and a stopped run reads its 2 values equal to the last one	unavailable a modifier in a block or over a burst under an `.up~` (W7-10 U3ae)
-? a condition of the kind block reads the frame it is in: the same values, and a call of process cut at a frame	unavailable a modifier in a block or over a burst under an `.up~` (W7-10 U3ae)
-? a when~ inside the boundary that deals a burst, under an .up~(2): the burst of a frame is dealt to its 2 runs with no delay, and a stopped frame reads the last element 4 times	unavailable a modifier in a block or over a burst under an `.up~` (W7-10 U3ae)
-? x.up~(2).when~(c).up~(2): the 2 runs of the inner up are one tick of the when~, and a stopped tick reads the last value four times	unavailable a modifier in a block or over a burst under an `.up~` (W7-10 U3ae)
+# flow_ref 1 source=tests/spec/flow_semantics/when_burst_up_values.onsa tests=4 evaluated=4 unavailable=0 skipped=0 waiting=0
+@ when~ of a burst under an .up~(2): both runs of a frame are made or both are stopped, and a stopped run reads its 2 values equal to the last one
+init 0 when_burst_up_values.burst_up sr=0x41000000
+init 1 when_burst_up_values.burst_up sr=0x41000000
+process 0 frames=3 in c=[true false true]
+out=[0x4529c000 0x452d9800 0x459a5000]
+process 1 frames=3 in c=[false true false]
+out=[0x00000000 0x4529c000 0x452d9800]
+@ a condition of the kind block reads the frame it is in: the same values, and a call of process cut at a frame
+init 0 when_burst_up_values.burst_up_block sr=0x41000000
+process 0 params c=true frames=1
+out=[0x4529c000]
+process 0 params c=false frames=1
+out=[0x452d9800]
+process 0 params c=true frames=1
+out=[0x459a5000]
+@ a when~ inside the boundary that deals a burst, under an .up~(2): the burst of a frame is dealt to its 2 runs with no delay, and a stopped frame reads the last element 4 times
+init 0 when_burst_up_values.burst_dealt_inside sr=0x41000000
+process 0 frames=3 in c=[true false true]
+out=[0x465fc000 0x4661ac00 0x46c6ac00]
+@ x.up~(2).when~(c).up~(2): the 2 runs of the inner up are one tick of the when~, and a stopped tick reads the last value four times
+init 0 when_burst_up_values.up_when_up sr=0x41000000
+process 0 frames=3 in c=[true false true]
+out=[0x45870800 0x458ae000 0x4608f400]

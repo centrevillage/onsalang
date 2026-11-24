@@ -67,6 +67,8 @@ pub mod walk_model;
 #[cfg(test)]
 mod aggregate_tests;
 #[cfg(test)]
+mod block_tests;
+#[cfg(test)]
 mod boundary_tests;
 #[cfg(test)]
 mod branch_tests;

@@ -1,10 +1,52 @@
-# flow_ref 1 source=tests/spec/flow_semantics/when_block_values.onsa tests=9 evaluated=0 unavailable=9 skipped=0 waiting=0
-? a condition of the signal at sample is gathered with the input: the run j reads the entry j, a stopped run holds the last output	unavailable a modifier in a block or over a burst under an `.up~` (W7-10 U3ae)
-? a condition of the kind block is read at the time of the run, and the head still gathers its input while the part is stopped	unavailable a modifier in a block or over a burst under an `.up~` (W7-10 U3ae)
-? a condition slower than the tick is read at its own tick: the entry j >> 1 of the 4 runs	unavailable a modifier in a block or over a burst under an `.up~` (W7-10 U3ae)
-? sample_tick() alone in a condition is the value of the frame, gathered with the input (not the tick of the run)	unavailable a modifier in a block or over a burst under an `.up~` (W7-10 U3ae)
-? a head with a stage of sample / 2 counts the runs that were made, and the stopped runs hold its last output	unavailable a modifier in a block or over a burst under an `.up~` (W7-10 U3ae)
-? with an .up~(4) and a .down~(2) the clock W is sample * 2 and the condition (a value of sample) is read per run, 2 entries of its ring for 4 runs	unavailable a modifier in a block or over a burst under an `.up~` (W7-10 U3ae)
-? the first tick of a ring is the defaults: a head that has no input still waits for its first block when the condition is a signal (S-1218)	unavailable a modifier in a block or over a burst under an `.up~` (W7-10 U3ae)
-? the calls of process cut the frames in the middle of a tick and a reset starts over: the same values (§13.4)	unavailable a modifier in a block or over a burst under an `.up~` (W7-10 U3ae)
-? a when~(true) put in anywhere of the chain is no when~: before, between and outside the block (the literal is not gathered)	unavailable a modifier in a block or over a burst under an `.up~` (W7-10 U3ae)
+# flow_ref 1 source=tests/spec/flow_semantics/when_block_values.onsa tests=9 evaluated=6 unavailable=0 skipped=3 waiting=0
+- a condition of the signal at sample is gathered with the input: the run j reads the entry j, a stopped run holds the last output	skipped layout
+@ a condition of the kind block is read at the time of the run, and the head still gathers its input while the part is stopped
+init 0 when_block_values.gate_block sr=0x41000000
+init 1 when_block_values.gate_block sr=0x41000000
+init 2 when_block_values.gate_block sr=0x41000000
+init 3 when_block_values.gate_block sr=0x41000000
+process 0 params c=true frames=8 in x=[0x3f800000 0x40000000 0x40400000 0x40800000 0x40a00000 0x40c00000 0x40e00000 0x41000000]
+out=[0x00000000 0x00000000 0x3f800000 0x40400000 0x40c00000 0x41200000 0x41700000 0x41a80000]
+process 1 params c=true frames=4 in x=[0x3f800000 0x40000000 0x40400000 0x40800000]
+out=[0x00000000 0x00000000 0x3f800000 0x40400000]
+process 1 params c=false frames=4 in x=[0x40a00000 0x40c00000 0x40e00000 0x41000000]
+out=[0x40400000 0x40400000 0x40400000 0x40400000]
+process 2 params c=true frames=4 in x=[0x3f800000 0x40000000 0x40400000 0x40800000]
+out=[0x00000000 0x00000000 0x3f800000 0x40400000]
+process 2 params c=false frames=2 in x=[0x40a00000 0x40c00000]
+out=[0x40400000 0x40400000]
+process 2 params c=true frames=2 in x=[0x40e00000 0x41000000]
+out=[0x41000000 0x41600000]
+process 3 params c=false frames=8 in x=[0x3f800000 0x40000000 0x40400000 0x40800000 0x40a00000 0x40c00000 0x40e00000 0x41000000]
+out=[0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000]
+@ a condition slower than the tick is read at its own tick: the entry j >> 1 of the 4 runs
+init 0 when_block_values.gate_slower sr=0x41000000
+process 0 frames=12 in x=[0x3f800000 0x40000000 0x40400000 0x40800000 0x40a00000 0x40c00000 0x40e00000 0x41000000 0x41100000 0x41200000 0x41300000 0x41400000]
+out=[0x00000000 0x00000000 0x00000000 0x00000000 0x3f800000 0x40400000 0x40400000 0x40400000 0x40400000 0x40400000 0x41200000 0x41900000]
+@ sample_tick() alone in a condition is the value of the frame, gathered with the input (not the tick of the run)
+init 0 when_block_values.gate_time sr=0x41000000
+process 0 frames=8 in x=[0x3f800000 0x40000000 0x40400000 0x40800000 0x40a00000 0x40c00000 0x40e00000 0x41000000]
+out=[0x00000000 0x00000000 0x3f800000 0x40400000 0x40400000 0x40400000 0x41000000 0x41600000]
+@ a head with a stage of sample / 2 counts the runs that were made, and the stopped runs hold its last output
+init 0 when_block_values.gate_slot sr=0x41000000
+process 0 frames=8 in c=[true false true true false true true true]
+out=[0x00000000 0x00000000 0x42ca0000 0x42ca0000 0x42cc0000 0x434b0000 0x434b0000 0x434c0000]
+@ with an .up~(4) and a .down~(2) the clock W is sample * 2 and the condition (a value of sample) is read per run, 2 entries of its ring for 4 runs
+init 0 when_block_values.gate_wider sr=0x41000000
+process 0 frames=8 in c=[true false true true false true true true]
+out=[0x00000000 0x00000000 0x41a80000 0x41b00000 0x422c0000 0x42820000 0x42840000 0x42ae0000]
+@ the first tick of a ring is the defaults: a head that has no input still waits for its first block when the condition is a signal (S-1218)
+init 0 when_block_values.first_signal sr=0x41000000
+init 1 when_block_values.first_block sr=0x41000000
+init 2 when_block_values.first_literal sr=0x41000000
+init 3 when_block_values.first_none sr=0x41000000
+process 0 frames=8 in c=[true true true true true true true true]
+out=[0x00000000 0x00000000 0x3f800000 0x40000000 0x40400000 0x40800000 0x40a00000 0x40c00000]
+process 1 params c=true frames=8
+out=[0x3f800000 0x40000000 0x40400000 0x40800000 0x40a00000 0x40c00000 0x40e00000 0x41000000]
+process 2 frames=8
+out=[0x3f800000 0x40000000 0x40400000 0x40800000 0x40a00000 0x40c00000 0x40e00000 0x41000000]
+process 3 frames=8
+out=[0x3f800000 0x40000000 0x40400000 0x40800000 0x40a00000 0x40c00000 0x40e00000 0x41000000]
+- the calls of process cut the frames in the middle of a tick and a reset starts over: the same values (§13.4)	skipped layout
+- a when~(true) put in anywhere of the chain is no when~: before, between and outside the block (the literal is not gathered)	skipped layout

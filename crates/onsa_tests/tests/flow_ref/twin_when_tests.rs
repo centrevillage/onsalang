@@ -5,7 +5,7 @@
 //! Three things hold them. The checker passes every program and the interpreter holds its asserts (a twin that the interpreter
 //! does not hold is a failure of the interpreter or of the generator), and a mutant of each twin is caught by the asserts: both
 //! run today. The evaluator gives what the interpreter gives (`twin::run`: it evaluates every test and the interpreter is
-//! compared with it): these wait for the evaluator to have a modifier inside a block and a `when~` of a burst under an `.up~` (W7-10 U3ae).
+//! compared with it), a modifier inside a block and a `when~` of a burst under an `.up~` too since W7-10 U3ae.
 //! The checker and the interpreter pass the programs of every seed once U3a is in (the tests that run them are marked `W7-10 U3a` until then).
 
 use std::collections::BTreeSet;
@@ -168,14 +168,12 @@ fn the_checker_passes_every_chain_in_range_of_up_to_three_modifiers_the_forms_th
 }
 
 #[test]
-#[ignore = "W7-10 U3ae: S-1209"]
 fn the_twins_of_when_agree_on_the_evaluator_and_in_the_interpreter() {
     println!("{:?}", check(GATE.to_vec(), WHEN));
     println!("{:?}", check(EXOTIC_GATE.to_vec(), EXOTIC));
 }
 
 #[test]
-#[ignore = "W7-10 U3ae: S-1209"]
 fn a_mutant_of_a_twin_of_when_is_caught_by_the_evaluator() {
     // The interpreter is not run on a mutant: the evaluator has to evaluate every test, and an assert fails in each program.
     for (family, seeds) in [(WHEN, GATE.to_vec()), (EXOTIC, EXOTIC_GATE.to_vec())] {
@@ -230,8 +228,8 @@ fn heavy_the_checker_passes_every_chain_in_range_of_up_to_five_modifiers() {
 }
 
 #[test]
-#[ignore = "W7-10 U3ae: S-1209"]
-fn many_when_twins_on_the_evaluator() {
+#[ignore = "heavy: the gate item `heavy` runs it"]
+fn heavy_when_twins() {
     println!("{:?}", check(heavy_seeds(200), WHEN));
     println!("{:?}", check((0..exotic_count()).collect(), EXOTIC));
 }

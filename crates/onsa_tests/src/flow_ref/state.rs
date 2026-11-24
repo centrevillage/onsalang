@@ -19,7 +19,7 @@ use super::call::parts;
 use super::chain::Gate;
 use super::expr::{Eval, Frame, LOW_STACK, Stop, evaluates};
 use super::flow::{Clock, Ctx, Inst, Plans, enter};
-use super::rate::{Bound, Level, chain_of, child_time, counted, levels, n_of, on_tick};
+use super::rate::{Bound, Level, chain_of, child_time, counted, levels, n_of, on_tick, port_exprs};
 use super::scalar::{Fault, Fault::Internal};
 use super::sema_view::{Called, Stage, input_stage};
 use super::value::{IntKind, Scalar, Shape, Value};
@@ -137,11 +137,12 @@ impl Run {
 
 enum Node {
     Delay(Delay),
-    /// The ring of the `2^k` elements that the input number `input` at `sample * 2^k` of the part inside the `.down~` boundary `bound` gathers (§11.9), flat, at the call.
+    /// The ring of the `2^k` elements that the port number `input` at `sample * 2^k` (of the expression `arg`) of the part inside the `.down~` boundary `bound` gathers (§11.9), flat, at the call.
     Gather {
         bound: usize,
         input: usize,
         k: i32,
+        arg: ExprId,
     },
     /// The array of the `2^m` elements that the output at `sample * 2^m` of the part inside the `.down~` boundary `bound` deals (§11.9), at the call.
     Deal {
@@ -315,10 +316,12 @@ impl<'a> Frame<'a> {
             };
             args.iter().map(|a| a.expr).chain(chain.conds()).try_for_each(|x| self.nodes(x, out))?;
             let parts = self.parts_of(def, &chain.bounds, at)?;
+            let ports = port_exprs(args.iter().map(|a| a.expr), &parts);
             for (b, lv) in parts.iter().enumerate().skip(1) {
                 for &input in &lv.gathers {
                     let k = parts[b - 1].ins[input].ok_or(here(Internal("a gather of an input of no clock")))?;
-                    out.push(Site::Node(chain.head, Node::Gather { bound: b, input, k }, args.as_slice()));
+                    let node = Node::Gather { bound: b, input, k, arg: ports[input] };
+                    out.push(Site::Node(chain.head, node, args.as_slice()));
                 }
                 if lv.deals {
                     out.push(Site::Node(chain.head, Node::Deal { bound: b, m: parts[b - 1].out }, args.as_slice()));
@@ -364,8 +367,8 @@ impl<'a> Frame<'a> {
         for site in sites {
             match site {
                 Site::Node(e, Node::Delay(d), args) => self.make_cell(*e, *d, args)?,
-                Site::Node(e, Node::Gather { bound, input, k }, args) => {
-                    self.make_gather(*e, *bound, *input, *k, args)?
+                Site::Node(e, Node::Gather { bound, input, k, arg }, _) => {
+                    self.make_gather(*e, *bound, *input, *k, *arg)?
                 }
                 Site::Node(e, Node::Deal { bound, m }, _) => self.make_deal(*e, *bound, *m)?,
                 Site::Node(e, Node::Instance(def, parts), _) => self.make_child(*e, *def, parts.clone())?,
@@ -426,12 +429,11 @@ impl<'a> Frame<'a> {
         Ok(())
     }
 
-    /// The node of the ring of the input number `input` (at `sample * 2^k`) of the chain whose head is `e`: the `2^k` elements of its argument that came before, `T.default()` at first (§11.9: position 0 has no
-    /// sample before it). It is a node of the call: what the argument is does not matter to it (it may be a delay itself).
-    fn make_gather(&mut self, e: ExprId, bound: usize, input: usize, k: i32, args: &[Arg]) -> Result<(), Stop> {
+    /// The node of the ring of the port number `input` (at `sample * 2^k`, of the expression `arg`: an argument of the head or a condition) of the chain whose head is `e`: the `2^k` elements of its argument that came before,
+    /// `T.default()` at first (§11.9: position 0 has no sample before it). It is a node of the call: what the argument is does not matter to it (it may be a delay itself).
+    fn make_gather(&mut self, e: ExprId, bound: usize, input: usize, k: i32, arg: ExprId) -> Result<(), Stop> {
         let at = self.body.ast.expr(e).span;
         let here = |fault| Stop { fault, at };
-        let arg = args.get(input).ok_or(here(Internal("an input with no argument")))?.expr;
         let shape = self.shape(self.body.ty(arg).map_err(here)?, at)?;
         let n = n_of(k) as usize;
         self.hold(n.checked_mul(shape.places()), at)?;
@@ -472,10 +474,10 @@ impl<'a> Frame<'a> {
         let plans = self.run.as_ref().map(|r| r.plans.clone()).ok_or(Stop { fault: Internal("no run"), at })?;
         let slow = Inst::planned(self.body.view, def, &plans)?.slow;
         let decl = self.body.view.flow(def).map_err(|fault| Stop { fault, at })?;
-        // The clock of a condition of a `reset_if~` is that of the plan of this body (`rate::slow_ticks`).
+        // The clock of a condition of a modifier is that of the plan of this body (`rate::slow_ticks`).
         let clock = |c| {
             let conds = Inst::planned(self.body.view, self.body.def, &plans).map_err(|stop| stop.fault)?.conds;
-            conds.get(&c).copied().ok_or(Internal("a condition of a `reset_if~` with no clock"))
+            conds.get(&c).copied().ok_or(Internal("a condition of a modifier with no clock"))
         };
         levels(decl, &slow, bounds, &clock).map_err(|fault| Stop { fault, at })
     }
@@ -485,6 +487,7 @@ impl<'a> Frame<'a> {
         let at = self.body.ast.expr(e).span;
         let (mut inst, decl) = self.new_child(def, at)?;
         inst.bursts = vec![Vec::new(); parts.len()];
+        inst.fed = vec![Value::Unit; parts[parts.len() - 1].ins.len()];
         inst.whens = self.gates(e, &parts, at)?;
         inst.levels = parts;
         let key = self.key(e, Role::Child);
@@ -637,7 +640,7 @@ impl<'a> Frame<'a> {
         for (key, def, parts, scope) in calls {
             let here = |fault| Stop { fault, at: self.body.ast.expr(key.call).span };
             let decl = self.body.view.flow(def).map_err(here)?;
-            let args = self.args_of_call(key.call, decl)?;
+            let args = port_exprs(self.args_of_call(key.call, decl)?.iter().map(|a| a.expr), &parts);
             let top = &parts[parts.len() - 1];
             for &n in &top.gathers {
                 let q = top.ins[n].ok_or(here(Internal("a gather of an input of no clock")))?;
@@ -646,8 +649,7 @@ impl<'a> Frame<'a> {
                 }
                 let run = self.run.as_mut().ok_or(here(Internal("no run")))?;
                 let role = Role::Gather { bound: parts.len() - 1, input: n };
-                let save =
-                    Save { key: key.role(role), expr: args[n].expr, scope: scope.clone(), call: Some(key.call), q };
+                let save = Save { key: key.role(role), expr: args[n], scope: scope.clone(), call: Some(key.call), q };
                 run.saves.push(save);
             }
         }

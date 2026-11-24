@@ -34,7 +34,7 @@ use onsa_syntax::ast::{BinOp, CallKind, ExprId, ExprKind, StmtKind};
 
 use super::expr::{Frame, LOW_STACK, Stop};
 use super::flow::{Clock, Known, Seen, Step, clock_of};
-use super::rate::{args_of, chain_of};
+use super::rate::{args_of, chain_of, port_exprs};
 use super::scalar::Fault;
 use super::sema_view::{Body, Called, Stage};
 
@@ -456,7 +456,8 @@ pub(super) fn gathered(f: &mut Frame, steps: &[Step], at: Stage) -> Result<(), S
             x.file == span.file && x.start <= span.start && span.end <= x.end
         };
         let step = steps.iter().find(|s| holds(s)).ok_or(stop(Fault::Internal("a chain that no step holds")))?;
-        let args = args_of(&body, key.call);
+        let levels = f.run.as_ref().and_then(|r| r.state.children.get(&key)).map(|c| c.levels.clone());
+        let args = port_exprs(args_of(&body, key.call), &levels.ok_or(stop(Fault::Internal("no instance")))?);
         f.with_bindings(&key.replicas, scope, |f| {
             gathers.iter().try_for_each(|n| {
                 let arg = args.get(*n).ok_or(stop(Fault::Internal("a gathered input with no argument")))?;

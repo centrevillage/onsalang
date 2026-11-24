@@ -34,7 +34,7 @@ flow sl(p: F32 at (sample / 2)) -> F32 at sample {
 ";
 
 /// The outputs of the flow `name` of `HEADS` and `src` for one call of `process` of the `sample` columns `cols` (by the input name, 0 and 1) and the `block` input `p`.
-fn outs(src: &str, name: &'static str, p: Option<bool>, cols: &[(&'static str, &[u8])]) -> Vec<f32> {
+pub(super) fn outs(src: &str, name: &'static str, p: Option<bool>, cols: &[(&'static str, &[u8])]) -> Vec<f32> {
     let src = format!("{HEADS}{src}");
     let cols: Vec<(&'static str, Vec<Value>)> =
         cols.iter().map(|(n, c)| (*n, c.iter().map(|b| Value::Bool(*b == 1)).collect())).collect();

@@ -506,10 +506,9 @@ fn plan_atid(rng: &mut Rng, rot: bool) -> Plan {
     }
 }
 
-/// The body of a flow for a chain: the `let`s its conditions and its head need, and the chain (wrapped in `g2` or `g4` when
-/// it gives a burst, with `at sample` when its output is slower).
-pub fn flow_body(head: Head, mods: &[Mod]) -> String {
-    let chain = format!("{}{}", head.text().0, mods.iter().map(Mod::text).collect::<String>());
+/// The `let`s that the conditions and the head of a chain need in the body of a flow (each ends in a line break and the
+/// indent of the body): the signals `c<N>` at `sample / N`, the slower values `k<F>` and the input `xv` of a head.
+pub fn lets(head: Head, mods: &[Mod]) -> String {
     let conds = || mods.iter().filter_map(Mod::cond);
     let signals: BTreeSet<u32> = conds().flat_map(|c| c.signals.iter().copied()).collect();
     let slow: BTreeSet<u32> = conds().flat_map(|c| c.slow.iter().copied()).collect();
@@ -520,12 +519,19 @@ pub fn flow_body(head: Head, mods: &[Mod]) -> String {
         Head::Sl => lets.push("let q = cnt~().down~(2)".to_string()),
         _ => {}
     }
+    lets.into_iter().map(|l| l + "\n  ").collect()
+}
+
+/// The body of a flow for a chain: the `let`s its conditions and its head need, and the chain (wrapped in `g2` or `g4` when
+/// it gives a burst, with `at sample` when its output is slower).
+pub fn flow_body(head: Head, mods: &[Mod]) -> String {
+    let chain = format!("{}{}", head.text().0, mods.iter().map(Mod::text).collect::<String>());
     let value = match net(head, mods) {
         0 => chain,
         n @ (1 | 2) => format!("g{}~({chain})", 1u32 << n),
         _ => format!("{chain} at sample"),
     };
-    lets.into_iter().map(|l| l + "\n  ").collect::<String>() + &value
+    lets(head, mods) + &value
 }
 
 /// The forms a plan holds (the tags that the seeds of the gate have to cover).

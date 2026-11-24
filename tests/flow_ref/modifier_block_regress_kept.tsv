@@ -1,3 +1,12 @@
-# flow_ref 1 source=tests/spec/flow_semantics/modifier_block_regress_kept.onsa tests=2 evaluated=0 unavailable=2 skipped=0 waiting=0
-? (1) a burst under .up~(2).down~(2) with a stopped run: the same rule with no boundary that deals inside	unavailable a modifier in a block or over a burst under an `.up~` (W7-10 U3ae)
-? (3) the same with .up~(4).down~(2): the reset is once for a frame (the clock of r is sample), before the first of its 2 runs, and the part gives 4 values for each frame	unavailable a modifier in a block or over a burst under an `.up~` (W7-10 U3ae)
+# flow_ref 1 source=tests/spec/flow_semantics/modifier_block_regress_kept.onsa tests=2 evaluated=2 unavailable=0 skipped=0 waiting=0
+@ (1) a burst under .up~(2).down~(2) with a stopped run: the same rule with no boundary that deals inside
+init 0 modifier_block_regress_kept.burst_plain sr=0x41000000
+process 0 frames=8 in c=[true false true true false true true true]
+out=[0x00000000 0x00000000 0x462c0800 0x462c0c00 0x46a43800 0x46f26c00 0x46f26e00 0x47205000]
+@ (3) the same with .up~(4).down~(2): the reset is once for a frame (the clock of r is sample), before the first of its 2 runs, and the part gives 4 values for each frame
+init 0 modifier_block_regress_kept.deal_reset_lo sr=0x41000000
+init 1 modifier_block_regress_kept.deal_reset_hi sr=0x41000000
+process 0 frames=8 in r=[false false false true false false false false]
+out=[0x43490000 0x44174000 0x447c4000 0x44b0a000 0x44e32000 0x43490000 0x44174000 0x447c4000]
+process 1 frames=8 in r=[false false false true false false false false]
+out=[0x43c98000 0x4449c000 0x44976000 0x44c9e000 0x44fc6000 0x43c98000 0x4449c000 0x44976000]
