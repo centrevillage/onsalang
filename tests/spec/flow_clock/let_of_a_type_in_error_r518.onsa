@@ -1,0 +1,25 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§11.11", "§18.1"]
+
+// R-518 (spec §18.1: an expression in error makes no second error): a `let` of a flow that reads a value of a type a syntax error left unread is in error with no diagnostic of its own, at `block` and at
+// `event`: no internal error of the check of the clocks (a file in the middle of an edit).
+
+pub struct Note:  {   //~ E0002
+  pitch: F32,
+  vel: F32,
+}
+
+pub rt fn vel(n: Note) -> F32 {
+  n.vel
+}
+
+pub flow of_a_block_value(m: Note at block, x: F32 at sample) -> F32 at sample {
+  let v = vel(m) * 2.0
+  x * v
+}
+
+pub flow of_an_event(m: Note at event, x: F32 at sample) -> F32 at sample {
+  let v = vel(m) * 2.0
+  x * v
+}

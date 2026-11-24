@@ -1,0 +1,82 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§11.5", "§11.11", "§18.1"]
+
+// W7-11 U1b/t, S-1158 (c), S-1210 (spec §11.3: "条件のどれかが他の段（`block`、別の刻み、`sample`）で決まる位置には書けない（E0815。刻みごとに計算するなら前の `let` に出し、届いたときに計算するなら読む名前に `at` を書く）"): a part computed from an event
+// value (`vel(m) * 2.0`, no `sample` operand) is of the tick of its event, so where an `if` branch, a `match` arm or guard, an `if~` condition after the first, or the right of `&&` / `||` is selected by a condition decided at `sample`, at `block` or at the
+// tick of another event, it is E0815 at the part. No candidate is promised. The accepted forms are in event_condition_positions_accepted.onsa. One error per flow (P-01). `m` and `n` are events, `x`, `g` and `k` are `sample` inputs, `p` is `block`.
+
+pub struct Note: Default {
+  pitch: F32,
+  vel: F32,
+}
+
+pub rt fn vel(n: Note) -> F32 {
+  n.vel
+}
+
+pub rt fn is_on(n: Note) -> Bool {
+  n.vel > 0.0
+}
+
+pub flow lp(x: F32 at sample) -> F32 at sample {
+  x * 0.5
+}
+
+// ---------------------------------------------------------------- an `if`: the branches
+
+pub flow if_on_a_sample_condition(m: Note at event, x: F32 at sample, g: Bool at sample) -> F32 at sample {
+  if g { vel(m) * 2.0 } else { x }                            //~ E0815
+}
+
+pub flow else_of_a_sample_condition(m: Note at event, x: F32 at sample, g: Bool at sample) -> F32 at sample {
+  if g { x } else { vel(m) * 2.0 }                            //~ E0815
+}
+
+pub flow if_on_a_block_condition(m: Note at event, x: F32 at sample, p: F32 at block) -> F32 at sample {
+  if p > 0.0 { vel(m) * 2.0 } else { x }                      //~ E0815
+}
+
+pub flow if_on_the_event_of_another_input(m: Note at event, n: Note at event, x: F32 at sample) -> F32 at sample {
+  if is_on(n) { vel(m) * 2.0 } else { x }                     //~ E0815
+}
+
+pub flow if_on_a_condition_that_has_a_sample(m: Note at event, x: F32 at sample, g: Bool at sample) -> F32 at sample {
+  if is_on(m) && g { vel(m) * 2.0 } else { x }                //~ E0815
+}
+
+// ---------------------------------------------------------------- `&&` and `||`: the right operand
+
+pub flow right_of_and(m: Note at event, x: F32 at sample, g: Bool at sample) -> F32 at sample {
+  if g && vel(m) > 1.0 { x } else { 0.0 }                     //~ E0815
+}
+
+pub flow right_of_or(m: Note at event, x: F32 at sample, g: Bool at sample) -> F32 at sample {
+  if g || vel(m) > 1.0 { x } else { 0.0 }                     //~ E0815
+}
+
+// ---------------------------------------------------------------- `match`: an arm and a guard; `if~`: a condition after the first
+
+pub flow arm_of_a_match_on_a_sample(m: Note at event, x: F32 at sample, k: U32 at sample) -> F32 at sample {
+  match k {
+    0 => vel(m) * 2.0,                                        //~ E0815
+    _ => x,
+  }
+}
+
+pub flow guard_of_a_match_on_a_sample(m: Note at event, x: F32 at sample, k: U32 at sample) -> F32 at sample {
+  match k {
+    0 if vel(m) > 1.0 => x,                                   //~ E0815
+    _ => 0.0,
+  }
+}
+
+pub flow second_condition_of_if_tilde(m: Note at event, x: F32 at sample, g: Bool at sample) -> F32 at sample {
+  if~ g { lp~(x) } else if vel(m) > 1.0 { 1.0 } else { 0.0 } //~ E0815
+}
+
+// S-1231: the part `(v at (sample / 4)) at sample` of a value of a tick is not a name read; it is E0815 here as `sample_tick()` is (a temporary reading).
+// SPEC-GAP(S-1231): whether a name of an event with an `at` to a slower tick, read at `sample`, may stand in a position that a `sample` condition selects; this is E0815 until it is decided.
+pub flow slow_at_under_a_sample_condition(v: F32 at event, g: Bool at sample) -> F32 at sample {
+  if g { (v at (sample / 4)) at sample } else { 0.0 }         //~ E0815
+}

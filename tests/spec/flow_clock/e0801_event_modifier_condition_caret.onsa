@@ -1,0 +1,44 @@
+// onsa.toml
+// [test]
+// spec = ["§11.2", "§11.10", "§18.1"]
+
+// W7-11 U1b/t, S-558 (spec §11.2: "`^名前` を書けるのは、遅延の組込みの第 1 引数の式の中だけで、その中の利用者の flow の引数と修飾子の引数（`when~`・`reset_if~` の条件）には書けない（E0801）"; the candidate `prev~(^名前)` is promised for a `^` outside a delay
+// and none inside its first argument, so no candidate is checked): the condition of a modifier takes no `^`, so an event (the output of a flow that gives out events, a `let` below the condition) cannot be read from above in `when~` and `reset_if~`,
+// outside a delay and inside its first argument. One error per flow (P-01). `m` is an event, `x` is a `sample` input.
+
+pub flow fwd(m: F32 at event) -> F32 at event {
+  Some(m)
+}
+
+pub flow count(x: F32 at sample) -> F32 at sample {
+  let n = prev~(^n) + x
+  n
+}
+
+pub flow lp(x: F32 at sample) -> F32 at sample {
+  x * 0.5
+}
+
+pub flow reset_of_an_event_below(m: F32 at event, x: F32 at sample) -> F32 at sample {
+  let l = count~(x).reset_if~(^e > 0.5)                       //~ E0801
+  let e = fwd~(m)
+  l
+}
+
+pub flow when_of_an_event_below(m: F32 at event, x: F32 at sample) -> F32 at sample {
+  let l = lp~(x).when~(^e > 0.5)                              //~ E0801
+  let e = fwd~(m)
+  l
+}
+
+pub flow in_the_first_argument_of_a_delay(m: F32 at event, x: F32 at sample) -> F32 at sample {
+  let l = prev~(prev~(x).reset_if~(^e > 0.5))                 //~ E0801
+  let e = fwd~(m)
+  l
+}
+
+pub flow event_of_a_delay_below(m: F32 at event, x: F32 at sample) -> F32 at sample {
+  let l = prev~(x).when~(^e > 0.5)                            //~ E0801
+  let e = prev~(m)
+  l
+}

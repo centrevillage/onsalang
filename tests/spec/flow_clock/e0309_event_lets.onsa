@@ -1,0 +1,58 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§11.11", "§18.1"]
+
+// W7-11 U1b/t, S-1146 (spec §18.1: "使われないローカルの束縛…flow の本体も同じに数え、さらに出力と `let _` から辿れない `let`"; §11.11): a `let` that only an event stage reads is read (by another `let` of an event, an event output, a condition of `when~`), so it
+// is no E0309; a `let` that nothing reads is E0309 at its name, whatever the clock of its value is. `m` is an event, `x` is a `sample` input.
+
+pub rt fn scale(v: U32) -> U32 {
+  v * 3
+}
+
+pub rt fn is_on(e: U32) -> Bool {
+  e > 0
+}
+
+pub flow fwd(m: U32 at event) -> U32 at event {
+  Some(m)
+}
+
+pub flow lp(x: F32 at sample) -> F32 at sample {
+  x * 0.5
+}
+
+// ---------------------------------------------------------------- read: no E0309
+
+pub flow let_read_by_a_let_of_events(m: U32 at event) -> U32 at sample {
+  let a = scale(m)
+  let w = m + a
+  w
+}
+
+pub flow let_read_by_an_event_output(m: U32 at event) -> U32 at event {
+  let a = scale(m)
+  let w = a + 1
+  Some(w)
+}
+
+pub flow let_read_by_when(m: U32 at event, x: F32 at sample) -> F32 at sample {
+  let g = is_on(m)
+  lp~(x).when~(g)
+}
+
+// ---------------------------------------------------------------- not read: E0309
+
+pub flow event_value_unread(m: U32 at event, x: F32 at sample) -> F32 at sample {
+  let a = m + 1                                               //~ E0309
+  x
+}
+
+pub flow computed_part_unread(m: U32 at event, x: F32 at sample) -> F32 at sample {
+  let a = scale(m)                                            //~ E0309
+  x
+}
+
+pub flow event_output_unread(m: U32 at event, x: F32 at sample) -> F32 at sample {
+  let e = fwd~(m)                                             //~ E0309
+  x
+}

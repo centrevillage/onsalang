@@ -1,0 +1,125 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§11.4", "§11.10", "§11.11", "§18.1"]
+
+// W7-11 U1b/t, S-563 (spec §11.11: "四つの所（組込みの遅延の第 1 引数、帰還の輪、`reset_if~` の条件、イベントの出力の式）では、`at` の下に無いイベントの値が周期の刻みのクロックの値と混ざると E0815"、"値は `let`・`rt fn` の結果・
+// `if` / `match`・struct・配列・タプルのリテラルを通して追い（フィールドを分けて追わない）"): an event value with no `at` over it meets a periodic value in a place where the clock decides when the state ticks, the loop is stepped, the state is
+// reset or the event is given out: E0815 at the line of the place, through a `let`, an `rt fn`, a `match`, a struct, an array and a tuple, and the length of a `vdelay~` of an event that is a periodic value. The same sums are no error outside the places (event_four_places_accepted.onsa). The candidates of the
+// delay are in e0815_event_delay_*candidates_clean.onsa; the other places promise none. One error per flow (P-01). `m` is an event, `bend` and `x` are `sample` inputs, `l4` is `sample / 4`.
+
+pub struct Bent: Default {
+  note: F32,
+  vel: F32,
+}
+
+pub rt fn lift(v: F32) -> F32 {
+  v + 1.0
+}
+
+pub rt fn hot(b: Bent) -> Bool {
+  b.vel > 0.5
+}
+
+pub rt fn is_start(e: U32) -> Bool {
+  e == 1
+}
+
+pub flow count(x: F32 at sample) -> F32 at sample {
+  let n = prev~(^n) + x
+  n
+}
+
+// ---------------------------------------------------------------- the first argument of a delay
+
+pub flow delay_sum(m: Bent at event, bend: F32 at sample) -> F32 at sample {
+  prev~(m.note + bend)                                        //~ E0815
+}
+
+pub flow vdelay_sum(m: Bent at event, bend: F32 at sample) -> F32 at sample {
+  vdelay~(m.note + bend, 2.0, 8)                              //~ E0815
+}
+
+pub flow delay_with_a_slow_value(m: Bent at event, l4: F32 at (sample / 4)) -> F32 at sample {
+  prev~(m.note + l4) at sample                                //~ E0815
+}
+
+pub flow through_a_let(m: Bent at event, bend: F32 at sample) -> F32 at sample {
+  let w = m.note + 1.0
+  prev~(w + bend)                                             //~ E0815
+}
+
+pub flow through_an_rt_fn(m: Bent at event, bend: F32 at sample) -> F32 at sample {
+  prev~(lift(m.note) + bend)                                  //~ E0815
+}
+
+pub flow through_a_match(m: Bent at event, bend: F32 at sample) -> F32 at sample {
+  let w = match hot(m) {
+    true => m.note,
+    false => 0.0,
+  }
+  prev~(w + bend)                                             //~ E0815
+}
+
+pub flow through_a_struct(m: Bent at event, bend: F32 at sample) -> F32 at sample {
+  let s = Bent { note: m.note, vel: 0.0 }
+  prev~(s.note + bend)                                        //~ E0815
+}
+
+pub flow through_an_array(m: Bent at event, bend: F32 at sample) -> F32 at sample {
+  let a = [m.note, m.vel]
+  prev~(a[0] + bend)                                          //~ E0815
+}
+
+pub flow through_a_tuple(m: Bent at event, bend: F32 at sample) -> F32 at sample {
+  let t = (m.note, m.vel)
+  prev~(t.0 + bend)                                           //~ E0815
+}
+
+// The fields are not followed apart (§11.11): the tuple holds the event value and a `sample` value in one value, and `t.0` is that value.
+pub flow tuple_of_both_clocks(m: Bent at event, bend: F32 at sample) -> F32 at sample {
+  let t = (m.note, bend)
+  prev~(t.0)                                                  //~ E0815
+}
+
+pub flow in_a_par(m: Bent at event, bend: F32 at sample) -> [F32; 2] at sample {
+  par~ i in 0 ..< 2 {
+    prev~(m.note + bend)                                      //~ E0815
+  }
+}
+
+// §11.4: "`d` は第 1 引数と同じクロックか、暗黙に読めるもの"; §11.11: "イベントの段の式では、周期の刻みのクロックの値（入力を含む）は読めず E0815": the length of a delay of an event is a value of a periodic clock.
+pub flow vdelay_length_of_a_sample(m: F32 at event, d: F32 at sample) -> F32 at event {
+  Some(vdelay~(m, d, 8))                                      //~ E0815
+}
+
+// ---------------------------------------------------------------- the loop
+
+pub flow loop_with_both(m: F32 at event, x: F32 at sample) -> F32 at sample {
+  let n = prev~(^n) + m + x                                   //~ E0815
+  n
+}
+
+// ---------------------------------------------------------------- the condition of reset_if~
+
+pub flow reset_and(tr: U32 at event, x: F32 at sample, armed: Bool at sample) -> F32 at sample {
+  count~(x).reset_if~(is_start(tr) && armed)                  //~ E0815
+}
+
+pub flow reset_through_a_let(tr: U32 at event, x: F32 at sample, armed: Bool at sample) -> F32 at sample {
+  let s = is_start(tr)
+  count~(x).reset_if~(s && armed)                             //~ E0815
+}
+
+pub flow reset_of_a_delay(m: F32 at event, armed: Bool at sample) -> F32 at sample {
+  prev~(m).reset_if~(m > 0.5 && armed)                        //~ E0815
+}
+
+// ---------------------------------------------------------------- the expression of an event output
+
+pub flow out_sum(m: F32 at event, x: F32 at sample) -> F32 at event {
+  Some(m + x)                                                 //~ E0815
+}
+
+pub flow out_if_on_a_sample(m: F32 at event, x: F32 at sample) -> F32 at event {
+  if x > 0.0 { Some(m) } else { None }                        //~ E0815
+}

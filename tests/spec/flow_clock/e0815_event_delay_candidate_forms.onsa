@@ -1,0 +1,29 @@
+// onsa.toml
+// [test]
+// spec = ["§11.4", "§11.11", "§18.1"]
+// fixes = 2
+
+// W7-11 U1b/b, S-563 (spec §11.11; §18.1: the least edit, the candidate leaves no new error): the two candidates of a delay whose first argument mixes an event and a `sample` value, in the forms where the event
+// is the right operand and the place needs parentheses, and the forms with the second alone (an `init`, a comment after the `(`), where the first would move what it does not know.
+
+pub flow right_operand_under_a_quotient(m: F32 at event, x: F32 at sample) -> F32 at sample {
+  1.0 / prev~(x - m)   //~ E0815
+}
+
+pub flow right_operand_under_a_sign(m: F32 at event, x: F32 at sample) -> F32 at sample {
+  -prev~(x + m)   //~ E0815
+}
+
+pub flow left_operand_under_a_product(m: F32 at event, x: F32 at sample) -> F32 at sample {
+  x * prev~(m + x)   //~ E0815
+}
+
+pub flow with_an_init(m: F32 at event, x: F32 at sample) -> F32 at sample {
+  prev~(m + x, 0.5)   //~ E0815
+}
+
+pub flow with_a_comment(m: F32 at event, x: F32 at sample) -> F32 at sample {
+  prev~( // the sum
+    m + x   //~ E0815
+  )
+}

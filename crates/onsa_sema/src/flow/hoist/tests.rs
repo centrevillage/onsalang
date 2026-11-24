@@ -352,3 +352,87 @@ fn a_computed_part_and_a_node_of_a_slow_tick_have_fields_at_the_tick() {
     assert!(f.starts_default(FieldOf::Let(local("a"))), "read at `sample` from its field");
     assert!(!f.starts_default(FieldOf::Let(local("y"))) && !f.starts_default(FieldOf::Input(f.inputs[1])));
 }
+
+#[test]
+fn the_join_of_the_conditions_is_the_one_of_the_stages_that_decide_them() {
+    use crate::clock::{EventSrc, Ratio};
+    use crate::flow::Cond;
+    let [a, b] = [0, 1].map(|i| ClockStage::Event(EventSrc::input(i)));
+    // The letter's: constants, `init`, `block`, the two events, a `sample`.
+    let atoms = [Cond::Const, Cond::Init, Cond::Block, Cond::Tick(a), Cond::Tick(b), Cond::Late];
+    let of = |set: u32| -> Cond {
+        let has = |i: u32| set & (1 << i) != 0;
+        let ticks = [has(2), has(3), has(4), has(5)].into_iter().filter(|&x| x).count();
+        match () {
+            _ if has(5) || ticks > 1 => Cond::Late,
+            _ if has(4) => Cond::Tick(b),
+            _ if has(3) => Cond::Tick(a),
+            _ if has(2) => Cond::Block,
+            _ if has(1) => Cond::Init,
+            _ if has(0) => Cond::Const,
+            _ => Cond::None,
+        }
+    };
+    let set_of = |c: Cond| atoms.iter().position(|&x| x == c).map_or(0, |i| 1u32 << i);
+    for set in 0..1u32 << atoms.len() {
+        // Any set of conditions, and one more on either side.
+        for &x in &atoms {
+            assert_eq!(of(set).join(x), of(set | set_of(x)), "{set:b} {x:?}");
+            assert_eq!(x.join(of(set)), of(set | set_of(x)), "{x:?} {set:b}");
+        }
+        // §11.3: constants, `init` and the tick of the part only.
+        for (part, i) in [(a, 3), (b, 4)] {
+            assert_eq!(of(set).admits(part), set & !(0b11 | 1 << i) == 0, "{set:b}");
+        }
+        let periodic = ClockStage::Tick(Ratio(-2));
+        assert_eq!(of(set).admits(periodic), set & !0b11 == 0, "{set:b}");
+    }
+    let at = ClockStage::SAMPLE;
+    assert_eq!([Cond::Block, Cond::Tick(a), Cond::Late].map(|c| c.decided(at)), [B, a, at]);
+}
+
+#[test]
+fn a_part_of_an_event_is_in_a_field_of_its_stage_and_its_names_are_not() {
+    use crate::clock::{EventSrc, Ratio};
+    let (v, s4) = (ClockStage::Event(EventSrc::input(0)), ClockStage::Tick(Ratio(-2)));
+    let of = |body: &str| {
+        hoists(&format!(
+            "pub struct Bent: Default {{ note: F32 }}\npub flow f(v: F32 at event, m: Bent at event, x: F32 at sample, g: Bool at sample, p: F32 at block) -> F32 at sample {{\n  {body}\n}}"
+        ))
+    };
+    let h = |n: usize| format!("_out._hoist_{n}");
+    assert_eq!(of("half(v) * x"), [one(&h(0), v, "half(v)")]);
+    assert_eq!(of("if v > 1.0 { half(v) } else { x }"), [one(&h(0), v, "v > 1.0"), one(&h(1), v, "half(v)")]);
+    // A part of `block` is not hoisted under a condition of an event (S-1184).
+    assert_eq!(of("if v > 1.0 { half(p) * x } else { x }"), [one(&h(0), v, "v > 1.0")]);
+    // A name, its fields, and `at` of the stage that reads it.
+    assert_eq!(of("v * x + m.note + (v at sample)"), []);
+    assert_eq!(of("if g { m.note } else { v }"), []);
+    // S-1210's: an `at` of a slower tick is kept at the tick, of what is kept at the event.
+    assert_eq!(of("(v at (sample / 4)) at sample"), [one(&h(0), s4, "v at (sample / 4)")]);
+    let two = [one(&h(0), s4, "half(v) at (sample / 4)"), one(&h(1), v, "half(v)")];
+    assert_eq!(of("(half(v) at (sample / 4)) at sample"), two);
+    assert_eq!(of("((v at (sample / 4)) * 2.0) at sample"), [one(&h(0), s4, "(v at (sample / 4)) * 2.0")]);
+    assert_eq!(of("let w = v at (sample / 4)\n  w at sample"), []);
+    // The node of an event.
+    assert_eq!(of("prev~(v) * x"), [one(&h(0), v, "prev~(v)")]);
+}
+
+#[test]
+fn a_part_of_an_event_is_refused_at_the_condition_of_another_stage() {
+    for (body, stage) in [
+        ("if p > 0.0 { half(v) } else { x }", "block"),
+        ("if v > 1.0 { if p > 0.0 { half(v) } else { x } } else { x }", "block"),
+        ("if v > 1.0 { if e { half(v) } else { x } } else { x }", "event"),
+        ("if e { if x > 0.0 { half(v) } else { x } } else { x }", "event"),
+        ("if v > 1.0 { if x > 0.0 { half(v) } else { x } } else { x }", "sample"),
+    ] {
+        let src = format!(
+            "{HEAD}pub flow f(v: F32 at event, e: Bool at event, x: F32 at sample, p: F32 at block) -> F32 at sample {{\n  {body}\n}}\n"
+        );
+        let a = check(&src);
+        let [d] = &a.diagnostics[..] else { panic!("{body}: {:?}", a.diagnostics) };
+        assert_eq!((d.code, d.span.text_in(&src)), (onsa_diag::Code::E0815, "half(v)"), "{body}");
+        assert!(d.message.contains(&format!("a condition decided at `{stage}`")), "{body}: {}", d.message);
+    }
+}

@@ -1,0 +1,89 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§11.9", "§11.10", "§11.11"]
+// fixes = 0
+
+// W7-11 U1b/t, S-558, S-1095, S-1209 (spec §11.10: "`c` は…イベントの値（W の刻みで、その位置までの最後の値として読む水準）"、"イベントの条件はそのイベントの刻み"): the condition of `when~` and `reset_if~` that is an event value alone, with a `sample` or a `block` value,
+// or an event `Bool` with the `at` to W, after a `.down~`, outside a clump and in a `par~`; `reset_if~` on a delay of an event. `check` reads the file with no diagnostic. The errors are in e0815_event_modifier_conditions.onsa and
+// e0020_event_when_on_an_event_delay.onsa. `m` and `tr` are events, `x`, `g` and `armed` are `sample` inputs, `k` is `block`, `l4` is `sample / 4`.
+
+pub rt fn is_on(e: U32) -> Bool {
+  e > 0
+}
+
+pub rt fn is_start(e: U32) -> Bool {
+  e == 1
+}
+
+pub flow count(x: F32 at sample) -> F32 at sample {
+  let n = prev~(^n) + x
+  n
+}
+
+pub flow hold4(l: F32 at (sample / 4)) -> F32 at (sample / 4) {
+  l
+}
+
+// ---------------------------------------------------------------- `when~`
+
+pub flow when_on_an_event(m: U32 at event, x: F32 at sample) -> F32 at sample {
+  count~(x).when~(is_on(m))
+}
+
+pub flow when_on_an_event_and_a_sample(m: U32 at event, x: F32 at sample, armed: Bool at sample) -> F32 at sample {
+  count~(x).when~((m > 0) && armed)
+}
+
+pub flow when_on_an_event_and_a_block_value(m: U32 at event, x: F32 at sample, k: Bool at block) -> F32 at sample {
+  count~(x).when~(is_on(m) && k)
+}
+
+pub flow when_on_an_event_bool_at_sample(m: Bool at event, x: F32 at sample) -> F32 at sample {
+  count~(x).when~(m at sample)
+}
+
+pub flow when_at_the_slow_tick_of_w(m: Bool at event, l4: F32 at (sample / 4)) -> F32 at sample {
+  hold4~(l4).when~(m at (sample / 4)) at sample
+}
+
+pub flow when_after_down(m: U32 at event, l2: F32 at (sample / 2)) -> F32 at sample {
+  count~(l2).down~(2).when~(is_on(m)) at sample
+}
+
+pub flow when_outside_a_clump(m: U32 at event, x: F32 at sample) -> F32 at sample {
+  count~(x).up~(2).down~(2).when~(is_on(m))
+}
+
+// ---------------------------------------------------------------- `reset_if~`
+
+pub flow reset_on_an_event(tr: U32 at event, x: F32 at sample) -> F32 at sample {
+  count~(x).reset_if~(is_start(tr))
+}
+
+pub flow reset_on_an_event_and_a_block_value(tr: U32 at event, x: F32 at sample, k: Bool at block) -> F32 at sample {
+  count~(x).reset_if~(tr != 0 && k)
+}
+
+pub flow reset_on_an_event_with_at(tr: U32 at event, x: F32 at sample, armed: Bool at sample) -> F32 at sample {
+  count~(x).reset_if~((is_start(tr) at sample) && armed)
+}
+
+pub flow reset_in_a_par(tr: U32 at event, x: F32 at sample) -> [F32; 2] at sample {
+  par~ i in 0 ..< 2 {
+    count~(x).reset_if~(is_start(tr))
+  }
+}
+
+pub flow reset_on_an_event_delay(tr: U32 at event) -> U32 at sample {
+  prev~(tr).reset_if~(is_start(tr))
+}
+
+// ---------------------------------------------------------------- a built-in delay at a tick takes both modifiers (the E0020 is of one at an event)
+
+pub flow delay_at_a_tick(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  prev~(x).when~(c) + delay~(x, 3).reset_if~(c)
+}
+
+pub flow slow_delay(l4: F32 at (sample / 4), c4: Bool at (sample / 4)) -> F32 at sample {
+  prev~(l4).when~(c4).reset_if~(c4) at sample
+}

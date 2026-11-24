@@ -23,15 +23,18 @@ mod tests;
 /// the one decided last is decided, joined. `None`: no condition. `Const`:
 /// constants only (W9-03 decides them at compile time). `Init`, `Block`:
 /// decided at that stage, where what they guard is written under them.
-/// `Late`: one decided per sample, or by a value that is not Copy at a
-/// sample: what is under it is evaluated where it is reached. The body of
-/// a `par~` is no conditional position.
+/// `Tick`: an event is the one tick that decides them. `Late`: one decided
+/// per sample, by a value that is not Copy at a sample, or two by stages with
+/// none in common (two events, an event and `block`): what is under it is
+/// evaluated where it is reached. The body of a `par~` is no conditional
+/// position.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum Cond {
     None,
     Const,
     Init,
     Block,
+    Tick(ClockStage),
     Late,
 }
 
@@ -40,8 +43,19 @@ impl Cond {
         match s {
             ClockStage::Init => Cond::Init,
             ClockStage::Block => Cond::Block,
-            // Of an event, until `Cond::Tick` (W7-11 U1b).
-            ClockStage::Event(_) | ClockStage::Tick(_) => Cond::Late,
+            ClockStage::Event(_) => Cond::Tick(s),
+            // A part of a periodic tick stands in the conditional positions of an expression
+            // of a faster clock, whose conditions are at that clock (`at`).
+            ClockStage::Tick(_) => Cond::Late,
+        }
+    }
+
+    /// Both conditions on one path.
+    pub(super) fn join(self, o: Cond) -> Cond {
+        match (self, o) {
+            (Cond::Tick(a), Cond::Tick(b)) if a != b => Cond::Late,
+            (Cond::Tick(_), Cond::Block) | (Cond::Block, Cond::Tick(_)) => Cond::Late,
+            (a, b) => a.max(b),
         }
     }
 
@@ -49,7 +63,24 @@ impl Cond {
         match self {
             Cond::Init => Some(ClockStage::Init),
             Cond::Block => Some(ClockStage::Block),
-            _ => None,
+            Cond::Tick(s) => Some(s),
+            Cond::None | Cond::Const | Cond::Late => None,
+        }
+    }
+
+    /// The stage the conditions are decided at, of an expression read at
+    /// `at`: of those decided where it is reached, `at`.
+    pub(super) fn decided(self, at: ClockStage) -> ClockStage {
+        self.stage().unwrap_or(at)
+    }
+
+    /// Whether a part of the tick `s` may stand under the conditions (§11.3,
+    /// S-1158 (c)): of constants, `init` and that tick only.
+    pub(super) fn admits(self, s: ClockStage) -> bool {
+        match self {
+            Cond::None | Cond::Const | Cond::Init => true,
+            Cond::Tick(t) => t == s,
+            Cond::Block | Cond::Late => false,
         }
     }
 }
@@ -127,8 +158,8 @@ impl Choose<'_> {
     /// is the largest, and a slower part in it is hoisted again (`make(a)`
     /// in `level * make(a)`). A computed part or a node of a tick slower
     /// than `at` ([`Choose::tick_field`]) is in a field written at the tick,
-    /// guarded under conditions of constants and `init`; under one decided
-    /// at another stage it is refused (S-1158 (c)).
+    /// guarded under conditions of constants, `init` and that tick; under one
+    /// decided at another stage it is refused (S-1158 (c)).
     pub(super) fn place(&self, e: ExprId, at: ClockStage, g: Cond) -> Place {
         let d = match self.clocks.stage(e) {
             Some(Clock::Init) => ClockStage::Init,
@@ -136,14 +167,15 @@ impl Choose<'_> {
             Some(Clock::Const) if g != Cond::None && self.computed(e) => {
                 return g.stage().filter(|&s| s < at).map_or(Place::Const, Place::Check);
             }
-            Some(Clock::Tick(r)) if ClockStage::Tick(r).stored_slower_than(at) && self.tick_field(e) => {
-                let d = ClockStage::Tick(r);
-                return match g {
-                    // SPEC-GAP(S-1195): of a type that is not Copy, E0200
-                    // (provisional).
-                    _ if self.part(e) && !self.copy(e) => Place::NotCopy(d),
-                    Cond::None | Cond::Const | Cond::Init => Place::Hoist(d),
-                    Cond::Block | Cond::Late => Place::Refuse(d),
+            Some(c @ (Clock::Tick(_) | Clock::Event(_))) => {
+                let slow = c.stage().filter(|&d| d.stored_slower_than(at) && self.tick_field(e, d));
+                let Some(d) = slow else { return Place::Here };
+                // SPEC-GAP(S-1195): of a type that is not Copy, E0200
+                // (provisional).
+                return match g.admits(d) {
+                    _ if !self.nodes.contains_key(&e) && !self.copy(e) => Place::NotCopy(d),
+                    true => Place::Hoist(d),
+                    false => Place::Refuse(d),
                 };
             }
             _ => return Place::Here,
@@ -151,7 +183,7 @@ impl Choose<'_> {
         let s = match g {
             // SPEC-GAP(S-1184): under a condition decided at a tick, where
             // it is reached (provisional).
-            Cond::Late => return Place::Here,
+            Cond::Late | Cond::Tick(_) => return Place::Here,
             g => g.stage().map_or(d, |c| c.max(d)),
         };
         if s >= at || !self.hoistable(e) {
@@ -183,13 +215,38 @@ impl Choose<'_> {
         self.part(e) && self.copy(e)
     }
 
-    /// Whether `e`, of a tick slower than the stage that reads it, has a
+    /// Whether `e`, of the tick `s` slower than the stage that reads it, has a
     /// field written at the tick: a [`Choose::part`], a node, or
-    /// `sample_tick()` under the `at` of the tick, which keeps the time of
-    /// the tick as a `let` of it would (S-1210), whose value is kept there
-    /// with no name (§11.3, §11.6).
-    fn tick_field(&self, e: ExprId) -> bool {
-        self.part(e) || self.nodes.contains_key(&e) || self.sample_tick.contains(&e)
+    /// `sample_tick()` under the `at` of the tick or an event value with it,
+    /// which keeps the value at the tick as a `let` of it would (S-1210,
+    /// §11.11), whose value is kept there with no name (§11.3, §11.6). The
+    /// field of a struct (or a tuple) read of a name of an event is a read of
+    /// the name (§11.3, §11.11).
+    // SPEC-GAP(S-1231): an event value with the `at` of a slower tick stands
+    // in a conditional position as `sample_tick()` with it does (provisional).
+    // SPEC-GAP(S-1197): the fields of a name are read with it, of an event.
+    fn tick_field(&self, e: ExprId, s: ClockStage) -> bool {
+        let event = |x: ExprId| matches!(self.clocks.stage(x), Some(Clock::Event(_)));
+        match (&self.ast.expr(e).kind, s) {
+            (ExprKind::At { expr, .. }, _) => event(*expr),
+            (ExprKind::Field { .. } | ExprKind::TupleIndex { .. }, ClockStage::Event(_)) if self.of_name(e) => false,
+            _ => self.part(e) || self.nodes.contains_key(&e) || self.sample_tick.contains(&e),
+        }
+    }
+
+    /// A field of a name, past parentheses.
+    fn of_name(&self, e: ExprId) -> bool {
+        match &self.ast.expr(e).kind {
+            ExprKind::Field { base: x, .. } | ExprKind::TupleIndex { base: x, .. } if !self.local(e) => {
+                self.of_name(*x)
+            }
+            ExprKind::Paren(x) => self.of_name(*x),
+            _ => self.local(e),
+        }
+    }
+
+    fn local(&self, e: ExprId) -> bool {
+        matches!(self.body.targets.get(&e), Some(Target::Local(_)))
     }
 
     /// Whether `e` is a computed part: none of a name (an input, a `let`,
@@ -203,8 +260,7 @@ impl Choose<'_> {
     // computed part (provisional).
     fn part(&self, e: ExprId) -> bool {
         let kind = &self.ast.expr(e).kind;
-        let name = matches!(self.body.targets.get(&e), Some(Target::Local(_)));
-        !(name
+        !(self.local(e)
             || matches!(kind, ExprKind::At { .. } | ExprKind::Par { .. })
             || value_of(kind).is_some()
             || self.nodes.contains_key(&e)

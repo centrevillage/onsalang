@@ -1,0 +1,65 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§11.4", "§11.11"]
+// fixes = 0
+
+// W7-11 U1b/t, S-1231, S-1232 (spec §11.11: "`v at sample`・`v at (sample / N)` と書いても同じ意味"; §11.4: "`sample_tick() -% (last at sample)`"): an event value with an `at` to `sample` or a slower tick, a `let` of it, a delay of it, and `sample_tick()` with the time of the
+// last event, as a value, in the condition of `when~` and in an argument of the head (S-1232: the time of the event). `check` reads the file with no diagnostic; the values are U3 and U4. `v` and `m` are events, `x` is a `sample` input.
+
+pub flow hold(x: U32 at sample) -> U32 at sample {
+  x
+}
+
+pub flow lp(x: F32 at sample) -> F32 at sample {
+  x * 0.5
+}
+
+// ---------------------------------------------------------------- `at` on an event value and on a `let`
+
+pub flow at_slow_then_at_sample(v: F32 at event) -> F32 at sample {
+  (v at (sample / 4)) at sample
+}
+
+pub flow let_of_the_slow_tick(v: F32 at event) -> F32 at sample {
+  let m4 = v at (sample / 4)
+  (m4 at sample) * 2.0
+}
+
+pub flow delay_of_the_value_at_sample(v: F32 at event) -> F32 at sample {
+  prev~(v at sample)
+}
+
+pub flow delay_of_the_value_at_the_slow_tick(v: F32 at event) -> F32 at sample {
+  prev~(v at (sample / 4)) at sample
+}
+
+// ---------------------------------------------------------------- `sample_tick()` and the time of the last event (S-1232)
+
+pub rt fn is_on(e: U32) -> Bool {
+  e > 0
+}
+
+pub flow elapsed_as_a_value(m: U32 at event) -> U32 at sample {
+  let pl = prev~(^last)
+  let last = if is_on(m) { sample_tick() } else { pl }
+  sample_tick() -% last
+}
+
+pub flow elapsed_in_a_when_condition(m: U32 at event, x: F32 at sample) -> F32 at sample {
+  let pl = prev~(^last)
+  let last = if is_on(m) { sample_tick() } else { pl }
+  lp~(x).when~((sample_tick() -% last) < 4)
+}
+
+pub flow elapsed_in_the_head_argument(m: U32 at event) -> U32 at sample {
+  let pl = prev~(^last)
+  let last = if is_on(m) { sample_tick() } else { pl }
+  hold~(sample_tick() -% last)
+}
+
+pub flow last_let_at_sample(m: U32 at event) -> U32 at sample {
+  let pl = prev~(^last)
+  let last = if is_on(m) { sample_tick() } else { pl }
+  let t = (last at sample)
+  sample_tick() -% t
+}

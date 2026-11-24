@@ -12,6 +12,7 @@
 //! (E0805) is in error too ([`Walk::fault`]).
 
 use onsa_syntax::ast::{Lit, OperandPlace};
+use onsa_syntax::foreign::{self, RowId};
 
 use super::*;
 use crate::binding::{aggregate, unit_variant};
@@ -91,7 +92,7 @@ impl Walk<'_> {
         self.report(Diagnostic::new(Stage::Flow, code, span, msg).with_found(found));
     }
 
-    fn ty_of(&self, e: ExprId) -> TyId {
+    pub(super) fn ty_of(&self, e: ExprId) -> TyId {
         self.body.expr_types.get(&e).copied().unwrap_or(self.error)
     }
 
@@ -253,7 +254,7 @@ impl Walk<'_> {
 
     /// The event clock `c` as a note names it, by its source: none of another
     /// clock.
-    fn event_name(&self, c: Clock) -> Option<String> {
+    pub(super) fn event_name(&self, c: Clock) -> Option<String> {
         let Clock::Event(src) = c else { return None };
         Some(match src.place(self.cx.inputs.len()) {
             Err(i) => {
@@ -675,6 +676,45 @@ impl Walk<'_> {
             diag = diag.with_fix(Fix::new(title, edits));
         }
         self.report(diag);
+    }
+
+    /// The modifier `e` of the chain of the head `head`, a built-in delay that
+    /// ticks at an event (§11.10): `.when~`, which stops nothing, is E0020,
+    /// with the candidate that takes every one of the chain off; of `.reset_if~`, a condition at
+    /// a periodic clock, faster than W (the event clock of the delay), E0815.
+    pub(super) fn event_delay_modifier(&mut self, e: ExprId, head: ExprId) {
+        let mods = || self.cx.chains.get(&head).into_iter().flat_map(|c| &c.mods);
+        let Some(m) = mods().find(|m| m.call == e) else { return };
+        let (plan, receiver) = (m.plan, self.ast.expr(m.receiver).span);
+        if !self.checking() {
+            return;
+        }
+        let d = match (plan.modifier, plan.cond) {
+            (crate::flow_names::Modifier::When, _) => {
+                // From the `.` at the name: what is between it and the receiver stays.
+                let whole = |m: &ChainModifier| {
+                    let dot = m.plan.name.start.saturating_sub(1).max(self.ast.expr(m.receiver).span.end);
+                    Span { start: dot, ..self.ast.expr(m.call).span }
+                };
+                let whens = mods().filter(|m| m.plan.modifier == crate::flow_names::Modifier::When);
+                let fix = Fix::new("remove `.when~(…)`", whens.map(|m| Edit::delete(whole(m))).collect());
+                foreign::report(RowId::EventDelayWhen, self.text, whole(m), vec![fix])
+            }
+            (crate::flow_names::Modifier::ResetIf, Some(cond)) => {
+                let Some(&c @ Clock::Tick(_)) = self.out.exprs.get(&cond) else { return };
+                let span = self.ast.expr(cond).span;
+                let msg = format!(
+                    "the condition of `.reset_if~` is at the clock `{}`, faster than the event clock of the delay, the fastest it resets at (§11.10)",
+                    c.shown(span)
+                );
+                let d = Diagnostic::new(Stage::Flow, Code::E0815, span, msg).with_found(self.src(span));
+                d.with_note(receiver, "this delay ticks at an event").with_rule(
+                    "reset it at an event, or write the delay in a flow and `.reset_if~` after the call of that flow",
+                )
+            }
+            _ => return,
+        };
+        self.report(d);
     }
 
     /// The `init` `i` of a delay, at the clock `c`, is at `init` or a

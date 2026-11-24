@@ -612,6 +612,7 @@ pub enum RowId {
     CStaticItem,
     LinkAttribute,
     CaretVisible,
+    EventDelayWhen,
 }
 }
 

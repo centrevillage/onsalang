@@ -1274,6 +1274,16 @@ pub static ROWS: &[Row] = &[
         rule: "`^name` reads a `let` defined below it, in the first argument of a delay; a name defined above, an input and a constant are read by their names, and their past value is `prev~(x)` (§11.2)",
         detect: Detect::Reported,
     },
+    // Found by the flow stage at `.when~` of a delay of an event value (§11.10, S-558).
+    Row {
+        id: RowId::EventDelayWhen,
+        name: "event_delay_when",
+        phase: Phase::Flow,
+        code: Code::E0020,
+        message: "`.when~` stops nothing here: a built-in delay of an event ticks at the event",
+        rule: "to hold a value, choose it: `let pc = prev~(^cur)` and `let cur = if is_on(m) { note_of(m) } else { pc }` (§11.10, §11.11)",
+        detect: Detect::Reported,
+    },
 ];
 
 /// The rows of the data file that no work has made yet (the later works

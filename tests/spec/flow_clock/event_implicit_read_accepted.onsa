@@ -1,0 +1,64 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§11.4", "§11.11"]
+// fixes = 0
+
+// W7-11 U1b/t, S-563, S-1158, S-1186 (spec §11.3: "速い段で読まない刻みの値には要らない"; §11.11: "最初のイベントの前は `T.default()`"): an event value that only the event stage reads needs no `Default`; a part computed from the event alone is read in a field of its own
+// type (`gain(m)` is an `F32`, `is_on(m)` a `Bool`); a delay has an `init`; a type with `Default` is read by its name. `check` reads the file with no diagnostic. The errors are in e0816_event_implicit_read.onsa. `x` is a `sample` input.
+
+pub enum Mode {
+  Off,
+  On,
+}
+
+pub struct Note {
+  pitch: F32,
+  vel: F32,
+}
+
+pub struct Pitch: Default {
+  pitch: F32,
+}
+
+pub rt fn gain(m: Mode) -> F32 {
+  match m {
+    Mode.Off => 0.0,
+    Mode.On => 1.0,
+  }
+}
+
+pub rt fn pick(p: Pitch, x: F32) -> F32 {
+  p.pitch * x
+}
+
+pub rt fn is_on(n: Note) -> Bool {
+  n.vel > 0.0
+}
+
+pub flow lp(x: F32 at sample) -> F32 at sample {
+  x * 0.5
+}
+
+pub flow forward_a_mode(m: Mode at event) -> Mode at event {
+  Some(m)
+}
+
+pub flow gain_in_the_event_stage(m: Mode at event) -> F32 at event {
+  Some(gain(m))
+}
+
+pub flow delay_with_an_init(m: Mode at event) -> Mode at event {
+  Some(prev~(m, Mode.Off))
+}
+
+pub flow part_that_sample_reads(m: Mode at event, x: F32 at sample) -> F32 at sample {
+  gain(m) * x
+}
+
+pub flow part_in_a_condition(m: Note at event, x: F32 at sample) -> F32 at sample {
+  lp~(x).when~(is_on(m))
+}
+
+pub flow type_with_default(m: Pitch at event, x: F32 at sample) -> F32 at sample {
+  pick(m, x)
+}

@@ -1,0 +1,94 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§11.5", "§11.11"]
+// fixes = 0
+
+// W7-11 U1b/t, S-1158 (c), S-1210 (spec §11.3: "条件の位置の中では、その位置を選ぶ条件が全て定数・`init`・その式と同じ刻みで決まるときだけ書け"、"名前とそのフィールドを読むだけなら書ける"、"`if~` / `match~` の腕は含めない"): the part
+// computed from an event value where the condition is decided at the same event or at `init`, the read of a name and its field under any condition, the `at` on the name (`vel(m at sample)`), a part moved to a `let`, and the arms of `if~` and
+// `match~`. `check` reads the file with no diagnostic. The errors are in e0815_event_condition_positions.onsa. `m` is an event, `x` and `g` and `k` are `sample` inputs, `i` is `init`.
+
+pub struct Note: Default {
+  pitch: F32,
+  vel: F32,
+}
+
+pub rt fn vel(n: Note) -> F32 {
+  n.vel
+}
+
+pub rt fn is_on(n: Note) -> Bool {
+  n.vel > 0.0
+}
+
+pub flow lp(x: F32 at sample) -> F32 at sample {
+  x * 0.5
+}
+
+pub rt fn kind(n: Note) -> U32 {
+  if n.pitch > 60.0 { 1 } else { 0 }
+}
+
+// ---------------------------------------------------------------- a condition decided at the same event, at `init` or at a constant
+
+pub flow if_on_the_same_event(m: Note at event, x: F32 at sample) -> F32 at sample {
+  if is_on(m) { vel(m) * 2.0 } else { x }
+}
+
+pub flow match_on_the_same_event(m: Note at event, x: F32 at sample) -> F32 at sample {
+  match kind(m) {
+    0 => vel(m) * 2.0,
+    _ => x,
+  }
+}
+
+pub flow right_of_and_on_the_same_event(m: Note at event, x: F32 at sample) -> F32 at sample {
+  if is_on(m) && vel(m) > 1.0 { x } else { 0.0 }
+}
+
+pub flow if_on_an_init_condition(m: Note at event, x: F32 at sample, i: I32 at init) -> F32 at sample {
+  if i > 0 { vel(m) * 2.0 } else { x }
+}
+
+// ---------------------------------------------------------------- a name and its field, the `at` on the name, a part in a `let`
+
+pub flow name_under_a_sample_condition(m: F32 at event, g: Bool at sample) -> F32 at sample {
+  if g { m } else { 0.0 }
+}
+
+pub flow field_under_a_sample_condition(m: Note at event, g: Bool at sample) -> F32 at sample {
+  if g { m.vel } else { 0.0 }
+}
+
+pub flow field_of_a_name_in_parentheses(m: Note at event, g: Bool at sample) -> F32 at sample {
+  if g { (m).vel } else { 0.0 }
+}
+
+pub flow block_value_at_a_slow_tick(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  if x > 0.5 { ((p at (sample / 4)) * 2.0) at sample } else { 0.0 }
+}
+
+pub flow part_with_at_on_the_name(m: Note at event, x: F32 at sample, g: Bool at sample) -> F32 at sample {
+  if g { vel(m at sample) * 2.0 } else { x }
+}
+
+pub flow part_in_a_let_before(m: Note at event, x: F32 at sample, g: Bool at sample) -> F32 at sample {
+  let v = vel(m) * 2.0
+  if g { v } else { x }
+}
+
+// ---------------------------------------------------------------- not positions of a condition
+
+pub flow condition_of_the_if_is_not_a_position(m: Note at event, x: F32 at sample) -> F32 at sample {
+  if vel(m) > 1.0 { x } else { 0.0 }
+}
+
+pub flow arm_of_if_tilde(m: Note at event, x: F32 at sample, g: Bool at sample) -> F32 at sample {
+  if~ g { vel(m) * 2.0 } else { lp~(x) }
+}
+
+pub flow arm_of_match_tilde(m: Note at event, x: F32 at sample, k: U32 at sample) -> F32 at sample {
+  match~ k {
+    0 => vel(m) * 2.0,
+    _ => lp~(x),
+  }
+}

@@ -1,0 +1,51 @@
+// onsa.toml
+// [test]
+// spec = ["§11.10", "§18.1"]
+// fixes = 1
+
+// W7-11 U1b/t, S-558 (spec §11.10: "イベントのクロックで動く受け手（第 1 引数がイベントの値の組込みの遅延）への `when~` は何も止めないので、書き手の誤解を示す印として E0020 の類にする（候補は `.when~(…)` を外す形）"): `when~` on a delay of an event
+// (`prev~`, `delay~`, `vdelay~`) is E0020 at the modifier, with the candidate that takes `.when~(…)` away (`.fix1`, made by the implementation). `reset_if~` on it, and `when~` on a delay of a `sample` value or on a flow that gives out events, are no error
+// (event_modifier_conditions_accepted.onsa, event_clock_accepted.onsa). `m` is an event, `c` is a `sample` input, `b` is `block`.
+
+pub rt fn is_on(e: U32) -> Bool {
+  e > 0
+}
+
+pub flow prev_of_an_event(m: U32 at event, c: Bool at sample) -> U32 at sample {
+  prev~(m).when~(c)                                           //~ E0020
+}
+
+pub flow delay_of_an_event(m: U32 at event, c: Bool at sample) -> U32 at sample {
+  delay~(m, 4).when~(c)                                       //~ E0020
+}
+
+pub flow vdelay_of_an_event(m: F32 at event, d: F32 at block, c: Bool at sample) -> F32 at sample {
+  vdelay~(m, d, 8).when~(c)                                   //~ E0020
+}
+
+pub flow with_a_block_condition(m: U32 at event, b: Bool at block) -> U32 at sample {
+  prev~(m).when~(b)                                           //~ E0020
+}
+
+pub flow with_the_event_as_the_condition(m: U32 at event) -> U32 at sample {
+  prev~(m).when~(is_on(m))                                    //~ E0020
+}
+
+pub flow with_an_init_in_a_let(m: U32 at event, c: Bool at sample) -> U32 at sample {
+  let p = prev~(m, 7).when~(c)                                //~ E0020
+  p
+}
+
+pub flow in_a_par(m: U32 at event, c: Bool at sample) -> [U32; 2] at sample {
+  par~ i in 0 ..< 2 {
+    prev~(m).when~(c)                                         //~ E0020
+  }
+}
+
+pub flow in_an_if_arm(m: U32 at event, c: Bool at sample) -> U32 at sample {
+  if~ c {
+    prev~(m).when~(c)                                         //~ E0020
+  } else {
+    0
+  }
+}

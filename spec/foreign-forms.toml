@@ -8712,6 +8712,42 @@ pub flow g(x: F32 at sample) -> F32 at sample {
 ''',
 ]
 
+# イベントのクロックで動く組込みの遅延への `when~`。何も止めないので外す（連鎖の `when~` を全て。`reset_if~` は残す）。
+[[form]]
+id = "event_delay_when"
+kind = "redundant"
+origin = "Onsa"
+stage = "flow"
+code = "E0020"
+spec = ["11.10", "11.11"]
+rule = "値を選んで保つ（`let pc = prev~(^cur)` と `let cur = if is_on(m) { note_of(m) } else { pc }`）"
+
+[[form.example]]
+source = '''
+pub flow g(m: U32 at event, c: Bool at sample) -> U32 at sample {
+  prev~(m).when~(c)
+}
+'''
+at = "2:11"
+fixed = ['''
+pub flow g(m: U32 at event, c: Bool at sample) -> U32 at sample {
+  prev~(m)
+}
+''']
+
+[[form.example]]
+source = '''
+pub flow g(m: U32 at event, c: Bool at sample) -> U32 at sample {
+  prev~(m).when~(c).reset_if~(m > 4)
+}
+'''
+at = "2:11"
+fixed = ['''
+pub flow g(m: U32 at event, c: Bool at sample) -> U32 at sample {
+  prev~(m).reset_if~(m > 4)
+}
+''']
+
 # ---- FAUST の書き方（§18.1 の表）-----------------------------------------------------------------------
 # 対象外（`rules/criteria.md` 7.32）: FAUST の文法の形は対象にしない。この節の FAUST の行
 # （`faust_feedback`、`faust_feedback_unnamed`、`faust_delay`、`faust_delay_variable`、`faust_compose`）は、

@@ -94,6 +94,13 @@ struct Bound {
     depth: usize,
 }
 
+/// Why [`Choose::place`] refused a part of a tick ([`Marker::refuse`]).
+enum Why {
+    /// A condition decided at this stage selects it.
+    Cond(ClockStage),
+    NotCopy,
+}
+
 /// The stage a read at the clock `c` is at: a constant at `init`, the first
 /// stage (as a constant `let` no one reads, defined there); none of a clock
 /// in error, which comes with a diagnostic of the callee and is not lowered.
@@ -318,9 +325,14 @@ impl Marker<'_> {
                 return self.konst_parts(e, at, g);
             }
             Place::Here => at,
-            // The condition is decided at `block` or at `at`.
-            Place::Refuse(s) => return self.refuse(e, s, Some(if g == Cond::Block { ClockStage::Block } else { at })),
-            Place::NotCopy(s) => return self.refuse(e, s, None),
+            Place::Refuse(s) => {
+                // Of an event, the first that refuses it: the join of two may be decided at neither's.
+                let of = |&(c, _): &(ExprId, Cond)| self.choose.cond_stage(c, at);
+                let first = self.conds.iter().map(of).find(|c| !c.admits(s));
+                let c = first.filter(|_| matches!(s, ClockStage::Event(_))).unwrap_or(g);
+                return self.refuse(e, s, Why::Cond(c.decided(at)));
+            }
+            Place::NotCopy(s) => return self.refuse(e, s, Why::NotCopy),
         };
         self.out.eval_at.insert(at);
         let ast = self.ast;
@@ -330,9 +342,7 @@ impl Marker<'_> {
                 if let Some(&Target::Local(id)) = self.body.targets.get(&e) {
                     self.out.read_at.entry(id).or_default().insert(at);
                     self.read_select(id, at);
-                    // The E0816 of an event read at a tick comes with its hoisted parts (W7-11 U1b).
                     let own = self.clocks.info.own_stage(id).filter(|s| s.stored_slower_than(at));
-                    let own = own.filter(|s| !matches!(s, ClockStage::Event(_)));
                     if let Some(s) = own.filter(|_| self.body.locals[id.0 as usize].kind != LocalKind::MatchBind) {
                         let name = expr.span.text_in(self.text);
                         self.no_default(e, s, SlowField::Name(name));
@@ -459,7 +469,7 @@ impl Marker<'_> {
     /// under it, of the stage it is decided at ([`Choose::cond_stage`]).
     fn enter(&mut self, c: ExprId, at: ClockStage, g: Cond) -> Cond {
         self.conds.push((c, g));
-        g.max(self.choose.cond_stage(c, at))
+        g.join(self.choose.cond_stage(c, at))
     }
 
     /// The conditions on the path, read at `s` (once each) by the guards of
@@ -512,13 +522,12 @@ impl Marker<'_> {
     }
 
     /// The part `e` of the tick `s` that `place` refused, at it: E0815 of
-    /// [`Place::Refuse`] under a condition decided at `cond` (S-1158 (c));
-    /// E0200 of [`Place::NotCopy`] (S-1195).
-    fn refuse(&mut self, e: ExprId, s: ClockStage, cond: Option<ClockStage>) {
+    /// [`Place::Refuse`] (S-1158 (c)); E0200 of [`Place::NotCopy`] (S-1195).
+    fn refuse(&mut self, e: ExprId, s: ClockStage, why: Why) {
         let span = self.ast.expr(e).span;
-        let d = match cond {
-            None => Feature::NonCopyTickParts.diagnostic(Stage::Flow, span, &[&s.shown(span)]),
-            Some(c) => {
+        let d = match why {
+            Why::NotCopy => Feature::NonCopyTickParts.diagnostic(Stage::Flow, span, &[&s.shown(span)]),
+            Why::Cond(c) => {
                 let msg = format!(
                     "this value of the clock `{}` is computed at its ticks, and a condition decided at `{}` selects this place; bind it with a `let` before the condition to compute it at each tick, or write `at` on the names it reads to compute it where it is reached (§11.3)",
                     s.shown(span),

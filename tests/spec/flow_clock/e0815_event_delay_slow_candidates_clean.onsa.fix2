@@ -1,0 +1,30 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§11.11", "§18.1"]
+// fixes = 2
+//
+// [[test.fix]]
+// at = "28:17"
+// code = "E0815"
+// candidate = 1
+// clean = true
+//
+// [[test.fix]]
+// at = "28:17"
+// code = "E0815"
+// candidate = 2
+// clean = true
+
+// W7-11 U1b/t, S-563 (spec §11.11: "`prev~(m.note + bend)` の候補は `prev~(m.note) + bend` と `prev~(m.note at sample + bend)`"; for a value of a slower tick the `at` is to the tick of the place, `(m.note at (sample / 4)) + l4`): the same two candidates where the
+// periodic value is `l4` of `sample / 4`, not `sample`: the delay of the event with the sum outside (the sum is at `sample / 4`), and the delay of the sum with the event value read at `sample / 4`. Each candidate leaves the file with no error
+// (`clean`). The position `28:17` is the start of the sum. `m` is an event, `l4` is a `sample / 4` input.
+
+pub struct Bent: Default {
+  note: F32,
+  vel: F32,
+}
+
+pub flow bent_slow_delay(m: Bent at event, l4: F32 at (sample / 4)) -> F32 at sample {
+  let w = prev~((m.note at (sample / 4)) + l4)                                  //~ E0815
+  w at sample
+}

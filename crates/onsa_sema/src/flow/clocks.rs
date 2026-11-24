@@ -38,6 +38,7 @@ use crate::clock::{self, ClockFrame, EventSrc, Ratio, delay_out, grounded, loop_
 use crate::names::body::BodyNames;
 
 mod checks;
+mod mix;
 mod stages;
 mod to_sample;
 
@@ -87,7 +88,7 @@ pub(crate) fn finish_flow(
     let (ast, text) = (&module.parsed.ast, module.text.as_str());
     let mut w = walk(a, flat, (ast, text), id, &body, &fcx, error);
     if w.diag.is_none() {
-        w.post_check(&fcx, ast, a.diagnostics.is_empty() && fcx.held.is_none() && !fcx.unread);
+        w.post_check(&fcx, ast);
     }
     let ty = |p: &PendingLet| body.expr_types.get(&p.init).copied().unwrap_or(error);
     let lets = fcx.pending.iter().zip(&w.checked);
@@ -274,6 +275,8 @@ pub(super) struct Walk<'a> {
     clash: Option<Clashed>,
     /// The clash of a loop by the `let` it is reported at (S-1198).
     loop_clash: Vec<Option<Clashed>>,
+    /// Stage 1: the loops of `let`s, each in the order of its `let`s ([`mix`]).
+    loops: Vec<Vec<usize>>,
     /// The stages of the `let`s checked, in their order ([`stages::of_params`]).
     let_stages: Vec<Clock>,
     /// [`Walked::output`].
@@ -353,6 +356,7 @@ pub(super) fn walk(
         first: 0,
         clash: None,
         loop_clash: vec![None; n],
+        loops: Vec::new(),
         let_stages: Vec::new(),
         output: Clock::SAMPLE,
     };
@@ -367,6 +371,7 @@ pub(super) fn walk(
         }
     }
     w.check();
+    mix::check(&mut w);
     let stages;
     (w.out.stages, w.out.local_stages, stages) = stages::of_walk(&w);
     let solved = |c: Option<Clock>| c.unwrap_or_else(|| onsa_diag::internal::bug(span, "a `let` left unsolved"));
@@ -423,6 +428,9 @@ impl Walk<'_> {
             }
             for &k in &scc.lets {
                 self.lets[k] = Some(c);
+            }
+            if scc.looped {
+                self.loops.push(scc.lets);
             }
         }
     }
@@ -857,7 +865,8 @@ impl Walk<'_> {
     /// `.reset_if~` is read by the ports of the head ([`Self::guard_cond`]):
     /// of an instance its declared ones, of a built-in delay its output at
     /// the clock of its first argument (§11.10), none of one in error, whose
-    /// condition is read with no rule as the N of `.down~` and `.up~` is.
+    /// condition is read with no rule as the N of `.down~` and `.up~` is; one of
+    /// an event is [`Self::event_delay_modifier`].
     fn modifier(&mut self, e: ExprId, receiver: ExprId, head: ExprId, args: &[Arg]) -> Option<Clock> {
         let call = self.calls.get(&head).map(|&i| &self.cx.calls[i]);
         let frame = self.frame_of(head);
@@ -879,7 +888,12 @@ impl Walk<'_> {
         match ports.and_then(|p| self.guard_cond(e, head, p)) {
             Some(false) => return Some(Clock::Error),
             Some(true) => {}
-            None => args.iter().for_each(|x| _ = self.cut(x.expr)),
+            None => {
+                args.iter().for_each(|x| _ = self.cut(x.expr));
+                if matches!((call.map(|c| &c.kind), c), (Some(NodeKind::Delay(..)), Some(Clock::Event(_)))) {
+                    self.event_delay_modifier(e, head);
+                }
+            }
         }
         if call.is_some() && frame.is_some() { c } else { Some(Clock::Error) }
     }
@@ -897,8 +911,7 @@ impl Walk<'_> {
     /// W, and of `.when~` an `at` in it to another clock than W (not in an
     /// argument of a flow, read at its port), are E0815. An event in the
     /// condition of `.when~` is read at W (its last value), in that of
-    /// `.reset_if~` at its own clock (§11.11; its checks are W7-11 U1b's and
-    /// its plan W7-17's): whether it is opened, its condition walked; none of
+    /// `.reset_if~` at its own clock (§11.11; its plan is W7-17's): whether it is opened, its condition walked; none of
     /// `.down~` and `.up~`, whose argument the caller walks.
     fn guard_cond(&mut self, e: ExprId, head: ExprId, ports: Ports) -> Option<bool> {
         let chain = self.cx.chains.get(&head)?;
@@ -1201,14 +1214,11 @@ impl Walk<'_> {
 impl Walked {
     /// After stage 2 with no error: each `let` has the clock of stage 1,
     /// past one in error, and no expression the clock of `sample_tick()`
-    /// ([`Walk::settle`]). `quiet`: no diagnostic was made before (a clock in
-    /// error has one, §18.1) and the body read nothing a syntax error left
-    /// unread (`FlowCx::unread`, whose clock is in error with none), so no
-    /// `let` is in error.
-    pub(super) fn post_check(&self, cx: &FlowCx, ast: &Ast, quiet: bool) {
+    /// ([`Walk::settle`]).
+    pub(super) fn post_check(&self, cx: &FlowCx, ast: &Ast) {
         let lets = self.lets.iter().zip(&self.checked).zip(&cx.pending);
         for ((&l, &c), p) in lets {
-            if (l != Clock::Error && l != c) || (quiet && (l == Clock::Error || c == Clock::Error)) {
+            if l != Clock::Error && l != c {
                 onsa_diag::internal::bug(Some(p.span), format!("the `let` is {l:?} in stage 1 and {c:?} in stage 2"));
             }
         }

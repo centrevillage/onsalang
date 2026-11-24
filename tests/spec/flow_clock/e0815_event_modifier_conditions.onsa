@@ -1,0 +1,68 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§11.9", "§11.10", "§11.11", "§18.1"]
+
+// W7-11 U1b/t, S-558, S-1095, S-1209 (spec §11.11: "別の入力のイベントのクロックどうしは比べられない"; §11.10: "W より速い条件…と、W 以外のクロックへの `at` は E0815" for `when~`): the condition of `when~` and `reset_if~` where the events of two inputs
+// meet (in a chain, after a `.down~`, in a clump `.up~(2).down~(2)`, in a `par~`), where an event value meets a periodic value faster than W, and where the `at` of an event value goes to a clock that is not W (`hold4~(l4)` is a `sample / 4` output, so W is
+// `sample / 4`; `count~(x)` is `sample`). The error is at the condition. The accepted forms are in event_modifier_conditions_accepted.onsa. One error per flow (P-01). `a` and `b` are events, `m` is an event `Bool`, `x` and `g` are `sample` inputs.
+
+pub rt fn is_on(e: U32) -> Bool {
+  e > 0
+}
+
+pub rt fn is_start(e: U32) -> Bool {
+  e == 1
+}
+
+pub flow count(x: F32 at sample) -> F32 at sample {
+  let n = prev~(^n) + x
+  n
+}
+
+pub flow hold4(l: F32 at (sample / 4)) -> F32 at (sample / 4) {
+  l
+}
+
+// ---------------------------------------------------------------- the events of two inputs
+
+pub flow when_of_two_events(a: U32 at event, b: U32 at event, x: F32 at sample) -> F32 at sample {
+  count~(x).when~(is_on(a) && is_on(b))                       //~ E0815
+}
+
+pub flow reset_of_two_events(a: U32 at event, b: U32 at event, x: F32 at sample) -> F32 at sample {
+  count~(x).reset_if~(is_start(a) && is_start(b))             //~ E0815
+}
+
+pub flow when_of_two_events_in_a_chain(a: U32 at event, b: U32 at event, x: F32 at sample, g: Bool at sample) -> F32 at sample {
+  count~(x).reset_if~(g).when~(is_on(a) || is_on(b))          //~ E0815
+}
+
+pub flow reset_of_two_events_after_a_down(a: U32 at event, b: U32 at event, l2: F32 at (sample / 2)) -> F32 at sample {
+  count~(l2).down~(2).reset_if~(is_start(a) && is_start(b)) at sample //~ E0815
+}
+
+pub flow when_of_two_events_in_a_clump(a: U32 at event, b: U32 at event, x: F32 at sample) -> F32 at sample {
+  count~(x).up~(2).down~(2).when~(is_on(a) && is_on(b))       //~ E0815
+}
+
+pub flow when_of_two_events_in_a_par(a: U32 at event, b: U32 at event, x: F32 at sample) -> [F32; 2] at sample {
+  par~ i in 0 ..< 2 {
+    count~(x).when~(is_on(a) && is_on(b))                     //~ E0815
+  }
+}
+
+// ---------------------------------------------------------------- an event value and a periodic value that is faster than W
+
+pub flow when_of_an_event_and_a_faster_value(m: Bool at event, l4: F32 at (sample / 4), g: Bool at sample) -> F32 at sample {
+  hold4~(l4).when~(m && g) at sample                          //~ E0815
+}
+
+// ---------------------------------------------------------------- the `at` of an event value that goes to a clock that is not W
+
+pub flow when_at_sample_where_w_is_slow(m: Bool at event, l4: F32 at (sample / 4)) -> F32 at sample {
+  hold4~(l4).when~(m at sample) at sample                     //~ E0815
+}
+
+pub flow when_at_a_slow_tick_where_w_is_sample(m: Bool at event, x: F32 at sample) -> F32 at sample {
+  count~(x).when~(m at (sample / 4))                          //~ E0815
+}

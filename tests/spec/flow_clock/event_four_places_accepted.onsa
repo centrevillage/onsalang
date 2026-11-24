@@ -1,0 +1,102 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§11.4", "§11.10", "§11.11"]
+// fixes = 0
+
+// W7-11 U1b/t, S-563 (spec §11.11: "四つの所では、`at` の下に無いイベントの値が周期の刻みのクロックの値と混ざると E0815"、"flow の出力と `at` を書いた値で止める"、"`prev~(m.note + bend)` の候補は `prev~(m.note) + bend` と
+// `prev~(m.note at sample + bend)`"): the four places of e0815_event_four_places.onsa where the rule reads no mix: the event alone, an `at` on the event value or on the sum, a flow output, and the same sum where the event value is read at `sample`
+// (an ordinary expression, a `when~` condition, an argument to a `sample` input). `check` reads the file with no diagnostic. `m` and `tr` are events, `bend`, `x` and `armed` are `sample` inputs, `l4` is `sample / 4`.
+
+pub struct Bent: Default {
+  note: F32,
+  vel: F32,
+}
+
+pub rt fn is_start(e: U32) -> Bool {
+  e == 1
+}
+
+pub flow count(x: F32 at sample) -> F32 at sample {
+  let n = prev~(^n) + x
+  n
+}
+
+pub flow lp(x: F32 at sample) -> F32 at sample {
+  x * 0.5
+}
+
+// ---------------------------------------------------------------- the delay ticks at the events, or at `sample` through an `at`
+
+pub flow delay_of_the_event_then_sum(m: Bent at event, bend: F32 at sample) -> F32 at sample {
+  prev~(m.note) + bend
+}
+
+pub flow delay_of_the_event_at_sample(m: Bent at event, bend: F32 at sample) -> F32 at sample {
+  prev~((m.note at sample) + bend)
+}
+
+pub flow at_over_the_sum(m: Bent at event, bend: F32 at sample) -> F32 at sample {
+  prev~((m.note + bend) at sample)
+}
+
+pub flow delay_after_a_flow_output(m: Bent at event, bend: F32 at sample) -> F32 at sample {
+  vdelay~(lp~(m.note) + bend, 2.0, 8)
+}
+
+pub flow vdelay_length_of_the_event_or_a_block_value(m: F32 at event, d: F32 at block) -> F32 at event {
+  Some(vdelay~(m, m, 8) + vdelay~(m, d, 8))
+}
+
+pub flow vdelay_of_a_sample_with_the_length_of_an_event(m: F32 at event, x: F32 at sample) -> F32 at sample {
+  vdelay~(x, m, 8)
+}
+
+// ---------------------------------------------------------------- the loop ticks at the events, or at `sample` through an `at`
+
+pub flow loop_of_events(m: F32 at event, x: F32 at sample) -> F32 at sample {
+  let n = prev~(^n) + m
+  n + x
+}
+
+pub flow loop_with_at_on_the_event(m: F32 at event, x: F32 at sample) -> F32 at sample {
+  let n = prev~(^n) + (m at sample) + x
+  n
+}
+
+// ---------------------------------------------------------------- the condition of reset_if~
+
+pub flow reset_on_the_event(tr: U32 at event, x: F32 at sample) -> F32 at sample {
+  count~(x).reset_if~(is_start(tr))
+}
+
+pub flow reset_with_at_on_the_event(tr: U32 at event, x: F32 at sample, armed: Bool at sample) -> F32 at sample {
+  count~(x).reset_if~((is_start(tr) at sample) && armed)
+}
+
+pub flow reset_of_an_event_delay(tr: U32 at event) -> U32 at sample {
+  prev~(tr).reset_if~(is_start(tr))
+}
+
+// ---------------------------------------------------------------- the expression of an event output
+
+pub flow out_of_the_event(m: F32 at event) -> F32 at event {
+  Some(m + 1.0)
+}
+
+pub flow out_with_at_over_the_sum(m: F32 at event, x: F32 at sample) -> F32 at event {
+  Some(m + x) at sample
+}
+
+// ---------------------------------------------------------------- not one of the four places: the event value is read at `sample`
+
+pub flow sum_in_an_ordinary_expression(m: F32 at event, x: F32 at sample) -> F32 at sample {
+  m + x
+}
+
+pub flow sum_to_a_sample_input(m: F32 at event, x: F32 at sample) -> F32 at sample {
+  lp~(m + x)
+}
+
+pub flow sum_in_a_when_condition(m: F32 at event, x: F32 at sample, armed: Bool at sample) -> F32 at sample {
+  lp~(x).when~((m > 0.5) && armed)
+}

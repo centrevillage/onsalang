@@ -1,0 +1,29 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§11.11", "§18.1"]
+// fixes = 2
+//
+// [[test.fix]]
+// at = "28:9"
+// code = "E0815"
+// candidate = 1
+// clean = true
+//
+// [[test.fix]]
+// at = "28:9"
+// code = "E0815"
+// candidate = 2
+// clean = true
+
+// W7-11 U1b/t, S-563 (spec §11.11: "`prev~(m.note + bend)` の候補は `prev~(m.note) + bend` と `prev~(m.note at sample + bend)`"; the second is written `prev~((m.note at sample) + bend)`, for `m.note at sample + bend` is E0011, §11.3): the
+// event value `m.note` meets the `sample` value `bend` in the first argument of a delay, and the two candidates are the delay of the event with the sum outside, and the delay of the sum with the event value read at `sample`. Each candidate leaves
+// the file with no error (`clean`), so the unit is the only one of the file. The position `28:9` is the start of the sum (the expression the error is on). `m` is an event, `bend` is a `sample` input.
+
+pub struct Bent: Default {
+  note: F32,
+  vel: F32,
+}
+
+pub flow bent_delay(m: Bent at event, bend: F32 at sample) -> F32 at sample {
+  prev~((m.note at sample) + bend)                                        //~ E0815
+}
