@@ -38,6 +38,7 @@ fix|E0002|write the name with a `…` at its end|E0020	a callee that is no path 
 fix|E0002|write the visibility, then `…`, once each|E0002	a block whose members have a visibility of their own takes no visibility
 fix|E0003|move `…` to the end of the line before|E0001	U+# cannot be written outside comments and strings: a name is written with the A
 fix|E0003|move `…` to the end of the line before|E0001	`…` (U+#) cannot be written outside comments and strings: a name is written with
+fix|E0003|move `…` to the end of the line before|E0001	a number has no suffix
 fix|E0003|move `…` to the end of the line before|E0001	number prefix without digits
 fix|E0003|move `…` to the end of the line before|E0002	a `…` that opens a list is written right after the token before it
 fix|E0003|move `…` to the end of the line before|E0002	expected `…` (a function body), found `…`
