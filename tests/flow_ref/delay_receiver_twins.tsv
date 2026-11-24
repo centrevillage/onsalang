@@ -1,0 +1,8 @@
+# flow_ref 1 source=tests/spec/flow_semantics/delay_receiver_twins.onsa tests=7 evaluated=0 unavailable=7 skipped=0 waiting=0
+? prev~(x).when~(c) and pv~(x).when~(c) give the same, whether c starts false or true	unavailable a chain whose head is not an instance of a flow
+? delay~(x, 2).reset_if~(r) and dl2~(x).reset_if~(r) give the same, for a reset at the first frame too	unavailable a chain whose head is not an instance of a flow
+? both orders of when~ and reset_if~, and two when~, are the same on the delay and on the flow that holds it	unavailable a chain whose head is not an instance of a flow
+? a condition that always holds and a reset that never comes are no modifier	unavailable a chain whose head is not an instance of a flow
+? vdelay~, a par~ of delays with two modifiers, and a delay in the first argument of a delay: the same as with the named flow	unavailable a chain whose head is not an instance of a flow
+? a delay of a value of sample / 4 and the conversion flow that holds it give the same, with a condition and a reset slower than the delay	unavailable a chain whose head is not an instance of a flow
+? the twins agree when the calls of process cut the frames, and after a reset	unavailable a chain whose head is not an instance of a flow

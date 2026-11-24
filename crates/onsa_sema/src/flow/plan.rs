@@ -165,9 +165,10 @@ pub struct PlanNode {
     /// `.when~` of `chain`, of the same walk as `bounds`.
     pub guards: Vec<PlanGuard>,
     /// Of an instance, its work in each stage of this flow (§11.9, S-1088,
-    /// S-1207), one entry of a stage, slowest first; none of another node,
-    /// and of an instance whose callee has no table (in error, in a loop of
-    /// calls). Made by the walk of the table ([`entries`], [`steps`]).
+    /// S-1207), one entry of a stage, slowest first; of a delay with a chain,
+    /// the same of its one stage, whose [`Op::Run`] reads it (§11.10); none of
+    /// another node, and of an instance whose callee has no table (in error,
+    /// in a loop of calls). Made by the walk of the table ([`entries`], [`steps`]).
     pub entries: Vec<Entry>,
     /// How this flow reads its value (§11.9).
     pub read: Read,
@@ -196,8 +197,8 @@ pub enum Op {
     /// The slot of the ring of the port `port` of the boundary `bound`,
     /// at its phase, written from `from`.
     Ring { bound: u32, port: Port, from: Feed },
-    /// The stage `body` of the head run (its function called); its result
-    /// to `out`.
+    /// The stage `body` of the head run (its function called; of a delay,
+    /// its value read, its store after it, §11.10); its result to `out`.
     Run { body: ClockStage, out: Out },
     /// The elements of the array of the boundary `from` written to `to`
     /// (the array of a boundary outside it that deals, or the value), in
@@ -555,6 +556,10 @@ pub(super) fn build(
                 // The port of each condition (§11.10), gathered as an input is.
                 for &(at, port) in &w.nodes[k].ports {
                     r.chain.get_mut(at as usize).into_iter().for_each(|m| m.port = Some(port));
+                }
+                // Of a delay, by its clock, known now (§11.10: P = W = that of its first argument).
+                if r.kind.delay().is_some() && !r.chain.is_empty() {
+                    (r.bounds, r.guards, _) = bounds::bounds(&r.chain, bounds::Ports::delay(w.nodes[k].clock));
                 }
                 bounds::conds(&r.chain, &mut r.bounds);
                 (w.nodes[k].clock, w.nodes[k].args.clone())

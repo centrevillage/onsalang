@@ -88,9 +88,13 @@ fn node_field_ty(lw: &mut Lowerer, flow: DefId, decls: &Decls, info: &FlowInfo, 
             };
             Ok(Ty::Array(Box::new(ty), super::chain::len(n, part, span)?))
         }
-        // Of a guard (§11.10, S-1220): its condition, its count, its held output.
-        (PlanKind::Instance { .. }, Part::On(_)) => Ok(Ty::Bool),
-        (PlanKind::Instance { .. }, Part::Count(_)) => Ok(Ty::u32()),
+        // Of a guard (§11.10, S-1220): its condition, its count, its held output; of a
+        // delay whether it ran.
+        (_, Part::On(_) | Part::Ran) => Ok(Ty::Bool),
+        (_, Part::Count(_)) => Ok(Ty::u32()),
+        (PlanKind::Prev { ty, .. } | PlanKind::Delay { ty, .. } | PlanKind::Vdelay { ty, .. }, Part::Held(_)) => {
+            lw.core_ty(*ty, &[], span)
+        }
         (PlanKind::Instance { callee, .. }, Part::Held(_)) => {
             let out = lw.a.def(*callee).as_flow().map(|f| f.out);
             lw.core_ty(out.ok_or_else(|| internal(span, "a held output of no flow"))?, &[], span)

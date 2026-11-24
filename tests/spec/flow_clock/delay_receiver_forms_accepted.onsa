@@ -1,0 +1,103 @@
+// onsa.toml
+// [test]
+// spec = ["§11.9", "§11.10", "§11.4", "§18.1"]
+
+// W7-10 U3b/t (S-1209, S-1203): `.when~(c)` and `.reset_if~(r)` on a built-in delay (`prev~`, `delay~`, `vdelay~`) as the receiver, read with no diagnostic (§11.10: "受け手は flow の呼び出し（組込みの遅延を含む）か修飾子の連鎖である"; the place
+// of the modifier P is the clock of the first argument K, so W = K, and the condition is read at K, or is of a parameter kind, a literal, or slower). The first five flows were E0200 in negative/modifier_reset_ticks_past_u32_e0200.onsa
+// until W7-10 U3b (that file keeps the two of S-1225). The values are in flow_semantics/delay_receiver_values.onsa and delay_receiver_twins.onsa, the errors in
+// delay_receiver_e0815.onsa and delay_receiver_e0816.onsa. `x` and `c` are `sample` inputs, `l` is a `sample / 4` input, `d` is a `Bool` of `sample / 4`, `p` and `b` are `block` inputs, `k` and `i` are `init` inputs.
+
+pub flow when_on_a_builtin_delay(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  prev~(x).when~(c)
+}
+
+pub flow reset_if_on_a_builtin_delay(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  prev~(x).reset_if~(c)
+}
+
+pub flow when_on_delay(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  delay~(x, 4).when~(c)
+}
+
+pub flow reset_if_on_vdelay(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  vdelay~(x, 2.0, 4).reset_if~(c)
+}
+
+pub flow two_modifiers_on_a_builtin_delay(x: F32 at sample, c: Bool at sample, r: Bool at sample) -> F32 at sample {
+  let a = prev~(x).when~(c).reset_if~(r)
+  a
+}
+
+pub flow the_other_order(x: F32 at sample, c: Bool at sample, r: Bool at sample) -> F32 at sample {
+  prev~(x).reset_if~(r).when~(c)
+}
+
+pub flow with_an_init(x: F32 at sample, c: Bool at sample, k: F32 at init) -> F32 at sample {
+  prev~(x, k).when~(c) + delay~(x, 2, 5.0).reset_if~(c)
+}
+
+pub flow with_a_vdelay_and_a_signal_d(x: F32 at sample, d: F32 at sample, c: Bool at sample) -> F32 at sample {
+  vdelay~(x, d, 8, 0.5).when~(c).reset_if~(c)
+}
+
+pub flow a_literal_condition(x: F32 at sample) -> F32 at sample {
+  prev~(x).when~(true) + delay~(x, 2).reset_if~(false)
+}
+
+pub flow conditions_of_the_parameter_kinds(x: F32 at sample, b: Bool at block, i: Bool at init) -> F32 at sample {
+  prev~(x).when~(b) + delay~(x, 3).reset_if~(i) + vdelay~(x, 2.0, 4).when~(i).reset_if~(b)
+}
+
+pub flow a_computed_condition(x: F32 at sample) -> F32 at sample {
+  prev~(x).when~(x > 0.5 && x < 2.0)
+}
+
+pub flow two_whens(x: F32 at sample, c: Bool at sample, b: Bool at block) -> F32 at sample {
+  prev~(x).when~(c).when~(b)
+}
+
+pub flow a_slow_first_argument(l: F32 at (sample / 4), d: Bool at (sample / 4)) -> F32 at sample {
+  prev~(l).when~(d) at sample
+}
+
+pub flow a_slow_first_argument_with_a_computed_condition(l: F32 at (sample / 4)) -> F32 at sample {
+  delay~(l, 2).when~(l > 0.5).reset_if~(l < 0.0) at sample
+}
+
+pub flow a_slow_first_argument_with_a_block_condition(l: F32 at (sample / 4), b: Bool at block) -> F32 at sample {
+  vdelay~(l, 2.0, 4).when~(b) at sample
+}
+
+pub flow a_reset_slower_than_the_delay(x: F32 at sample, b: Bool at block, d: Bool at (sample / 4)) -> F32 at sample {
+  prev~(x).reset_if~(d) + delay~(x, 2).reset_if~(b at (sample / 8))
+}
+
+pub flow a_reset_slower_than_a_slow_delay(l: F32 at (sample / 4), b: Bool at block) -> F32 at sample {
+  prev~(l).reset_if~(b at (sample / 16)).when~(l > 0.0) at sample
+}
+
+pub flow on_a_computed_first_argument(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  prev~(x * 0.5 + 1.0).when~(c)
+}
+
+pub flow in_a_let(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  let a = delay~(x, 2).when~(c)
+  a * 2.0
+}
+
+pub flow in_an_argument(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  prev~(delay~(x, 2).when~(c))
+}
+
+pub flow in_the_argument_of_the_receiver(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  prev~(prev~(x).when~(c)).reset_if~(c)
+}
+
+pub flow in_an_arm_of_if_tilde(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  if~ c { prev~(x).when~(c) } else { x }
+}
+
+pub flow in_a_par_body(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  let ys = par~ i in 0 ..< 2 { prev~(x * F32.round_from(i + 1)).when~(c).reset_if~(c) }
+  ys[0] + ys[1]
+}

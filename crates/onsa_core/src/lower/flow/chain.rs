@@ -39,6 +39,14 @@ impl<'a> Walk<'a> {
         sfield(lw, self.info, self.state, FieldOf::Node(self.id, part), self.span)
     }
 
+    /// `_ran` of a delay a guard stops set to `on` (§11.10: its store is of the ticks it ran).
+    fn ran(&self, lw: &Lowerer, out: &mut Vec<Stmt>, on: bool) -> R<()> {
+        match self.info.field_at(FieldOf::Node(self.id, Part::Ran)) {
+            Some(_) => assign(out, &self.field(lw, Part::Ran)?, lit(Ty::Bool, self.span, Lit::Bool(on))),
+            None => Ok(()),
+        }
+    }
+
     fn bound(&self, b: u32) -> R<&'a onsa_sema::flow::PlanBound> {
         self.n.bounds.get(b as usize).ok_or_else(|| internal(self.span, format!("no boundary {b}")))
     }
@@ -263,6 +271,12 @@ pub(super) fn entry(
         let ty = burst_ty(Some(w.n.clock), lw.core_ty(*t, &[], w.span)?);
         w.value = Some(zeroed(cx, out, "__value", ty, w.span));
     }
+    // A delay that a guard stops has not run until its run says so (§11.10, its store).
+    let mut runs = false;
+    Op::walk(&e.ops, &mut |op| runs |= matches!(op, Op::Run { .. }));
+    if runs {
+        w.ran(lw, out, false)?;
+    }
     let made = ops(lw, cx, out, &mut w, &e.ops)?;
     Ok(made.or(w.value))
 }
@@ -373,7 +387,7 @@ fn ops(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, w: &mut Walk, list:
             Op::Reset { at } => {
                 let on = w.cond(lw, cx, out, at)?;
                 let mut body = Vec::new();
-                reset(lw, &mut body, w, at)?;
+                reset(lw, cx, &mut body, w, at)?;
                 out.push(stmt(span, StmtKind::If(on, Block { stmts: body, value: None }, Block::default())));
             }
             Op::Deal { to, from, by } => {
@@ -418,15 +432,14 @@ fn ops(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, w: &mut Walk, list:
 }
 
 /// The part the `.reset_if~` at `at` of the walk wraps back to its start
-/// (§11.10): its head by its soft reset ([`super::phases::ensure_reset_kept`]),
-/// the rings and the arrays of the boundaries inside it and the held outputs
-/// of the guards inside it at `T.default()`; not the conditions and the
-/// counts of the guards, nor what is outside it (§11.9).
-fn reset(lw: &mut Lowerer, out: &mut Vec<Stmt>, w: &Walk, at: u32) -> R<()> {
+/// (§11.10): its head as a soft reset does ([`super::phases::reset_node`]:
+/// an instance by its `_reset_kept`, a delay its value and its write place
+/// from the copy of its `init`), the rings and the arrays of the boundaries
+/// inside it and the held outputs of the guards inside it at `T.default()`;
+/// not the conditions and the counts of the guards, nor what is outside it (§11.9).
+fn reset(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, w: &Walk, at: u32) -> R<()> {
     let (n, span) = (w.n, w.span);
-    let PlanKind::Instance { callee, .. } = n.kind else { return Err(internal(span, "a reset of no instance")) };
-    let f = super::phases::ensure_reset_kept(lw, callee, span)?;
-    expr_stmt(out, call(f, Ty::Unit, span, vec![inout(w.field(lw, Part::Own)?)]));
+    super::phases::reset_node(lw, cx, out, w.id, w.state, super::phases::Keep::Kept)?;
     // A held output of a guard the table reads alone has a field (S-1220).
     let kept = |p: &Part| !matches!(p, Part::Held(_)) || w.info.field_at(FieldOf::Node(w.id, *p)).is_some();
     for part in n.reset_parts(at).into_iter().filter(kept) {
@@ -505,6 +518,15 @@ fn prelower(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, w: &mut Walk, 
     let conds: Vec<(u32, bool)> = conds.collect::<R<_>>()?;
     let mut conds: Vec<u32> =
         conds.into_iter().filter(|&(at, ring)| ring || w.ring(at).is_none()).map(|c| c.0).collect();
+    // The `d` of a `vdelay~` a run reads, read while it stops (§11.10), once.
+    if let PlanKind::Vdelay { d, .. } = w.n.kind
+        && !bodies.is_empty()
+        && !cx.flow.as_ref().expect("flow context").expr_override.contains_key(&d)
+    {
+        let v = lower_expr(lw, cx, d)?;
+        let v = materialize(cx, v, out, "__d");
+        cx.flow.as_mut().expect("flow context").expr_override.insert(d, v);
+    }
     for body in bodies {
         read.extend(head_inputs(lw, w, body)?.into_iter().filter(|&i| w.n.ring_of(0, Port::Input(i)).is_none()));
     }
@@ -544,10 +566,10 @@ fn arg_value(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, w: &Walk, inp
 }
 
 /// The inputs of the head of the walk a run of its stage `body` reads, by
-/// index ([`instance_args`]).
+/// index ([`instance_args`]); none of a delay, which reads its state.
 fn head_inputs(lw: &Lowerer, w: &Walk, body: ClockStage) -> R<Vec<u32>> {
     let (a, PlanKind::Instance { callee, .. }) = (lw.a, &w.n.kind) else {
-        return Err(internal(w.span, "a run of no instance"));
+        return if w.n.kind.delay().is_some() { Ok(Vec::new()) } else { Err(internal(w.span, "a run of no instance")) };
     };
     let (Some(g), Some(fd)) = (a.flows.get(callee), a.def(*callee).as_flow()) else {
         return Err(internal(w.span, "an instance of no checked flow"));
@@ -650,6 +672,13 @@ fn window(
 /// window of the frame of the head ([`window`], the memo of U6b 2.4).
 fn run(lw: &mut Lowerer, cx: &mut FnCx, w: &Walk, body: ClockStage) -> R<Expr> {
     let (a, n, span) = (lw.a, w.n, w.span);
+    // A delay reads its value, and stores after it (§11.4, §11.10).
+    if n.kind.delay().is_some() {
+        let mut lets = Vec::new();
+        let v = super::nodes::delay_value(lw, cx, &mut lets, w.state, w.id)?;
+        w.ran(lw, &mut lets, true)?;
+        return Ok(after(lets, v));
+    }
     let (&PlanKind::Instance { callee, ref args, .. }, ClockStage::Tick(k)) = (&n.kind, body) else {
         return Err(internal(span, format!("a run of {body:?} of no instance")));
     };

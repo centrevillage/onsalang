@@ -479,27 +479,40 @@ impl Walk<'_> {
         // Of a flow with a port in error, none (§18.1).
         let Some(f) = a.def(g).as_flow().filter(|f| !f.ports_in_error) else { return };
         let Some(chain) = self.cx.chains.get(&e) else { return };
-        let (bounds, guards, _) = super::super::plan::bounds::bounds(chain.mods.iter().map(|m| &m.plan), f);
+        let ports = super::super::plan::bounds::Ports::of(f);
+        let (bounds, guards, _) = super::super::plan::bounds::bounds(chain.mods.iter().map(|m| &m.plan), ports);
         let gathered = |i: usize| bounds.iter().any(|b| b.gathers.iter().any(|g| g.0 == Port::Input(i as u32)));
         let mut found = Vec::new();
         for (_, (&x, input)) in args.iter().zip(&f.inputs).enumerate().filter(|&(i, _)| gathered(i)) {
             let what = format!("the part of the input `{}` of `{name}` gathered before the first samples", input.name);
             found.extend(crate::signal::no_default_signal(a, input.ty, self.ast.expr(x).span, &what, "§11.9"));
         }
-        let chain = chain.mods.last().map_or(e, |m| m.call);
+        let at = chain.mods.last().map_or(e, |m| m.call);
         let what = format!("the array `{name}` deals before its first tick");
         if bounds.iter().any(|b| b.deals) {
-            found.extend(crate::signal::no_default_signal(a, f.out, self.ast.expr(chain).span, &what, "§11.9"));
+            found.extend(crate::signal::no_default_signal(a, f.out, self.ast.expr(at).span, &what, "§11.9"));
         } else if !guards.is_empty() {
-            // The output a `.when~` holds, of a part that has not run (§11.10,
-            // S-558; one error with the dealt array, S-1214 (1)).
-            let (what, ty) = (format!("the output of `{name}` a `.when~` holds before it first runs"), self.ty_of(e));
-            found.extend(crate::signal::no_default_signal(a, ty, self.ast.expr(chain).span, &what, "§11.10"));
+            // One error with the dealt array (S-1214 (1)).
+            found.extend(self.held_default(e, name));
         }
         for d in found {
             let at = self.src(d.span);
             self.report(d.with_found(at));
         }
+    }
+
+    /// The E0816 of the output of `name` at `e` a `.when~` of its chain
+    /// holds, of a part that has not run (§11.10, S-558: `T.default()`, an
+    /// `init` of a delay too), at the whole chain (S-1203 (1)), of a type
+    /// that does not satisfy `Default`; none of a chain with no `.when~`.
+    // SPEC-GAP(S-1203): the place, provisional (1).
+    pub(super) fn held_default(&self, e: ExprId, name: &str) -> Option<Diagnostic> {
+        let chain = self.cx.chains.get(&e)?;
+        chain.mods.iter().find(|m| m.plan.modifier == crate::flow_names::Modifier::When)?;
+        let at = self.ast.expr(chain.mods.last()?.call).span;
+        let what = format!("the output of `{name}` a `.when~` holds before it first runs");
+        let d = crate::signal::no_default_signal(self.a, self.ty_of(e), at, &what, "§11.10")?;
+        Some(d.with_found(self.src(at)))
     }
 
     /// The output `out` at the clock `c`, read at `at`, the clock the body

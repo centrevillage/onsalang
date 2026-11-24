@@ -6,7 +6,7 @@
 // W7-10 U2a/t, S-1130 (spec §11.2: "`^名前` を書けるのは、遅延の組込みの第 1 引数の式の中だけで、その中の利用者の flow の引数と修飾子の引数（`when~`・`reset_if~` の条件）には書けない（E0801）"; "修飾子の条件も同じで、受け手が
 // 利用者の flow でも組込みの遅延でも E0801 である（`prev~(lp~(x).when~(^c))`、`prev~(prev~(x).reset_if~(^c))`。候補は無く…）"; §18.1: the names stage): a `^name` in the condition of a modifier that is inside the first argument of
 // a delay is E0801, for every receiver (a user flow, a built-in delay), every modifier and every position in the chain and in the condition, and for each of the three delays. The rule is of the names stage, so it is reported
-// before the E0200 of the flow stage that a built-in delay as the receiver still has (the forms of the second block are the ones that would be E0200: the E0801 comes first). A name that is used before its `let` with
+// for a built-in delay as the receiver as for a flow (the forms of the second block; a modifier on a built-in delay is open since W7-10 U3b). A name that is used before its `let` with
 // no `^`, in the same place, is E0801 too, and the `^` is no candidate there (`fixes = 0` counts every candidate of the file; the rule of the candidate outside such a place is in fixes/e0801_forward.onsa). The inner delay in a condition
 // takes its own `^` (the first argument of the inner delay), which is accepted: flow_clock/when_condition_accepted.onsa. One error per flow (P-01). `c` is a later `let` of `Bool`, `d` a later `let` of `F32`.
 
@@ -64,7 +64,7 @@ pub flow in_a_delay_of_a_delay(x: F32 at sample) -> F32 at sample {
   a
 }
 
-// ---------------------------------------------------------------- the receiver is a built-in delay (it would be the E0200 of the flow stage)
+// ---------------------------------------------------------------- the receiver is a built-in delay
 
 pub flow when_on_a_delay_with_a_caret(x: F32 at sample) -> F32 at sample {
   let a = prev~(prev~(x).when~(^c))                 //~ E0801

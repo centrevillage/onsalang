@@ -209,7 +209,7 @@ impl NodeBuilder {
             if let (Some(_), &NodeKind::Instance(g)) = (c.ratio, &call.kind)
                 && let Some(f) = a.def(g).as_flow()
             {
-                (n.bounds, n.guards, _) = super::plan::bounds::bounds(&n.chain, f);
+                (n.bounds, n.guards, _) = super::plan::bounds::bounds(&n.chain, super::plan::bounds::Ports::of(f));
             }
         }
         Ok(())

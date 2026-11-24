@@ -5,7 +5,7 @@
 // W7-10 U2b/t, S-559, S-1196, S-1209, S-1218 (spec §11.10: "条件の刻みは、条件の式のクロック（`at` で付けたクロックを含む）で決まり、パラメータの種類なら `when~` と同じ条件を読むクロック W の刻み、刻みのクロックならそのクロックの刻み
 // （`.reset_if~(c at (sample / 4))`（`c` は `block`）は `sample / 4` の刻み）"; "W より速い周期のクロックの条件は E0815"): the forms of a `.reset_if~(r)` that are read with no diagnostic. A condition at W, of the kind `block`, slower than W (a
 // tick that is slower is a tick of its own, also when it is written with an `at`), a `.reset_if~` in a chain with a `.when~` in both orders, inside and outside a `.up~` and a `.down~`, in a conversion flow's ring (inside and outside the
-// boundary), in a `let`, in an argument, in an arm of `if~`, in a `par~`. Before W7-10 U2b these were the E0200 of the flow stage (negative/modifier_when_reset_if_e0200_until_w7_10.onsa); the values are in flow_semantics/reset_if_values.onsa and
+// boundary), in a `let`, in an argument, in an arm of `if~`, in a `par~`. Before W7-10 U2b these were the E0200 of the flow stage (negative/modifier_reset_ticks_past_u32_e0200.onsa); the values are in flow_semantics/reset_if_values.onsa and
 // reset_if_slow_values.onsa, the errors in reset_if_condition_e0815.onsa. `x`, `c` and `r` are `sample` inputs, `p` and `b` are `block` inputs, `l` is `sample / 4`, `m` is `sample / 8`.
 
 flow lp(x: F32 at sample) -> F32 at sample {

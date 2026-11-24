@@ -100,7 +100,9 @@ fn close(pkg: &Package, a: &mut Analysis, f: DefId, marks: &HashMap<DefId, Mark>
     for (i, n) in info.nodes.iter().enumerate() {
         let id = NodeId(i as u32);
         let PlanKind::Instance { callee, .. } = n.kind else {
-            tables.push(None);
+            // A delay with a chain runs at its one stage (§11.10), a stage of this flow.
+            let stage = n.clock.stage().filter(|_| n.kind.delay().is_some() && !n.chain.is_empty());
+            tables.push(stage.map(|s| steps::table(n, &[s], Some(s))));
             continue;
         };
         let Some(g) = table(callee) else {
@@ -111,9 +113,9 @@ fn close(pkg: &Package, a: &mut Analysis, f: DefId, marks: &HashMap<DefId, Mark>
             counted = false;
             continue;
         };
-        let (entries, read) = steps::table(n, g);
+        let heads: Vec<ClockStage> = g.stages.iter().copied().chain([ClockStage::SAMPLE]).collect();
+        let (entries, read) = steps::table(n, &heads, g.out_stage);
         unmade_at.extend(unmade(n, g).map(|(at, k, over)| (id, at, k, over)));
-        stages.extend(entries.iter().map(|e| e.caller).filter(|s| s.tick_slower_than(ClockStage::SAMPLE)));
         callee_time(&mut time, info, n, g, &entries);
         tables.push(Some((entries, read)));
         let Some((inner, via)) = most.get(&callee).copied().flatten() else {
@@ -135,6 +137,8 @@ fn close(pkg: &Package, a: &mut Analysis, f: DefId, marks: &HashMap<DefId, Mark>
             past_at = Some((at, total, id));
         }
     }
+    let callers = tables.iter().flatten().flat_map(|t| &t.0).map(|e| e.caller);
+    stages.extend(callers.filter(|s| s.tick_slower_than(ClockStage::SAMPLE)));
     let Some(flow) = a.flows.get_mut(&f) else { onsa_diag::internal::bug(None, "a flow closed out of the table") };
     let set = |n: &mut PlanNode, (e, read)| (n.entries, n.read) = (e, read);
     flow.nodes.iter_mut().zip(tables).for_each(|(n, t)| t.into_iter().for_each(|t| set(n, t)));
@@ -213,14 +217,16 @@ fn past_u32(pkg: &Package, a: &Analysis, f: DefId, (id, at, k, mut over): Unmade
     d.with_note(span, format!("{what} `{}` is at `{}`", def.name, c.shown(span)))
 }
 
-/// The node of `g` whose chain moves a stage of its callee slower than its
-/// `sample` to the stage of `g` of the ratio `s` ([`Entry::runs`]), with it.
+/// The instance of `g` whose chain moves a stage of its callee slower than its
+/// `sample` to the stage of `g` of the ratio `s` ([`Entry::runs`]), with it
+/// (not a delay, whose run is of its own stage).
 fn source(g: &FlowInfo, s: Ratio) -> Option<(NodeId, Over)> {
     let run = |r| match r {
         (ClockStage::Tick(body), ClockStage::Tick(at)) if at == s && body.slower_than_body() => Some(Over::Stage(body)),
         _ => None,
     };
-    (0u32..).zip(&g.nodes).find_map(|(i, n)| Some((NodeId(i), Entry::runs(&n.entries).into_iter().find_map(run)?)))
+    let instances = (0u32..).zip(&g.nodes).filter(|(_, n)| matches!(n.kind, PlanKind::Instance { .. }));
+    instances.into_iter().find_map(|(i, n)| Some((NodeId(i), Entry::runs(&n.entries).into_iter().find_map(run)?)))
 }
 
 /// The time of the stages of `info` that read `sample_tick()` (§11.4,

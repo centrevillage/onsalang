@@ -4,7 +4,7 @@
 
 // W7-10 U1/t (S-1209, S-557, S-558): `.when~(c)` on an instance with a condition of the clock W (the clock the output of the part is read at, when it is slower than the place of the modifier, and else the place) or of the parameter kinds
 // is read with no diagnostic: a call of a flow, a chain of `.down~` and `.up~` before or after it, a conversion flow, two of them, in a `let`, an argument and an arm of `if~`. The values are in flow_semantics/when_values.onsa and
-// when_slow_values.onsa. These forms were E0200 in negative/modifier_when_reset_if_e0200_until_w7_10.onsa until W7-10 U1. `l` is a `sample / 4` input, `p` and `b` are `block` inputs.
+// when_slow_values.onsa. These forms were E0200 in negative/modifier_reset_ticks_past_u32_e0200.onsa until W7-10 U1. `l` is a `sample / 4` input, `p` and `b` are `block` inputs.
 
 pub flow lp(x: F32 at sample) -> F32 at sample {
   x * 0.5 + prev~(x) * 0.5

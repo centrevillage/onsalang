@@ -274,47 +274,44 @@ pub(super) fn ensure_reset_kept(lw: &mut Lowerer, flow: DefId, span: Span) -> R<
 }
 
 /// A node back to its value after `init` (§11.4), from the copy of its
-/// `init` value the state keeps; of an instance by `keep` ([`Keep`]).
-fn reset_node(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, id: NodeId, state: &Expr, keep: Keep) -> R<()> {
+/// `init` value the state `s` keeps; of an instance by `k` ([`Keep`]), and
+/// of `reset` the condition and the count of each guard of its chain.
+pub(super) fn reset_node(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, id: NodeId, s: &Expr, k: Keep) -> R<()> {
     let info = plan(cx);
     let n = info.node(id);
     let (span, at) = (cx.ast.expr(n.expr).span, |p| FieldOf::Node(id, p));
     match &n.kind {
         PlanKind::Prev { init, ty, .. } => {
             let t = lw.core_ty(*ty, &[], span)?;
-            let v = init_value(lw, init, &t, span, |lw, _| sfield(lw, info, state, at(Part::Init), span))?;
-            assign(out, &sfield(lw, info, state, at(Part::Own), span)?, v)?;
+            let v = init_value(lw, init, &t, span, |lw, _| sfield(lw, info, s, at(Part::Init), span))?;
+            assign(out, &sfield(lw, info, s, at(Part::Own), span)?, v)?;
         }
         PlanKind::Delay { init, ty, .. } | PlanKind::Vdelay { init, ty, .. } => {
             let t = lw.core_ty(*ty, &[], span)?;
             let len = ring_len(&n.kind, span)?;
-            let v = init_value(lw, init, &t, span, |lw, _| sfield(lw, info, state, at(Part::Init), span))?;
-            let buf = sfield(lw, info, state, at(Part::Buf), span)?;
+            let v = init_value(lw, init, &t, span, |lw, _| sfield(lw, info, s, at(Part::Init), span))?;
+            let buf = sfield(lw, info, s, at(Part::Buf), span)?;
             let fill = Expr::new(buf.ty.clone(), span, ExprKind::Repeat { elem: Box::new(v), n: len });
             assign(out, &buf, fill)?;
-            assign(out, &sfield(lw, info, state, at(Part::W), span)?, u32_lit(span, 0))?;
+            assign(out, &sfield(lw, info, s, at(Part::W), span)?, u32_lit(span, 0))?;
         }
         PlanKind::Instance { callee, .. } => {
-            let st = sfield(lw, info, state, at(Part::Own), span)?;
-            if keep == Keep::Kept {
-                let f = ensure_reset_kept(lw, *callee, span)?;
-                expr_stmt(out, call(f, Ty::Unit, span, vec![inout(st)]));
-                return Ok(());
-            }
-            let sub = lw.ensure_flow(*callee)?;
-            expr_stmt(out, call(sub.reset, Ty::Unit, span, vec![inout(st)]));
-            // The condition and the count of each guard of its chain (§11.9: `reset`, not `reset_if~`).
-            for g in 0..n.guards.len() as u32 {
-                for (part, v) in
-                    [(Part::On(g), lit(Ty::Bool, span, Lit::Bool(false))), (Part::Count(g), u32_lit(span, 0))]
-                {
-                    if info.field_at(at(part)).is_some() {
-                        assign(out, &sfield(lw, info, state, at(part), span)?, v)?;
-                    }
-                }
-            }
+            let st = sfield(lw, info, s, at(Part::Own), span)?;
+            let f = match k {
+                Keep::Kept => ensure_reset_kept(lw, *callee, span)?,
+                Keep::Hard => lw.ensure_flow(*callee)?.reset,
+            };
+            expr_stmt(out, call(f, Ty::Unit, span, vec![inout(st)]));
         }
         PlanKind::Par { .. } => {}
+    }
+    // The condition and the count of each guard of its chain (§11.9: `reset`, not `reset_if~`).
+    for g in (0..n.guards.len() as u32).filter(|_| k == Keep::Hard) {
+        for (part, v) in [(Part::On(g), lit(Ty::Bool, span, Lit::Bool(false))), (Part::Count(g), u32_lit(span, 0))] {
+            if info.field_at(at(part)).is_some() {
+                assign(out, &sfield(lw, info, s, at(part), span)?, v)?;
+            }
+        }
     }
     Ok(())
 }
@@ -550,15 +547,26 @@ fn store_node(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, id: NodeId, 
         PlanKind::Delay { .. } | PlanKind::Vdelay { .. } => Some(ring_len(&n.kind, span)?),
         PlanKind::Instance { .. } | PlanKind::Par { .. } => return Err(internal(span, "a store of no delay")),
     };
+    // Evaluated while a guard stops it too (§11.10), stored of a tick it ran (its `_ran`).
+    let ran = info.field_at(at(Part::Ran)).map(|_| sfield(lw, info, state, at(Part::Ran), span)).transpose()?;
     let v = lower_expr(lw, cx, arg)?;
-    let Some(len) = ring else {
-        return assign(out, &sfield(lw, info, state, at(Part::Own), span)?, v);
-    };
-    let buf = sfield(lw, info, state, at(Part::Buf), span)?;
-    let w = sfield(lw, info, state, at(Part::W), span)?;
-    assign(out, &index(buf, w.clone())?, v)?;
-    let next = checked_binary(BinOp::Rem, checked_binary(BinOp::Add, w.clone(), u32_lit(span, 1)), u32_lit(span, len));
-    assign(out, &w, next)
+    let v = if ran.is_some() { materialize(cx, v, out, "__store") } else { v };
+    let mut store = Vec::new();
+    match ring {
+        None => assign(&mut store, &sfield(lw, info, state, at(Part::Own), span)?, v)?,
+        Some(len) => {
+            let buf = sfield(lw, info, state, at(Part::Buf), span)?;
+            let w = sfield(lw, info, state, at(Part::W), span)?;
+            assign(&mut store, &index(buf, w.clone())?, v)?;
+            let one = checked_binary(BinOp::Add, w.clone(), u32_lit(span, 1));
+            assign(&mut store, &w, checked_binary(BinOp::Rem, one, u32_lit(span, len)))?;
+        }
+    }
+    match ran {
+        Some(ran) => out.push(stmt(span, StmtKind::If(ran, Block { stmts: store, value: None }, Block::default()))),
+        None => out.extend(store),
+    }
+    Ok(())
 }
 
 /// The argument the node `id` stores at the end of the function of the

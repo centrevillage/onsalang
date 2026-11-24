@@ -16,15 +16,15 @@ use super::*;
 /// before its work in the stage of its tick ([`reset`]).
 type Level = BTreeMap<ClockStage, Vec<Op>>;
 
-/// The entries and the read of the instance `n` of the callee whose table
-/// is `g`: each stage x of the body of `g` (its slow stages, then `sample`)
-/// runs, that of `g.out_stage` into the array of the innermost boundary
-/// that deals, else as the value; then the arm of each boundary.
-pub(super) fn table(n: &PlanNode, g: &FlowInfo) -> (Vec<Entry>, Read) {
+/// The entries and the read of the node `n` whose head runs each stage of
+/// `heads` (of an instance, the stages of the body of its callee: its slow
+/// stages, then `sample`; of a delay, its one stage, §11.10), that of
+/// `out_stage` into the array of the innermost boundary that deals, else as
+/// the value; then the arm of each boundary.
+pub(super) fn table(n: &PlanNode, heads: &[ClockStage], out_stage: Option<ClockStage>) -> (Vec<Entry>, Read) {
     let first = first_deal(n, 0);
-    let out = |x| if Some(x) == g.out_stage { first.map_or(Out::Value, Out::Deal) } else { Out::None };
-    let heads = g.stages.iter().copied().chain([ClockStage::SAMPLE]);
-    let mut level: Level = heads.map(|x| (x, vec![Op::Run { body: x, out: out(x) }])).collect();
+    let out = |x| if Some(x) == out_stage { first.map_or(Out::Value, Out::Deal) } else { Out::None };
+    let mut level: Level = heads.iter().map(|&x| (x, vec![Op::Run { body: x, out: out(x) }])).collect();
     let mut dealt = None;
     let (mut b, mut g) = (0u32, 0u32);
     // The chain inner first: each boundary by its arm, each guard by that of `.when~`.

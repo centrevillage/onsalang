@@ -456,9 +456,6 @@ pub(crate) struct ModifierChain {
     /// Its modifiers in the order they are written (the check reads the
     /// receiver first).
     mods: Vec<ChainModifier>,
-    /// The E0200 of its first `.when~` or `.reset_if~` (W7-10), held when
-    /// no N of it is in error.
-    gate: Option<Diagnostic>,
 }
 
 /// A modifier of a [`ModifierChain`]: its call, its receiver, and what the

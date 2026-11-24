@@ -1,0 +1,121 @@
+// onsa.toml
+// [test]
+// spec = ["§11.4", "§11.10", "§6.4", "§18.1"]
+
+// W7-10 U3b/t, S-1209, S-1203 (provisional reading (1): the chain as a whole), R4 (spec §11.10: "止まっている間は最後の出力を保つ（一度も動いていなければ `T.default()`。`T` が `Default` を満たさなければ E0816）"): the delay that a
+// `.when~` can stop keeps its last output, `T.default()` before it first ran, so the type of its value needs `Default` even when the delay is written with an `init` (the held output is not the `init`; the delay with an `init` and no `.when~`
+// has no E0816, flow_semantics/default_init_explicit.onsa). `Char`, `Mixed` (a struct that does not list `Default`), `Gear` (an enum that does not), `Option[F32]` and a tuple with a `Char` have none (§6.4, as in
+// negative/flow_default_init_e0816.onsa). The error is at the chain as a whole (the line of the call); a chain with two `.when~`, or a `.reset_if~` in it, has one. The same delays with a type that has `Default`, a delay with no `.when~` and one
+// with a `.reset_if~` only (the reset goes back to the written `init`, which is a value of the type) are accepted. One error per flow (P-01), so each form is a flow of its own.
+// `x` is a `sample` input, `c`, `d` and `r` are `sample` `Bool` inputs, `l` is a `sample / 4` `F32` and `e` a `sample / 4` `Bool`.
+
+pub struct Mixed {
+  a: F32,
+  c: Char,
+}
+
+pub enum Gear {
+  Low,
+  High,
+}
+
+pub rt fn pick(c: Char) -> F32 {
+  if c == 'a' { 1.0 } else { 0.0 }
+}
+
+// ---------------------------------------------------------------- E0816: a type with no Default under a `.when~`, with an `init`
+
+pub flow prev_of_a_char(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  let v: Char = if x > 0.0 { 'a' } else { 'b' }
+  pick(prev~(v, 'a').when~(c))                                //~ E0816
+}
+
+pub flow delay_of_a_char(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  let v: Char = if x > 0.0 { 'a' } else { 'b' }
+  let w = delay~(v, 2, 'a').when~(c)                          //~ E0816
+  pick(w)
+}
+
+pub flow prev_of_a_struct(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  let m: Mixed = Mixed { a: x, c: 'b' }
+  let w = prev~(m, Mixed { a: 1.0, c: 'a' }).when~(c)         //~ E0816
+  w.a
+}
+
+pub flow prev_of_an_enum(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  let g = if x > 1.0 { Gear.High } else { Gear.Low }
+  let w = prev~(g, Gear.Low).when~(c)                         //~ E0816
+  match w {
+    Gear.High => 1.0,
+    Gear.Low => 0.0,
+  }
+}
+
+pub flow delay_of_an_option(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  let o: Option[F32] = if x > 1.0 { Some(x) } else { None }
+  let p = delay~(o, 2, None).when~(c)                         //~ E0816
+  match p {
+    Some(v) => v,
+    None => 0.0,
+  }
+}
+
+pub flow prev_of_a_tuple_with_a_char(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  let ch: Char = if x > 0.0 { 'a' } else { 'b' }
+  let (a, k) = prev~((x, ch), (0.0, 'a')).when~(c)            //~ E0816
+  a + pick(k)
+}
+
+pub flow a_reset_if_inside_the_when(x: F32 at sample, c: Bool at sample, r: Bool at sample) -> F32 at sample {
+  let v: Char = if x > 0.0 { 'a' } else { 'b' }
+  pick(prev~(v, 'a').reset_if~(r).when~(c))                   //~ E0816
+}
+
+pub flow a_reset_if_outside_the_when(x: F32 at sample, c: Bool at sample, r: Bool at sample) -> F32 at sample {
+  let v: Char = if x > 0.0 { 'a' } else { 'b' }
+  pick(delay~(v, 2, 'a').when~(c).reset_if~(r))               //~ E0816
+}
+
+pub flow two_whens(x: F32 at sample, c: Bool at sample, d: Bool at sample) -> F32 at sample {
+  let v: Char = if x > 0.0 { 'a' } else { 'b' }
+  pick(prev~(v, 'a').when~(c).when~(d))                       //~ E0816
+}
+
+pub flow a_when_with_a_literal_condition(x: F32 at sample) -> F32 at sample {
+  let v: Char = if x > 0.0 { 'a' } else { 'b' }
+  pick(prev~(v, 'a').when~(true))                             //~ E0816
+}
+
+pub flow a_slow_delay_of_a_char(l: F32 at (sample / 4), e: Bool at (sample / 4)) -> F32 at sample {
+  let v: Char = if l > 0.0 { 'a' } else { 'b' }
+  let w = prev~(v, 'a').when~(e)                              //~ E0816
+  pick(w) at sample
+}
+
+pub flow in_a_par_body(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  let v: Char = if x > 0.0 { 'a' } else { 'b' }
+  let ys = par~ i in 0 ..< 2 { prev~(v, 'a').when~(c) }       //~ E0816
+  pick(ys[0]) + pick(ys[1])
+}
+
+// ---------------------------------------------------------------- no error: the type has Default, or nothing is stopped
+
+pub flow a_float_when(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  prev~(x, 3.0).when~(c) + delay~(x, 2, 5.0).when~(c)
+}
+
+pub flow a_char_without_a_when(x: F32 at sample) -> F32 at sample {
+  let v: Char = if x > 0.0 { 'a' } else { 'b' }
+  pick(prev~(v, 'a'))
+}
+
+pub flow a_char_with_a_reset_if_only(x: F32 at sample, r: Bool at sample) -> F32 at sample {
+  let v: Char = if x > 0.0 { 'a' } else { 'b' }
+  pick(delay~(v, 2, 'a').reset_if~(r))
+}
+
+pub flow a_struct_with_a_reset_if_only(x: F32 at sample, r: Bool at sample) -> F32 at sample {
+  let m: Mixed = Mixed { a: x, c: 'b' }
+  let w = prev~(m, Mixed { a: 1.0, c: 'a' }).reset_if~(r)
+  w.a
+}

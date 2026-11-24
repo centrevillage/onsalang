@@ -52,13 +52,16 @@ pub(crate) fn lower_flow_expr(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId) -> R<O
     }
     let mut stmts = Vec::new();
     let value = match &info.node(id).kind {
-        PlanKind::Prev { .. } => sfield(lw, info, &state, at(Part::Own), span)?,
-        PlanKind::Delay { .. } => {
-            let buf = sfield(lw, info, &state, at(Part::Buf), span)?;
-            let w = sfield(lw, info, &state, at(Part::W), span)?;
-            index(buf, w)?
+        // Of a chain, read by the ops of its entry (§11.10).
+        PlanKind::Prev { .. } | PlanKind::Delay { .. } | PlanKind::Vdelay { .. } => {
+            match info.node(id).entry(phase.stage(), true) {
+                Some(e) => {
+                    let v = super::chain::entry(lw, cx, &mut stmts, id, &state, e)?;
+                    v.ok_or_else(|| internal(span, format!("`{name}` read of an entry of no value")))?
+                }
+                None => delay_value(lw, cx, &mut stmts, &state, id)?,
+            }
         }
-        PlanKind::Vdelay { d, max, ty, .. } => vdelay_read(lw, cx, &mut stmts, &state, id, *d, *max, *ty, span)?,
         PlanKind::Instance { .. } => match info.node(id).read {
             // Of a chain that deals, the array of its outermost boundary that deals (§11.9),
             // after the ops of this stage that write it (the review of U6b, its high 1).
@@ -109,6 +112,23 @@ pub(crate) fn lower_flow_expr(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId) -> R<O
     cx.flow.as_mut().unwrap().expr_override.insert(e, result.clone());
     let ty = result.ty.clone();
     Ok(Some(Expr::new(ty, span, ExprKind::Block(Block { stmts, value: Some(Box::new(result)) }))))
+}
+
+/// The value of the delay `id` in the scope of the state `s` (§11.4): the field of
+/// `prev`, `buf[w]` of `delay`, the read side of `vdelay` ([`vdelay_read`]).
+pub(super) fn delay_value(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, s: &Expr, id: NodeId) -> R<Expr> {
+    let info = cx.flow.as_ref().expect("flow context").info;
+    let span = cx.ast.expr(info.node(id).expr).span;
+    let at = |p| FieldOf::Node(id, p);
+    match &info.node(id).kind {
+        PlanKind::Prev { .. } => sfield(lw, info, s, at(Part::Own), span),
+        PlanKind::Delay { .. } => {
+            let buf = sfield(lw, info, s, at(Part::Buf), span)?;
+            index(buf, sfield(lw, info, s, at(Part::W), span)?)
+        }
+        PlanKind::Vdelay { d, max, ty, .. } => vdelay_read(lw, cx, out, s, id, *d, *max, *ty, span),
+        PlanKind::Instance { .. } | PlanKind::Par { .. } => Err(internal(span, "the value of no delay")),
+    }
 }
 
 /// The read side of `vdelay` (§11.4), in the fixed operation order.

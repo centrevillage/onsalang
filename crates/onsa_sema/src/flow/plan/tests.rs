@@ -1408,6 +1408,60 @@ pub flow w10(c: Bool at init) -> F32 at sample { pick0~(mk2~().down~(2).when~(c)
     }
 }
 
+/// The table of a chain whose head is a built-in delay (§11.10, W7-10 U3b):
+/// the head is its one stage K (P = W = the clock of its first argument), its
+/// run the read of its value, and the arms of `.when~` and `.reset_if~` are
+/// those of an instance; worked out by hand from the memo of W7-10 U3 (3.3,
+/// 3.5) and S-1228 (the reset first in the stage of its tick). A delay a
+/// guard stops has the field `_ran` after those of its guards (S-1220
+/// provisional); one with a `.reset_if~` alone has none.
+#[test]
+fn the_table_of_a_chain_of_a_delay() {
+    let src = "flow cnt() -> F32 at sample {
+  let n = prev~(^n) + 1.0
+  n
+}
+pub flow d0(x: F32 at sample, c: Bool at sample) -> F32 at sample { prev~(x).when~(c) }
+pub flow d1(x: F32 at sample, r: Bool at sample) -> F32 at sample { delay~(x, 2).reset_if~(r) }
+pub flow d2(x: F32 at sample) -> F32 at sample {
+  let k = cnt~().down~(4)
+  prev~(x).reset_if~(k == 2.0)
+}
+pub flow d3(x: F32 at sample, c: Bool at sample, r: Bool at sample) -> F32 at sample { prev~(x).when~(c).reset_if~(r) }
+pub flow d4(x: F32 at sample, c: Bool at sample, r: Bool at sample) -> F32 at sample { prev~(x).reset_if~(r).when~(c) }
+pub flow d5(x: F32 at sample) -> F32 at sample {
+  let l = cnt~().down~(4)
+  let q = cnt~().down~(16)
+  let v = prev~(l).reset_if~(q == 2.0).when~(l != 3.0)
+  v at sample
+}
+";
+    let a = check(src);
+    assert!(a.diagnostics.is_empty(), "{:?}", a.diagnostics);
+    let rows = [
+        ("d0", "0*: W(0,r)[R(0,H(0))], Hold(0,V)   read=Run", ".held ._ran"),
+        ("d1", "0*: Reset(0), R(0,V)   read=Run", ".buf .w"),
+        ("d2", "-2: Reset(0) | 0*: R(0,V)   read=Run", ""),
+        ("d3", "0*: Reset(1), W(0,r)[R(0,H(0))], Hold(0,V)   read=Run", ".held ._ran"),
+        ("d4", "0*: W(0,r)[Reset(0), R(0,H(0))], Hold(0,V)   read=Run", ".held ._ran"),
+        (
+            "d5",
+            "-2*: W(0,r)[], W(0,l@-4)[Reset(0)], W(0,l)[R(-2,H(0))], Hold(0,V) | 0: W(0,k+)[]   read=Run",
+            "._on_0 ._tick_0 .held ._ran",
+        ),
+    ];
+    for (name, want, fields) in rows {
+        let f = flow(&a, name);
+        let id = f.nodes.iter().position(|n| !n.chain.is_empty() && n.kind.delay().is_some());
+        let id = id.unwrap_or_else(|| panic!("{name}: no chain of a delay"));
+        let n = &f.nodes[id];
+        assert_eq!(drawn(n), want, "{name}");
+        let own = |x: &&super::Field| matches!(x.of, super::FieldOf::Node(k, p) if k.0 as usize == id && p != super::Part::Own);
+        let got: Vec<_> = f.fields.iter().filter(own).map(|x| x.name.trim_start_matches(n.path.as_str())).collect();
+        assert_eq!(got.join(" "), fields, "{name}");
+    }
+}
+
 /// The table of a chain with `.reset_if~` around a `.when~` that moves a
 /// stage slower than the tick R of its condition to its W (§11.10, S-1209,
 /// S-1228): the reset first in the stage R, before all the work of the part

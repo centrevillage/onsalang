@@ -1,0 +1,100 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§11.4", "§11.9", "§11.10", "§18.1"]
+
+// W7-10 U3b/t, S-1209 (spec §11.10: "W より速い条件（…）と、W 以外のクロックへの `at` は E0815" for `when~`, "W より速い周期のクロックの条件は E0815 である" for `reset_if~`; the receiver is a built-in delay, so P is the clock K of its first
+// argument ("組込みの遅延は第 1 引数のクロック", a delay takes no `.down~`/`.up~`) and W = P = K, the clock of its output). A condition that ticks faster than K is E0815 whatever the delay is (`prev~`, `delay~`, `vdelay~`), whatever modifier
+// it is in, in a chain of two, in a `let`, an argument, an arm of `if~`, a `par~`, and an `at` to a clock that is not W is E0815 for `when~` (also to a slower clock, and inside an operand). The error is at the condition. The notes are not
+// fixed. The same conditions read at K, slower than K (held, for `when~`; the tick of the condition, for `reset_if~`), of a parameter kind or a literal are accepted: delay_receiver_forms_accepted.onsa. One error per flow (P-01), so each form
+// is a flow of its own. `x`, `c` and `e` are `sample` inputs, `l` is a `sample / 4` `F32`, `d` a `sample / 4` `Bool`, `b` is a `block` `Bool`.
+
+// ---------------------------------------------------------------- faster than K
+
+pub flow when_faster_than_a_slow_prev(l: F32 at (sample / 4), c: Bool at sample) -> F32 at sample {
+  prev~(l).when~(c) at sample                                 //~ E0815
+}
+
+pub flow reset_if_faster_than_a_slow_delay(l: F32 at (sample / 4), c: Bool at sample) -> F32 at sample {
+  delay~(l, 2).reset_if~(c) at sample                         //~ E0815
+}
+
+pub flow when_faster_than_a_slow_vdelay(l: F32 at (sample / 4), c: Bool at sample) -> F32 at sample {
+  vdelay~(l, 2.0, 4).when~(c) at sample                       //~ E0815
+}
+
+pub flow a_computed_sample_condition(l: F32 at (sample / 4), x: F32 at sample) -> F32 at sample {
+  prev~(l).when~(x > 0.5) at sample                           //~ E0815
+}
+
+pub flow slow_and_fast_in_one_condition(l: F32 at (sample / 4), d: Bool at (sample / 4), c: Bool at sample) -> F32 at sample {
+  prev~(l).when~(d && c) at sample                            //~ E0815
+}
+
+pub flow a_let_of_a_sample_value(l: F32 at (sample / 4), c: Bool at sample, e: Bool at sample) -> F32 at sample {
+  let f = c || e
+  delay~(l, 2).reset_if~(f) at sample                         //~ E0815
+}
+
+pub flow the_second_when_of_a_chain(l: F32 at (sample / 4), d: Bool at (sample / 4), c: Bool at sample) -> F32 at sample {
+  prev~(l).when~(d).when~(c) at sample                        //~ E0815
+}
+
+pub flow the_second_reset_if_of_a_chain(l: F32 at (sample / 4), d: Bool at (sample / 4), c: Bool at sample) -> F32 at sample {
+  prev~(l).reset_if~(d).reset_if~(c) at sample                //~ E0815
+}
+
+pub flow a_reset_if_after_a_when(l: F32 at (sample / 4), d: Bool at (sample / 4), c: Bool at sample) -> F32 at sample {
+  prev~(l).when~(d).reset_if~(c) at sample                    //~ E0815
+}
+
+pub flow in_a_let(l: F32 at (sample / 4), c: Bool at sample) -> F32 at sample {
+  let a = prev~(l).when~(c)                                   //~ E0815
+  a at sample
+}
+
+pub flow in_an_argument(l: F32 at (sample / 4), c: Bool at sample) -> F32 at sample {
+  prev~(prev~(l).when~(c)) at sample                          //~ E0815
+}
+
+pub flow on_the_inner_one_of_two(l: F32 at (sample / 4), d: Bool at (sample / 4), c: Bool at sample) -> F32 at sample {
+  prev~(prev~(l).when~(c)).reset_if~(d) at sample             //~ E0815
+}
+
+pub flow in_an_arm_of_if_tilde(l: F32 at (sample / 4), c: Bool at sample) -> F32 at sample {
+  if~ c { prev~(l).when~(c) at sample } else { 0.0 }          //~ E0815
+}
+
+pub flow in_a_par_body(l: F32 at (sample / 4), c: Bool at sample) -> F32 at sample {
+  let ys = par~ i in 0 ..< 2 { prev~(l * F32.round_from(i + 1)).when~(c) at sample } //~ E0815
+  ys[0] + ys[1]
+}
+
+// ---------------------------------------------------------------- an `at` that makes the tick faster than K, or a `when~` that reads another clock than W
+
+pub flow an_at_to_sample_where_k_is_slower(l: F32 at (sample / 4), d: Bool at (sample / 4)) -> F32 at sample {
+  prev~(l).when~(d at sample) at sample                       //~ E0815
+}
+
+pub flow a_reset_if_at_to_sample_where_k_is_slower(l: F32 at (sample / 4), b: Bool at block) -> F32 at sample {
+  prev~(l).reset_if~(b at sample) at sample                   //~ E0815
+}
+
+pub flow a_when_at_to_a_slower_clock_than_w(x: F32 at sample, b: Bool at block) -> F32 at sample {
+  prev~(x).when~(b at (sample / 4))                           //~ E0815
+}
+
+pub flow a_when_at_to_a_slower_clock_than_a_slow_w(l: F32 at (sample / 4), b: Bool at block) -> F32 at sample {
+  delay~(l, 2).when~(b at (sample / 8)) at sample             //~ E0815
+}
+
+pub flow an_at_in_an_operand_of_a_when(x: F32 at sample, b: Bool at block, c: Bool at sample) -> F32 at sample {
+  prev~(x).when~((b at (sample / 4)) && c)                    //~ E0815
+}
+
+pub flow an_at_in_an_operand_of_a_reset_if(x: F32 at sample, b: Bool at block, c: Bool at sample) -> F32 at sample {
+  prev~(x).reset_if~((b at (sample / 4)) && c)                //~ E0815
+}
+
+pub flow a_when_at_to_a_faster_clock_inside_a_slow_delay(l: F32 at (sample / 4), b: Bool at block) -> F32 at sample {
+  vdelay~(l, 2.0, 4).when~(b at (sample / 2)) at sample       //~ E0815
+}

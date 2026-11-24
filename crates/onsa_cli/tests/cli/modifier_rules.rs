@@ -108,22 +108,19 @@ fn no_diagnostic_after_the_candidate(forms: &[(&str, &str)]) {
     }
 }
 
-/// The modifiers whose receiver is a built-in delay stay E0200 until the last unit of W7-10 (U3b), `.when~` and `.reset_if~` alike, and are still E0200 after the candidate (Q-09: the flow stage stops at the meaning it has not).
+/// §11.10 (W7-10 U3b; S-1209): the same for a `.when~` and a `.reset_if~` whose receiver is a built-in delay (`prev~`, `delay~`): the program after the candidate has no diagnostic (the E0200 that the flow stage gave them is gone,
+/// and the condition `c` is a `sample` value, read at the clock of the delay).
 #[test]
-fn the_program_after_a_candidate_of_a_delay_receiver_is_e0200_until_the_last_unit() {
+fn the_program_after_a_candidate_of_a_delay_receiver_has_no_diagnostic() {
     let forms = [
         ("prev~(x).when(c)", "E0811"),
         ("prev~(x).when!(c)", "E0806"),
         ("prev~(x).reset_if(c)", "E0811"),
         ("prev~(x).reset_if!(c)", "E0806"),
         ("delay~(x, 2).reset_if(c)", "E0811"),
+        ("vdelay~(x, 2.0, 4).reset_if!(c).when~(c)", "E0806"),
     ];
-    for (body, code) in forms {
-        let after = one_candidate(&flow(body), code);
-        let ds = diags(&after);
-        assert_eq!(ds.len(), 1, "{body}: one diagnostic after the candidate: {ds:?}\n{after}");
-        assert_eq!(code_of(&ds[0]), "E0200", "{body}: {}", ds[0]);
-    }
+    no_diagnostic_after_the_candidate(&forms);
 }
 
 /// The one E0812 of the body, with no candidate, and the text of its notes.

@@ -1,0 +1,16 @@
+# flow_ref 1 source=tests/spec/flow_semantics/delay_receiver_values.onsa tests=15 evaluated=0 unavailable=15 skipped=0 waiting=0
+? prev~(x).when~(c) runs where c holds and keeps its last output where it does not (the output before the first run is T.default())	unavailable a chain whose head is not an instance of a flow
+? a delay that has not run reads T.default(), not its init; the first run reads the init (R4)	unavailable a chain whose head is not an instance of a flow
+? the length of a delay counts the frames it ran: delay~(x, 3).when~(c)	unavailable a chain whose head is not an instance of a flow
+? a condition of the kind block is read once for each call of process: the calls cut where the delay stops and runs again	unavailable a chain whose head is not an instance of a flow
+? delay~(x, 2).reset_if~(r) puts the values and the write position back before the stages of the frame, and the frame gives its own input	unavailable a chain whose head is not an instance of a flow
+? a reset puts the delay back to its init (a literal or a value of the kind init), not to T.default()	unavailable a chain whose head is not an instance of a flow
+? the order of the two modifiers: x.when~(c).reset_if~(r) resets the stopped frames and the held output too, x.reset_if~(r).when~(c) only the frames that run	unavailable a chain whose head is not an instance of a flow
+? vdelay~: the argument d is the caller's and is evaluated at the stopped frames too, the interpolation counts the runs	unavailable a chain whose head is not an instance of a flow
+? in a par~: each copy has its own delay, stopped by the same condition	unavailable a chain whose head is not an instance of a flow
+? a delay in the first argument of a delay, with the modifier on the inner or on the outer one	unavailable a chain whose head is not an instance of a flow
+? a first argument at sample / 4: the delay ticks at the grid, the condition is read there, and a stopped tick is no tick of the delay	unavailable a chain whose head is not an instance of a flow
+? a reset_if~ whose condition is slower than the delay resets before the stage of the delay at that frame	unavailable a chain whose head is not an instance of a flow
+? a slow delay with a reset_if~ slower than its tick: the grid of sample / 16 is every 4th tick of the delay	unavailable a chain whose head is not an instance of a flow
+? a slower reset_if~ inside a when~: its grid counts the ticks that the delay ran, not the ticks of the caller (§11.9)	unavailable a chain whose head is not an instance of a flow
+? the calls of process cut the frames anywhere, a call of 0 frames too, and a reset starts over (§13.4, §11.6)	unavailable a chain whose head is not an instance of a flow

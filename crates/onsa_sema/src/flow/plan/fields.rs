@@ -34,6 +34,9 @@ pub enum Part {
     On(u32),
     Count(u32),
     Held(u32),
+    /// Of a delay with a `.when~` in its chain: it ran at this tick, so it
+    /// stores (§11.4, §11.10, S-1220).
+    Ran,
 }
 
 /// What a field of the state holds.
@@ -182,7 +185,8 @@ impl Structs<'_> {
     /// holds it: `n` of `prev~` and of an instance, `n.buf` and `n.w` of
     /// `delay~` / `vdelay~`, then `n.init` of a delay whose `init` is an
     /// `Init`-rate expression; after `n` of an instance the rings and the
-    /// array of each boundary of its chain; `n` of a `par~` whose replicas have fields
+    /// array of each boundary of its chain; of either, those its guards
+    /// read, and of a delay with a guard `n._ran`; `n` of a `par~` whose replicas have fields
     /// (of its nodes, then its hoisted ones by their names), and none of
     /// one with no state.
     fn node(&mut self, id: NodeId, out: &mut Vec<Field>) {
@@ -195,6 +199,20 @@ impl Structs<'_> {
             guard_parts(n).into_iter().filter_map(|p| if let Part::Held(g) = p { Some(g) } else { None }).max();
         let mut push =
             |part: Part| out.push(Field { name: names::part(own, part, outermost), of: FieldOf::Node(id, part) });
+        // §11.6 (S-1208, S-1220): after its state, by the modifiers of its chain inner
+        // first, the rings then the array of a boundary, of a guard what its table reads.
+        let mut parts = Vec::new();
+        for (b, at) in (0u32..).zip(&n.bounds) {
+            parts.extend(at.gathers.iter().map(|&(port, _)| (at.at, Part::Gather { bound: b, port })));
+            parts.extend(at.deals.then_some((at.at, Part::Deal(b))));
+        }
+        let read = guard_parts(n);
+        for (g, at) in (0u32..).zip(&n.guards) {
+            let of = [Part::On(g), Part::Count(g), Part::Held(g)];
+            parts.extend(of.into_iter().filter(|p| read.contains(p)).map(|p| (at.at, p)));
+        }
+        parts.sort_by_key(|p| p.0);
+        let chain = parts.into_iter().map(|p| p.1);
         let init = match &n.kind {
             PlanKind::Prev { init, .. } => {
                 push(Part::Own);
@@ -206,21 +224,7 @@ impl Structs<'_> {
                 Some(init)
             }
             PlanKind::Instance { .. } => {
-                // §11.6 (S-1208, S-1220): after its state, by the modifiers of its chain inner
-                // first, the rings then the array of a boundary, of a guard what its table reads.
                 push(Part::Own);
-                let mut parts = Vec::new();
-                for (b, at) in (0u32..).zip(&n.bounds) {
-                    parts.extend(at.gathers.iter().map(|&(port, _)| (at.at, Part::Gather { bound: b, port })));
-                    parts.extend(at.deals.then_some((at.at, Part::Deal(b))));
-                }
-                let read = guard_parts(n);
-                for (g, at) in (0u32..).zip(&n.guards) {
-                    let of = [Part::On(g), Part::Count(g), Part::Held(g)];
-                    parts.extend(of.into_iter().filter(|p| read.contains(p)).map(|p| (at.at, p)));
-                }
-                parts.sort_by_key(|p| p.0);
-                parts.into_iter().for_each(|p| push(p.1));
                 None
             }
             PlanKind::Par { children, .. } => {
@@ -242,6 +246,11 @@ impl Structs<'_> {
         };
         if let Some(InitArg::Init(_)) = init {
             push(Part::Init);
+        }
+        chain.for_each(&mut push);
+        // The store of a delay is of the ticks it ran (§11.10).
+        if n.kind.delay().is_some() && !n.guards.is_empty() {
+            push(Part::Ran);
         }
         self.at[id.0 as usize] = Some(start);
     }

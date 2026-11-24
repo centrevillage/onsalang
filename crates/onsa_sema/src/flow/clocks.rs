@@ -30,6 +30,7 @@ use onsa_syntax::ast::{Ast, BinOp, MatchArm};
 use super::lift::{self, Stmt};
 use super::loops;
 use super::nodes::{NodeBuilder, Recorded};
+use super::plan::bounds::Ports;
 use super::plan::{Edge, Owner};
 use super::*;
 use crate::body::LocalKind;
@@ -800,9 +801,11 @@ impl Walk<'_> {
     /// head ([`Walk::instance`]). The chain is the thing with state, of the
     /// kind of its head (S-392). A head with no node (S-59) is walked as a
     /// call, and the chain is in error, as one with no frame ([`Self::frame_of`])
-    /// and one held by the E0200 of `.when~` / `.reset_if~`, whose value is
-    /// W7-10's (§18.1; its head runs in its frame). Its argument, the N or
-    /// the condition of W7-10, is read with no rule.
+    /// (§18.1; its head runs in its frame). The condition of a `.when~` and a
+    /// `.reset_if~` is read by the ports of the head ([`Self::guard_cond`]):
+    /// of an instance its declared ones, of a built-in delay its output at
+    /// the clock of its first argument (§11.10), none of one in error, whose
+    /// condition is read with no rule as the N of `.down~` and `.up~` is.
     fn modifier(&mut self, e: ExprId, receiver: ExprId, head: ExprId, args: &[Arg]) -> Option<Clock> {
         let call = self.calls.get(&head).map(|&i| &self.cx.calls[i]);
         let frame = self.frame_of(head);
@@ -816,21 +819,21 @@ impl Walk<'_> {
             return Some(Clock::Error);
         }
         let c = self.expr(receiver);
-        let held = self.cx.chains.get(&head).is_some_and(|c| c.gate.is_some());
-        let opened = match (call.map(|c| &c.kind), frame, held) {
-            (Some(&NodeKind::Instance(g)), Some(_), false) => self.guard_cond(e, head, g),
+        let ports = match (call.map(|c| &c.kind), frame, c) {
+            (Some(&NodeKind::Instance(g)), Some(_), _) => self.a.def(g).as_flow().map(Ports::of),
+            (Some(NodeKind::Delay(..)), Some(_), Some(k @ Clock::Tick(_))) => Some(Ports::delay(k)),
             _ => None,
         };
-        match opened {
+        match ports.and_then(|p| self.guard_cond(e, head, p)) {
             Some(false) => return Some(Clock::Error),
             Some(true) => {}
             None => args.iter().for_each(|x| _ = self.cut(x.expr)),
         }
-        if call.is_some() && frame.is_some() && !held { c } else { Some(Clock::Error) }
+        if call.is_some() && frame.is_some() { c } else { Some(Clock::Error) }
     }
 
     /// The condition of the `.when~` or the `.reset_if~` `e` of the chain of
-    /// the head `head`, an instance of `g` (§11.10, S-1209), of its clock W
+    /// the head `head` of the ports `ports` (§11.10, S-1209), of its clock W
     /// ([`super::plan::bounds::bounds`]) moved out of the ratios outside it
     /// (`w`, a `sample * N` read at the `sample` of the body, §11.4). Of
     /// `.when~` read at W; of `.reset_if~` read at the tick R it resets at,
@@ -840,13 +843,13 @@ impl Walk<'_> {
     /// ([`super::plan::bounds::run_at`]): hoisted and kept as the other
     /// arguments are, a value of a slower tick held. A condition faster than
     /// W, and of `.when~` an `at` in it to another clock than W (not in an
-    /// argument of a flow, read at its port), are E0815, one of an event the
-    /// E0200 of W7-11: whether it is opened, its condition walked; none of
+    /// argument of a flow, read at its port), are E0815 (this version makes
+    /// no event clock, W7-11): whether it is opened, its condition walked; none of
     /// `.down~` and `.up~`, whose argument the caller walks.
-    fn guard_cond(&mut self, e: ExprId, head: ExprId, g: DefId) -> Option<bool> {
-        let (chain, f) = (self.cx.chains.get(&head)?, self.a.def(g).as_flow()?);
+    fn guard_cond(&mut self, e: ExprId, head: ExprId, ports: Ports) -> Option<bool> {
+        let chain = self.cx.chains.get(&head)?;
         let i = chain.mods.iter().position(|m| m.call == e)?;
-        let (_, guards, resets) = super::plan::bounds::bounds(chain.mods.iter().map(|m| &m.plan), f);
+        let (_, guards, resets) = super::plan::bounds::bounds(chain.mods.iter().map(|m| &m.plan), ports);
         let cond = chain.mods[i].plan.cond?;
         let outside = chain.mods[i + 1..].iter().filter_map(|m| m.plan.ratio).map(|r| r.0).sum::<i32>();
         let (own, reset) = match resets.iter().find(|x| x.at == i as u32) {
@@ -864,9 +867,7 @@ impl Walk<'_> {
             return Some(false);
         }
         if matches!(c, Some(Clock::Event(_))) {
-            let d = Feature::InstanceModifiers.diagnostic(Stage::Flow, name, &[]);
-            self.report(d.with_found(self.src(name)));
-            return Some(false);
+            onsa_diag::internal::bug(Some(name), "the condition of a modifier of an event clock, which W7-11 makes");
         }
         if !self.checking() {
             return Some(true);
@@ -1024,6 +1025,12 @@ impl Walk<'_> {
                 let found = self.src(span);
                 self.report(d.with_found(found));
             }
+            if let NodeKind::Delay(delay, _) = call.kind
+                && !not_copy
+                && let Some(d) = self.held_default(e, &format!("{}~", delay.name()))
+            {
+                self.report(d);
+            }
             self.node_clocks[k] =
                 NodeClock { clock: clock.unwrap_or(Clock::Const), args, resets: Vec::new(), ports: Vec::new() };
         }
@@ -1062,11 +1069,11 @@ impl Walk<'_> {
 
     /// The stages the arguments `reads` of the head `e` of a chain, an
     /// instance of `f`, are read at where its `.when~`s move them
-    /// ([`super::plan::bounds::head_stage`]); none of a chain held by a gate.
+    /// ([`super::plan::bounds::head_stage`]).
     fn head_stages(&self, e: ExprId, f: &crate::def::FlowDef, reads: &mut [ArgRead]) {
-        let Some(chain) = self.cx.chains.get(&e).filter(|c| c.gate.is_none()) else { return };
+        let Some(chain) = self.cx.chains.get(&e) else { return };
         let mods = || chain.mods.iter().map(|m| &m.plan);
-        let (_, guards, _) = super::plan::bounds::bounds(mods(), f);
+        let (_, guards, _) = super::plan::bounds::bounds(mods(), Ports::of(f));
         if guards.is_empty() {
             return;
         }

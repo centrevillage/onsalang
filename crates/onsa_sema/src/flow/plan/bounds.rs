@@ -141,7 +141,28 @@ pub(in crate::flow) fn reads_at(out: Option<Ratio>) -> Ratio {
     out.filter(|k| k.slower_than_body()).unwrap_or(Ratio(0))
 }
 
-/// The boundaries of the chain `chain` of an instance of `f`, inner first
+/// The ports of the head of a chain (§11.9, §11.10): the exponent of each
+/// of its inputs and of its output in the frame it is called in, none of a
+/// parameter kind.
+pub(in crate::flow) struct Ports {
+    ins: Vec<Option<Ratio>>,
+    out: Option<Ratio>,
+}
+
+impl Ports {
+    /// Of an instance of `f`: its declared inputs and output.
+    pub(in crate::flow) fn of(f: &FlowDef) -> Ports {
+        Ports { ins: f.inputs.iter().map(|i| exponent(i.caller_clock())).collect(), out: exponent(f.out_clock) }
+    }
+
+    /// Of a built-in delay at the clock `clock` (§11.10: P = W = the clock K
+    /// of its first argument): no input of a port, its output at K.
+    pub(in crate::flow) fn delay(clock: Clock) -> Ports {
+        Ports { ins: Vec::new(), out: exponent(clock) }
+    }
+}
+
+/// The boundaries of the chain `chain` of the head of the ports `ports`, inner first
 /// ([`PlanBound`]): of each modifier with a ratio (not `.when~` and
 /// `.reset_if~`), the ports of the part it wraps, the inputs it gathers
 /// with the stage of the ring, and whether it deals; no stage, which the
@@ -152,10 +173,9 @@ pub(in crate::flow) fn reads_at(out: Option<Ratio>) -> Ratio {
 /// O(modifiers × inputs).
 pub(in crate::flow) fn bounds<'a>(
     chain: impl IntoIterator<Item = &'a PlanModifier>,
-    f: &FlowDef,
+    ports: Ports,
 ) -> (Vec<PlanBound>, Vec<PlanGuard>, Vec<PlanReset>) {
-    let mut ins: Vec<Option<Ratio>> = f.inputs.iter().map(|i| exponent(i.caller_clock())).collect();
-    let mut out = exponent(f.out_clock);
+    let Ports { mut ins, mut out } = ports;
     let (mut list, mut guards, mut resets) = (Vec::new(), Vec::new(), Vec::new());
     for (at, m) in (0u32..).zip(chain) {
         let Some(r) = m.ratio else {

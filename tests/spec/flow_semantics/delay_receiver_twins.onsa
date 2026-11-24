@@ -1,0 +1,308 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.10", "§11.9", "§11.4", "§13.4"]
+
+// The twins of delay_receiver_values.onsa (W7-10 U3b/t; S-1207, S-1209): a modifier on a built-in delay has the value it has when the delay is put in a flow of its own with the same arguments, and the modifier is put on the call of that flow
+// (§11.10: "受け手は flow の呼び出し（組込みの遅延を含む）か修飾子の連鎖である", the modifiers wrap "左の全体"; §11.4 "利用者の flow のインスタンスと同じく"). `pv` is `flow pv(x: F32 at sample) -> F32 at sample { prev~(x) }`, `dl2` is `delay~(x, 2)`,
+// `pv4` is the delay of a value of `sample / 4` as a conversion flow (`x: F32 at (sample / 4)` to `F32 at (sample / 4)`), `vd` is `vdelay~(x, d, 4)`. The flow with the delay in its body (`a_…`) and the one with the named flow (`b_…`) run on every version
+// of the arrays of this file, and the two are equal frame by frame; the arrays are not written down here: they are those of delay_receiver_values.onsa where the cases are the same. A literal condition that always holds (`when~(true)`) or never
+// resets (`reset_if~(false)`) is no condition: the twin is the delay itself.
+
+flow cnt() -> F32 at sample {
+  let n = prev~(^n) + 1.0
+  n
+}
+
+flow pv(x: F32 at sample) -> F32 at sample {
+  prev~(x)
+}
+
+flow dl2(x: F32 at sample) -> F32 at sample {
+  delay~(x, 2)
+}
+
+flow pv4(x: F32 at (sample / 4)) -> F32 at (sample / 4) {
+  prev~(x)
+}
+
+flow vd(x: F32 at sample, d: F32 at sample) -> F32 at sample {
+  vdelay~(x, d, 4)
+}
+
+pub flow a_when(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  prev~(x).when~(c)
+}
+
+pub flow b_when(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  pv~(x).when~(c)
+}
+
+pub flow a_reset(x: F32 at sample, r: Bool at sample) -> F32 at sample {
+  delay~(x, 2).reset_if~(r)
+}
+
+pub flow b_reset(x: F32 at sample, r: Bool at sample) -> F32 at sample {
+  dl2~(x).reset_if~(r)
+}
+
+pub flow a_when_reset(x: F32 at sample, c: Bool at sample, r: Bool at sample) -> F32 at sample {
+  delay~(x, 2).when~(c).reset_if~(r)
+}
+
+pub flow b_when_reset(x: F32 at sample, c: Bool at sample, r: Bool at sample) -> F32 at sample {
+  dl2~(x).when~(c).reset_if~(r)
+}
+
+pub flow a_reset_when(x: F32 at sample, c: Bool at sample, r: Bool at sample) -> F32 at sample {
+  delay~(x, 2).reset_if~(r).when~(c)
+}
+
+pub flow b_reset_when(x: F32 at sample, c: Bool at sample, r: Bool at sample) -> F32 at sample {
+  dl2~(x).reset_if~(r).when~(c)
+}
+
+pub flow a_two_whens(x: F32 at sample, c: Bool at sample, d: Bool at sample) -> F32 at sample {
+  prev~(x).when~(c).when~(d)
+}
+
+pub flow b_two_whens(x: F32 at sample, c: Bool at sample, d: Bool at sample) -> F32 at sample {
+  pv~(x).when~(c && d)
+}
+
+pub flow a_true(x: F32 at sample) -> F32 at sample {
+  prev~(x).when~(true)
+}
+
+pub flow b_true(x: F32 at sample) -> F32 at sample {
+  pv~(x).when~(true)
+}
+
+pub flow a_never(x: F32 at sample) -> F32 at sample {
+  delay~(x, 2).reset_if~(false)
+}
+
+pub flow b_never(x: F32 at sample) -> F32 at sample {
+  dl2~(x)
+}
+
+pub flow a_vdelay(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  vdelay~(x, cnt~() * 0.5, 4).when~(c)
+}
+
+pub flow b_vdelay(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  vd~(x, cnt~() * 0.5).when~(c)
+}
+
+pub flow a_par(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  let ys = par~ i in 0 ..< 2 { prev~(x * F32.round_from(i + 1)).when~(c).reset_if~(c) }
+  ys[0] + ys[1] * 10.0
+}
+
+pub flow b_par(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  let ys = par~ i in 0 ..< 2 { pv~(x * F32.round_from(i + 1)).when~(c).reset_if~(c) }
+  ys[0] + ys[1] * 10.0
+}
+
+pub flow a_nested(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  prev~(prev~(x).when~(c)).when~(c)
+}
+
+pub flow b_nested(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  pv~(pv~(x).when~(c)).when~(c)
+}
+
+pub flow a_slow() -> F32 at sample {
+  let l = cnt~().down~(4)
+  prev~(l).when~(l != 3.0 && l != 6.0) at sample
+}
+
+pub flow b_slow() -> F32 at sample {
+  let l = cnt~().down~(4)
+  pv4~(l).when~(l != 3.0 && l != 6.0) at sample
+}
+
+pub flow a_slow_reset(x: F32 at sample) -> F32 at sample {
+  let k = cnt~().down~(4)
+  prev~(x).reset_if~(k == 2.0 || k == 4.0)
+}
+
+pub flow b_slow_reset(x: F32 at sample) -> F32 at sample {
+  let k = cnt~().down~(4)
+  pv~(x).reset_if~(k == 2.0 || k == 4.0)
+}
+
+pub flow a_slow_reset_in_when(r: Bool at block) -> F32 at sample {
+  let l = cnt~().down~(4)
+  prev~(l).reset_if~(r at (sample / 16)).when~(l != 2.0 && l != 3.0 && l != 7.0) at sample
+}
+
+pub flow b_slow_reset_in_when(r: Bool at block) -> F32 at sample {
+  let l = cnt~().down~(4)
+  pv4~(l).reset_if~(r at (sample / 16)).when~(l != 2.0 && l != 3.0 && l != 7.0) at sample
+}
+
+fn xs() -> [F32; 16] {
+  [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0]
+}
+
+fn c1() -> [Bool; 16] {
+  [true, true, false, true, false, false, true, true, true, false, true, false, true, true, false, true]
+}
+
+fn c2() -> [Bool; 16] {
+  [false, false, true, false, true, true, false, true, true, false, false, true, true, false, true, true]
+}
+
+fn r1() -> [Bool; 16] {
+  [false, false, true, true, false, true, false, false, false, true, false, false, true, false, false, false]
+}
+
+fn r2() -> [Bool; 16] {
+  [true, false, false, false, true, false, false, true, false, false, false, true, false, false, false, false]
+}
+
+test "prev~(x).when~(c) and pv~(x).when~(c) give the same, whether c starts false or true" {
+  var a1: [F32; 16] = [9.0; 16]
+  var b1: [F32; 16] = [9.0; 16]
+  var a2: [F32; 16] = [9.0; 16]
+  var b2: [F32; 16] = [9.0; 16]
+  var sa1 = a_when.init(8.0)
+  var sb1 = b_when.init(8.0)
+  var sa2 = a_when.init(8.0)
+  var sb2 = b_when.init(8.0)
+  a_when.process(inout sa1, a_when.In { x: xs(), c: c1() }, inout a1)
+  b_when.process(inout sb1, b_when.In { x: xs(), c: c1() }, inout b1)
+  a_when.process(inout sa2, a_when.In { x: xs(), c: c2() }, inout a2)
+  b_when.process(inout sb2, b_when.In { x: xs(), c: c2() }, inout b2)
+  assert a1 == b1
+  assert a2 == b2
+}
+
+test "delay~(x, 2).reset_if~(r) and dl2~(x).reset_if~(r) give the same, for a reset at the first frame too" {
+  var a1: [F32; 16] = [9.0; 16]
+  var b1: [F32; 16] = [9.0; 16]
+  var a2: [F32; 16] = [9.0; 16]
+  var b2: [F32; 16] = [9.0; 16]
+  var sa1 = a_reset.init(8.0)
+  var sb1 = b_reset.init(8.0)
+  var sa2 = a_reset.init(8.0)
+  var sb2 = b_reset.init(8.0)
+  a_reset.process(inout sa1, a_reset.In { x: xs(), r: r1() }, inout a1)
+  b_reset.process(inout sb1, b_reset.In { x: xs(), r: r1() }, inout b1)
+  a_reset.process(inout sa2, a_reset.In { x: xs(), r: r2() }, inout a2)
+  b_reset.process(inout sb2, b_reset.In { x: xs(), r: r2() }, inout b2)
+  assert a1 == b1
+  assert a2 == b2
+}
+
+test "both orders of when~ and reset_if~, and two when~, are the same on the delay and on the flow that holds it" {
+  var a1: [F32; 16] = [9.0; 16]
+  var b1: [F32; 16] = [9.0; 16]
+  var a2: [F32; 16] = [9.0; 16]
+  var b2: [F32; 16] = [9.0; 16]
+  var a3: [F32; 16] = [9.0; 16]
+  var b3: [F32; 16] = [9.0; 16]
+  var sa1 = a_when_reset.init(8.0)
+  var sb1 = b_when_reset.init(8.0)
+  var sa2 = a_reset_when.init(8.0)
+  var sb2 = b_reset_when.init(8.0)
+  var sa3 = a_two_whens.init(8.0)
+  var sb3 = b_two_whens.init(8.0)
+  a_when_reset.process(inout sa1, a_when_reset.In { x: xs(), c: c1(), r: r1() }, inout a1)
+  b_when_reset.process(inout sb1, b_when_reset.In { x: xs(), c: c1(), r: r1() }, inout b1)
+  a_reset_when.process(inout sa2, a_reset_when.In { x: xs(), c: c1(), r: r1() }, inout a2)
+  b_reset_when.process(inout sb2, b_reset_when.In { x: xs(), c: c1(), r: r1() }, inout b2)
+  a_two_whens.process(inout sa3, a_two_whens.In { x: xs(), c: c1(), d: c2() }, inout a3)
+  b_two_whens.process(inout sb3, b_two_whens.In { x: xs(), c: c1(), d: c2() }, inout b3)
+  assert a1 == b1
+  assert a2 == b2
+  assert a3 == b3
+  // The two orders differ on these inputs (the reset outside the when~ also reaches the stopped frames and the held output).
+  assert a1 != a2
+}
+
+test "a condition that always holds and a reset that never comes are no modifier" {
+  var a: [F32; 16] = [9.0; 16]
+  var b: [F32; 16] = [9.0; 16]
+  var c: [F32; 16] = [9.0; 16]
+  var d: [F32; 16] = [9.0; 16]
+  var sa = a_true.init(8.0)
+  var sb = b_true.init(8.0)
+  var sc = a_never.init(8.0)
+  var sd = b_never.init(8.0)
+  a_true.process(inout sa, xs(), inout a)
+  b_true.process(inout sb, xs(), inout b)
+  a_never.process(inout sc, xs(), inout c)
+  b_never.process(inout sd, xs(), inout d)
+  assert a == [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0]
+  assert a == b
+  assert c == [0.0, 0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0]
+  assert c == d
+}
+
+test "vdelay~, a par~ of delays with two modifiers, and a delay in the first argument of a delay: the same as with the named flow" {
+  var a1: [F32; 16] = [9.0; 16]
+  var b1: [F32; 16] = [9.0; 16]
+  var a2: [F32; 16] = [9.0; 16]
+  var b2: [F32; 16] = [9.0; 16]
+  var a3: [F32; 16] = [9.0; 16]
+  var b3: [F32; 16] = [9.0; 16]
+  var sa1 = a_vdelay.init(8.0)
+  var sb1 = b_vdelay.init(8.0)
+  var sa2 = a_par.init(8.0)
+  var sb2 = b_par.init(8.0)
+  var sa3 = a_nested.init(8.0)
+  var sb3 = b_nested.init(8.0)
+  a_vdelay.process(inout sa1, a_vdelay.In { x: xs(), c: c1() }, inout a1)
+  b_vdelay.process(inout sb1, b_vdelay.In { x: xs(), c: c1() }, inout b1)
+  a_par.process(inout sa2, a_par.In { x: xs(), c: c2() }, inout a2)
+  b_par.process(inout sb2, b_par.In { x: xs(), c: c2() }, inout b2)
+  a_nested.process(inout sa3, a_nested.In { x: xs(), c: c1() }, inout a3)
+  b_nested.process(inout sb3, b_nested.In { x: xs(), c: c1() }, inout b3)
+  assert a1 == b1
+  assert a2 == b2
+  assert a3 == b3
+}
+
+test "a delay of a value of sample / 4 and the conversion flow that holds it give the same, with a condition and a reset slower than the delay" {
+  // The grid is read at the ticks of the delay; the grid of `sample / 16` of a reset inside the when~ counts the runs in both (§11.9).
+  var a: [F32; 56] = [9.0; 56]
+  var b: [F32; 56] = [9.0; 56]
+  var c: [F32; 16] = [9.0; 16]
+  var d: [F32; 16] = [9.0; 16]
+  var e: [F32; 56] = [9.0; 56]
+  var f: [F32; 56] = [9.0; 56]
+  var sa = a_slow.init(8.0)
+  var sb = b_slow.init(8.0)
+  var sc = a_slow_reset.init(8.0)
+  var sd = b_slow_reset.init(8.0)
+  var se = a_slow_reset_in_when.init(8.0)
+  var sf = b_slow_reset_in_when.init(8.0)
+  a_slow.process(inout sa, inout a)
+  b_slow.process(inout sb, inout b)
+  a_slow_reset.process(inout sc, xs(), inout c)
+  b_slow_reset.process(inout sd, xs(), inout d)
+  a_slow_reset_in_when.process(inout se, a_slow_reset_in_when.Params { r: true }, inout e)
+  b_slow_reset_in_when.process(inout sf, b_slow_reset_in_when.Params { r: true }, inout f)
+  assert a == b
+  assert c == d
+  assert e == f
+}
+
+test "the twins agree when the calls of process cut the frames, and after a reset" {
+  var a: [F32; 16] = [9.0; 16]
+  var b: [F32; 16] = [9.0; 16]
+  var junk: [F32; 5] = [0.0; 5]
+  var sa = a_when_reset.init(8.0)
+  var sb = b_when_reset.init(8.0)
+  a_when_reset.process(inout sa, a_when_reset.In { x: [101.0; 5], c: [true; 5], r: [false; 5] }, inout junk)
+  a_when_reset.reset(inout sa)
+  b_when_reset.process(inout sb, b_when_reset.In { x: [101.0; 5], c: [true; 5], r: [false; 5] }, inout junk)
+  b_when_reset.reset(inout sb)
+  a_when_reset.process(inout sa, a_when_reset.In { x: xs().slice(0, 7), c: c1().slice(0, 7), r: r1().slice(0, 7) }, inout a.slice(0, 7))
+  a_when_reset.process(inout sa, a_when_reset.In { x: xs().slice(7, 7), c: c1().slice(7, 7), r: r1().slice(7, 7) }, inout a.slice(7, 7))
+  a_when_reset.process(inout sa, a_when_reset.In { x: xs().slice(7, 16), c: c1().slice(7, 16), r: r1().slice(7, 16) }, inout a.slice(7, 16))
+  b_when_reset.process(inout sb, b_when_reset.In { x: xs(), c: c1(), r: r1() }, inout b)
+  assert a == b
+}

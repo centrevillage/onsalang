@@ -11,6 +11,8 @@ file default_init_module.tsv rows=7 tests=2 evaluated=2 unavailable=0 skipped=0 
 file default_init_numbers.tsv rows=19 tests=6 evaluated=6 unavailable=0 skipped=0 waiting=0
 file default_init_reset.tsv rows=30 tests=5 evaluated=5 unavailable=0 skipped=0 waiting=0
 file default_init_values.tsv rows=54 tests=19 evaluated=17 unavailable=1 skipped=1 waiting=0
+file delay_receiver_twins.tsv rows=8 tests=7 evaluated=0 unavailable=7 skipped=0 waiting=0
+file delay_receiver_values.tsv rows=16 tests=15 evaluated=0 unavailable=15 skipped=0 waiting=0
 file down_chain_time_values.tsv rows=98 tests=16 evaluated=16 unavailable=0 skipped=0 waiting=0
 file down_chain_values.tsv rows=115 tests=20 evaluated=20 unavailable=0 skipped=0 waiting=0
 file down_gather_deal_module.tsv rows=15 tests=3 evaluated=3 unavailable=0 skipped=0 waiting=0
@@ -159,4 +161,4 @@ file when_identity_regressions.tsv rows=78 tests=5 evaluated=5 unavailable=0 ski
 file when_slow_head_values.tsv rows=47 tests=5 evaluated=5 unavailable=0 skipped=0 waiting=0
 file when_slow_values.tsv rows=86 tests=9 evaluated=9 unavailable=0 skipped=0 waiting=0
 file when_values.tsv rows=77 tests=10 evaluated=10 unavailable=0 skipped=0 waiting=0
-total files=160 rows=5443 tests=1135 evaluated=1031 unavailable=1 skipped=103 waiting=6
+total files=162 rows=5467 tests=1157 evaluated=1031 unavailable=23 skipped=103 waiting=6

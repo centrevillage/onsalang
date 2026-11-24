@@ -127,8 +127,6 @@ features! {
     /// of a type that is not Copy read at a faster stage (provisional).
     NonCopyTickParts: Language, "a value that is not Copy computed at the clock `{}` and read at a faster clock",
         Some("write `at` on the names it reads, so that it is computed where it is read (`(a at sample) > 0.0`)");
-    /// §11.10: the meaning of `.when~(c)` and `.reset_if~(r)` (W7-10).
-    InstanceModifiers: Language, "the modifiers `.when~(c)` and `.reset_if~(r)` of an instance", None;
     /// §11.10, S-1225: `{}`: the clock. A `.reset_if~` whose condition
     /// resets at a tick that, in a frame of the chain inside the caller
     /// (after an `.up~` outside it), is slower than `sample / 2^31`.

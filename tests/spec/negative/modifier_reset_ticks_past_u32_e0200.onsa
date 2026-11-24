@@ -1,0 +1,32 @@
+// onsa.toml
+// [test]
+// spec = ["§2.6", "§11.10", "§11.9", "§18.1"]
+// fixes = 0
+
+// W7-09 U3a/t, rewritten for W7-10 U1/t, U2a/t, U2b/t, U3a/t and U3b/t (S-1225): what the flow stage still stops with E0200 (Q-09) is a `.reset_if~` inside a `.up~` whose condition ticks at `sample / 2147483648` (in the frame of P, the clock of the
+// `.up~`, the tick is `sample / 2^32`, which this version does not hold: found is the condition; with or without a `.when~`). There is no candidate (`fixes = 0`). The modifiers `.when~(c)` and `.reset_if~(r)` of an instance and of a
+// built-in delay (`prev~`, `delay~`, `vdelay~`; open since U3b) have their meaning and no diagnostic (flow_clock/when_forms_accepted.onsa, reset_if_forms_accepted.onsa and delay_receiver_forms_accepted.onsa; the values are in
+// flow_semantics/when_values.onsa, reset_if_values.onsa and delay_receiver_values.onsa). A modifier inside a block (`x.when~(c).up~(2).down~(2)`) and a `.when~` of a burst under an `.up~` were E0200 here until U3a: their values are in
+// flow_semantics/when_block_values.onsa, reset_if_block_values.onsa and when_burst_up_values.onsa. The `down` and `up` forms are in flow_clock/modifier_down_forms.onsa. One error per flow (P-01).
+
+flow cnt() -> F32 at sample {
+  let n = prev~(^n) + 1.0
+  n
+}
+
+flow g2(x: F32 at (sample * 2)) -> F32 at sample {
+  x[0] + x[1] * 10.0
+}
+
+pub flow a_tick_of_2_pow_32_in_an_up(c: Bool at block) -> F32 at sample {
+  g2~(cnt~().reset_if~(c at (sample / 2147483648)).up~(2)) //~ E0200
+}
+
+pub flow a_tick_of_2_pow_32_in_an_up_with_a_when(c: Bool at block, d: Bool at sample) -> F32 at sample {
+  g2~(cnt~().reset_if~(c at (sample / 2147483648)).when~(d).up~(2)) //~ E0200
+}
+
+pub flow a_tick_of_2_pow_32_in_an_up_in_a_let(c: Bool at block) -> F32 at sample {
+  let a = cnt~().reset_if~(c at (sample / 2147483648)).up~(2) //~ E0200
+  g2~(a)
+}

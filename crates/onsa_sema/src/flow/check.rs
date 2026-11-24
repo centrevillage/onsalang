@@ -54,23 +54,8 @@ impl<'a> Checker<'a> {
         // A chain whose N multiply past 2^24 (§11.9, S-1089) is E0808 at the
         // modifier past which they are, and in error: before its clock is
         // shown, whose ratio is then within 2^24 either way. One with an N
-        // in error has that error alone (its ratio is not known, §18.1). The
-        // E0200 of this version is of a chain with no N in error (§11.9).
-        let (mut past, mut gates) = (Vec::new(), Vec::new());
-        let flow = self.flow.as_ref().expect("flow mode");
-        let heads: HashMap<ExprId, &NodeKind> = flow.calls.iter().map(|c| (c.expr, &c.kind)).collect();
-        let mut held = Vec::new();
-        for (head, c) in &flow.chains {
-            // The first in the text of the gate of a modifier and that of the chain.
-            let at = [c.gate.as_ref().map(|d| d.span), gated(&c.mods, heads.get(head).copied())];
-            if let Some(at) = at.into_iter().flatten().min_by_key(|s| (s.start, s.end)) {
-                held.push((*head, at));
-            }
-        }
-        for (head, at) in held {
-            let d = Feature::InstanceModifiers.diagnostic(Stage::Flow, at, &[]).with_found(self.src(at));
-            self.fcx().chains.get_mut(&head).into_iter().for_each(|c| c.gate = Some(d.clone()));
-        }
+        // in error has that error alone (its ratio is not known, §18.1).
+        let mut past = Vec::new();
         for c in self.fcx().chains.values_mut() {
             let first = c.ratio.and_then(|_| super::plan::past(c.mods.iter().map(|m| &m.plan), 0));
             if let Some(m) = first {
@@ -82,13 +67,11 @@ impl<'a> Checker<'a> {
                 let note = format!("the N on the path: `{}`", super::plan::shown(c.mods.iter().map(|m| &m.plan)));
                 past.push((m.name, msg, note));
             }
-            gates.extend(c.gate.clone().filter(|_| c.ratio.is_some()));
         }
         for (at, msg, note) in past {
             let d = Diagnostic::new(Stage::Flow, Code::E0808, at, msg).with_found(self.src(at));
             self.flow_hold(d.with_note(at, note));
         }
-        gates.into_iter().for_each(|d| self.flow_hold(d));
         self.frames.pop();
     }
 
@@ -483,15 +466,14 @@ impl<'a> Checker<'a> {
                 // A failed constant (§18.1) or a gate of its own.
                 None => Err(()),
             },
-            // The rest of `.when~` and `.reset_if~`: [`gated`] of the chain, the walk of
-            // the clocks of its condition.
+            // The rest of `.when~` and `.reset_if~`: the walk of the clocks of its condition.
             None => {
                 let bool = self.bool_();
                 self.check_expr(arg.expr, Some(bool))?;
                 Ok(None)
             }
         };
-        let fresh = ModifierChain { ratio: Some(Ratio(0)), size: 0, mods: Vec::new(), gate: None };
+        let fresh = ModifierChain { ratio: Some(Ratio(0)), size: 0, mods: Vec::new() };
         let chain = self.fcx().chains.entry(m.head).or_insert(fresh);
         // Past 2^24 is the E0808 of the chain (`check_flow_body`).
         let r = ratio.ok().flatten();
@@ -697,14 +679,4 @@ pub(super) fn hold_vdelay_max(a: &Analysis, module: &Module, body: &BodyInfo, fc
         let diag = Diagnostic::new(Stage::Flow, Code::E0808, span, msg).with_found(span.text_in(&module.text));
         Diagnostic::keep_first(&mut fcx.held, diag);
     }
-}
-
-/// The name of the first `.when~` or `.reset_if~` of the modifiers `mods`
-/// of a chain whose head is the node `head` W7-10 U3a does not open (§11.10;
-/// U3b): of the head of a built-in delay. The one judgement of the form of a
-/// chain (D-15): the walk of the clocks opens the rest by the clock of the
-/// condition alone.
-fn gated(mods: &[ChainModifier], head: Option<&NodeKind>) -> Option<Span> {
-    let delay = matches!(head, Some(NodeKind::Delay(..)));
-    mods.iter().find(|m| delay && m.plan.ratio.is_none()).map(|m| m.plan.name)
 }

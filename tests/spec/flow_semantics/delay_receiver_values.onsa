@@ -1,0 +1,326 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.10", "§11.9", "§11.4", "§11.6", "§13.4"]
+
+// `.when~(c)` and `.reset_if~(r)` on a built-in delay (`prev~`, `delay~`, `vdelay~`) as the receiver (W7-10 U3b/t; S-1209, S-1217, S-1228). Worked out by hand from the text: §11.10 "受け手は flow の呼び出し（組込みの遅延を含む）か修飾子の連鎖である";
+// the place of the modifier P is the clock of the first argument K ("連鎖の起点のクロック（… 組込みの遅延は第 1 引数のクロック）"; a delay takes no `.down~`/`.up~`, so P = K) and the output of the receiver is read at K, so W = K. The delay
+// runs at the K ticks where `c` holds, and "遅延の長さは動いた刻みで数える" (a stopped tick is no sample of the delay); where it is stopped the caller reads "最後の出力を保つ（一度も動いていなければ `T.default()`）", whatever `init` the
+// delay has. `.reset_if~(r)` puts "遅延の値と書き込み位置" back to its `init` before the stages that follow the tick of the condition (the `init` of the kind `init` is kept). "頭の引数は呼び出し側のもので、止まっている間も評価する".
+// The twins that wrap the delay in a named flow (`flow pv(x) { prev~(x) }`, `pv~(x).when~(c)`) are in delay_receiver_twins.onsa and the errors in flow_clock/delay_receiver_e0815.onsa and delay_receiver_e0816.onsa. These forms were
+// E0200 until W7-10 U3b.
+
+flow cnt() -> F32 at sample {
+  let n = prev~(^n) + 1.0
+  n
+}
+
+pub flow when_prev(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  prev~(x).when~(c)
+}
+
+pub flow when_prev_init(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  prev~(x, 5.0).when~(c)
+}
+
+pub flow when_delay3(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  delay~(x, 3).when~(c)
+}
+
+pub flow when_true(x: F32 at sample) -> F32 at sample {
+  prev~(x).when~(true)
+}
+
+pub flow when_block(x: F32 at sample, c: Bool at block) -> F32 at sample {
+  prev~(x).when~(c)
+}
+
+pub flow reset_delay(x: F32 at sample, r: Bool at sample) -> F32 at sample {
+  delay~(x, 2).reset_if~(r)
+}
+
+pub flow reset_delay_init(x: F32 at sample, r: Bool at sample) -> F32 at sample {
+  delay~(x, 2, 7.0).reset_if~(r)
+}
+
+pub flow reset_prev_kind(x: F32 at sample, r: Bool at sample, k: F32 at init) -> F32 at sample {
+  prev~(x, k).reset_if~(r)
+}
+
+pub flow reset_false(x: F32 at sample) -> F32 at sample {
+  delay~(x, 2).reset_if~(false)
+}
+
+pub flow when_then_reset(x: F32 at sample, c: Bool at sample, r: Bool at sample) -> F32 at sample {
+  prev~(x).when~(c).reset_if~(r)
+}
+
+pub flow reset_then_when(x: F32 at sample, c: Bool at sample, r: Bool at sample) -> F32 at sample {
+  prev~(x).reset_if~(r).when~(c)
+}
+
+pub flow when_vdelay(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  vdelay~(x, cnt~() * 0.5, 4).when~(c)
+}
+
+pub flow when_in_par(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  let ys = par~ i in 0 ..< 2 { prev~(x * F32.round_from(i + 1)).when~(c) }
+  ys[0] + ys[1] * 10.0
+}
+
+pub flow when_in_the_argument(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  prev~(prev~(x).when~(c))
+}
+
+pub flow when_on_the_outer(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  prev~(prev~(x)).when~(c)
+}
+
+pub flow when_slow() -> F32 at sample {
+  let l = cnt~().down~(4)
+  prev~(l).when~(l != 3.0) at sample
+}
+
+pub flow reset_slower_than_the_delay(x: F32 at sample) -> F32 at sample {
+  let k = cnt~().down~(4)
+  prev~(x).reset_if~(k == 2.0)
+}
+
+pub flow reset_at_the_grid(x: F32 at sample, c: Bool at block) -> F32 at sample {
+  prev~(x).reset_if~(c at (sample / 4))
+}
+
+pub flow reset_slow_delay(r: Bool at block) -> F32 at sample {
+  let l = cnt~().down~(4)
+  prev~(l).reset_if~(r at (sample / 16)) at sample
+}
+
+pub flow reset_in_when(r: Bool at block) -> F32 at sample {
+  let l = cnt~().down~(4)
+  prev~(l).reset_if~(r at (sample / 16)).when~(l != 2.0 && l != 3.0) at sample
+}
+
+test "prev~(x).when~(c) runs where c holds and keeps its last output where it does not (the output before the first run is T.default())" {
+  // x = 1 .. 5, c = 1 0 1 1 0. Frame 0 runs: the stored value is the init, 0, and 1 is stored. Frame 1 is stopped: the output stays 0, nothing is stored. Frame 2 runs: 1 out, 3 stored. Frame 3 runs: 3 out, 4 stored. Frame 4 is stopped: 3.
+  let xs: [F32; 5] = [1.0, 2.0, 3.0, 4.0, 5.0]
+  let cs: [Bool; 5] = [true, false, true, true, false]
+  var a: [F32; 5] = [9.0; 5]
+  var b: [F32; 5] = [9.0; 5]
+  var c: [F32; 5] = [9.0; 5]
+  var d: [F32; 5] = [9.0; 5]
+  var sa = when_prev.init(8.0)
+  var sb = when_prev.init(8.0)
+  var sc = when_prev.init(8.0)
+  var sd = when_true.init(8.0)
+  when_prev.process(inout sa, when_prev.In { x: xs, c: cs }, inout a)
+  when_prev.process(inout sb, when_prev.In { x: xs, c: [false; 5] }, inout b)
+  when_prev.process(inout sc, when_prev.In { x: xs, c: [true; 5] }, inout c)
+  when_true.process(inout sd, xs, inout d)
+  assert a == [0.0, 0.0, 1.0, 3.0, 3.0]
+  assert b == [0.0, 0.0, 0.0, 0.0, 0.0]
+  assert c == [0.0, 1.0, 2.0, 3.0, 4.0]
+  assert d == c
+}
+
+test "a delay that has not run reads T.default(), not its init; the first run reads the init (R4)" {
+  // prev~(x, 5.0), x = 1 .. 5. c = 0 0 1 1 0: the frames 0 and 1 have never run: 0.0 (§11.10: 一度も動いていなければ `T.default()`), the first run (frame 2) reads the init 5.0 and stores 3, frame 3 reads 3, frame 4 keeps 3.
+  // c = 1 1 0 1 1: the first run reads 5.0, then 1, the stopped frame keeps 1, the run at frame 3 reads 2 (stored at frame 1), frame 4 reads 4.
+  let xs: [F32; 5] = [1.0, 2.0, 3.0, 4.0, 5.0]
+  var a: [F32; 5] = [9.0; 5]
+  var b: [F32; 5] = [9.0; 5]
+  var sa = when_prev_init.init(8.0)
+  var sb = when_prev_init.init(8.0)
+  when_prev_init.process(inout sa, when_prev_init.In { x: xs, c: [false, false, true, true, false] }, inout a)
+  when_prev_init.process(inout sb, when_prev_init.In { x: xs, c: [true, true, false, true, true] }, inout b)
+  assert a == [0.0, 0.0, 5.0, 3.0, 3.0]
+  assert b == [5.0, 1.0, 1.0, 2.0, 4.0]
+}
+
+test "the length of a delay counts the frames it ran: delay~(x, 3).when~(c)" {
+  // x = 1 .. 8, c = 1 1 0 1 0 1 1 1: the runs are the frames 0 1 3 5 6 7 (j = 0 .. 5) and store 1 2 4 6 7 8. The output of the run j is what the run j - 3 stored (0 before): 0 0 0 | 1 | 2 | 4, the stopped frames keep the last one.
+  // A delay of 3 frames would read x[n - 3] (0 0 0 1 2 3 4 5).
+  let xs: [F32; 8] = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]
+  let cs: [Bool; 8] = [true, true, false, true, false, true, true, true]
+  var out: [F32; 8] = [9.0; 8]
+  var st = when_delay3.init(8.0)
+  when_delay3.process(inout st, when_delay3.In { x: xs, c: cs }, inout out)
+  assert out == [0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 2.0, 4.0]
+}
+
+test "a condition of the kind block is read once for each call of process: the calls cut where the delay stops and runs again" {
+  // x = 1 .. 8; c is true for the frames 0 .. 3 (0 1 2 3, storing 1 .. 4), false for 4 and 5 (3 3), true for 6 and 7 (4 = the stored value of frame 3, then 7).
+  let xs: [F32; 8] = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]
+  var out: [F32; 8] = [9.0; 8]
+  var st = when_block.init(8.0)
+  when_block.process(inout st, when_block.Params { c: true }, xs.slice(0, 4), inout out.slice(0, 4))
+  when_block.process(inout st, when_block.Params { c: false }, xs.slice(4, 6), inout out.slice(4, 6))
+  when_block.process(inout st, when_block.Params { c: true }, xs.slice(6, 8), inout out.slice(6, 8))
+  assert out == [0.0, 1.0, 2.0, 3.0, 3.0, 3.0, 4.0, 7.0]
+}
+
+test "delay~(x, 2).reset_if~(r) puts the values and the write position back before the stages of the frame, and the frame gives its own input" {
+  // x = 1 .. 6, r at the frame 2. The ring is 1 2 at the frame 2 (write position 0); the reset gives 0 0 and position 0, the output is 0 and 3 is written at 0; frame 3 reads the position 1 (0, and 4 is written), frame 4 reads 3, frame 5 reads 4.
+  // r at the frames 2 and 3 (a level: every true frame resets): frame 2 writes 3 at the position 0, frame 3 puts the ring back and writes 4 at the position 0 again; frame 4 reads the position 1 (0), frame 5 reads 4.
+  let xs: [F32; 6] = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]
+  var a: [F32; 6] = [9.0; 6]
+  var b: [F32; 6] = [9.0; 6]
+  var c: [F32; 6] = [9.0; 6]
+  var sa = reset_delay.init(8.0)
+  var sb = reset_delay.init(8.0)
+  var sc = reset_false.init(8.0)
+  reset_delay.process(inout sa, reset_delay.In { x: xs, r: [false, false, true, false, false, false] }, inout a)
+  reset_delay.process(inout sb, reset_delay.In { x: xs, r: [false, false, true, true, false, false] }, inout b)
+  reset_false.process(inout sc, xs, inout c)
+  assert a == [0.0, 0.0, 0.0, 0.0, 3.0, 4.0]
+  assert b == [0.0, 0.0, 0.0, 0.0, 0.0, 4.0]
+  assert c == [0.0, 0.0, 1.0, 2.0, 3.0, 4.0]
+}
+
+test "a reset puts the delay back to its init (a literal or a value of the kind init), not to T.default()" {
+  // delay~(x, 2, 7.0): 7 7 at the start; the reset at the frame 2 gives 7 7 again: 7 7 7 7, then 3 (written at the frame 2), 4. prev~(x, k) with k = 9: 9, 1, then the reset at the frame 2 gives 9 (not 0), 3 4 5.
+  let xs: [F32; 6] = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]
+  let r: [Bool; 6] = [false, false, true, false, false, false]
+  var a: [F32; 6] = [0.0; 6]
+  var b: [F32; 6] = [0.0; 6]
+  var sa = reset_delay_init.init(8.0)
+  var sb = reset_prev_kind.init(reset_prev_kind.Config { k: 9.0 }, 8.0)
+  reset_delay_init.process(inout sa, reset_delay_init.In { x: xs, r: r }, inout a)
+  reset_prev_kind.process(inout sb, reset_prev_kind.In { x: xs, r: r }, inout b)
+  assert a == [7.0, 7.0, 7.0, 7.0, 3.0, 4.0]
+  assert b == [9.0, 1.0, 9.0, 3.0, 4.0, 5.0]
+}
+
+test "the order of the two modifiers: x.when~(c).reset_if~(r) resets the stopped frames and the held output too, x.reset_if~(r).when~(c) only the frames that run" {
+  // x = 1 .. 8, c = 1 1 0 1 0 0 1 1, r = 0 0 1 1 0 1 0 0.
+  // when then reset: frame 0 reads 0 (stores 1), frame 1 reads 1 (stores 2); frame 2 is stopped and r resets: the delay is 0 and the held output 0 (T.default()): 0; frame 3 runs after the reset (r holds): reads 0, stores 4: 0; frame 4 keeps 0;
+  // frame 5 (stopped, r) resets the stored 4 and the held output: 0; frame 6 runs: reads 0 (not 4), stores 7: 0; frame 7 reads 7.
+  // reset then when: the reset is inside the part, so only the runs: frame 2 keeps the held 1 (no reset); frame 3 (run, r) resets the stored 2 first: reads 0, stores 4; frame 4 keeps 0; frame 5 (stopped) does not reset; frame 6 reads the stored 4, stores 7; frame 7 reads 7.
+  let xs: [F32; 8] = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]
+  let cs: [Bool; 8] = [true, true, false, true, false, false, true, true]
+  let rs: [Bool; 8] = [false, false, true, true, false, true, false, false]
+  var a: [F32; 8] = [9.0; 8]
+  var b: [F32; 8] = [9.0; 8]
+  var sa = when_then_reset.init(8.0)
+  var sb = reset_then_when.init(8.0)
+  when_then_reset.process(inout sa, when_then_reset.In { x: xs, c: cs, r: rs }, inout a)
+  reset_then_when.process(inout sb, reset_then_when.In { x: xs, c: cs, r: rs }, inout b)
+  assert a == [0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 7.0]
+  assert b == [0.0, 1.0, 1.0, 0.0, 0.0, 0.0, 4.0, 7.0]
+}
+
+test "vdelay~: the argument d is the caller's and is evaluated at the stopped frames too, the interpolation counts the runs" {
+  // x = 1 .. 8, c = 1 1 0 1 0 1 1 1 (the runs are the frames 0 1 3 5 6 7, storing 1 2 4 6 7 8), MAX = 4, d = 0.5 (frame + 1) because cnt~() is the caller's instance and counts every frame: d = 0.5 1 1.5 2 2.5 3 3.5 4.
+  // The runs read d = 0.5 (saturated to 1), 1, 2 (frame 3), 3 (frame 5), 3.5 (frame 6), 4 (frame 7); with k = floor(d) and f = d - k they read e[j - k] (and e[j - k - 1] with the weight f), e[-1] = 0: 0; e[0] = 1; e[0] = 1; e[0] = 1;
+  // 0.5 e[1] + 0.5 e[0] = 1.5 (j = 4); e[1] = 2 (j = 5). A counter that stopped with the part would give d = 0.5 1 1.5 2 2.5 3 (at the runs) and other values.
+  let xs: [F32; 8] = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]
+  let cs: [Bool; 8] = [true, true, false, true, false, true, true, true]
+  var out: [F32; 8] = [9.0; 8]
+  var st = when_vdelay.init(8.0)
+  when_vdelay.process(inout st, when_vdelay.In { x: xs, c: cs }, inout out)
+  assert out == [0.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.5, 2.0]
+}
+
+test "in a par~: each copy has its own delay, stopped by the same condition" {
+  // x = 1 .. 6, c = 1 1 0 1 0 1: copy 0 stores x at the runs (frames 0 1 3 5): 0 1 (1) 2 (2) 4; copy 1 stores 2 x: 0 2 (2) 4 (4) 8. The output is copy 0 + 10 copy 1.
+  var out: [F32; 6] = [9.0; 6]
+  var st = when_in_par.init(8.0)
+  when_in_par.process(inout st, when_in_par.In { x: [1.0, 2.0, 3.0, 4.0, 5.0, 6.0], c: [true, true, false, true, false, true] }, inout out)
+  assert out == [0.0, 21.0, 21.0, 42.0, 42.0, 84.0]
+}
+
+test "a delay in the first argument of a delay, with the modifier on the inner or on the outer one" {
+  // x = 1 .. 6, c = 1 0 1 1 0 1. Inner: prev~(x).when~(c) gives 0 0 1 3 3 4 (the runs are the frames 0 2 3 5, storing 1 3 4 6); the outer prev~ is plain and reads the inner output of the frame before: 0 0 0 1 3 3.
+  // Outer: prev~(prev~(x)).when~(c): the argument is the caller's, the plain prev~(x) = 0 1 2 3 4 5 at every frame (also the stopped ones); the outer stores it at its runs (0 2 3 5) and gives 0 0 (stopped) 0 2 (stopped) 3.
+  let xs: [F32; 6] = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]
+  let cs: [Bool; 6] = [true, false, true, true, false, true]
+  var a: [F32; 6] = [9.0; 6]
+  var b: [F32; 6] = [9.0; 6]
+  var sa = when_in_the_argument.init(8.0)
+  var sb = when_on_the_outer.init(8.0)
+  when_in_the_argument.process(inout sa, when_in_the_argument.In { x: xs, c: cs }, inout a)
+  when_on_the_outer.process(inout sb, when_on_the_outer.In { x: xs, c: cs }, inout b)
+  assert a == [0.0, 0.0, 0.0, 1.0, 3.0, 3.0]
+  assert b == [0.0, 0.0, 0.0, 2.0, 2.0, 3.0]
+}
+
+test "a first argument at sample / 4: the delay ticks at the grid, the condition is read there, and a stopped tick is no tick of the delay" {
+  // l = cnt~().down~(4) is 1 2 3 4 5 6 at the grid ticks 0 .. 5 (each held 4 frames). prev~(l).when~(l != 3.0) is stopped at the tick 2 (l = 3): the ticks 0 1 3 4 5 give 0 1 2 4 5 (the tick 3 reads what the tick 1 stored, 2), the tick 2 keeps 1.
+  var out: [F32; 24] = [9.0; 24]
+  var st = when_slow.init(8.0)
+  when_slow.process(inout st, inout out)
+  assert out == [0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 2.0, 2.0, 2.0, 2.0, 4.0, 4.0, 4.0, 4.0, 5.0, 5.0, 5.0, 5.0]
+}
+
+test "a reset_if~ whose condition is slower than the delay resets before the stage of the delay at that frame" {
+  // k = cnt~().down~(4) is 2 at the tick 1, the frame 4: the reset puts the stored value back before the stage of `sample` of that frame: the frame 4 gives 0 (and stores 5), the frame 5 gives 5. Before: x[n - 1] = 0 1 2 3.
+  // With c of the kind block and `c at (sample / 4)` the condition ticks at the frames 0 4 8: the frame 0 resets too (0), the frame 4 gives 0 and the frame 8 gives 0; the frames between give x[n - 1].
+  let xs: [F32; 12] = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0]
+  var a: [F32; 12] = [9.0; 12]
+  var b: [F32; 12] = [9.0; 12]
+  var c: [F32; 12] = [9.0; 12]
+  var sa = reset_slower_than_the_delay.init(8.0)
+  var sb = reset_at_the_grid.init(8.0)
+  var sc = reset_at_the_grid.init(8.0)
+  reset_slower_than_the_delay.process(inout sa, xs, inout a)
+  reset_at_the_grid.process(inout sb, reset_at_the_grid.Params { c: true }, xs, inout b)
+  reset_at_the_grid.process(inout sc, reset_at_the_grid.Params { c: false }, xs, inout c)
+  assert a == [0.0, 1.0, 2.0, 3.0, 0.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0]
+  assert b == [0.0, 1.0, 2.0, 3.0, 0.0, 5.0, 6.0, 7.0, 0.0, 9.0, 10.0, 11.0]
+  assert c == [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0]
+}
+
+test "a slow delay with a reset_if~ slower than its tick: the grid of sample / 16 is every 4th tick of the delay" {
+  // l = 1 2 3 ... at the grid ticks of 4 frames; prev~(l) gives the tick j its stored l of the tick j - 1 (j): 0 1 2 3 4 5 6 7. r (a block value, true) at `sample / 16` resets at the ticks 0 and 4 (the frames 0 and 16): the tick 4 gives 0 (and stores 5), the tick 5 gives 5.
+  var out: [F32; 32] = [9.0; 32]
+  var st = reset_slow_delay.init(8.0)
+  reset_slow_delay.process(inout st, reset_slow_delay.Params { r: true }, inout out)
+  assert out == [0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0, 2.0, 2.0, 2.0, 2.0, 3.0, 3.0, 3.0, 3.0, 0.0, 0.0, 0.0, 0.0, 5.0, 5.0, 5.0, 5.0, 6.0, 6.0, 6.0, 6.0, 7.0, 7.0, 7.0, 7.0]
+}
+
+test "a slower reset_if~ inside a when~: its grid counts the ticks that the delay ran, not the ticks of the caller (§11.9)" {
+  // l = 1 2 3 4 ... at the ticks 0 1 2 ... (4 frames each); the condition holds except at the ticks 1 and 2 (l = 2, 3). The runs j = 0 1 2 3 ... are the ticks 0 3 4 5 6 7 8 9 10: the grid of sample / 16 is every 4th run of the part (4 on-frames each): j = 0, 4, 8 = the ticks 0, 6, 10.
+  // A run that is at a reset reads 0 (the stored value is put back before the stage of the delay) and stores l; the others read what the run before stored: tick 0: 0 (reset, stores 1), 3: 1 (stores 4), 4: 4, 5: 5, 6: 0 (reset, stores 7), 7: 7, 8: 8, 9: 9, 10: 0 (reset);
+  // the ticks 1 and 2 keep the last output, 0. A reset at the ticks of the caller (0, 4, 8) would give 0 0 0 1 0 5 6 7 0 9 10.
+  var out: [F32; 44] = [9.0; 44]
+  var st = reset_in_when.init(8.0)
+  reset_in_when.process(inout st, reset_in_when.Params { r: true }, inout out)
+  assert out == [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0, 4.0, 4.0, 4.0, 4.0, 5.0, 5.0, 5.0, 5.0, 0.0, 0.0, 0.0, 0.0, 7.0, 7.0, 7.0, 7.0, 8.0, 8.0, 8.0, 8.0, 9.0, 9.0, 9.0, 9.0, 0.0, 0.0, 0.0, 0.0]
+}
+
+test "the calls of process cut the frames anywhere, a call of 0 frames too, and a reset starts over (§13.4, §11.6)" {
+  // The case of the two orders: cut at 1, 3 (a stopped frame and then a run), 5 and with 0 frames in the middle, and the same after a reset that follows 3 frames of another run.
+  let xs: [F32; 8] = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]
+  let cs: [Bool; 8] = [true, true, false, true, false, false, true, true]
+  let rs: [Bool; 8] = [false, false, true, true, false, true, false, false]
+  let want: [F32; 8] = [0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 7.0]
+  var cut: [F32; 8] = [9.0; 8]
+  var st = when_then_reset.init(8.0)
+  when_then_reset.process(inout st, when_then_reset.In { x: xs.slice(0, 1), c: cs.slice(0, 1), r: rs.slice(0, 1) }, inout cut.slice(0, 1))
+  when_then_reset.process(inout st, when_then_reset.In { x: xs.slice(1, 3), c: cs.slice(1, 3), r: rs.slice(1, 3) }, inout cut.slice(1, 3))
+  when_then_reset.process(inout st, when_then_reset.In { x: xs.slice(3, 3), c: cs.slice(3, 3), r: rs.slice(3, 3) }, inout cut.slice(3, 3))
+  when_then_reset.process(inout st, when_then_reset.In { x: xs.slice(3, 5), c: cs.slice(3, 5), r: rs.slice(3, 5) }, inout cut.slice(3, 5))
+  when_then_reset.process(inout st, when_then_reset.In { x: xs.slice(5, 8), c: cs.slice(5, 8), r: rs.slice(5, 8) }, inout cut.slice(5, 8))
+  assert cut == want
+  var junk: [F32; 3] = [0.0; 3]
+  var again: [F32; 8] = [9.0; 8]
+  var s2 = when_then_reset.init(8.0)
+  when_then_reset.process(inout s2, when_then_reset.In { x: [101.0; 3], c: [true; 3], r: [false; 3] }, inout junk)
+  when_then_reset.reset(inout s2)
+  when_then_reset.process(inout s2, when_then_reset.In { x: xs, c: cs, r: rs }, inout again)
+  assert again == want
+  // The same for a delay of 3 that the part stops, and for the slow one (the frames of the junk leave the grid in the middle).
+  let c8: [Bool; 8] = [true, true, false, true, false, true, true, true]
+  var d: [F32; 8] = [9.0; 8]
+  var e: [F32; 8] = [9.0; 8]
+  var s3 = when_delay3.init(8.0)
+  when_delay3.process(inout s3, when_delay3.In { x: [101.0; 3], c: [true; 3] }, inout junk)
+  when_delay3.reset(inout s3)
+  when_delay3.process(inout s3, when_delay3.In { x: xs, c: c8 }, inout d)
+  assert d == [0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 2.0, 4.0]
+  var out: [F32; 24] = [9.0; 24]
+  var s4 = when_slow.init(8.0)
+  when_slow.process(inout s4, inout e.slice(0, 6))
+  when_slow.reset(inout s4)
+  when_slow.process(inout s4, inout out)
+  assert out == [0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 2.0, 2.0, 2.0, 2.0, 4.0, 4.0, 4.0, 4.0, 5.0, 5.0, 5.0, 5.0]
+}

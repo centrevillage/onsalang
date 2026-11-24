@@ -29,7 +29,7 @@ fn notes(d: &Value) -> String {
 }
 
 /// §11.2: "修飾子の条件も同じで、受け手が利用者の flow でも組込みの遅延でも E0801 である（`prev~(lp~(x).when~(^c))`、`prev~(prev~(x).reset_if~(^c))`。候補は無く、note で修飾子の呼び出しを `let l = lp~(x).when~(c)` に出して
-/// `prev~(^l)` と書く形を示す）". The names stage reports it, so the E0200 that a built-in delay as the receiver still has in the flow stage does not come with it (one diagnostic).
+/// `prev~(^l)` と書く形を示す）". The names stage reports it, for a built-in delay as the receiver too (open since W7-10 U3b), and it is the one diagnostic.
 #[test]
 fn a_caret_in_the_condition_of_a_modifier_in_a_delay_is_the_e0801_with_a_note_that_shows_the_let_and_no_candidate() {
     let rhs = [

@@ -26,6 +26,7 @@ mod decided_notes;
 mod declaration_headings;
 mod declaration_order;
 mod deep_recursion;
+mod delay_receiver_c_commands;
 mod derived_clock_model;
 mod derived_clock_ratio_rules;
 mod derived_clock_syntax;

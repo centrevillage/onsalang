@@ -6,7 +6,7 @@
 // 条件は本体の `sample` 以下の値で、遅い値として保持で読む"; "止まる部品の `at (sample / N)` の入力は、呼び出し側の値を、部品の中の刻みの時点で読む"; §11.4: the `sample_tick()` of a condition is the value of the body's `sample`): the
 // conditions of a `.when~` that are read with no diagnostic. A condition slower than W (held, one clock in a condition), an `at` to W (`l at sample` where W is `sample`, `at (sample / 4)` where W is `sample / 4`), `sample_tick()` in
 // the condition (the time of the body's `sample`; `at (sample / 4)` where W is `sample / 4`; where W is `sample * 2` the body's `sample` value), a head whose input is slower than W, and an inner delay in a condition inside the
-// first argument of a delay (its own `^`). Before W7-10 U2a these were the E0200 of the flow stage (negative/modifier_when_reset_if_e0200_until_w7_10.onsa); the values are in flow_semantics/when_condition_values.onsa
+// first argument of a delay (its own `^`). Before W7-10 U2a these were the E0200 of the flow stage (negative/modifier_reset_ticks_past_u32_e0200.onsa); the values are in flow_semantics/when_condition_values.onsa
 // and when_slow_head_values.onsa. `x` and `c` are `sample` inputs, `p` is a `block` input, `l` is `sample / 4`, `m` is `sample / 8`.
 
 flow lp(x: F32 at sample) -> F32 at sample {
