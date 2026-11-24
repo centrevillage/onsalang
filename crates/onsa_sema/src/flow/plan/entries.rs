@@ -170,7 +170,7 @@ fn unmade(n: &PlanNode, g: &FlowInfo) -> Option<(Span, Ratio, Over)> {
     let past = |k: Ratio| k.made_n().is_none();
     let slow = |s: &ClockStage| match *s {
         ClockStage::Tick(k) if k.slower_than_body() && !past(k) => Some((k, k)),
-        _ => None,
+        ClockStage::Init | ClockStage::Block | ClockStage::Tick(_) => None,
     };
     let mut stages: Vec<(Ratio, Ratio)> = g.stages.iter().filter_map(slow).collect();
     for b in &n.bounds {
@@ -221,9 +221,9 @@ fn past_u32(pkg: &Package, a: &Analysis, f: DefId, (id, at, k, mut over): Unmade
 /// `sample` to the stage of `g` of the ratio `s` ([`Entry::runs`]), with it
 /// (not a delay, whose run is of its own stage).
 fn source(g: &FlowInfo, s: Ratio) -> Option<(NodeId, Over)> {
-    let run = |r| match r {
-        (ClockStage::Tick(body), ClockStage::Tick(at)) if at == s && body.slower_than_body() => Some(Over::Stage(body)),
-        _ => None,
+    let run = |(body, at)| match body {
+        ClockStage::Tick(k) if at == ClockStage::Tick(s) && k.slower_than_body() => Some(Over::Stage(k)),
+        ClockStage::Init | ClockStage::Block | ClockStage::Tick(_) => None,
     };
     let instances = (0u32..).zip(&g.nodes).filter(|(_, n)| matches!(n.kind, PlanKind::Instance { .. }));
     instances.into_iter().find_map(|(i, n)| Some((NodeId(i), Entry::runs(&n.entries).into_iter().find_map(run)?)))

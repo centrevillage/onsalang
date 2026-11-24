@@ -53,8 +53,8 @@ fn value(v: Expr) -> Block {
 /// The stage of the function lowered and the state of its innermost scope.
 fn here(cx: &FnCx, span: Span) -> R<(ClockStage, Expr)> {
     let f = cx.flow.as_ref().ok_or_else(|| internal(span, "a branching outside a flow"))?;
-    let scope = f.scopes.last().ok_or_else(|| internal(span, "a branching outside the state"))?;
-    Ok((f.phase.stage(), scope.state.clone()))
+    let scope = f.now.scopes.last().ok_or_else(|| internal(span, "a branching outside the state"))?;
+    Ok((f.now.stage, scope.state.clone()))
 }
 
 /// After `stmts`, every one of `bodies` in the order of the text, each in a
@@ -136,9 +136,9 @@ pub(super) fn choose(
     for (i, arm) in arms.iter().enumerate().take(pick.upto) {
         // In the guard, a binding is the value of the pattern, not its place.
         let flow = cx.flow.as_mut().unwrap();
-        let held: Vec<_> = t.arms[i].iter().filter_map(|b| flow.local_override.remove_entry(&b.0)).collect();
+        let held: Vec<_> = t.arms[i].iter().filter_map(|b| flow.now.local_override.remove_entry(&b.0)).collect();
         let tested = test_arm(lw, cx, arm, (i, &taken, &place), pick, (s, state));
-        cx.flow.as_mut().unwrap().local_override.extend(held);
+        cx.flow.as_mut().unwrap().now.local_override.extend(held);
         let (test, then);
         (test, binds[i], then) = tested?;
         let open = cmp(CmpOp::Eq, taken.clone(), none.clone());
@@ -151,7 +151,7 @@ pub(super) fn choose(
         out.push(stmt(span, StmtKind::If(cond, then, Block::default())));
     }
     for (i, (arm, bound)) in arms.iter().zip(&t.arms).enumerate().take(pick.eval) {
-        let overrides = &cx.flow.as_ref().unwrap().local_override;
+        let overrides = &cx.flow.as_ref().unwrap().now.local_override;
         let slots: Vec<(LocalId, Expr)> =
             bound.iter().filter_map(|b| overrides.get(&b.0).map(|p| (LocalId(b.0), p.clone()))).collect();
         if slots.is_empty() || !binds[i] {
@@ -167,7 +167,7 @@ pub(super) fn choose(
         let is = cmp(CmpOp::Eq, taken.clone(), u32_lit(span, i as u32));
         out.push(stmt(span, StmtKind::If(is, Block { stmts: then, value: None }, Block { stmts: else_, value: None })));
     }
-    if let Some(scope) = cx.flow.as_mut().unwrap().scopes.last_mut() {
+    if let Some(scope) = cx.flow.as_mut().unwrap().now.scopes.last_mut() {
         scope.chosen.extend((0..pick.eval).map(|i| (m, i)));
     }
     Ok(taken)
@@ -240,8 +240,8 @@ pub(super) fn choose_arms(
             return Err(internal(cx.ast.expr(m).span, "a `match~` the plan did not record"));
         };
         let a = a as usize;
-        let chosen = flow.scopes.last().is_some_and(|x| x.chosen.contains(&(m, a)));
-        if chosen || !t.arms[a].iter().any(|b| flow.local_override.contains_key(&b.0)) {
+        let chosen = flow.now.scopes.last().is_some_and(|x| x.chosen.contains(&(m, a)));
+        if chosen || !t.arms[a].iter().any(|b| flow.now.local_override.contains_key(&b.0)) {
             continue;
         }
         choose(lw, cx, m, Pick { upto: a + 1, eval: a + 1, write: false }, s, state, out)?;

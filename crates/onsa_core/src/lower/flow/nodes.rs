@@ -8,20 +8,20 @@ use super::*;
 /// expression of the flow body is lowered. `None`: not a flow construct.
 pub(crate) fn lower_flow_expr(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId) -> R<Option<Expr>> {
     let span = cx.ast.expr(e).span;
-    let (phase, info, id, state) = {
+    let (stage, info, id, state) = {
         let f = cx.flow.as_ref().expect("flow context");
-        if let Some(v) = f.expr_override.get(&e) {
+        if let Some(v) = f.now.expr_override.get(&e) {
             return Ok(Some(v.clone()));
         }
         if f.sample_rate_calls.contains(&e) {
-            return Ok(Some(f.sample_rate.clone()));
+            return Ok(Some(f.now.sample_rate.clone()));
         }
         // A hoisted subexpression of an earlier stage: its field (§11.3), of
         // the scope it is lowered in: the `State` (a `let` or the output
         // holds it), or the replica of the `par~` whose body does (S-1140);
         // `sample_tick()` of a slower tick too (S-1210).
-        if let Some(h) = f.info.hoist_of(e).filter(|&h| f.info.hoist(h).stage < f.phase.stage()) {
-            let scope = f.scopes.last().ok_or_else(|| internal(span, "a hoisted field outside the state"))?;
+        if let Some(h) = f.info.hoist_of(e).filter(|&h| f.info.hoist(h).stage < f.now.stage) {
+            let scope = f.now.scopes.last().ok_or_else(|| internal(span, "a hoisted field outside the state"))?;
             let v = sfield(lw, f.info, &scope.state, FieldOf::Hoist(h), span)?;
             super::hoist::record(lw, h, span, false)?;
             return Ok(Some(v));
@@ -29,7 +29,7 @@ pub(crate) fn lower_flow_expr(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId) -> R<O
         // The time of the root its caller passes to the function (§11.4,
         // S-1129 (1)), at every stage.
         if f.sample_tick_calls.contains(&e) {
-            let t = f.time.first().cloned();
+            let t = f.now.time.first().cloned();
             return t.map(Some).ok_or_else(|| internal(span, "`sample_tick()` in a function with no time"));
         }
         let Some(&id) = f.info.node_of.get(&e) else {
@@ -37,15 +37,15 @@ pub(crate) fn lower_flow_expr(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId) -> R<O
             let Some(&receiver) = f.info.modifiers.get(&e) else { return Ok(None) };
             return lower_expr(lw, cx, receiver).map(Some);
         };
-        let state = f.scopes.last().ok_or_else(|| internal(span, "node outside a state scope"))?.state.clone();
-        (f.phase, f.info, id, state)
+        let state = f.now.scopes.last().ok_or_else(|| internal(span, "node outside a state scope"))?.state.clone();
+        (f.now.stage, f.info, id, state)
     };
     let (name, at) = (&info.node(id).path, |p| FieldOf::Node(id, p));
     // A node is read in the function of the stage the plan gives it, a
     // `par~` where its body is.
     let here = match info.node(id).kind {
         PlanKind::Par { .. } => true,
-        _ => info.node_stage(id) == Some(phase.stage()),
+        _ => info.node_stage(id) == Some(stage),
     };
     if !here {
         return Err(internal(span, format!("`{name}` evaluated outside the function of its tick")));
@@ -54,7 +54,7 @@ pub(crate) fn lower_flow_expr(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId) -> R<O
     let value = match &info.node(id).kind {
         // Of a chain, read by the ops of its entry (§11.10).
         PlanKind::Prev { .. } | PlanKind::Delay { .. } | PlanKind::Vdelay { .. } => {
-            match info.node(id).entry(phase.stage(), true) {
+            match info.node(id).entry(stage, true) {
                 Some(e) => {
                     let v = super::chain::entry(lw, cx, &mut stmts, id, &state, e)?;
                     v.ok_or_else(|| internal(span, format!("`{name}` read of an entry of no value")))?
@@ -66,14 +66,14 @@ pub(crate) fn lower_flow_expr(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId) -> R<O
             // Of a chain that deals, the array of its outermost boundary that deals (§11.9),
             // after the ops of this stage that write it (the review of U6b, its high 1).
             Read::Array(b) => {
-                if let Some(e) = info.node(id).entry(phase.stage(), true) {
+                if let Some(e) = info.node(id).entry(stage, true) {
                     super::chain::entry(lw, cx, &mut stmts, id, &state, e)?;
                 }
                 super::chain::dealt(lw, cx, &mut stmts, id, &state, b, span)?
             }
             // Read where the stage of its callee that makes the output runs (S-1088): its entry read.
             Read::Run => {
-                let e = info.node(id).entry(phase.stage(), true);
+                let e = info.node(id).entry(stage, true);
                 let e = e.ok_or_else(|| internal(span, format!("`{name}` read where its output is not made")))?;
                 let v = super::chain::entry(lw, cx, &mut stmts, id, &state, e)?;
                 v.ok_or_else(|| internal(span, format!("`{name}` read of an entry of no value")))?
@@ -95,7 +95,7 @@ pub(crate) fn lower_flow_expr(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId) -> R<O
             let mut loop_body = Vec::new();
             let v = lower_expr(lw, cx, *body)?;
             assign(&mut loop_body, &index(arr_e.clone(), idx)?, v)?;
-            cx.flow.as_mut().unwrap().scopes.pop();
+            cx.flow.as_mut().unwrap().now.scopes.pop();
             stmts.push(r.each(cx, span, loop_body));
             arr_e
         }
@@ -109,7 +109,7 @@ pub(crate) fn lower_flow_expr(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId) -> R<O
         stmts.push(stmt(span, StmtKind::Let(tmp, value)));
         local_expr(cx, tmp, span)
     };
-    cx.flow.as_mut().unwrap().expr_override.insert(e, result.clone());
+    cx.flow.as_mut().unwrap().now.expr_override.insert(e, result.clone());
     let ty = result.ty.clone();
     Ok(Some(Expr::new(ty, span, ExprKind::Block(Block { stmts, value: Some(Box::new(result)) }))))
 }

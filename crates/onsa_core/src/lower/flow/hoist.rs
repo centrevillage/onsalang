@@ -153,7 +153,7 @@ fn parts_writes(
             cx.flow.as_mut().unwrap().push_scope(elem.clone());
             let mut b = Vec::new();
             let done = writes(lw, cx, info, *body, s, &elem, &mut b);
-            cx.flow.as_mut().unwrap().scopes.pop();
+            cx.flow.as_mut().unwrap().now.scopes.pop();
             done?;
             out.push(r.each(cx, span, b));
         }
@@ -224,7 +224,7 @@ fn tilde_match_writes(
         return Err(internal(span, "a `match~` the plan did not record"));
     };
     let guards = arms.iter().rposition(|a| a.guard.is_some_and(|g| has_writes(info, ast, g, s))).map_or(0, |w| w + 1);
-    let slots = &cx.flow.as_ref().unwrap().local_override;
+    let slots = &cx.flow.as_ref().unwrap().now.local_override;
     let bound = t.arms.iter().rposition(|b| b.iter().any(|b| slots.contains_key(&b.0))).map_or(0, |b| b + 1);
     let bound = if arms.iter().any(|a| has_writes(info, ast, a.body, s)) { bound } else { 0 };
     if guards == 0 && bound == 0 {

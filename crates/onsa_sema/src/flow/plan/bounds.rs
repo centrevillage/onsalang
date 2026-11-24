@@ -25,7 +25,7 @@ fn exponent(c: Clock) -> Option<Ratio> {
 pub(in crate::flow) fn step(s: ClockStage, r: Ratio) -> ClockStage {
     match s {
         ClockStage::Tick(k) => ClockStage::Tick(Ratio(k.0.saturating_add(r.0).min(0))),
-        s => s,
+        ClockStage::Init | ClockStage::Block => s,
     }
 }
 
@@ -74,7 +74,7 @@ pub(in crate::flow) fn head_stage<'a>(
     let conds = guards.iter().map(|g| cond_stage(chain.clone(), guards, g));
     match s {
         ClockStage::Tick(_) => conds.fold(s, ClockStage::max),
-        s => s,
+        ClockStage::Init | ClockStage::Block => s,
     }
 }
 

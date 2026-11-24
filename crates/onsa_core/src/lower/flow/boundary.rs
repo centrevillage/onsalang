@@ -52,14 +52,14 @@ fn process_types(lw: &Lowerer, process: FnId) -> Vec<Ty> {
 /// `process(inout s, params, [input], inout output)` (§11.6): `input` and
 /// `output` one `Span` (planar `[Span; N]`) or the `In` and `Out` of more.
 pub(super) fn gen_process<'b>(lw: &mut Lowerer<'b>, shape: &FlowShape, info: &'b FlowInfo, fns: &FlowFns) -> R<()> {
-    let mut g = Gen::new(lw, shape, info, Phase::SAMPLE, Ty::Unit)?;
+    let mut g = Gen::new(lw, shape, info, ClockStage::SAMPLE, Ty::Unit)?;
     let span = g.span;
     let (s, params, input, output) = match g.member_params(lw, shape, FlowFn::Process)?.as_slice() {
         [s, p, o] => (s.clone(), p.clone(), None, o.clone()),
         [s, p, i, o] => (s.clone(), p.clone(), Some(i.clone()), o.clone()),
         _ => return Err(internal(span, "`process` with another number of parameters")),
     };
-    let sig_inputs: Vec<(String, Ty)> = (shape.inputs.iter().filter(|i| i.phase == Phase::SAMPLE))
+    let sig_inputs: Vec<(String, Ty)> = (shape.inputs.iter().filter(|i| i.stage == ClockStage::SAMPLE))
         .map(|Input { decl: i, .. }| Ok((i.name.clone(), lw.core_ty(i.ty, &[], i.span)?)))
         .collect::<R<_>>()?;
     let ins = input.as_ref().map(|i| signals(lw, i)).transpose()?.unwrap_or_default();
@@ -170,7 +170,7 @@ pub(super) fn gen_process_inplace<'b>(
     fns: &FlowFns,
 ) -> R<()> {
     let Some(fid) = fns.process_inplace else { return Ok(()) };
-    let mut g = Gen::new(lw, shape, info, Phase::SAMPLE, Ty::Unit)?;
+    let mut g = Gen::new(lw, shape, info, ClockStage::SAMPLE, Ty::Unit)?;
     let span = g.span;
     let [s, params, output] = &g.member_params(lw, shape, FlowFn::ProcessInplace)?[..] else {
         return Err(internal(span, "`process_inplace` with another number of parameters"));
@@ -202,7 +202,7 @@ pub(super) fn gen_process_inplace<'b>(
 /// (interpreter only): `process` on zeroed `Buf`s, whose views it makes.
 pub(super) fn gen_render<'b>(lw: &mut Lowerer<'b>, shape: &FlowShape, info: &'b FlowInfo, fns: &FlowFns) -> R<()> {
     let out_ty = Ty::Struct(shape.out_ty);
-    let mut g = Gen::new(lw, shape, info, Phase::SAMPLE, out_ty.clone())?;
+    let mut g = Gen::new(lw, shape, info, ClockStage::SAMPLE, out_ty.clone())?;
     let span = g.span;
     // The third is `input` (views), or the `U32` `frames` of a flow with no `sample` input, as the
     // signature the types stage made reads (§11.6).
@@ -274,7 +274,7 @@ pub(super) fn gen_params_default<'b>(
 ) -> R<()> {
     let (Some(fid), Some(defaults)) = (fns.params_default, defaults) else { return Ok(()) };
     let ty = Ty::Struct(shape.params_ty);
-    let g = Gen::new(lw, shape, info, Phase::Init, ty.clone())?;
+    let g = Gen::new(lw, shape, info, ClockStage::Init, ty.clone())?;
     let span = g.span;
     let mut fields = Vec::new();
     for (t, d) in defaults {

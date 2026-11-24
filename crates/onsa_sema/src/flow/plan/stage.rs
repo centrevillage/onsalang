@@ -25,13 +25,19 @@ impl FlowInfo {
         };
         self.field_at(of).is_some()
             && match of {
-                FieldOf::Hoist(h) => matches!(self.hoist(h).stage, ClockStage::Tick(_)),
+                FieldOf::Hoist(h) => match self.hoist(h).stage {
+                    ClockStage::Tick(_) => true,
+                    ClockStage::Init | ClockStage::Block => false,
+                },
                 FieldOf::Input(l) | FieldOf::Let(l) => read_faster(l),
                 // The rings a chain gathers in and the arrays it deals from (§11.9, phase 0).
                 FieldOf::Node(_, Part::Gather { .. } | Part::Deal(_)) => true,
                 // The held output of a guard, until it first runs (§11.10).
                 FieldOf::Node(_, Part::Held(_)) => true,
-                _ => false,
+                FieldOf::Node(_, Part::Own | Part::Init | Part::Buf | Part::W) => false,
+                FieldOf::Node(_, Part::On(_) | Part::Count(_) | Part::Ran) => false,
+                FieldOf::SampleRate | FieldOf::Tick | FieldOf::TickHi => false,
+                FieldOf::Poisoned | FieldOf::Initialized => false,
             }
     }
 
@@ -66,7 +72,7 @@ impl FlowInfo {
     pub fn run_stage(&self, s: ClockStage) -> ClockStage {
         match s {
             ClockStage::Tick(k) if k.faster_than_body() => ClockStage::SAMPLE,
-            s => s,
+            ClockStage::Init | ClockStage::Block | ClockStage::Tick(_) => s,
         }
     }
 

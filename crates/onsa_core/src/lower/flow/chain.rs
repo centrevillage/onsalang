@@ -148,7 +148,7 @@ fn fold(words: &[Expr], r: Ratio, j: Option<&Expr>, span: Span) -> R<Vec<Expr>> 
 /// S-1217): two words folded out of each boundary, the outermost first, in
 /// `let`s `t_in`, `t_hi_in` into `out` that the next shares, cut to `words`.
 fn child_time(cx: &mut FnCx, out: &mut Vec<Stmt>, w: &Walk, words: usize) -> R<Vec<Expr>> {
-    let mut time = cx.flow.as_ref().expect("flow context").time.clone();
+    let mut time = cx.flow.as_ref().expect("flow context").now.time.clone();
     for (k, b) in w.n.bounds.iter().enumerate().rev() {
         // One word divided would lose the upper (S-1211): the table gives two under a `.down~`.
         if b.ratio.slower_than_body() && time.len() != 2 {
@@ -169,7 +169,7 @@ fn child_time(cx: &mut FnCx, out: &mut Vec<Stmt>, w: &Walk, words: usize) -> R<V
 /// window ([`at`]).
 fn counter(lw: &Lowerer, cx: &FnCx, w: &Walk, from: usize, own: usize) -> R<Expr> {
     let (f, span) = (cx.flow.as_ref().expect("flow context"), w.span);
-    let root = f.scopes.first().ok_or_else(|| internal(span, "a chain outside the state"))?;
+    let root = f.now.scopes.first().ok_or_else(|| internal(span, "a chain outside the state"))?;
     let mut c = match f.info.counter() {
         Counter::Tick => vec![sfield(lw, f.info, &root.state, FieldOf::Tick, span)?],
         Counter::None | Counter::Process => vec![u32_lit(span, 0)],
@@ -521,11 +521,11 @@ fn prelower(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, w: &mut Walk, 
     // The `d` of a `vdelay~` a run reads, read while it stops (§11.10), once.
     if let PlanKind::Vdelay { d, .. } = w.n.kind
         && !bodies.is_empty()
-        && !cx.flow.as_ref().expect("flow context").expr_override.contains_key(&d)
+        && !cx.flow.as_ref().expect("flow context").now.expr_override.contains_key(&d)
     {
         let v = lower_expr(lw, cx, d)?;
         let v = materialize(cx, v, out, "__d");
-        cx.flow.as_mut().expect("flow context").expr_override.insert(d, v);
+        cx.flow.as_mut().expect("flow context").now.expr_override.insert(d, v);
     }
     for body in bodies {
         read.extend(head_inputs(lw, w, body)?.into_iter().filter(|&i| w.n.ring_of(0, Port::Input(i)).is_none()));
@@ -574,7 +574,7 @@ fn head_inputs(lw: &Lowerer, w: &Walk, body: ClockStage) -> R<Vec<u32>> {
     let (Some(g), Some(fd)) = (a.flows.get(callee), a.def(*callee).as_flow()) else {
         return Err(internal(w.span, "an instance of no checked flow"));
     };
-    Ok((0u32..).zip(inputs(g, fd, w.span)?).filter(|(_, i)| i.phase.stage() == body).map(|(k, _)| k).collect())
+    Ok((0u32..).zip(inputs(g, fd, w.span)?).filter(|(_, i)| i.stage == body).map(|(k, _)| k).collect())
 }
 
 /// What a chunk of elements is copied from ([`copy`]): a value of them
@@ -679,12 +679,12 @@ fn run(lw: &mut Lowerer, cx: &mut FnCx, w: &Walk, body: ClockStage) -> R<Expr> {
         w.ran(lw, &mut lets, true)?;
         return Ok(after(lets, v));
     }
-    let (&PlanKind::Instance { callee, ref args, .. }, ClockStage::Tick(k)) = (&n.kind, body) else {
+    let &PlanKind::Instance { callee, ref args, .. } = &n.kind else {
         return Err(internal(span, format!("a run of {body:?} of no instance")));
     };
     let sub = lw.ensure_flow(callee)?;
     let g = a.flows.get(&callee).ok_or_else(|| internal(span, "an instance of no checked flow"))?;
-    let f = sub.stage_fn(body).ok_or_else(|| internal(span, format!("a callee with no stage {k:?}")))?;
+    let f = sub.stage_fn(body).ok_or_else(|| internal(span, format!("a callee with no stage {body:?}")))?;
     let own = w.field(lw, Part::Own)?;
     let (words, mut lets) = (g.time_words(body), Vec::new());
     let time = if words > 0 { child_time(cx, &mut lets, w, words)? } else { Vec::new() };
@@ -704,7 +704,7 @@ fn run(lw: &mut Lowerer, cx: &mut FnCx, w: &Walk, body: ClockStage) -> R<Expr> {
         };
         given.push((input, v));
     }
-    let inputs = instance_args(lw, cx, (callee, args), Phase::Tick(k), &given, span)?;
+    let inputs = instance_args(lw, cx, (callee, args), body, &given, span)?;
     let ret = lw.m.fn_(f).ret.clone();
     call_stage(StageRun { g, f, ret, x: body, state: own, time, lets, inputs }, span)
 }

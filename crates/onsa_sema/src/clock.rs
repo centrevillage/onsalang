@@ -230,7 +230,10 @@ impl ClockStage {
     /// kept in a field written at the tick, which starts at `T.default()`
     /// (§11.3, S-1158 (c), S-1186). The one test of it (D-15).
     pub fn tick_slower_than(self, at: ClockStage) -> bool {
-        matches!(self, ClockStage::Tick(_)) && self < at
+        match self {
+            ClockStage::Tick(_) => self < at,
+            ClockStage::Init | ClockStage::Block => false,
+        }
     }
 }
 

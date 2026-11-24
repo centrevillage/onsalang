@@ -47,8 +47,8 @@ pub(super) fn init_value(
     }
 }
 
-/// Arguments of an instance call for the callee inputs of the stage of
-/// `phase`, in their places, lowered in the current function: of the input
+/// Arguments of an instance call for the callee inputs of the stage
+/// `stage`, in their places, lowered in the current function: of the input
 /// value types, which are no views (§11.3), so with no conversion, of a
 /// burst its array ([`burst_ty`], [`spread`]); of an input among `given`
 /// (by its index), the value given (of a chain, the window of a ring or of
@@ -57,7 +57,7 @@ pub(super) fn instance_args(
     lw: &mut Lowerer,
     cx: &mut FnCx,
     (callee, args): (DefId, &[ExprId]),
-    phase: Phase,
+    stage: ClockStage,
     given: &[(u32, Expr)],
     span: Span,
 ) -> R<Vec<Expr>> {
@@ -67,7 +67,7 @@ pub(super) fn instance_args(
     };
     let mut out = Vec::new();
     for (i, (arg, input)) in (0u32..).zip(args.iter().zip(inputs(info, fd, span)?)) {
-        if input.phase != phase {
+        if input.stage != stage {
             continue;
         }
         if let Some((_, v)) = given.iter().find(|r| r.0 == i) {
@@ -189,10 +189,10 @@ impl<'b> Gen<'b> {
         lw: &mut Lowerer<'b>,
         shape: &FlowShape,
         info: &'b FlowInfo,
-        phase: Phase,
+        stage: ClockStage,
         ret: Ty,
     ) -> R<Gen<'b>> {
-        Gen::of(lw, (shape.def, shape.span), info, phase, ret)
+        Gen::of(lw, (shape.def, shape.span), info, stage, ret)
     }
 
     /// [`Gen::new`] of the flow `def` declared at `span`, with no shape.
@@ -200,7 +200,7 @@ impl<'b> Gen<'b> {
         lw: &mut Lowerer<'b>,
         (def, span): (DefId, Span),
         info: &'b FlowInfo,
-        phase: Phase,
+        stage: ClockStage,
         ret: Ty,
     ) -> R<Gen<'b>> {
         let mut cx = FnCx::new(lw, def, Vec::new(), &info.body, ret)?;
@@ -209,15 +209,17 @@ impl<'b> Gen<'b> {
             local.ty = burst_ty(Some(c), local.ty.clone());
         }
         cx.flow = Some(FlowLowerCx {
-            local_override: HashMap::new(),
-            expr_override: HashMap::new(),
             info,
-            phase,
-            sample_rate: lit(Ty::Float(FloatKind::F32), span, Lit::F32(0.0)),
             sample_rate_calls: info.sample_rate_calls.iter().copied().collect(),
             sample_tick_calls: info.sample_tick_calls.iter().copied().collect(),
-            time: Vec::new(),
-            scopes: Vec::new(),
+            now: StageCx {
+                stage,
+                local_override: HashMap::new(),
+                expr_override: HashMap::new(),
+                sample_rate: lit(Ty::Float(FloatKind::F32), span, Lit::F32(0.0)),
+                time: Vec::new(),
+                scopes: Vec::new(),
+            },
         });
         Ok(Gen { cx, params: Vec::new(), stmts: Vec::new(), span })
     }
@@ -267,10 +269,10 @@ impl<'b> Gen<'b> {
         from: &Expr,
         state: &Expr,
     ) -> R<()> {
-        let phase = self.flow().phase;
-        for i in shape.inputs.iter().filter(|i| i.phase == phase) {
+        let stage = self.flow().now.stage;
+        for i in shape.inputs.iter().filter(|i| i.stage == stage) {
             let v = field(lw, from.clone(), i.at)?;
-            self.flow().local_override.insert(i.local.0, v.clone());
+            self.flow().now.local_override.insert(i.local.0, v.clone());
             if let Some(of) = info.kept_field(i.local) {
                 let f = sfield(lw, info, state, of, i.decl.span)?;
                 assign(&mut self.stmts, &f, v)?;
@@ -282,18 +284,18 @@ impl<'b> Gen<'b> {
     /// Overrides for the locals this phase reads from the state, and for
     /// `sample_rate()` (S-05, [`FlowInfo::from_state`]).
     pub(super) fn state_overrides(&mut self, lw: &mut Lowerer, info: &FlowInfo, state: &Expr) -> R<()> {
-        let stage = self.flow().phase.stage();
+        let stage = self.flow().now.stage;
         for of in info.fields.iter().map(|f| f.of) {
             if let FieldOf::Input(l) | FieldOf::Let(l) = of
                 && info.from_state(Kept::Local(l), stage)
             {
                 let f = sfield(lw, info, state, of, self.span)?;
-                self.flow().local_override.insert(l.0, f);
+                self.flow().now.local_override.insert(l.0, f);
             }
         }
         if info.from_state(Kept::SampleRate, stage) {
             let f = sfield(lw, info, state, FieldOf::SampleRate, self.span)?;
-            self.flow().sample_rate = f;
+            self.flow().now.sample_rate = f;
         }
         Ok(())
     }
@@ -304,7 +306,7 @@ impl<'b> Gen<'b> {
     /// of `tick` reads (`FlowInfo::store_bindings`), an element for each
     /// replica of the `par~`s around it.
     pub(super) fn slots(&mut self, info: &FlowInfo) -> R<()> {
-        let (stage, span) = (self.flow().phase.stage(), self.span);
+        let (stage, span) = (self.flow().now.stage, self.span);
         for t in info.tilde_matches.values() {
             let here = |b: &&onsa_sema::LocalId| {
                 info.bound_at.get(b).is_some_and(|r| r.iter().any(|&s| info.run_stage(s) == stage))
@@ -325,7 +327,7 @@ impl<'b> Gen<'b> {
                 for (var, from, _) in each {
                     place = index(place, var_index(&self.cx, var, from, span))?;
                 }
-                self.flow().local_override.insert(b.0, place);
+                self.flow().now.local_override.insert(b.0, place);
             }
         }
         Ok(())
@@ -333,7 +335,7 @@ impl<'b> Gen<'b> {
 
     /// The `let`s of a constant this phase reads, recomputed as locals (§11.3).
     pub(super) fn const_lets(&mut self, lw: &mut Lowerer, info: &FlowInfo) -> R<()> {
-        let stage = self.flow().phase.stage();
+        let stage = self.flow().now.stage;
         for l in info.consts_at(stage) {
             let v = lower_expr(lw, &mut self.cx, l.init)?;
             bind_irrefutable(lw, &mut self.cx, l.pat, v, &mut self.stmts)?;
@@ -350,7 +352,7 @@ impl<'b> Gen<'b> {
     // SPEC-GAP(S-1159): in the order of the text, a field at the place of
     // the `let` that holds it.
     pub(super) fn stage_lets(&mut self, lw: &mut Lowerer, info: &FlowInfo, state: &Expr) -> R<()> {
-        let stage = self.flow().phase.stage();
+        let stage = self.flow().now.stage;
         for (k, l) in info.lets.iter().enumerate() {
             let Some(at) = l.stage.stage() else { continue };
             let run = info.run_stage(at);

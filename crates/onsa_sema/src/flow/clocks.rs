@@ -925,7 +925,7 @@ impl Walk<'_> {
             .map(|j| super::plan::bounds::run_at(mods().take(j + 1), guards, i as u32, ClockStage::Tick(rp)));
         let past = frames.filter_map(|s| match s {
             ClockStage::Tick(k) if k.made_n().is_none() => Some(k),
-            _ => None,
+            ClockStage::Init | ClockStage::Block | ClockStage::Tick(_) => None,
         });
         let Some(k) = past.min() else { return true };
         let name = chain.mods[i].plan.name;

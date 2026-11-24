@@ -203,7 +203,7 @@ fn lower_target_value(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId, t: Target, ty:
     let span = cx.expr(e).span;
     if let Target::Local(l) = t
         && let Some(f) = &cx.flow
-        && let Some(v) = f.local_override.get(&l.0)
+        && let Some(v) = f.now.local_override.get(&l.0)
     {
         return Ok(v.clone());
     }

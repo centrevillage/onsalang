@@ -199,49 +199,15 @@ pub struct FlowMeta {
     pub name_span: Span,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-enum Phase {
-    Init,
-    Ctl,
-    /// The function of a tick: `tick` of the `sample` of the body, or that
-    /// of a slower one (`FlowInfo::stages`).
-    Tick(Ratio),
-}
-
-impl Phase {
-    /// The phase of `tick`.
-    const SAMPLE: Phase = Phase::Tick(Ratio(0));
-
-    /// The stage of the analysis whose values the function of the phase
-    /// makes: the one place of the correspondence (D-03).
-    fn stage(self) -> ClockStage {
-        match self {
-            Phase::Init => ClockStage::Init,
-            Phase::Ctl => ClockStage::Block,
-            Phase::Tick(k) => ClockStage::Tick(k),
-        }
-    }
-
-    /// The phase whose function evaluates what is of the stage `s`, as the
-    /// plan says (`FlowInfo::run_stage`, R-91 (1)).
-    fn of(info: &FlowInfo, s: ClockStage) -> Phase {
-        match info.run_stage(s) {
-            ClockStage::Init => Phase::Init,
-            ClockStage::Block => Phase::Ctl,
-            ClockStage::Tick(k) => Phase::Tick(k),
-        }
-    }
-}
-
 /// An input of the flow as its functions read it (§11.2, §11.6): its local,
-/// its declaration, the phase of its stage in the plan (of
-/// `FlowInput::body_clock`) and its place among the inputs of that stage
-/// (its field of `Config` or `Params`).
+/// its declaration, the stage of the function that reads it as the plan
+/// says (`FlowInfo::run_stage`, R-91 (1)) and its place among the inputs of
+/// that stage (its field of `Config` or `Params`).
 #[derive(Debug, Clone)]
 struct Input {
     local: onsa_sema::LocalId,
     decl: FlowInput,
-    phase: Phase,
+    stage: ClockStage,
     at: u32,
 }
 
@@ -253,19 +219,14 @@ fn inputs(info: &FlowInfo, fd: &FlowDef, span: Span) -> R<Vec<Input>> {
     if info.inputs.len() != fd.inputs.len() {
         return Err(internal(span, "a plan of another number of inputs than its flow"));
     }
-    let mut count = [0u32; 3];
+    let mut count: HashMap<ClockStage, u32> = HashMap::new();
     let one = |(&local, decl): (&onsa_sema::LocalId, &FlowInput)| {
-        let stage = info.own_stage(local);
-        let phase = stage.map(|s| Phase::of(info, s));
-        let k = match phase {
-            Some(Phase::Init) => 0,
-            Some(Phase::Ctl) => 1,
-            Some(Phase::Tick(_)) => 2,
-            None => return Err(internal(decl.span, format!("an input of the stage {stage:?}"))),
-        };
-        let (at, phase) = (count[k], phase.unwrap_or(Phase::SAMPLE));
-        count[k] += 1;
-        Ok(Input { local, decl: decl.clone(), phase, at })
+        let own = info.own_stage(local).ok_or_else(|| internal(decl.span, "an input of no stage"))?;
+        let stage = info.run_stage(own);
+        let next = count.entry(stage).or_default();
+        let at = *next;
+        *next += 1;
+        Ok(Input { local, decl: decl.clone(), stage, at })
     };
     info.inputs.iter().zip(&fd.inputs).map(one).collect()
 }
@@ -305,32 +266,39 @@ struct Scope {
 /// Flow-mode state of a [`FnCx`] (one per generated function).
 #[derive(Debug)]
 pub struct FlowLowerCx<'b> {
-    /// Sema local index → the expression to read instead (`s.r`, `p.fc`, `cfg.time`).
-    pub local_override: HashMap<u32, Expr>,
-    /// Node expression → its value once computed (a temporary).
-    pub expr_override: HashMap<ExprId, Expr>,
     pub(crate) info: &'b FlowInfo,
-    phase: Phase,
-    /// `sample_rate()`: the parameter in `init`, the state field elsewhere.
-    sample_rate: Expr,
     /// The calls of `sample_rate()` (`FlowInfo::sample_rate_calls`), each found at once (R-498).
     sample_rate_calls: HashSet<ExprId>,
     /// The calls of `sample_tick()` (`FlowInfo::sample_tick_calls`).
     sample_tick_calls: HashSet<ExprId>,
+    pub(crate) now: StageCx,
+}
+
+/// What a [`FlowLowerCx`] holds of the stage whose values it makes: that of
+/// its function.
+#[derive(Debug)]
+pub(crate) struct StageCx {
+    stage: ClockStage,
+    /// Sema local index → the expression to read instead (`s.r`, `p.fc`, `cfg.time`).
+    pub(crate) local_override: HashMap<u32, Expr>,
+    /// Node expression → its value once computed (a temporary).
+    expr_override: HashMap<ExprId, Expr>,
+    /// `sample_rate()`: the parameter in `init`, the state field elsewhere.
+    sample_rate: Expr,
     /// The time of the function (§11.4, S-1129 (1), S-1217): its parameters
     /// `t` and `t_hi` of a stage that takes them (`FlowInfo::time_words`),
     /// the count of the outermost `sample` from `process`, which a caller
     /// passes to its callees ([`chain::child_time`]); empty elsewhere.
     time: Vec<Expr>,
-    /// Innermost scope last.
+    /// Innermost scope last, the arms chosen at the stage.
     scopes: Vec<Scope>,
 }
 
 impl FlowLowerCx<'_> {
     /// A scope of `state` in the innermost, whose arms chosen it has.
     fn push_scope(&mut self, state: Expr) {
-        let chosen = self.scopes.last().map(|s| s.chosen.clone()).unwrap_or_default();
-        self.scopes.push(Scope { state, chosen });
+        let chosen = self.now.scopes.last().map(|s| s.chosen.clone()).unwrap_or_default();
+        self.now.scopes.push(Scope { state, chosen });
     }
 }
 
@@ -513,7 +481,7 @@ fn lower_flow<'b>(lw: &mut Lowerer<'b>, flow: DefId, fd: FlowDef, span: Span) ->
     for &s in &info.stages {
         let n = match s {
             ClockStage::Tick(k) => k.n(),
-            _ => None,
+            ClockStage::Init | ClockStage::Block => None,
         };
         let n = n.ok_or_else(|| internal(span, format!("a slower tick of the stage {s:?}")))?;
         stages.push((s, push_fn(lw, format!("{base}.tick_{n}"), true, span)));
@@ -528,12 +496,12 @@ fn lower_flow<'b>(lw: &mut Lowerer<'b>, flow: DefId, fd: FlowDef, span: Span) ->
     let render = id(made(FlowFn::Render)?)?;
     // The values of `@param`, read from the analysis in this one place (§11.7).
     let (mut params, mut sig_inputs) = (Vec::new(), Vec::new());
-    for Input { decl: i, phase, .. } in &shape.inputs {
+    for Input { decl: i, stage, .. } in &shape.inputs {
         let ty = lw.core_ty(i.ty, &[], i.span)?;
-        match phase {
-            Phase::Ctl => params.push((i.name.clone(), ty, a.param_info(i))),
-            &Phase::SAMPLE => sig_inputs.push((i.name.clone(), ty)),
-            Phase::Init | Phase::Tick(_) => {}
+        match stage {
+            ClockStage::Block => params.push((i.name.clone(), ty, a.param_info(i))),
+            &ClockStage::SAMPLE => sig_inputs.push((i.name.clone(), ty)),
+            ClockStage::Init | ClockStage::Tick(_) => {}
         }
     }
     // Of the C API alone, when every `block` input has a `default` (§11.7, §14.2, S-625).
