@@ -6,7 +6,7 @@
 //! does not hold is a failure of the interpreter or of the generator), and a mutant of each twin is caught by the asserts: both
 //! run today. The evaluator gives what the interpreter gives (`twin::run`: it evaluates every test and the interpreter is
 //! compared with it), a modifier inside a block and a `when~` of a burst under an `.up~` too since W7-10 U3ae.
-//! The checker and the interpreter pass the programs of every seed once U3a is in (the tests that run them are marked `W7-10 U3a` until then).
+//! The checker and the interpreter pass the programs of every seed (U3a opened the modifiers inside a block).
 
 use std::collections::BTreeSet;
 
@@ -26,7 +26,7 @@ const DELAY: Family = ("delay_twins", make_delay);
 /// inside a block (`AT_BLOCK`).
 const GATE: [u64; 7] = [1215, 461, 98, 18, 239, 10, 25];
 /// The seeds of the twin `atid` whose `at` is at a place inside a block (`at_blk`): a value of a parameter kind with `at sample` is
-/// the value (§11.3), not a signal gathered with the inputs. They fail until U3a keeps an `at` on a parameter kind from making a ring.
+/// the value (§11.3), not a signal gathered with the inputs. They hold since U3a, which keeps an `at` on a parameter kind from making a ring.
 const AT_BLOCK: [u64; 2] = [7, 210];
 /// The forms the seeds of the gate hold: every head, every twin, every modifier, the places a `when~` that always holds is put
 /// in, the clocks W the conditions are read at and the kinds of condition, a burst and a slow output, a `when~` between an
@@ -159,7 +159,7 @@ fn a_mutant_of_each_twin_is_caught_by_its_asserts_in_the_interpreter() {
 #[test]
 fn the_checker_passes_every_chain_in_range_of_up_to_three_modifiers_the_forms_that_u1_stopped_too() {
     // Every chain of up to 3 modifiers over every head, with the condition at W and with an `init` one: the checker passes (and
-    // lowers) every one, a modifier inside a block and a `when~` of a burst under an `.up~` (`form`) too (E0200 until U3a).
+    // lowers) every one, a modifier inside a block and a `when~` of a burst under an `.up~` (`form`) too (E0200 before U3a).
     let (mut made, mut opened, mut wrong) = (0, 0, Vec::new());
     for cond in ["sig", "ci"] {
         for (what, src, form) in chains(3, cond) {

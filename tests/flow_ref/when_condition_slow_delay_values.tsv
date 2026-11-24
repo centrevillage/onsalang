@@ -1,0 +1,20 @@
+# flow_ref 1 source=tests/spec/flow_semantics/when_condition_slow_delay_values.onsa tests=4 evaluated=4 unavailable=0 skipped=0 waiting=0
+@ a delay in the condition of a when~ steps at the ticks of its own clock, and the same delay bound by a let is the same
+init 0 when_condition_slow_delay_values.prev_in_cond sr=0x41000000
+init 1 when_condition_slow_delay_values.prev_let_twin sr=0x41000000
+process 0 frames=16
+out=[0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x3f800000 0x40000000 0x40400000 0x40800000 0x40a00000 0x40c00000 0x40e00000 0x41000000]
+process 1 frames=16
+out=[0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x3f800000 0x40000000 0x40400000 0x40800000 0x40a00000 0x40c00000 0x40e00000 0x41000000]
+@ a delay of two ticks in the condition starts the part at the frame 12
+init 0 when_condition_slow_delay_values.delay_in_cond sr=0x41000000
+process 0 frames=16
+out=[0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x3f800000 0x40000000 0x40400000 0x40800000]
+@ a when~ outside stops the part for two frames and the delay of the condition does not stop with it
+init 0 when_condition_slow_delay_values.prev_in_cond_stopped_outside sr=0x41000000
+process 0 frames=16
+out=[0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x3f800000 0x3f800000 0x3f800000 0x40000000 0x40400000 0x40800000 0x40a00000 0x40c00000]
+@ a delay of a grid slower than W in a when~ of a burst under an outer when~: the part runs from the second grid of sample / 8 (the frame 8 is the grid of W where prev~ of the first reads 1)
+init 0 when_condition_slow_delay_values.burst_under_an_outer_when sr=0x41000000
+process 0 params d=true frames=16
+out=[0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x41200000 0x41300000 0x41400000 0x41500000 0x41a00000 0x41a80000 0x41b00000 0x41b80000]

@@ -221,7 +221,7 @@ fn plan_rmerge(rng: &mut Rng, rot: bool) -> Plan {
     let blk = form_at(head, &fa, at) == Some("in_block");
     let (a, b) = loop {
         let (a, b) = (cond_at(rng, w), cond_at(rng, w));
-        if !(blk && kinds_apart(&a, &b)) {
+        if !(blk && kinds_apart(&a, &b, true)) {
             break (a, b);
         }
     };

@@ -6,7 +6,7 @@
 //! does not hold is a failure of the interpreter or of the generator), and a mutant of each twin is caught by the asserts: both
 //! run today. The evaluator gives what the interpreter gives (`twin::run`: it evaluates every test and the interpreter is
 //! compared with it), a modifier inside a block and a `when~` of a burst under an `.up~` too since W7-10 U3ae.
-//! The checker and the interpreter pass the programs of every seed once U3a is in (the tests that run them are marked `W7-10 U3a` until then).
+//! The checker and the interpreter pass the programs of every seed (U3a opened the modifiers inside a block).
 
 use super::twin::{Family, run};
 use super::twin_reset::{chains, exotic_count, make, make_exotic};
@@ -22,7 +22,7 @@ const EXOTIC: Family = ("reset_exotic", make_exotic);
 /// chose the seeds again: the twin `slowc` is not made inside a block (a `sample_tick()` there is gathered, and a slower value is read
 /// at its own tick), and the twin `atid` was added.
 const GATE: [u64; 12] = [339, 1934, 46, 1336, 2426, 177, 17, 117, 20, 25, 87, 1988];
-/// The seeds of the twin `atid` at a place inside a block (`at_blk`), as in twin_when_tests.rs: they fail until U3a keeps an `at`
+/// The seeds of the twin `atid` at a place inside a block (`at_blk`), as in twin_when_tests.rs: they hold since U3a, which keeps an `at`
 /// on a parameter kind from making a ring.
 const AT_BLOCK: [u64; 3] = [95, 194, 247];
 /// The forms the seeds of the gate hold: every head (a slow stage that writes a field, a slow input, the time as the input, a
@@ -69,7 +69,7 @@ fn a_mutant_of_each_twin_is_caught_by_its_asserts_in_the_interpreter() {
 }
 
 /// Every chain of up to `len` modifiers over the heads: the checker passes (and lowers) every one, a `reset_if~` with an `.up~` and
-/// then a `.down~` outside it and a `when~` of a burst with an `.up~` outside it too (they were E0200 until U3a). How many
+/// then a `.down~` outside it and a `when~` of a burst with an `.up~` outside it too (they were E0200 before U3a). How many
 /// there are, and what is wrong.
 fn matrix(len: usize) -> (usize, Vec<String>) {
     let (mut made, mut wrong) = (0, Vec::new());

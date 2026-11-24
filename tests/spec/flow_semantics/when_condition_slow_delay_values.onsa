@@ -1,0 +1,88 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.10", "§11.4", "§11.9", "§11.3"]
+
+// A delay written in the condition of a `.when~` whose clock is slower than the caller's `sample` (W7-10 close/t, from the carry-over of U1e and U1f; S-1209, S-1217). Worked out by hand from §11.4 and §11.10.
+// `k` counts the ticks of a grid of `sample / 4`: the tick m (the frames 4 m .. 4 m + 3) reads m + 1. A delay takes its first argument's clock (§11.4: "第 1 引数のクロックで刻み"), so `prev~(k)` steps at the ticks of `sample / 4` of the
+// caller, whatever stops the part that the `.when~` wraps: the tick m reads k of the tick m - 1 (the first tick, `T.default()` = 0), `delay~(k, 2)` reads the tick m - 2 (0 for the first two ticks). A condition slower than W is held
+// (§11.10), so `prev~(k) > 1.0` is false at the ticks 0 and 1 and true from the tick 2, that is the frames 8 ..., and the part runs from there (`acc` counts its runs: 1 at the frame 8). A delay that was stored at each frame, and not
+// at the ticks of its own clock, would hold the previous frame's held value: the part would start at the frame 5 for `prev~` and at the frame 6 for `delay~`.
+// The form with a burst (`mk4c~().when~(c).down~(4).when~(d)`): the inner W is `sample / 4` (§11.10), so the condition of `sample / 2` is E0815 and one of `sample / 8` is held at the grid of W (frames 0, 4, 8 ...):
+// `prev~(k8)` is 0 at the frames 0 and 4 (the grid g = 0), 1 from the frame 8 (g = 1), so `prev~(k8) > 0.0` starts the part at the frame 8 (the stopped tick reads `T.default()`, the running ticks deal 10 11 12 13 and 20 21 22 23).
+// With an `.when~` outside that stops the part at the frames 9 and 10 (`n` is the frame number + 1, so `n != 10.0 && n != 11.0`), the output keeps the last one and the count goes on at the frame 11: the delay of the
+// condition is of the caller and is not stopped (§11.10: what stops is the receiver's processing of the `sample`; the stopped frames read the held condition as the caller gives it).
+
+flow acc(f: F32 at block) -> F32 at sample {
+  let n = f + prev~(^n)
+  n
+}
+
+flow cnt() -> F32 at sample {
+  let n = prev~(^n) + 1.0
+  n
+}
+
+flow mk4c() -> F32 at (sample * 4) {
+  let n = cnt~() * 10.0
+  [n, n + 1.0, n + 2.0, n + 3.0]
+}
+
+pub flow prev_in_cond() -> F32 at sample {
+  let k = acc~(1.0).down~(4)
+  acc~(1.0).when~(prev~(k) > 1.0)
+}
+
+pub flow prev_let_twin() -> F32 at sample {
+  let k = acc~(1.0).down~(4)
+  let p = prev~(k)
+  acc~(1.0).when~(p > 1.0)
+}
+
+pub flow delay_in_cond() -> F32 at sample {
+  let k = acc~(1.0).down~(4)
+  acc~(1.0).when~(delay~(k, 2) > 1.0)
+}
+
+pub flow prev_in_cond_stopped_outside() -> F32 at sample {
+  let k = acc~(1.0).down~(4)
+  let n = cnt~()
+  acc~(1.0).when~(prev~(k) > 1.0).when~(n != 10.0 && n != 11.0)
+}
+
+pub flow burst_under_an_outer_when(d: Bool at block) -> F32 at sample {
+  let k8 = acc~(1.0).down~(8)
+  mk4c~().when~(prev~(k8) > 0.0).down~(4).when~(d) at sample
+}
+
+test "a delay in the condition of a when~ steps at the ticks of its own clock, and the same delay bound by a let is the same" {
+  var a: [F32; 16] = [9.0; 16]
+  var b: [F32; 16] = [9.0; 16]
+  var sa = prev_in_cond.init(8.0)
+  var sb = prev_let_twin.init(8.0)
+  prev_in_cond.process(inout sa, inout a)
+  prev_let_twin.process(inout sb, inout b)
+  assert a == [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]
+  assert b == a
+}
+
+test "a delay of two ticks in the condition starts the part at the frame 12" {
+  var a: [F32; 16] = [9.0; 16]
+  var s = delay_in_cond.init(8.0)
+  delay_in_cond.process(inout s, inout a)
+  assert a == [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 2.0, 3.0, 4.0]
+}
+
+test "a when~ outside stops the part for two frames and the delay of the condition does not stop with it" {
+  var a: [F32; 16] = [9.0; 16]
+  var s = prev_in_cond_stopped_outside.init(8.0)
+  prev_in_cond_stopped_outside.process(inout s, inout a)
+  assert a == [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0]
+}
+
+test "a delay of a grid slower than W in a when~ of a burst under an outer when~: the part runs from the second grid of sample / 8 (the frame 8 is the grid of W where prev~ of the first reads 1)" {
+  var a: [F32; 16] = [9.0; 16]
+  var s = burst_under_an_outer_when.init(8.0)
+  burst_under_an_outer_when.process(inout s, burst_under_an_outer_when.Params { d: true }, inout a)
+  assert a == [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 10.0, 11.0, 12.0, 13.0, 20.0, 21.0, 22.0, 23.0]
+}

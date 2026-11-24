@@ -8,7 +8,7 @@
 // runs at the K ticks where `c` holds, and "遅延の長さは動いた刻みで数える" (a stopped tick is no sample of the delay); where it is stopped the caller reads "最後の出力を保つ（一度も動いていなければ `T.default()`）", whatever `init` the
 // delay has. `.reset_if~(r)` puts "遅延の値と書き込み位置" back to its `init` before the stages that follow the tick of the condition (the `init` of the kind `init` is kept). "頭の引数は呼び出し側のもので、止まっている間も評価する".
 // The twins that wrap the delay in a named flow (`flow pv(x) { prev~(x) }`, `pv~(x).when~(c)`) are in delay_receiver_twins.onsa and the errors in flow_clock/delay_receiver_e0815.onsa and delay_receiver_e0816.onsa. These forms were
-// E0200 until W7-10 U3b.
+// E0200 before W7-10 U3b.
 
 flow cnt() -> F32 at sample {
   let n = prev~(^n) + 1.0

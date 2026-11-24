@@ -471,12 +471,17 @@ fn plan_commute(rng: &mut Rng, rot: bool) -> Plan {
     }
 }
 
-/// Whether two conditions read at the same W inside a block are not the twin of their `&&`: a signal is gathered with the inputs and a
-/// value of a `block` kind is read when the run is made, so two modifiers keep them apart, but one expression of both is a signal that
-/// is gathered whole, with the `block` value of the call that gathered it (§11.10: the clock of an expression is the fastest of its
-/// parts, and a call of `process` that is cut gives the later frames of a tick another value of `cb`).
-pub fn kinds_apart(a: &Cond, b: &Cond) -> bool {
+/// Whether two conditions read at the same W inside a block are not the twin of their `&&` (`or` false) or `||` (`or` true): a signal
+/// is gathered with the inputs and a value of a parameter kind is read when the run is made, so two modifiers keep them apart, but
+/// one expression of both is a signal that is gathered whole (§11.10: the clock of an expression is the fastest of its parts, S-1227).
+/// With `&&` they differ only for a `block` value that a call of `process` that is cut changes between the parts (the phase 0 of what
+/// is gathered is `false` for both sides). With `||` they differ for every parameter kind (a `block` or `init` value, a literal: §11.3)
+/// that holds, whatever the calls, because the gathered whole is `false` at phase 0 (§11.9) and the value read at the run is not.
+pub fn kinds_apart(a: &Cond, b: &Cond, or: bool) -> bool {
     let (sig, blk) = (|c: &Cond| c.tags.contains("c_sig"), |c: &Cond| c.tags.contains("c_block"));
+    if or {
+        return sig(a) != sig(b);
+    }
     (sig(a) && !sig(b) && blk(b)) || (sig(b) && !sig(a) && blk(a))
 }
 
@@ -501,7 +506,7 @@ fn plan_merge(rng: &mut Rng, rot: bool) -> Plan {
         let (Mod::When(a), Mod::When(b)) = (fa[at].clone(), fa[at + 1].clone()) else {
             unreachable!("two when~ were put in")
         };
-        if !(blk && kinds_apart(&a, &b)) {
+        if !(blk && kinds_apart(&a, &b, false)) {
             break (a, b);
         }
     };

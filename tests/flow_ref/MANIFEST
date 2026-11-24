@@ -156,10 +156,11 @@ file vdelay_varying_d.tsv rows=2 tests=1 evaluated=0 unavailable=0 skipped=1 wai
 file when_block_values.tsv rows=52 tests=9 evaluated=6 unavailable=0 skipped=3 waiting=0
 file when_boundary_hold_values.tsv rows=21 tests=5 evaluated=5 unavailable=0 skipped=0 waiting=0
 file when_burst_up_values.tsv rows=24 tests=4 evaluated=4 unavailable=0 skipped=0 waiting=0
+file when_condition_slow_delay_values.tsv rows=20 tests=4 evaluated=4 unavailable=0 skipped=0 waiting=0
 file when_condition_values.tsv rows=76 tests=11 evaluated=9 unavailable=0 skipped=2 waiting=0
 file when_grid_and_time_values.tsv rows=13 tests=3 evaluated=3 unavailable=0 skipped=0 waiting=0
 file when_identity_regressions.tsv rows=78 tests=5 evaluated=5 unavailable=0 skipped=0 waiting=0
 file when_slow_head_values.tsv rows=47 tests=5 evaluated=5 unavailable=0 skipped=0 waiting=0
 file when_slow_values.tsv rows=86 tests=9 evaluated=9 unavailable=0 skipped=0 waiting=0
 file when_values.tsv rows=77 tests=10 evaluated=10 unavailable=0 skipped=0 waiting=0
-total files=163 rows=5565 tests=1166 evaluated=1045 unavailable=1 skipped=120 waiting=6
+total files=164 rows=5585 tests=1170 evaluated=1049 unavailable=1 skipped=120 waiting=6
