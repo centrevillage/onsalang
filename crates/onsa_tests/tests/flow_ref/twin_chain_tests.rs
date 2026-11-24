@@ -34,8 +34,8 @@ fn the_forms_that_killed_two_mutants_of_the_evaluator_agree_on_the_evaluator_and
     println!("{:?}", check(vec![0, 1], FIXED));
 }
 
-/// The F2 forms: a `sample_tick()` in a modifier inside a block that a `when~` outside it stops reads the time of the frame where its tick is
-/// (§11.4), not the time rounded to the ratio of the block, which Core read before W7-10 (P).
+/// The F2 forms: a `sample_tick()` in a modifier inside a block that a `when~` outside it stops reads the time kept at the last tick of the grid
+/// of `sample / n` of the body that wrote it (§11.4, S-1230 (G)), not the time of the frame of its own tick, and not the time rounded to the ratio of the block.
 #[test]
 fn the_time_in_a_block_that_a_when_stops_is_read_alike_on_the_evaluator_and_in_the_interpreter() {
     println!("{:?}", check(vec![2, 3], FIXED));

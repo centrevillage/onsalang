@@ -252,8 +252,8 @@ pub struct ArgRead {
     /// The stage of the caller that reads it where that is not the stage of
     /// `at` (§11.10, S-1209): of an input of the head of a chain and of a
     /// condition a `.when~` moves to its W. `at` stays the clock of the
-    /// port, the root of `sample_tick()` and the judgement of a burst; of a
-    /// condition of `sample_tick()` alone, the clock of the stage (§11.4).
+    /// port, the root of `sample_tick()` (of a condition of it alone, W:
+    /// S-1230) and the judgement of a burst.
     pub stage: Option<ClockStage>,
 }
 

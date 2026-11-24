@@ -1,0 +1,334 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.4", "§11.3", "§11.9", "§11.10"]
+
+// The time that a `sample_tick()` alone in the condition of a modifier reads when the grid of the part is not the grid of the body that wrote the condition (W7-10 S1230/t; S-1230 (G), S-1209, S-1226, S-1227, S-1228). §11.4: the
+// condition is read by "書いた本体の刻み" of the clock W that reads it, and an expression that reads no other tick value is "刻みのクロックの `at` を付けた形は、その刻みで評価する計算した部分式と同じ"; §11.3: a computed part with an `at`
+// "その刻みの時間を保つ"; §11.10: W is the clock of the position (`x.up~(2).when~(c).down~(2)` has W = P = `sample / 2` in the caller's terms) and a part under `when~(c)` counts "動いた刻み". So the condition `sample_tick() % 3 == 0` is the
+// same value as `(sample_tick() at (sample / 2)) % 3 == 0` (the time that the grid of `sample / 2` of the BODY THAT WROTE IT kept at its last tick, which is the time of the caller with the odd frames rounded down), whichever frame the
+// tick of the part is at: a part that an outer `when~` stops has its own ticks (the runs 0 2 4 6 ..., counted on the frames that ran) at other frames than the even ones. A condition written inside the part (`g~()` whose body holds the
+// modifier, in sample_tick_condition_grid_same.onsa) reads the time at the frame of the tick.
+// The flows are the F2 chain `cnt~().up~(2).when~(K).down~(2).when~(c)` with cs = 1 1 1 0 1 0 1 0 0 0 0 1 0 1 1 0 (the frames that run are 0 1 2 4 6 11 13 14; the ticks of the part are its runs 0 2 4 6, the frames 0 2 6 13; the time kept
+// at those frames is 0 2 6 12). `sample_tick() % 3 == 0` is true at 0 6 12 and false at 2: so the ticks give T F T T (not T F T F, which the time 13 of the frame itself gives). `cnt` counts the runs it makes (1 2 3 ...), a tick that is
+// not true holds the last output, and a frame that the outer `when~` stops holds its output. Every vector is worked out by hand: V = 1 2 2 2 2 2 3 3 3 3 3 4 4 5 6 6 (the tick 0 runs 1 2, the tick 2 holds 2, the tick 6 runs 3 4 at the
+// frames 6 and 11, the tick 13 runs 5 6 at the frames 13 and 14, the frame 15 holds 6).
+
+flow cnt() -> F32 at sample {
+  let n = prev~(^n) + 1.0
+  n
+}
+
+// The same part with the condition as a port of the clock W: a call writes the argument in the caller, as a head argument is.
+flow gp(k: Bool at (sample / 2)) -> F32 at sample {
+  cnt~().up~(2).when~(k).down~(2)
+}
+
+flow rp(k: Bool at (sample / 2)) -> F32 at sample {
+  cnt~().up~(2).reset_if~(k).down~(2)
+}
+
+rt fn third(t: U32) -> Bool {
+  t % 3 == 0
+}
+
+pub flow gate_direct(c: Bool at sample) -> F32 at sample {
+  cnt~().up~(2).when~(sample_tick() % 3 == 0).down~(2).when~(c)
+}
+
+pub flow gate_at(c: Bool at sample) -> F32 at sample {
+  cnt~().up~(2).when~((sample_tick() at (sample / 2)) % 3 == 0).down~(2).when~(c)
+}
+
+pub flow gate_port(c: Bool at sample) -> F32 at sample {
+  gp~(sample_tick() % 3 == 0).when~(c)
+}
+
+pub flow reset_direct(c: Bool at sample) -> F32 at sample {
+  cnt~().up~(2).reset_if~(sample_tick() % 3 == 0).down~(2).when~(c)
+}
+
+pub flow reset_at(c: Bool at sample) -> F32 at sample {
+  cnt~().up~(2).reset_if~((sample_tick() at (sample / 2)) % 3 == 0).down~(2).when~(c)
+}
+
+pub flow reset_port(c: Bool at sample) -> F32 at sample {
+  rp~(sample_tick() % 3 == 0).when~(c)
+}
+
+pub flow two_whens_at(c1: Bool at sample, c2: Bool at sample) -> F32 at sample {
+  cnt~().up~(2).when~((sample_tick() at (sample / 2)) % 3 == 0).down~(2).when~(c1).when~(c2)
+}
+
+pub flow two_whens(c1: Bool at sample, c2: Bool at sample) -> F32 at sample {
+  cnt~().up~(2).when~(sample_tick() % 3 == 0).down~(2).when~(c1).when~(c2)
+}
+
+pub flow outer_reset_at(c: Bool at sample, r: Bool at sample) -> F32 at sample {
+  cnt~().up~(2).when~((sample_tick() at (sample / 2)) % 3 == 0).down~(2).reset_if~(r).when~(c)
+}
+
+pub flow outer_reset(c: Bool at sample, r: Bool at sample) -> F32 at sample {
+  cnt~().up~(2).when~(sample_tick() % 3 == 0).down~(2).reset_if~(r).when~(c)
+}
+
+pub flow n4_at(c: Bool at sample) -> F32 at sample {
+  cnt~().up~(4).when~((sample_tick() at (sample / 4)) % 3 == 0).down~(4).when~(c)
+}
+
+pub flow n4(c: Bool at sample) -> F32 at sample {
+  cnt~().up~(4).when~(sample_tick() % 3 == 0).down~(4).when~(c)
+}
+
+pub flow nested_at(c: Bool at sample) -> F32 at sample {
+  cnt~().up~(2).when~((sample_tick() at (sample / 2)) % 3 == 0).down~(2).up~(2).down~(2).when~(c)
+}
+
+pub flow nested(c: Bool at sample) -> F32 at sample {
+  cnt~().up~(2).when~(sample_tick() % 3 == 0).down~(2).up~(2).down~(2).when~(c)
+}
+
+// W = `sample / 2` is faster than the boundary of the `.down~(4)`, so the condition is gathered with the inputs: the tick t of the boundary reads the 2 entries of the frames t - 4 and t - 2 of the part, and the run j of the `.up~(2)`
+// outside the modifier reads the entry j (§11.9, §11.10).
+pub flow ring_at(c: Bool at sample) -> F32 at sample {
+  cnt~().up~(2).when~((sample_tick() at (sample / 2)) % 3 == 0).up~(2).down~(4).when~(c)
+}
+
+pub flow ring(c: Bool at sample) -> F32 at sample {
+  cnt~().up~(2).when~(sample_tick() % 3 == 0).up~(2).down~(4).when~(c)
+}
+
+pub flow mixed_init(c: Bool at sample) -> F32 at sample {
+  cnt~().up~(2).when~(sample_rate() > 4.0 && sample_tick() % 3 == 0).down~(2).when~(c)
+}
+
+pub flow mixed_rt(c: Bool at sample) -> F32 at sample {
+  cnt~().up~(2).when~(third(sample_tick())).down~(2).when~(c)
+}
+
+pub flow mixed_if(c: Bool at sample, cb: Bool at block) -> F32 at sample {
+  cnt~().up~(2).when~(if cb { sample_tick() % 3 == 0 } else { false }).down~(2).when~(c)
+}
+
+pub flow mixed_block_at(c: Bool at sample, cb: Bool at block) -> F32 at sample {
+  cnt~().up~(2).when~((cb && sample_tick() % 3 == 0) at (sample / 2)).down~(2).when~(c)
+}
+
+pub flow mixed_block(c: Bool at sample, cb: Bool at block) -> F32 at sample {
+  cnt~().up~(2).when~(cb && sample_tick() % 3 == 0).down~(2).when~(c)
+}
+
+// A part that holds the block, called from a flow that stops it: the body that wrote the condition is `fa`, and its grid of `sample / 2` counts the frames that `fa` ran.
+pub flow fa(c: Bool at sample) -> F32 at sample {
+  cnt~().up~(2).when~(sample_tick() % 3 == 0).down~(2).when~(c)
+}
+
+pub flow fa_at(c: Bool at sample) -> F32 at sample {
+  cnt~().up~(2).when~((sample_tick() at (sample / 2)) % 3 == 0).down~(2).when~(c)
+}
+
+pub flow top(c: Bool at sample, d: Bool at sample) -> F32 at sample {
+  fa~(c).when~(d)
+}
+
+pub flow top_at(c: Bool at sample, d: Bool at sample) -> F32 at sample {
+  fa_at~(c).when~(d)
+}
+
+// The time since a start, the usual use: `sample_tick() -% t0 < len` plays while the time is in [t0, t0 + len) (a time before t0 wraps to a huge number).
+pub flow note_direct(c: Bool at sample, t0: U32 at block, len: U32 at block) -> F32 at sample {
+  cnt~().up~(2).when~(sample_tick() -% t0 < len).down~(2).when~(c)
+}
+
+pub flow note_at(c: Bool at sample, t0: U32 at block, len: U32 at block) -> F32 at sample {
+  cnt~().up~(2).when~((sample_tick() -% t0 < len) at (sample / 2)).down~(2).when~(c)
+}
+
+const CS: [Bool; 16] = [true, true, true, false, true, false, true, false, false, false, false, true, false, true, true, false]
+const V: [F32; 16] = [1.0, 2.0, 2.0, 2.0, 2.0, 2.0, 3.0, 3.0, 3.0, 3.0, 3.0, 4.0, 4.0, 5.0, 6.0, 6.0]
+
+test "a when~ in a block that is stopped from outside reads the time kept at the last tick of the grid of the body that wrote it: the ticks at 0 2 6 13 read 0 2 6 12, so the part runs at the tick 13 too" {
+  // The condition written as it is, with the `at` of its clock, and given to the part as a port: the same vector V.
+  var oa: [F32; 16] = [0.0; 16]
+  var ob: [F32; 16] = [0.0; 16]
+  var oc: [F32; 16] = [0.0; 16]
+  var sa = gate_at.init(8.0)
+  var sb = gate_port.init(8.0)
+  var sc = gate_direct.init(8.0)
+  gate_at.process(inout sa, CS, inout oa)
+  gate_port.process(inout sb, CS, inout ob)
+  gate_direct.process(inout sc, CS, inout oc)
+  assert oa == V
+  assert ob == V
+  assert oc == V
+}
+
+test "a reset_if~ in a block that is stopped from outside reads the same time: the part is put back at the ticks 0 6 13, and the ticks 2 does not" {
+  // The runs of the ticks: the tick 0 gives 1 2 (frames 0 1), the tick 2 (no reset) 3 4 (frames 2 4), the tick 6 puts `cnt` back and gives 1 2 (frames 6 11), the tick 13 puts it back and gives 1 2 (frames 13 14), the frame 15 holds 2;
+  // the frames that the outer `when~` stops hold the output before: 1 2 3 3 4 4 1 1 1 1 1 2 2 1 2 2.
+  var oa: [F32; 16] = [0.0; 16]
+  var ob: [F32; 16] = [0.0; 16]
+  var oc: [F32; 16] = [0.0; 16]
+  var sa = reset_at.init(8.0)
+  var sb = reset_port.init(8.0)
+  var sc = reset_direct.init(8.0)
+  reset_at.process(inout sa, CS, inout oa)
+  reset_port.process(inout sb, CS, inout ob)
+  reset_direct.process(inout sc, CS, inout oc)
+  let want: [F32; 16] = [1.0, 2.0, 3.0, 3.0, 4.0, 4.0, 1.0, 1.0, 1.0, 1.0, 1.0, 2.0, 2.0, 1.0, 2.0, 2.0]
+  assert oa == want
+  assert ob == want
+  assert oc == want
+}
+
+test "two when~ outside the block stop it where both hold: the grid counts the frames of c1 && c2, so the part is the one of V" {
+  // c1 && c2 is CS (c1 is 0 at the frames 3 5 9 10 12, c2 is 0 at 7 8 15): the frames that run are 0 1 2 4 6 11 13 14 as in V, whatever the order of the two `when~`.
+  let c1: [Bool; 16] = [true, true, true, false, true, false, true, true, true, false, false, true, false, true, true, true]
+  let c2: [Bool; 16] = [true, true, true, true, true, true, true, false, false, true, true, true, true, true, true, false]
+  var oa: [F32; 16] = [0.0; 16]
+  var ob: [F32; 16] = [0.0; 16]
+  var sa = two_whens_at.init(8.0)
+  var sb = two_whens.init(8.0)
+  two_whens_at.process(inout sa, two_whens_at.In { c1: c1, c2: c2 }, inout oa)
+  two_whens.process(inout sb, two_whens.In { c1: c1, c2: c2 }, inout ob)
+  assert oa == V
+  assert ob == V
+}
+
+test "a reset_if~ outside the block that comes between the runs of a tick that runs: the tick at the frame 13 reads the time 12 and runs, and the reset at the frame 14 takes back what it dealt" {
+  // Before the frame 13 the output is V's: 1 2 2 2 2 2 3 3 3 3 3 4 4. The tick at the frame 13 is true (the time kept is 12) and runs `cnt` twice, 5 6, and deals them to the frames 13 and 14: the frame 13 reads 5 (the time 13 would
+  // not run the tick, and the frame 13 would hold 4). The reset at the frame 14 is in the middle of the tick (the second run, no boundary): it puts `cnt` and the dealt array back before the stage of that frame (§11.10: the field that a
+  // slower stage writes, here the array that the `.down~(2)` deals, reads `T.default()` until the next tick), so the frame 14 reads 0, and the frame 15, where `c` stops the part, holds 0.
+  var r: [Bool; 16] = [false; 16]
+  r[14] = true
+  var oa: [F32; 16] = [0.0; 16]
+  var ob: [F32; 16] = [0.0; 16]
+  var sa = outer_reset_at.init(8.0)
+  var sb = outer_reset.init(8.0)
+  outer_reset_at.process(inout sa, outer_reset_at.In { c: CS, r: r }, inout oa)
+  outer_reset.process(inout sb, outer_reset.In { c: CS, r: r }, inout ob)
+  let want: [F32; 16] = [1.0, 2.0, 2.0, 2.0, 2.0, 2.0, 3.0, 3.0, 3.0, 3.0, 3.0, 4.0, 4.0, 5.0, 0.0, 0.0]
+  assert oa == want
+  assert ob == want
+}
+
+test "a block of 4: the grid of the part counts 4 runs a tick, the ticks are the runs 0 and 4 (the frames 0 and 6) and the time kept at the frame 6 is 4, so the second tick does not run" {
+  // The tick 0 reads the time 0 (true) and runs `cnt` 4 times: 1 2 3 4 are dealt to the frames that run, 0 1 2 4; the tick of the run 4 (the frame 6) reads the time kept at the last tick of `sample / 4`, the frame 4: 4 % 3 is 1,
+  // false, so the runs 4 .. 7 hold 4. The frames that are stopped hold: 1 2 3 3 4 4 4 4 4 4 4 4 4 4 4 4.
+  var oa: [F32; 16] = [0.0; 16]
+  var ob: [F32; 16] = [0.0; 16]
+  var sa = n4_at.init(8.0)
+  var sb = n4.init(8.0)
+  n4_at.process(inout sa, CS, inout oa)
+  n4.process(inout sb, CS, inout ob)
+  let want: [F32; 16] = [1.0, 2.0, 3.0, 3.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0]
+  assert oa == want
+  assert ob == want
+}
+
+test "a block inside a block reads the same time: the outer pair and the inner block tick together every 2 runs, so the vector is V" {
+  var oa: [F32; 16] = [0.0; 16]
+  var ob: [F32; 16] = [0.0; 16]
+  var sa = nested_at.init(8.0)
+  var sb = nested.init(8.0)
+  nested_at.process(inout sa, CS, inout oa)
+  nested.process(inout sb, CS, inout ob)
+  assert oa == V
+  assert ob == V
+}
+
+test "a condition gathered by a boundary slower than W writes the time kept at the last tick of the body that wrote it into the ring, at the frame of the run where it is gathered" {
+  // The frames that run are 0 2 3 4 6 7 8 9 11 12 14 15 (the frames 1 5 10 13 are stopped), so the runs i = 0 .. 11 are at those frames, and the ticks of `sample / 2` of the part are the even runs, at the frames 0 3 6 8 11 14.
+  // The time kept there (the body's grid ticks at the even frames) is 0 2 6 8 10 14: the condition `% 3 == 0` is T F T F F F. The boundary of the `.down~(4)` ticks at the runs 0 4 8: the tick of the run 0 gathers the defaults
+  // (false false: the part is stopped, and holds 0), the run 4 gathers the entries of the runs 0 and 2 (T F): the 2 runs of the `.up~(2)` outside the modifier read T then F, so `cnt` runs twice (1 2) and then holds (2 2), the
+  // 4 outputs 1 2 2 2 are dealt to the runs 4 .. 7; the run 8 gathers the entries of the runs 4 and 6 (T F): cnt runs 3 4 and holds 4 4: 3 4 4 4 to the runs 8 .. 11. So the outputs of the runs 0 .. 11 are 0 0 0 0 | 1 2 2 2 | 3 4 4 4 at
+  // the frames 0 2 3 4 | 6 7 8 9 | 11 12 14 15, and the stopped frames hold: 0 0 0 0 0 0 1 2 2 2 2 3 4 4 4 4.
+  let cs: [Bool; 16] = [true, false, true, true, true, false, true, true, true, true, false, true, true, false, true, true]
+  var oa: [F32; 16] = [0.0; 16]
+  var ob: [F32; 16] = [0.0; 16]
+  var sa = ring_at.init(8.0)
+  var sb = ring.init(8.0)
+  ring_at.process(inout sa, cs, inout oa)
+  ring.process(inout sb, cs, inout ob)
+  let want: [F32; 16] = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 2.0, 2.0, 2.0, 2.0, 3.0, 4.0, 4.0, 4.0, 4.0]
+  assert oa == want
+  assert ob == want
+}
+
+test "a condition that mixes the time with an init value, an rt fn and an if is the time alone: V" {
+  // `sample_rate()` is 8 (init), `third` is `% 3 == 0`, and `cb` is true in the call: each is the time condition of V, read at the same tick.
+  var o1: [F32; 16] = [0.0; 16]
+  var o2: [F32; 16] = [0.0; 16]
+  var o3: [F32; 16] = [0.0; 16]
+  var s1 = mixed_init.init(8.0)
+  var s2 = mixed_rt.init(8.0)
+  var s3 = mixed_if.init(8.0)
+  mixed_init.process(inout s1, CS, inout o1)
+  mixed_rt.process(inout s2, CS, inout o2)
+  mixed_if.process(inout s3, mixed_if.Params { cb: true }, CS, inout o3)
+  assert o1 == V
+  assert o2 == V
+  assert o3 == V
+}
+
+test "a block value mixed with the time is a value of the grid too: the call that is cut at the frame 13, where cb turns false, still has the cb of the last tick (the frame 12) at the tick 13" {
+  // The grid of `sample / 2` of the body ticks at the even frames and writes `cb && time % 3 == 0` there: the frame 12 wrote true && true. `process` is cut at the frame 13 (the first call runs the frames 0 .. 12 with cb true, the second
+  // the frames 13 .. 15 with cb false), and the tick of the part at the frame 13 reads the kept value, true: it runs `cnt` at the frames 13 and 14, 5 6, the frame 15 holds. Read at the run (cb false) it would hold 4: V is 1 2 2 2 2 2 3 3 3 3 3 4 4 | 5 6 6.
+  let first: [Bool; 13] = [true, true, true, false, true, false, true, false, false, false, false, true, false]
+  let second: [Bool; 3] = [true, true, false]
+  var a1: [F32; 13] = [0.0; 13]
+  var a2: [F32; 3] = [0.0; 3]
+  var b1: [F32; 13] = [0.0; 13]
+  var b2: [F32; 3] = [0.0; 3]
+  var sa = mixed_block_at.init(8.0)
+  var sb = mixed_block.init(8.0)
+  mixed_block_at.process(inout sa, mixed_block_at.Params { cb: true }, first, inout a1)
+  mixed_block_at.process(inout sa, mixed_block_at.Params { cb: false }, second, inout a2)
+  mixed_block.process(inout sb, mixed_block.Params { cb: true }, first, inout b1)
+  mixed_block.process(inout sb, mixed_block.Params { cb: false }, second, inout b2)
+  assert a1 == [1.0, 2.0, 2.0, 2.0, 2.0, 2.0, 3.0, 3.0, 3.0, 3.0, 3.0, 4.0, 4.0]
+  assert a2 == [5.0, 6.0, 6.0]
+  assert b1 == [1.0, 2.0, 2.0, 2.0, 2.0, 2.0, 3.0, 3.0, 3.0, 3.0, 3.0, 4.0, 4.0]
+  assert b2 == [5.0, 6.0, 6.0]
+}
+
+test "a flow that holds the block is stopped from outside: the grid of the body that wrote the condition counts the frames that the body ran, and the tick at the odd run reads the time of the run before it" {
+  // `top` runs `fa` on the frames of d = CS (0 1 2 4 6 11 13 14, the runs i = 0 .. 7). Inside `fa`, c is false at the runs 1 and 6 (the frames 1 and 13), so the part of the block runs at the runs 0 2 3 4 5 7 and ticks at the 0th, 2nd, 4th
+  // of them: the runs 0, 3 and 5. `sample_tick()` in `fa` is the time of `top` (a part under `when~` reads the outer time, §11.4), and the grid of `sample / 2` of `fa` ticks at its even runs, 0 2 4 6 at the frames 0 2 6 13, where the time
+  // kept is 0 2 6 13. The ticks of the block read the time kept at the last tick of that grid: the run 0 reads 0 (true), the run 3 reads the run 2's time 2 (false), the run 5 reads the run 4's time 6 (true). So `cnt` runs at the first
+  // tick (1 2), holds at the second (2 2), and runs at the third (3 4): the outputs of the 6 runs of the block are 1 2 2 2 3 4, and the runs of `fa` (the run 1 and the run 6 hold) are 1 1 2 2 2 3 3 4. `top` holds them at the frames that
+  // `d` stops: 1 1 2 2 2 2 2 2 2 2 2 3 3 3 4 4.
+  let c: [Bool; 16] = [true, false, true, false, true, false, true, false, false, false, false, true, false, false, true, false]
+  var oa: [F32; 16] = [0.0; 16]
+  var ob: [F32; 16] = [0.0; 16]
+  var sa = top.init(8.0)
+  var sb = top_at.init(8.0)
+  top.process(inout sa, top.In { c: c, d: CS }, inout oa)
+  top_at.process(inout sb, top_at.In { c: c, d: CS }, inout ob)
+  let want: [F32; 16] = [1.0, 1.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 3.0, 3.0, 3.0, 4.0, 4.0]
+  assert ob == want
+  assert oa == want
+}
+
+test "the time since a start in a block that is stopped from outside: the tick at the frame 13 reads the time 12, so a note of 13 frames from 0 is still on and one from 2 for 11 is on" {
+  // `sample_tick() -% t0 < len` at the ticks that read the time 0 2 6 12. With t0 = 0 and len = 13 all four ticks are on: cnt runs 8 times, 1 2 3 4 5 6 7 8 at the frames 0 1 2 4 6 11 13 14 and the other frames hold: 1 2 3 3 4 4 5 5 5 5 5 6 6 7 8 8.
+  // With t0 = 2 and len = 11 the first tick is off (0 - 2 wraps) and the other three are on (0, 4 and 10 are less than 11): the tick 2 runs 1 2, the tick 6 runs 3 4, the tick 13 runs 5 6: 0 0 1 1 2 2 3 3 3 3 3 4 4 5 6 6.
+  var oa: [F32; 16] = [0.0; 16]
+  var ob: [F32; 16] = [0.0; 16]
+  var oc: [F32; 16] = [0.0; 16]
+  var od: [F32; 16] = [0.0; 16]
+  var sa = note_at.init(8.0)
+  var sb = note_direct.init(8.0)
+  var sc = note_at.init(8.0)
+  var sd = note_direct.init(8.0)
+  note_at.process(inout sa, note_at.Params { t0: 0, len: 13 }, CS, inout oa)
+  note_direct.process(inout sb, note_direct.Params { t0: 0, len: 13 }, CS, inout ob)
+  note_at.process(inout sc, note_at.Params { t0: 2, len: 11 }, CS, inout oc)
+  note_direct.process(inout sd, note_direct.Params { t0: 2, len: 11 }, CS, inout od)
+  let w0: [F32; 16] = [1.0, 2.0, 3.0, 3.0, 4.0, 4.0, 5.0, 5.0, 5.0, 5.0, 5.0, 6.0, 6.0, 7.0, 8.0, 8.0]
+  let w2: [F32; 16] = [0.0, 0.0, 1.0, 1.0, 2.0, 2.0, 3.0, 3.0, 3.0, 3.0, 3.0, 4.0, 4.0, 5.0, 6.0, 6.0]
+  assert oa == w0
+  assert ob == w0
+  assert oc == w2
+  assert od == w2
+}

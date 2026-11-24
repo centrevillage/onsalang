@@ -1,0 +1,159 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.4", "§11.3", "§11.9", "§11.10"]
+
+// The forms where a `sample_tick()` alone in the condition of a modifier reads the time of the frame of the tick, which S-1230 (G) does not change (W7-10 S1230/t; sample_tick_condition_grid_values.onsa has the forms that it changes). §11.4:
+// the time is "`reset` からの時間を、書いた場所の `sample_rate()` の刻みの数で表したもの" and "`when~` の中は外と同じ（止まっている間も進む）", and a condition that reads W "で、書いた本体の刻み" is the same as the one with the `at` of W (§11.3). So the time
+// is the frame itself where (1) the condition is written inside the part that a `when~` outside stops (the body that wrote it is the part: its tick is the tick of the part, at the frame it is, and `sample_tick()` there is the time of the
+// caller), (2) W is `sample` (the body that wrote it ticks at each frame and the part's tick is at a frame that ran), (3) W is `sample * N` (read as `sample`, §11.4), (4) no `when~` stops the part (its ticks are the ticks of the body),
+// (5) the condition is a head argument (the clock of the port, `sample`), and (6) the time is named with its `at` (`let t2 = sample_tick() at (sample / 2)`, which is (G) written out). Every vector is worked out by hand from the rules of the
+// values file (cs = 1 1 1 0 1 0 1 0 0 0 0 1 0 1 1 0, the frames that run are 0 1 2 4 6 11 13 14, the ticks of a part with `.up~(2)` ... `.down~(2)` are its runs 0 2 4 6, the frames 0 2 6 13).
+
+flow cnt() -> F32 at sample {
+  let n = prev~(^n) + 1.0
+  n
+}
+
+flow g2(x: F32 at (sample * 2)) -> F32 at sample {
+  x[0] + x[1] * 10.0
+}
+
+flow t_in(t: U32 at sample) -> F32 at sample {
+  F32.round_from(t)
+}
+
+// (1) The condition is written inside the part: `sample_tick()` is the time of the caller at the frame of the tick.
+flow gate_part() -> F32 at sample {
+  cnt~().up~(2).when~(sample_tick() % 3 == 0).down~(2)
+}
+
+flow reset_part() -> F32 at sample {
+  cnt~().up~(2).reset_if~(sample_tick() % 3 == 0).down~(2)
+}
+
+flow note_part(t0: U32 at block, len: U32 at block) -> F32 at sample {
+  cnt~().up~(2).when~(sample_tick() -% t0 < len).down~(2)
+}
+
+pub flow gate_inside(c: Bool at sample) -> F32 at sample {
+  gate_part~().when~(c)
+}
+
+pub flow reset_inside(c: Bool at sample) -> F32 at sample {
+  reset_part~().when~(c)
+}
+
+pub flow note_inside(c: Bool at sample, t0: U32 at block, len: U32 at block) -> F32 at sample {
+  note_part~(t0, len).when~(c)
+}
+
+// (2) W is `sample`: no block, the condition is read at each frame that runs.
+pub flow when_at_sample(c: Bool at sample) -> F32 at sample {
+  cnt~().when~(sample_tick() % 3 == 0).when~(c)
+}
+
+pub flow reset_at_sample(c: Bool at sample) -> F32 at sample {
+  cnt~().reset_if~(sample_tick() % 3 == 0).when~(c)
+}
+
+// (3) W is `sample * 2`: the part is a burst that a conversion flow takes, the condition is read once a frame (as a value of `sample`).
+pub flow when_burst() -> F32 at sample {
+  g2~(cnt~().up~(2).when~(sample_tick() % 3 == 0))
+}
+
+pub flow reset_burst() -> F32 at sample {
+  g2~(cnt~().up~(2).reset_if~(sample_tick() % 3 == 0))
+}
+
+// (4) No `when~` outside: the ticks of the part are the ticks of the body.
+pub flow no_stop() -> F32 at sample {
+  cnt~().up~(2).when~(sample_tick() % 3 == 0).down~(2)
+}
+
+// (5) The time is the argument of the head: read at the clock of the port, `sample`, at each frame (the part reads the value of the frame that it runs at).
+pub flow head_argument(c: Bool at sample) -> F32 at sample {
+  t_in~(sample_tick()).when~(c)
+}
+
+// (6) The time named with the `at` of W, as a `let` of `sample / 2`.
+pub flow named_time(c: Bool at sample) -> F32 at sample {
+  let t2 = sample_tick() at (sample / 2)
+  cnt~().up~(2).when~(t2 % 3 == 0).down~(2).when~(c)
+}
+
+const CS: [Bool; 16] = [true, true, true, false, true, false, true, false, false, false, false, true, false, true, true, false]
+
+test "a when~ written inside the part reads the time of the frame of its tick: the ticks at 0 2 6 13 read 0 2 6 13, true at 0 and 6 and false at 13" {
+  // The ticks of the part give the runs 1 2 (frames 0 1), none (the tick at the frame 2 holds 2 at the frames 2 and 4), 3 4 (frames 6 and 11), none (the tick at the frame 13 holds 4 at the frames 13 and 14): 1 2 2 2 2 2 3 3 3 3 3 4 4 4 4 4.
+  var out: [F32; 16] = [0.0; 16]
+  var st = gate_inside.init(8.0)
+  gate_inside.process(inout st, CS, inout out)
+  assert out == [1.0, 2.0, 2.0, 2.0, 2.0, 2.0, 3.0, 3.0, 3.0, 3.0, 3.0, 4.0, 4.0, 4.0, 4.0, 4.0]
+}
+
+test "a reset_if~ written inside the part reads the same time: the part is put back at the ticks 0 and 6, not at 13" {
+  // The ticks: the tick 0 gives 1 2, the tick 2 (no reset) 3 4 at the frames 2 and 4, the tick 6 puts `cnt` back and gives 1 2 at the frames 6 and 11, the tick 13 (the time 13) gives 3 4: 1 2 3 3 4 4 1 1 1 1 1 2 2 3 4 4.
+  var out: [F32; 16] = [0.0; 16]
+  var st = reset_inside.init(8.0)
+  reset_inside.process(inout st, CS, inout out)
+  assert out == [1.0, 2.0, 3.0, 3.0, 4.0, 4.0, 1.0, 1.0, 1.0, 1.0, 1.0, 2.0, 2.0, 3.0, 4.0, 4.0]
+}
+
+test "the time since a start written inside the part is the time of the frame: a note of 13 frames from 0 is off at the tick 13" {
+  // `sample_tick() -% t0 < len` reads 0 2 6 13 at the ticks: with t0 = 0 and len = 13 the first three are on and the tick 13 is off (13 is not less than 13): 1 2 3 3 4 4 5 5 5 5 5 6 6 6 6 6.
+  var out: [F32; 16] = [0.0; 16]
+  var st = note_inside.init(8.0)
+  note_inside.process(inout st, note_inside.Params { t0: 0, len: 13 }, CS, inout out)
+  assert out == [1.0, 2.0, 3.0, 3.0, 4.0, 4.0, 5.0, 5.0, 5.0, 5.0, 5.0, 6.0, 6.0, 6.0, 6.0, 6.0]
+}
+
+test "a modifier at W = sample reads the time of the frame: a when~ runs on the frames that run whose time is a multiple of 3, and a reset_if~ puts back there" {
+  // The frames that run are 0 1 2 4 6 11 13 14 and the time is true at 0 and 6: `cnt` runs at those frames only, 1 at the frame 0 and 2 at the frame 6: 1 1 1 1 1 1 2 2 2 2 2 2 2 2 2 2.
+  // The `reset_if~` puts `cnt` back at the frames that run with the time a multiple of 3 (0 and 6): the runs 1 2 3 4 at 0 1 2 4, 1 at 6, 2 3 4 at 11 13 14, held at the frames that are stopped: 1 2 3 3 4 4 1 1 1 1 1 2 2 3 4 4.
+  var a: [F32; 16] = [0.0; 16]
+  var b: [F32; 16] = [0.0; 16]
+  var sa = when_at_sample.init(8.0)
+  var sb = reset_at_sample.init(8.0)
+  when_at_sample.process(inout sa, CS, inout a)
+  reset_at_sample.process(inout sb, CS, inout b)
+  assert a == [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0]
+  assert b == [1.0, 2.0, 3.0, 3.0, 4.0, 4.0, 1.0, 1.0, 1.0, 1.0, 1.0, 2.0, 2.0, 3.0, 4.0, 4.0]
+}
+
+test "a burst read at W = sample * 2 takes the condition as a value of the body's sample: the time of the frame, true at 0 3 6 9 12 15" {
+  // The frame t runs `cnt` twice when t % 3 == 0 (the elements n, n + 1) and holds the last output twice when it is not. g2 is x[0] + 10 x[1]: the frame 0 gives 1 + 20, the frames 1 2 hold 2 and 2: 22 22, the frame 3 gives 3 + 40 and so on:
+  // 21 22 22 43 44 44 65 66 66 87 88 88 109 110 110 131. With a `reset_if~` the part is put back at those frames, the frame 3 starts from 0 again: 21 43 65 21 43 65 ... and the frame 15 gives 21.
+  var a: [F32; 16] = [0.0; 16]
+  var b: [F32; 16] = [0.0; 16]
+  var sa = when_burst.init(8.0)
+  var sb = reset_burst.init(8.0)
+  when_burst.process(inout sa, inout a)
+  reset_burst.process(inout sb, inout b)
+  assert a == [21.0, 22.0, 22.0, 43.0, 44.0, 44.0, 65.0, 66.0, 66.0, 87.0, 88.0, 88.0, 109.0, 110.0, 110.0, 131.0]
+  assert b == [21.0, 43.0, 65.0, 21.0, 43.0, 65.0, 21.0, 43.0, 65.0, 21.0, 43.0, 65.0, 21.0, 43.0, 65.0, 21.0]
+}
+
+test "no when~ outside the block: the ticks are the even frames and the time kept is the time of the frame: 1 2 2 2 2 2 3 4 4 4 4 4 5 6 6 6" {
+  // The ticks at the frames 0 2 4 ... 14 read the times 0 2 4 ... 14, true at 0 6 12: the tick 0 runs 1 2, the ticks 2 and 4 hold, the tick 6 runs 3 4, the ticks 8 and 10 hold, the tick 12 runs 5 6, the tick 14 holds.
+  var out: [F32; 16] = [0.0; 16]
+  var st = no_stop.init(8.0)
+  no_stop.process(inout st, inout out)
+  assert out == [1.0, 2.0, 2.0, 2.0, 2.0, 2.0, 3.0, 4.0, 4.0, 4.0, 4.0, 4.0, 5.0, 6.0, 6.0, 6.0]
+}
+
+test "the time as the argument of the head is the time of the frame that runs: the part holds at the frames that are stopped" {
+  // `t_in` gives the time of the frame at the frames that run (0 1 2 4 6 11 13 14), and holds it where `c` stops the part: 0 1 2 2 4 4 6 6 6 6 6 11 11 13 14 14.
+  var out: [F32; 16] = [0.0; 16]
+  var st = head_argument.init(8.0)
+  head_argument.process(inout st, CS, inout out)
+  assert out == [0.0, 1.0, 2.0, 2.0, 4.0, 4.0, 6.0, 6.0, 6.0, 6.0, 6.0, 11.0, 11.0, 13.0, 14.0, 14.0]
+}
+
+test "the time named with the at of its clock is the value that the condition without a name has: V of the values file" {
+  // The `let t2 = sample_tick() at (sample / 2)` keeps the time at the last tick of its grid (0 2 6 12 at the ticks of the part, T F T T): 1 2 2 2 2 2 3 3 3 3 3 4 4 5 6 6.
+  var out: [F32; 16] = [0.0; 16]
+  var st = named_time.init(8.0)
+  named_time.process(inout st, CS, inout out)
+  assert out == [1.0, 2.0, 2.0, 2.0, 2.0, 2.0, 3.0, 3.0, 3.0, 3.0, 3.0, 4.0, 4.0, 5.0, 6.0, 6.0]
+}

@@ -78,6 +78,7 @@ rt fn resonator.process(inout s, params, input: Span[F32], inout output: Span[F3
   - `Op::Hold` は、束でない部分の保持した出力 `Part::Held` を出す。束では、動いた刻みの配列の最後の要素を保って N 回読む（S-1222）。
   - `Op::Reset { at }` は `reset_if~` で、条件の刻み R の段の仕事の並びの先頭に置く（S-1228 の (P)）。刻み R は `PlanModifier::reset`、条件のポートは `PlanModifier::port`（書き手は歩きの一か所）。
     Core は、頭を `<flow>._reset_kept`（`phases::ensure_reset_kept`、`reset_node` の `Keep::Kept`。`reset` からカウンタ・`_poisoned`・守りの条件と数を除いたもので、使うときだけ作る）で戻し、内の輪・配る配列・保持を `T.default()` に戻す。
+  - 条件の `sample_tick()` だけの式は、W の `at` を付けた式と同じに扱う（S-1230。`guard_cond` の `ArgRead::at` が W、`settle` が根を W に落とし、外の `when~` で読む段が速くなる所だけ `Choose::place` が W の段の隠れた欄に置く）。
   - 境界の内に書いた条件は頭の入力と同じに集める（`Port::Cond`、`bounds::cond_ring`）。欄は `Part::On`・`Count`・`Held` と、`when~` で止まる遅延の `Part::Ran`（名前と並びは S-1220 の仮、`plan/names.rs`）。
   - 組込みの遅延の受け手は `Ports::delay`（P = W = 第 1 引数のクロック K）で、表は段 K 一つ。保存は `store_node` が `Part::Ran` で守り、止まっている間も保存する値と `vdelay~` の `d` は評価する。
   - 修飾子の門（`ModifierChain::gate`・`check::gated`・`Feature::InstanceModifiers`）は無い。修飾子で E0200 にするのは `Feature::ResetTicksPastU32`（S-1225）だけで、イベントのクロックの条件の枝は内部エラー（W7-11 が書き直す）。

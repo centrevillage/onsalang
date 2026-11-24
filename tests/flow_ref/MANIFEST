@@ -127,8 +127,9 @@ file reset_if_values.tsv rows=99 tests=12 evaluated=11 unavailable=0 skipped=1 w
 file reset_replay.tsv rows=58 tests=9 evaluated=9 unavailable=0 skipped=0 waiting=0
 file reset_ring_order_s1226.tsv rows=2 tests=1 evaluated=0 unavailable=0 skipped=1 waiting=0
 file sample_tick_at_a_slower_tick_values.tsv rows=59 tests=10 evaluated=10 unavailable=0 skipped=0 waiting=0
-file sample_tick_block_modifier_f2.tsv rows=9 tests=2 evaluated=2 unavailable=0 skipped=0 waiting=0
 file sample_tick_child_values.tsv rows=73 tests=11 evaluated=11 unavailable=0 skipped=0 waiting=0
+file sample_tick_condition_grid_same.tsv rows=39 tests=8 evaluated=8 unavailable=0 skipped=0 waiting=0
+file sample_tick_condition_grid_values.tsv rows=79 tests=11 evaluated=8 unavailable=0 skipped=3 waiting=0
 file sample_tick_explicit_burst_values.tsv rows=31 tests=4 evaluated=4 unavailable=0 skipped=0 waiting=0
 file sample_tick_time_only_values.tsv rows=51 tests=5 evaluated=5 unavailable=0 skipped=0 waiting=0
 file sample_tick_values.tsv rows=54 tests=10 evaluated=10 unavailable=0 skipped=0 waiting=0
@@ -163,4 +164,4 @@ file when_identity_regressions.tsv rows=78 tests=5 evaluated=5 unavailable=0 ski
 file when_slow_head_values.tsv rows=47 tests=5 evaluated=5 unavailable=0 skipped=0 waiting=0
 file when_slow_values.tsv rows=86 tests=9 evaluated=9 unavailable=0 skipped=0 waiting=0
 file when_values.tsv rows=77 tests=10 evaluated=10 unavailable=0 skipped=0 waiting=0
-total files=164 rows=5585 tests=1170 evaluated=1049 unavailable=1 skipped=120 waiting=6
+total files=165 rows=5694 tests=1187 evaluated=1063 unavailable=1 skipped=123 waiting=6

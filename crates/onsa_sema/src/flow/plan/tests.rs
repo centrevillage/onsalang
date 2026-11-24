@@ -5,7 +5,7 @@
 
 use super::Vertex::{Let, Local, Node, Output};
 use super::{Edge, NodeId, Owner, PlanKind};
-use crate::clock::Clock;
+use crate::clock::{Clock, ClockStage, Ratio};
 use crate::flow::FlowInfo;
 use crate::tests::check;
 use crate::{Analysis, DefId};
@@ -1575,6 +1575,9 @@ flow h2(c: Bool at sample) -> Bool at (sample / 2) { pk2~(c).down~(2) }
         "cnt~().when~(p at sample).up~(2).down~(2)",
         "cnt~().reset_if~(p at sample).up~(2).down~(2)",
         "cnt~().reset_if~(p at (sample / 2)).up~(4).down~(4)",
+        "cnt~().up~(2).when~(sample_tick() % 3 == 0).down~(2).when~(c)",
+        "cnt~().up~(2).reset_if~(sample_tick() % 3 == 0).down~(2).when~(c)",
+        "cnt~().up~(2).when~(sample_tick() % 3 == 0).down~(2).up~(2).down~(2).when~(c)",
     ];
     let mut src = heads.to_string();
     for (k, ch) in chains.iter().enumerate() {
@@ -1615,6 +1618,56 @@ flow h2(c: Bool at sample) -> Bool at (sample / 2) { pk2~(c).down~(2) }
         }
     }
     assert!(seen.0 > 10 && seen.1 > seen.0, "{seen:?}");
+}
+
+/// §11.4, S-1230: a condition of `sample_tick()` alone is of its clock W of
+/// the caller, as with the `at` of W: where the stage that reads it is
+/// faster (moved by a `.when~` outside), in a field written at W, else with
+/// no field; a value of the parameter kinds in it too.
+#[test]
+fn a_condition_of_sample_tick_alone_is_kept_at_the_tick_of_w() {
+    let head = "flow cnt() -> F32 at sample {\n  let n = prev~(^n) + 1.0\n  n\n}\n";
+    // The chain with the modifier as `M`, its W as a power of two of `sample`, and whether it has a field.
+    let rows = [
+        ("cnt~().up~(2).M.down~(2).when~(c)", -1, true),
+        ("cnt~().up~(4).M.down~(4).when~(c)", -2, true),
+        ("cnt~().up~(2).M.down~(2).when~(p).when~(c)", -1, true),
+        ("cnt~().up~(2).M.down~(2).up~(2).down~(2).when~(c)", -1, true),
+        ("cnt~().up~(2).M.up~(2).down~(4).when~(c)", -1, true),
+        ("cnt~().up~(2).M.down~(2)", -1, false),
+        ("cnt~().up~(2).M.down~(2).reset_if~(c)", -1, false),
+        ("cnt~().up~(2).down~(2).M.when~(c)", 0, false),
+        ("cnt~().M.up~(2).down~(2).when~(c)", 0, false),
+    ];
+    let conds = [
+        ("sample_tick() % 3 == 0", "(sample_tick() at W) % 3 == 0"),
+        ("p && sample_tick() % 3 == 0", "(p && sample_tick() % 3 == 0) at W"),
+    ];
+    for (chain, w, kept) in rows {
+        for m in ["when~", "reset_if~"] {
+            for (bare, at) in conds {
+                let at = at.replace('W', &format!("(sample / {})", 1 << -w)).replace("(sample / 1)", "sample");
+                let seen = [bare.to_string(), at].map(|cond| {
+                    let chain = chain.replace('M', &format!("{m}({cond})"));
+                    let src = format!("{head}pub flow t(p: Bool at block, c: Bool at sample) -> F32 at sample {{\n  let u = if p && c {{ 1.0 }} else {{ 0.0 }}\n  u + {chain}\n}}\n");
+                    let a = check(&src);
+                    assert!(a.diagnostics.is_empty(), "{chain}: {:?}", a.diagnostics);
+                    let f = flow(&a, "t");
+                    let n = f.nodes.iter().find(|n| n.chain.len() > 1).unwrap_or_else(|| panic!("{chain}"));
+                    let reads: Vec<_> = n.args.iter().map(|r| (r.at, r.stage)).collect();
+                    let clocks: Vec<_> = n.chain.iter().map(|m| m.cond.and_then(|c| f.clocks.stage(c))).collect();
+                    let hoists: Vec<_> = f.hoists.iter().map(|h| (h.stage, h.path.clone())).collect();
+                    (reads, clocks, hoists, n.entries.clone(), n.chain.iter().map(|m| m.port).collect::<Vec<_>>())
+                });
+                let (_, clocks, hoists, ..) = &seen[0];
+                let place = chain.split('.').skip(1).position(|x| x == "M").expect("M");
+                assert_eq!(clocks[place], Some(Clock::Tick(Ratio(w))), "{chain} {m} {bare}: {clocks:?}");
+                let field = hoists.iter().any(|h| h.0 == ClockStage::Tick(Ratio(w)));
+                assert_eq!(field, kept, "{chain} {m} {bare}: {hoists:?}");
+                assert_eq!(format!("{:?}", seen[0]), format!("{:?}", seen[1]), "{chain} {m} {bare}");
+            }
+        }
+    }
 }
 
 /// §11.3: a value of the parameter kinds alone `at` a tick (through a `let`

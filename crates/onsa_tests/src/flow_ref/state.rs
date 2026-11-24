@@ -551,13 +551,20 @@ impl<'a> Frame<'a> {
 
     /// The fields of the instance at `key` and of those it calls that a tick slower than `sample` writes and a faster stage reads, at `T.default()` (§11.10, §11.3: its `let`s and inputs of such a tick, the parts of its
     /// body that such a stage made, and its output where its caller reads it between its ticks), for `reset_if~`. A type with no default is not read by a faster stage (E0816), so its field is left as it is.
-    /// `fed` is for an instance whose caller is in the part too: what it keeps of its caller's values of a tick (`Inst::fed`, which a `when~` reads in its W) is that caller's field, and goes back with it.
+    /// `fed` is for an instance whose caller is in the part too: what it keeps of its caller's values of a tick (`Inst::fed`, which a `when~` reads in its W, and the conditions of its chain) is that caller's field, and goes back with it.
     pub(super) fn restart(&mut self, key: &NodeKey, fed: bool) -> Result<(), Stop> {
         self.in_child(key, |f, inst, decl| {
             let at = f.body.ast.expr(decl.body).span;
             let here = |fault| Stop { fault, at };
             let slow = |c: Clock| matches!(c.rooted(), Clock::Tick(r) if r < 0);
-            let top = inst.levels.last().ok_or(here(Internal("an instance with no parts")))?;
+            let levels = inst.levels.clone();
+            let top = levels.last().ok_or(here(Internal("an instance with no parts")))?;
+            for (g, gate) in levels.iter().map(|l| l.guard).zip(&mut inst.whens) {
+                if let (true, Some(g), Some(gate)) = (fed, g.filter(|g| g.at < 0), gate) {
+                    gate.cond = Value::Bool(false);
+                    g.port.into_iter().for_each(|n| inst.fed[n] = Value::Bool(false));
+                }
+            }
             for (n, i) in decl.inputs.iter().enumerate() {
                 let mine = matches!(input_stage(i).map_err(here)?, Stage::Tick(r) if r < 0);
                 let theirs = fed && top.ins[n].is_some_and(|q| q < 0) && !top.gathers.contains(&n);

@@ -11,9 +11,7 @@ use onsa_syntax::ast::ExprId;
 
 use super::expr::{Eval, Frame, LOW_STACK, Stop};
 use super::flow::{Ctx, Inst, enter};
-use super::rate::{
-    Guard, Level, counted, dealt, elements, n_of, on_tick, phase, port_exprs, port_stage, slice, time_of,
-};
+use super::rate::{Guard, Level, counted, dealt, elements, n_of, on_tick, phase, port_exprs, slice, time_of};
 use super::scalar::{Fault, Fault::Internal};
 use super::sema_view::{Called, Stage, input_stage};
 use super::state::{NodeKey, Role, Store};
@@ -26,7 +24,7 @@ const NO_GATE: &str = "a `when~` with no state";
 /// the condition and whether its part is `due` to be put back (`Frame::cut`). A chain on a delay keeps the same (`delay_mods.rs`).
 #[derive(Clone, Debug)]
 pub(super) struct Gate {
-    cond: Value,
+    pub(super) cond: Value,
     on: bool,
     due: bool,
     pub(super) runs: u64,
@@ -106,14 +104,14 @@ impl<'a> Frame<'a> {
     }
 
     /// The arguments of the ports of the head that this frame reads at the stage `sx` of this one (the inputs of the head and the conditions a boundary gathers, `rate::port_exprs`): those the last boundary does not gather, at
-    /// the clock `q` they have in the call (at the stage `rate::port_stage`: `q`, `sample` for `q > 0`, S-1131: the bindings of an arm they read are those of the stage). A burst is `2^q` values for `q > 0` (a value of the parameter kinds is each of them).
+    /// the clock `q` they have in the call (at its stage, `sample` for `q > 0`, S-1131: the bindings of an arm they read are those of the stage). A burst is `2^q` values for `q > 0` (a value of the parameter kinds is each of them).
     fn feed(&mut self, key: &NodeKey, decl: &'a FlowDef, levels: &[Level], sx: i32) -> Result<(), Stop> {
         let at = self.body.ast.expr(key.call).span;
         let here = |fault| Stop { fault, at };
         let top = &levels[levels.len() - 1];
         let args = port_exprs(self.args_of_call(key.call, decl)?.iter().map(|a| a.expr), levels);
         for (n, a) in args.into_iter().enumerate() {
-            let Some(q) = top.ins[n].filter(|q| port_stage(levels, n, *q) == sx && !top.gathers.contains(&n)) else {
+            let Some(q) = top.ins[n].filter(|q| (*q).min(0) == sx && !top.gathers.contains(&n)) else {
                 continue;
             };
             let v = match self.eval_staged(key.call, a, Stage::Tick(sx))? {
@@ -227,7 +225,7 @@ impl<'a> Frame<'a> {
         Ok(())
     }
 
-    /// The condition of each `when~` and `reset_if~` of the chain at `key` that is read in the stage `sx` of this one (`Guard::at`, §11.10: at its W or its tick, where the arguments of the head of that clock are read), but one that
+    /// The condition of each `when~` and `reset_if~` of the chain at `key` that is read in the stage `sx` of this one (`Guard::at`, §11.10: at its clock, where the arguments of the head of that clock are read, or at its W), but one that
     /// a boundary gathers, which its part reads from its port (`cond_of`). Those of one stage are read outermost first.
     // SPEC-GAP(S-1221): the condition of a `when~` or `reset_if~` inside a `when~` is read at its W or tick whether or not the outer one runs the part (provisional, as the arguments of the head are; only a panic shows it), and
     // the conditions of a stage outermost first (the order the spec does not say either).

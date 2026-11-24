@@ -49,6 +49,10 @@ mod twin_reset;
 mod twin_reset_tests;
 #[path = "flow_ref/twin_tests.rs"]
 mod twin_tests;
+#[path = "flow_ref/twin_time.rs"]
+mod twin_time;
+#[path = "flow_ref/twin_time_tests.rs"]
+mod twin_time_tests;
 #[path = "flow_ref/twin_when.rs"]
 mod twin_when;
 #[path = "flow_ref/twin_when_tests.rs"]

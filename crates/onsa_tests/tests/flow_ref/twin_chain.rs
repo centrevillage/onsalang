@@ -6,7 +6,8 @@
 //! A seed makes a head (`tk`, `acc`, `slot`), a pattern of blocks (none, `.up~(N).down~(N)`, two of them, a block inside a block, a block and the
 //! rate halved and doubled back), 0 to 2 modifiers (`when~`, `reset_if~`) in each place of it, and a condition for each at its clock W: what
 //! `twin_when.rs` and `twin_reset.rs` make, and the time alone, `sample_tick() % 3 == 0` (also for a `when~`, where W is `sample` or slower: a
-//! block that is stopped from outside reads the time of the caller's frame, §11.4, §11.10). The tests are those of `twin_when.rs`, with the
+//! block that is stopped from outside reads the time that the grid of `sample / n` of the body that wrote the condition kept at its last tick, the same
+//! as the condition with the `at` of W, §11.4, §11.3, §11.10, S-1230 (G); `twin_time.rs` holds the twins of that). The tests are those of `twin_when.rs`, with the
 //! chain as `fa` and as `fb` (the same text): `render` on the grid of `ci` and `cb`, and `process` cut at other places with a `reset`.
 
 use std::collections::BTreeSet;
@@ -112,7 +113,9 @@ const F: &str = "false";
 /// The forms that the break side found the evaluator wrong on or that its mutants of the evaluator needed (U3ae, `b_report.md`): the chain, and the
 /// signals and the spans of its tests. A mutant of `cut` that always reads a ring as put back (M10) and one that writes a ring from the raw
 /// input and not the input of the moved time (M16) were caught by a seed of the break side's sweeps only; F2 is a `sample_tick()` of a block
-/// that a `when~` stops, which the evaluator reads as §11.4 says and Core did not (it read the time rounded to the ratio of the block).
+/// that a `when~` stops: the ticks of the part are at the frames 0 2 6 13 and the condition reads the time kept at the last tick of the grid of `sample / 2` of the body that
+/// wrote it, 0 2 6 12 (S-1230 (G); before it, the time of the frame of the tick, 0 2 6 13). The chain is both flows, so what is held is that the evaluator and the
+/// interpreter read it alike, and the values are in `tests/spec/flow_semantics/sample_tick_condition_grid_values.onsa`.
 fn fixed_forms() -> [String; 4] {
     let (f2_cs, spans) = (
         [T, T, T, F, T, F, T, F, F, F, F, T, F, T, T, F].join(", "),

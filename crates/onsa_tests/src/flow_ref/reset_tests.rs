@@ -8,7 +8,7 @@ use super::sema_view::View;
 use super::state_tests::{f32s, same};
 use super::value::Value;
 
-const HEADS: &str = "flow acc(f: F32 at block) -> F32 at sample {
+pub(super) const HEADS: &str = "flow acc(f: F32 at block) -> F32 at sample {
   let n = f + prev~(^n)
   n
 }

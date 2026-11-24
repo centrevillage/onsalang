@@ -12,7 +12,8 @@
 //! the last block) and 0 or 1 of them outside. The condition is a signal, `!c`, a `block` or `init` value, a signal slower than
 //! the clock (`c2`, `c4`), or a `block` value `at sample` or `at (sample / 2)` (a value of a parameter kind with an `at` is read
 //! when the run is made, and not gathered, §11.3; 1b of U3a). No literal and no condition of the time: a literal is not gathered
-//! and a signal is (R2, R3), so the twin of `when~(true)` is not a parameter of `w`.
+//! and a signal is (R2, R3), so the twin of `when~(true)` is not a parameter of `w`. The time alone as a condition is made by `twin_time.rs` (S-1230 (G)): its twins
+//! are the condition with the `at` of its clock and a flow `gp` that holds the part with the condition as its port.
 
 use std::collections::BTreeSet;
 

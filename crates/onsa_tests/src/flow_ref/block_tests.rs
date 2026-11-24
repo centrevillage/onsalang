@@ -2,8 +2,12 @@
 //! a condition faster than the tick of the boundary is gathered as an input of the head is and the run j reads its entry, a value of the parameter kinds (with an `at` too) is read at the run, and a reset due at the
 //! tick of the boundary puts the rings back before the runs (S-1226 (γ)). The values are worked out by hand from the spec, in the comment of each test; `cnt` gives 1 2 3 ... at its runs (`reset_tests::HEADS`).
 
-use super::reset_tests::outs;
-use super::state_tests::same;
+use super::expr_tests::{def_named, with_checked};
+use super::flow::Instance;
+use super::reset_tests::{HEADS, outs};
+use super::sema_view::View;
+use super::state_tests::{f32s, same};
+use super::value::Value;
 
 const MORE: &str =
     "flow g4(x: F32 at (sample * 4)) -> F32 at sample { x[0] + x[1] * 10.0 + x[2] * 100.0 + x[3] * 1000.0 }
@@ -97,37 +101,120 @@ flow top(c: Bool at sample, r: Bool at sample) -> F32 at sample {{ g2~(cb~(c).up
 }
 
 #[test]
-fn a_condition_of_sample_tick_alone_gathered_under_an_outer_when_reads_the_time_its_ring_is_written_at() {
-    // §11.4: `sample_tick()` is the time of the place that reads it; gathered (§11.10), that is where the outer ring is written, which the outer `when~(c)` runs at the frames it ran (c false at 5 and 13: the runs
-    // q = 0 .. 4 at the frames 0 .. 4, 5 .. 11 at 6 .. 12, 12 13 at 14 15; the ring of `sample / 2` is written at q' = 0 2 4 6 8 10, the frames 0 2 4 7 9 11: true false false false true false). The `.down~(4)` ticks
-    // at q = 0 4 8 12 (the frames 0 4 9 14) and deals its 4 runs; its runs 0 and 2 read the ring of q - 4 and q - 2, and a true one runs `cnt` twice (the `.up~(2)`), dealt to the runs j and j + 1, a false one holds
-    // the last value: the tick 0 gives 0 0 0 0, the tick 4 1 2 2 2 (the frame 5 holds 1), the tick 9 2 2 2 2 (the frame 13 holds 2), the tick 14 3 4.
-    let src = format!(
-        "{MORE}flow top(c: Bool at sample) -> F32 at sample {{ cnt~().up~(2).when~(sample_tick() % 3 == 0).down~(2).up~(4).down~(4).when~(c) }}"
-    );
+fn a_condition_of_sample_tick_alone_gathered_under_an_outer_when_is_the_one_with_the_at_of_w() {
+    // S-1230 (G): the time alone is the value the body that wrote it kept at its last tick of W, `sample / 2` (the even frames), also where the outer `when~(c)` runs the ring off that grid: c false at 5 and 13, so the runs
+    // are q = 0 .. 4 at the frames 0 .. 4, 5 .. 11 at 6 .. 12, 12 13 at 14 15, and the ring is written at q' = 0 2 4 6 8 10, the frames 0 2 4 7 9 11, with the times 0 2 4 6 8 10: true false false true false false. The
+    // `.down~(4)` ticks at q = 0 4 8 12 (the frames 0 4 9 14) and deals its 4 runs; its runs 0 and 2 read the ring of q - 4 and q - 2, and a true one runs `cnt` twice (the `.up~(2)`), dealt to the runs j and j + 1, a false
+    // one holds the last value: the tick 0 gives 0 0 0 0, the tick 4 1 2 2 2 (the frame 5 holds 1), the tick 9 2 2 3 4 (the frame 13 holds 4), the tick 14 4 4.
     let mut c = [1; 16];
     (c[5], c[13]) = (0, 0);
-    let want = [0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 3.0, 4.0];
-    same(&outs(&src, "top", None, &[("c", &c)]), &want);
-    // With an `at` it is a value of `sample / 2`, read as a signal is: the ring holds the caller's value of its last tick, the frame 6 (true) at q' = 6: the tick 9 holds 2 at its run 0 and makes 3 4 at its run 2,
-    // and the tick 14 reads false false: 4 4.
-    let at = format!(
-        "{MORE}flow top(c: Bool at sample) -> F32 at sample {{ cnt~().up~(2).when~((sample_tick() at (sample / 2)) % 3 == 0).down~(2).up~(4).down~(4).when~(c) }}"
-    );
     let want = [0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 2.0, 2.0, 2.0, 2.0, 2.0, 3.0, 4.0, 4.0, 4.0, 4.0];
-    same(&outs(&at, "top", None, &[("c", &c)]), &want);
+    for k in ["sample_tick() % 3 == 0", "(sample_tick() at (sample / 2)) % 3 == 0"] {
+        let src = format!(
+            "{MORE}flow top(c: Bool at sample) -> F32 at sample {{ cnt~().up~(2).when~({k}).down~(2).up~(4).down~(4).when~(c) }}"
+        );
+        same(&outs(&src, "top", None, &[("c", &c)]), &want);
+    }
 }
 
 #[test]
-fn a_reset_of_sample_tick_alone_gathered_under_an_outer_when_reads_the_time_its_ring_is_written_at() {
-    // c false at 1 only: the run q = 0 at the frame 0 and q = t - 1 from the frame 2. The ring of `sample / 2` is written at q' = 0 2 4 ..., the frames 0 3 5 7 9 11 13 15: false, then true (odd frames). The `.down~(4)`
-    // ticks at q = 0 4 8 12 (the frames 0 5 9 13); the reset is read at its runs 0 and 2 (the ring of q - 4 and q - 2) before `cnt` runs twice there: the tick 0 reads the defaults: 1 2 3 4 (the frame 1 holds 1);
-    // the tick 5 reads false true: 5 6 1 2; the ticks 9 and 13 read true true: 1 2 1 2.
+fn a_reset_of_sample_tick_alone_gathered_under_an_outer_when_is_the_one_with_the_at_of_w() {
+    // c false at 1 only: the run q = 0 at the frame 0 and q = t - 1 from the frame 2. The ring of `sample / 2` is written at q' = 0 2 4 ..., the frames 0 3 5 7 9 11 ..., with the times 0 2 4 6 8 10: false true false true
+    // false true (the times of the frames themselves are odd: never true). The `.down~(4)` ticks at q = 0 4 8 12 (the frames 0 5 9 13); the reset is read at its runs 0 and 2 (the ring of q - 4 and q - 2) before `cnt` runs
+    // twice there: the tick 0 reads the defaults: 1 2 3 4 (the frame 1 holds 1); the tick 5 reads false true: 5 6 1 2; the ticks 9 and 13 the same: 3 4 1 2.
     let src = format!(
-        "{MORE}flow top(c: Bool at sample) -> F32 at sample {{ cnt~().up~(2).reset_if~(sample_tick() % 2 == 1).down~(2).up~(4).down~(4).when~(c) }}"
+        "{MORE}flow top(c: Bool at sample) -> F32 at sample {{ cnt~().up~(2).reset_if~(sample_tick() % 4 == 2).down~(2).up~(4).down~(4).when~(c) }}"
     );
     let mut c = [1; 16];
     c[1] = 0;
-    let want = [1.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 1.0, 2.0, 1.0, 2.0, 1.0, 2.0, 1.0, 2.0, 1.0];
+    let want = [1.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 1.0, 2.0, 3.0, 4.0, 1.0, 2.0, 3.0, 4.0, 1.0];
     same(&outs(&src, "top", None, &[("c", &c)]), &want);
+}
+
+/// c false at 1 and 8: the runs are at the frames 0 2 .. 7 9 .. 13, and the ticks of a block of 2 in a `when~(c)` (its runs 0 2 4 6 8 10) at the frames 0 3 5 7 10 12.
+const OFF: [u8; 14] = [1, 0, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1];
+
+#[test]
+fn a_condition_of_sample_tick_alone_under_an_outer_when_reads_the_time_of_the_last_tick_of_w_in_the_body_that_wrote_it()
+{
+    // S-1230 (G), §11.4: the ticks read the time of the last even frame, 0 2 4 6 10 12: `% 4 == 2` is false true false true true false (the times of the frames 0 3 5 7 10 12 would be true at 10 alone). The tick 0 holds 0 0
+    // (the frames 0 2), 3 makes 1 2 (3 4), 5 holds 2 2, 7 makes 3 4 (7 and 9), 10 makes 5 6, 12 holds 6 6. The same in two blocks, whose ticks are the same.
+    let want = [0.0, 0.0, 0.0, 1.0, 2.0, 2.0, 2.0, 3.0, 3.0, 4.0, 5.0, 6.0, 6.0, 6.0];
+    for after in ["", ".up~(2).down~(2)"] {
+        let src = format!(
+            "flow top(c: Bool at sample) -> F32 at sample {{ cnt~().up~(2).when~(sample_tick() % 4 == 2).down~(2){after}.when~(c) }}"
+        );
+        same(&outs(&src, "top", None, &[("c", &OFF)]), &want);
+    }
+    // The resets at the ticks 3 7 10: 1 2 | 1 2 | 3 4 | 1 2 | 1 2 | 3 4.
+    let src = "flow top(c: Bool at sample) -> F32 at sample { cnt~().up~(2).reset_if~(sample_tick() % 4 == 2).down~(2).when~(c) }";
+    let want = [1.0, 1.0, 2.0, 1.0, 2.0, 3.0, 4.0, 1.0, 1.0, 2.0, 1.0, 2.0, 3.0, 4.0];
+    same(&outs(src, "top", None, &[("c", &OFF)]), &want);
+}
+
+#[test]
+fn a_value_of_block_mixed_with_the_time_is_the_one_of_the_tick_of_w_too() {
+    // The same with `p &&` (the `at` of W on the whole is the same expression), and `process` cut at the frame 7, between the tick 6 of W and the tick 7 of the part that reads it: p is true in the first call and false in the
+    // second, the tick 7 still reads what the frame 6 kept (true && true): 3 4 (the frames 7 and 9). The ticks 10 and 12 read false: 4.
+    for k in [
+        "p && sample_tick() % 4 == 2",
+        "(p && sample_tick() % 4 == 2) at (sample / 2)",
+        "sample_tick() % 4 == 2 && (p at (sample / 2))",
+    ] {
+        let src = format!(
+            "{HEADS}flow top(c: Bool at sample, p: Bool at block) -> F32 at sample {{ cnt~().up~(2).when~({k}).down~(2).when~(c) }}"
+        );
+        let got = with_checked(&src, true, |a| {
+            let mut me = Instance::init(View::new(a), def_named(a, "top"), 48000.0, &[], None).expect("init");
+            let c = OFF.map(|b| Value::Bool(b == 1));
+            let mut got = Vec::new();
+            for (p, c) in [(true, &c[..7]), (false, &c[7..])] {
+                let outs = me.process(&[("p", Value::Bool(p))], &[("c", c)], c.len(), None).expect("process");
+                got.extend(f32s(&outs));
+            }
+            got
+        });
+        same(&got, &[0.0, 0.0, 0.0, 1.0, 2.0, 2.0, 2.0, 3.0, 3.0, 4.0, 4.0, 4.0, 4.0, 4.0]);
+    }
+}
+
+#[test]
+fn the_tick_of_w_is_that_of_the_body_that_wrote_the_condition_where_its_caller_stops_it() {
+    // `fa` runs at the frames 0 2 .. 7 9 .. 13 (d = OFF), its runs i = 0 .. 11, and ticks its `sample / 2` at the even ones, the frames 0 3 5 7 10 12, whose times it keeps (§11.4: the time is the caller's in a `when~`).
+    // c is false at the frame 3 (the run 2): the block runs at i = 0 1 3 .. 11 and ticks at i = 0 3 5 7 9 11, which read the times of i = 0 2 4 6 8 10: 0 3 5 7 10 12: `% 5 == 0` is true false true false true false
+    // (the times at its ticks, the frames 0 4 6 9 11 13, would be true at 0 alone). `fa` gives 1 2, 2 at the stopped run, 2 2 | 3 4 | 4 4 | 5 6 | 6, and the frames 1 and 8 hold.
+    let src =
+        "flow fa(c: Bool at sample) -> F32 at sample { cnt~().up~(2).when~(sample_tick() % 5 == 0).down~(2).when~(c) }
+flow top(c: Bool at sample, d: Bool at sample) -> F32 at sample { fa~(c).when~(d) }";
+    let mut c = [1; 14];
+    c[3] = 0;
+    let want = [1.0, 1.0, 2.0, 2.0, 2.0, 2.0, 3.0, 4.0, 4.0, 4.0, 4.0, 5.0, 6.0, 6.0];
+    same(&outs(src, "top", None, &[("c", &c), ("d", &OFF)]), &want);
+}
+
+#[test]
+fn a_reset_puts_back_the_condition_kept_by_the_body_it_is_of_and_not_the_one_of_its_own_chain() {
+    // c is false at 1: the block ticks at the frames 0 3 5 7, which read the times 0 2 4 6 (`% 4 == 2`: false true false true). The reset at the frame 3, between two ticks of W: of the chain, whose condition is the
+    // caller's (R-492), the tick 3 reads what the frame 2 kept (true): 1 2, then 2 2, 3 4 (the frames 7 8). Of the flow `fa` whose body has the chain, what its `sample / 2` kept is put back too (§11.10: `T.default()` until
+    // the next tick): the tick 3 reads false: 0 0, 0 0 (the time 4), 1 2 (the time 6).
+    let part = "cnt~().up~(2).when~(sample_tick() % 4 == 2).down~(2).when~(c)";
+    let src = format!(
+        "flow fa(c: Bool at sample) -> F32 at sample {{ {part} }}
+flow chain(c: Bool at sample, r: Bool at sample) -> F32 at sample {{ {part}.reset_if~(r) }}
+flow named(c: Bool at sample, r: Bool at sample) -> F32 at sample {{ fa~(c).reset_if~(r) }}"
+    );
+    let cols: [(&str, &[u8]); 2] = [("c", &[1, 0, 1, 1, 1, 1, 1, 1, 1]), ("r", &[0, 0, 0, 1, 0, 0, 0, 0, 0])];
+    same(&outs(&src, "chain", None, &cols), &[0.0, 0.0, 0.0, 1.0, 2.0, 2.0, 2.0, 3.0, 4.0]);
+    same(&outs(&src, "named", None, &cols), &[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 2.0]);
+    // The same where the condition is gathered: the ring is written at the frames 0 3 5 7 9 11 ..., and the `.down~(4)` ticks at 0 5 9 13 17. The reset at the frame 7 takes back the ring and what the frame 6 kept, so the ring
+    // is written with false there (the frame 5 was taken back, 9 is the time 8): the tick 5 deals 0 0 (the rest is put back: 0 0), the tick 9 0 0 0 0, the tick 13 (the times 8 and 10: false true) 0 0 1 2, the tick 17 2.
+    let src = format!(
+        "flow fa(c: Bool at sample) -> F32 at sample {{ {} }}
+flow top(c: Bool at sample, r: Bool at sample) -> F32 at sample {{ fa~(c).reset_if~(r) }}",
+        part.replace(".when~(c)", ".up~(4).down~(4).when~(c)")
+    );
+    let (mut c, mut r, mut want) = ([1; 18], [0; 18], [0.0; 18]);
+    (c[1], r[7]) = (0, 1);
+    (want[15], want[16], want[17]) = (1.0, 2.0, 2.0);
+    same(&outs(&src, "top", None, &[("c", &c), ("r", &r)]), &want);
 }

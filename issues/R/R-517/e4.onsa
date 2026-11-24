@@ -1,0 +1,25 @@
+pub flow edge(x: Bool at sample, p: U32 at block) -> F32 at sample {
+  let y = ((sample_tick() + (p at (sample / 4))) % 8 == 4) at sample
+  if y || (x && !x) { 1.0 } else { 0.0 }
+}
+
+pub flow edge5(x: Bool at sample, p: Bool at block) -> F32 at sample {
+  let t = sample_tick() % 8 == 4 && (p at (sample / 4))
+  if (t at sample) || (x && !x) { 1.0 } else { 0.0 }
+}
+
+test "e4" {
+  let x: [Bool; 14] = [true; 14]
+  var e: [F32; 14] = [0.0; 14]
+  var se = edge.init(8.0)
+  edge.process(inout se, edge.Params { p: 0 }, x, inout e)
+  assert e == [0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0]
+}
+
+test "e5" {
+  let x: [Bool; 14] = [true; 14]
+  var e: [F32; 14] = [0.0; 14]
+  var se = edge5.init(8.0)
+  edge5.process(inout se, edge5.Params { p: true }, x, inout e)
+  assert e == [0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0]
+}

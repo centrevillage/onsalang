@@ -46,7 +46,12 @@ pub flow when_then_down(
 
 /// Each flow: the frames of one run of `frames` frames (`has_input`: it has the input `x`), in one call, in the pieces `1 1 5 7` and after a `reset` that follows 0, 1, 3, 5, 6 or 7 frames of another run, are `want`.
 fn same_in_c(tag: &str, flows: &[(&str, bool, u32, Vec<i64>)]) {
-    let dir = build_flows(tag, FLOWS);
+    same_in_c_of(FLOWS, tag, flows);
+}
+
+/// `same_in_c` for the flows of `src`.
+fn same_in_c_of(src: &str, tag: &str, flows: &[(&str, bool, u32, Vec<i64>)]) {
+    let dir = build_flows(tag, src);
     for (flow, has_input, frames, want) in flows {
         let exe = driver(&dir, flow, *has_input);
         for junk in [0, 1, 3, 5, 6, 7] {
@@ -75,4 +80,41 @@ fn a_when_read_at_a_slower_clock_gives_the_same_values_in_both_orders_in_c() {
         want.extend(vec![value; frames]);
     }
     same_in_c("when_c_slow", &[("down_then_when", false, 24, want.clone()), ("when_then_down", false, 24, want)]);
+}
+
+/// The time that a `sample_tick()` alone in the condition of a modifier inside a block reads when the block is stopped from outside (S-1230 (G); `tests/spec/flow_semantics/sample_tick_condition_grid_values.onsa`): the part
+/// `cnt~().up~(2).when~(K).down~(2)` has W = `sample / 2` and its ticks are every 2nd run, and `when~(c)` stops the frames 3 5 7 8 9 10 12 15 (`x` is the frame + 1, so `x` is 4 6 8 9 10 11 13 16 there), so the ticks are at the frames
+/// 0 2 6 13 and read the time kept at the last tick of the grid of `sample / 2` of the body that wrote the condition, 0 2 6 12 (the odd frames rounded down): `% 3 == 0` is true at 0, 6 and 12, so the part runs at all of the ticks
+/// but the one at 2 (the runs 1 2 | held | 3 4 | 5 6 at the frames 0 1, 4 and 11, 13 and 14): 1 2 2 2 2 2 3 3 3 3 3 4 4 5 6 6. The time of the frame itself (13) would not run the last tick and hold 4 at the end.
+const TIME_FLOWS: &str = "\
+flow cnt() -> F32 at sample {
+  let n = prev~(^n) + 1.0
+  n
+}
+
+@export
+pub flow time_at(x: F32 at sample) -> F32 at sample {
+  let c = !(x == 4.0 || x == 6.0 || x == 8.0 || x == 9.0 || x == 10.0 || x == 11.0 || x == 13.0 || x == 16.0)
+  cnt~().up~(2).when~((sample_tick() at (sample / 2)) % 3 == 0).down~(2).when~(c)
+}
+
+@export
+pub flow time_direct(x: F32 at sample) -> F32 at sample {
+  let c = !(x == 4.0 || x == 6.0 || x == 8.0 || x == 9.0 || x == 10.0 || x == 11.0 || x == 13.0 || x == 16.0)
+  cnt~().up~(2).when~(sample_tick() % 3 == 0).down~(2).when~(c)
+}
+";
+
+const TIME_WANT: [i64; 16] = [1, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 4, 4, 5, 6, 6];
+
+/// The condition written with the `at` of its clock: the same values in C (16 frames, in one call and cut at 1 2 7 and 14, after a `reset` that follows 0 .. 7 frames of another run).
+#[test]
+fn a_time_with_the_at_of_its_clock_in_a_stopped_block_gives_the_values_of_the_case_file_in_c() {
+    same_in_c_of(TIME_FLOWS, "when_c_time_at", &[("time_at", true, 16, TIME_WANT.to_vec())]);
+}
+
+/// The condition `sample_tick() % 3 == 0` as it is: the same values (S-1230 (G)).
+#[test]
+fn a_time_alone_in_a_stopped_block_gives_the_values_of_the_case_file_in_c() {
+    same_in_c_of(TIME_FLOWS, "when_c_time", &[("time_direct", true, 16, TIME_WANT.to_vec())]);
 }

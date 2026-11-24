@@ -1,0 +1,39 @@
+# flow_ref 1 source=tests/spec/flow_semantics/sample_tick_condition_grid_same.onsa tests=8 evaluated=8 unavailable=0 skipped=0 waiting=0
+@ a when~ written inside the part reads the time of the frame of its tick: the ticks at 0 2 6 13 read 0 2 6 13, true at 0 and 6 and false at 13
+init 0 sample_tick_condition_grid_same.gate_inside sr=0x41000000
+process 0 frames=16 in c=[true true true false true false true false false false false true false true true false]
+out=[0x3f800000 0x40000000 0x40000000 0x40000000 0x40000000 0x40000000 0x40400000 0x40400000 0x40400000 0x40400000 0x40400000 0x40800000 0x40800000 0x40800000 0x40800000 0x40800000]
+@ a reset_if~ written inside the part reads the same time: the part is put back at the ticks 0 and 6, not at 13
+init 0 sample_tick_condition_grid_same.reset_inside sr=0x41000000
+process 0 frames=16 in c=[true true true false true false true false false false false true false true true false]
+out=[0x3f800000 0x40000000 0x40400000 0x40400000 0x40800000 0x40800000 0x3f800000 0x3f800000 0x3f800000 0x3f800000 0x3f800000 0x40000000 0x40000000 0x40400000 0x40800000 0x40800000]
+@ the time since a start written inside the part is the time of the frame: a note of 13 frames from 0 is off at the tick 13
+init 0 sample_tick_condition_grid_same.note_inside sr=0x41000000
+process 0 params t0=0 len=13 frames=16 in c=[true true true false true false true false false false false true false true true false]
+out=[0x3f800000 0x40000000 0x40400000 0x40400000 0x40800000 0x40800000 0x40a00000 0x40a00000 0x40a00000 0x40a00000 0x40a00000 0x40c00000 0x40c00000 0x40c00000 0x40c00000 0x40c00000]
+@ a modifier at W = sample reads the time of the frame: a when~ runs on the frames that run whose time is a multiple of 3, and a reset_if~ puts back there
+init 0 sample_tick_condition_grid_same.when_at_sample sr=0x41000000
+init 1 sample_tick_condition_grid_same.reset_at_sample sr=0x41000000
+process 0 frames=16 in c=[true true true false true false true false false false false true false true true false]
+out=[0x3f800000 0x3f800000 0x3f800000 0x3f800000 0x3f800000 0x3f800000 0x40000000 0x40000000 0x40000000 0x40000000 0x40000000 0x40000000 0x40000000 0x40000000 0x40000000 0x40000000]
+process 1 frames=16 in c=[true true true false true false true false false false false true false true true false]
+out=[0x3f800000 0x40000000 0x40400000 0x40400000 0x40800000 0x40800000 0x3f800000 0x3f800000 0x3f800000 0x3f800000 0x3f800000 0x40000000 0x40000000 0x40400000 0x40800000 0x40800000]
+@ a burst read at W = sample * 2 takes the condition as a value of the body's sample: the time of the frame, true at 0 3 6 9 12 15
+init 0 sample_tick_condition_grid_same.when_burst sr=0x41000000
+init 1 sample_tick_condition_grid_same.reset_burst sr=0x41000000
+process 0 frames=16
+out=[0x41a80000 0x41b00000 0x41b00000 0x422c0000 0x42300000 0x42300000 0x42820000 0x42840000 0x42840000 0x42ae0000 0x42b00000 0x42b00000 0x42da0000 0x42dc0000 0x42dc0000 0x43030000]
+process 1 frames=16
+out=[0x41a80000 0x422c0000 0x42820000 0x41a80000 0x422c0000 0x42820000 0x41a80000 0x422c0000 0x42820000 0x41a80000 0x422c0000 0x42820000 0x41a80000 0x422c0000 0x42820000 0x41a80000]
+@ no when~ outside the block: the ticks are the even frames and the time kept is the time of the frame: 1 2 2 2 2 2 3 4 4 4 4 4 5 6 6 6
+init 0 sample_tick_condition_grid_same.no_stop sr=0x41000000
+process 0 frames=16
+out=[0x3f800000 0x40000000 0x40000000 0x40000000 0x40000000 0x40000000 0x40400000 0x40800000 0x40800000 0x40800000 0x40800000 0x40800000 0x40a00000 0x40c00000 0x40c00000 0x40c00000]
+@ the time as the argument of the head is the time of the frame that runs: the part holds at the frames that are stopped
+init 0 sample_tick_condition_grid_same.head_argument sr=0x41000000
+process 0 frames=16 in c=[true true true false true false true false false false false true false true true false]
+out=[0x00000000 0x3f800000 0x40000000 0x40000000 0x40800000 0x40800000 0x40c00000 0x40c00000 0x40c00000 0x40c00000 0x40c00000 0x41300000 0x41300000 0x41500000 0x41600000 0x41600000]
+@ the time named with the at of its clock is the value that the condition without a name has: V of the values file
+init 0 sample_tick_condition_grid_same.named_time sr=0x41000000
+process 0 frames=16 in c=[true true true false true false true false false false false true false true true false]
+out=[0x3f800000 0x40000000 0x40000000 0x40000000 0x40000000 0x40000000 0x40400000 0x40400000 0x40400000 0x40400000 0x40400000 0x40800000 0x40800000 0x40a00000 0x40c00000 0x40c00000]
