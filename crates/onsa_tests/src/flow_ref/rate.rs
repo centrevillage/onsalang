@@ -14,7 +14,7 @@ use super::expr::{Frame, LIMITS, LOW_STACK, Stop};
 use super::flow::{Clock, Ctx, Inst, Known, Plans, Seen, Step, clock_of, join};
 use super::hoist::{feedback, stage_of};
 use super::scalar::Fault;
-use super::sema_view::{Body, Called, Stage, View, input_ratio, output_stage};
+use super::sema_view::{Body, Called, Stage, View, input_ratio, input_stage, output_stage};
 use super::value::Value;
 use onsa_sema::def::FlowDef;
 
@@ -76,6 +76,7 @@ pub(super) fn derived(body: &Body, r: &ClockRatio) -> Result<i32, Fault> {
 pub(super) fn out_ratio(decl: &FlowDef) -> Result<i32, Fault> {
     match output_stage(decl)? {
         Stage::Tick(m) => Ok(m),
+        Stage::Event(_) => Ok(0),
         _ => Err(Fault::Unavailable("an output that is not at a tick")),
     }
 }
@@ -503,7 +504,7 @@ pub(super) fn ring_clock(
         let c = entering(body, known, lets[*i].1, lets[*i].1, &inside)?;
         clock = join(clock, c).ok_or(Fault::Internal("clocks that do not join"))?;
     }
-    Ok(slow(clock).map(|_| clock.rooted()))
+    Ok(slow(clock).map(|_| clock.rooted()).or(matches!(clock, Clock::Event(_)).then_some(clock)))
 }
 
 /// The ratio of a tick slower than `sample` that `c` is, if it is one.
@@ -565,13 +566,23 @@ fn visit(
     // The stages of an instance that is called here are stages of this one: those of the last part of its chain (`levels`; of the head alone for no modifier).
     let (call, bounds) = chain.as_ref().map_or((e, &[][..]), |c| (c.head, &c.bounds[..]));
     let tick = |c| Ok(matches!(stage_of(body, known, root, c)?, Clock::Tick(_)));
-    let clock = |c| Ok(CondClock { clock: clock_of(body, known, root, c)?, tick: tick(c)? });
+    let clock = |c| match clock_of(body, known, root, c)? {
+        Clock::Event(_) => Err(Fault::Unavailable("a modifier with a condition of an event clock (W7-11 U2r)")),
+        clock => Ok(CondClock { clock, tick: tick(c)? }),
+    };
     // The clock K of a delay a chain is on is kept with them (§11.10: its W).
     let delay = |c: &&Chain| matches!(body.called(c.head), Ok(Called::Builtin(FlowBuiltin::Delay(_))));
     for c in chain.iter().flat_map(Chain::conds).chain(chain.iter().filter(delay).map(|c| c.head)) {
         out.1.insert(c, clock(c).map_err(here)?);
     }
     if let Ok(Called::Flow(def)) = body.called(call) {
+        // A chain on a call that takes or gives events (W7-17).
+        let decl = view.flow(def).map_err(here)?;
+        let events = decl.inputs.iter().any(|i| matches!(input_stage(i), Ok(Stage::Event(_))))
+            || matches!(output_stage(decl), Ok(Stage::Event(_)));
+        if events && !bounds.is_empty() {
+            return Err(here(Fault::Unavailable("a chain of modifiers on a call that takes or gives events (W7-17)")));
+        }
         let body_ticks = Inst::planned(view, def, plans)?.slow;
         let parts = levels(view.flow(def).map_err(here)?, &body_ticks, bounds, &clock).map_err(here)?;
         out.0.extend(parts[parts.len() - 1].stages.iter().copied().filter(|s| *s < 0));

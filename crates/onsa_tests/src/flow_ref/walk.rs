@@ -204,6 +204,22 @@ impl<'a> Walk<'_, 'a> {
                         _ => return Err(Halt::Failed(format!("assert {} does not hold", self.asserts))),
                     }
                 }
+                // `for i in lo ..< hi { .. }` of a test: the body runs once for each value, with the variable bound (the asserts of a column read one by one).
+                StmtKind::For { pat, moved: None, iter, body: inner } => {
+                    let ExprKind::Range(r) = &body.ast.expr(*iter).kind else {
+                        return Err(Halt::Skip(Skip::Statement));
+                    };
+                    let (lo, hi) = (self.value(body, r.lo)?, self.value(body, r.hi)?);
+                    let (Value::Int(kind, lo, _), Value::Int(_, hi, _)) = (lo, hi) else {
+                        return Err(Halt::Skip(Skip::Statement));
+                    };
+                    let local = body.pat_local(*pat).map_err(Halt::from)?;
+                    let end = if matches!(r.end, onsa_syntax::ast::RangeEnd::Included) { hi + 1 } else { hi };
+                    for i in lo..end {
+                        self.locals.insert(local, Value::int(kind, i));
+                        self.steps(body, *inner)?;
+                    }
+                }
                 StmtKind::Assign { target, .. } if views(body, *target) => return Err(Halt::Skip(Skip::Layout)),
                 StmtKind::Expr(e) => self.statement(body, *e)?,
                 _ => return Err(Halt::Skip(Skip::Statement)),

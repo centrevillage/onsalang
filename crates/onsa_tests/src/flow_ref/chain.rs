@@ -69,6 +69,11 @@ impl<'a> Frame<'a> {
             }
             self.run_unit(&key, stage)?;
         }
+        // In the stage of an event source the call ticks the inputs that take it (the call is where it is written, after its arguments, §11.11).
+        if let Some(Stage::Event(k)) = stage {
+            let step = self.run.as_ref().and_then(|run| run.step.clone());
+            self.work_of(whole, Clock::Event(k), step.as_ref().map(|(known, root)| (&**known, *root)))?;
+        }
         self.level_out(&key, &levels, levels.len() - 1, caller, at)
     }
 
@@ -109,7 +114,7 @@ impl<'a> Frame<'a> {
         let ins = self.run.as_ref().and_then(|r| r.state.children.get(key)).map(|c| c.fed.clone());
         self.run_level(key, &levels, levels.len() - 1, sx, caller, ins.ok_or(here(Internal("no instance")))?)?;
         self.child_mut(key, at)?.done = Some((caller.total(), s));
-        Ok(())
+        self.fire_emitted(key)
     }
 
     /// The arguments of the ports of the head that this frame reads at the stage `sx` of this one (the inputs of the head and the conditions a boundary gathers, `rate::port_exprs`): those the last boundary does not gather, at

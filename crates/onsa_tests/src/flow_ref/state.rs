@@ -109,7 +109,7 @@ impl InstState {
 
 /// What a delay saves this tick: where, the expression whose value it is, and the bindings it is read under (the index
 /// of each `par~` it is in and the locals an arm of a `match~` binds: they are not what they were when it is stored).
-struct Save {
+pub(super) struct Save {
     key: NodeKey,
     expr: ExprId,
     scope: Vec<(LocalId, Value)>,
@@ -121,6 +121,10 @@ struct Save {
     keep: bool,
     /// A part that reads a `^name` (S-1244, `Frame::defer_part`): not stored in a cell but kept in its field (`Frame::hoisted`), as of the stage that made it.
     field: Option<Clock>,
+    /// The values the event names it reads had where the delay is written (S-1240, §11.3): read so at the end of the stage, not the last ones.
+    pub(super) snap: Vec<(LocalId, Value)>,
+    /// The same for the parts of an event clock that a stage kept (`hoisted`): by expression, with the value.
+    pub(super) snap_parts: Vec<(ExprId, Value)>,
 }
 
 /// A delay whose `init` argument reads a `^name`: its node, the argument and the bindings it is read under.
@@ -146,9 +150,22 @@ pub struct Run {
     pub(super) step: Option<(Rc<Known>, ExprId)>,
     /// The delays whose `init` argument reads a `^name`, with the bindings it is read under: made at the end of `init` (`Frame::finish_cells`).
     late_cells: Vec<LateCell>,
+    /// The steps of the instance this evaluation runs (`enter`): an event stage of its own is run from inside another stage (`Frame::fire`).
+    pub(super) steps: Option<Rc<[super::flow::Step]>>,
+    /// The event the output step gave in this entry, and the value of the output an event stage run inside it made (`enter` takes them).
+    pub(super) emitted: Option<Value>,
+    pub(super) set_out: Option<Value>,
 }
 
 impl Run {
+    pub(super) fn saves_len(&self) -> usize {
+        self.saves.len()
+    }
+
+    pub(super) fn save_mut(&mut self, slot: usize) -> Option<&mut Save> {
+        self.saves.get_mut(slot)
+    }
+
     pub(super) fn new(state: InstState, ctx: Ctx, used: usize, plans: Plans) -> Run {
         Run {
             state,
@@ -162,6 +179,9 @@ impl Run {
             gathered: BTreeSet::new(),
             step: None,
             late_cells: Vec::new(),
+            steps: None,
+            emitted: None,
+            set_out: None,
         }
     }
 }
@@ -286,8 +306,9 @@ impl<'a> Frame<'a> {
         let arg = |i: usize| args.get(i).map(|a| a.expr).ok_or(here(Internal("a delay with too few arguments")));
         // The place of what it saves is held first (S-1154: in the order the delays are written, a delay inside the argument of another after it), then the calls in the first argument come (S-1241), then `d`.
         let key = self.key(e, Role::Delay);
-        self.reserve_save(key.clone(), arg(Delay::SAVED)?, at)?;
+        let slot = self.reserve_save(key.clone(), arg(Delay::SAVED)?, at)?;
         self.early_calls(arg(Delay::SAVED)?)?;
+        self.snapshot(slot, arg(Delay::SAVED)?);
         let dc = match d.d_index() {
             Some(k) => Some(self.eval(arg(k)?)?),
             None => None,
@@ -301,7 +322,17 @@ impl<'a> Frame<'a> {
     pub(super) fn reserve_save(&mut self, key: NodeKey, expr: ExprId, at: Span) -> Result<usize, Stop> {
         let run =
             self.run.as_mut().ok_or(Stop { fault: Fault::Unavailable("a delay outside an instance of a flow"), at })?;
-        run.saves.push(Save { key, expr, scope: run.scope.clone(), call: None, q: 0, keep: true, field: None });
+        run.saves.push(Save {
+            key,
+            expr,
+            scope: run.scope.clone(),
+            call: None,
+            q: 0,
+            keep: true,
+            field: None,
+            snap: Vec::new(),
+            snap_parts: Vec::new(),
+        });
         Ok(run.saves.len() - 1)
     }
 
@@ -322,6 +353,8 @@ impl<'a> Frame<'a> {
                 q: 0,
                 keep: true,
                 field: Some(here),
+                snap: Vec::new(),
+                snap_parts: Vec::new(),
             });
         }
         Ok(())
@@ -415,21 +448,44 @@ impl<'a> Frame<'a> {
     /// The second phase of a tick: what the delays saved (and the delays inside them), then every one stored.
     // S-1126, S-1154: a panic of what a delay saves (`prev~(10 / x)`, x = 0) is raised here, in the second phase, after the `let`s of the stage, and the saves are in the order the delays are written, a delay in what another saves after it.
     pub(super) fn commit(&mut self, at: Span) -> Result<(), Stop> {
+        self.commit_from(at, 0)
+    }
+
+    /// `commit` of the saves from the place `from` on: an event stage run inside another stage (`Frame::fire`) stores what it saved, not what the stage it is in has saved so far.
+    pub(super) fn commit_from(&mut self, at: Span, from: usize) -> Result<(), Stop> {
         let here = |fault| Stop { fault, at };
         let (mut stores, mut once) = (Vec::new(), BTreeSet::new());
-        for next in 0.. {
+        for next in from.. {
             let Some(save) = self.run.as_ref().ok_or(here(Internal("no run")))?.saves.get(next) else { break };
             let (key, expr, scope, call, q) = (save.key.clone(), save.expr, save.scope.clone(), save.call, save.q);
-            let (keep, field) = (save.keep, save.field);
+            let (keep, field, snap, parts_snap) = (save.keep, save.field, save.snap.clone(), save.snap_parts.clone());
             // The value the part had is stale: it is made again.
             if field.is_some() {
                 self.hoisted.get_mut(&expr).into_iter().for_each(|(_, kept)| drop(kept.remove(&key.replicas)));
             }
             let before = self.run.as_ref().map_or(0, |r| r.saves.len());
+            let was: Vec<_> = snap.iter().map(|(l, _)| (*l, self.locals.get(l).cloned())).collect();
+            self.locals.extend(snap);
+            let was_parts: Vec<_> = parts_snap
+                .iter()
+                .map(|(e, _)| (*e, self.hoisted.get(e).and_then(|k| k.1.get(&key.replicas)).cloned()))
+                .collect();
+            for (e, v) in parts_snap {
+                self.hoisted.entry(e).or_insert((Clock::Const, HashMap::new())).1.insert(key.replicas.clone(), v);
+            }
             let value = self.with_bindings(&key.replicas, scope, |f| match call {
                 Some(call) => f.eval_in_arms(call, expr),
                 None => f.eval(expr),
-            })?;
+            });
+            for (l, v) in was {
+                v.into_iter().for_each(|v| drop(self.locals.insert(l, v)));
+            }
+            for (e, v) in was_parts {
+                if let (Some(v), Some(k)) = (v, self.hoisted.get_mut(&e)) {
+                    k.1.insert(key.replicas.clone(), v);
+                }
+            }
+            let value = value?;
             if let Some(clock) = field {
                 self.hoisted.entry(expr).or_insert((clock, HashMap::new())).1.insert(key.replicas.clone(), value);
                 continue;
@@ -451,7 +507,7 @@ impl<'a> Frame<'a> {
             stores.push((key, items));
         }
         let run = self.run.as_mut().ok_or(here(Internal("no run")))?;
-        run.saves.clear();
+        run.saves.truncate(from);
         for (key, items) in stores {
             match run.state.cells.get_mut(&key).map(|c| &mut c.current) {
                 Some(Store::Last(last)) => {
@@ -565,6 +621,7 @@ impl<'a> Frame<'a> {
             }
             Clock::Block => Stage::Block,
             Clock::Tick(r) => Stage::Tick(r),
+            Clock::Event(_) => return self.tick_receivers(e, head, here, parts),
             Clock::Const => return Ok(()),
         };
         if !matches!(self.body.called(head).map_err(stop)?, Called::Flow(_)) {
@@ -742,7 +799,8 @@ impl<'a> Frame<'a> {
         inst.scope = self.run.as_ref().map(|r| r.scope.clone()).unwrap_or_default();
         let run = self.run.as_mut().ok_or(Stop { fault: Internal("no run"), at })?;
         run.state.children.insert(key.clone(), inst);
-        self.in_child(&key, |f, inst, decl| enter(f, inst, decl, Stage::Init, &config))
+        self.in_child(&key, |f, inst, decl| enter(f, inst, decl, Stage::Init, &config))?;
+        self.start_events(&key, e)
     }
 
     /// What each `when~` and `reset_if~` of the chain whose head is `e` keeps (§11.10): the output a `when~` holds is `T.default()` at first, a burst of them for an output at `sample * N` (S-1222), and its places are held first.
@@ -770,7 +828,7 @@ impl<'a> Frame<'a> {
         self.in_child(key, |f, inst, decl| {
             let at = f.body.ast.expr(decl.body).span;
             let here = |fault| Stop { fault, at };
-            let slow = |c: Clock| matches!(c.rooted(), Clock::Tick(r) if r < 0);
+            let slow = |c: Clock| matches!(c.rooted(), Clock::Tick(r) if r < 0) || matches!(c, Clock::Event(_));
             let levels = inst.levels.clone();
             let top = levels.last().ok_or(here(Internal("an instance with no parts")))?;
             for (g, gate) in levels.iter().map(|l| l.guard).zip(&mut inst.whens) {
@@ -780,7 +838,8 @@ impl<'a> Frame<'a> {
                 }
             }
             for (n, i) in decl.inputs.iter().enumerate() {
-                let mine = matches!(input_stage(i).map_err(here)?, Stage::Tick(r) if r < 0);
+                let mine = matches!(input_stage(i).map_err(here)?, Stage::Tick(r) if r < 0)
+                    || matches!(input_stage(i).map_err(here)?, Stage::Event(_));
                 let theirs = fed && top.ins[n].is_some_and(|q| q < 0) && !top.gathers.contains(&n);
                 let Some(d) = f.shape(f.body.view.ty(i.ty), at)?.default_value().filter(|_| mine || theirs) else {
                     continue;
@@ -793,7 +852,7 @@ impl<'a> Frame<'a> {
                 }
             }
             let between = inst.levels.last().is_some_and(|top| top.made < 0);
-            for st in inst.steps.iter().filter(|st| slow(st.clock) || (st.pat.is_none() && between)) {
+            for st in inst.steps.iter().filter(|st| !st.emits && (slow(st.clock) || (st.pat.is_none() && between))) {
                 let ty = f.body.ty(st.init).map_err(here)?;
                 match (st.pat, f.shape(ty, at)?.default_value()) {
                     (Some(pat), Some(d)) => f.destructure(pat, &d, ty)?,
@@ -911,6 +970,8 @@ impl<'a> Frame<'a> {
                     q,
                     keep: true,
                     field: None,
+                    snap: Vec::new(),
+                    snap_parts: Vec::new(),
                 };
                 run.saves.push(save);
             }

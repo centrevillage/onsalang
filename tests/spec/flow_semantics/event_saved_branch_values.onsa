@@ -1,0 +1,89 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.3", "§11.4", "§11.5", "§11.11"]
+
+// W7-11 U2/t2, S-1240, S-1244, S-1245: the forms of `event_saved_values.onsa` (the event that a delay stores, read above its producer) that are in a `par~` or in the scrutinee or the guard of a `match~`.
+// They are apart from that file because the table of what U2 runs puts a `par~` and a `match~` with an event inside among the forms that stay E0200 (W7-17) and a guard is a position of a condition (U3, S-1158):
+// if U2 does not run them, they are moved to the case of the work that does. The input and the table of the values (`PB`, `PA`) are those of that file: `GS = 1 .. 9`, the event `x` when `x % 3 != 0`, `p = prev~(^d)`,
+// PB = 0 0 1 1 2 4 4 5 7 (p before the event of the sample), PA = 0 1 1 2 4 4 5 7 7 (after), and the last event value DA = 1 2 2 4 5 5 7 8 8 (after the sample).
+
+const GS: [U32; 9] = [1, 2, 3, 4, 5, 6, 7, 8, 9]
+
+flow gen(x: U32 at sample) -> U32 at event {
+  if x % 3 != 0 { Some(x) } else { None }
+}
+
+// ---- `par~`: each replica stores `(p at sample) + i` and the stored value is the one before the event of the sample
+
+pub flow saved_par(x: U32 at sample) -> U32 at sample {
+  let p = prev~(^d)
+  let ys = par~ i in 0 ..< 2 { prev~((p at sample) + i) }
+  let d = gen~(x)
+  ys[0] + ys[1] * 10
+}
+
+pub flow saved_par_let(x: U32 at sample) -> U32 at sample {
+  let p = prev~(^d)
+  let t = par i in 0 ..< 2 { (p at sample) + i }
+  let ys = par~ i in 0 ..< 2 { prev~(t[i]) }
+  let d = gen~(x)
+  ys[0] + ys[1] * 10
+}
+
+test "each replica of a par~ stores the event as at its place" {
+  // The replica 0 stores PB (0 0 1 1 2 4 4 5 7), the replica 1 PB + 1; each gives it one sample later: ys[0] = 0 0 0 1 1 2 4 4 5, ys[1] = 0 1 1 2 2 3 5 5 6. The output is ys[0] + ys[1] * 10.
+  let w: [U32; 9] = [0, 10, 10, 21, 21, 32, 54, 54, 65]
+  let o = saved_par.render(GS, 8.0)
+  let t = saved_par_let.render(GS, 8.0)
+  for i in 0 ..< 9 {
+    assert o.out[i] == w[i] && t.out[i] == w[i]
+  }
+}
+
+// ---- the guard of a `match~` reads the event; the binding of a `match~` chosen by `^d`
+
+pub flow saved_guard(x: U32 at sample) -> U32 at sample {
+  let p = prev~(^d)
+  let q = prev~(match~ x { v if v > (p at sample) + 2 => v, _ => prev~(x) + 100 })
+  let d = gen~(x)
+  q
+}
+
+pub flow saved_guard_let(x: U32 at sample) -> U32 at sample {
+  let p = prev~(^d)
+  let t = (p at sample) + 2
+  let q = prev~(match~ x { v if v > t => v, _ => prev~(x) + 100 })
+  let d = gen~(x)
+  q
+}
+
+// The binding is chosen by `^d`, so it is the value of the end of the stage: the twin has the `let` below the producer and reads `^s`.
+pub flow saved_binding(x: U32 at sample) -> U32 at sample {
+  let q = prev~(match~ (^d at sample) { 1 => prev~(x) + 100, v => v + 1 })
+  let d: U32 = gen~(x)
+  q
+}
+
+pub flow saved_binding_let(x: U32 at sample) -> U32 at sample {
+  let q = prev~(^s)
+  let d: U32 = gen~(x)
+  let s = match~ (d at sample) { 1 => prev~(x) + 100, v => v + 1 }
+  q
+}
+
+test "the guard of a match~ reads the event before the event of the sample, and a binding chosen by ^d the value of the end of the stage" {
+  // The guard `v > PB + 2` (PB + 2 = 2 2 3 3 4 6 6 7 9, x = 1 .. 9) holds at the samples 3 4 6 7, where the arm gives x; elsewhere it gives the x before + 100 (0 1 .. 8 + 100):
+  // the stored expression is 100 101 102 4 5 105 7 8 108, shifted.
+  let g: [U32; 9] = [0, 100, 101, 102, 4, 5, 105, 7, 8]
+  // DA = 1 2 2 4 5 5 7 8 8: the arm 1 at the sample 0 (the x before + 100 = 100), v + 1 elsewhere: 100 3 3 5 6 6 8 9 9, shifted.
+  let b: [U32; 9] = [0, 100, 3, 3, 5, 6, 6, 8, 9]
+  let a = saved_guard.render(GS, 8.0)
+  let a2 = saved_guard_let.render(GS, 8.0)
+  let c = saved_binding.render(GS, 8.0)
+  let c2 = saved_binding_let.render(GS, 8.0)
+  for i in 0 ..< 9 {
+    assert a.out[i] == g[i] && a2.out[i] == g[i]
+    assert c.out[i] == b[i] && c2.out[i] == b[i]
+  }
+}

@@ -1,0 +1,222 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.11", "§11.10", "§11.9", "§11.6", "§11.4"]
+
+// Flows whose ports are all at `sample` and that use events inside, run as parts of a chain, through the generated API, and wrapped in flows of their own (W7-11 U2/t; S-559, S-561, S-1207; spec §11.11: "`.down~`・`.up~` の部品の中の
+// `at event` の入力も、全ての位置のイベントで動く"; §11.10: `when~` で止まる部品は、止まっている間も保つ最後の出力を読ませ、`reset_if~` は刻みで書いて速い段が読むフィールド（イベントの値を含む）を `T.default()` に戻す; §11.4:
+// `sample_tick()` は `when~` の中は外と同じ、`.down~(N)` の本体では N で割って切り捨て、イベントの段の式ではその位置の値; §11.6: 状態の所有者は呼び出し側で、`reset` は初めの状態に戻す).
+// The head `lp` sums the events of its run: the run j (0, 1, 2 ...) is a frame of the part, `ramp` gives j + 1, the producer gives it as an event, and the sum is the triangular number 1 3 6 10 15 21 ... `last_even`
+// gives the last event of the even numbers (0 before the first), `last_tick` the last value of `sample_tick() + 1` that the event stage read. Every value is worked out by hand.
+
+flow gen(x: U32 at sample) -> U32 at event {
+  Some(x)
+}
+
+flow inc(m: U32 at event) -> U32 at event {
+  Some(m + 1)
+}
+
+flow odd(m: U32 at event) -> U32 at event {
+  if m % 2 == 1 {
+    Some(m)
+  } else {
+    None
+  }
+}
+
+flow even(m: U32 at event) -> U32 at event {
+  if m % 2 == 0 {
+    Some(m)
+  } else {
+    None
+  }
+}
+
+flow tick_ev(m: U32 at event) -> U32 at event {
+  Some(sample_tick() + 1)
+}
+
+flow acc(e: U32 at event) -> U32 at sample {
+  let n = prev~(^n) + e
+  n
+}
+
+flow ramp() -> U32 at sample {
+  let t = prev~(^t) + 1
+  t
+}
+
+flow g2u(x: U32 at (sample * 2)) -> U32 at sample {
+  x[0] + x[1] * 10
+}
+
+flow lp() -> U32 at sample {
+  let d = gen~(ramp~())
+  acc~(d)
+}
+
+flow last_even() -> U32 at sample {
+  let d = even~(gen~(ramp~()))
+  d
+}
+
+flow last_tick() -> U32 at sample {
+  let d = tick_ev~(gen~(ramp~()))
+  d
+}
+
+// ---- a part with events inside, under each modifier
+
+pub flow lp_down() -> U32 at sample {
+  lp~().down~(2) at sample
+}
+
+pub flow lp_up() -> U32 at sample {
+  g2u~(lp~().up~(2))
+}
+
+pub flow lp_when(c: Bool at sample) -> U32 at sample {
+  lp~().when~(c)
+}
+
+pub flow lp_reset(r: Bool at sample) -> U32 at sample {
+  lp~().reset_if~(r)
+}
+
+pub flow even_reset(r: Bool at sample) -> U32 at sample {
+  last_even~().reset_if~(r)
+}
+
+pub flow tick_when(c: Bool at sample) -> U32 at sample {
+  last_tick~().when~(c)
+}
+
+pub flow tick_down() -> U32 at sample {
+  last_tick~().down~(2) at sample
+}
+
+test "a part with events inside under .down~(2) runs at the even frames: its sums are held two frames" {
+  // The runs at the frames 0 2 4 6 give the triangular numbers 1 3 6 10.
+  let o = lp_down.render(8, 8.0)
+  assert o.out[0] == 1 && o.out[1] == 1 && o.out[2] == 3 && o.out[3] == 3 && o.out[4] == 6 && o.out[5] == 6 && o.out[6] == 10 && o.out[7] == 10
+}
+
+test "a part with events inside under .up~(2) runs twice in each frame: the two runs are the two elements of its output" {
+  // The runs 0 .. 5 give 1 3 6 10 15 21; the frame t has the runs 2 t and 2 t + 1 as x[0] and x[1]: 1 + 10 * 3, 6 + 10 * 10, 15 + 10 * 21.
+  let o = lp_up.render(3, 8.0)
+  assert o.out[0] == 31 && o.out[1] == 106 && o.out[2] == 225
+}
+
+test "a part with events inside under when~ runs only where the condition holds: its events, its state and its output are those of the runs" {
+  // c = T T F T F F T: the runs at the frames 0 1 3 6 give 1 3 6 10; the stopped frames keep the last output.
+  let cs: [Bool; 7] = [true, true, false, true, false, false, true]
+  let o = lp_when.render(cs, 8.0)
+  assert o.out[0] == 1 && o.out[1] == 3 && o.out[2] == 3 && o.out[3] == 6 && o.out[4] == 6 && o.out[5] == 6 && o.out[6] == 10
+}
+
+test "reset_if~ puts the events inside back: the sum starts again, and the value of an event that did not come after it is T.default()" {
+  // lp, r = F F T F F T: the frames 2 and 5 run as the first run: 1 3 1 3 6 1. last_even gives 2 4 6 .. at the runs 1 3 5 (0 before the first: the run 0 has 1): 0 2 2 4 4 6 6; with r at the frame 4 the run
+  // there is the first again (1, no event) and the last even value is put back to 0, not kept: 0 2 2 4 0 2 2.
+  let rs: [Bool; 6] = [false, false, true, false, false, true]
+  let a = lp_reset.render(rs, 8.0)
+  let es: [Bool; 7] = [false, false, false, false, true, false, false]
+  let b = even_reset.render(es, 8.0)
+  assert a.out[0] == 1 && a.out[1] == 3 && a.out[2] == 1 && a.out[3] == 3 && a.out[4] == 6 && a.out[5] == 1
+  assert b.out[0] == 0 && b.out[1] == 2 && b.out[2] == 2 && b.out[3] == 4 && b.out[4] == 0 && b.out[5] == 2 && b.out[6] == 2
+}
+
+test "sample_tick() in an event stage of a part is the position: the time of the caller under when~ (stopped frames count), the time divided by 2 under .down~(2)" {
+  // last_tick gives sample_tick() + 1 at each run. Under when~ with c = T F T T F T the runs are at the frames 0 2 3 5 and the time is the frame: 1 3 4 6, held: 1 1 3 4 4 6. Under .down~(2) the runs are at the
+  // frames 0 2 4 and the time is 0 1 2: 1 2 3, held two frames.
+  let cs: [Bool; 6] = [true, false, true, true, false, true]
+  let a = tick_when.render(cs, 8.0)
+  let b = tick_down.render(6, 8.0)
+  assert a.out[0] == 1 && a.out[1] == 1 && a.out[2] == 3 && a.out[3] == 4 && a.out[4] == 4 && a.out[5] == 6
+  assert b.out[0] == 1 && b.out[1] == 1 && b.out[2] == 2 && b.out[3] == 2 && b.out[4] == 3 && b.out[5] == 3
+}
+
+// ---- the generated API: events are in the state, so a run in two calls is a run in one, and `reset` makes the first state again
+
+pub flow held(x: U32 at sample) -> U32 at sample {
+  odd~(gen~(x)) at sample
+}
+
+test "a run split in two process calls keeps the last event in the state, and reset puts it back" {
+  // x = 1 2 4 6: the only odd one is 1 at the frame 0, held: 1 1 1 1, also across the cut after the frame 1. After `reset`, x = 2 4 has no odd value: 0 0 (T.default(), not the 1 of the run before); the run of x again is 1 1 1 1.
+  let xs: [U32; 4] = [1, 2, 4, 6]
+  var out: [U32; 4] = [0; 4]
+  var st = held.init(8.0)
+  held.process(inout st, xs.slice(0, 2), inout out.slice(0, 2))
+  held.process(inout st, xs.slice(2, 4), inout out.slice(2, 4))
+  assert out[0] == 1 && out[1] == 1 && out[2] == 1 && out[3] == 1
+  held.reset(inout st)
+  held.process(inout st, xs.slice(1, 3), inout out.slice(0, 2))
+  assert out[0] == 0 && out[1] == 0
+  held.reset(inout st)
+  held.process(inout st, xs.slice(0, 4), inout out.slice(0, 4))
+  assert out[0] == 1 && out[1] == 1 && out[2] == 1 && out[3] == 1
+}
+
+// ---- nested and wrapped: a producer, a receiver, the two, and the whole in a flow of their own are the same
+
+flow make_in_a_flow(x: U32 at sample) -> U32 at event {
+  let d = gen~(x)
+  Some(d)
+}
+
+flow make_two_in_a_flow(x: U32 at sample) -> U32 at event {
+  let a = gen~(x)
+  let b = inc~(a)
+  Some(b)
+}
+
+flow take_in_a_flow(e: U32 at event) -> U32 at sample {
+  acc~(e)
+}
+
+flow whole(x: U32 at sample) -> U32 at sample {
+  let d = gen~(x)
+  acc~(d)
+}
+
+pub flow plain(x: U32 at sample) -> U32 at sample {
+  acc~(gen~(x))
+}
+
+pub flow wrap_make(x: U32 at sample) -> U32 at sample {
+  acc~(make_in_a_flow~(x))
+}
+
+pub flow wrap_take(x: U32 at sample) -> U32 at sample {
+  take_in_a_flow~(gen~(x))
+}
+
+pub flow wrap_both(x: U32 at sample) -> U32 at sample {
+  take_in_a_flow~(make_in_a_flow~(x))
+}
+
+pub flow wrap_whole(x: U32 at sample) -> U32 at sample {
+  whole~(x)
+}
+
+pub flow wrap_two_stages(x: U32 at sample) -> U32 at sample {
+  acc~(make_two_in_a_flow~(x))
+}
+
+test "the producer, the receiver, the two and the whole wrapped in flows give the sums of the plain form" {
+  // x = 1 2 3 4: the sums 1 3 6 10 in each form. `make_two_in_a_flow` adds one on the way: the events 2 3 4 5, the sums 2 5 9 14.
+  let xs: [U32; 4] = [1, 2, 3, 4]
+  let a = plain.render(xs, 8.0)
+  let b = wrap_make.render(xs, 8.0)
+  let c = wrap_take.render(xs, 8.0)
+  let d = wrap_both.render(xs, 8.0)
+  let e = wrap_whole.render(xs, 8.0)
+  let f = wrap_two_stages.render(xs, 8.0)
+  assert a.out[0] == 1 && a.out[1] == 3 && a.out[2] == 6 && a.out[3] == 10
+  assert b.out[0] == 1 && b.out[1] == 3 && b.out[2] == 6 && b.out[3] == 10
+  assert c.out[0] == 1 && c.out[1] == 3 && c.out[2] == 6 && c.out[3] == 10
+  assert d.out[0] == 1 && d.out[1] == 3 && d.out[2] == 6 && d.out[3] == 10
+  assert e.out[0] == 1 && e.out[1] == 3 && e.out[2] == 6 && e.out[3] == 10
+  assert f.out[0] == 2 && f.out[1] == 5 && f.out[2] == 9 && f.out[3] == 14
+}

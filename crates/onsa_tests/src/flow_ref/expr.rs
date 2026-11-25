@@ -203,7 +203,10 @@ impl<'a> Frame<'a> {
             let replicas = self.run.as_ref().map_or(&[][..], |r| &r.replicas[..]);
             if let Some(v) = kept.1.get(replicas).cloned() {
                 super::hoist::hoisted_calls(self, e)?;
-                return Ok(v);
+                // The work of a call in the part may give an event, whose stage makes the part again (§11.11, S-1234).
+                let replicas = self.run.as_ref().map_or(&[][..], |r| &r.replicas[..]);
+                let again = self.hoisted.get(&e).and_then(|k| k.1.get(replicas)).cloned();
+                return Ok(again.unwrap_or(v));
             }
         }
         let at = self.body.ast.expr(e).span;

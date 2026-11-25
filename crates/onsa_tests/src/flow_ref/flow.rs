@@ -28,7 +28,7 @@ use super::hoist::{has_state, pre, seen_of, stage_of};
 use super::host::FnHost;
 use super::rate::{Conds, Level, chain_of, components, derived, levels, on_tick, ring_clock, slow_ticks};
 use super::scalar::{Fault, PanicKind};
-use super::sema_view::{Body, Called, Stage, View, clock_stage, input_stage, inputs_at, output_stage};
+use super::sema_view::{Body, Called, Stage, View, clock_stage, input_clock, inputs_at, output_stage};
 use super::state::{InstState, Run};
 use super::value::Value;
 
@@ -40,6 +40,8 @@ pub enum Clock {
     Const,
     Init,
     Block,
+    /// The events of a source (§11.11, W7-11 U2): below every tick, above `block`. Two sources are not ordered (E0815): the number says which, not when.
+    Event(u32),
     Tick(i32),
 }
 
@@ -77,7 +79,11 @@ pub(super) type Known = HashMap<LocalId, Seen>;
 /// The clock of an expression of two operands: the faster, as §11.3 has it. `None` for two that do not join (the event
 /// clocks of two inputs, W7-17); there is always one today.
 pub fn join(a: Clock, b: Clock) -> Option<Clock> {
-    Some(a.max(b))
+    Some(match (a, b) {
+        // `sample_tick()` has the clock of the place that reads it (§11.4): with an event it is that event's (§11.11).
+        (Clock::AMBIENT, e @ Clock::Event(_)) | (e @ Clock::Event(_), Clock::AMBIENT) => e,
+        _ => a.max(b),
+    })
 }
 
 impl From<Stage> for Clock {
@@ -85,6 +91,7 @@ impl From<Stage> for Clock {
         match s {
             Stage::Init => Clock::Init,
             Stage::Block => Clock::Block,
+            Stage::Event(k) => Clock::Event(k),
             Stage::Tick(r) => Clock::Tick(r),
         }
     }
@@ -97,6 +104,7 @@ impl Clock {
         match (stage, self) {
             (Stage::Init, _) => self <= Clock::Init,
             (Stage::Block, _) => self == Clock::Block,
+            (Stage::Event(k), _) => self == Clock::Event(k),
             (Stage::Sample, Clock::Tick(r)) => r >= 0,
             (Stage::Tick(r), _) => self == Clock::Tick(r),
         }
@@ -163,10 +171,14 @@ pub(super) fn clock_of(body: &Body, known: &Known, root: ExprId, e: ExprId) -> R
                     let first = args.get(Delay::SAVED).ok_or(Fault::Internal("a delay with no argument"))?;
                     match clock_of(body, known, root, first.expr)? {
                         c @ Clock::Tick(_) => c.rooted(),
+                        c @ Clock::Event(_) => c,
                         _ => Clock::Sample,
                     }
                 }
-                Called::Flow(def) => output_stage(body.view.flow(def)?)?.into(),
+                Called::Flow(def) => match output_stage(body.view.flow(def)?)? {
+                    Stage::Event(_) => super::events::call_src(e),
+                    s => s.into(),
+                },
             })
         }
         // The index of a `par~` is a value of `init` (§11.5), not a constant: the body is clocked with it.
@@ -184,6 +196,14 @@ pub(super) fn clock_of(body: &Body, known: &Known, root: ExprId, e: ExprId) -> R
                     .ok_or(Fault::Unavailable("a clock the evaluator has not")),
             }
         }
+        // `^name` of a name of an event is read at the events of that name (`prev~(^d)` ticks when `d` gives one, §11.11); any other has no clock of its own (`sample`, §11.3).
+        ExprKind::Feedback(_) => match body.target(e) {
+            Ok(Target::Local(l)) => match known.get(l).and_then(|seen| seen.read) {
+                Some(c @ Clock::Event(_)) => Ok(c),
+                _ => Ok(Clock::Const),
+            },
+            _ => Ok(Clock::Const),
+        },
         ExprKind::Path(_) | ExprKind::Field { .. } if body.names(e) => match body.target(e)? {
             Target::Local(l) => match known.get(l) {
                 Some(seen) => seen.read.ok_or(Fault::Unavailable("a clock the evaluator has not")),
@@ -208,6 +228,8 @@ pub(super) struct Step {
     pub(super) known: Rc<Known>,
     /// Does `init` hold a call of an instance or a delay: the work they have in a stage that is not the step's is done where they are written (S-1233).
     pub(super) calls: bool,
+    /// The output of a flow that gives events: its value is an `Option` and a `Some` is an event it gives (`events::emit`).
+    pub(super) emits: bool,
 }
 
 /// What is the same at each call of a flow: its steps, the ticks slower than `sample` its stages are of, and the clock of the condition of each `reset_if~` (`rate::slow_ticks`).
@@ -243,6 +265,8 @@ pub struct Inst {
     /// The parts of the body that a slower stage made (`Frame::hoisted`).
     hoisted: Hoisted,
     pub(super) out: Value,
+    /// The event an entry of this instance gave (§11.11), taken by whoever ran the entry (`Frame::fire_emitted`).
+    pub(super) emitted: Option<Value>,
     pub(super) state: InstState,
     /// The index of each `par~` around the call that made it, which the arguments of its `block` stage and what a ring gathers of them may read (the bindings of an arm they read are made by `Frame::eval_in_arms`).
     pub(super) scope: Vec<(LocalId, Value)>,
@@ -287,7 +311,7 @@ pub fn stage_at(view: View, at: Span) -> Option<Stage> {
         Some(match clock {
             Clock::Const | Clock::Init => Stage::Init,
             Clock::Block => Stage::Block,
-            Clock::Tick(_) => Stage::Sample,
+            Clock::Event(_) | Clock::Tick(_) => Stage::Sample,
         })
     })
 }
@@ -311,6 +335,16 @@ impl Outcome {
     }
 }
 
+/// An event the outermost flow gave: the frame and the value.
+pub type EventOut = (usize, Value);
+
+/// The events a `process` is given at its outermost flow (`Instance::process_events`), and the ones the flow gave.
+#[derive(Default)]
+struct Events {
+    given: Vec<(usize, String, Value)>,
+    took: RefCell<Vec<(usize, Value)>>,
+}
+
 /// What a call of `render` is given (§11.6): the inputs of `init` and of `block` by name, the columns of the `sample`
 /// inputs, and the frames of a flow that has none of them.
 #[derive(Clone, Copy, Default)]
@@ -331,6 +365,8 @@ pub struct Instance<'a> {
     pub ctx: Ctx,
     /// The places of the tree held so far (`Run::used`), which a call goes on from: the limit is the tree's, not a call's.
     used: usize,
+    /// What `reset` could not do (the names of the events back to `T.default()`): the next `process` gives it.
+    reset_failed: Option<Stop>,
 }
 
 /// The inputs of `decl` at `stage` and the `names` given: an input left out, one added and one of another clock are
@@ -370,13 +406,17 @@ fn give<V: std::borrow::Borrow<Value>>(
 /// the call is written, whether its output is read here or not, so there is one walk of the body for a stage and the stage is its argument).
 // S-1093 (1): a `let` and the output expression of a stage are evaluated whether or not a value is read from them (so one that
 // panics does, in a branch not taken too, and the output of `block` or `init` in a call of 0 frames too).
-fn stage(f: &mut Frame, steps: &[Step], out: &mut Value, at: Stage) -> Result<(), Stop> {
+pub(super) fn stage(f: &mut Frame, steps: &[Step], out: &mut Value, at: Stage) -> Result<(), Stop> {
     for s in steps {
         // Where a call that an expression of the step reads is written (`read_call` makes the arguments the call gathers there).
         f.run.iter_mut().for_each(|run| run.step = Some((s.known.clone(), s.init)));
         if s.clock.runs_at(at) {
             match s.pat {
                 Some(pat) => f.bind(pat, s.init)?,
+                None if s.emits => {
+                    let v = f.eval(s.init)?;
+                    f.emit(&v);
+                }
                 None => *out = f.eval(s.init)?,
             }
         } else if s.clock > Clock::from(at) || s.calls {
@@ -401,14 +441,31 @@ pub(super) fn enter<V: std::borrow::Borrow<Value>>(
     f.run.as_mut().iter_mut().for_each(|run| {
         run.stage = at;
         run.gathered.clear();
+        run.steps = Some(inst.steps.clone());
     });
     stage(f, &inst.steps, &mut inst.out, at)?;
     let whole = f.body.ast.expr(decl.body).span;
+    let done = enter_end(f, inst, decl, at, whole);
+    // What the entry gave: the event, which is the value of the output from now (§11.11), and the value an event stage of the caller's own made (`Frame::fire`).
+    if let Some(run) = f.run.as_mut() {
+        if let Some(p) = run.emitted.take() {
+            inst.out = p.clone();
+            inst.emitted = Some(p);
+        }
+        if let Some(v) = run.set_out.take() {
+            inst.out = v;
+        }
+    }
+    done
+}
+
+fn enter_end(f: &mut Frame, inst: &mut Inst, decl: &FlowDef, at: Stage, whole: Span) -> Result<(), Stop> {
     match at {
         // The nodes of `init` and the stages of the instances are made and run by the walk (`Frame::work_of`); what is left is the forms the evaluator has not.
         Stage::Init => {
             f.check_forms(&inst.steps.iter().map(|s| s.init).collect::<Vec<_>>())?;
             f.finish_cells()?;
+            f.default_events(&inst.steps, decl, &mut inst.out)?;
             f.commit(whole)
         }
         // The parts that read a `^name` and that this stage makes are made at its end (S-1244).
@@ -474,6 +531,7 @@ impl Inst {
                 locals: HashMap::new(),
                 hoisted: HashMap::new(),
                 out: Value::Unit,
+                emitted: None,
                 state: InstState::default(),
                 scope: Vec::new(),
             },
@@ -498,10 +556,10 @@ impl Inst {
         }
         let mut inputs = Known::new();
         for i in &decl.inputs {
-            let stage = input_stage(i).map_err(at(decl.body))?;
+            let n = inputs.len();
             inputs.insert(
                 body.input(&i.name).ok_or(wrong(decl.body, "an input with no local"))?,
-                Seen::both(stage.into()),
+                Seen::both(input_clock(decl, n).map_err(at(decl.body))?),
             );
         }
         let (mut known, mut seen) = (inputs.clone(), vec![None; lets.len()]);
@@ -534,19 +592,25 @@ impl Inst {
                 clock: clock.stage,
                 known: Rc::default(),
                 calls: has_state(body, *init),
+                emits: false,
             });
         }
         let out = seen_of(body, &known, tail, tail).map_err(at(tail))?;
         let ambient = stage_of(body, &known, tail, tail).map_err(at(tail))? == Clock::AMBIENT;
-        // An event output is of no stage here (W7-11 U2): not evaluated.
-        let clock = match output_stage(decl).map_err(at(tail))? {
-            Stage::Tick(m) if ambient && m < 0 => Clock::Tick(m),
-            _ => out.stage,
+        let emits = matches!(output_stage(decl).map_err(at(tail))?, Stage::Event(_));
+        // The clock of an event output is that of its expression (`at` counted): the events come at its ticks, at each `sample` of the body for the parameter kinds alone (§11.11).
+        let clock = match (emits, out.read) {
+            (true, Some(c @ (Clock::Tick(_) | Clock::Event(_)))) => c.rooted(),
+            (true, _) => Clock::Sample,
+            (false, _) => match output_stage(decl).map_err(at(tail))? {
+                Stage::Tick(m) if ambient && m < 0 => Clock::Tick(m),
+                _ => out.stage,
+            },
         };
         // Every step has the clocks of all the locals: a `^name` in the first argument of a delay reads one below it (S-1244); a name is read of the ones before it alone (the check sees to it).
         let every = Rc::new(known);
         steps.iter_mut().for_each(|s| s.known = every.clone());
-        steps.push(Step { pat: None, init: tail, clock, known: every, calls: has_state(body, tail) });
+        steps.push(Step { pat: None, init: tail, clock, known: every, calls: has_state(body, tail), emits });
         Ok(steps.into())
     }
 
@@ -596,7 +660,7 @@ impl<'a> Instance<'a> {
         let done = enter(&mut f, &mut me, decl, Stage::Init, config);
         let used = f.run.as_ref().map_or(0, |r| r.used);
         let kept = me.keep(f, body.ast.expr(decl.body).span);
-        done.and(kept).map(|()| Instance { body, decl, me, plans, ctx, used })
+        done.and(kept).map(|()| Instance { body, decl, me, plans, ctx, used, reset_failed: None })
     }
 
     /// `process` over `frames` frames: the `let`s of `block` once (`params`, by name), a call of 0 frames too, and for
@@ -612,7 +676,7 @@ impl<'a> Instance<'a> {
     where
         'a: 'h,
     {
-        self.stages(params, inputs, frames, host).map_err(|(_, stop)| stop)
+        self.stages(params, inputs, frames, host, &Events::default()).map_err(|(_, stop)| stop)
     }
 
     /// [`Self::process`] with a panic as a result (§9.2, §11.6): the stage it was at and the expression.
@@ -626,7 +690,7 @@ impl<'a> Instance<'a> {
     where
         'a: 'h,
     {
-        Outcome::of(self.stages(params, inputs, frames, host))
+        Outcome::of(self.stages(params, inputs, frames, host, &Events::default()))
     }
 
     /// The one `process`, with the stage a stop is at (`block`, then each frame).
@@ -636,12 +700,16 @@ impl<'a> Instance<'a> {
         inputs: &[(&str, &[Value])],
         frames: usize,
         host: Option<&'h mut dyn FnHost>,
+        events: &Events,
     ) -> Result<Vec<Value>, (PanicAt, Stop)>
     where
         'a: 'h,
     {
         let (decl, mut outs, mut stage) = (self.decl, Vec::new(), PanicAt::Start);
         let at = self.body.ast.expr(decl.body).span;
+        if let Some(stop) = self.reset_failed.take() {
+            return Err((PanicAt::Start, stop));
+        }
         let mut f = self.me.frame(self.body, self.ctx, self.used, self.plans.clone(), host);
         let done = (|| {
             check(at, decl, Stage::Sample, inputs.iter().map(|(n, _)| *n))?;
@@ -656,7 +724,18 @@ impl<'a> Instance<'a> {
                 let run = f.run.as_mut().ok_or(Stop { fault: Fault::Internal("a frame with no run"), at })?;
                 run.ctx = self.ctx;
                 let given: Vec<(&str, &Value)> = inputs.iter().map(|(name, col)| (*name, &col[n])).collect();
+                // The events the boundary gives at this position come first, in the order it gives them (§11.11, §11.9: before the ticks and `sample`).
+                for (_, name, v) in events.given.iter().filter(|(pos, ..)| *pos == n) {
+                    let k = decl
+                        .inputs
+                        .iter()
+                        .position(|i| i.name == *name)
+                        .ok_or(Stop { fault: Fault::Internal("an event for an input that is not there"), at })?;
+                    enter(&mut f, &mut self.me, decl, Stage::Event(k as u32), &[(name.as_str(), v.clone())])?;
+                    self.gave(&mut events.took.borrow_mut(), n);
+                }
                 run_frame(&mut f, &mut self.me, decl, &given)?;
+                self.gave(&mut events.took.borrow_mut(), n);
                 outs.push(self.me.out.clone());
                 self.ctx = Ctx::at(self.ctx.sample_rate, self.ctx.total().wrapping_add(1));
             }
@@ -665,6 +744,31 @@ impl<'a> Instance<'a> {
         self.used = f.run.as_ref().map_or(self.used, |r| r.used);
         let kept = self.me.keep(f, at);
         done.and(kept).map(|()| outs).map_err(|stop| (stage, stop))
+    }
+
+    /// `process` of an instance whose outermost flow has inputs of `at event` (§11.11): the evaluator's own table of the events, `(frame, input name, value)` in the order the boundary gives them (the interpreter has no such
+    /// door before W10-07). The outputs of the frames, and the events the flow gave, `(frame, value)`.
+    pub fn process_events<'h>(
+        &mut self,
+        params: &[(&str, Value)],
+        inputs: &[(&str, &[Value])],
+        frames: usize,
+        given: &[(usize, String, Value)],
+        host: Option<&'h mut dyn FnHost>,
+    ) -> Result<(Vec<Value>, Vec<EventOut>), Stop>
+    where
+        'a: 'h,
+    {
+        let events = Events { given: given.to_vec(), took: Default::default() };
+        let outs = self.stages(params, inputs, frames, host, &events).map_err(|(_, stop)| stop)?;
+        Ok((outs, events.took.take()))
+    }
+
+    /// The event the last entry gave, if one, is taken with the position (`Events::took`).
+    fn gave(&mut self, took: &mut Vec<(usize, Value)>, at: usize) {
+        if let Some(v) = self.me.emitted.take() {
+            took.push((at, v));
+        }
     }
 
     /// `render` (§11.6): `init` and one `process` of all the frames, the call a test makes. A flow with `sample` inputs
@@ -704,6 +808,19 @@ impl<'a> Instance<'a> {
     pub fn reset(&mut self) {
         self.me.state.reset(false);
         self.ctx = Ctx::at(self.ctx.sample_rate, 0);
+        self.reset_failed = self.reset_events().err();
+    }
+
+    /// The names of the events of the instance and of the instances it calls are `T.default()` again (§11.11, §11.6).
+    fn reset_events(&mut self) -> Result<(), Stop> {
+        let at = self.body.ast.expr(self.decl.body).span;
+        let mut f = self.me.frame(self.body, self.ctx, self.used, self.plans.clone(), None);
+        let steps = self.me.steps.clone();
+        let done = f.default_events(&steps, self.decl, &mut self.me.out).and_then(|()| {
+            let calls: Vec<_> = f.run.as_ref().map(|r| r.state.children.keys().cloned().collect()).unwrap_or_default();
+            calls.iter().try_for_each(|k| f.restart(k, true))
+        });
+        done.and(self.me.keep(f, at))
     }
 
     /// The clock of each step: the `let`s in the order they are written, then the output.

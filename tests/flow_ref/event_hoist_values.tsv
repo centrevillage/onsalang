@@ -1,0 +1,34 @@
+# flow_ref 1 source=tests/spec/flow_semantics/event_hoist_values.onsa tests=7 evaluated=7 unavailable=0 skipped=0 waiting=1
+@ an event output read at sample in an expression of sample has the event of the frame itself
+render event_hoist_values.call_at_sample sr=0x41000000 in x=[1 2 3]
+out=[2 4 6]
+@ an expression of an event is evaluated at its events: before the first it is T.default(), and `(d at sample) + 7` is computed at sample from the value before the first
+render event_hoist_values.expression_of_an_event sr=0x41000000 in x=[2 4 3 6 5]
+out=[0 0 10 10 12]
+render event_hoist_values.read_then_add sr=0x41000000 in x=[2 4 3 6 5]
+out=[7 7 10 10 12]
+@ an event value read at the ticks of sample / 4 is the last value before the tick, kept four frames, in a let and inline
+render event_hoist_values.event_at_a_slower_tick sr=0x41000000 in x=[1 2 3 4 5 6 7 8 9 10]
+out=[0 0 0 0 4 4 4 4 8 8]
+render event_hoist_values.event_at_a_slower_tick_inline sr=0x41000000 in x=[1 2 3 4 5 6 7 8 9 10]
+out=[0 0 0 0 4 4 4 4 8 8]
+@ an event stage reads sample_rate(), a block value and sample_tick()
+render event_hoist_values.event_reads_the_rate sr=0x41000000 in x=[0x3f800000 0x40000000 0x40400000]
+out=[0x41000000 0x41800000 0x41c00000]
+render event_hoist_values.event_reads_a_block sr=0x41000000 params p=3 in x=[1 2 3]
+out=[3 6 9]
+render event_hoist_values.event_reads_the_time sr=0x41000000 in x=[1 2 3 4 5]
+out=[1 1 4 4 9]
+@ the output expression gives an event at each tick of its clock: the value read at sample / 4 gives an event at each of its ticks
+render event_hoist_values.out_event_at_a_quarter sr=0x41000000 in x=[1 2 3 4 5 6 7 8 9]
+out=[0 0 0 0 4 4 4 4 12]
+@ an output expression of a block value gives an event at each frame, and with `at (sample / 4)` at each tick of it
+render event_hoist_values.out_block_each sr=0x41000000 params p=2 frames=4
+out=[2 4 6 8]
+render event_hoist_values.out_block_quarter sr=0x41000000 params p=2 frames=9
+out=[2 2 2 2 4 4 4 4 6]
+@ one event given to two inputs ticks each of them once
+render event_hoist_values.one_event_two_inputs sr=0x41000000 in x=[1 2 3]
+out=[2 4 6]
+render event_hoist_values.one_event_two_sums sr=0x41000000 in x=[1 2 3]
+out=[11 33 66]

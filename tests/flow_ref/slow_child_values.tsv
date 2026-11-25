@@ -7,7 +7,7 @@ process 0 params p=0x40000000 frames=4 in x=[0x40a00000 0x40c00000 0x40e00000 0x
 out=[0x40a00000 0x40c00000 0x40e00000 0x41000000]
 process 0 params p=0x40400000 frames=5 in x=[0x41100000 0x41200000 0x41300000 0x41400000 0x41500000]
 out=[0x41900000 0x41a00000 0x41b00000 0x41c00000 0x421c0000]
-- the value of a child is the value of its body written in the parent, whatever the cuts of the run	skipped statement
+- the value of a child is the value of its body written in the parent, whatever the cuts of the run	skipped nocall
 @ two instances of one child keep their own delays
 init 0 slow_child_values.two_sites sr=0x41000000
 process 0 params p=0x3f800000 q=0x40a00000 frames=4

@@ -1,0 +1,349 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.11", "§11.3", "§11.4", "§11.9", "§11.2"]
+
+// The values of the event clock in a straight line (W7-11 U2/t; S-561, S-564, S-1234, S-1235, S-1240; spec §11.11: "出したイベントの刻みは、作り手の呼び出しのその刻みの仕事（保存まで）が済んだ直後に、呼び出し側の段の途中で行い、
+// 呼び出し側の段の残りはその後に続く"; "作り手より下に書いた式と受け手には、その位置の、出した段より後の自分の仕事の前に届く"; "`^名前` を通して作り手より上に書いた受け手もその時に刻むが、その段の上の仕事は済んでいるので、
+// 上の式が読むのは、その式を評価した時点までに出たイベントまでの値"; "同じ位置で速い段が出したイベントは、それより遅い周期の刻みには次の刻みで見える"; §11.3: 保存する値の残りが読むイベントの値は、書いた位置までの最後の値).
+// The outermost flows have ports at `sample` and are rendered. A producer gives its event from a `sample` expression (`gen`), from a `sample / 4` expression (`gen4`) or for each event of its input (`inc`, `odd`); a receiver
+// (`acc`) adds the values of its events and gives the sum at `sample`, so an output frame is the sum of the events up to that frame. Every value is worked out by hand from the text.
+
+flow gen(x: U32 at sample) -> U32 at event {
+  Some(x)
+}
+
+flow inc(m: U32 at event) -> U32 at event {
+  Some(m + 1)
+}
+
+flow odd(m: U32 at event) -> U32 at event {
+  if m % 2 == 1 {
+    Some(m)
+  } else {
+    None
+  }
+}
+
+flow acc(e: U32 at event) -> U32 at sample {
+  let n = prev~(^n) + e
+  n
+}
+
+flow acc_half(e: U32 at event) -> U32 at (sample / 2) {
+  let n = prev~(^n) + e
+  n
+}
+
+flow acc_quarter(e: U32 at event) -> U32 at (sample / 4) {
+  let n = prev~(^n) + e
+  n
+}
+
+flow lag(m: U32 at event) -> U32 at sample {
+  prev~(m, 9)
+}
+
+// 1 at the frame 0, 2 at the frame 4, 3 at the frame 8 ...: the ticks of `sample / 4` (`c` counts them from 0, `prev~` gives the one before).
+flow gen4() -> U32 at event {
+  let c = prev~((^c + 1) at (sample / 4))
+  Some(c + 1)
+}
+
+rt fn bump(v: U32, n: U32) -> U32 {
+  if v > n {
+    v
+  } else {
+    n
+  }
+}
+
+// ---- a producer, a receiver, and the clock the receiver is read at
+
+pub flow basic(x: U32 at sample) -> U32 at sample {
+  let d = gen~(x)
+  acc~(d)
+}
+
+pub flow read_by_half(x: U32 at sample) -> U32 at sample {
+  let d = gen~(x)
+  acc_half~(d) at sample
+}
+
+pub flow quarter_to_sample() -> U32 at sample {
+  let d = gen4~()
+  acc~(d)
+}
+
+pub flow quarter_to_half() -> U32 at sample {
+  let d = gen4~()
+  acc_half~(d) at sample
+}
+
+test "the events of a producer at sample are summed by a receiver and read at sample: the sum up to the frame" {
+  // x = 1 2 3 4: the events 1 2 3 4, the sums 1 3 6 10.
+  let xs: [U32; 4] = [1, 2, 3, 4]
+  let o = basic.render(xs, 8.0)
+  assert o.out[0] == 1 && o.out[1] == 3 && o.out[2] == 6 && o.out[3] == 10
+}
+
+test "a receiver read at sample / 2 sees at a tick the events of the frames before it: the event of the frame of the tick comes at the next tick" {
+  // x = 1 .. 6: the ticks are the frames 0, 2, 4. The event of the frame p is given by the `sample` stage, after the tick of the frame p (§11.9), so the tick of the frame 0 reads the value before the first event (0), the tick
+  // of the frame 2 the events of the frames 0 and 1 (3), the tick of the frame 4 the events of the frames 0 .. 3 (10). Each is held two frames.
+  let xs: [U32; 6] = [1, 2, 3, 4, 5, 6]
+  let o = read_by_half.render(xs, 8.0)
+  assert o.out[0] == 0 && o.out[1] == 0 && o.out[2] == 3 && o.out[3] == 3 && o.out[4] == 10 && o.out[5] == 10
+}
+
+test "a producer at sample / 4 gives its event in its own stage, before the stage of sample / 2 and of sample of the same frame" {
+  // The events 1 2 3 at the frames 0 4 8. The stage of `sample / 4` is before that of `sample / 2` (the larger N first, §11.9), so a receiver read at the tick of `sample / 2` of the frame 4 has the event of the
+  // frame 4 already: the sums 1 3 6 at the frames 0 4 8, whether the receiver is read at `sample` or at `sample / 2`.
+  let a = quarter_to_sample.render(9, 8.0)
+  let b = quarter_to_half.render(9, 8.0)
+  assert a.out[0] == 1 && a.out[3] == 1 && a.out[4] == 3 && a.out[7] == 3 && a.out[8] == 6
+  assert b.out[0] == 1 && b.out[3] == 1 && b.out[4] == 3 && b.out[7] == 3 && b.out[8] == 6
+}
+
+// ---- the value before the first event, the value of the first event, a sample expression that reads two calls
+
+pub flow before_the_first(x: U32 at sample) -> U32 at sample {
+  let d = gen~(x)
+  let o = odd~(d)
+  lag~(o)
+}
+
+pub flow two_reads(x: U32 at sample) -> U32 at sample {
+  let a = gen~(x)
+  let b = odd~(gen~(x + 1))
+  (a at sample) + b
+}
+
+pub flow two_makers(x: U32 at sample) -> U32 at sample {
+  let a = gen~(x)
+  let s = acc~(a)
+  let b = gen~(s)
+  acc~(b)
+}
+
+test "before the first event the value is T.default() (0), and the first event of a delay with an init gives that init" {
+  // x = 2 4 3 6 5: `odd` gives 3 at the frame 2 and 5 at the frame 4. Frames 0 and 1 have no event (0). `prev~(m, 9)` of the first event is 9 (the frame 2), of the next the event before it (3, the frame 4).
+  let xs: [U32; 5] = [2, 4, 3, 6, 5]
+  let o = before_the_first.render(xs, 8.0)
+  assert o.out[0] == 0 && o.out[1] == 0 && o.out[2] == 9 && o.out[3] == 9 && o.out[4] == 3
+}
+
+test "one sample expression reads the last values of two calls with the events of their own" {
+  // x = 1 2 3 4. `a` gives x at each frame (1 2 3 4). `b` gives x + 1 where it is odd, so 3 at the frame 1 and 5 at the frame 3 (the value before the first is 0, then held): 0 3 3 5. The sums: 1 5 6 9.
+  let xs: [U32; 4] = [1, 2, 3, 4]
+  let o = two_reads.render(xs, 8.0)
+  assert o.out[0] == 1 && o.out[1] == 5 && o.out[2] == 6 && o.out[3] == 9
+}
+
+test "two producers written in order: the second reads a sum that has the event of the first of the same frame" {
+  // x = 1 2 3: the sums `s` are 1 3 6 (each has the event of its frame), the second producer gives them as events, and the receiver of them sums again: 1 4 10.
+  let xs: [U32; 3] = [1, 2, 3]
+  let o = two_makers.render(xs, 8.0)
+  assert o.out[0] == 1 && o.out[1] == 4 && o.out[2] == 10
+}
+
+// ---- from an event to an event: in `let`s, as arguments, a frame with no event, a flow whose output is an event of a call, a state of an event
+
+flow via_two(m: U32 at event) -> U32 at event {
+  let e1 = inc~(m)
+  let e2 = inc~(e1)
+  Some(e2)
+}
+
+pub flow chain_lets(x: U32 at sample) -> U32 at sample {
+  let d = gen~(x)
+  let e1 = inc~(d)
+  let e2 = inc~(e1)
+  let e3 = inc~(e2)
+  acc~(e3)
+}
+
+pub flow chain_nested(x: U32 at sample) -> U32 at sample {
+  acc~(inc~(inc~(inc~(gen~(x)))))
+}
+
+pub flow chain_in_a_flow(x: U32 at sample) -> U32 at sample {
+  let d = gen~(x)
+  acc~(inc~(via_two~(d)))
+}
+
+pub flow skipping(x: U32 at sample) -> U32 at sample {
+  acc~(odd~(gen~(x)))
+}
+
+flow max_of(d: U32 at event) -> U32 at sample {
+  let n = bump(d, prev~(^n))
+  n
+}
+
+pub flow running_max(x: U32 at sample) -> U32 at sample {
+  max_of~(gen~(x))
+}
+
+test "events through three flows, in lets and nested, and through a flow whose output is the event of a call, are the same" {
+  // x = 1 2 3 4: three `inc` give 4 5 6 7, the sums 4 9 15 22. `via_two` is two `inc`, one more outside the flow: the same.
+  let xs: [U32; 4] = [1, 2, 3, 4]
+  let a = chain_lets.render(xs, 8.0)
+  let b = chain_nested.render(xs, 8.0)
+  let c = chain_in_a_flow.render(xs, 8.0)
+  assert a.out[0] == 4 && a.out[1] == 9 && a.out[2] == 15 && a.out[3] == 22
+  assert b.out[0] == 4 && b.out[1] == 9 && b.out[2] == 15 && b.out[3] == 22
+  assert c.out[0] == 4 && c.out[1] == 9 && c.out[2] == 15 && c.out[3] == 22
+}
+
+test "a frame where the producer gives no event does not move the receiver" {
+  // x = 1 2 3 4 5: `odd` passes 1 3 5 (the frames 0 2 4): the sums 1 1 4 4 9.
+  let xs: [U32; 5] = [1, 2, 3, 4, 5]
+  let o = skipping.render(xs, 8.0)
+  assert o.out[0] == 1 && o.out[1] == 1 && o.out[2] == 4 && o.out[3] == 4 && o.out[4] == 9
+}
+
+test "the state of an event is kept from one event to the next: a running maximum" {
+  // x = 3 1 4 1 5 2: the maxima 3 3 4 4 5 5.
+  let xs: [U32; 6] = [3, 1, 4, 1, 5, 2]
+  let o = running_max.render(xs, 8.0)
+  assert o.out[0] == 3 && o.out[1] == 3 && o.out[2] == 4 && o.out[3] == 4 && o.out[4] == 5 && o.out[5] == 5
+}
+
+// ---- `^` through a delay: a receiver above the producer, a receiver in its argument, a producer that has an input event of its own
+
+// `prev~(^d)` ticks when `d` gives an event, with the `d` before. The receiver `acc_quarter` is read at the tick of `sample / 4`.
+pub flow receiver_above() -> U32 at sample {
+  let h = acc_quarter~(prev~(^d))
+  let d = gen4~()
+  h at sample
+}
+
+pub flow receiver_below() -> U32 at sample {
+  let d = gen4~()
+  let h = acc_quarter~(d)
+  h at sample
+}
+
+pub flow receiver_in_the_argument(x: U32 at sample) -> U32 at sample {
+  let d = gen~(acc~(prev~(^d)) + x)
+  d at sample
+}
+
+// The maker has the input event `m` of its own; its output is a `sample` expression, so it gives an event at each frame, with the value computed before that event ticks `m`.
+flow maker(x: U32 at sample, m: U32 at event) -> U32 at event {
+  let n = prev~(^n) + m
+  Some(x + (n at sample))
+}
+
+pub flow maker_with_input(x: U32 at sample) -> U32 at sample {
+  let d = maker~(x, prev~(^d))
+  d at sample
+}
+
+flow count_events(e: U32 at event) -> U32 at event {
+  let n = prev~(^n) + e
+  Some(n)
+}
+
+pub flow delay_of_events(x: U32 at sample) -> U32 at sample {
+  let r = delay~(^d, 2)
+  let d = odd~(gen~(x))
+  r at sample
+}
+
+flow gen_f(t: F32 at sample) -> F32 at event {
+  if t > 0.0 {
+    Some(t)
+  } else {
+    None
+  }
+}
+
+pub flow vdelay_by_an_event(x: F32 at sample, t: F32 at sample) -> F32 at sample {
+  let d = gen_f~(t)
+  vdelay~(x, d, 4)
+}
+
+test "a receiver written above a producer, read at a tick of sample / 4 of the same frame, has the events of the ticks before it" {
+  // The events of `gen4` are 1 2 3 4 at the frames 0 4 8 12, and `prev~(^d)` gives the one before: 0 1 2 3. The receiver sums them: 0 1 3 6 after each. It is above the producer, so at its tick of the frame p it has
+  // the events of the frames before p (S-1235): 0 at the frame 0, 0 at the frame 4, 1 at the frame 8, 3 at the frame 12, held four frames.
+  let o = receiver_above.render(13, 8.0)
+  assert o.out[0] == 0 && o.out[4] == 0 && o.out[7] == 0 && o.out[8] == 1 && o.out[11] == 1 && o.out[12] == 3
+}
+
+test "the same receiver written below the producer has the event of the frame of its tick" {
+  // The receiver sums the events 1 2 3 4: 1 3 6 10 at the frames 0 4 8 12, each already with the event of its frame (S-1234).
+  let o = receiver_below.render(13, 8.0)
+  assert o.out[0] == 1 && o.out[3] == 1 && o.out[4] == 3 && o.out[8] == 6 && o.out[11] == 6 && o.out[12] == 10
+}
+
+test "a receiver in the argument of the producer, fed by the producer through a delay, has the events of the frames before" {
+  // x = 1 1 1 1 1 1. At the frame p the argument has the sum of what `prev~(^d)` gave up to the frame p - 1, that is d_0 + .. + d_(p-2): d = 1 1 2 3 5 8 (d_0 = 1, d_1 = 1, d_2 = 1 + d_0, d_3 = 1 + d_0 + d_1, ...).
+  let xs: [U32; 6] = [1, 1, 1, 1, 1, 1]
+  let o = receiver_in_the_argument.render(xs, 8.0)
+  assert o.out[0] == 1 && o.out[1] == 1 && o.out[2] == 2 && o.out[3] == 3 && o.out[4] == 5 && o.out[5] == 8
+}
+
+test "a producer with an event input fed by its own output through a delay: its work of the frame comes before the event it gives ticks the input" {
+  // x = 0 1 0 0 0 0. The value of the frame p is x_p + the sum of d_0 .. d_(p-2) (the input event of the frame q adds d_(q-1), and it ticks after the value of the frame q is given): d = 0 1 0 1 1 2.
+  let xs: [U32; 6] = [0, 1, 0, 0, 0, 0]
+  let o = maker_with_input.render(xs, 8.0)
+  assert o.out[0] == 0 && o.out[1] == 1 && o.out[2] == 0 && o.out[3] == 1 && o.out[4] == 1 && o.out[5] == 2
+}
+
+test "delay~ of a value that is an event counts events, not frames" {
+  // x = 1 .. 7: `odd` gives 1 3 5 7 at the frames 0 2 4 6. `delay~(^d, 2)` at the event k gives the event k - 2 (0 before): 0 0 1 3. It is read at sample, held: 0 0 0 0 1 1 3.
+  let xs: [U32; 7] = [1, 2, 3, 4, 5, 6, 7]
+  let o = delay_of_events.render(xs, 8.0)
+  assert o.out[0] == 0 && o.out[1] == 0 && o.out[2] == 0 && o.out[3] == 0 && o.out[4] == 1 && o.out[5] == 1 && o.out[6] == 3
+}
+
+test "vdelay~ reads its length d as the last event, whose first value is 0 (saturated to 1)" {
+  // x = 10 20 30 40 50 60, t = 0 0 2 0 0 4: events 2 at the frame 2 and 4 at the frame 5. Length 1 (the value before the first event is 0 and the length is at least 1) at the frames 0 1: 0 (the init) and 10; then 2: 10 20 30 (the frames 2 3 4 read
+  // x[n - 2]), then 4 at the frame 5: x[1] = 20.
+  let xs: [F32; 6] = [10.0, 20.0, 30.0, 40.0, 50.0, 60.0]
+  let ts: [F32; 6] = [0.0, 0.0, 2.0, 0.0, 0.0, 4.0]
+  let o = vdelay_by_an_event.render(vdelay_by_an_event.In { x: xs, t: ts }, 8.0)
+  assert o.out[0] == 0.0 && o.out[1] == 10.0 && o.out[2] == 10.0 && o.out[3] == 20.0 && o.out[4] == 30.0 && o.out[5] == 20.0
+}
+
+// ---- S-1240: what a delay stores is the value of the event where it is written, a `^name` is the value at the end of the stage
+
+pub flow stored_reads_n(x: U32 at sample) -> U32 at sample {
+  let n = count_events~(prev~(^d))
+  let q = prev~((n at sample) + 1)
+  let d = gen~(x)
+  q
+}
+
+pub flow stored_reads_t(x: U32 at sample) -> U32 at sample {
+  let n = count_events~(prev~(^d))
+  let t = (n at sample) + 1
+  let q = prev~(t)
+  let d = gen~(x)
+  q
+}
+
+pub flow stored_reads_caret(x: U32 at sample) -> U32 at sample {
+  let n = count_events~(prev~(^d))
+  let w = prev~((n at sample) + (^d at sample))
+  let d = gen~(x)
+  w
+}
+
+test "what a delay stores reads the event value where it is written, in the argument or in a let of its own" {
+  // x = 3 1 2 5 4. `n` is a sum of the `d` before each event: 0 3 4 6 11 after the events of the frames 0 .. 4. At the frame p, above the producer, `n` is the value after the frame p - 1 (0 at the frame 0): 0 0 3 4 6.
+  // The delay stores that plus 1 (1 1 4 5 7) and gives it a frame later: 0 1 1 4 5. `let t = (n at sample) + 1` with `prev~(t)` is the same.
+  let xs: [U32; 5] = [3, 1, 2, 5, 4]
+  let a = stored_reads_n.render(xs, 8.0)
+  let b = stored_reads_t.render(xs, 8.0)
+  assert a.out[0] == 0 && a.out[1] == 1 && a.out[2] == 1 && a.out[3] == 4 && a.out[4] == 5
+  assert b.out[0] == 0 && b.out[1] == 1 && b.out[2] == 1 && b.out[3] == 4 && b.out[4] == 5
+}
+
+test "what a delay stores reads a ^name at the end of the stage: the event of the frame itself" {
+  // The same x. The stored value is `n` of the frame (as above: 0 0 3 4 6) plus `^d`, the event of the frame at the end of the stage (3 1 2 5 4): 3 1 5 9 10. The delay gives it a frame later: 0 3 1 5 9.
+  let xs: [U32; 5] = [3, 1, 2, 5, 4]
+  let o = stored_reads_caret.render(xs, 8.0)
+  assert o.out[0] == 0 && o.out[1] == 3 && o.out[2] == 1 && o.out[3] == 5 && o.out[4] == 9
+}

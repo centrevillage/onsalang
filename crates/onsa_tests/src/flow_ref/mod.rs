@@ -51,6 +51,7 @@ pub mod call;
 mod chain;
 pub mod data;
 mod delay_mods;
+pub mod events;
 pub mod expr;
 pub mod flow;
 mod hoist;
@@ -84,6 +85,10 @@ mod conversion_tests;
 mod data_tests;
 #[cfg(test)]
 mod delay_mods_tests;
+#[cfg(test)]
+mod event_table_tests;
+#[cfg(test)]
+mod event_tests;
 #[cfg(test)]
 mod expr_tests;
 #[cfg(test)]

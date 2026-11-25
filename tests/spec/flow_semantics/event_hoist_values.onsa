@@ -1,0 +1,194 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.11", "§11.3", "§11.4", "§11.2"]
+
+// An event value read at another clock, the expressions of an event, the output expression of an event, and one event given to two inputs (W7-11 U2/t; S-564, S-1196, S-1236, S-1210; spec §11.11: "`v at sample`・`v at (sample / N)`
+// と書いても同じ意味で、変換の場所を留める（値の欄は §11.3 の巻き上げの隠れた欄）"; "周期の刻みのクロックの被演算子の無いイベントの値の式は、そのイベントのクロックの式で、その刻みごとに評価する"; "本体の出力の式は `Option[E]` で、
+// その式のクロック（`at` で付けたクロックを含む）の刻みで、`Some(v)` のときに一つのイベント `v` を出す（`sample` の式なら刻みごと、入力 `m` のイベントの値なら `m` のイベントごと、パラメータの種類だけなら本体の `sample` の刻みで、
+// `at (sample / N)` を付ければその刻み）"; "同じクロックを二つ以上の入力に渡すと、部品はイベントごとに、その入力を宣言の順に一つずつ刻む"; §11.3: 刻みで書いて速い段が読むフィールドの初めの値は `T.default()`).
+// The order of two ticks of one event (S-1236) shows in a value only through the condition of a modifier or a panic (the first is for U2r, the second is in crates/onsa_cli/tests/cli/event_stage_commands.rs); here the sums are the same
+// in whichever order. Every value is worked out by hand.
+
+flow gen(x: U32 at sample) -> U32 at event {
+  Some(x)
+}
+
+flow gen_f(x: F32 at sample) -> F32 at event {
+  Some(x)
+}
+
+flow odd(m: U32 at event) -> U32 at event {
+  if m % 2 == 1 {
+    Some(m)
+  } else {
+    None
+  }
+}
+
+flow acc(e: U32 at event) -> U32 at sample {
+  let n = prev~(^n) + e
+  n
+}
+
+flow scale_ev(m: U32 at event, p: U32 at block) -> U32 at event {
+  Some(m * p)
+}
+
+flow rate_ev(m: F32 at event) -> F32 at event {
+  Some(m * sample_rate())
+}
+
+flow tick_ev(m: U32 at event) -> U32 at event {
+  Some(m * 0 + sample_tick() + 1)
+}
+
+// ---- the value of an event read at sample or at sample / 4
+
+pub flow call_at_sample(x: U32 at sample) -> U32 at sample {
+  (gen~(x) at sample) + x
+}
+
+pub flow expression_of_an_event(x: U32 at sample) -> U32 at sample {
+  let d = odd~(gen~(x))
+  (d + 7) at sample
+}
+
+pub flow read_then_add(x: U32 at sample) -> U32 at sample {
+  let d = odd~(gen~(x))
+  (d at sample) + 7
+}
+
+pub flow event_at_a_slower_tick(x: U32 at sample) -> U32 at sample {
+  let d = gen~(x)
+  let q = d at (sample / 4)
+  q at sample
+}
+
+pub flow event_at_a_slower_tick_inline(x: U32 at sample) -> U32 at sample {
+  let d = gen~(x)
+  (d at (sample / 4)) at sample
+}
+
+test "an event output read at sample in an expression of sample has the event of the frame itself" {
+  // x = 1 2 3: `(gen~(x) at sample)` is the event of the frame (x), plus x: 2 4 6.
+  let xs: [U32; 3] = [1, 2, 3]
+  let o = call_at_sample.render(xs, 8.0)
+  assert o.out[0] == 2 && o.out[1] == 4 && o.out[2] == 6
+}
+
+test "an expression of an event is evaluated at its events: before the first it is T.default(), and `(d at sample) + 7` is computed at sample from the value before the first" {
+  // x = 2 4 3 6 5: `odd` gives 3 at the frame 2 and 5 at the frame 4. `(d + 7) at sample` is the event expression `d + 7` held: 0 (its default) 0 10 10 12. `(d at sample) + 7` is an expression of sample over the last value of d (0 before
+  // the first event): 7 7 10 10 12.
+  let xs: [U32; 5] = [2, 4, 3, 6, 5]
+  let a = expression_of_an_event.render(xs, 8.0)
+  let b = read_then_add.render(xs, 8.0)
+  assert a.out[0] == 0 && a.out[1] == 0 && a.out[2] == 10 && a.out[3] == 10 && a.out[4] == 12
+  assert b.out[0] == 7 && b.out[1] == 7 && b.out[2] == 10 && b.out[3] == 10 && b.out[4] == 12
+}
+
+test "an event value read at the ticks of sample / 4 is the last value before the tick, kept four frames, in a let and inline" {
+  // x = 1 .. 10. The tick of the frame p is before the `sample` stage of the frame p, so it reads the event of the frame p - 1 (0 before the first): the frames 0 .. 3 are 0, the frames 4 .. 7 are 4 (x of the frame 3), the frames 8 9 are 8.
+  let xs: [U32; 10] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+  let a = event_at_a_slower_tick.render(xs, 8.0)
+  let b = event_at_a_slower_tick_inline.render(xs, 8.0)
+  assert a.out[0] == 0 && a.out[3] == 0 && a.out[4] == 4 && a.out[7] == 4 && a.out[8] == 8 && a.out[9] == 8
+  assert b.out[0] == 0 && b.out[3] == 0 && b.out[4] == 4 && b.out[7] == 4 && b.out[8] == 8 && b.out[9] == 8
+}
+
+// ---- what an event stage reads: `sample_rate()`, a `block` value, `sample_tick()` (the value of the position)
+
+pub flow event_reads_the_rate(x: F32 at sample) -> F32 at sample {
+  rate_ev~(gen_f~(x)) at sample
+}
+
+pub flow event_reads_a_block(x: U32 at sample, p: U32 at block) -> U32 at sample {
+  scale_ev~(gen~(x), p) at sample
+}
+
+pub flow event_reads_the_time(x: U32 at sample) -> U32 at sample {
+  acc~(tick_ev~(odd~(gen~(x))))
+}
+
+test "an event stage reads sample_rate(), a block value and sample_tick()" {
+  // The rate is 8.0: x = 1 2 3 gives 8 16 24. With p = 3: 3 6 9. `sample_tick()` is the frame of the event (0 at the first frame; the output reads `m`, so it is at the ticks of `m`): `odd` passes the frames 0 2 4 of x = 1 .. 5, so the events are 1 3 5 and the sums 1 1 4 4 9.
+  let fs: [F32; 3] = [1.0, 2.0, 3.0]
+  let a = event_reads_the_rate.render(fs, 8.0)
+  let xs: [U32; 3] = [1, 2, 3]
+  let b = event_reads_a_block.render(event_reads_a_block.Params { p: 3 }, xs, 8.0)
+  let ys: [U32; 5] = [1, 2, 3, 4, 5]
+  let c = event_reads_the_time.render(ys, 8.0)
+  assert a.out[0] == 8.0 && a.out[1] == 16.0 && a.out[2] == 24.0
+  assert b.out[0] == 3 && b.out[1] == 6 && b.out[2] == 9
+  assert c.out[0] == 1 && c.out[1] == 1 && c.out[2] == 4 && c.out[3] == 4 && c.out[4] == 9
+}
+
+// ---- the output expression of an event (S-1196, S-564): the clock of the expression, with the `at` it has
+
+flow fwd_quarter(m: U32 at event) -> U32 at event {
+  Some(m at (sample / 4))
+}
+
+flow every(p: U32 at block) -> U32 at event {
+  Some(p)
+}
+
+flow every_quarter(p: U32 at block) -> U32 at event {
+  Some(p) at (sample / 4)
+}
+
+pub flow out_event_at_a_quarter(x: U32 at sample) -> U32 at sample {
+  acc~(fwd_quarter~(gen~(x)))
+}
+
+pub flow out_block_each(p: U32 at block) -> U32 at sample {
+  acc~(every~(p))
+}
+
+pub flow out_block_quarter(p: U32 at block) -> U32 at sample {
+  acc~(every_quarter~(p))
+}
+
+test "the output expression gives an event at each tick of its clock: the value read at sample / 4 gives an event at each of its ticks" {
+  // x = 1 .. 9: the ticks of the frames 0 4 8 give the last value of the event before the frame: 0 (before the first), 4, 8 (the events of the frames 3 and 7). The sums: 0 at the frames 0 .. 3, 4 at 4 .. 7, 12 at the frame 8.
+  let xs: [U32; 9] = [1, 2, 3, 4, 5, 6, 7, 8, 9]
+  let o = out_event_at_a_quarter.render(xs, 8.0)
+  assert o.out[0] == 0 && o.out[3] == 0 && o.out[4] == 4 && o.out[7] == 4 && o.out[8] == 12
+}
+
+test "an output expression of a block value gives an event at each frame, and with `at (sample / 4)` at each tick of it" {
+  // p = 2: an event at each frame, the sums 2 4 6 8. With `at (sample / 4)`: the events of the frames 0 4 8, the sums 2 4 6 held four frames.
+  let a = out_block_each.render(out_block_each.Params { p: 2 }, 4, 8.0)
+  let b = out_block_quarter.render(out_block_quarter.Params { p: 2 }, 9, 8.0)
+  assert a.out[0] == 2 && a.out[1] == 4 && a.out[2] == 6 && a.out[3] == 8
+  assert b.out[0] == 2 && b.out[3] == 2 && b.out[4] == 4 && b.out[7] == 4 && b.out[8] == 6
+}
+
+// ---- one event given to two inputs of one flow (S-1236, without a modifier): each input is ticked once for each event
+
+flow two(a: U32 at event, b: U32 at event) -> U32 at sample {
+  (a at sample) + b
+}
+
+flow both(a: U32 at event, b: U32 at event) -> U32 at sample {
+  acc~(a) * 10 + acc~(b)
+}
+
+pub flow one_event_two_inputs(x: U32 at sample) -> U32 at sample {
+  let d = gen~(x)
+  two~(d, d)
+}
+
+pub flow one_event_two_sums(x: U32 at sample) -> U32 at sample {
+  let d = gen~(x)
+  both~(d, d)
+}
+
+test "one event given to two inputs ticks each of them once" {
+  // x = 1 2 3: `two` is the last event of the first input plus that of the second: 2 4 6. `both` sums the events of each input and weighs the first by 10: 11 times the sum 1 3 6: 11 33 66.
+  let xs: [U32; 3] = [1, 2, 3]
+  let a = one_event_two_inputs.render(xs, 8.0)
+  let b = one_event_two_sums.render(xs, 8.0)
+  assert a.out[0] == 2 && a.out[1] == 4 && a.out[2] == 6
+  assert b.out[0] == 11 && b.out[1] == 33 && b.out[2] == 66
+}

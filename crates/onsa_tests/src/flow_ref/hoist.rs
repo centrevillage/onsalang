@@ -33,7 +33,7 @@ use onsa_sema::flow_names::FlowBuiltin;
 use onsa_syntax::ast::{BinOp, CallKind, ExprId, ExprKind, StmtKind};
 
 use super::expr::{Frame, LOW_STACK, Stop};
-use super::flow::{Clock, Known, Seen, clock_of};
+use super::flow::{Clock, Known, Seen, clock_of, join};
 use super::rate::{args_of, chain_of, port_exprs};
 use super::scalar::Fault;
 use super::sema_view::{Body, Called, Stage};
@@ -104,7 +104,7 @@ pub(super) fn stage_of(body: &Body, known: &Known, root: ExprId, e: ExprId) -> R
         }
         // A tick is read at the clock `at` gives (`(lf at sample) * 2.0` is of `sample`); a value of the parameter kinds is made at its own stage.
         K::At { expr, .. } => match stage_of(body, known, root, *expr)? {
-            Clock::Tick(_) => clock_of(body, known, root, e),
+            Clock::Tick(_) | Clock::Event(_) => clock_of(body, known, root, e),
             parameter => Ok(parameter),
         },
         K::Path(_) | K::Field { .. } if body.names(e) => match body.target(e)? {
@@ -123,10 +123,10 @@ pub(super) fn stage_of(body: &Body, known: &Known, root: ExprId, e: ExprId) -> R
         _ => {
             let mut stage = Clock::Const;
             for x in body.ast.sub_exprs(e) {
-                stage = stage.max(stage_of(body, known, root, x)?);
+                stage = join(stage, stage_of(body, known, root, x)?).unwrap_or(stage);
             }
             for c in conditions(body, e) {
-                stage = stage.max(clock_of(body, known, root, c)?);
+                stage = join(stage, clock_of(body, known, root, c)?).unwrap_or(stage);
             }
             Ok(stage)
         }
@@ -262,10 +262,17 @@ pub(super) fn operands(body: &Body, e: ExprId) -> Vec<ExprId> {
 
 /// Whether a part that a stage makes is kept: Copy (or a `panic`), and none of an atom, a part that reads what is not made, and a part that reads a `^name` and holds a call (it is read where it is written). A part that reads a `^name` is kept too, but made at the end of
 /// its stage (S-1244, `Frame::defer_part`): the name is below.
-fn kept(body: &Body, known: &Known, e: ExprId) -> Result<bool, Fault> {
+pub(super) fn kept(body: &Body, known: &Known, e: ExprId) -> Result<bool, Fault> {
     let copy = body.view.is_copy(body.ty_id(e)?) || is_panic(body, e);
     let read_in_place = feedback(body, e) && has_state(body, e);
-    Ok(copy && !atom(body, e) && !read_in_place && !reads_unknown(body, known, e, e))
+    // A name of an event read at a tick (`d at (sample / 4)`) is the last value at that tick, so it is a part of its own, which a name of the parameter kinds is not (§11.3).
+    let slow_event = match &body.ast.expr(e).kind {
+        ExprKind::At { expr, clock } if clock.ratio.is_some() => {
+            matches!(stage_of(body, known, e, *expr)?, Clock::Event(_)) && atom(body, *expr)
+        }
+        _ => false,
+    };
+    Ok(copy && (!atom(body, e) || slow_event) && !read_in_place && !reads_unknown(body, known, e, e))
 }
 
 /// The clocks of the names in scope in the body of a `par~` whose variable is written at `at`: the index is of `init` (§11.5).
@@ -538,6 +545,10 @@ pub(super) fn hoisted_calls(f: &mut Frame, e: ExprId) -> Result<(), Stop> {
         Some(Stage::Tick(r)) => {
             let step = f.run.as_ref().and_then(|run| run.step.clone());
             f.work_of(e, Clock::Tick(r), step.as_ref().map(|(known, root)| (&**known, *root)))
+        }
+        Some(Stage::Event(k)) => {
+            let step = f.run.as_ref().and_then(|run| run.step.clone());
+            f.work_of(e, Clock::Event(k), step.as_ref().map(|(known, root)| (&**known, *root)))
         }
         _ => Ok(()),
     }

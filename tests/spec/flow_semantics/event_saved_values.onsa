@@ -1,0 +1,435 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.3", "§11.4", "§11.9", "§11.11"]
+
+// W7-11 U2/t2, S-1240, S-1241, S-1244, S-1235, S-1234 (spec §11.3: "保存する値の残りが読むイベントの値 … は、`^名前` を読むものを除いて、評価が段の終わりでも、その読みを書いた位置 … までの最後の値である";
+// "`^名前` で読む値と、`^名前` を読むイベントの段の部分式の値は、段の終わりの値である"; §11.4: "保存する値 `e` を全て評価してから、まとめて保存する"; §11.11: "作り手より上に書いた式 …
+// 読むのは、その式を評価した時点までに出たイベントまでの値"): the value of an event that a delay stores when the producer of the event is written below the delay. The producer `let d = gen~(x)` is below, so the
+// event of the sample is not yet given where the stored expression is written, but it is given at the end of the stage. The delay stores the value at the place where the read is written (the one before the event of
+// the sample), which is the value of the twin with a `let t = …` above the delay; a `^name` form reads the value at the end of the stage, the value of the twin with the `let` below the producer. Every value is
+// worked out by hand in the comments.
+//
+// The input is `GS = 1 .. 9`, `gen~` gives the event `x` when `x % 3 != 0` (the samples 0 1 3 4 6 7, the values 1 2 4 5 7 8). The delay of the events `p = prev~(^d)` gives the event before (0 at the first), so p
+// after each sample is `PA` = 0 1 1 2 4 4 5 7 7, and p before the event of the sample (`PB`, what a read written above the producer sees) is 0 0 1 1 2 4 4 5 7. A delay gives the expression it stored at the sample
+// before (0 at the first), so its output is the stored expression shifted by one sample.
+
+const GS: [U32; 9] = [1, 2, 3, 4, 5, 6, 7, 8, 9]
+// The condition of the forms with a branch: true, false, true, true, false, true, true, false, false.
+const YS: [U32; 9] = [1, 0, 1, 1, 0, 1, 1, 0, 0]
+
+flow gen(x: U32 at sample) -> U32 at event {
+  if x % 3 != 0 { Some(x) } else { None }
+}
+
+// ---- `(p at sample) + 1`: the name of an event read in a stored expression
+
+pub flow saved_name(x: U32 at sample) -> U32 at sample {
+  let p = prev~(^d)
+  let q = prev~((p at sample) + 1)
+  let d = gen~(x)
+  q
+}
+
+pub flow saved_name_let(x: U32 at sample) -> U32 at sample {
+  let p = prev~(^d)
+  let t = (p at sample) + 1
+  let q = prev~(t)
+  let d = gen~(x)
+  q
+}
+
+// The same text with `^t` and the `let` below the producer: the value of the end of the stage (p after the sample).
+pub flow saved_name_caret(x: U32 at sample) -> U32 at sample {
+  let p = prev~(^d)
+  let q = prev~(^t)
+  let d = gen~(x)
+  let t = (p at sample) + 1
+  q
+}
+
+test "a name of an event read in the stored expression of a delay is the value before the event that the producer below gives at that sample" {
+  // The stored expression is PB + 1 = 1 1 2 2 3 5 5 6 8, the delay gives it one sample later.
+  let a: [U32; 9] = [0, 1, 1, 2, 2, 3, 5, 5, 6]
+  // With `^t` it is the value after the event of the sample: PA + 1 = 1 2 2 3 5 5 6 8 8, shifted.
+  let c: [U32; 9] = [0, 1, 2, 2, 3, 5, 5, 6, 8]
+  let o = saved_name.render(GS, 8.0)
+  let t = saved_name_let.render(GS, 8.0)
+  let k = saved_name_caret.render(GS, 8.0)
+  for i in 0 ..< 9 {
+    assert o.out[i] == a[i] && t.out[i] == a[i]
+    assert k.out[i] == c[i]
+  }
+}
+
+// ---- `((p * 2) at sample) + 1`: a part computed at the clock of the event, read in a stored expression
+
+pub flow saved_computed(x: U32 at sample) -> U32 at sample {
+  let p = prev~(^d)
+  let q = prev~(((p * 2) at sample) + 1)
+  let d = gen~(x)
+  q
+}
+
+pub flow saved_computed_let(x: U32 at sample) -> U32 at sample {
+  let p = prev~(^d)
+  let t = ((p * 2) at sample) + 1
+  let q = prev~(t)
+  let d = gen~(x)
+  q
+}
+
+test "a part computed at the clock of an event, read in a stored expression, is the value before the event of the sample" {
+  // 2 PB + 1 = 1 1 3 3 5 9 9 11 15, shifted.
+  let w: [U32; 9] = [0, 1, 1, 3, 3, 5, 9, 9, 11]
+  let o = saved_computed.render(GS, 8.0)
+  let t = saved_computed_let.render(GS, 8.0)
+  for i in 0 ..< 9 {
+    assert o.out[i] == w[i] && t.out[i] == w[i]
+  }
+}
+
+// ---- a condition with `^k`: the read of `p` in the branch it selects is the value of the end of the stage
+
+pub flow saved_caret_branch(x: U32 at sample, y: U32 at sample) -> U32 at sample {
+  let p = prev~(^d)
+  let q = prev~(if ^k > 0 { p at sample } else { x })
+  let k = y
+  let d = gen~(x)
+  q
+}
+
+pub flow saved_caret_branch_let(x: U32 at sample, y: U32 at sample) -> U32 at sample {
+  let p = prev~(^d)
+  let q = prev~(^t)
+  let k = y
+  let d = gen~(x)
+  let t = if k > 0 { p at sample } else { x }
+  q
+}
+
+// The same text with a condition that does not read `^k`: `p` is the value before the event of the sample.
+pub flow saved_plain_branch(x: U32 at sample, y: U32 at sample) -> U32 at sample {
+  let p = prev~(^d)
+  let k = y
+  let q = prev~(if k > 0 { p at sample } else { x })
+  let d = gen~(x)
+  q
+}
+
+test "a read selected by a condition with ^k is the value of the end of the stage, and the same text without ^k the value at its place" {
+  // The condition YS is true at 0 2 3 5 6 (the events are at 0 3 6, none at 2 5) and false at 1 4 7 8. With ^k the stored expression is PA at the true samples and x at the false ones:
+  // 0 2 1 2 5 4 5 8 9, shifted.
+  let a: [U32; 9] = [0, 0, 2, 1, 2, 5, 4, 5, 8]
+  // Without ^k it is PB at the true ones: 0 2 1 1 5 4 4 8 9, shifted.
+  let b: [U32; 9] = [0, 0, 2, 1, 1, 5, 4, 4, 8]
+  let o = saved_caret_branch.render(saved_caret_branch.In { x: GS, y: YS }, 8.0)
+  let t = saved_caret_branch_let.render(saved_caret_branch_let.In { x: GS, y: YS }, 8.0)
+  let n = saved_plain_branch.render(saved_plain_branch.In { x: GS, y: YS }, 8.0)
+  for i in 0 ..< 9 {
+    assert o.out[i] == a[i] && t.out[i] == a[i]
+    assert n.out[i] == b[i]
+  }
+}
+
+// ---- `match~` and `if~` with the event read in its condition
+
+pub flow saved_match_tilde(x: U32 at sample) -> U32 at sample {
+  let p: U32 = prev~(^d)
+  let q = prev~(match~ (p at sample) { 0 => prev~(x), v => v + 1 })
+  let d: U32 = gen~(x)
+  q
+}
+
+pub flow saved_match_tilde_let(x: U32 at sample) -> U32 at sample {
+  let p: U32 = prev~(^d)
+  let s = match~ (p at sample) { 0 => prev~(x), v => v + 1 }
+  let q = prev~(s)
+  let d: U32 = gen~(x)
+  q
+}
+
+pub flow saved_if_tilde(x: U32 at sample) -> U32 at sample {
+  let p = prev~(^d)
+  let q = prev~(if~ (p at sample) > 2 { prev~(x) } else { 100 })
+  let d: U32 = gen~(x)
+  q
+}
+
+pub flow saved_if_tilde_let(x: U32 at sample) -> U32 at sample {
+  let p = prev~(^d)
+  let c = (p at sample) > 2
+  let q = prev~(if~ c { prev~(x) } else { 100 })
+  let d: U32 = gen~(x)
+  q
+}
+
+test "a match~ and an if~ that read the event in the scrutinee or the condition choose by the value before the event of the sample" {
+  // match~ (the arm 0 gives the delay of x, which is the x of the sample before, 0 1 2 .. 8): PB = 0 0 1 1 2 4 4 5 7 gives 0 1 2 2 3 5 5 6 8, shifted.
+  let m: [U32; 9] = [0, 0, 1, 2, 2, 3, 5, 5, 6]
+  // if~ (PB > 2 is true from the sample 5, the branch gives the delay of x, the x before): 100 100 100 100 100 5 6 7 8, shifted.
+  let c: [U32; 9] = [0, 100, 100, 100, 100, 100, 5, 6, 7]
+  let a = saved_match_tilde.render(GS, 8.0)
+  let a2 = saved_match_tilde_let.render(GS, 8.0)
+  let d = saved_if_tilde.render(GS, 8.0)
+  let d2 = saved_if_tilde_let.render(GS, 8.0)
+  for i in 0 ..< 9 {
+    assert a.out[i] == m[i] && a2.out[i] == m[i]
+    assert d.out[i] == c[i] && d2.out[i] == c[i]
+  }
+}
+
+// ---- `vdelay~` and `delay~` in the first argument of a delay: the length `d` and the stored expression are stored at the end of the stage
+
+pub flow saved_vdelay(x: U32 at sample) -> U32 at sample {
+  let q = prev~(^z)
+  let w = prev~(U32.trunc_from(vdelay~(F32.round_from(x), F32.round_from(q at sample), 8)))
+  let z = gen~(x)
+  w
+}
+
+pub flow saved_vdelay_let(x: U32 at sample) -> U32 at sample {
+  let q = prev~(^z)
+  let l = F32.round_from(q at sample)
+  let w = prev~(U32.trunc_from(vdelay~(F32.round_from(x), l, 8)))
+  let z = gen~(x)
+  w
+}
+
+// Not in the first argument of another delay: `d` is read where the delay is written.
+pub flow vdelay_direct(x: U32 at sample) -> U32 at sample {
+  let q = prev~(^z)
+  let w = U32.trunc_from(vdelay~(F32.round_from(x), F32.round_from(q at sample), 8))
+  let z = gen~(x)
+  w
+}
+
+pub flow saved_delay(x: U32 at sample) -> U32 at sample {
+  let p = prev~(^d)
+  let q = prev~(delay~((p at sample) + 1, 2))
+  let d = gen~(x)
+  q
+}
+
+pub flow saved_delay_let(x: U32 at sample) -> U32 at sample {
+  let p = prev~(^d)
+  let t = (p at sample) + 1
+  let q = prev~(delay~(t, 2))
+  let d = gen~(x)
+  q
+}
+
+test "the d of a vdelay~ and the expression of a delay~ in the first argument of a delay read the event as at their place" {
+  // The length is PB, at least 1 and at most 8: 1 1 1 1 2 4 4 5 7. The output of the vdelay~ is x of that many samples before (0 before the start): 0 1 2 3 3 2 3 3 2. The delay shifts it.
+  let v: [U32; 9] = [0, 0, 1, 2, 3, 3, 2, 3, 3]
+  let d: [U32; 9] = [0, 1, 2, 3, 3, 2, 3, 3, 2]
+  // delay~((PB + 1), 2) is the stored expression 1 1 2 2 3 5 5 6 8 three samples later, and the delay one sample more: 0 0 0 1 1 2 2 3 5.
+  let e: [U32; 9] = [0, 0, 0, 1, 1, 2, 2, 3, 5]
+  let a = saved_vdelay.render(GS, 8.0)
+  let a2 = saved_vdelay_let.render(GS, 8.0)
+  let b = vdelay_direct.render(GS, 8.0)
+  let c = saved_delay.render(GS, 8.0)
+  let c2 = saved_delay_let.render(GS, 8.0)
+  for i in 0 ..< 9 {
+    assert a.out[i] == v[i] && a2.out[i] == v[i]
+    assert b.out[i] == d[i]
+    assert c.out[i] == e[i] && c2.out[i] == e[i]
+  }
+}
+
+// ---- a delay inside a stored expression, and a call that gives its output in it
+
+pub flow saved_nested(x: U32 at sample) -> U32 at sample {
+  let p = prev~(^d)
+  let q = prev~(prev~(p at sample) + 1)
+  let d = gen~(x)
+  q
+}
+
+pub flow saved_nested_let(x: U32 at sample) -> U32 at sample {
+  let p = prev~(^d)
+  let s = prev~(p at sample)
+  let q = prev~(s + 1)
+  let d = gen~(x)
+  q
+}
+
+flow cnt(m: U32 at event) -> U32 at sample {
+  let c = prev~(^c) + m
+  c at sample
+}
+
+// A call in the stored expression is done where it is written, with the event it takes from its own `gen~`, so the sum it gives has the event of the sample.
+pub flow saved_call(x: U32 at sample) -> U32 at sample {
+  let q = prev~(^z)
+  let y = prev~(prev~((q at sample) + x) + cnt~(gen~(x)) + (q at sample))
+  let z = gen~(x)
+  y
+}
+
+pub flow saved_call_let(x: U32 at sample) -> U32 at sample {
+  let q = prev~(^z)
+  let a = prev~((q at sample) + x)
+  let s = cnt~(gen~(x))
+  let t = a + s + (q at sample)
+  let y = prev~(t)
+  let z = gen~(x)
+  y
+}
+
+test "a delay in a stored expression and a call that gives the sum of events there read the event as at their place" {
+  // The delay of PB (the inner one stores PB, the outer stores its output + 1): the inner output is PB shifted 0 0 0 1 1 2 4 4 5, so the stored expression is 1 1 1 2 2 3 5 5 6, shifted.
+  let n: [U32; 9] = [0, 1, 1, 1, 2, 2, 3, 5, 5]
+  // The inner delay gives PB + x shifted: 0 1 2 4 5 7 10 11 13. The sum of the events at the call is 1 3 3 7 12 12 19 27 27 (it has the event of the sample), PB = 0 0 1 1 2 4 4 5 7:
+  // the stored expression is 1 4 6 12 19 23 33 43 47, shifted.
+  let c: [U32; 9] = [0, 1, 4, 6, 12, 19, 23, 33, 43]
+  let a = saved_nested.render(GS, 8.0)
+  let a2 = saved_nested_let.render(GS, 8.0)
+  let b = saved_call.render(GS, 8.0)
+  let b2 = saved_call_let.render(GS, 8.0)
+  for i in 0 ..< 9 {
+    assert a.out[i] == n[i] && a2.out[i] == n[i]
+    assert b.out[i] == c[i] && b2.out[i] == c[i]
+  }
+}
+
+// ---- a delay that reads `reset_if~` with a condition of an event, in the first argument of a delay
+
+pub flow saved_reset(x: U32 at sample) -> U32 at sample {
+  let q = prev~(^z) > 3
+  let y = prev~(prev~(x).reset_if~(q at sample))
+  let z = gen~(x)
+  y
+}
+
+pub flow saved_reset_let(x: U32 at sample) -> U32 at sample {
+  let q = prev~(^z) > 3
+  let c = q at sample
+  let y = prev~(prev~(x).reset_if~(c))
+  let z = gen~(x)
+  y
+}
+
+// Not in the first argument of another delay: the same condition at the same place.
+pub flow reset_direct(x: U32 at sample) -> U32 at sample {
+  let q = prev~(^z) > 3
+  let y = prev~(x).reset_if~(q at sample)
+  let z = gen~(x)
+  y
+}
+
+test "the condition of a reset_if~ in the first argument of a delay is read where it is written, before the event of the sample" {
+  // q is false before the sample 5 (the value of p = prev~(^z) that is above 3 is the 4 given at the sample 4, so q is true from 4 at the end of the stage but from 5 before the event).
+  // The inner delay gives the x before (0 1 .. 8) and 0 at the samples where the condition holds (5 6 7 8): 0 1 2 3 4 0 0 0 0. The outer delay shifts it.
+  let r: [U32; 9] = [0, 1, 2, 3, 4, 0, 0, 0, 0]
+  let s: [U32; 9] = [0, 0, 1, 2, 3, 4, 0, 0, 0]
+  let a = saved_reset.render(GS, 8.0)
+  let a2 = saved_reset_let.render(GS, 8.0)
+  let b = reset_direct.render(GS, 8.0)
+  for i in 0 ..< 9 {
+    assert a.out[i] == s[i] && a2.out[i] == s[i]
+    assert b.out[i] == r[i]
+  }
+}
+
+// ---- a part read at `sample / 4`, and a delay at `sample / 4`
+
+pub flow saved_slow_read(x: U32 at sample) -> U32 at sample {
+  let q = prev~(^z)
+  let y = prev~((q at (sample / 4)) at sample)
+  let z = gen~(x)
+  y
+}
+
+pub flow saved_slow_read_let(x: U32 at sample) -> U32 at sample {
+  let q = prev~(^z)
+  let h = (q at (sample / 4)) at sample
+  let y = prev~(h)
+  let z = gen~(x)
+  y
+}
+
+// The producer gives an event at each tick of `sample / 4`: the sum of `k` at the ticks (2 4 6 8).
+flow slow_events(k: U32 at block) -> U32 at event {
+  let c = prev~(^c) + (k at (sample / 4))
+  Some(c)
+}
+
+pub flow saved_slow_delay(k: U32 at block) -> U32 at sample {
+  let p = prev~(^d)
+  let q = prev~((p at (sample / 4)) + (k at (sample / 4)))
+  let d = slow_events~(k)
+  q at sample
+}
+
+pub flow saved_slow_delay_let(k: U32 at block) -> U32 at sample {
+  let p = prev~(^d)
+  let t = (p at (sample / 4)) + (k at (sample / 4))
+  let q = prev~(t)
+  let d = slow_events~(k)
+  q at sample
+}
+
+test "an event read at sample / 4 takes the value before the events of the frame, and a delay at sample / 4 stores the value at its place" {
+  // The tick of `sample / 4` is before the `sample` stage of the frame, so the events of the frame 4 are not yet there: the value is PB at the frames 0 4 8, 0 2 7, held for four frames. The delay shifts: the frames 5 .. 8 give 2.
+  let h: [U32; 9] = [0, 0, 0, 0, 0, 2, 2, 2, 2]
+  let a = saved_slow_read.render(GS, 8.0)
+  let a2 = saved_slow_read_let.render(GS, 8.0)
+  for i in 0 ..< 9 {
+    assert a.out[i] == h[i] && a2.out[i] == h[i]
+  }
+  // k = 2: the events at the ticks 0 1 2 3 are 2 4 6 8; p after them is 0 2 4 6, so p before the event of a tick is 0 0 2 4 and the stored expression is that + 2 = 2 2 4 6.
+  // The delay gives the one before at each tick: 0 2 2 4, held for four frames each (16 frames).
+  let cfg = saved_slow_delay.Params { k: 2 }
+  let s = saved_slow_delay.render(cfg, 16, 8.0)
+  let s2 = saved_slow_delay_let.render(saved_slow_delay_let.Params { k: 2 }, 16, 8.0)
+  for f in 0 ..< 16 {
+    let want = if f < 4 { 0 } else if f < 12 { 2 } else { 4 }
+    assert s.out[f] == want && s2.out[f] == want
+  }
+}
+
+// ---- a value of a struct that is an event, passed whole to a function
+
+pub struct M: Default {
+  vel: U32,
+  q: U32,
+}
+
+rt fn mk(v: U32) -> M {
+  M { vel: v, q: 0 }
+}
+
+rt fn pick(a: M, b: U32) -> U32 {
+  a.vel + b
+}
+
+pub flow struct_below(x: U32 at sample) -> U32 at sample {
+  let p = prev~(^d)
+  let w = mk(p)
+  let y = pick(w at sample, cnt~(gen~(x)))
+  let d = gen~(x)
+  y
+}
+
+// The producer above: its event is given before `w` is read, so `w` is the one of the end of the stage.
+pub flow struct_above(x: U32 at sample) -> U32 at sample {
+  let d = gen~(x)
+  let p = prev~(d)
+  let w = mk(p)
+  pick(w at sample, cnt~(gen~(x)))
+}
+
+test "a struct that is an event value, read whole in an argument, is the value before the event of the sample when the producer is below, after it when above" {
+  // The sum of the events given in the argument after it (cnt~(gen~(x)), the event of the sample is in it): 1 3 3 7 12 12 19 27 27. w.vel is PB = 0 0 1 1 2 4 4 5 7 below the producer:
+  // 1 3 4 8 14 16 23 32 34.
+  let a: [U32; 9] = [1, 3, 4, 8, 14, 16, 23, 32, 34]
+  // Above the producer it is PA = 0 1 1 2 4 4 5 7 7: 1 4 4 9 16 16 24 34 34.
+  let b: [U32; 9] = [1, 4, 4, 9, 16, 16, 24, 34, 34]
+  let o = struct_below.render(GS, 8.0)
+  let u = struct_above.render(GS, 8.0)
+  for i in 0 ..< 9 {
+    assert o.out[i] == a[i]
+    assert u.out[i] == b[i]
+  }
+}

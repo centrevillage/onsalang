@@ -405,6 +405,8 @@ impl Callee<'_> {
 pub enum Stage {
     Init,
     Block,
+    /// The stage of an event source (§11.11, W7-11 U2): the input of that index of the declaration, or a call (`events::call_src`); `EVENT` for an event input or output as a declaration says it, before its source is known.
+    Event(u32),
     Tick(i32),
 }
 
@@ -414,13 +416,17 @@ impl Stage {
     pub const Sample: Stage = Stage::Tick(0);
 }
 
-/// The stage a clock is made in; the clocks of events (W7-11, W7-17) are `Unavailable`. A tick of any ratio has its own: `sample / N` is
+/// An event as a declaration says it (`input_stage`, `output_stage`): the source is the input (its index) or the call of the caller, which this does not know.
+pub const EVENT: u32 = u32::MAX;
+
+/// The stage a clock is made in. A tick of any ratio has its own: `sample / N` is
 /// `Tick(-k)` and `sample * N` `Tick(k)` (§11.9).
 pub(super) fn stage_of(clock: Clock) -> Result<Stage, Fault> {
     match clock {
         Clock::Init => Ok(Stage::Init),
         Clock::Block => Ok(Stage::Block),
         Clock::Tick(onsa_sema::clock::Ratio(r)) => Ok(Stage::Tick(r)),
+        Clock::Event(_) => Ok(Stage::Event(EVENT)),
         _ => Err(Fault::Unavailable("a clock of no stage the evaluator has")),
     }
 }
@@ -441,12 +447,25 @@ pub fn input_stage(input: &FlowInput) -> Result<Stage, Fault> {
 /// The inputs of `decl` that are at `stage`, in the order of the heading.
 pub fn inputs_at(decl: &FlowDef, stage: Stage) -> Result<Vec<&FlowInput>, Fault> {
     let mut mine = Vec::new();
-    for i in &decl.inputs {
-        if input_stage(i)? == stage {
+    for (n, i) in decl.inputs.iter().enumerate() {
+        let here = match (input_stage(i)?, stage) {
+            (Stage::Event(_), Stage::Event(k)) => k == n as u32,
+            (s, t) => s == t,
+        };
+        if here {
             mine.push(i);
         }
     }
     Ok(mine)
+}
+
+/// The clock of the input number `n` of `decl` as its body reads it: an event input is the source of its index (§11.11).
+pub fn input_clock(decl: &FlowDef, n: usize) -> Result<super::flow::Clock, Fault> {
+    let input = decl.inputs.get(n).ok_or(Fault::Internal("an input that is not there"))?;
+    Ok(match input_stage(input)? {
+        Stage::Event(_) => super::flow::Clock::Event(n as u32),
+        s => s.into(),
+    })
 }
 
 /// The stage of the clock `name` an `at` writes (§11.3), if it is one of the three.

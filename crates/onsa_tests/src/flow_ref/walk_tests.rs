@@ -99,7 +99,7 @@ fn what_is_not_run_is_skipped_with_its_reason() {
         Verdict::Skipped(s) => s,
         other => panic!("not skipped: {other:?}"),
     };
-    assert_eq!(reason(one("test \"loop\" {\n  for i in 0 ..< 2 { assert i < 2 }\n}")), Skip::Statement);
+    assert_eq!(reason(one("test \"loop\" {\n  for i in [1, 2] { assert i < 3 }\n}")), Skip::Statement);
     assert_eq!(reason(one("test \"none\" {\n  assert 1 + 1 == 2\n}")), Skip::NoCall);
     assert_eq!(
         reason(one(

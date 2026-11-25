@@ -1,4 +1,4 @@
-# flow_ref 1 source=tests/spec/flow_semantics/bursts_values.onsa tests=13 evaluated=10 unavailable=0 skipped=3 waiting=0
+# flow_ref 1 source=tests/spec/flow_semantics/bursts_values.onsa tests=13 evaluated=12 unavailable=0 skipped=1 waiting=0
 @ a bundle given to a port at sample * 2 is its two elements of the frame: 2 x - 1 + 10 (2 x) = 22 x - 1, in any of the forms that pass it
 init 0 bursts_values.direct sr=0x41000000
 init 1 bursts_values.in_parens sr=0x41000000
@@ -101,6 +101,127 @@ out=[0x4b05be58 0x4b498dc3 0x4b05be6e]
 reset 1
 process 1 params p=0x3f800000 frames=12
 out=[0x4a83ddf0 0x4b05be63 0x4a83de1c 0x4b05be79 0x4a83de48 0x4b05be8f 0x4a83de74 0x4b05bea5 0x4a83dea0 0x4b05bebb 0x4a83decc 0x4b05bed1]
-- the calls of process cut the run anywhere, a call of 0 frames too: the same values for a bundle that goes by and one that is dealt by a .down~(2) (§13.4)	skipped statement
-- twelve calls of one frame give the same	skipped statement
-- reset after any number of frames, at a tick of the head or between: the state of the bundle, the dealt array and the time are those of a state just made	skipped statement
+- the calls of process cut the run anywhere, a call of 0 frames too: the same values for a bundle that goes by and one that is dealt by a .down~(2) (§13.4)	skipped nocall
+@ twelve calls of one frame give the same
+init 0 bursts_values.combo sr=0x41000000
+process 0 params p=0x3f800000 frames=1
+out=[0x4a83ddf0]
+process 0 params p=0x3f800000 frames=1
+out=[0x4b05be63]
+process 0 params p=0x3f800000 frames=1
+out=[0x4a83de1c]
+process 0 params p=0x3f800000 frames=1
+out=[0x4b05be79]
+process 0 params p=0x3f800000 frames=1
+out=[0x4a83de48]
+process 0 params p=0x3f800000 frames=1
+out=[0x4b05be8f]
+process 0 params p=0x3f800000 frames=1
+out=[0x4a83de74]
+process 0 params p=0x3f800000 frames=1
+out=[0x4b05bea5]
+process 0 params p=0x3f800000 frames=1
+out=[0x4a83dea0]
+process 0 params p=0x3f800000 frames=1
+out=[0x4b05bebb]
+process 0 params p=0x3f800000 frames=1
+out=[0x4a83decc]
+process 0 params p=0x3f800000 frames=1
+out=[0x4b05bed1]
+@ reset after any number of frames, at a tick of the head or between: the state of the bundle, the dealt array and the time are those of a state just made
+init 0 bursts_values.combo sr=0x41000000
+process 0 params p=0x40a00000 frames=0
+out=[]
+reset 0
+process 0 params p=0x3f800000 frames=12
+out=[0x4a83ddf0 0x4b05be63 0x4a83de1c 0x4b05be79 0x4a83de48 0x4b05be8f 0x4a83de74 0x4b05bea5 0x4a83dea0 0x4b05bebb 0x4a83decc 0x4b05bed1]
+init 1 bursts_values.time_burst sr=0x41000000
+process 1 frames=0
+out=[]
+reset 1
+process 1 frames=4
+out=[1 203 405 607]
+init 2 bursts_values.combo sr=0x41000000
+process 0 params p=0x40a00000 frames=1
+out=[0x4b05bedc]
+reset 0
+process 0 params p=0x3f800000 frames=12
+out=[0x4a83ddf0 0x4b05be63 0x4a83de1c 0x4b05be79 0x4a83de48 0x4b05be8f 0x4a83de74 0x4b05bea5 0x4a83dea0 0x4b05bebb 0x4a83decc 0x4b05bed1]
+init 3 bursts_values.time_burst sr=0x41000000
+process 1 frames=1
+out=[809]
+reset 1
+process 1 frames=4
+out=[1 203 405 607]
+init 4 bursts_values.combo sr=0x41000000
+process 0 params p=0x40a00000 frames=2
+out=[0x4b05bedc 0x4b498e47]
+reset 0
+process 0 params p=0x3f800000 frames=12
+out=[0x4a83ddf0 0x4b05be63 0x4a83de1c 0x4b05be79 0x4a83de48 0x4b05be8f 0x4a83de74 0x4b05bea5 0x4a83dea0 0x4b05bebb 0x4a83decc 0x4b05bed1]
+init 5 bursts_values.time_burst sr=0x41000000
+process 1 frames=2
+out=[809 1011]
+reset 1
+process 1 frames=4
+out=[1 203 405 607]
+init 6 bursts_values.combo sr=0x41000000
+process 0 params p=0x40a00000 frames=3
+out=[0x4b05bedc 0x4b498e47 0x4b05bef2]
+reset 0
+process 0 params p=0x3f800000 frames=12
+out=[0x4a83ddf0 0x4b05be63 0x4a83de1c 0x4b05be79 0x4a83de48 0x4b05be8f 0x4a83de74 0x4b05bea5 0x4a83dea0 0x4b05bebb 0x4a83decc 0x4b05bed1]
+init 7 bursts_values.time_burst sr=0x41000000
+process 1 frames=3
+out=[809 1011 1213]
+reset 1
+process 1 frames=4
+out=[1 203 405 607]
+init 8 bursts_values.combo sr=0x41000000
+process 0 params p=0x40a00000 frames=4
+out=[0x4b05bedc 0x4b498e47 0x4b05bef2 0x4b498e5d]
+reset 0
+process 0 params p=0x3f800000 frames=12
+out=[0x4a83ddf0 0x4b05be63 0x4a83de1c 0x4b05be79 0x4a83de48 0x4b05be8f 0x4a83de74 0x4b05bea5 0x4a83dea0 0x4b05bebb 0x4a83decc 0x4b05bed1]
+init 9 bursts_values.time_burst sr=0x41000000
+process 1 frames=4
+out=[809 1011 1213 1415]
+reset 1
+process 1 frames=4
+out=[1 203 405 607]
+init 10 bursts_values.combo sr=0x41000000
+process 0 params p=0x40a00000 frames=5
+out=[0x4b05bedc 0x4b498e47 0x4b05bef2 0x4b498e5d 0x4b05bf08]
+reset 0
+process 0 params p=0x3f800000 frames=12
+out=[0x4a83ddf0 0x4b05be63 0x4a83de1c 0x4b05be79 0x4a83de48 0x4b05be8f 0x4a83de74 0x4b05bea5 0x4a83dea0 0x4b05bebb 0x4a83decc 0x4b05bed1]
+init 11 bursts_values.time_burst sr=0x41000000
+process 1 frames=5
+out=[809 1011 1213 1415 1617]
+reset 1
+process 1 frames=4
+out=[1 203 405 607]
+init 12 bursts_values.combo sr=0x41000000
+process 0 params p=0x40a00000 frames=6
+out=[0x4b05bedc 0x4b498e47 0x4b05bef2 0x4b498e5d 0x4b05bf08 0x4b498e73]
+reset 0
+process 0 params p=0x3f800000 frames=12
+out=[0x4a83ddf0 0x4b05be63 0x4a83de1c 0x4b05be79 0x4a83de48 0x4b05be8f 0x4a83de74 0x4b05bea5 0x4a83dea0 0x4b05bebb 0x4a83decc 0x4b05bed1]
+init 13 bursts_values.time_burst sr=0x41000000
+process 1 frames=6
+out=[809 1011 1213 1415 1617 1819]
+reset 1
+process 1 frames=4
+out=[1 203 405 607]
+init 14 bursts_values.combo sr=0x41000000
+process 0 params p=0x40a00000 frames=7
+out=[0x4b05bedc 0x4b498e47 0x4b05bef2 0x4b498e5d 0x4b05bf08 0x4b498e73 0x4b05bf1e]
+reset 0
+process 0 params p=0x3f800000 frames=12
+out=[0x4a83ddf0 0x4b05be63 0x4a83de1c 0x4b05be79 0x4a83de48 0x4b05be8f 0x4a83de74 0x4b05bea5 0x4a83dea0 0x4b05bebb 0x4a83decc 0x4b05bed1]
+init 15 bursts_values.time_burst sr=0x41000000
+process 1 frames=7
+out=[809 1011 1213 1415 1617 1819 2021]
+reset 1
+process 1 frames=4
+out=[1 203 405 607]

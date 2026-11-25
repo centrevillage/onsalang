@@ -16,6 +16,14 @@ impl Walk<'_, '_> {
             return self.eval(body, e);
         }
         let ExprKind::Binary { op, lhs, rhs, .. } = &body.ast.expr(e).kind else { return self.shape(body, e) };
+        // `a && b` and `a || b` of reads: the right side is read only where the left does not decide (§3.4).
+        if let BinOp::And | BinOp::Or = op {
+            let left = self.value(body, *lhs)?;
+            return match (&left, op) {
+                (Value::Bool(false), BinOp::And) | (Value::Bool(true), BinOp::Or) => Ok(left),
+                _ => self.value(body, *rhs),
+            };
+        }
         let bin = match op {
             BinOp::Eq => Bin::Eq,
             BinOp::Ne => Bin::Ne,

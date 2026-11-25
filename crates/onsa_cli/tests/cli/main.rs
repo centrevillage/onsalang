@@ -46,6 +46,8 @@ mod effect_notes;
 mod empty_brackets;
 mod error_type_sweep;
 mod event_gate_rules;
+mod event_saved_commands;
+mod event_stage_commands;
 mod excluded_readings_notes;
 mod exit_codes;
 mod explain_e0200;

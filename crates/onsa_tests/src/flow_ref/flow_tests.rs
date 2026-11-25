@@ -629,20 +629,22 @@ fn the_counter_goes_round_at_2_pow_32() {
 }
 
 #[test]
-fn a_flow_with_an_event_is_unavailable_and_not_evaluated() {
-    // §11.11: the evaluator has no event clock until W7-11 U2. A flow with an event input, with an event output, and one that calls an event output (the check passes each) stop as `Unavailable`.
+fn a_flow_with_an_event_runs_from_the_outermost_process() {
+    // §11.11 (W7-11 U2): a flow with an event input, one with an event output, and one that calls an event output run. `det` gives the event 1 at the frame where x > 0.5 (the output of the frame is the last event, 1);
+    // `acc` has no event in a `process` that gives none (the sum is its default 0); `calls` sums the events of `det` (1); `reads` reads the last event of `det` at `sample` (1).
     let src = "flow det(x: F32 at sample) -> U32 at event { if x > 0.5 { Some(1) } else { None } }
 flow acc(e: U32 at event) -> U32 at sample {
   let n = prev~(^n) + e
   n
 }
 flow calls(x: F32 at sample) -> U32 at sample { acc~(det~(x)) }
-flow reads(x: F32 at sample) -> U32 at sample { det~(x) }";
-    for name in ["det", "acc", "calls", "reads"] {
-        let stopped = with_checked(src, true, move |a| {
-            let mut me = Instance::init(View::new(a), def_named(a, name), 48000.0, &[], None).map_err(|s| s.fault)?;
-            me.process(&[], &[("x", &[Value::F32(1.0)])], 1, None).map(|_| ()).map_err(|s| s.fault)
+flow reads(x: F32 at sample) -> U32 at sample { det~(x) at sample }";
+    for (name, want) in [("det", 1), ("acc", 0), ("calls", 1), ("reads", 1)] {
+        let got = with_checked(src, true, move |a| {
+            let mut me = Instance::init(View::new(a), def_named(a, name), 48000.0, &[], None).expect("init");
+            let ins: Vec<(&str, &[Value])> = if name == "acc" { vec![] } else { vec![("x", &[Value::F32(1.0)])] };
+            me.process(&[], &ins, 1, None).expect("process")
         });
-        assert!(matches!(stopped, Err(Fault::Unavailable(_))), "{name}: {stopped:?}");
+        assert!(matches!(&got[..], [Value::Int(_, n, _)] if *n == want), "{name}: {got:?}");
     }
 }
