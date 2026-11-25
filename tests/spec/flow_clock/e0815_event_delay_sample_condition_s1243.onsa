@@ -1,0 +1,23 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§11.10", "§11.11", "§18.1"]
+
+// W7-11 U2r/t, S-1243 (the reading (1), which is the stand-in of the decision: not decided yet; spec §11.10: "W より速い周期のクロックの条件は E0815"; the receiver is a built-in delay, so W is the clock of its first argument, here an event, §11.10, §11.4;
+// the events are below all periodic clocks, §11.11): a `reset_if~` on a delay of an event whose condition is a `sample` value (a signal, a computed one, a `sample` value in a chain) is E0815 at the condition. The conditions of the kind `block`
+// and the same event are accepted (event_reset_chain_accepted.onsa). If the decision is (2) these cases are to be removed. One error per flow (P-01). `v` is an event, `g` and `c` are `sample` inputs, `k` is `block`.
+
+pub flow prev_with_a_sample_bool(v: U32 at event, g: Bool at sample) -> U32 at sample {
+  prev~(v).reset_if~(g)                                       //~ E0815
+}
+
+pub flow delay_with_a_computed_condition(v: U32 at event, c: U32 at sample) -> U32 at sample {
+  delay~(v, 2).reset_if~(c > 3)                               //~ E0815
+}
+
+pub flow vdelay_with_a_sample_bool(v: F32 at event, g: Bool at sample) -> F32 at sample {
+  vdelay~(v, 2.0, 4).reset_if~(g)                             //~ E0815
+}
+
+pub flow second_modifier_of_a_chain(v: U32 at event, g: Bool at sample) -> U32 at sample {
+  prev~(v).reset_if~(v > 0).reset_if~(g)                      //~ E0815
+}

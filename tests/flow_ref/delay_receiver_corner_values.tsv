@@ -1,4 +1,4 @@
-# flow_ref 1 source=tests/spec/flow_semantics/delay_receiver_corner_values.onsa tests=9 evaluated=7 unavailable=0 skipped=2 waiting=0
+# flow_ref 1 source=tests/spec/flow_semantics/delay_receiver_corner_values.onsa tests=9 evaluated=9 unavailable=0 skipped=0 waiting=0
 @ a feedback reference in the first argument: the delay gives y and stores y + 1 at the frames it runs, so it counts its runs
 init 0 delay_receiver_corner_values.fb_when sr=0x41000000
 process 0 frames=16 in c=[true true false true false false true true true false true false true true false true]
@@ -11,8 +11,23 @@ out=[0x00000000 0x00000000 0x3f800000 0x00000000 0x3f800000 0x40000000 0x0000000
 init 0 delay_receiver_corner_values.fb_delay2 sr=0x41000000
 process 0 frames=12 in c=[true true false true false false true true true false true false]
 out=[0x00000000 0x00000000 0x00000000 0x3f800000 0x3f800000 0x3f800000 0x3f800000 0x40000000 0x40000000 0x40000000 0x40400000 0x40400000]
-- an array as the value of a delay is stored and held as a whole: T.default() of an array is the zeros, the init is an array	skipped layout
-- the copies of a par~ have a state of their own (the flag of a delay that has run too): the condition differs by the copy	skipped layout
+@ an array as the value of a delay is stored and held as a whole: T.default() of an array is the zeros, the init is an array
+init 0 delay_receiver_corner_values.arr_when sr=0x41000000
+init 1 delay_receiver_corner_values.arr_when_init sr=0x41000000
+init 2 delay_receiver_corner_values.arr_delay_reset sr=0x41000000
+process 0 frames=6 in x=[0x3f800000 0x40000000 0x40400000 0x40800000 0x40a00000 0x40c00000] c=[true false true true false true]
+out=[0x00000000 0x00000000 0x41a80000 0x427c0000 0x427c0000 0x42a80000]
+process 1 frames=6 in x=[0x3f800000 0x40000000 0x40400000 0x40800000 0x40a00000 0x40c00000] c=[false false true true false true]
+out=[0x00000000 0x00000000 0x42820000 0x427c0000 0x427c0000 0x42a80000]
+process 2 frames=6 in x=[0x3f800000 0x40000000 0x40400000 0x40800000 0x40a00000 0x40c00000] r=[false false false true false false]
+out=[0x42ae0000 0x42ae0000 0x41a80000 0x42ae0000 0x42ae0000 0x42580000]
+@ the copies of a par~ have a state of their own (the flag of a delay that has run too): the condition differs by the copy
+init 0 delay_receiver_corner_values.par_when sr=0x41000000
+init 1 delay_receiver_corner_values.par_reset sr=0x41000000
+process 0 frames=6 in x=[0x3f800000 0x40000000 0x40400000 0x40800000 0x40a00000 0x40c00000] c=[false true false true true false]
+out=[0x40a00000 0x424c0000 0x42500000 0x41b80000 0x42300000 0x42340000]
+process 1 frames=6 in x=[0x3f800000 0x40000000 0x40400000 0x40800000 0x40a00000 0x40c00000] r=[false false false true false false]
+out=[0x00000000 0x00000000 0x41300000 0x40000000 0x40400000 0x42300000]
 @ sample_tick() as the condition: the time of the frame is read at the clock of the delay
 init 0 delay_receiver_corner_values.tick_when sr=0x41000000
 init 1 delay_receiver_corner_values.tick_reset sr=0x41000000

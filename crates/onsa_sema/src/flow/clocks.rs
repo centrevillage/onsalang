@@ -837,7 +837,7 @@ impl Walk<'_> {
     /// of an instance its declared ones, of a built-in delay its output at
     /// the clock of its first argument (§11.10), none of one in error, whose
     /// condition is read with no rule as the N of `.down~` and `.up~` is; one of
-    /// an event is [`Self::event_delay_modifier`].
+    /// an event is of [`Self::event_delay_modifier`].
     fn modifier(&mut self, e: ExprId, receiver: ExprId, head: ExprId, args: &[Arg]) -> Option<Clock> {
         let call = self.calls.get(&head).map(|&i| &self.cx.calls[i]);
         let frame = self.frame_of(head);
@@ -861,8 +861,8 @@ impl Walk<'_> {
             Some(true) => {}
             None => {
                 args.iter().for_each(|x| _ = self.cut(x.expr));
-                if matches!((call.map(|c| &c.kind), c), (Some(NodeKind::Delay(..)), Some(Clock::Event(_)))) {
-                    self.event_delay_modifier(e, head);
+                if let (Some(NodeKind::Delay(..)), Some(at @ Clock::Event(_))) = (call.map(|c| &c.kind), c) {
+                    self.event_delay_modifier(e, head, at);
                 }
             }
         }
@@ -882,7 +882,7 @@ impl Walk<'_> {
     /// W, and of `.when~` an `at` in it to another clock than W (not in an
     /// argument of a flow, read at its port), are E0815. An event in the
     /// condition of `.when~` is read at W (its last value), in that of
-    /// `.reset_if~` at its own clock (§11.11; its plan is W7-17's): whether it is opened, its condition walked; none of
+    /// `.reset_if~` at its own clock, which resets (§11.11): whether it is opened, its condition walked; none of
     /// `.down~` and `.up~`, whose argument the caller walks.
     fn guard_cond(&mut self, e: ExprId, head: ExprId, ports: Ports) -> Option<bool> {
         let chain = self.cx.chains.get(&head)?;
@@ -906,9 +906,10 @@ impl Walk<'_> {
         if !self.checking() {
             return Some(true);
         }
-        if let Some(at @ Clock::Event(_)) = c.filter(|_| reset) {
+        if let Some(at @ Clock::Event(src)) = c.filter(|_| reset) {
             if let Some(&k) = self.node_of.get(&head) {
                 self.node_clocks[k].args.push(ArgRead { expr: cond, at, stage: None });
+                self.node_clocks[k].resets.push((i as u32, ClockStage::Event(src)));
             }
             return Some(true);
         }
@@ -946,7 +947,7 @@ impl Walk<'_> {
             // an outer guard moved W to a faster stage, a field of the grid of W, as a head's argument.
             let stage = (at.stage() != Some(stage)).then_some(stage);
             self.node_clocks[k].args.push(ArgRead { expr: cond, at, stage });
-            self.node_clocks[k].resets.extend(r.map(|r| (i as u32, r)));
+            self.node_clocks[k].resets.extend(r.map(|r| (i as u32, ClockStage::Tick(r))));
             self.node_clocks[k].ports.extend(port.map(|p| (i as u32, p)));
         }
         Some(true)

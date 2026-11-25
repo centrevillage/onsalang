@@ -12,8 +12,11 @@ use super::walk::{Halt, Walk};
 impl Walk<'_, '_> {
     /// The value of `e` when it reads what a render gave (`o.out[2]`, `is_nan(o.out[0])`, `o.out.len()`), else evaluated.
     pub(super) fn value(&mut self, body: Body, e: ExprId) -> Result<Value, Halt> {
-        if !self.reads(body, e) {
+        if !self.reads(body, e) || self.user_call(body, e) {
             return self.eval(body, e);
+        }
+        if let ExprKind::Paren(x) = &body.ast.expr(e).kind {
+            return self.value(body, *x);
         }
         let ExprKind::Binary { op, lhs, rhs, .. } = &body.ast.expr(e).kind else { return self.shape(body, e) };
         // `a && b` and `a || b` of reads: the right side is read only where the left does not decide (§3.4).
@@ -31,6 +34,12 @@ impl Walk<'_, '_> {
         };
         let (a, b) = (self.value(body, *lhs)?, self.value(body, *rhs)?);
         Ok(binary(bin, &a, &b)?)
+    }
+
+    /// A call of a function of the user (not a primitive, nor `len` of the channels): it reads the outputs a `render` gave as any other value does, by the struct that the `let` of the render holds (`Walk::bind`).
+    fn user_call(&self, body: Body, e: ExprId) -> bool {
+        let ExprKind::Call { .. } = &body.ast.expr(e).kind else { return false };
+        body.callee(e).is_ok_and(|c| body.view.prim(c.def).is_none() && body.view.array_len() != Some(c.def))
     }
 
     fn reads(&self, body: Body, e: ExprId) -> bool {
@@ -103,6 +112,21 @@ impl Walk<'_, '_> {
             _ => Err(unavailable()),
         }
     }
+}
+
+/// The value of a `Rendered` that a `render` gave, as the evaluator reads it (`rendered_value`): each field is the frames of one output, or the channels of it (the frames of each) when the output is an array.
+pub(super) fn rendered_struct(outs: &[Value], fields: usize) -> Result<Value, Fault> {
+    let field = |at: usize| -> Result<Value, Fault> {
+        let frames: Vec<Value> = outs.iter().map(|v| part(v, at)).collect();
+        match frames.first() {
+            Some(Value::Array(a)) => {
+                let channel = |k| frames.iter().map(|v| elem(v, k)).collect::<Result<_, _>>().map(Value::Array);
+                (0..a.len()).map(channel).collect::<Result<_, _>>().map(Value::Array)
+            }
+            _ => Ok(Value::Array(frames)),
+        }
+    };
+    Ok(Value::Struct((0..fields).map(field).collect::<Result<_, _>>()?))
 }
 
 /// The field `at` of a struct output, or the output itself (it is no struct).

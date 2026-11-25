@@ -78,7 +78,8 @@ struct Marker<'a> {
     par_of: HashMap<ExprId, NodeId>,
     pars: Vec<NodeId>,
     /// The first arguments of the delays, and the bindings a `^name`
-    /// chooses (`BodyNames::past`), of [`Marker::back`].
+    /// chooses (`BodyNames::past`, and of the `match`es marked with no `~`,
+    /// S-1249), of [`Marker::back`].
     firsts: HashSet<ExprId>,
     past: HashSet<LocalId>,
     /// The bindings of the arms of the `match~`s marked, the `match~`s whose
@@ -436,6 +437,11 @@ impl Marker<'_> {
             // A guard under the scrutinee and the guards before it; the arm
             // bodies of `match~` (S-1094) under no more than it.
             ExprKind::Match { scrutinee, arms, tilde } => {
+                if arms.iter().filter_map(|a| a.guard).chain([*scrutinee]).any(|x| self.back(x)) {
+                    let (body, past) = (self.body, &mut self.past);
+                    let mut bind = |q, _: &_| past.extend(body.pat_locals.get(&q));
+                    arms.iter().for_each(|a| crate::pat::each_bind(ast, a.pat, true, &mut bind));
+                }
                 let depth = self.conds.len();
                 let arms_of = self.clocks.tilde.get(&e).filter(|_| tilde.is_some());
                 if arms_of.is_some_and(|t| t.arms.iter().flatten().any(|b| self.past.contains(b))) {

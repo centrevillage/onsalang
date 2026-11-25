@@ -233,13 +233,13 @@ impl ClockInfo {
 
 /// The clock of a delay or an instance call the walk of the clocks gives,
 /// the clocks its arguments are read at, and of the head of a chain the
-/// tick of the condition of each `.reset_if~` by its place in the chain
-/// ([`PlanModifier::reset`], the one writer of it).
+/// stage the condition of each `.reset_if~` resets at by its place in the
+/// chain ([`PlanModifier::reset`], the one writer of it).
 #[derive(Debug, Clone)]
 pub(super) struct NodeClock {
     pub(super) clock: Clock,
     pub(super) args: Vec<ArgRead>,
-    pub(super) resets: Vec<(u32, crate::clock::Ratio)>,
+    pub(super) resets: Vec<(u32, ClockStage)>,
     pub(super) ports: Vec<(u32, crate::clock::Ratio)>,
 }
 

@@ -90,7 +90,7 @@ fn node_field_ty(lw: &mut Lowerer, flow: DefId, decls: &Decls, info: &FlowInfo, 
         }
         // Of a guard (§11.10, S-1220): its condition, its count, its held output; of a
         // delay whether it ran.
-        (_, Part::On(_) | Part::Ran) => Ok(Ty::Bool),
+        (_, Part::On(_) | Part::Ran | Part::Open | Part::Back(_)) => Ok(Ty::Bool),
         (_, Part::Count(_)) => Ok(Ty::u32()),
         (PlanKind::Prev { ty, .. } | PlanKind::Delay { ty, .. } | PlanKind::Vdelay { ty, .. }, Part::Held(_)) => {
             lw.core_ty(*ty, &[], span)

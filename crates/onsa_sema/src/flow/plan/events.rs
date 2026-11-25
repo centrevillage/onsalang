@@ -58,9 +58,9 @@ pub(super) fn sources(info: &FlowInfo) -> Vec<EventPlan> {
 }
 
 /// The first form of `info`, in the order of the text, of those with events
-/// this version does not run (W7-17), of the body: a chain of a call of a
-/// flow with an event port, of a delay at an event or with a condition at
-/// one; and in a `par~` (and a `par`, whose fields are of each replica as
+/// this version does not run (W7-17), of the body: a chain with a modifier
+/// but `.reset_if~` of a call of a flow with an event port, of a delay at an
+/// event or with a condition at one; and in a `par~` (and a `par`, whose fields are of each replica as
 /// well), an `if~` or a `match~`, its conditions, scrutinee and guards too,
 /// a call of a flow with an event port, a delay at an event or a computed
 /// part of one, but not a name. Not those of a callee, which stop it.
@@ -78,8 +78,10 @@ pub(super) fn form(a: &Analysis, info: &FlowInfo, ast: &Ast) -> Option<Span> {
         info.lets.iter().map(|l| l.init).chain(info.output).map(|e| (e, false)).collect();
     while let Some((e, inside)) = todo.pop() {
         if let Some(n) = info.node_of.get(&e).map(|&id| info.node(id)) {
-            found.extend((ticks(n) && (inside || !n.chain.is_empty())).then_some(n.span));
-            found.extend(n.chain.iter().filter(|m| m.cond.as_ref().is_some_and(event)).map(|m| m.name));
+            if inside || n.chain.iter().any(|m| m.modifier != Modifier::ResetIf) {
+                found.extend(ticks(n).then_some(n.span));
+                found.extend(n.chain.iter().filter(|m| m.cond.as_ref().is_some_and(event)).map(|m| m.name));
+            }
         }
         let part = info.hoist_of(e).map(|h| info.hoist(h)).filter(|h| matches!(h.stage, ClockStage::Event(_)));
         found.extend(part.filter(|_| inside).map(|h| h.span));
@@ -138,13 +140,15 @@ pub(super) fn out(g: &FlowInfo) -> Option<(ClockStage, Out)> {
     g.emit.map(|s| (s, Out::Event)).or(value)
 }
 
-/// The work of the instance `n` of `g` at the events its inputs are bound to
-/// (§11.11), an entry of a source in the order of their numbers: the tick of
-/// each input bound to it, in the order they are declared (S-1236). Not
-/// through the boundaries of a chain ([`form`]).
-pub(super) fn entries(n: &PlanNode, g: &FlowInfo) -> Vec<Entry> {
+/// Adds to the `entries` of the node `n` ([`super::steps`]) its work at the
+/// events (§11.11), an entry of a source in the order of their numbers: of an
+/// instance of `g`, the tick of each input bound to it, in the order they are
+/// declared (S-1236), and before them the reset of each `.reset_if~` with a
+/// condition of it, the outer first (§11.10). One entry of a stage. Not
+/// through the boundaries and the guards of a chain ([`form`]).
+pub(super) fn entries(n: &PlanNode, g: Option<&FlowInfo>, entries: &mut Vec<Entry>) {
     let mut at: BTreeMap<EventSrc, Vec<Op>> = BTreeMap::new();
-    for p in &g.events {
+    for (g, p) in g.into_iter().flat_map(|g| g.events.iter().map(move |p| (g, p))) {
         // An argument in error has the diagnostic of a callee.
         if let EventFrom::Input(i) = p.from
             && let Some(Clock::Event(src)) = n.args.get(i as usize).map(|r| r.at)
@@ -154,7 +158,22 @@ pub(super) fn entries(n: &PlanNode, g: &FlowInfo) -> Vec<Entry> {
             at.entry(src).or_default().push(Op::Run { body, out });
         }
     }
-    at.into_iter().map(|(src, ops)| Entry { caller: ClockStage::Event(src), read: false, ops }).collect()
+    for (k, m) in (0u32..).zip(&n.chain) {
+        if let Some(ClockStage::Event(src)) = m.reset {
+            at.entry(src).or_default().insert(0, Op::Reset { at: k });
+        }
+    }
+    for (src, mut ops) in at {
+        let caller = ClockStage::Event(src);
+        match entries.iter_mut().find(|e| e.caller == caller) {
+            // The read of a delay at it.
+            Some(e) => {
+                ops.append(&mut e.ops);
+                e.ops = ops;
+            }
+            None => entries.push(Entry { caller, read: false, ops }),
+        }
+    }
 }
 
 /// The events of `info` with the stage that ticks each, of the tables of its

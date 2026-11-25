@@ -62,7 +62,8 @@ fn stage(f: &FlowInfo, s: ClockStage) -> String {
 }
 
 /// The work of the nodes of `f` at `path`, of the callee `g`: `<stage of the
-/// caller>: <stage of g>><where its result goes>` of each entry.
+/// caller>: <stage of g>><where its result goes>` of each entry, `reset <its
+/// place in the chain>` of a reset; of a delay, `g` is the flow of `f`.
 fn work(a: &Analysis, f: &FlowInfo, path: &str, g: &str) -> Vec<String> {
     let g = flow(a, g);
     let op = |op: &Op| match op {
@@ -75,6 +76,7 @@ fn work(a: &Analysis, f: &FlowInfo, path: &str, g: &str) -> Vec<String> {
             };
             format!("{}>{out}", stage(g, *body))
         }
+        Op::Reset { at } => format!("reset {at}"),
         other => panic!("{other:?}"),
     };
     let entry = |e: &Entry| format!("{}: {}", stage(f, e.caller), e.ops.iter().map(op).collect::<Vec<_>>().join(", "));
@@ -190,6 +192,90 @@ fn the_stage_that_gives_out_the_events() {
     assert_eq!(events(flow(&a, "keep")), (vec!["m < -".into()], Some("0".into())));
 }
 
+/// The work of a chain of `.reset_if~` with an event (§11.10): a reset is in
+/// the one entry of the event of its condition, first of its ops, the outer
+/// first, and of a tick where it was.
+#[test]
+fn the_resets_of_an_event_are_in_the_entry_of_its_source() {
+    let head = "x: U32 at sample, m: U32 at event, k: U32 at event, c: Bool at sample, b: Bool at block, s: U32 at (sample / 4)";
+    let own = "flow lp(x: U32 at sample) -> U32 at sample {\n  x + prev~(x)\n}\n";
+    let table = |body: &str, path: &str, g: &str| {
+        let (_, a, _) = analysis(&format!(
+            "{own}pub flow top({head}) -> U32 at sample {{\n  let _ = (m, c, b)\n  let _ = k\n  let _ = s\n  let y = {body}\n  y at sample\n}}\n"
+        ));
+        work(&a, flow(&a, "top"), path, g)
+    };
+    let call = |body: &str, g: &str| table(body, if g == "fwd" { "y.fwd_0" } else { "y" }, g);
+    assert_eq!(call("lp~(x).reset_if~(m > 0)", "lp"), ["0: 0>value", "m: reset 0"]);
+    assert_eq!(call("cnt~(m).reset_if~(m >= 4)", "cnt"), ["0: 0>value", "m: reset 0, e>-"]);
+    assert_eq!(call("cnt~(m).reset_if~(k >= 5)", "cnt"), ["0: 0>value", "m: e>-", "k: reset 0"]);
+    assert_eq!(call("cnt~(k).reset_if~(m >= 5)", "cnt"), ["0: 0>value", "m: reset 0", "k: e>-"]);
+    let two = call("cnt~(m).reset_if~(m >= 5).reset_if~(m >= 7)", "cnt");
+    assert_eq!(two, ["0: 0>value", "m: reset 1, reset 0, e>-"]);
+    let mixed = call("lp~(x).reset_if~(c).reset_if~(m >= 5)", "lp");
+    assert_eq!(mixed, ["0: reset 0, 0>value", "m: reset 1"]);
+    let slow = call("cnt~(m).reset_if~(s > 0)", "cnt");
+    assert_eq!(slow, ["-2: reset 0", "0: 0>value", "m: e>-"]);
+    assert_eq!(call("cnt~(m).reset_if~(b)", "cnt"), ["0: reset 0, 0>value", "m: e>-"]);
+    // The call that gives the event, of no tick of its own but `sample`.
+    let gives = call("fwd~(m).reset_if~(k > 0)", "fwd");
+    assert_eq!(gives, ["0: 0>-", "m: e>event", "k: reset 0"]);
+    // Delays, of `sample` and of an event; a condition of no event at the event of the delay.
+    let delay = |body: &str| table(body, if body.contains("(x") { "y" } else { "y.prev_0" }, "top");
+    assert_eq!(delay("prev~(x, 9).reset_if~(m > 0)"), ["0: 0>value", "m: reset 0"]);
+    assert_eq!(delay("prev~(m, 9).reset_if~(m == 0)"), ["m: reset 0, m>value"]);
+    assert_eq!(delay("prev~(m, 9).reset_if~(k == 0)"), ["m: m>value", "k: reset 0"]);
+    assert_eq!(delay("prev~(m, 9).reset_if~(b).reset_if~(m == 0)"), ["m: reset 1, reset 0, m>value"]);
+    assert_eq!(delay("prev~(m, 9).reset_if~(sample_tick() > 3)"), ["m: reset 0, m>value"]);
+    assert_eq!(delay("prev~(m, 9).reset_if~(true)"), ["m: reset 0, m>value"]);
+    let (_, a, _) = analysis(
+        "flow two(a: U32 at event, b: U32 at event) -> U32 at sample {\n  cnt~(a) + cnt~(b)\n}\n\
+         pub flow top(m: U32 at event) -> U32 at sample {\n  two~(m, m).reset_if~(m > 3)\n}\n",
+    );
+    let f = flow(&a, "top");
+    assert_eq!(work(&a, f, "_out.two_0", "two"), ["0: 0>value", "m: reset 0, a>-, b>-"]);
+}
+
+/// The condition of a delay at an event is read at the event (§11.3): its
+/// part of `block` is hoisted, and `sample_tick()` is of that stage.
+#[test]
+fn the_condition_of_a_delay_at_an_event_is_read_at_it() {
+    let top = |cond: &str| {
+        let (p, a, text) = analysis(&format!(
+            "pub flow top(m: U32 at event, k: U32 at block, f: Bool at block) -> U32 at sample {{\n  let _ = (k, f)\n  let y = prev~(m, 9).reset_if~({cond})\n  y at sample\n}}\n"
+        ));
+        let (f, ast) = (flow(&a, "top"), &p.modules[0].parsed.ast);
+        let hoists = f.hoists.iter().map(|h| ast.expr(h.expr).span.text_in(&text).to_string());
+        let time = f.time.keys().map(|&s| stage(f, s)).collect::<Vec<_>>();
+        (hoists.collect::<Vec<_>>(), time)
+    };
+    assert_eq!(top("k * 2 > 3 && m > 1"), (vec!["k * 2 > 3".to_string()], no()));
+    assert_eq!(top("f && 100 / k > m"), (vec!["100 / k".to_string()], no()));
+    assert_eq!(top("sample_tick() > 3 && m > 1"), (no(), vec!["m".to_string()]));
+    assert_eq!(top("sample_tick() > 3"), (no(), vec!["m".to_string()]));
+}
+
+/// S-1250: the flags of a delay that an event of another stage resets, and
+/// of no other.
+#[test]
+fn the_flags_of_a_delay_reset_by_an_event_of_another_stage() {
+    let fields = |body: &str| {
+        let (_, a, _) = analysis(&format!(
+            "pub flow top(x: U32 at sample, m: U32 at event, k: U32 at event, c: Bool at sample) -> U32 at sample {{\n  let _ = (x, m, c)\n  let _ = k\n  let y = {body}\n  y at sample\n}}\n"
+        ));
+        let f = flow(&a, "top");
+        let names = f.fields.iter().map(|f| f.name.clone()).filter(|n| n.starts_with("y.") && n.contains("._"));
+        names.collect::<Vec<String>>()
+    };
+    assert_eq!(fields("prev~(x).reset_if~(m > 3)"), ["y._open", "y._back_0"]);
+    let chain = fields("delay~(x, 2).reset_if~(m > 3).reset_if~(c).reset_if~(k > 3)");
+    assert_eq!(chain, ["y._open", "y._back_0", "y._back_2"]);
+    assert_eq!(fields("prev~(m).reset_if~(k > 3)"), ["y.prev_0._open", "y.prev_0._back_0"]);
+    assert_eq!(fields("prev~(m).reset_if~(m > 3)"), no::<String>());
+    assert_eq!(fields("prev~(x).reset_if~(c)"), no::<String>());
+    assert_eq!(fields("cnt~(m).reset_if~(k > 3)"), no::<String>());
+}
+
 /// The time of the stage of an event (`sample_tick()` in it, §11.4) is of the
 /// stages that tick it, of a caller by the tick of its input, and two words
 /// under a `.down~`.
@@ -233,20 +319,25 @@ fn forms(body: &str) -> Option<String> {
     ))
 }
 
-/// The forms of a chain: of a call of a flow with an event port, of a
-/// condition at an event and of a delay at one; not of a flow with events
-/// inside alone, and of a condition with `at sample`.
+/// The forms of a chain with a modifier but `.reset_if~`: of a call of a flow
+/// with an event port and of a condition at an event; not of a flow with
+/// events inside alone, of a condition with `at sample`, and of `.reset_if~`
+/// alone (§11.10).
 #[test]
 fn the_chains_not_run() {
-    assert_eq!(forms("  cnt~(m).reset_if~(c)").as_deref(), Some("cnt~(m)"));
+    assert_eq!(forms("  cnt~(m).reset_if~(c)"), None);
     assert_eq!(forms("  let d = gen~(x).when~(c)\n  d at sample").as_deref(), Some("gen~(x)"));
-    assert_eq!(forms("  let q = m > 3\n  own~(x).reset_if~(q)").as_deref(), Some("reset_if"));
+    assert_eq!(forms("  let q = m > 3\n  own~(x).reset_if~(q)"), None);
     assert_eq!(forms("  own~(x).when~(m > 3)").as_deref(), Some("when"));
-    assert_eq!(forms("  let d = prev~(m).reset_if~(m > 3)\n  d at sample").as_deref(), Some("prev~(m)"));
+    assert_eq!(forms("  let d = prev~(m).reset_if~(m > 3)\n  d at sample"), None);
+    assert_eq!(forms("  cnt~(m).reset_if~(m > 3).reset_if~(c)"), None);
+    assert_eq!(forms("  own~(x).when~(c).reset_if~(m > 3)").as_deref(), Some("reset_if"));
+    assert_eq!(forms("  prev~(x).reset_if~(m > 3).when~(c)").as_deref(), Some("reset_if"));
+    assert_eq!(forms("  cnt~(m).reset_if~(m > 3).when~(c)").as_deref(), Some("cnt~(m)"));
     assert_eq!(forms("  own~(x).when~(c) + own~(x).reset_if~(c)"), None);
     assert_eq!(forms("  let q = m > 3\n  own~(x).when~(q at sample) + prev~(x).reset_if~(q at sample)"), None);
     // The first in the order of the text.
-    assert_eq!(forms("  own~(x).when~(m > 3) + cnt~(m).reset_if~(c)").as_deref(), Some("when"));
+    assert_eq!(forms("  own~(x).when~(m > 3) + cnt~(m).when~(c)").as_deref(), Some("when"));
 }
 
 /// The forms in a `par~`, an `if~` and a `match~` (the conditions, the
@@ -260,6 +351,8 @@ fn the_branches_not_run() {
     assert_eq!(forms(par).as_deref(), Some("prev~(m)"));
     let par = "  let y = par~ i in 0..<2 { ((m * 2) at sample) + prev~(x) + i }\n  y[0] + y[1]";
     assert_eq!(forms(par).as_deref(), Some("m * 2"));
+    let par = "  let y = par~ i in 0..<2 { own~(x).reset_if~(m > 3) + i }\n  y[0] + y[1]";
+    assert_eq!(forms(par).as_deref(), Some("reset_if"));
     // The fields of a `par` are of each replica too.
     let par = "  let y = par i in 0..<2 { ((m * 2) at sample) + x + i }\n  y[0] + y[1]";
     assert_eq!(forms(par).as_deref(), Some("m * 2"));
@@ -372,6 +465,20 @@ fn a_delay_reads_the_events_of_what_it_stores_where_it_is_written() {
     assert_eq!(stored("match~ x { v if v > ^k => prev~(x), v if v > (p at sample) => v, _ => 0 }"), ["p"]);
     assert_eq!(stored("if~ ^k > x { prev~(x) } else if (p at sample) > 3 { 1 } else { m at sample }"), ["p", "m"]);
     assert_eq!(stored("if x > 3 || (^k > 3 && (p at sample) > 3) { x } else { 0 }"), ["p"]);
+    // A binding one chooses, of a `match` with no `~` too, is one (S-1249), and so
+    // is one that reads it to choose; not the parts beside it.
+    let plain = |arms: &str| {
+        let body = format!(
+            "  let p = prev~(^z)\n  let n = U32.trunc_from(sample_rate())\n  let y = prev~(match {arms})\n  let h: Option[U32] = if sample_rate() > 1.0 {{ Some(n) }} else {{ None }}\n  let z = gen~(x)\n  y"
+        );
+        saved(&body, "y")
+    };
+    assert_eq!(plain("^h { Some(v) => (p * v) at sample, None => (p * 2) at sample }"), ["p * 2"]);
+    assert_eq!(plain("^h { Some(v) => match v { 0 => p at sample, w => (p * w) at sample }, None => x }"), ["p"]);
+    let guard =
+        "n { v if v > 9 => (p * v) at sample, v if Some(v) == ^h => x, v => ((p + v) at sample) + (m at sample) }";
+    assert_eq!(plain(guard), ["m"]);
+    assert_eq!(plain("n { 4 => if ^h == Some(1) { x } else { 0 }, v => (p * v) at sample }"), ["p * v"]);
     // The arms of a `match~` are no conditional positions (§11.3).
     assert_eq!(stored("match~ ^k { 0 => prev~(x), v => v + (p at sample) }"), ["p"]);
 }

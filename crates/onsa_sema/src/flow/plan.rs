@@ -456,10 +456,11 @@ pub struct PlanModifier {
     pub cond: Option<ExprId>,
     /// The name of the modifier (`down`).
     pub name: Span,
-    /// Of `.reset_if~`, the exponent of the tick R its condition resets at
-    /// in its frame (§11.10), written by the walk of the clocks (the one
-    /// writer of it, [`build`]); none of another and of a chain in error.
-    pub reset: Option<Ratio>,
+    /// Of `.reset_if~`, the stage its condition resets at (§11.10): the tick
+    /// R in its frame, or the event of its condition; written by the walk of
+    /// the clocks (the one writer of it, [`build`]); none of another and of a
+    /// chain in error.
+    pub reset: Option<ClockStage>,
     /// Of `.when~` and `.reset_if~`, the exponent in its frame of the clock
     /// of its condition, a port of the part at its place (§11.10: read as an
     /// input of the head is); of the same writer; none of a parameter kind.
@@ -584,9 +585,9 @@ pub(super) fn build(
     let nodes = recorded.into_iter().zip(children).map(|(mut r, ch)| {
         let (clock, args) = match (w.node_of.get(&r.expr), info.clocks.exprs.get(&r.expr)) {
             (Some(&k), _) => {
-                // The tick of each `.reset_if~` the walk found (§11.10).
-                for &(at, tick) in &w.nodes[k].resets {
-                    r.chain.get_mut(at as usize).into_iter().for_each(|m| m.reset = Some(tick));
+                // The stage of each `.reset_if~` the walk found (§11.10).
+                for &(at, stage) in &w.nodes[k].resets {
+                    r.chain.get_mut(at as usize).into_iter().for_each(|m| m.reset = Some(stage));
                 }
                 // The port of each condition (§11.10), gathered as an input is.
                 for &(at, port) in &w.nodes[k].ports {

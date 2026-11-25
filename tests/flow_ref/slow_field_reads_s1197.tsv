@@ -1,14 +1,50 @@
-# flow_ref 1 source=tests/spec/flow_semantics/slow_field_reads_s1197.onsa tests=13 evaluated=0 unavailable=0 skipped=13 waiting=0
-- a field of a tick under a sample condition is the value of the tick whether or not the condition held at the tick	skipped layout
-- the field read under a condition is the same value as the field moved to a let	skipped layout
-- the whole read first and the field of it under a condition has the same values while no reset has come	skipped layout
-- an element of a tuple under a condition is read at every tick	skipped layout
-- a nested field under a condition is read at every tick	skipped layout
-- the inner struct read first under a condition has the same values while no reset has come	skipped layout
-- after a reset the field of the type F32 is F32.default() until the next tick	skipped layout
-- after a reset the whole read first is M.default() until the next tick, so its vel is 1.0	skipped layout
-- after a reset the element of a tuple is F32.default() until the next tick	skipped layout
-- after a reset the nested field is F32.default() (0.0), not the declared default of the struct	skipped layout
-- after a reset the whole nested value read first has the declared default vel 1.0	skipped layout
-- after a reset the inner struct read first has the declared default vel 1.0	skipped layout
+# flow_ref 1 source=tests/spec/flow_semantics/slow_field_reads_s1197.onsa tests=13 evaluated=12 unavailable=0 skipped=1 waiting=0
+@ a field of a tick under a sample condition is the value of the tick whether or not the condition held at the tick
+init 0 slow_field_reads_s1197.cond_field sr=0x41000000
+process 0 frames=12 in x=[0x00000000 0x3f800000 0x40000000 0x40400000 0x40800000 0x40a00000 0x40c00000 0x40e00000 0x41000000 0x41100000 0x41200000 0x41300000] g=[false false false false false true true false true false false true]
+out=[0x00000000 0x3f800000 0x40000000 0x40400000 0x40800000 0x41400000 0x41400000 0x40e00000 0x41500000 0x41100000 0x41200000 0x41500000]
+@ the field read under a condition is the same value as the field moved to a let
+init 0 slow_field_reads_s1197.let_field sr=0x41000000
+process 0 frames=12 in x=[0x00000000 0x3f800000 0x40000000 0x40400000 0x40800000 0x40a00000 0x40c00000 0x40e00000 0x41000000 0x41100000 0x41200000 0x41300000] g=[false false false false false true true false true false false true]
+out=[0x00000000 0x3f800000 0x40000000 0x40400000 0x40800000 0x41400000 0x41400000 0x40e00000 0x41500000 0x41100000 0x41200000 0x41500000]
+@ the whole read first and the field of it under a condition has the same values while no reset has come
+init 0 slow_field_reads_s1197.cond_whole sr=0x41000000
+process 0 frames=12 in x=[0x00000000 0x3f800000 0x40000000 0x40400000 0x40800000 0x40a00000 0x40c00000 0x40e00000 0x41000000 0x41100000 0x41200000 0x41300000] g=[false false false false false true true false true false false true]
+out=[0x00000000 0x3f800000 0x40000000 0x40400000 0x40800000 0x41400000 0x41400000 0x40e00000 0x41500000 0x41100000 0x41200000 0x41500000]
+@ an element of a tuple under a condition is read at every tick
+init 0 slow_field_reads_s1197.cond_tuple sr=0x41000000
+process 0 frames=12 in x=[0x00000000 0x3f800000 0x40000000 0x40400000 0x40800000 0x40a00000 0x40c00000 0x40e00000 0x41000000 0x41100000 0x41200000 0x41300000] g=[false false false false false true true false true false false true]
+out=[0x00000000 0x3f800000 0x40000000 0x40400000 0x40800000 0x41400000 0x41400000 0x40e00000 0x41500000 0x41100000 0x41200000 0x41500000]
+@ a nested field under a condition is read at every tick
+init 0 slow_field_reads_s1197.cond_nested_field sr=0x41000000
+process 0 frames=12 in x=[0x00000000 0x3f800000 0x40000000 0x40400000 0x40800000 0x40a00000 0x40c00000 0x40e00000 0x41000000 0x41100000 0x41200000 0x41300000] g=[false false false false false true true false true false false true]
+out=[0x00000000 0x3f800000 0x40000000 0x40400000 0x40800000 0x41400000 0x41400000 0x40e00000 0x41500000 0x41100000 0x41200000 0x41500000]
+@ the inner struct read first under a condition has the same values while no reset has come
+init 0 slow_field_reads_s1197.cond_nested_part sr=0x41000000
+process 0 frames=12 in x=[0x00000000 0x3f800000 0x40000000 0x40400000 0x40800000 0x40a00000 0x40c00000 0x40e00000 0x41000000 0x41100000 0x41200000 0x41300000] g=[false false false false false true true false true false false true]
+out=[0x00000000 0x3f800000 0x40000000 0x40400000 0x40800000 0x41400000 0x41400000 0x40e00000 0x41500000 0x41100000 0x41200000 0x41500000]
+@ after a reset the field of the type F32 is F32.default() until the next tick
+init 0 slow_field_reads_s1197.reset_cond_field sr=0x41000000
+process 0 frames=12 in x=[0x00000000 0x3f800000 0x40000000 0x40400000 0x40800000 0x40a00000 0x40c00000 0x40e00000 0x41000000 0x41100000 0x41200000 0x41300000] g=[true true true true true true false true true true true true] r=[false false false false false true false false false false false false]
+out=[0x41300000 0x41300000 0x41300000 0x41300000 0x41400000 0x00000000 0x40c00000 0x00000000 0x41300000 0x41300000 0x41300000 0x41300000]
+@ after a reset the whole read first is M.default() until the next tick, so its vel is 1.0
+init 0 slow_field_reads_s1197.reset_cond_whole sr=0x41000000
+process 0 frames=12 in x=[0x00000000 0x3f800000 0x40000000 0x40400000 0x40800000 0x40a00000 0x40c00000 0x40e00000 0x41000000 0x41100000 0x41200000 0x41300000] g=[true true true true true true false true true true true true] r=[false false false false false true false false false false false false]
+out=[0x41300000 0x41300000 0x41300000 0x41300000 0x41400000 0x3f800000 0x40c00000 0x3f800000 0x41300000 0x41300000 0x41300000 0x41300000]
+@ after a reset the element of a tuple is F32.default() until the next tick
+init 0 slow_field_reads_s1197.reset_cond_tuple sr=0x41000000
+process 0 frames=12 in x=[0x00000000 0x3f800000 0x40000000 0x40400000 0x40800000 0x40a00000 0x40c00000 0x40e00000 0x41000000 0x41100000 0x41200000 0x41300000] g=[true true true true true true false true true true true true] r=[false false false false false true false false false false false false]
+out=[0x41300000 0x41300000 0x41300000 0x41300000 0x41400000 0x00000000 0x40c00000 0x00000000 0x41300000 0x41300000 0x41300000 0x41300000]
+@ after a reset the nested field is F32.default() (0.0), not the declared default of the struct
+init 0 slow_field_reads_s1197.reset_cond_nested_field sr=0x41000000
+process 0 frames=12 in x=[0x00000000 0x3f800000 0x40000000 0x40400000 0x40800000 0x40a00000 0x40c00000 0x40e00000 0x41000000 0x41100000 0x41200000 0x41300000] g=[true true true true true true false true true true true true] r=[false false false false false true false false false false false false]
+out=[0x41300000 0x41300000 0x41300000 0x41300000 0x41400000 0x00000000 0x40c00000 0x00000000 0x41300000 0x41300000 0x41300000 0x41300000]
+@ after a reset the whole nested value read first has the declared default vel 1.0
+init 0 slow_field_reads_s1197.reset_cond_nested_whole sr=0x41000000
+process 0 frames=12 in x=[0x00000000 0x3f800000 0x40000000 0x40400000 0x40800000 0x40a00000 0x40c00000 0x40e00000 0x41000000 0x41100000 0x41200000 0x41300000] g=[true true true true true true false true true true true true] r=[false false false false false true false false false false false false]
+out=[0x41300000 0x41300000 0x41300000 0x41300000 0x41400000 0x3f800000 0x40c00000 0x3f800000 0x41300000 0x41300000 0x41300000 0x41300000]
+@ after a reset the inner struct read first has the declared default vel 1.0
+init 0 slow_field_reads_s1197.reset_cond_nested_part sr=0x41000000
+process 0 frames=12 in x=[0x00000000 0x3f800000 0x40000000 0x40400000 0x40800000 0x40a00000 0x40c00000 0x40e00000 0x41000000 0x41100000 0x41200000 0x41300000] g=[true true true true true true false true true true true true] r=[false false false false false true false false false false false false]
+out=[0x41300000 0x41300000 0x41300000 0x41300000 0x41400000 0x3f800000 0x40c00000 0x3f800000 0x41300000 0x41300000 0x41300000 0x41300000]
 - the copies of a par~ keep a field each	skipped layout

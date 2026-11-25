@@ -1,0 +1,51 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§11.10", "§11.11", "§18.1"]
+
+// W7-11 U2r/t, S-559, S-562, S-1209 (spec §11.10: "条件の中で、イベントの値と周期のクロックの値が混ざると E0815（`is_start(tr) && armed`、`armed` は `sample`）"; §11.11: "別の入力のイベントのクロックどうしは比べられない"): a chain of `reset_if~` with an
+// event condition keeps the errors of the clocks of the conditions, whatever the lowering of the events does after U2r: the events of two sources in one condition, an event with a `sample` value in one condition, in the second modifier of a chain,
+// and where the receiver is a part that has an event input. The error is at the line of the condition. The accepted chains are in event_reset_chain_accepted.onsa. One error per flow (P-01).
+// `a`, `b`, `e` and `m` are events, `x` and `armed` are `sample` inputs, `g` is a `sample` Bool.
+
+pub rt fn is_on(e: U32) -> Bool {
+  e > 0
+}
+
+pub flow rs(x: F32 at sample) -> F32 at sample {
+  let y = x + prev~(^y)
+  y
+}
+
+pub flow acc(e: U32 at event) -> U32 at sample {
+  let n = prev~(^n) + e
+  n
+}
+
+pub flow two_events_in_a_second_modifier(a: U32 at event, b: U32 at event, x: F32 at sample, g: Bool at sample) -> F32 at sample {
+  rs~(x).reset_if~(g).reset_if~(is_on(a) && is_on(b))         //~ E0815
+}
+
+pub flow two_events_in_the_first_modifier(a: U32 at event, b: U32 at event, x: F32 at sample) -> F32 at sample {
+  rs~(x).reset_if~(is_on(a) && is_on(b)).reset_if~(false)     //~ E0815
+}
+
+pub flow an_event_and_a_sample_value_in_the_second(m: U32 at event, x: F32 at sample, armed: Bool at sample) -> F32 at sample {
+  rs~(x).reset_if~(is_on(m)).reset_if~(is_on(m) && armed)     //~ E0815
+}
+
+pub flow an_event_and_a_sample_value(m: U32 at event, x: F32 at sample, armed: Bool at sample) -> F32 at sample {
+  rs~(x).reset_if~(is_on(m) && armed)                         //~ E0815
+}
+
+pub flow two_events_of_an_event_part(a: U32 at event, b: U32 at event, e: U32 at event) -> U32 at sample {
+  acc~(e).reset_if~(is_on(a) && is_on(b))                     //~ E0815
+}
+
+pub flow an_event_and_a_sample_value_of_an_event_part(e: U32 at event, armed: Bool at sample) -> U32 at sample {
+  acc~(e).reset_if~(is_on(e) && armed)                        //~ E0815
+}
+
+pub flow a_let_of_a_mixed_condition(a: U32 at event, b: U32 at event, e: U32 at event) -> U32 at sample {
+  let c = is_on(a) && is_on(b)                                //~ E0815
+  acc~(e).reset_if~(c)
+}

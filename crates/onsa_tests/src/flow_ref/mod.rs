@@ -114,6 +114,8 @@ mod probe_tests;
 #[cfg(test)]
 mod render_tests;
 #[cfg(test)]
+mod reset_event_tests;
+#[cfg(test)]
 mod reset_order_tests;
 #[cfg(test)]
 mod reset_tests;

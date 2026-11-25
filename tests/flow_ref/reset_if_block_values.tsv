@@ -1,4 +1,4 @@
-# flow_ref 1 source=tests/spec/flow_semantics/reset_if_block_values.onsa tests=8 evaluated=4 unavailable=0 skipped=4 waiting=0
+# flow_ref 1 source=tests/spec/flow_semantics/reset_if_block_values.onsa tests=8 evaluated=8 unavailable=0 skipped=0 waiting=0
 @ a condition of the kind block resets at each run: both runs of the tick that reads it (the sum is put back before each, S-1218)
 init 0 reset_if_block_values.reset_run sr=0x41000000
 init 1 reset_if_block_values.reset_run sr=0x41000000
@@ -10,8 +10,17 @@ process 0 params r=false frames=4 in x=[0x40a00000 0x40c00000 0x40e00000 0x41000
 out=[0x40a00000 0x41100000 0x41600000 0x41a00000]
 process 1 params r=true frames=8 in x=[0x3f800000 0x40000000 0x40400000 0x40800000 0x40a00000 0x40c00000 0x40e00000 0x41000000]
 out=[0x00000000 0x00000000 0x3f800000 0x40000000 0x40400000 0x40800000 0x40a00000 0x40c00000]
-- a condition of the signal at sample is gathered with the input: the run j resets for the sample of its own frame	skipped layout
-- reset_if~ after a when~ puts the part back at a stopped run too (and the held output is T.default()); before it, only at the runs that are made	skipped layout
+@ a condition of the signal at sample is gathered with the input: the run j resets for the sample of its own frame
+init 0 reset_if_block_values.reset_signal sr=0x41000000
+process 0 frames=8 in x=[0x3f800000 0x40000000 0x40400000 0x40800000 0x40a00000 0x40c00000 0x40e00000 0x41000000] r=[false false true false false false false false]
+out=[0x00000000 0x00000000 0x3f800000 0x40400000 0x40400000 0x40e00000 0x41400000 0x41900000]
+@ reset_if~ after a when~ puts the part back at a stopped run too (and the held output is T.default()); before it, only at the runs that are made
+init 0 reset_if_block_values.reset_after_when sr=0x41000000
+init 1 reset_if_block_values.reset_before_when sr=0x41000000
+process 0 frames=8 in x=[0x3f800000 0x40000000 0x40400000 0x40800000 0x40a00000 0x40c00000 0x40e00000 0x41000000] c=[true false true true false true true true] r=[false true false true false false false false]
+out=[0x00000000 0x00000000 0x3f800000 0x00000000 0x40400000 0x40800000 0x40800000 0x41200000]
+process 1 frames=8 in x=[0x3f800000 0x40000000 0x40400000 0x40800000 0x40a00000 0x40c00000 0x40e00000 0x41000000] c=[true false true true false true true true] r=[false true false true false false false false]
+out=[0x00000000 0x00000000 0x3f800000 0x3f800000 0x40800000 0x40800000 0x40800000 0x41200000]
 @ with an .up~(4) and a .down~(2) a condition of the kind block resets once for each frame, before the first of its 2 runs
 init 0 reset_if_block_values.reset_frame sr=0x41000000
 process 0 params r=false frames=2
@@ -36,5 +45,20 @@ process 0 params r=true frames=2
 out=[0x3f800000 0x3f800000]
 process 0 params r=false frames=4
 out=[0x42cc0000 0x42ce0000 0x434c0000 0x434d0000]
-- a reset_if~ outside the block puts back the rings and the array that is dealt too (§11.10), and the part starts again from the next sample	skipped layout
-- reset_if~(false) anywhere changes nothing: inside and outside a when~, the same values as with none	skipped layout
+@ a reset_if~ outside the block puts back the rings and the array that is dealt too (§11.10), and the part starts again from the next sample
+init 0 reset_if_block_values.reset_outside sr=0x41000000
+process 0 frames=12 in x=[0x3f800000 0x40000000 0x40400000 0x40800000 0x40a00000 0x40c00000 0x40e00000 0x41000000 0x41100000 0x41200000 0x41300000 0x41400000] c=[true true true true true true true true true true true true] r=[false false false false false true false false false false false false]
+out=[0x00000000 0x00000000 0x3f800000 0x40400000 0x40c00000 0x00000000 0x00000000 0x40c00000 0x41500000 0x41a80000 0x41f00000 0x42200000]
+@ reset_if~(false) anywhere changes nothing: inside and outside a when~, the same values as with none
+init 0 reset_if_block_values.never_reset sr=0x41000000
+init 1 reset_if_block_values.no_reset sr=0x41000000
+init 2 reset_if_block_values.never_reset_inside_when sr=0x41000000
+init 3 reset_if_block_values.only_when sr=0x41000000
+process 0 frames=8 in x=[0x3f800000 0x40000000 0x40400000 0x40800000 0x40a00000 0x40c00000 0x40e00000 0x41000000]
+out=[0x00000000 0x00000000 0x3f800000 0x40400000 0x40c00000 0x41200000 0x41700000 0x41a80000]
+process 1 frames=8 in x=[0x3f800000 0x40000000 0x40400000 0x40800000 0x40a00000 0x40c00000 0x40e00000 0x41000000]
+out=[0x00000000 0x00000000 0x3f800000 0x40400000 0x40c00000 0x41200000 0x41700000 0x41a80000]
+process 2 frames=8 in x=[0x3f800000 0x40000000 0x40400000 0x40800000 0x40a00000 0x40c00000 0x40e00000 0x41000000] c=[true false true true false true true true]
+out=[0x00000000 0x00000000 0x3f800000 0x3f800000 0x40800000 0x41000000 0x41000000 0x41600000]
+process 3 frames=8 in x=[0x3f800000 0x40000000 0x40400000 0x40800000 0x40a00000 0x40c00000 0x40e00000 0x41000000] c=[true false true true false true true true]
+out=[0x00000000 0x00000000 0x3f800000 0x3f800000 0x40800000 0x41000000 0x41000000 0x41600000]

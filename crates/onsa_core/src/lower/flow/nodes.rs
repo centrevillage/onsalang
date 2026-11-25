@@ -62,6 +62,7 @@ pub(crate) fn lower_flow_expr(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId) -> R<O
                 delay_value(lw, cx, &mut stmts, &state, id)?
             } else {
                 let v = super::chain::entry(lw, cx, &mut stmts, id, &state)?;
+                super::chain::opened(lw, cx, &mut stmts, id)?;
                 v.ok_or_else(|| internal(span, format!("`{name}` read of an entry of no value")))?
             }
         }
@@ -198,7 +199,7 @@ pub(super) fn delay_work(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, i
         let v = keep(cx, out, (&n.path, n.owner), v)?;
         cx.flow.as_mut().unwrap().now.expr_override.insert(cond, v);
     }
-    Ok(())
+    super::chain::opened(lw, cx, out, id)
 }
 
 /// The reads `saved` of events in what the end of the stage evaluates, of the

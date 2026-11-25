@@ -37,6 +37,10 @@ pub enum Part {
     /// Of a delay with a `.when~` in its chain: it ran at this tick, so it
     /// stores (§11.4, §11.10, S-1220).
     Ran,
+    /// Of a delay an event of another stage resets (§11.3, S-1250): between its
+    /// place and its store; the reset at this place of its chain waits for that store.
+    Open,
+    Back(u32),
 }
 
 /// What a field of the state holds.
@@ -186,7 +190,7 @@ impl Structs<'_> {
     /// `delay~` / `vdelay~`, then `n.init` of a delay whose `init` is an
     /// `Init`-rate expression; after `n` of an instance the rings and the
     /// array of each boundary of its chain; of either, those its guards
-    /// read, and of a delay with a guard `n._ran`; `n` of a `par~` whose replicas have fields
+    /// read, of a delay with a guard `n._ran`, its flags (S-1250); `n` of a `par~` whose replicas have fields
     /// (of its nodes, then its hoisted ones by their names), and none of
     /// one with no state.
     fn node(&mut self, id: NodeId, out: &mut Vec<Field>) {
@@ -252,6 +256,7 @@ impl Structs<'_> {
         if n.kind.delay().is_some() && !n.guards.is_empty() {
             push(Part::Ran);
         }
+        n.late_flags().into_iter().for_each(&mut push);
         self.at[id.0 as usize] = Some(start);
     }
 }

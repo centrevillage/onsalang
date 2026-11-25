@@ -1,0 +1,100 @@
+# flow_ref 1 source=tests/spec/flow_semantics/event_reset_more_values.onsa tests=11 evaluated=11 unavailable=0 skipped=0 waiting=0
+@ a part of events reset by a condition of sample: after the add when the event is above the call, before it when the event comes through ^ from below
+render event_reset_more_values.ra_sample_above sr=0x41000000 in x=[3 1 4 2 5 1] c=[0 0 1 0 0 1]
+out=[3 4 0 2 7 0]
+render event_reset_more_values.ra_sample_below sr=0x41000000 in x=[3 1 4 2 5 1] c=[0 0 1 0 0 1]
+out=[0 0 0 1 5 0]
+@ a condition of sample / 4 is in the stage before the sample stage, one of block or a constant is at the call: the add comes first and the reset after it
+init 0 event_reset_more_values.ra_block sr=0x41000000
+process 0 params k=true frames=3 in x=[3 1 4]
+out=[0 0 0]
+process 0 params k=false frames=3 in x=[2 5 1]
+out=[2 7 8]
+render event_reset_more_values.ra_slow sr=0x41000000 in x=[1 1 1 1 1 1 1 1 1 1 1 1]
+out=[1 2 3 4 5 6 7 8 1 2 3 4]
+render event_reset_more_values.ra_true sr=0x41000000 in x=[3 1 4 2 5 1]
+out=[0 0 0 0 0 0]
+render event_reset_more_values.ra_false sr=0x41000000 in x=[3 1 4 2 5 1]
+out=[3 4 8 10 15 16]
+@ a producer reset by an event: the reset is before its stage when the event is above, after it when its own event resets it, and a flow of events restarts at the event
+render event_reset_more_values.pr_above sr=0x41000000 in x=[1 1 1 1 1 1 1] r=[0 0 3 0 0 0 7]
+out=[1 3 4 6 9 13 14]
+render event_reset_more_values.pr_self sr=0x41000000 in x=[5 5 5 5 5 5 5]
+out=[5 15 30 35 40 50 65]
+render event_reset_more_values.pr_per_event sr=0x41000000 in x=[3 1 4 6 2 5 1]
+out=[3 7 15 21 29 34 40]
+@ hit~(m, m).reset_if~(m > 3): the reset of the outside is once, before the two inputs tick one at a time
+render event_reset_more_values.hit_outer sr=0x41000000 in x=[3 1 4 2 5 9 1]
+out=[3 4 4 6 5 0 1]
+render event_reset_more_values.hit_outer_r sr=0x41000000 in x=[3 1 4 2 5 9 1]
+out=[3 4 4 6 5 9 10]
+@ a delay of sample / 4 reset by an event of sample: the reset is after the tick of that frame, and the output the caller holds is not reset
+render event_reset_more_values.s4_hits sr=0x41000000 in r=[0 0 0 0 0 9 0 0 9 0 0 0 0 0 0 0]
+out=[99 99 99 99 10 10 10 10 99 99 99 99 99 99 99 99]
+@ the guard of && in a condition protects a division of block, for a flow and for a delay of events
+init 0 event_reset_more_values.guard_flow sr=0x41000000
+init 1 event_reset_more_values.guard_delay sr=0x41000000
+init 2 event_reset_more_values.guard_flow sr=0x41000000
+init 3 event_reset_more_values.guard_delay sr=0x41000000
+process 0 params f=false k=0 frames=6 in x=[3 1 4 2 5 1]
+out=[3 4 8 10 15 16]
+process 1 params f=false k=0 frames=6 in x=[3 1 4 2 5 1]
+out=[9 3 1 4 2 5]
+process 2 params f=true k=20 frames=6 in x=[3 1 4 2 5 1]
+out=[3 1 4 2 7 1]
+process 3 params f=true k=20 frames=6 in x=[3 1 4 2 5 1]
+out=[9 9 9 9 2 9]
+init 4 event_reset_more_values.guard_flow sr=0x41000000
+init 5 event_reset_more_values.guard_delay sr=0x41000000
+process 4 params f=false k=0 frames=3 in x=[3 1 4]
+out=[3 4 8]
+process 4 params f=true k=20 frames=3 in x=[2 5 1]
+out=[2 7 1]
+process 5 params f=false k=0 frames=3 in x=[3 1 4]
+out=[9 3 1]
+process 5 params f=true k=20 frames=3 in x=[2 5 1]
+out=[9 2 9]
+@ a delay, sample_tick() and a parameter in a condition with an event: the condition is read at the tick of the event
+render event_reset_more_values.node_prev_flow sr=0x41000000 in x=[3 1 4 2 5 1]
+out=[3 4 8 2 7 1]
+render event_reset_more_values.node_prev_delay sr=0x41000000 in x=[3 1 4 2 5 1]
+out=[9 3 1 9 2 9]
+render event_reset_more_values.node_tick_flow sr=0x41000000 in x=[3 1 4 2 5 1]
+out=[3 4 8 10 5 6]
+render event_reset_more_values.node_tick_delay sr=0x41000000 in x=[3 1 4 2 5 1]
+out=[9 3 1 4 9 5]
+init 0 event_reset_more_values.node_block_flow sr=0x41000000
+init 1 event_reset_more_values.node_block_delay sr=0x41000000
+process 0 params k=1 frames=3 in x=[3 1 4]
+out=[3 4 8]
+process 0 params k=2 frames=3 in x=[2 5 1]
+out=[2 5 6]
+process 1 params k=1 frames=3 in x=[3 1 4]
+out=[9 3 1]
+process 1 params k=2 frames=3 in x=[2 5 1]
+out=[9 9 5]
+@ the output of a delay of events that another source resets is the last tick's, in a named flow it is the default of the field
+render event_reset_more_values.other_source sr=0x41000000 in v=[5 0 0 7 0 3 0 0] a=[0 0 0 0 1 0 0 0]
+out=[9 9 9 5 5 9 9 9]
+render event_reset_more_values.other_source_named sr=0x41000000 in v=[5 0 0 7 0 3 0 0] a=[0 0 0 0 1 0 0 0]
+out=[9 9 9 5 0 9 9 9]
+@ the reset of a delay of events goes back to the init that an input gives
+render event_reset_more_values.with_start sr=0x41000000 cfg start=7 in x=[5 2 0 3 4 0]
+out=[7 5 7 0 3 7]
+render event_reset_more_values.with_start_delay sr=0x41000000 cfg start=7 in x=[5 2 0 3 4 0]
+out=[7 7 7 7 0 7]
+@ an event of a struct: a field in the condition resets before the tick, and the init of the delay is a struct
+render event_reset_more_values.st_flow sr=0x41000000 in x=[3 1 4 2 5]
+out=[3 4 4 6 5]
+render event_reset_more_values.st_delay sr=0x41000000 in x=[3 1 4 2 5]
+out=[9 3 9 4 9]
+@ a block condition that turns true in a piece with no event does not reset a delay of events: it is read at the ticks
+init 0 event_reset_more_values.prev_blk sr=0x41000000
+process 0 params k=false frames=3 in x=[0 4 0]
+out=[0 9 9]
+process 0 params k=true frames=3 in x=[0 0 0]
+out=[9 9 9]
+process 0 params k=false frames=2 in x=[6 0]
+out=[4 4]
+process 0 params k=true frames=1 in x=[7]
+out=[9]

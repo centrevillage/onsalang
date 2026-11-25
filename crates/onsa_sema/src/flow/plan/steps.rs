@@ -13,7 +13,8 @@ use super::*;
 
 /// The work of a part in each stage of the frame it is called in, slowest
 /// first, each in its order (§11.9). A `.reset_if~` puts the part back
-/// before its work in the stage of its tick ([`reset`]).
+/// before its work in the stage of its tick ([`reset`]); of an event, not of
+/// a level ([`events::entries`]).
 type Level = BTreeMap<ClockStage, Vec<Op>>;
 
 /// The entries and the read of the node `n` whose head runs each stage of
@@ -40,9 +41,13 @@ pub(super) fn table(n: &PlanNode, heads: &[ClockStage], to: Option<(ClockStage, 
             level = when(n, g, guard, level, &mut dealt);
             g += 1;
         } else if let Some(m) = n.chain.get(at as usize).filter(|m| m.modifier == Modifier::ResetIf) {
-            // The walk of the clocks gives the tick of each of a chain with no diagnostic.
-            let Some(r) = m.reset else { onsa_diag::internal::bug(Some(m.name), "a `.reset_if~` of no tick") };
-            level = reset(n, at, r, level, &mut dealt);
+            // The walk of the clocks gives the stage of each of a chain with no diagnostic.
+            match m.reset {
+                Some(ClockStage::Tick(r)) => level = reset(n, at, r, level, &mut dealt),
+                // No boundary and no guard with it ([`events::form`]): none takes an array ([`taker`]).
+                Some(ClockStage::Event(_)) => {}
+                _ => onsa_diag::internal::bug(Some(m.name), "a `.reset_if~` of no stage"),
+            }
         }
     }
     // The outermost that deals is read from, unless an `.up~` outside it

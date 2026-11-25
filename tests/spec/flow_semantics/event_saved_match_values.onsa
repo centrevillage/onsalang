@@ -1,0 +1,102 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.3", "§11.5", "§11.11"]
+
+// W7-11 S-1249: what a delay stores, in the arm of a plain `match` that is chosen by `^name`. A binding of a `match` whose scrutinee or guard has a `^name` counts as a read of `^name` (as the binding of a `match~` does):
+// a computed part of the event stage that has it (`(p * v) at sample`) is the value of the end of the stage; every other read of an event is the value at the place where it is written (`p at sample`, `(p * 2) at sample`),
+// and a `^name` inside the first argument of a delay in the scrutinee is not counted. `GS = 1 .. 9`, the event `x` when `x % 3 != 0`, `p = prev~(^d)`, `d` is below the delay: PB = 0 0 1 1 2 4 4 5 7 is p at the place where it is written
+// (before the event of the sample), PA = 0 1 1 2 4 4 5 7 7 the value of the end of the stage. The delay gives the stored value of the sample before (the first is 0), so each table is the stored values shifted by one.
+
+const GS: [U32; 9] = [1, 2, 3, 4, 5, 6, 7, 8, 9]
+
+flow gen(x: U32 at sample) -> U32 at event {
+  if x % 3 != 0 { Some(x) } else { None }
+}
+
+pub flow bind_some(x: U32 at sample, k: U32 at init) -> U32 at sample {
+  let p = prev~(^d)
+  let q = prev~(match ^h { Some(v) => (p * v) at sample, None => p at sample })
+  let d = gen~(x)
+  let h: Option[U32] = if k > 0 { Some(k) } else { None }
+  q
+}
+
+pub flow bind_twin(x: U32 at sample, k: U32 at init) -> U32 at sample {
+  let p = prev~(^d)
+  let q = prev~((p * ^h) at sample)
+  let d = gen~(x)
+  let h: U32 = k
+  q
+}
+
+pub flow inner_match(x: U32 at sample, k: U32 at init) -> U32 at sample {
+  let p = prev~(^d)
+  let q = prev~(match ^h { Some(v) => match v { Some(w) => (p + w) at sample, None => x }, None => x })
+  let d = gen~(x)
+  let h: Option[Option[U32]] = if k > 0 { Some(Some(k)) } else { Some(None) }
+  q
+}
+
+pub flow no_binding(x: U32 at sample, k: U32 at init) -> U32 at sample {
+  let p = prev~(^d)
+  let q = prev~(match ^h { Some(_) => (p * 2) at sample, None => x })
+  let d = gen~(x)
+  let h: Option[U32] = if k > 0 { Some(k) } else { None }
+  q
+}
+
+pub flow no_binding_let(x: U32 at sample, k: U32 at init) -> U32 at sample {
+  let p = prev~(^d)
+  let t = (p * 2) at sample
+  let q = prev~(match ^h { Some(_) => t, None => x })
+  let d = gen~(x)
+  let h: Option[U32] = if k > 0 { Some(k) } else { None }
+  q
+}
+
+pub flow scrutinee_delay(x: U32 at sample) -> U32 at sample {
+  let p = prev~(^d)
+  let q = prev~(match prev~(^r, None) { Some(v) => v + (p at sample), None => x })
+  let d = gen~(x)
+  let r: Option[U32] = if x > 5 { Some(x) } else { None }
+  q
+}
+
+test "the binding of a match chosen by ^name makes the computed part the value of the end of the stage, and the arm that does not read it the value where it is written" {
+  // bind_some, k = 3: stored 3 * PA = 0 3 3 6 12 12 15 21 21; k = 0 takes the arm `p at sample`: stored PB = 0 0 1 1 2 4 4 5 7. The twin with `^h` of a number has the same value as k = 3.
+  let a = bind_some.render(bind_some.Config { k: 3 }, GS, 8.0)
+  let b = bind_some.render(bind_some.Config { k: 0 }, GS, 8.0)
+  let c = bind_twin.render(bind_twin.Config { k: 3 }, GS, 8.0)
+  let wa: [U32; 9] = [0, 0, 3, 3, 6, 12, 12, 15, 21]
+  let wb: [U32; 9] = [0, 0, 0, 1, 1, 2, 4, 4, 5]
+  for i in 0 ..< 9 {
+    assert a.out[i] == wa[i] && c.out[i] == wa[i]
+    assert b.out[i] == wb[i]
+  }
+}
+
+test "an inner match on a binding of a match chosen by ^name counts too" {
+  // inner_match, k = 5: the inner binding `w` is 5, stored PA + 5 = 5 6 6 7 9 9 10 12 12; k = 0 takes the arm `None` of the inner match, stored x (1 .. 9).
+  let a = inner_match.render(inner_match.Config { k: 5 }, GS, 8.0)
+  let b = inner_match.render(inner_match.Config { k: 0 }, GS, 8.0)
+  let wa: [U32; 9] = [0, 5, 6, 6, 7, 9, 9, 10, 12]
+  let wb: [U32; 9] = [0, 1, 2, 3, 4, 5, 6, 7, 8]
+  for i in 0 ..< 9 {
+    assert a.out[i] == wa[i] && b.out[i] == wb[i]
+  }
+}
+
+test "a part that reads no binding, and a ^name in the delay of the scrutinee, are the value where they are written" {
+  // no_binding, k = 3: `(p * 2) at sample` has no ^name and no binding: stored 2 * PB = 0 0 2 2 4 8 8 10 14, the same as the `let t` above the delay.
+  // scrutinee_delay: `prev~(^r, None)` is the output of that delay (not counted), Some(x of the sample before) from the sample 6: stored x (1 .. 6), then v + PB = 6 + 4, 7 + 5, 8 + 7 = 10 12 15.
+  let a = no_binding.render(no_binding.Config { k: 3 }, GS, 8.0)
+  let b = no_binding_let.render(no_binding_let.Config { k: 3 }, GS, 8.0)
+  let c = scrutinee_delay.render(GS, 8.0)
+  let wa: [U32; 9] = [0, 0, 0, 2, 2, 4, 8, 8, 10]
+  let wc: [U32; 9] = [0, 1, 2, 3, 4, 5, 6, 10, 12]
+  for i in 0 ..< 9 {
+    assert a.out[i] == wa[i] && b.out[i] == wa[i]
+    assert c.out[i] == wc[i]
+  }
+}

@@ -3,14 +3,17 @@
 //! (`tick_receivers`, in the order of the declaration, each with the events it gives done first, S-1236), and the call that gave the event has done its work of the stage first (`fire_emitted`, S-1234). A name of an event
 //! keeps its last value, `T.default()` before the first (`default_events`); what a delay saves reads the names of an event as they were where the read is written, a `^name` and a part with one excepted (`snapshot`, S-1240, S-1249).
 
+use std::sync::atomic::{AtomicU64, Ordering};
+
 use onsa_diag::Span;
-use onsa_sema::Target;
 use onsa_sema::def::FlowDef;
+use onsa_sema::{LocalId, Target};
 use onsa_syntax::ast::{ExprId, ExprKind};
 
 use super::expr::{Frame, Stop};
 use super::flow::{Clock, Known, Step, clock_of, enter, stage};
 use super::hoist::{caret, kept, stage_of};
+use super::rate::{Bound, chain_of};
 use super::scalar::{Fault, Fault::Internal};
 use super::sema_view::{Body, Called, Stage, input_clock, output_stage};
 use super::state::{NodeKey, Role};
@@ -23,6 +26,33 @@ fn bare_name(body: &Body, e: ExprId) -> bool {
         ExprKind::Paren(x) | ExprKind::At { expr: x, .. } => bare_name(body, *x),
         _ => false,
     }
+}
+
+/// Does `e` read one of the locals `chosen`?
+fn reads_any(body: &Body, e: ExprId, chosen: &[LocalId]) -> bool {
+    matches!(body.target(e), Ok(Target::Local(l)) if body.names(e) && chosen.contains(l))
+        || body.ast.sub_exprs(e).into_iter().any(|x| reads_any(body, x, chosen))
+}
+
+/// The bindings of the arms of the `match`es and `match~`es in `e` that a `^name` chooses (S-1249): the object or a guard of any arm has a `^name`, or reads a binding that one chooses (the outer match comes first).
+fn chosen_bindings(body: &Body, e: ExprId, chosen: &mut Vec<LocalId>) {
+    if let ExprKind::Match { scrutinee, arms, .. } = &body.ast.expr(e).kind {
+        let reads = |x: ExprId, chosen: &[LocalId]| caret(body, x) || reads_any(body, x, chosen);
+        if reads(*scrutinee, chosen) || arms.iter().any(|a| a.guard.is_some_and(|g| reads(g, chosen))) {
+            for a in arms {
+                chosen.extend(body.pat_locals(a.pat).unwrap_or_default());
+            }
+        }
+    }
+    for x in body.ast.sub_exprs(e) {
+        chosen_bindings(body, x, chosen);
+    }
+}
+
+/// A number for each run of an event stage, whichever instance (a delay of an event keeps what it gave for the run it gave it in).
+pub(super) fn next_serial() -> u64 {
+    static SERIAL: AtomicU64 = AtomicU64::new(1);
+    SERIAL.fetch_add(1, Ordering::Relaxed)
 }
 
 /// The clock of the events the call `e` gives: a source of its own for each call (the clocks of two calls are not compared, §11.11).
@@ -122,19 +152,60 @@ impl<'a> Frame<'a> {
         let Some(steps) = run.steps.clone() else {
             return Err(Stop { fault: Fault::Unavailable("an event stage outside an instance"), at });
         };
-        let (was, gathered, step, from) =
-            (run.stage, std::mem::take(&mut run.gathered), run.step.take(), run.saves_len());
+        let (was, gathered, step, from, serial) =
+            (run.stage, std::mem::take(&mut run.gathered), run.step.take(), run.saves_len(), run.serial);
         run.stage = Stage::Event(k);
+        run.serial = next_serial();
         let (mut out, mine) = (Value::Unit, Stage::Event(k));
         let ran = steps.last().is_some_and(|s| s.pat.is_none() && !s.emits && s.clock.runs_at(mine));
         let done = stage(self, &steps, &mut out, mine).and_then(|()| self.commit_from(at, from));
         if let Some(run) = self.run.as_mut() {
-            (run.stage, run.gathered, run.step) = (was, gathered, step);
+            (run.stage, run.gathered, run.step, run.serial) = (was, gathered, step, serial);
             if ran && done.is_ok() {
                 run.set_out = Some(out);
             }
         }
         done
+    }
+
+    /// The `reset_if~`s of the chain `e` whose condition is an event of the source `here` (§11.10, S-1236): each condition is read in the order written, and each that holds puts back what it wraps, before the inputs of the call that
+    /// tick in this stage (`tick_receivers`: the reset is first for an input of the same source, §11.10 "戻してから足す"). An instance goes back at once; a delay of another clock than the event goes back now, or after the store of the
+    /// stage it is in when it has been read in it and is not stored yet (S-1250 (B), `Frame::reset_delay`). A delay of the clock of the event reads its condition where it is written (`delay_chain`).
+    pub(super) fn reset_on_event(
+        &mut self,
+        e: ExprId,
+        here: Clock,
+        parts: Option<(&Known, ExprId)>,
+    ) -> Result<(), Stop> {
+        let (body, at) = (self.body, self.body.ast.expr(e).span);
+        let stop = |fault| Stop { fault, at };
+        let (Some(chain), Some((known, root))) = (chain_of(&body, e).map_err(stop)?, parts) else { return Ok(()) };
+        let own = clock_of(&body, known, root, chain.head).map_err(stop)?;
+        let delay = matches!(body.called(chain.head).map_err(stop)?, Called::Builtin(_));
+        let mut due = Vec::new();
+        for (i, b) in chain.bounds.iter().enumerate() {
+            let Bound::ResetIf(c) = b else { continue };
+            if clock_of(&body, known, root, *c).map_err(stop)? == here
+                && !(delay && own == here)
+                && self.truth(*c, at)?
+            {
+                due.push(i);
+            }
+        }
+        for i in due {
+            match delay {
+                true => {
+                    let key = self.key(chain.head, Role::Delay);
+                    self.reset_delay(&key, at)?;
+                }
+                false => {
+                    let key = self.key(chain.head, Role::Child);
+                    self.gate(&key, i + 1, at)?.due = true;
+                    self.put_back(&key, i + 1, at)?;
+                }
+            }
+        }
+        Ok(())
     }
 
     /// The call `e` (of `head`) in the stage of the event source `here`: each input of an event whose argument has that clock ticks, in the order of the declaration, with the events it gives done before the next input (S-1236).
@@ -158,6 +229,11 @@ impl<'a> Frame<'a> {
                 continue;
             }
             let v = self.eval(args[n].expr)?;
+            // A `reset_if~` of a tick that held before this stage (a slower tick, read before the `sample` stage) puts the part back before the input ticks, as it does before the work of its own stage (§11.10).
+            let levels = self.levels_of(&key, at)?;
+            if levels.len() > 1 {
+                self.cut(&key, &levels, 0, 0, at)?;
+            }
             let scope = self.run.as_ref().and_then(|r| r.state.children.get(&key)).map(|c| c.scope.clone());
             let scope = scope.ok_or(stop(Internal("an instance with no state")))?;
             self.with_bindings(&[], scope, |f| {
@@ -182,15 +258,26 @@ impl<'a> Frame<'a> {
         let known = self.run.as_ref().and_then(|r| r.steps.clone()).and_then(|s| s.first().map(|s| s.known.clone()));
         let mut parts = Vec::new();
         if let Some(known) = known {
-            self.reads_of_events(&known, expr, expr, &mut parts);
+            let mut chosen = Vec::new();
+            chosen_bindings(&self.body, expr, &mut chosen);
+            self.reads_of_events(&known, (expr, &chosen), expr, &mut parts);
         }
         parts
     }
 
-    fn reads_of_events(&self, known: &Known, root: ExprId, e: ExprId, out: &mut Vec<(ExprId, Value)>) {
+    /// `root` and the bindings of the arms that a `^name` chooses (S-1249); a part of an event clock that reads one is made at the end of the stage whole, as one that has a `^name` is.
+    fn reads_of_events(
+        &self,
+        known: &Known,
+        (root, chosen): (ExprId, &[LocalId]),
+        e: ExprId,
+        out: &mut Vec<(ExprId, Value)>,
+    ) {
         let body = self.body;
         let event = matches!(clock_of(&body, known, root, e), Ok(Clock::Event(_)));
-        if matches!(body.ast.expr(e).kind, ExprKind::Feedback(_)) || (event && caret(&body, e)) {
+        if matches!(body.ast.expr(e).kind, ExprKind::Feedback(_))
+            || (event && (caret(&body, e) || reads_any(&body, e, chosen)))
+        {
             return;
         }
         // A part of an event clock that a stage kept is read as it is where the delay is written too, and so is a read that the delay around this one saved where it is written (`Clock::Const`: no part of a stage, `commit_from`).
@@ -211,7 +298,7 @@ impl<'a> Frame<'a> {
             }
         }
         for x in body.ast.sub_exprs(e) {
-            self.reads_of_events(known, root, x, out);
+            self.reads_of_events(known, (root, chosen), x, out);
         }
     }
 }

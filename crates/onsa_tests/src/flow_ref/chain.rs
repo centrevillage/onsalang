@@ -27,7 +27,7 @@ const NO_GATE: &str = "a `when~` with no state";
 pub(super) struct Gate {
     pub(super) cond: Value,
     on: bool,
-    due: bool,
+    pub(super) due: bool,
     pub(super) runs: u64,
     pub(super) held: Value,
     start: Value,
@@ -91,7 +91,7 @@ impl<'a> Frame<'a> {
         child.ok_or(Stop { fault: Internal("an instance with no state"), at })
     }
 
-    fn levels_of(&self, key: &NodeKey, at: Span) -> Result<Rc<[Level]>, Stop> {
+    pub(super) fn levels_of(&self, key: &NodeKey, at: Span) -> Result<Rc<[Level]>, Stop> {
         let child = self.run.as_ref().and_then(|run| run.state.children.get(key));
         child.map(|c| c.levels.clone()).ok_or(Stop { fault: Internal("an instance with no state"), at })
     }
@@ -255,7 +255,7 @@ impl<'a> Frame<'a> {
     fn read_conds(&mut self, key: &NodeKey, levels: &[Level], sx: i32) -> Result<(), Stop> {
         let at = self.body.ast.expr(key.call).span;
         for (b, when) in levels.iter().enumerate().filter_map(|(b, lv)| lv.guard.map(|w| (b, w))) {
-            if when.at == sx && when.port.is_none() {
+            if when.at == sx && when.port.is_none() && !when.ev {
                 let v = self.eval_staged(key.call, when.cond, Stage::Tick(sx))?;
                 self.gate(key, b, at)?.cond = v;
             }
@@ -272,7 +272,7 @@ impl<'a> Frame<'a> {
     }
 
     /// What the `when~` that makes the part `b` of the chain at `key` keeps.
-    fn gate(&mut self, key: &NodeKey, b: usize, at: Span) -> Result<&mut Gate, Stop> {
+    pub(super) fn gate(&mut self, key: &NodeKey, b: usize, at: Span) -> Result<&mut Gate, Stop> {
         let gate = self.child_mut(key, at)?.whens.get_mut(b).and_then(Option::as_mut);
         gate.ok_or(Stop { fault: Internal(NO_GATE), at })
     }
@@ -342,7 +342,7 @@ impl<'a> Frame<'a> {
         ins: Vec<Value>,
     ) -> Result<(), Stop> {
         let at = self.body.ast.expr(key.call).span;
-        if levels[b].reset().is_some_and(|r| r.w == s) {
+        if levels[b].reset().is_some_and(|r| r.w == s && !r.ev) {
             let Value::Bool(due) = self.cond_of(key, levels, b, &ins, at)? else {
                 return Err(Stop { fault: Internal("a condition of a `reset_if~` that was not read at its tick"), at });
             };
@@ -361,7 +361,7 @@ impl<'a> Frame<'a> {
     /// of its caller the work is in puts its part back (§11.10: "その刻みに続く x の段の前に"; S-1228 (P)): the work of a slower stage writes first ("条件の刻みより遅い刻みは、…その位置で先に書いた後に戻す"). That stage is
     /// `s` moved out of the parts between as their stages are (`Level::outer`): out of a boundary by `caller_stage`, and to W by a `when~`, which runs the work of the slower ticks inside in its W (§11.9,
     /// `rate::when_level`), so a `reset_if~` outside it puts the part back before that work, and one inside it after.
-    fn cut(&mut self, key: &NodeKey, levels: &[Level], b: usize, s: i32, at: Span) -> Result<(), Stop> {
+    pub(super) fn cut(&mut self, key: &NodeKey, levels: &[Level], b: usize, s: i32, at: Span) -> Result<(), Stop> {
         let mut label = s;
         for (c, lv) in levels.iter().enumerate().skip(b + 1) {
             label = lv.outer(label);
@@ -375,7 +375,7 @@ impl<'a> Frame<'a> {
     /// The part inside the `reset_if~` `c` of the chain at `key`, if it is due, back to its start (§11.10, S-1186): the rings of the boundaries inside (their elements; the place goes on, so the frames after write
     /// in order) and the arrays they deal, the output each `when~` inside holds, and the head as the generated `reset` puts it back but for the phase counters and what the `when~`s remember (`InstState::reset`), with
     /// the fields that a tick writes and a faster stage reads at `T.default()` (`Frame::restart`).
-    fn put_back(&mut self, key: &NodeKey, c: usize, at: Span) -> Result<(), Stop> {
+    pub(super) fn put_back(&mut self, key: &NodeKey, c: usize, at: Span) -> Result<(), Stop> {
         let gate = self.gate(key, c, at)?;
         if !std::mem::take(&mut gate.due) {
             return Ok(());

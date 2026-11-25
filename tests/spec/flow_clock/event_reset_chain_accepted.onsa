@@ -1,0 +1,85 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§11.10", "§11.11"]
+// fixes = 0
+
+// W7-11 U2r/t, S-559, S-562, S-1209 (spec §11.10: "`c` は…イベントの値（W の刻みで、その位置までの最後の値として読む水準）"; "イベントの条件は、そのイベントの刻み"; "パラメータの種類なら `when~` と同じ条件を読むクロック W の刻み"): chains of `reset_if~` with an event
+// condition that `check` reads with no diagnostic: the same event or two sources in a chain, an event with a `block` value or with an `at sample` over it and a `sample` value, an event part and a delay of an event with the event of its own or a `block` condition, nested in
+// a flow, with the event given in. The errors are in e0815_reset_if_event_chain.onsa and e0815_event_delay_sample_condition_s1243.onsa. `m`, `a` and `b` are events, `x`, `armed` and `g` are `sample` inputs, `k` is `block`.
+
+pub rt fn is_on(e: U32) -> Bool {
+  e > 0
+}
+
+pub flow rs(x: F32 at sample) -> F32 at sample {
+  let y = x + prev~(^y)
+  y
+}
+
+pub flow acc(e: U32 at event) -> U32 at sample {
+  let n = prev~(^n) + e
+  n
+}
+
+pub flow pulse(x: U32 at sample) -> U32 at event {
+  if x > 0 {
+    Some(x)
+  } else {
+    None
+  }
+}
+
+pub flow same_event_twice(m: U32 at event, x: F32 at sample) -> F32 at sample {
+  rs~(x).reset_if~(is_on(m)).reset_if~(m > 5)
+}
+
+pub flow two_sources_in_a_chain(a: U32 at event, b: U32 at event, x: F32 at sample) -> F32 at sample {
+  rs~(x).reset_if~(is_on(a)).reset_if~(is_on(b))
+}
+
+pub flow an_event_and_a_sample_in_a_chain(m: U32 at event, x: F32 at sample, g: Bool at sample) -> F32 at sample {
+  rs~(x).reset_if~(g).reset_if~(is_on(m))
+}
+
+pub flow an_event_and_a_block_value(m: U32 at event, x: F32 at sample, k: Bool at block) -> F32 at sample {
+  rs~(x).reset_if~(is_on(m) && k)
+}
+
+pub flow an_event_with_an_at(m: U32 at event, x: F32 at sample, armed: Bool at sample) -> F32 at sample {
+  rs~(x).reset_if~((is_on(m) at sample) && armed)
+}
+
+pub flow an_event_part_reset_by_another_event(a: U32 at event, b: U32 at event) -> U32 at sample {
+  acc~(a).reset_if~(is_on(b))
+}
+
+pub flow an_event_part_reset_by_its_own_event(m: U32 at event) -> U32 at sample {
+  acc~(m).reset_if~(m >= 4)
+}
+
+pub flow a_delay_of_an_event_with_its_own_event(m: U32 at event) -> U32 at sample {
+  prev~(m, 9).reset_if~(m == 0)
+}
+
+pub flow a_delay_of_an_event_with_a_block_value(m: U32 at event, k: Bool at block) -> U32 at sample {
+  delay~(m, 2, 9).reset_if~(k)
+}
+
+pub flow a_delay_of_an_event_with_a_chain(m: U32 at event, k: Bool at block) -> U32 at sample {
+  prev~(m).reset_if~(m > 3).reset_if~(k)
+}
+
+pub flow a_loop_of_an_event_delay(m: U32 at event) -> U32 at sample {
+  let s = prev~(m + ^s).reset_if~(m >= 5)
+  s
+}
+
+pub flow events_made_inside(r: U32 at sample, n: U32 at sample) -> U32 at sample {
+  let m = pulse~(r)
+  let e = pulse~(n)
+  acc~(e).reset_if~(m > 0)
+}
+
+pub flow event_given_in(x: F32 at sample, r: U32 at sample) -> F32 at sample {
+  rs~(x).reset_if~(is_on(pulse~(r)))
+}

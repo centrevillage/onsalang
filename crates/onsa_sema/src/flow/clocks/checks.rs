@@ -682,12 +682,14 @@ impl Walk<'_> {
     }
 
     /// The modifier `e` of the chain of the head `head`, a built-in delay that
-    /// ticks at an event (§11.10): `.when~`, which stops nothing, is E0020,
+    /// ticks at the event `at` (§11.10): `.when~`, which stops nothing, is E0020,
     /// with the candidate that takes every one of the chain off; of `.reset_if~`, a condition at
-    /// a periodic clock, faster than W (the event clock of the delay), E0815.
-    pub(super) fn event_delay_modifier(&mut self, e: ExprId, head: ExprId) {
+    /// a periodic clock, faster than W (the event clock of the delay), E0815, else
+    /// the read of its condition at the event it is of, of no event at W.
+    // SPEC-GAP(S-1243): a condition at a periodic clock is E0815 (provisional).
+    pub(super) fn event_delay_modifier(&mut self, e: ExprId, head: ExprId, at: Clock) {
         let mods = || self.cx.chains.get(&head).into_iter().flat_map(|c| &c.mods);
-        let Some(m) = mods().find(|m| m.call == e) else { return };
+        let Some((i, m)) = (0u32..).zip(mods()).find(|(_, m)| m.call == e) else { return };
         let (plan, receiver) = (m.plan, self.ast.expr(m.receiver).span);
         if !self.checking() {
             return;
@@ -704,7 +706,15 @@ impl Walk<'_> {
                 foreign::report(RowId::EventDelayWhen, self.text, whole(m), vec![fix])
             }
             (crate::flow_names::Modifier::ResetIf, Some(cond)) => {
-                let Some(&c @ Clock::Tick(_)) = self.out.exprs.get(&cond) else { return };
+                let clock = self.out.exprs.get(&cond).copied();
+                let Some(c @ Clock::Tick(_)) = clock else {
+                    let at = clock.filter(|c| matches!(c, Clock::Event(_))).unwrap_or(at);
+                    if let Some(&k) = self.node_of.get(&head) {
+                        self.node_clocks[k].args.push(ArgRead { expr: cond, at, stage: None });
+                        self.node_clocks[k].resets.extend(at.stage().map(|s| (i, s)));
+                    }
+                    return;
+                };
                 let span = self.ast.expr(cond).span;
                 let msg = format!(
                     "the condition of `.reset_if~` is at the clock `{}`, faster than the event clock of the delay, the fastest it resets at (§11.10)",

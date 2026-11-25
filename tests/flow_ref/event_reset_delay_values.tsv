@@ -1,0 +1,110 @@
+# flow_ref 1 source=tests/spec/flow_semantics/event_reset_delay_values.onsa tests=13 evaluated=13 unavailable=0 skipped=0 waiting=0
+@ a delay reset by an event of a producer below it: the reset is after the save of the stage, as in a named flow
+render event_reset_delay_values.late_prev sr=0x41000000 in x=[1 6 2 7 3 4 1 1]
+out=[9 1 6 9 7 9 4 1]
+render event_reset_delay_values.late_prev_named sr=0x41000000 in x=[1 6 2 7 3 4 1 1]
+out=[9 1 6 9 7 9 4 1]
+render event_reset_delay_values.late_delay sr=0x41000000 in x=[1 6 2 7 3 4 1 1]
+out=[9 9 1 9 9 9 9 4]
+render event_reset_delay_values.late_nested sr=0x41000000 in x=[1 6 2 7 3 4 1 1]
+out=[7 9 1 6 9 7 9 4]
+render event_reset_delay_values.late_nested_named sr=0x41000000 in x=[1 6 2 7 3 4 1 1]
+out=[7 9 1 6 9 7 9 4]
+@ a counter reset by an event of its own value is back to 0 after the stage that gave the value
+render event_reset_delay_values.late_count_gen sr=0x41000000 frames=15
+out=[0 1 2 3 4 5 6 0 0 1 2 3 4 5 6]
+render event_reset_delay_values.late_count_named sr=0x41000000 frames=15
+out=[0 1 2 3 4 5 6 0 0 1 2 3 4 5 6]
+render event_reset_delay_values.late_count_pulse sr=0x41000000 frames=12
+out=[0 1 2 3 4 5 6 0 1 0 1 2]
+@ vdelay~ reset by an event of a producer below it
+render event_reset_delay_values.late_vdelay sr=0x41000000 in x=[0x3f800000 0x40c00000 0x40000000 0x40e00000 0x40400000 0x40800000 0x3f800000 0x3f800000]
+out=[0x40e00000 0x40e00000 0x3f800000 0x40e00000 0x40e00000 0x40e00000 0x40e00000 0x40800000]
+render event_reset_delay_values.late_vdelay_named sr=0x41000000 in x=[0x3f800000 0x40c00000 0x40000000 0x40e00000 0x40400000 0x40800000 0x3f800000 0x3f800000]
+out=[0x40e00000 0x40e00000 0x3f800000 0x40e00000 0x40e00000 0x40e00000 0x40e00000 0x40800000]
+render event_reset_delay_values.late_vdelay_frac sr=0x41000000 in x=[0x3f800000 0x40c00000 0x40000000 0x40e00000 0x40400000 0x40800000 0x3f800000 0x3f800000]
+out=[0x40e00000 0x40e00000 0x40800000 0x40e00000 0x40e00000 0x40e00000 0x40e00000 0x40b00000]
+render event_reset_delay_values.late_vdelay_k sr=0x41000000 in x=[0x3f800000 0x40c00000 0x40000000 0x40e00000 0x40400000 0x40800000 0x3f800000 0x3f800000] kk=[0x3f800000 0x40000000 0x40000000 0x3f800000 0x40400000 0x40000000 0x3f800000 0x40000000]
+out=[0x00000000 0x00000000 0x00000000 0x3f800000 0x00000000 0x00000000 0x00000000 0x40800000]
+@ delay~ back to the write place 0 gives the init for N reads, then the first stored one
+render event_reset_delay_values.late_delay3 sr=0x41000000 in x=[1 6 2 3 4 5 7 8 9 3]
+out=[9 9 9 9 9 9 3 4 5 7]
+@ a reset on the inner delay only, the outer only, or both: only the delay it is written on
+render event_reset_delay_values.nest_outer sr=0x41000000 in x=[1 6 2 7 3 4 1 1]
+out=[7 9 1 7 2 7 3 4]
+render event_reset_delay_values.nest_outer_let sr=0x41000000 in x=[1 6 2 7 3 4 1 1]
+out=[7 9 1 7 2 7 3 4]
+render event_reset_delay_values.nest_both sr=0x41000000 in x=[1 6 2 7 3 4 1 1]
+out=[7 9 1 7 9 7 9 4]
+render event_reset_delay_values.tri_inner sr=0x41000000 in x=[1 6 2 7 3 4 1 1]
+out=[6 7 9 1 6 9 7 9]
+render event_reset_delay_values.tri_mid sr=0x41000000 in x=[1 6 2 7 3 4 1 1]
+out=[6 7 9 1 7 2 7 3]
+render event_reset_delay_values.tri_outer sr=0x41000000 in x=[1 6 2 7 3 4 1 1]
+out=[6 7 9 6 6 6 7 3]
+render event_reset_delay_values.tri_all sr=0x41000000 in x=[1 6 2 7 3 4 1 1]
+out=[6 7 9 6 7 6 7 9]
+@ a reset of sample at the place of the call and a reset of an event after the stage, in either order of the chain
+render event_reset_delay_values.chain_event_sample sr=0x41000000 in x=[1 6 2 7 3 4 1 1] r=[0 0 0 1 1 0 1 0]
+out=[9 1 6 9 9 9 9 1]
+render event_reset_delay_values.chain_sample_event sr=0x41000000 in x=[1 6 2 7 3 4 1 1] r=[0 0 0 1 1 0 1 0]
+out=[9 1 6 9 9 9 9 1]
+@ an event made in the condition resets before the read, and the producer of the argument that the delay is in ticks after the delay saves
+render event_reset_delay_values.cond_producer sr=0x41000000 in x=[1 6 2 7 3 4 1 1]
+out=[9 9 6 9 7 3 4 1]
+render event_reset_delay_values.cond_producer_let sr=0x41000000 in x=[1 6 2 7 3 4 1 1]
+out=[9 9 6 9 7 3 4 1]
+render event_reset_delay_values.arg_delay sr=0x41000000 in x=[1 6 2 7 3 4 1 1]
+out=[9 1 9 2 9 3 9 1]
+render event_reset_delay_values.arg_delay_let sr=0x41000000 in x=[1 6 2 7 3 4 1 1]
+out=[9 1 9 2 9 3 9 1]
+@ a delay of an event reset by an event made in its stage, in another stage, or above it
+render event_reset_delay_values.ev_in_stage sr=0x41000000 in x=[1 6 2 7 3 4 1 1]
+out=[9 1 6 9 7 9 4 1]
+render event_reset_delay_values.ev_out_of_stage sr=0x41000000 in x=[1 6 2 7 3 4 1 1]
+out=[9 1 6 9 7 9 4 1]
+render event_reset_delay_values.ev_named sr=0x41000000 in x=[1 6 2 7 3 4 1 1]
+out=[9 1 6 9 7 9 4 1]
+render event_reset_delay_values.ev_above sr=0x41000000 in x=[1 6 2 7 3 4 1 1]
+out=[9 9 6 9 7 3 4 1]
+@ a delay of sample / 4 reset by an event of the same stage written below it, and by an event of the sample stage
+render event_reset_delay_values.s4_in_stage sr=0x41000000 frames=24
+out=[99 99 99 99 10 10 10 10 14 14 14 14 18 18 18 18 99 99 99 99 26 26 26 26]
+render event_reset_delay_values.s4_sample_above sr=0x41000000 in r=[0 0 0 0 0 0 0 0 0 0 0 0 9 0 0 0 0 0 0 0 0 0 0 0]
+out=[99 99 99 99 10 10 10 10 14 14 14 14 18 18 18 18 99 99 99 99 26 26 26 26]
+render event_reset_delay_values.s4_sample_below sr=0x41000000 in r=[0 0 0 0 0 0 0 0 0 0 0 9 0 0 0 0 0 0 0 0 0 0 0 0]
+out=[99 99 99 99 10 10 10 10 14 14 14 14 18 18 18 18 99 99 99 99 26 26 26 26]
+@ a source that ticks two inputs of a part: the delay inside is reset by the second input, and the whole part by an event below the call
+render event_reset_delay_values.twice_src sr=0x41000000 in x=[3 1 4 2 8 1 2]
+out=[9 3 1 9 2 0 9]
+@ a reset on a flow of the user is the flow with its flows and delays inside, even the event delay that resets it from inside
+render event_reset_delay_values.range_outer sr=0x41000000 in x=[1 6 2 7 3 4 1 1]
+out=[16 10 7 16 16 16 13 5]
+render event_reset_delay_values.reset_whole sr=0x41000000 in x=[1 6 2 7 3 4 1 1] r=[0 0 0 0 1 0 0 0]
+out=[9 1 6 9 9 3 4 1]
+@ the stored value of a delay with an event name and a ^name: the event at its place, the name of the end of the stage, then the reset after the save
+render event_reset_delay_values.mixed sr=0x41000000 in x=[1 6 2 7 3 4 1 1]
+out=[0 2 7 0 14 0 12 5]
+render event_reset_delay_values.mixed_let sr=0x41000000 in x=[1 6 2 7 3 4 1 1]
+out=[0 2 7 0 14 0 12 5]
+@ a run cut after the frame of a reset, with a call of 0 frames, and after reset, gives the same values
+init 0 event_reset_delay_values.late_prev sr=0x41000000
+process 0 frames=2 in x=[1 6]
+out=[9 1]
+process 0 frames=1 in x=[2]
+out=[6]
+process 0 frames=0 in x=[]
+out=[]
+process 0 frames=5 in x=[7 3 4 1 1]
+out=[9 7 9 4 1]
+reset 0
+process 0 frames=8 in x=[1 6 2 7 3 4 1 1]
+out=[9 1 6 9 7 9 4 1]
+init 1 event_reset_delay_values.late_count_gen sr=0x41000000
+process 1 frames=8
+out=[0 1 2 3 4 5 6 0]
+reset 1
+process 1 frames=4
+out=[0 1 2 3]
+process 1 frames=4
+out=[4 5 6 0]

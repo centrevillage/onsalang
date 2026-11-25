@@ -387,6 +387,12 @@ fn ops(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, w: &mut Walk, list:
                 let on = w.cond(lw, cx, out, at)?;
                 let mut body = Vec::new();
                 reset(lw, cx, &mut body, w, at)?;
+                if w.info.field_at(FieldOf::Node(w.id, Part::Back(at))).is_some() {
+                    let mut late = Vec::new();
+                    assign(&mut late, &w.field(lw, Part::Back(at))?, lit(Ty::Bool, span, Lit::Bool(true)))?;
+                    let (late, now) = (Block { stmts: late, value: None }, Block { stmts: body, value: None });
+                    body = vec![stmt(span, StmtKind::If(w.field(lw, Part::Open)?, late, now))];
+                }
                 out.push(stmt(span, StmtKind::If(on, Block { stmts: body, value: None }, Block::default())));
             }
             Op::Deal { to, from, by } => {
@@ -442,6 +448,33 @@ fn reset(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, w: &Walk, at: u32
         let place = w.field(lw, part)?;
         let v = crate::lower::derived::default_value(lw, &place.ty, span)?;
         assign(out, &place, v)?;
+    }
+    Ok(())
+}
+
+/// The delay `id`, read at this place, open to its store (§11.3, S-1250): a
+/// reset that an event of another stage ticks in between waits ([`stored`]).
+pub(super) fn opened(lw: &Lowerer, cx: &FnCx, out: &mut Vec<Stmt>, id: NodeId) -> R<()> {
+    let (f, open) = (cx.flow.as_ref().expect("flow context"), FieldOf::Node(id, Part::Open));
+    if f.now.saving || f.info.field_at(open).is_none() {
+        return Ok(());
+    }
+    let (span, (_, state)) = (f.info.node(id).span, super::branches::here(cx, f.info.node(id).span)?);
+    assign(out, &sfield(lw, f.info, &state, open, span)?, lit(Ty::Bool, span, Lit::Bool(true)))
+}
+
+/// The resets that waited for the store of the delay `id` ([`opened`]), after it.
+pub(super) fn stored(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, id: NodeId, state: &Expr) -> R<()> {
+    let info = cx.flow.as_ref().expect("flow context").info;
+    let w = Walk::new(info, id, state, info.node(id).span);
+    for flag in w.n.late_flags() {
+        let (on, mut body) = (w.field(lw, flag)?, Vec::new());
+        assign(&mut body, &on, lit(Ty::Bool, w.span, Lit::Bool(false)))?;
+        if let Part::Back(at) = flag {
+            reset(lw, cx, &mut body, &w, at)?;
+            body = vec![stmt(w.span, StmtKind::If(on, Block { stmts: body, value: None }, Block::default()))];
+        }
+        out.append(&mut body);
     }
     Ok(())
 }

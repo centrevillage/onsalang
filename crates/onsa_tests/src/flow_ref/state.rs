@@ -124,6 +124,12 @@ pub(super) struct Save {
     /// The values the reads of an event it holds had where they are written (S-1240, §11.3): a name of an event and a part of an event clock that a stage kept, by the expression that reads it (one name may be read at the end of the stage in
     /// another place, where a `^name` in a condition chooses it), read so at the end of the stage, not the last ones.
     pub(super) snap_parts: Vec<(ExprId, Value)>,
+    /// A `reset_if~` of an event that came after the delay was read and before it is stored: the delay goes back to its `init` after the store (S-1250 (B), `Frame::reset_delay`).
+    reset: bool,
+    /// The delays inside what it saves (the first argument of the delay it is, read where it is saved) that a `reset_if~` of an event came for before they were read: they go back after this store (S-1250 (B)).
+    resets: Vec<NodeKey>,
+    /// Is the delay read already? Not while the calls in the conditions of its modifiers are done (`Frame::early_conditions`): an event they give puts it back before the read.
+    placed: bool,
 }
 
 /// A delay whose `init` argument reads a `^name`: its node, the argument and the bindings it is read under.
@@ -154,6 +160,8 @@ pub struct Run {
     /// The event the output step gave in this entry, and the value of the output an event stage run inside it made (`enter` takes them).
     pub(super) emitted: Option<Value>,
     pub(super) set_out: Option<Value>,
+    /// The number of the run of an event stage that this evaluation is in (`events::next_serial`): what a delay of an event gave in it is kept for it alone, as the time is for a delay of a tick.
+    pub(super) serial: u64,
 }
 
 impl Run {
@@ -181,6 +189,7 @@ impl Run {
             steps: None,
             emitted: None,
             set_out: None,
+            serial: 0,
         }
     }
 }
@@ -330,6 +339,9 @@ impl<'a> Frame<'a> {
             keep: true,
             field: None,
             snap_parts: Vec::new(),
+            reset: false,
+            resets: Vec::new(),
+            placed: true,
         });
         Ok(run.saves.len() - 1)
     }
@@ -346,7 +358,19 @@ impl<'a> Frame<'a> {
             .ok_or(Stop { fault: Internal("a part made at the end of a stage outside an instance"), at })?;
         if !run.saves.iter().any(|s| s.field.is_some() && s.key == key) {
             let scope = run.scope.clone();
-            run.saves.push(Save { key, expr: e, scope, call: None, q: 0, keep: true, field: Some(here), snap_parts });
+            run.saves.push(Save {
+                key,
+                expr: e,
+                scope,
+                call: None,
+                q: 0,
+                keep: true,
+                field: Some(here),
+                snap_parts,
+                reset: false,
+                resets: Vec::new(),
+                placed: true,
+            });
         }
         Ok(())
     }
@@ -445,11 +469,12 @@ impl<'a> Frame<'a> {
     /// `commit` of the saves from the place `from` on: an event stage run inside another stage (`Frame::fire`) stores what it saved, not what the stage it is in has saved so far.
     pub(super) fn commit_from(&mut self, at: Span, from: usize) -> Result<(), Stop> {
         let here = |fault| Stop { fault, at };
-        let (mut stores, mut once) = (Vec::new(), BTreeSet::new());
+        let (mut stores, mut once, mut back) = (Vec::new(), BTreeSet::new(), Vec::new());
         for next in from.. {
             let Some(save) = self.run.as_ref().ok_or(here(Internal("no run")))?.saves.get(next) else { break };
             let (key, expr, scope, call, q) = (save.key.clone(), save.expr, save.scope.clone(), save.call, save.q);
-            let (keep, field, parts_snap) = (save.keep, save.field, save.snap_parts.clone());
+            let (keep, field, parts_snap, reset) = (save.keep, save.field, save.snap_parts.clone(), save.reset);
+            let inner = save.resets.clone();
             // The value the part had is stale: it is made again.
             if field.is_some() {
                 self.hoisted.get_mut(&expr).into_iter().for_each(|(_, kept)| drop(kept.remove(&key.replicas)));
@@ -485,6 +510,10 @@ impl<'a> Frame<'a> {
                 run.saves.splice(next + 1..next + 1, added);
             }
             // A delay is stored once for a frame: a delay in the object of an arm that `eval_in_arms` evaluates again here saved its value in the frame already, the same one.
+            if reset {
+                back.push(key.clone());
+            }
+            back.extend(inner);
             if !keep || !once.insert(key.clone()) {
                 continue;
             }
@@ -510,6 +539,38 @@ impl<'a> Frame<'a> {
                 }
                 None => return Err(here(Internal("a delay with no state"))),
             }
+        }
+        // A `reset_if~` that came between the read of a delay and its store takes effect after the store (S-1250 (B)).
+        for key in back {
+            run.state.cells.get_mut(&key).into_iter().for_each(|c| c.current = c.initial.clone());
+        }
+        Ok(())
+    }
+
+    /// The calls in the conditions of the modifiers of the delay saved at `slot` that are events of another source (`Mod::ev`), done where the delay is written, before it is read: what they give puts it back before the read.
+    pub(super) fn early_conditions(&mut self, slot: usize, conds: &[ExprId]) -> Result<(), Stop> {
+        let place = |f: &mut Self, placed| {
+            f.run.as_mut().and_then(|r| r.saves.get_mut(slot)).iter_mut().for_each(|s| s.placed = placed)
+        };
+        place(self, false);
+        let done = conds.iter().try_for_each(|c| self.early_calls(*c));
+        place(self, true);
+        done
+    }
+
+    /// The delay at `key` goes back to its `init` for a `reset_if~` of an event that comes now (S-1250 (B), §11.3: "値は、`^名前` の値の他は、書いた位置で評価して保存したのと同じである"): when it has been read in a stage that has
+    /// not stored yet, what it gave was read before the reset and what it stores is the value of its place, so it goes back after the store (`Save::reset`, `commit_from`); else now, before the next read.
+    pub(super) fn reset_delay(&mut self, key: &NodeKey, at: Span) -> Result<(), Stop> {
+        let body = self.body;
+        let run = self.run.as_mut().ok_or(Stop { fault: Internal("no run"), at })?;
+        let holds = |s: &Save| s.field.is_none() && s.placed && contains(&body, s.expr, key.call);
+        if let Some(save) = run.saves.iter_mut().find(|s| s.key == *key && s.field.is_none() && s.placed) {
+            save.reset = true;
+        } else if let Some(save) = run.saves.iter_mut().find(|s| holds(s)) {
+            save.resets.push(key.clone());
+        } else {
+            let cell = run.state.cells.get_mut(key).ok_or(Stop { fault: Internal("a delay with no state"), at })?;
+            cell.current = cell.initial.clone();
         }
         Ok(())
     }
@@ -610,7 +671,10 @@ impl<'a> Frame<'a> {
             }
             Clock::Block => Stage::Block,
             Clock::Tick(r) => Stage::Tick(r),
-            Clock::Event(_) => return self.tick_receivers(e, head, here, parts),
+            Clock::Event(_) => {
+                self.reset_on_event(e, here, parts)?;
+                return self.tick_receivers(e, head, here, parts);
+            }
             Clock::Const => return Ok(()),
         };
         if !matches!(self.body.called(head).map_err(stop)?, Called::Flow(_)) {
@@ -960,6 +1024,9 @@ impl<'a> Frame<'a> {
                     keep: true,
                     field: None,
                     snap_parts: Vec::new(),
+                    reset: false,
+                    resets: Vec::new(),
+                    placed: true,
                 };
                 run.saves.push(save);
             }
@@ -994,4 +1061,9 @@ impl<'a> Frame<'a> {
             ty => Shape::Scalar(Scalar::of(ty).ok_or(here(Fault::Unavailable("a type with no default here")))?),
         })
     }
+}
+
+/// Does `root` hold the expression `target`?
+fn contains(body: &super::sema_view::Body, root: ExprId, target: ExprId) -> bool {
+    root == target || body.ast.sub_exprs(root).into_iter().any(|x| contains(body, x, target))
 }

@@ -1,0 +1,592 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.10", "§11.3", "§11.4", "§11.11", "§11.9"]
+
+// W7-11 U2r/t2, S-1250 (§11.3: "値は、`^名前` の値の他は、書いた位置で評価して保存したのと同じである"; §11.10: "`r` が真の刻みで、その刻みに続く x の段の前に x の状態を初期値に戻す"; §11.11: "出したイベントの刻みは、作り手の呼び出しのその刻みの仕事（保存まで）が済んだ直後に"):
+// a built-in delay that a `reset_if~` resets by an event that ticks below it, after the place where the delay is written and before the end of its stage. The delay gives and stores at its place, and the reset comes after
+// that save, so its state is the init for the next stage: the value is that of the twin with the delay in a named flow, or with the event of a source of another stage. The common input is x = 1 6 2 7 3 4 1 1 and the event
+// `e = prev~(^d)` (the x before: 0 1 6 2 7 3 4 1), which holds at the frames 2 and 4 for `e >= 5`: the reset is after the stage of those two frames. Where a delay is read in the caller, the field of the caller is not reset.
+
+const XS: [U32; 8] = [1, 6, 2, 7, 3, 4, 1, 1]
+const FS: [F32; 8] = [1.0, 6.0, 2.0, 7.0, 3.0, 4.0, 1.0, 1.0]
+
+flow gen(x: U32 at sample) -> U32 at event {
+  Some(x)
+}
+
+flow gen_f(x: F32 at sample) -> F32 at event {
+  Some(x)
+}
+
+flow pulse(x: U32 at sample) -> U32 at event {
+  if x > 0 {
+    Some(x)
+  } else {
+    None
+  }
+}
+
+flow fwd(m: U32 at event) -> U32 at event {
+  Some(m)
+}
+
+// ---- the delay is written above the producer of its reset: prev~, delay~ and a nested delay, with the twins that put the delay in a named flow
+
+flow pv(x: U32 at sample) -> U32 at sample {
+  prev~(x, 9)
+}
+
+pub flow late_prev(x: U32 at sample) -> U32 at sample {
+  let e = prev~(^d)
+  let q = prev~(x, 9).reset_if~(e >= 5)
+  let d = gen~(x)
+  q
+}
+
+pub flow late_prev_named(x: U32 at sample) -> U32 at sample {
+  let e = prev~(^d)
+  let q = pv~(x).reset_if~(e >= 5)
+  let d = gen~(x)
+  q
+}
+
+pub flow late_delay(x: U32 at sample) -> U32 at sample {
+  let e = prev~(^d)
+  let q = delay~(x, 2, 9).reset_if~(e >= 5)
+  let d = gen~(x)
+  q
+}
+
+pub flow late_nested(x: U32 at sample) -> U32 at sample {
+  let e = prev~(^d)
+  let q = prev~(prev~(x, 9).reset_if~(e >= 5), 7)
+  let d = gen~(x)
+  q
+}
+
+pub flow late_nested_named(x: U32 at sample) -> U32 at sample {
+  let e = prev~(^d)
+  let q = prev~(pv~(x).reset_if~(e >= 5), 7)
+  let d = gen~(x)
+  q
+}
+
+test "a delay reset by an event of a producer below it: the reset is after the save of the stage, as in a named flow" {
+  // prev~(x, 9): the outputs 9 1 6, then 2 is stored at the frame 2 and the reset puts the init back, so 9 at the frame 3 (7 is stored), 7 at the frame 4 (3 stored, reset), 9, then 4 1: 9 1 6 9 7 9 4 1 (the reset does not take the output of its own frame, and the value stored in that stage is not kept).
+  // delay~(x, 2, 9): the line is back with the write place 0 after the frames 2 and 4: 9 9 1 9 9 9 9 4. The inner delay of a nested one gives its output at its place (not changed by the reset after it), the outer one stores that and gives it one frame later: 7 then 9 1 6 9 7 9 4.
+  let a = late_prev.render(XS, 8.0)
+  let b = late_prev_named.render(XS, 8.0)
+  let c = late_delay.render(XS, 8.0)
+  let d = late_nested.render(XS, 8.0)
+  let f = late_nested_named.render(XS, 8.0)
+  let want1: [U32; 8] = [9, 1, 6, 9, 7, 9, 4, 1]
+  for i in 0 ..< 8 {
+    assert a.out[i] == want1[i] && b.out[i] == want1[i]
+  }
+  let want2: [U32; 8] = [9, 9, 1, 9, 9, 9, 9, 4]
+  for i in 0 ..< 8 {
+    assert c.out[i] == want2[i]
+  }
+  let want3: [U32; 8] = [7, 9, 1, 6, 9, 7, 9, 4]
+  for i in 0 ..< 8 {
+    assert d.out[i] == want3[i] && f.out[i] == want3[i]
+  }
+}
+
+// ---- a loop that resets itself: the counter that an event of its own value resets (the reset is after its stage, so the value of the stage is kept)
+
+flow cnt() -> U32 at sample {
+  let c = prev~(^c + 1)
+  c
+}
+
+pub flow late_count_pulse() -> U32 at sample {
+  let e = prev~(^d)
+  let c: U32 = prev~(^c + 1).reset_if~(e >= 5)
+  let d = pulse~(c)
+  c
+}
+
+pub flow late_count_gen() -> U32 at sample {
+  let e = prev~(^d)
+  let c: U32 = prev~(^c + 1).reset_if~(e >= 5)
+  let d = gen~(c)
+  c
+}
+
+pub flow late_count_named() -> U32 at sample {
+  let e = prev~(^d)
+  let c = cnt~().reset_if~(e >= 5)
+  let d = gen~(c)
+  c
+}
+
+test "a counter reset by an event of its own value is back to 0 after the stage that gave the value" {
+  // gen~(c): e is the c before, so it holds at the frame 6 (e = 5): c = 0 1 2 3 4 5 6, the reset after the frame 6, 0 at the frame 7, where e = 6 holds again and resets after it, so 0 again at the frame 8, then 1 2 3 4 5 6 (e = 0 at the frame 8 and so on).
+  // pulse~(c) gives the event only when c is not 0: e is the nonzero c before, 0 at the first one (the frame 1), 1 at the frame 2, .. 5 at the frame 6: the reset after the frame 6, 0 at the frame 7, the event again at the frame 8 (c = 1, e = 6 holds): the reset after it, 0 at the frame 9, then 1 2.
+  let a = late_count_gen.render(15, 8.0)
+  let b = late_count_named.render(15, 8.0)
+  let c = late_count_pulse.render(12, 8.0)
+  let want1: [U32; 15] = [0, 1, 2, 3, 4, 5, 6, 0, 0, 1, 2, 3, 4, 5, 6]
+  for i in 0 ..< 15 {
+    assert a.out[i] == want1[i] && b.out[i] == want1[i]
+  }
+  let want2: [U32; 12] = [0, 1, 2, 3, 4, 5, 6, 0, 1, 0, 1, 2]
+  for i in 0 ..< 12 {
+    assert c.out[i] == want2[i]
+  }
+}
+
+// ---- vdelay~: the line is back, the read at its place is not changed; a `^k` in the length is the value of the end of the stage
+
+flow vd(x: F32 at sample) -> F32 at sample {
+  vdelay~(x, 2.0, 4, 7.0)
+}
+
+pub flow late_vdelay(x: F32 at sample) -> F32 at sample {
+  let e = prev~(^d)
+  let q = vdelay~(x, 2.0, 4, 7.0).reset_if~(e >= 5.0)
+  let d = gen_f~(x)
+  q
+}
+
+pub flow late_vdelay_named(x: F32 at sample) -> F32 at sample {
+  let e = prev~(^d)
+  let q = vd~(x).reset_if~(e >= 5.0)
+  let d = gen_f~(x)
+  q
+}
+
+pub flow late_vdelay_frac(x: F32 at sample) -> F32 at sample {
+  let e = prev~(^d)
+  let q = vdelay~(x, 2.5, 4, 7.0).reset_if~(e >= 5.0)
+  let d = gen_f~(x)
+  q
+}
+
+pub flow late_vdelay_k(x: F32 at sample, kk: F32 at sample) -> F32 at sample {
+  let e = prev~(^d)
+  let q = prev~(vdelay~(x, ^k, 8).reset_if~(e >= 5.0))
+  let d = gen_f~(x)
+  let k = kk
+  q
+}
+
+test "vdelay~ reset by an event of a producer below it" {
+  // d = 2.0 is delay~(x, 2, 7.0): 7 7 1 | 7 7 7 7 4. d = 2.5 is half of the stored value two frames before and half of three frames before (the init 7 where there is none): 7 7 (1 + 7) / 2 = 4 | 7 7 7 7 | (4 + 7) / 2 = 5.5 at the frame 7 (after the reset at the frame 4 the line has the init, the frames 5 and 6 stored 4 and 1).
+  // With `^k` as the length (kk = 1 2 2 1 3 2 1 2, the value of the end of the stage) the inner read at its place is 0 0 1 0 0 0 4 4 (the state is back after the frames 2 and 4, the read of the frame 2 is before the reset: 1), the outer prev~ gives it one frame later.
+  let ks: [F32; 8] = [1.0, 2.0, 2.0, 1.0, 3.0, 2.0, 1.0, 2.0]
+  let a = late_vdelay.render(FS, 8.0)
+  let b = late_vdelay_named.render(FS, 8.0)
+  let c = late_vdelay_frac.render(FS, 8.0)
+  let d = late_vdelay_k.render(late_vdelay_k.In { x: FS, kk: ks }, 8.0)
+  let want1: [F32; 8] = [7.0, 7.0, 1.0, 7.0, 7.0, 7.0, 7.0, 4.0]
+  for i in 0 ..< 8 {
+    assert a.out[i] == want1[i] && b.out[i] == want1[i]
+  }
+  let want2: [F32; 8] = [7.0, 7.0, 4.0, 7.0, 7.0, 7.0, 7.0, 5.5]
+  for i in 0 ..< 8 {
+    assert c.out[i] == want2[i]
+  }
+  let want3: [F32; 8] = [0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 4.0]
+  for i in 0 ..< 8 {
+    assert d.out[i] == want3[i]
+  }
+}
+
+// ---- the write place of delay~: after the reset the line is read as the init for N frames
+
+pub flow late_delay3(x: U32 at sample) -> U32 at sample {
+  let e = prev~(^d)
+  let q = delay~(x, 3, 9).reset_if~(e == 6)
+  let d = gen~(x)
+  q
+}
+
+test "delay~ back to the write place 0 gives the init for N reads, then the first stored one" {
+  // x = 1 6 2 3 4 5 7 8 9 3, e == 6 holds only at the frame 2: the outputs 9 9 9 (no value is old enough), the reset after the frame 2 (the 1 6 2 stored are gone), the frames 3 4 5 give the init 9 three times, and the frame 6 gives the x of the frame 3 (3), 4 5 7.
+  let ys: [U32; 10] = [1, 6, 2, 3, 4, 5, 7, 8, 9, 3]
+  let a = late_delay3.render(ys, 8.0)
+  let want1: [U32; 10] = [9, 9, 9, 9, 9, 9, 3, 4, 5, 7]
+  for i in 0 ..< 10 {
+    assert a.out[i] == want1[i]
+  }
+}
+
+// ---- nested: the reset is of the receiver, a delay in its first argument is of the caller (§11.10: "その連鎖の頭の引数…は、呼び出し側のものなので触れない"), as in the form with the inner delay in a `let`
+
+pub flow nest_outer(x: U32 at sample) -> U32 at sample {
+  let e = prev~(^d)
+  let q = prev~(prev~(x, 9), 7).reset_if~(e >= 5)
+  let d = gen~(x)
+  q
+}
+
+pub flow nest_outer_let(x: U32 at sample) -> U32 at sample {
+  let e = prev~(^d)
+  let i = prev~(x, 9)
+  let q = prev~(i, 7).reset_if~(e >= 5)
+  let d = gen~(x)
+  q
+}
+
+pub flow nest_both(x: U32 at sample) -> U32 at sample {
+  let e = prev~(^d)
+  let q = prev~(prev~(x, 9).reset_if~(e >= 5), 7).reset_if~(e >= 5)
+  let d = gen~(x)
+  q
+}
+
+pub flow tri_inner(x: U32 at sample) -> U32 at sample {
+  let e = prev~(^d)
+  let q = prev~(prev~(prev~(x, 9).reset_if~(e >= 5), 7), 6)
+  let d = gen~(x)
+  q
+}
+
+pub flow tri_mid(x: U32 at sample) -> U32 at sample {
+  let e = prev~(^d)
+  let q = prev~(prev~(prev~(x, 9), 7).reset_if~(e >= 5), 6)
+  let d = gen~(x)
+  q
+}
+
+pub flow tri_outer(x: U32 at sample) -> U32 at sample {
+  let e = prev~(^d)
+  let q = prev~(prev~(prev~(x, 9), 7), 6).reset_if~(e >= 5)
+  let d = gen~(x)
+  q
+}
+
+pub flow tri_all(x: U32 at sample) -> U32 at sample {
+  let e = prev~(^d)
+  let q = prev~(prev~(prev~(x, 9).reset_if~(e >= 5), 7).reset_if~(e >= 5), 6).reset_if~(e >= 5)
+  let d = gen~(x)
+  q
+}
+
+test "a reset on the inner delay only, the outer only, or both: only the delay it is written on" {
+  // Two delays (9 inner, 7 outer): the inner only (late_nested) 7 9 1 6 9 7 9 4. The outer only: the inner gives 9 1 6 2 7 3 4 1 as ever, the outer gives it one frame later and is back (7) at the frames 3 and 5: 7 9 1 7 2 7 3 4, as with the inner in a `let`. Both: the inner gives 9 1 6 9 7 9 4 1: 7 9 1 7 9 7 9 4.
+  // Three delays (9 7 6, the outer last): the inner only 6 7 9 1 6 9 7 9; the middle only, which gives 7 9 1 7 2 7 3 4, one frame later: 6 7 9 1 7 2 7 3; the outer only, of the middle one 7 9 1 6 2 7 3 4, back (6) at the frames 3 and 5: 6 7 9 6 6 6 7 3; one on each: 6 7 9 6 7 6 7 9.
+  let a = nest_outer.render(XS, 8.0)
+  let al = nest_outer_let.render(XS, 8.0)
+  let b = nest_both.render(XS, 8.0)
+  let c = tri_inner.render(XS, 8.0)
+  let d = tri_mid.render(XS, 8.0)
+  let f = tri_outer.render(XS, 8.0)
+  let g = tri_all.render(XS, 8.0)
+  let want1: [U32; 8] = [7, 9, 1, 7, 2, 7, 3, 4]
+  for i in 0 ..< 8 {
+    assert a.out[i] == want1[i] && al.out[i] == want1[i]
+  }
+  let want2: [U32; 8] = [7, 9, 1, 7, 9, 7, 9, 4]
+  for i in 0 ..< 8 {
+    assert b.out[i] == want2[i]
+  }
+  let want3: [U32; 8] = [6, 7, 9, 1, 6, 9, 7, 9]
+  let want4: [U32; 8] = [6, 7, 9, 1, 7, 2, 7, 3]
+  for i in 0 ..< 8 {
+    assert c.out[i] == want3[i]
+  }
+  for i in 0 ..< 8 {
+    assert d.out[i] == want4[i]
+  }
+  let want5: [U32; 8] = [6, 7, 9, 6, 6, 6, 7, 3]
+  let want6: [U32; 8] = [6, 7, 9, 6, 7, 6, 7, 9]
+  for i in 0 ..< 8 {
+    assert f.out[i] == want5[i]
+  }
+  for i in 0 ..< 8 {
+    assert g.out[i] == want6[i]
+  }
+}
+
+// ---- a chain of two conditions: the event is after the stage, the condition of sample is at the place of the call
+
+pub flow chain_event_sample(x: U32 at sample, r: U32 at sample) -> U32 at sample {
+  let e = prev~(^d)
+  let q = prev~(x, 9).reset_if~(e >= 5).reset_if~(r > 0)
+  let d = gen~(x)
+  q
+}
+
+pub flow chain_sample_event(x: U32 at sample, r: U32 at sample) -> U32 at sample {
+  let e = prev~(^d)
+  let q = prev~(x, 9).reset_if~(r > 0).reset_if~(e >= 5)
+  let d = gen~(x)
+  q
+}
+
+test "a reset of sample at the place of the call and a reset of an event after the stage, in either order of the chain" {
+  // r = 0 0 0 1 1 0 1 0 resets before the stage (the output is the init): the frames 3 4 6. The event e resets after the frames 2 and 4. 9 1 6 | 9 (the init at 3: r; 7 is stored) | 9 (r at the frame 4 before the read, 3 stored, reset after) | 9 | 9 (r, 1 stored) | 1.
+  let rr: [U32; 8] = [0, 0, 0, 1, 1, 0, 1, 0]
+  let a = chain_event_sample.render(chain_event_sample.In { x: XS, r: rr }, 8.0)
+  let b = chain_sample_event.render(chain_sample_event.In { x: XS, r: rr }, 8.0)
+  let want1: [U32; 8] = [9, 1, 6, 9, 9, 9, 9, 1]
+  for i in 0 ..< 8 {
+    assert a.out[i] == want1[i] && b.out[i] == want1[i]
+  }
+}
+
+// ---- a producer in the condition (before the read), a producer in the argument of the producer that resets (its own delay)
+
+pub flow cond_producer(x: U32 at sample) -> U32 at sample {
+  prev~(x, 9).reset_if~(gen~(x) >= 5)
+}
+
+pub flow cond_producer_let(x: U32 at sample) -> U32 at sample {
+  let g = gen~(x)
+  prev~(x, 9).reset_if~(g >= 5)
+}
+
+pub flow arg_delay(x: U32 at sample) -> U32 at sample {
+  let e = prev~(^d)
+  let d = gen~(prev~(x, 9).reset_if~(e >= 5))
+  d
+}
+
+pub flow arg_delay_let(x: U32 at sample) -> U32 at sample {
+  let e = prev~(^d)
+  let q = prev~(x, 9).reset_if~(e >= 5)
+  let d = gen~(q)
+  d
+}
+
+test "an event made in the condition resets before the read, and the producer of the argument that the delay is in ticks after the delay saves" {
+  // The condition gen~(x) >= 5 holds at the frames 1 and 3 (x = 6, 7) and resets before the read at the place of the call: 9 9 6 9 7 3 4 1 (the stored 6 and 7 are gone before they are read), the same with the producer in a let above.
+  // arg_delay: d is the output of the delay (it stores x and gives it one frame later), e the d before (0 9 1 9 2 9 3 9), so e >= 5 holds after the frames 1 3 5 7 (the d before is 9): the stored x of those frames is gone: d = 9 1 9 2 9 3 9 1, the output is the event d. The let twin is the same.
+  let a = cond_producer.render(XS, 8.0)
+  let b = cond_producer_let.render(XS, 8.0)
+  let c = arg_delay.render(XS, 8.0)
+  let d = arg_delay_let.render(XS, 8.0)
+  let want1: [U32; 8] = [9, 9, 6, 9, 7, 3, 4, 1]
+  for i in 0 ..< 8 {
+    assert a.out[i] == want1[i] && b.out[i] == want1[i]
+  }
+  let want2: [U32; 8] = [9, 1, 9, 2, 9, 3, 9, 1]
+  for i in 0 ..< 8 {
+    assert c.out[i] == want2[i] && d.out[i] == want2[i]
+  }
+}
+
+// ---- a delay of the event stage: the reset event is made in the stage of the event (by a producer below it) or by a producer of another stage
+
+pub flow ev_in_stage(x: U32 at sample) -> U32 at sample {
+  let m = gen~(x)
+  let w = prev~(^b)
+  let q = prev~(m, 9).reset_if~(w >= 5)
+  let b = fwd~(m)
+  q
+}
+
+pub flow ev_out_of_stage(x: U32 at sample) -> U32 at sample {
+  let m = gen~(x)
+  let w = prev~(^b)
+  let q = prev~(m, 9).reset_if~(w >= 5)
+  let b = gen~(x)
+  q
+}
+
+flow pve(m: U32 at event) -> U32 at event {
+  Some(prev~(m, 9))
+}
+
+pub flow ev_named(x: U32 at sample) -> U32 at sample {
+  let m = gen~(x)
+  let w = prev~(^b)
+  let q = pve~(m).reset_if~(w >= 5)
+  let b = fwd~(m)
+  q
+}
+
+pub flow ev_above(x: U32 at sample) -> U32 at sample {
+  let b = gen~(x)
+  let m = gen~(x)
+  let w = fwd~(b)
+  let q = prev~(m, 9).reset_if~(w >= 5)
+  q
+}
+
+test "a delay of an event reset by an event made in its stage, in another stage, or above it" {
+  // w is the b before (0 1 6 2 7 3 4 1), the reset after the tick of m at the frames 2 and 4: the q read is the event output of the tick (the field of the caller is not reset): 9 1 6 9 7 9 4 1, for b = fwd~(m), for a producer b of its own (another stage) and for the delay in a named flow that gives its output as an event.
+  // Above it (b is written before m, w = b itself, x >= 5 at the frames 1 and 3): the reset is before the tick of m: 9 9 6 9 7 3 4 1.
+  let a = ev_in_stage.render(XS, 8.0)
+  let b = ev_out_of_stage.render(XS, 8.0)
+  let c = ev_named.render(XS, 8.0)
+  let d = ev_above.render(XS, 8.0)
+  let want1: [U32; 8] = [9, 1, 6, 9, 7, 9, 4, 1]
+  for i in 0 ..< 8 {
+    assert a.out[i] == want1[i] && b.out[i] == want1[i] && c.out[i] == want1[i]
+  }
+  let want2: [U32; 8] = [9, 9, 6, 9, 7, 3, 4, 1]
+  for i in 0 ..< 8 {
+    assert d.out[i] == want2[i]
+  }
+}
+
+// ---- a delay of `sample / 4`: the stage of sample / 4 is before the sample stage; an event of the sample stage resets after it, an event made in the stage below it resets after the save
+
+flow tick_t() -> U32 at event {
+  Some(sample_tick() at (sample / 4))
+}
+
+pub flow s4_in_stage() -> U32 at sample {
+  let t = (sample_tick() at (sample / 4)) + 10
+  let w = prev~(^b)
+  let q = prev~(t, 99).reset_if~(w == 8)
+  let b = tick_t~()
+  q at sample
+}
+
+pub flow s4_sample_above(r: U32 at sample) -> U32 at sample {
+  let t = (sample_tick() at (sample / 4)) + 10
+  let e = gen~(r)
+  let q = prev~(t, 99).reset_if~(e >= 8)
+  q at sample
+}
+
+pub flow s4_sample_below(r: U32 at sample) -> U32 at sample {
+  let t = (sample_tick() at (sample / 4)) + 10
+  let e = prev~(^g)
+  let q = prev~(t, 99).reset_if~(e >= 8)
+  let g = gen~(r)
+  q at sample
+}
+
+test "a delay of sample / 4 reset by an event of the same stage written below it, and by an event of the sample stage" {
+  // t = 10 14 18 22 26 30 at the frames 0 4 .. 20, the delay gives 99 10 14 18 | 99 26 after the reset: the event tick_t gives the time 0 4 8 12 ..; w is the one before, so w == 8 at the frame 12 only, the reset after the save of that stage.
+  // 99 10 14 18 are the outputs of the ticks (held for 4 frames); the stored 22 is gone: the tick at 16 gives 99, and 26 at 20. The sample producers: r = 9 at the frame 12 resets in the sample stage (after the stage of sample / 4 of that frame), e >= 8 above and below (e is the r before at the frame 12 with r = 9 at 11): the same values.
+  var r12: [U32; 24] = [0; 24]
+  r12[12] = 9
+  var r11: [U32; 24] = [0; 24]
+  r11[11] = 9
+  let w: [U32; 24] = [99, 99, 99, 99, 10, 10, 10, 10, 14, 14, 14, 14, 18, 18, 18, 18, 99, 99, 99, 99, 26, 26, 26, 26]
+  let a = s4_in_stage.render(24, 8.0)
+  let b = s4_sample_above.render(r12, 8.0)
+  let c = s4_sample_below.render(r11, 8.0)
+  for i in 0 ..< 24 {
+    assert a.out[i] == w[i] && b.out[i] == w[i] && c.out[i] == w[i]
+  }
+}
+
+// ---- a part with two inputs given one event (one at a time), reset from below by an event: the whole of the part is back, with its own field
+
+flow pairp(a: U32 at event, b: U32 at event) -> U32 at sample {
+  let q = prev~(a, 9).reset_if~(b >= 4)
+  q
+}
+
+pub flow twice_src(x: U32 at sample) -> U32 at sample {
+  let m = gen~(x)
+  let w = prev~(^bb)
+  let q = pairp~(m, m).reset_if~(w >= 7)
+  let bb = fwd~(m)
+  q
+}
+
+test "a source that ticks two inputs of a part: the delay inside is reset by the second input, and the whole part by an event below the call" {
+  // x = 3 1 4 2 8 1 2. The tick of a gives the delay output and stores x, the tick of b resets it when x >= 4 (the frames 2 and 4: the output of the frame is read before the reset, the held q is the one of the tick of a): 9 3 1 9 2.
+  // The frame 5: w = 8 (the x before) >= 7 resets the whole part after the tick: its own field q is T.default() when the call is read at its place (0), the delay is back (the stored 1 is gone): 0, then 9 at the frame 6.
+  let xs: [U32; 7] = [3, 1, 4, 2, 8, 1, 2]
+  let a = twice_src.render(xs, 8.0)
+  let want1: [U32; 7] = [9, 3, 1, 9, 2, 0, 9]
+  for i in 0 ..< 7 {
+    assert a.out[i] == want1[i]
+  }
+}
+
+// ---- a delay and a flow in the range of a reset on a flow of the user: the flow outside is back, with what it holds
+
+flow inner(x: U32 at sample) -> U32 at sample {
+  prev~(x, 9)
+}
+
+flow outer(x: U32 at sample) -> U32 at sample {
+  let a = inner~(x)
+  let b = prev~(a, 7)
+  a + b
+}
+
+pub flow range_outer(x: U32 at sample) -> U32 at sample {
+  let e = prev~(^d)
+  let q = outer~(x).reset_if~(e >= 5)
+  let d = gen~(x)
+  q
+}
+
+pub flow reset_whole(x: U32 at sample, r: U32 at sample) -> U32 at sample {
+  late_prev~(x).reset_if~(r > 0)
+}
+
+test "a reset on a flow of the user is the flow with its flows and delays inside, even the event delay that resets it from inside" {
+  // outer: a is the inner delay (9 1 6 | 9 7 | 9 4 1 as in late_prev), b the delay of a (7 9 1 | 7 9 | 7 9 4), both back after the frames 2 and 4: a + b = 16 10 7 16 16 16 13 5.
+  // late_prev with a reset of sample at the frame 4 (r = 1): before the stage the whole of it is back, the delay of x (9 not 7) and the delay of e (0, not 7), so the reset after the frame 4 does not come, and the stored 3 is kept: 9 1 6 9 9 3 4 1.
+  let rr: [U32; 8] = [0, 0, 0, 0, 1, 0, 0, 0]
+  let a = range_outer.render(XS, 8.0)
+  let b = reset_whole.render(reset_whole.In { x: XS, r: rr }, 8.0)
+  let want1: [U32; 8] = [16, 10, 7, 16, 16, 16, 13, 5]
+  for i in 0 ..< 8 {
+    assert a.out[i] == want1[i]
+  }
+  let want2: [U32; 8] = [9, 1, 6, 9, 9, 3, 4, 1]
+  for i in 0 ..< 8 {
+    assert b.out[i] == want2[i]
+  }
+}
+
+// ---- the value that a delay stores has an event name read at its place and a `^k` read at the end of the stage
+
+pub flow mixed(x: U32 at sample) -> U32 at sample {
+  let p = prev~(^g)
+  let q = prev~((p at sample) + ^k).reset_if~(p >= 5)
+  let g = gen~(x)
+  let k = x + 1
+  q
+}
+
+pub flow mixed_let(x: U32 at sample) -> U32 at sample {
+  let p = prev~(^g)
+  let t = p at sample
+  let q = prev~(t + ^k).reset_if~(p >= 5)
+  let g = gen~(x)
+  let k = x + 1
+  q
+}
+
+test "the stored value of a delay with an event name and a ^name: the event at its place, the name of the end of the stage, then the reset after the save" {
+  // p is the x before the sample (0 1 6 2 7 3 4 1 after the event, so 0 0 1 6 2 7 3 4 at the place of the delay), ^k = x + 1: the stored values are 0+2 0+7 1+3 6+8 2+4 7+5 3+2 4+2 = 2 7 4 14 6 12 5 6, the reset where p >= 5 (the frames 2 4 after their event) is after the save: 0 2 7 0 14 0 12 5 (the let twin is the same).
+  let a = mixed.render(XS, 8.0)
+  let b = mixed_let.render(XS, 8.0)
+  let want1: [U32; 8] = [0, 2, 7, 0, 14, 0, 12, 5]
+  for i in 0 ..< 8 {
+    assert a.out[i] == want1[i] && b.out[i] == want1[i]
+  }
+}
+
+// ---- a run in pieces, a call of 0 frames and a reset of the state: the same as the whole run
+
+test "a run cut after the frame of a reset, with a call of 0 frames, and after reset, gives the same values" {
+  // late_prev: 9 1 6 9 7 9 4 1 in pieces 0..2, 2..3 (the frame of the reset), an empty call, 3..8. The state holds the event delay and the delay: the cut at the frame 3 starts with the init after the reset.
+  // After `reset` the same run again is the same (the counter late_count_gen too: 0 1 2 3 4 5 6 0, and after reset the same).
+  var o: [U32; 8] = [9; 8]
+  var st = late_prev.init(8.0)
+  late_prev.process(inout st, XS.slice(0, 2), inout o.slice(0, 2))
+  late_prev.process(inout st, XS.slice(2, 3), inout o.slice(2, 3))
+  late_prev.process(inout st, XS.slice(3, 3), inout o.slice(3, 3))
+  late_prev.process(inout st, XS.slice(3, 8), inout o.slice(3, 8))
+  assert o == [9, 1, 6, 9, 7, 9, 4, 1]
+  late_prev.reset(inout st)
+  var o2: [U32; 8] = [9; 8]
+  late_prev.process(inout st, XS, inout o2)
+  assert o2 == o
+  var c: [U32; 8] = [9; 8]
+  var sc = late_count_gen.init(8.0)
+  late_count_gen.process(inout sc, inout c)
+  assert c == [0, 1, 2, 3, 4, 5, 6, 0]
+  late_count_gen.reset(inout sc)
+  var c2: [U32; 8] = [9; 8]
+  late_count_gen.process(inout sc, inout c2.slice(0, 4))
+  late_count_gen.process(inout sc, inout c2.slice(4, 8))
+  assert c2 == c
+}

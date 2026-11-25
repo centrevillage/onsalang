@@ -34,9 +34,9 @@ pub(in crate::flow) fn qualify(scope: &str, name: &str) -> String {
 /// `<field>._deal_<b>` (§11.6, S-1208); of the guard m of its chain
 /// `<field>._on_<m>`, `<field>._tick_<m>` and `<field>._held_<m>`, but the
 /// held output of the guard `outermost`, which its caller reads, `<field>.held`;
-/// of a delay a guard stops, `<field>._ran`.
+/// of a delay a guard stops, `<field>._ran`; its `<field>._open` and `<field>._back_<at>`.
 // SPEC-GAP(S-1220): the names and the order of the fields of a guard, of the
-// ring of a condition and of `_ran`, provisional.
+// ring of a condition and of `_ran`, `_open` and `_back_<at>`, provisional.
 pub(in crate::flow) fn part(field: &str, p: Part, outermost: Option<u32>) -> String {
     match p {
         Part::Held(g) if Some(g) == outermost => format!("{field}.held"),
@@ -51,6 +51,8 @@ pub(in crate::flow) fn part(field: &str, p: Part, outermost: Option<u32>) -> Str
         Part::Gather { bound, port: Port::Cond(at) } => format!("{field}._gather_{bound}_c{at}"),
         Part::Deal(bound) => format!("{field}._deal_{bound}"),
         Part::Ran => format!("{field}._ran"),
+        Part::Open => format!("{field}._open"),
+        Part::Back(at) => format!("{field}._back_{at}"),
     }
 }
 

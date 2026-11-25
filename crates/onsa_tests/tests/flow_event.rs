@@ -6,7 +6,10 @@ use onsa_tests::case::repo_root;
 use onsa_tests::flow_ref::interp_host::Wrappers;
 use onsa_tests::flow_ref::walk::{Verdict, run_case};
 
+// `event_reset_delay_values.onsa` and `event_reset_more_values.onsa` are not here: they check the outputs with `same(a.out, [..])`, a function of `Span` arguments that a loop makes (the interpreter is its host, and the case has to lower first, W7-11 U2r).
 const CASES: &[&str] = &[
+    "tests/spec/flow_semantics/event_reset_values.onsa",
+    "tests/spec/flow_semantics/event_saved_match_values.onsa",
     "tests/spec/flow_semantics/event_stage_values.onsa",
     "tests/spec/flow_semantics/event_hoist_values.onsa",
     "tests/spec/flow_semantics/event_part_values.onsa",

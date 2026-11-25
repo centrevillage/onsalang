@@ -1,4 +1,4 @@
-//! The flows with an event in their head in the commands of `onsa` (W7-11 U1a/t, U2g/t and U2/t; spec §11.2, §11.9, §11.11, §18.1, `spec/tools.md` §1 and §4; S-560, S-564, S-67, Q-09): what the case files in
+//! The flows with an event in their head in the commands of `onsa` (W7-11 U1a/t, U2g/t, U2/t and U2r/t; spec §11.2, §11.9, §11.10, §11.11, §18.1, `spec/tools.md` §1 and §4; S-560, S-562, S-564, S-67, Q-09): what the case files in
 //! `tests/spec/flow_clock/` and `tests/spec/flow_semantics/event_*.onsa` cannot pin.
 //!
 //! - `check` reads a package whose flows have an event input or an event output, and a flow that calls one, with no diagnostic (the event clock is found and the heads and the bodies are right, U1a). The error of a form that
@@ -6,10 +6,11 @@
 //! - From W7-11 U2 the forms in a straight line run: a producer, a receiver, a flow that gives or takes an event, a delay of an event, a `let` and the `at` of an event, one event given to two inputs. `test` and `dump --core`
 //!   go on (the package is run, a test that calls them gives the values of the case files); `onsa graph` draws them (a `let` of an event is `名前: 型 at event`, `spec/tools.md` §1.1), and `onsa interface` has the size of the
 //!   state of each (§12.4).
-//! - The forms that are E0200 after U2 (`rules` of the table of the work, until W7-17 and U2r): a call with a modifier whose callee has an event port, a modifier whose condition is an event, a built-in delay of an event with a
-//!   modifier, an event in a `par~`, an `if~` or a `match~`, a source that ticks by itself (`let d = fwd~(prev~(^d))`, on the path of the output, off it, and in a loop of two). Each is one E0200 for the flow that has the
-//!   form, at a place in that flow (the spec fixes the code and says that it is where the form is found, §18.1; so only the lines of the flow are asked), in `test`, `dump --core` and `graph <that flow>`; the flows that run
-//!   in the same package are not stopped (`graph` of one is drawn), and the tests do not run.
+//! - From W7-11 U2r a chain of `reset_if~` only (one or more) runs when it has an event: a receiver whose condition is an event, a receiver that has an event port (a call of a flow with an event input, or an argument that is an
+//!   event), and a built-in delay of an event (its condition is the event of its own or a kind `block`). The forms that are E0200 after U2r (until W7-17): a call with `when~`, `.down~` or `.up~` whose callee has an event port, a
+//!   chain that has an event condition and a `when~`, `.down~` or `.up~`, an event in a `par~`, an `if~` or a `match~`, a source that ticks by itself (`let d = fwd~(prev~(^d))`, on the path of the output, off it, and in a loop
+//!   of two). Each is one E0200 for the flow that has the form, at a place in that flow (the spec fixes the code and says that it is where the form is found, §18.1; so only the lines of the flow are asked), in `test`,
+//!   `dump --core` and `graph <that flow>`; the flows that run in the same package are not stopped (`graph` of one is drawn), and the tests do not run.
 //! - A package with a mistake of the clock in a flow with an event (E0815: the events of two inputs in one sum) has that diagnostic and no E0200, in every command: the check stops what goes on to the Core.
 //!
 //! Not written here: a flow with an event in a package that is a dependency (a dependency other than `std` is E0200 of the manifest in this version, §15.3, and `std` has no flow with an event), so the form "the own package does
@@ -43,7 +44,16 @@ const FWD: &str = "flow fwd(m: U32 at event) -> U32 at event {\n  Some(m)\n}\n";
 const LP: &str = "flow lp(x: F32 at sample) -> F32 at sample {\n  x * 0.5\n}\n";
 const MODDED: &str =
     "pub flow modded(x: F32 at sample) -> U32 at sample {\n  acc~(with_event_out~(x)).when~(true)\n}\n";
+/// A chain that has an event condition and a `when~` (before or after the `reset_if~`), a `.down~`, or a call of an event port with a `.down~`: E0200 after U2r too.
+const MIXED_WHEN: &str = "pub flow mixed_when(x: F32 at sample, c: Bool at sample) -> F32 at sample {\n  let d = with_event_out~(x)\n  lp~(x).when~(c).reset_if~(d != 0)\n}\n";
+const MIXED_DOWN: &str = "pub flow mixed_down(x: F32 at sample) -> F32 at sample {\n  let d = with_event_out~(x)\n  lp~(0.5).down~(2).reset_if~(d != 0) at sample\n}\n";
+const PORT_DOWN: &str = "pub flow port_down(x: F32 at sample) -> U32 at sample {\n  let d = with_event_out~(x)\n  acc~(d).down~(2) at sample\n}\n";
+const RESET_THEN_WHEN: &str = "pub flow reset_then_when(x: F32 at sample, c: Bool at sample) -> U32 at sample {\n  let d = with_event_out~(x)\n  acc~(d).reset_if~(d != 0).when~(c)\n}\n";
+/// The forms of a chain of `reset_if~` only that has an event, which run after U2r (E0200 at U2).
 const EVENT_COND: &str = "pub flow event_cond(x: F32 at sample) -> F32 at sample {\n  let d = with_event_out~(x)\n  lp~(x).reset_if~(d != 0)\n}\n";
+const RESET_CHAIN: &str = "pub flow reset_chain(x: F32 at sample) -> F32 at sample {\n  let d = with_event_out~(x)\n  lp~(x).reset_if~(d != 0).reset_if~(d > 1)\n}\n";
+const RESET_PART: &str = "pub flow reset_part(x: F32 at sample) -> U32 at sample {\n  let d = with_event_out~(x)\n  acc~(d).reset_if~(d != 0)\n}\n";
+const DELAY_OWN: &str = "pub flow delay_own(m: U32 at event) -> U32 at sample {\n  prev~(m, 9).reset_if~(m == 0)\n}\n";
 const ROOTLESS_ON: &str =
     "pub flow rootless_on(x: F32 at sample) -> U32 at sample {\n  let d = fwd~(prev~(^d))\n  acc~(d)\n}\n";
 const ROOTLESS_OFF: &str = "pub flow rootless_off(x: F32 at sample) -> U32 at sample {\n  let d = fwd~(prev~(^d))\n  let _ = acc~(d)\n  0\n}\n";
@@ -183,19 +193,43 @@ fn interface_has_the_sizes_of_the_states_of_the_flows_that_run_u2() {
 
 // ---------------------------------------------------------------- the forms that stay E0200 after U2
 
-/// A built-in delay of an event with a modifier, and an event in a `par~`, an `if~` and a `match~`: each flow that has the form is one E0200 (their heads have an event, so they stop before U2 too).
+/// An event in a `par~`, an `if~` and a `match~`: each flow that has the form is one E0200 (their heads have an event, so they stop before U2 too). The delay of an event with a `reset_if~` is not in the list from U2r
+/// (`delay_modifier` runs: `a_package_of_reset_if_chains_on_events_runs_u2r`).
 #[test]
-fn a_delay_with_a_modifier_and_events_in_par_and_branches_are_one_e0200_for_each_flow() {
-    let names = ["delay_modifier", "par_event", "if_event", "match_event"];
-    assert_each_stops("event_stay_inside", &[DELAY_MODIFIER, PAR_EVENT, IF_EVENT, MATCH_EVENT], &names);
+fn events_in_par_and_branches_are_one_e0200_for_each_flow() {
+    let names = ["par_event", "if_event", "match_event"];
+    assert_each_stops("event_stay_inside", &[PAR_EVENT, IF_EVENT, MATCH_EVENT], &names);
 }
 
-/// A modifier on a call whose callee has an event port, a modifier whose condition is an event, and a source that ticks by itself (on the path of the output, off it, in a loop of two): one E0200 for the flow that has
-/// the form. The flows that run in the same package (`acc`, `fwd`, `with_event_out`, `calls_acc`) are not stopped.
+/// A `when~` or a `.down~` on a call whose callee has an event port, a chain that has an event condition and a `when~` or a `.down~` (before or after the `reset_if~`), and a source that ticks by itself (on the path of the
+/// output, off it, in a loop of two): one E0200 for the flow that has the form (they stay E0200 after U2r, until W7-17). The flows that run in the same package (`acc`, `fwd`, `with_event_out`, `calls_acc`) are not stopped.
 #[test]
-fn a_modifier_on_an_event_port_an_event_condition_and_a_source_with_no_root_are_one_e0200_for_each_flow_u2() {
-    let flows = [EVENT_OUT, ACC, FWD, LP, CALLS_ACC, MODDED, EVENT_COND, ROOTLESS_ON, ROOTLESS_OFF, ROOTLESS_LOOP];
-    let names = ["modded", "event_cond", "rootless_on", "rootless_off", "rootless_loop"];
+fn a_mixed_chain_a_modifier_on_an_event_port_and_a_source_with_no_root_are_one_e0200_for_each_flow_u2() {
+    let flows = [
+        EVENT_OUT,
+        ACC,
+        FWD,
+        LP,
+        CALLS_ACC,
+        MODDED,
+        MIXED_WHEN,
+        MIXED_DOWN,
+        PORT_DOWN,
+        RESET_THEN_WHEN,
+        ROOTLESS_ON,
+        ROOTLESS_OFF,
+        ROOTLESS_LOOP,
+    ];
+    let names = [
+        "modded",
+        "mixed_when",
+        "mixed_down",
+        "port_down",
+        "reset_then_when",
+        "rootless_on",
+        "rootless_off",
+        "rootless_loop",
+    ];
     assert_each_stops("event_stay_calls", &flows, &names);
     let (d, _) = package("event_stay_calls_beside", &flows);
     let out = run(d.root(), &["graph", "calls_acc"]);
@@ -210,6 +244,43 @@ fn flows_that_run_beside_a_flow_that_is_e0200_are_not_stopped_u2() {
     assert_checks("event_beside", &d);
     assert_stops_in("event_beside", &d, &src, &["test"], &["modded"]);
     for flow in ["calls_acc", "drawn", "acc"] {
+        let out = run(d.root(), &["graph", flow]);
+        assert_eq!(out.code, 0, "graph {flow}: {}{}", out.stdout, out.stderr);
+    }
+}
+
+// ---------------------------------------------------------------- a chain of `reset_if~` only that has an event (U2r)
+
+/// The forms of a chain of `reset_if~` only that has an event (a periodic receiver with an event condition, two conditions on one event, a receiver that has an event port, a delay of an event with the event of its own or
+/// a `block` condition): `check` has no diagnostic, `test` passes (1 passed), `dump --core` goes on, no E0200 is said and `interface` has the sizes of their states (§12.4).
+#[test]
+fn a_package_of_reset_if_chains_on_events_runs_u2r() {
+    let mut flows = RUNNING.to_vec();
+    flows.extend([LP, EVENT_COND, RESET_CHAIN, RESET_PART, DELAY_OWN, DELAY_MODIFIER]);
+    let (d, _) = package("event_reset_run", &flows);
+    assert_checks("event_reset_run", &d);
+    let out = run(d.root(), &["test"]);
+    assert_eq!(out.code, 0, "test: {}{}", out.stdout, out.stderr);
+    assert!(errors(&out).is_empty() && out.stdout.contains("1 passed, 0 failed"), "test: {}{}", out.stdout, out.stderr);
+    assert_no_internal_error("event_reset_run", &["test"], &out);
+    let dir = d.arg();
+    let core = run(d.root(), &["dump", "--core", &dir]);
+    assert_eq!(core.code, 0, "dump --core: {}{}", core.stdout, core.stderr);
+    assert!(errors(&core).is_empty(), "dump --core: {}{}", core.stdout, core.stderr);
+    let interface = run(d.root(), &["interface"]);
+    assert_eq!(interface.code, 0, "interface: {}{}", interface.stdout, interface.stderr);
+    assert!(!interface.stdout.contains("not available"), "the size of the state is known: {}", interface.stdout);
+}
+
+/// The chains that run (U2r) beside the forms that stay E0200: the stop is the flows that stay (a `when~` before the `reset_if~`, a `.down~` before it, a `reset_if~` and then a `when~`), and the flows that run are in
+/// the same package (`graph` of one is drawn).
+#[test]
+fn reset_if_chains_that_run_beside_a_mixed_chain_are_not_stopped_u2r() {
+    let flows = [EVENT_OUT, ACC, LP, EVENT_COND, RESET_PART, MIXED_WHEN, MIXED_DOWN, RESET_THEN_WHEN];
+    let (d, src) = package("event_reset_beside", &flows);
+    assert_checks("event_reset_beside", &d);
+    assert_stops_in("event_reset_beside", &d, &src, &["test"], &["mixed_when", "mixed_down", "reset_then_when"]);
+    for flow in ["event_cond", "reset_part"] {
         let out = run(d.root(), &["graph", flow]);
         assert_eq!(out.code, 0, "graph {flow}: {}{}", out.stdout, out.stderr);
     }

@@ -1,4 +1,4 @@
-# flow_ref 1 source=tests/spec/flow_semantics/reset_if_values.onsa tests=12 evaluated=11 unavailable=0 skipped=1 waiting=0
+# flow_ref 1 source=tests/spec/flow_semantics/reset_if_values.onsa tests=12 evaluated=12 unavailable=0 skipped=0 waiting=0
 @ a condition that never holds is no condition
 init 0 reset_if_values.plain sr=0x41000000
 init 1 reset_if_values.never sr=0x41000000
@@ -49,7 +49,16 @@ process 0 frames=8 in r=[false false false true false false false false]
 out=[0x42ca0000 0x42cc0000 0x434b0000 0x3f800000 0x42cc0000 0x42ce0000 0x434c0000 0x434d0000]
 process 1 frames=8 in r=[false false false false true false false false]
 out=[0x42ca0000 0x42cc0000 0x434b0000 0x434c0000 0x3f800000 0x40000000 0x42ce0000 0x42d00000]
-- x.when~(c).reset_if~(r) resets the stopped frames too and the held output, before the stage that the when moves; x.reset_if~(r).when~(c) resets only the frames that run	skipped layout
+@ x.when~(c).reset_if~(r) resets the stopped frames too and the held output, before the stage that the when moves; x.reset_if~(r).when~(c) resets only the frames that run
+init 0 reset_if_values.when_then_reset sr=0x41000000
+init 1 reset_if_values.reset_then_when sr=0x41000000
+init 2 reset_if_values.wrapped_signal sr=0x41000000
+process 0 frames=8 in c=[true true false true false false true true] r=[false false true true false true false false]
+out=[0x42ca0000 0x42cc0000 0x00000000 0x42ca0000 0x42ca0000 0x00000000 0x3f800000 0x42cc0000]
+process 1 frames=8 in c=[true true false true false false true true] r=[false false true true false true false false]
+out=[0x42ca0000 0x42cc0000 0x42cc0000 0x3f800000 0x3f800000 0x3f800000 0x40000000 0x42ce0000]
+process 2 frames=8 in c=[true true false true false false true true] r=[false false true true false true false false]
+out=[0x42ca0000 0x42cc0000 0x00000000 0x42ca0000 0x42ca0000 0x00000000 0x3f800000 0x42cc0000]
 @ x.when~(true).reset_if~(r) is not x.reset_if~(r) where the reset is at a tick of a slower stage of x: the reset is before the stage that the when moves (S-1228)
 init 0 reset_if_values.slot_reset sr=0x41000000
 init 1 reset_if_values.slot_when_true sr=0x41000000

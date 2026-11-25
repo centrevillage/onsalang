@@ -1,0 +1,32 @@
+// onsa.toml
+// [test]
+// spec = ["§11.10", "§18.1"]
+// fixes = 1
+
+// W7-11 U2r/t, S-558, S-562 (spec §11.10: "イベントのクロックで動く受け手（第 1 引数がイベントの値の組込みの遅延）への `when~` は何も止めないので、書き手の誤解を示す印として E0020 の類にする（候補は `.when~(…)` を外す形）"; "各修飾子は左の全体を包む"):
+// `when~` on a delay of an event stays E0020 at the modifier when a `reset_if~` chain is to its left (a chain with an event condition is run after U2r; the `when~` is not), whatever the delay is, whatever the chain before it
+// and after it is. The candidate takes `.when~(…)` away (`.fix1`, made by the implementation). The same without a `when~` is in event_reset_chain_accepted.onsa. `v` is an event, `c` is a `sample` input, `k` is `block`.
+
+pub rt fn is_on(e: U32) -> Bool {
+  e > 0
+}
+
+pub flow prev_after_a_reset(v: U32 at event, c: Bool at sample) -> U32 at sample {
+  prev~(v).reset_if~(is_on(v))                       //~ E0020
+}
+
+pub flow delay_between_two_resets(v: U32 at event, c: Bool at sample) -> U32 at sample {
+  delay~(v, 2).reset_if~(v > 3).reset_if~(v > 1)     //~ E0020
+}
+
+pub flow vdelay_after_a_reset(v: F32 at event, c: Bool at sample) -> F32 at sample {
+  vdelay~(v, 2.0, 4).reset_if~(v > 0.5)              //~ E0020
+}
+
+pub flow when_then_reset(v: U32 at event, c: Bool at sample) -> U32 at sample {
+  prev~(v).reset_if~(is_on(v))                       //~ E0020
+}
+
+pub flow after_two_resets_and_a_block_one(v: U32 at event, k: Bool at block) -> U32 at sample {
+  prev~(v).reset_if~(is_on(v)).reset_if~(k)          //~ E0020
+}

@@ -1,7 +1,28 @@
-# flow_ref 1 source=tests/spec/flow_semantics/delay_receiver_values.onsa tests=15 evaluated=5 unavailable=0 skipped=10 waiting=0
-- prev~(x).when~(c) runs where c holds and keeps its last output where it does not (the output before the first run is T.default())	skipped layout
-- a delay that has not run reads T.default(), not its init; the first run reads the init (R4)	skipped layout
-- the length of a delay counts the frames it ran: delay~(x, 3).when~(c)	skipped layout
+# flow_ref 1 source=tests/spec/flow_semantics/delay_receiver_values.onsa tests=15 evaluated=15 unavailable=0 skipped=0 waiting=0
+@ prev~(x).when~(c) runs where c holds and keeps its last output where it does not (the output before the first run is T.default())
+init 0 delay_receiver_values.when_prev sr=0x41000000
+init 1 delay_receiver_values.when_prev sr=0x41000000
+init 2 delay_receiver_values.when_prev sr=0x41000000
+init 3 delay_receiver_values.when_true sr=0x41000000
+process 0 frames=5 in x=[0x3f800000 0x40000000 0x40400000 0x40800000 0x40a00000] c=[true false true true false]
+out=[0x00000000 0x00000000 0x3f800000 0x40400000 0x40400000]
+process 1 frames=5 in x=[0x3f800000 0x40000000 0x40400000 0x40800000 0x40a00000] c=[false false false false false]
+out=[0x00000000 0x00000000 0x00000000 0x00000000 0x00000000]
+process 2 frames=5 in x=[0x3f800000 0x40000000 0x40400000 0x40800000 0x40a00000] c=[true true true true true]
+out=[0x00000000 0x3f800000 0x40000000 0x40400000 0x40800000]
+process 3 frames=5 in x=[0x3f800000 0x40000000 0x40400000 0x40800000 0x40a00000]
+out=[0x00000000 0x3f800000 0x40000000 0x40400000 0x40800000]
+@ a delay that has not run reads T.default(), not its init; the first run reads the init (R4)
+init 0 delay_receiver_values.when_prev_init sr=0x41000000
+init 1 delay_receiver_values.when_prev_init sr=0x41000000
+process 0 frames=5 in x=[0x3f800000 0x40000000 0x40400000 0x40800000 0x40a00000] c=[false false true true false]
+out=[0x00000000 0x00000000 0x40a00000 0x40400000 0x40400000]
+process 1 frames=5 in x=[0x3f800000 0x40000000 0x40400000 0x40800000 0x40a00000] c=[true true false true true]
+out=[0x40a00000 0x3f800000 0x3f800000 0x40000000 0x40800000]
+@ the length of a delay counts the frames it ran: delay~(x, 3).when~(c)
+init 0 delay_receiver_values.when_delay3 sr=0x41000000
+process 0 frames=8 in x=[0x3f800000 0x40000000 0x40400000 0x40800000 0x40a00000 0x40c00000 0x40e00000 0x41000000] c=[true true false true false true true true]
+out=[0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x3f800000 0x40000000 0x40800000]
 @ a condition of the kind block is read once for each call of process: the calls cut where the delay stops and runs again
 init 0 delay_receiver_values.when_block sr=0x41000000
 process 0 params c=true frames=4 in x=[0x3f800000 0x40000000 0x40400000 0x40800000]
@@ -10,12 +31,45 @@ process 0 params c=false frames=2 in x=[0x40a00000 0x40c00000]
 out=[0x40400000 0x40400000]
 process 0 params c=true frames=2 in x=[0x40e00000 0x41000000]
 out=[0x40800000 0x40e00000]
-- delay~(x, 2).reset_if~(r) puts the values and the write position back before the stages of the frame, and the frame gives its own input	skipped layout
-- a reset puts the delay back to its init (a literal or a value of the kind init), not to T.default()	skipped layout
-- the order of the two modifiers: x.when~(c).reset_if~(r) resets the stopped frames and the held output too, x.reset_if~(r).when~(c) only the frames that run	skipped layout
-- vdelay~: the argument d is the caller's and is evaluated at the stopped frames too, the interpolation counts the runs	skipped layout
-- in a par~: each copy has its own delay, stopped by the same condition	skipped layout
-- a delay in the first argument of a delay, with the modifier on the inner or on the outer one	skipped layout
+@ delay~(x, 2).reset_if~(r) puts the values and the write position back before the stages of the frame, and the frame gives its own input
+init 0 delay_receiver_values.reset_delay sr=0x41000000
+init 1 delay_receiver_values.reset_delay sr=0x41000000
+init 2 delay_receiver_values.reset_false sr=0x41000000
+process 0 frames=6 in x=[0x3f800000 0x40000000 0x40400000 0x40800000 0x40a00000 0x40c00000] r=[false false true false false false]
+out=[0x00000000 0x00000000 0x00000000 0x00000000 0x40400000 0x40800000]
+process 1 frames=6 in x=[0x3f800000 0x40000000 0x40400000 0x40800000 0x40a00000 0x40c00000] r=[false false true true false false]
+out=[0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x40800000]
+process 2 frames=6 in x=[0x3f800000 0x40000000 0x40400000 0x40800000 0x40a00000 0x40c00000]
+out=[0x00000000 0x00000000 0x3f800000 0x40000000 0x40400000 0x40800000]
+@ a reset puts the delay back to its init (a literal or a value of the kind init), not to T.default()
+init 0 delay_receiver_values.reset_delay_init sr=0x41000000
+init 1 delay_receiver_values.reset_prev_kind sr=0x41000000 cfg k=0x41100000
+process 0 frames=6 in x=[0x3f800000 0x40000000 0x40400000 0x40800000 0x40a00000 0x40c00000] r=[false false true false false false]
+out=[0x40e00000 0x40e00000 0x40e00000 0x40e00000 0x40400000 0x40800000]
+process 1 frames=6 in x=[0x3f800000 0x40000000 0x40400000 0x40800000 0x40a00000 0x40c00000] r=[false false true false false false]
+out=[0x41100000 0x3f800000 0x41100000 0x40400000 0x40800000 0x40a00000]
+@ the order of the two modifiers: x.when~(c).reset_if~(r) resets the stopped frames and the held output too, x.reset_if~(r).when~(c) only the frames that run
+init 0 delay_receiver_values.when_then_reset sr=0x41000000
+init 1 delay_receiver_values.reset_then_when sr=0x41000000
+process 0 frames=8 in x=[0x3f800000 0x40000000 0x40400000 0x40800000 0x40a00000 0x40c00000 0x40e00000 0x41000000] c=[true true false true false false true true] r=[false false true true false true false false]
+out=[0x00000000 0x3f800000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x40e00000]
+process 1 frames=8 in x=[0x3f800000 0x40000000 0x40400000 0x40800000 0x40a00000 0x40c00000 0x40e00000 0x41000000] c=[true true false true false false true true] r=[false false true true false true false false]
+out=[0x00000000 0x3f800000 0x3f800000 0x00000000 0x00000000 0x00000000 0x40800000 0x40e00000]
+@ vdelay~: the argument d is the caller's and is evaluated at the stopped frames too, the interpolation counts the runs
+init 0 delay_receiver_values.when_vdelay sr=0x41000000
+process 0 frames=8 in x=[0x3f800000 0x40000000 0x40400000 0x40800000 0x40a00000 0x40c00000 0x40e00000 0x41000000] c=[true true false true false true true true]
+out=[0x00000000 0x3f800000 0x3f800000 0x3f800000 0x3f800000 0x3f800000 0x3fc00000 0x40000000]
+@ in a par~: each copy has its own delay, stopped by the same condition
+init 0 delay_receiver_values.when_in_par sr=0x41000000
+process 0 frames=6 in x=[0x3f800000 0x40000000 0x40400000 0x40800000 0x40a00000 0x40c00000] c=[true true false true false true]
+out=[0x00000000 0x41a80000 0x41a80000 0x42280000 0x42280000 0x42a80000]
+@ a delay in the first argument of a delay, with the modifier on the inner or on the outer one
+init 0 delay_receiver_values.when_in_the_argument sr=0x41000000
+init 1 delay_receiver_values.when_on_the_outer sr=0x41000000
+process 0 frames=6 in x=[0x3f800000 0x40000000 0x40400000 0x40800000 0x40a00000 0x40c00000] c=[true false true true false true]
+out=[0x00000000 0x00000000 0x00000000 0x3f800000 0x40400000 0x40400000]
+process 1 frames=6 in x=[0x3f800000 0x40000000 0x40400000 0x40800000 0x40a00000 0x40c00000] c=[true false true true false true]
+out=[0x00000000 0x00000000 0x00000000 0x40000000 0x40000000 0x40400000]
 @ a first argument at sample / 4: the delay ticks at the grid, the condition is read there, and a stopped tick is no tick of the delay
 init 0 delay_receiver_values.when_slow sr=0x41000000
 process 0 frames=24
@@ -38,4 +92,33 @@ out=[0x00000000 0x00000000 0x00000000 0x00000000 0x3f800000 0x3f800000 0x3f80000
 init 0 delay_receiver_values.reset_in_when sr=0x41000000
 process 0 params r=true frames=44
 out=[0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x3f800000 0x3f800000 0x3f800000 0x3f800000 0x40800000 0x40800000 0x40800000 0x40800000 0x40a00000 0x40a00000 0x40a00000 0x40a00000 0x00000000 0x00000000 0x00000000 0x00000000 0x40e00000 0x40e00000 0x40e00000 0x40e00000 0x41000000 0x41000000 0x41000000 0x41000000 0x41100000 0x41100000 0x41100000 0x41100000 0x00000000 0x00000000 0x00000000 0x00000000]
-- the calls of process cut the frames anywhere, a call of 0 frames too, and a reset starts over (§13.4, §11.6)	skipped layout
+@ the calls of process cut the frames anywhere, a call of 0 frames too, and a reset starts over (§13.4, §11.6)
+init 0 delay_receiver_values.when_then_reset sr=0x41000000
+process 0 frames=1 in x=[0x3f800000] c=[true] r=[false]
+out=[0x00000000]
+process 0 frames=2 in x=[0x40000000 0x40400000] c=[true false] r=[false true]
+out=[0x3f800000 0x00000000]
+process 0 frames=0 in x=[] c=[] r=[]
+out=[]
+process 0 frames=2 in x=[0x40800000 0x40a00000] c=[true false] r=[true false]
+out=[0x00000000 0x00000000]
+process 0 frames=3 in x=[0x40c00000 0x40e00000 0x41000000] c=[false true true] r=[true false false]
+out=[0x00000000 0x00000000 0x40e00000]
+init 1 delay_receiver_values.when_then_reset sr=0x41000000
+process 1 frames=3 in x=[0x42ca0000 0x42ca0000 0x42ca0000] c=[true true true] r=[false false false]
+out=[0x00000000 0x42ca0000 0x42ca0000]
+reset 1
+process 1 frames=8 in x=[0x3f800000 0x40000000 0x40400000 0x40800000 0x40a00000 0x40c00000 0x40e00000 0x41000000] c=[true true false true false false true true] r=[false false true true false true false false]
+out=[0x00000000 0x3f800000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x40e00000]
+init 2 delay_receiver_values.when_delay3 sr=0x41000000
+process 2 frames=3 in x=[0x42ca0000 0x42ca0000 0x42ca0000] c=[true true true]
+out=[0x00000000 0x00000000 0x00000000]
+reset 2
+process 2 frames=8 in x=[0x3f800000 0x40000000 0x40400000 0x40800000 0x40a00000 0x40c00000 0x40e00000 0x41000000] c=[true true false true false true true true]
+out=[0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x3f800000 0x40000000 0x40800000]
+init 3 delay_receiver_values.when_slow sr=0x41000000
+process 3 frames=6
+out=[0x00000000 0x00000000 0x00000000 0x00000000 0x3f800000 0x3f800000]
+reset 3
+process 3 frames=24
+out=[0x00000000 0x00000000 0x00000000 0x00000000 0x3f800000 0x3f800000 0x3f800000 0x3f800000 0x3f800000 0x3f800000 0x3f800000 0x3f800000 0x40000000 0x40000000 0x40000000 0x40000000 0x40800000 0x40800000 0x40800000 0x40800000 0x40a00000 0x40a00000 0x40a00000 0x40a00000]

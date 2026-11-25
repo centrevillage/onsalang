@@ -1,4 +1,4 @@
-# flow_ref 1 source=tests/spec/flow_semantics/reset_if_slow_values.onsa tests=8 evaluated=7 unavailable=0 skipped=1 waiting=0
+# flow_ref 1 source=tests/spec/flow_semantics/reset_if_slow_values.onsa tests=8 evaluated=8 unavailable=0 skipped=0 waiting=0
 @ a condition of the kind block at the grid resets the ring of the conversion flow: the tick gives T.default(), the next tick sums the frames since
 init 0 reset_if_slow_values.dws_plain sr=0x41000000
 init 1 reset_if_slow_values.dws_reset sr=0x41000000
@@ -87,7 +87,10 @@ process 5 params r=true frames=2
 out=[0x41a80000 0x41a80000]
 process 5 params r=false frames=3
 out=[0x422c0000 0x42820000 0x42ae0000]
-- the held output of a part that is stopped is put back by a reset_if~ outside the when~: all N values are T.default() (S-1222)	skipped layout
+@ the held output of a part that is stopped is put back by a reset_if~ outside the when~: all N values are T.default() (S-1222)
+init 0 reset_if_slow_values.up_held sr=0x41000000
+process 0 frames=6 in c=[true true false false true true] r=[false false false true false false]
+out=[0x41a80000 0x422c0000 0x42300000 0x00000000 0x41a80000 0x422c0000]
 @ the stage of the part that is slower than the part's own W is written first and a reset at W takes it back; a when~ before the reset moves that stage to W and the reset is before it (S-1228)
 init 0 reset_if_slow_values.slow_plain sr=0x41000000
 init 1 reset_if_slow_values.slow_reset sr=0x41000000

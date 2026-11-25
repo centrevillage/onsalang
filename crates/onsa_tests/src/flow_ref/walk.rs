@@ -29,7 +29,7 @@ use super::value::{Scalar, Value};
 use crate::{Markers, parse_markers};
 use onsa_sema::prim::PrimRow;
 
-use super::reads::{elem, part};
+use super::reads::{elem, part, rendered_struct};
 pub use super::walk_model::{CaseRun, Event, Named, Panic, Run, Shape, Skip, TestRun, Types, Verdict};
 
 /// Run the tests of `input` on the evaluator, its functions through the interpreter host. Call it on a thread of a
@@ -220,12 +220,30 @@ impl<'a> Walk<'_, 'a> {
                         self.steps(body, *inner)?;
                     }
                 }
+                // `xs[i] = v` of a local array of scalars (the columns a test builds).
+                StmtKind::Assign { target, value } if self.element_assign(body, *target, *value)? => {}
                 StmtKind::Assign { target, .. } if views(body, *target) => return Err(Halt::Skip(Skip::Layout)),
                 StmtKind::Expr(e) => self.statement(body, *e)?,
                 _ => return Err(Halt::Skip(Skip::Statement)),
             }
         }
         block.tail.map_or(Ok(()), |e| self.statement(body, e))
+    }
+
+    /// `xs[i] = v` where `xs` is a local array of scalars: stored (`true`); any other target is left to the caller.
+    fn element_assign(&mut self, body: Body<'a>, target: ExprId, value: ExprId) -> Result<bool, Halt> {
+        let ExprKind::Index { base, index } = &body.ast.expr(target).kind else { return Ok(false) };
+        let Ok(Target::Local(l)) = body.target(*base) else { return Ok(false) };
+        if !matches!(self.locals.get(l), Some(Value::Array(vs)) if !vs.iter().any(|v| matches!(v, Value::Array(_)))) {
+            return Ok(false);
+        }
+        let (Value::Int(_, i, _), v) = (self.value(body, *index)?, self.value(body, value)?) else { return Ok(false) };
+        let at = usize::try_from(i).map_err(|_| Fault::Panic(PanicKind::Bounds))?;
+        match self.locals.get_mut(l) {
+            Some(Value::Array(vs)) => *vs.get_mut(at).ok_or(Fault::Panic(PanicKind::Bounds))? = v,
+            _ => return Ok(false),
+        }
+        Ok(true)
     }
 
     /// An expression as a statement (or the tail of the block: the last call of a test is one): a call of a generated
@@ -251,7 +269,11 @@ impl<'a> Walk<'_, 'a> {
     fn bind(&mut self, body: Body<'a>, init: ExprId, local: Result<LocalId, Halt>) -> Result<(), Halt> {
         if self.generated_call(body, init).is_some() {
             match self.call(body, init)? {
-                Some(Gave::Rendered(r)) => _ = self.rendered.insert(local?, r),
+                Some(Gave::Rendered(r)) => {
+                    let local = local?;
+                    self.locals.insert(local, rendered_struct(&r.outs, r.fields.len())?);
+                    self.rendered.insert(local, r);
+                }
                 Some(Gave::State(st)) => self.states.push((local?, *st)),
                 None => {}
             }
@@ -314,18 +336,7 @@ impl<'a> Walk<'_, 'a> {
             },
             _ => (None, rest),
         };
-        let given: Vec<ExprId> = match (sampled.len() > 1, rest) {
-            // The inputs of a flow of two `sample` inputs or more are the fields of `f.In { x: .., y: .. }` (§11.6), in the order of the declaration.
-            (true, [one]) => match &body.ast.expr(one.expr).kind {
-                ExprKind::Struct { fields, .. } => sampled
-                    .iter()
-                    .map(|i| fields.iter().find(|(n, _)| n.name == i.name).map(|f| f.1))
-                    .collect::<Option<_>>()
-                    .ok_or(Halt::Skip(Skip::Layout))?,
-                _ => return Err(Halt::Skip(Skip::Layout)),
-            },
-            _ => rest.iter().map(|a| a.expr).collect(),
-        };
+        let given = sample_exprs(body, &sampled, &rest.iter().map(|a| a.expr).collect::<Vec<_>>())?;
         let columns = given.iter().map(|e| self.column(body, *e)).collect::<Result<Vec<_>, _>>()?;
         let call = (&args.config, &args.params);
         let (outcome, mut event) = render_run(&mut *self.host, view, flow, call, (sample_rate, frames, &columns))?;
@@ -349,11 +360,17 @@ impl<'a> Walk<'_, 'a> {
     fn process(&mut self, body: Body<'a>, decl: &FlowDef, args: &Args, params: &[(&str, Value)]) -> Result<(), Halt> {
         let sampled = inputs_at(decl, Stage::Sample)?;
         let (outs, ins): (Vec<&&Arg>, Vec<&&Arg>) = args.rest.iter().partition(|a| a.mode == Mode::Inout);
-        let (&[out], true) = (&outs[..], ins.len() == sampled.len()) else { return Err(Halt::Skip(Skip::Layout)) };
-        let columns = ins.iter().map(|a| self.column(body, a.expr)).collect::<Result<Vec<_>, _>>()?;
+        let &[out] = &outs[..] else { return Err(Halt::Skip(Skip::Layout)) };
+        let given = sample_exprs(body, &sampled, &ins.iter().map(|a| a.expr).collect::<Vec<_>>())?;
+        if given.len() != sampled.len() {
+            return Err(Halt::Skip(Skip::Layout));
+        }
+        let columns = given.iter().map(|e| self.column(body, *e)).collect::<Result<Vec<_>, _>>()?;
         let (whole, part) = self.slice_of(body, out.expr)?;
         let Ok(Target::Local(buf)) = body.target(whole) else { return Err(Halt::Skip(Skip::Layout)) };
-        let Some(Value::Array(vs)) = self.locals.get(buf) else { return Err(Halt::Skip(Skip::Layout)) };
+        let Some(Value::Array(vs)) = self.locals.get(buf).filter(|v| !holds_arrays(v)) else {
+            return Err(Halt::Skip(Skip::Layout));
+        };
         let (frames, at) = cut(vs, part)?;
         let inputs = named_columns(&sampled, &columns);
         let (state, st) = Self::state(&mut self.states, body, args)?;
@@ -432,6 +449,27 @@ impl<'a> Walk<'_, 'a> {
             Value::Array(vs) if !vs.iter().any(|v| matches!(v, Value::Array(_))) => Ok(vs[cut(&vs, part)?.1].to_vec()),
             _ => Err(Halt::Skip(Skip::Layout)),
         }
+    }
+}
+
+/// Is `v` an array of arrays (the buffers of a flow of several channels: a layout of views)?
+fn holds_arrays(v: &Value) -> bool {
+    matches!(v, Value::Array(vs) if vs.iter().any(|x| matches!(x, Value::Array(_))))
+}
+
+/// The expressions of the columns of the `sample` inputs `sampled` that a call of `process` or `render` is given in `rest`: the inputs of a flow of two `sample` inputs or more are the fields of `f.In { x: .., y: .. }` (§11.6), in the order of
+/// the declaration; any other layout is skipped.
+fn sample_exprs(body: Body, sampled: &[&FlowInput], rest: &[ExprId]) -> Result<Vec<ExprId>, Halt> {
+    match (sampled.len() > 1, rest) {
+        (true, [one]) => match &body.ast.expr(*one).kind {
+            ExprKind::Struct { fields, .. } => sampled
+                .iter()
+                .map(|i| fields.iter().find(|(n, _)| n.name == i.name).map(|f| f.1))
+                .collect::<Option<_>>()
+                .ok_or(Halt::Skip(Skip::Layout)),
+            _ => Err(Halt::Skip(Skip::Layout)),
+        },
+        _ => Ok(rest.to_vec()),
     }
 }
 

@@ -1,0 +1,186 @@
+# flow_ref 1 source=tests/spec/flow_semantics/event_reset_values.onsa tests=21 evaluated=21 unavailable=0 skipped=0 waiting=0
+@ a flow of sample reset by an event starts again at the frame of the event, and the frame gives its own input: the same in every way of writing it
+init 0 event_reset_values.by_gen sr=0x41000000
+init 1 event_reset_values.by_pulse sr=0x41000000
+init 2 event_reset_values.by_big sr=0x41000000
+init 3 event_reset_values.in_a_flow sr=0x41000000
+init 4 event_reset_values.event_given sr=0x41000000
+init 5 event_reset_values.in_a_let sr=0x41000000
+init 6 event_reset_values.by_gen sr=0x41000000
+process 0 frames=6 in x=[1 2 3 4 5 6] r=[0 0 5 0 0 7]
+out=[1 3 3 7 12 6]
+process 1 frames=6 in x=[1 2 3 4 5 6] r=[0 0 5 0 0 7]
+out=[1 3 3 7 12 6]
+process 2 frames=6 in x=[1 2 3 4 5 6] r=[0 0 5 0 0 7]
+out=[1 3 6 10 15 6]
+process 3 frames=6 in x=[1 2 3 4 5 6] r=[0 0 5 0 0 7]
+out=[1 3 3 7 12 6]
+process 4 frames=6 in x=[1 2 3 4 5 6] r=[0 0 5 0 0 7]
+out=[1 3 3 7 12 6]
+process 5 frames=6 in x=[1 2 3 4 5 6] r=[0 0 5 0 0 7]
+out=[1 3 3 7 12 6]
+process 6 frames=6 in x=[1 1 1 1 1 1] r=[0 3 4 0 0 2]
+out=[1 1 1 2 3 1]
+@ reset_if~ with an event does not touch sample_tick(): the time goes on
+init 0 event_reset_values.tick_reset sr=0x41000000
+process 0 frames=6 in r=[0 3 0 4 4 0]
+out=[0 1 2 3 4 5]
+@ the last event inside the part is T.default() after the reset: the reset is before the stage where the part gives its own event
+init 0 event_reset_values.keep_reset sr=0x41000000
+process 0 frames=7 in x=[0 3 0 0 5 0 0] r=[0 0 1 0 1 0 0]
+out=[0 3 0 0 5 5 5]
+@ a field of sample / 2 is T.default() after the reset until the next tick, and the counter inside starts again from its init
+init 0 event_reset_values.slow_reset sr=0x41000000
+init 1 event_reset_values.slow_reset sr=0x41000000
+process 0 frames=10 in r=[0 0 0 1 0 0 0 0 0 0]
+out=[0 0 1 0 0 0 1 1 2 2]
+process 1 frames=10 in r=[0 0 0 0 1 0 0 0 0 0]
+out=[0 0 1 1 0 0 0 0 1 1]
+@ the reset goes down to the instances inside: a running sum of a running sum, and a sum of events made inside
+init 0 event_reset_values.nested_reset sr=0x41000000
+init 1 event_reset_values.event_part_inside sr=0x41000000
+process 0 frames=6 in x=[1 1 1 1 1 1] r=[0 0 0 1 0 0]
+out=[1 3 6 1 3 6]
+process 1 frames=6 in x=[1 1 1 1 1 1] r=[0 0 1 0 1 0]
+out=[1 2 1 2 1 2]
+@ two calls of one flow keep their own state, and two producers that give an event at one frame reset each its call
+init 0 event_reset_values.two_calls sr=0x41000000
+process 0 frames=6 in x=[1 1 1 1 1 1] r=[0 0 1 0 0 0] s=[0 0 1 0 1 0]
+out=[101 202 101 202 301 402]
+@ an event part: a reset by an event that a line above gave comes before the add, one from the argument or from a line above the input comes after it
+init 0 event_reset_values.reset_then_add sr=0x41000000
+init 1 event_reset_values.same_source sr=0x41000000
+init 2 event_reset_values.add_then_reset sr=0x41000000
+init 3 event_reset_values.input_above_the_condition sr=0x41000000
+process 0 frames=6 in x=[3 1 4 2 5 1]
+out=[3 4 4 6 5 6]
+process 1 frames=6 in x=[3 1 4 2 5 1]
+out=[3 4 4 6 5 6]
+process 2 frames=6 in x=[3 1 4 2 5 1]
+out=[3 4 0 2 0 1]
+process 3 frames=6 in x=[3 1 4 2 5 1]
+out=[3 4 0 2 0 1]
+@ two sources: the one written first ticks first, so the reset is after the add when the input is written first and before it when the condition is
+init 0 event_reset_values.sources_a_first sr=0x41000000
+init 1 event_reset_values.sources_b_first sr=0x41000000
+process 0 frames=6 in x=[1 2 3 4 5 6] r=[0 0 5 0 6 0]
+out=[1 3 0 4 0 6]
+process 1 frames=6 in x=[1 2 3 4 5 6] r=[0 0 5 0 6 0]
+out=[1 3 3 7 5 11]
+@ the producer of sample / 4 ticks before the producers of sample of the same frame, whatever the order of the lines
+init 0 event_reset_values.slow_condition sr=0x41000000
+init 1 event_reset_values.slow_condition_above sr=0x41000000
+init 2 event_reset_values.slow_input sr=0x41000000
+init 3 event_reset_values.slow_input_below sr=0x41000000
+process 0 frames=6 in x=[1 1 1 1 1 1]
+out=[1 2 3 4 1 2]
+process 1 frames=6 in x=[1 1 1 1 1 1]
+out=[1 2 3 4 1 2]
+process 2 frames=6 in y=[0 0 0 0 1 0]
+out=[1 1 1 1 0 0]
+process 3 frames=6 in y=[0 0 0 0 1 0]
+out=[1 1 1 1 0 0]
+@ a delay of a value of sample is put back to its init at the frame of the event, and that frame gives the init
+init 0 event_reset_values.sample_prev sr=0x41000000
+init 1 event_reset_values.sample_delay sr=0x41000000
+process 0 frames=5 in x=[1 2 3 4 5] r=[0 0 1 0 0]
+out=[9 1 9 3 4]
+process 1 frames=6 in x=[1 2 3 4 5 6] r=[0 0 0 1 0 0]
+out=[7 7 1 7 7 4]
+@ one event given to two inputs: the input declared first ticks first, and what its tick gives is done before the next input ticks
+init 0 event_reset_values.hit_twice sr=0x41000000
+init 1 event_reset_values.hit_reversed_twice sr=0x41000000
+init 2 event_reset_values.pair_in_twice sr=0x41000000
+init 3 event_reset_values.three_times sr=0x41000000
+process 0 frames=6 in x=[3 1 4 2 5 1]
+out=[3 4 0 2 0 1]
+process 1 frames=6 in x=[3 1 4 2 5 1]
+out=[3 4 4 6 5 6]
+process 2 frames=6 in x=[3 1 4 2 5 1]
+out=[3 4 0 2 0 1]
+process 3 frames=6 in x=[3 1 4 2 5 1]
+out=[3003 4004 4 2006 5 1006]
+@ reset_if~ twice on an event: each condition resets the whole, the frame where both hold is one reset
+init 0 event_reset_values.chain_same sr=0x41000000
+init 1 event_reset_values.chain_two_sources sr=0x41000000
+init 2 event_reset_values.chain_sample_mixed sr=0x41000000
+process 0 frames=8 in x=[1 1 1 1 1 1 1 1] r=[0 5 0 7 0 0 6 0]
+out=[1 1 2 1 2 3 1 2]
+process 1 frames=8 in x=[1 1 1 1 1 1 1 1] r=[0 5 0 0 6 0 0 0] s=[0 0 0 2 6 0 0 0]
+out=[1 1 2 1 1 2 3 4]
+process 2 frames=8 in x=[1 1 1 1 1 1 1 1] r=[0 5 0 0 0 7 0 0] c=[0 0 0 0 1 1 0 0]
+out=[1 1 2 3 1 1 2 3]
+@ a condition of the kind block or a constant next to an event: true resets at each frame, false does nothing
+init 0 event_reset_values.chain_block sr=0x41000000
+init 1 event_reset_values.chain_false sr=0x41000000
+init 2 event_reset_values.chain_true sr=0x41000000
+process 0 params k=true frames=3 in x=[1 2 3]
+out=[1 2 3]
+process 0 params k=false frames=3 in x=[4 5 2]
+out=[7 5 7]
+process 1 frames=6 in x=[1 2 3 4 5 2]
+out=[1 3 6 10 5 7]
+process 2 frames=6 in x=[1 2 3 4 5 2]
+out=[1 2 3 4 5 2]
+@ prev~ of an event reset by the same event: the delay is at its init for that event, and T.default() is the value before the first event
+init 0 event_reset_values.prev_zero sr=0x41000000
+init 1 event_reset_values.prev_before_first sr=0x41000000
+process 0 frames=8 in x=[5 2 0 3 4 0 0 6]
+out=[9 5 9 0 3 9 9 0]
+process 1 frames=8 in x=[0 0 5 0 0 7 0 4]
+out=[0 0 9 9 9 9 9 7]
+@ delay~ and vdelay~ of an event reset by the event: the line of the stored events is back to the init with its write place
+init 0 event_reset_values.delay_two sr=0x41000000
+init 1 event_reset_values.vdelay_two sr=0x41000000
+process 0 frames=8 in x=[1 2 3 6 4 5 7 2]
+out=[9 9 1 9 9 6 4 5]
+process 1 frames=7 in x=[0x3f800000 0x40000000 0x40400000 0xbf800000 0x40800000 0x40a00000 0x40c00000]
+out=[0x40e00000 0x40e00000 0x3f800000 0x40e00000 0x40e00000 0xbf800000 0x40800000]
+@ a loop of an event delay is reset to its init: the sum of the events before, where a reset sends it to 0 again
+init 0 event_reset_values.loop_sum sr=0x41000000
+process 0 frames=7 in x=[1 2 6 3 4 5 1]
+out=[0 1 0 6 9 0 5]
+@ a delay of an event with a condition of the kind block: true resets at each tick of the event, so each tick gives the init; false does nothing
+init 0 event_reset_values.prev_block sr=0x41000000
+init 1 event_reset_values.prev_block sr=0x41000000
+process 0 params k=false frames=6 in x=[0 0 5 0 3 0]
+out=[0 0 9 9 5 5]
+process 1 params k=true frames=6 in x=[0 0 5 0 3 0]
+out=[0 0 9 9 9 9]
+@ a receiver written above its producer gets its event through ^ after its own stage, so the output of a frame is the sum before it, and an event written above it resets before the read
+init 0 event_reset_values.above_the_producer sr=0x41000000
+init 1 event_reset_values.event_of_a_delay sr=0x41000000
+process 0 frames=6 in x=[1 2 3 4 5 6] r=[0 0 5 0 0 6]
+out=[0 0 0 2 5 0]
+process 1 frames=6 in x=[1 5 2 6 3 4]
+out=[0 0 1 5 7 6]
+@ a call with a reset in the first argument of a delay reads the event where it is written: the last value before the producer of that event ticks again
+init 0 event_reset_values.written_position sr=0x41000000
+process 0 frames=8 in x=[1 7 2 3 8 1 1 1]
+out=[0 1 8 10 3 11 12 1]
+@ the last event of a condition is T.default() before the first event: a condition on its value holds until the event comes
+init 0 event_reset_values.level_of_an_event sr=0x41000000
+process 0 frames=6 in x=[1 2 3 4 5 6] r=[0 0 3 0 0 0]
+out=[1 2 5 9 14 20]
+@ a run in pieces, with a call of 0 frames and a reset of the state, is the run in one call
+init 0 event_reset_values.by_gen sr=0x41000000
+process 0 frames=2 in x=[1 2] r=[0 0]
+out=[1 3]
+process 0 frames=0 in x=[] r=[]
+out=[]
+process 0 frames=3 in x=[3 4 5] r=[5 0 0]
+out=[3 7 12]
+process 0 frames=1 in x=[6] r=[7]
+out=[6]
+init 1 event_reset_values.keep_reset sr=0x41000000
+process 1 frames=3 in x=[0 3 0] r=[0 0 1]
+out=[0 3 0]
+process 1 frames=2 in x=[0 5] r=[0 1]
+out=[0 5]
+process 1 frames=2 in x=[0 0] r=[0 0]
+out=[5 5]
+reset 1
+process 1 frames=1 in x=[0] r=[0]
+out=[0]
+process 1 frames=2 in x=[0 0] r=[0 0]
+out=[0 0]

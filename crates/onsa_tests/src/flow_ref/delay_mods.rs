@@ -29,6 +29,8 @@ use super::value::Value;
 pub(super) struct Mod {
     cond: ExprId,
     reset: Option<i32>,
+    /// A `reset_if~` whose condition is an event of another source than the clock of the delay: it is read and puts the delay back at the stage of that event (`Frame::reset_on_event`), not where the delay is read.
+    ev: bool,
 }
 
 /// What a chain on a delay keeps besides the cell of the delay: K, the modifiers innermost first with a `Gate` for each (a `when~` holds its output and counts the frames its part ran), and the
@@ -37,6 +39,8 @@ pub(super) struct Mod {
 #[derive(Clone, Debug)]
 pub(super) struct DelayMods {
     k: i32,
+    /// Does the delay tick at an event (`k` is 0 then)? What it gave is kept for the run of its stage (`Run::serial`) and not for the time, which has many events.
+    event: bool,
     mods: Rc<[Mod]>,
     gates: Vec<Gate>,
     last: Option<(u64, Value)>,
@@ -63,17 +67,23 @@ impl<'a> Frame<'a> {
         let plans = self.run.as_ref().map(|r| r.plans.clone()).ok_or(here(Internal("no run")))?;
         let conds = Inst::planned(self.body.view, self.body.def, &plans)?.conds;
         let clock = |c: ExprId| conds.get(&c).copied().ok_or(here(Internal("a condition of a modifier with no clock")));
-        let Clock::Tick(k) = clock(head)?.clock.rooted() else {
-            return Err(here(Internal("a delay that is not at a tick")));
+        let own = clock(head)?.clock.rooted();
+        let (k, event) = match own {
+            Clock::Tick(k) => (k, false),
+            Clock::Event(_) => (0, true),
+            _ => return Err(here(Internal("a delay that is not at a tick"))),
         };
         let (mut mods, mut gates) = (Vec::new(), Vec::new());
         for b in bounds {
-            let (cond, reset) = match *b {
-                Bound::When(c) => (c, None),
-                Bound::ResetIf(c) => (c, Some(cond_tick(clock(c)?.clock, k, &[]))),
+            let (cond, reset, ev) = match *b {
+                Bound::When(c) => (c, None, false),
+                Bound::ResetIf(c) => {
+                    let cc = clock(c)?.clock;
+                    (c, Some(cond_tick(cc, k, &[])), matches!(cc, Clock::Event(_)) && cc != own)
+                }
                 Bound::Rate(_) => return Err(here(Internal("a delay with a `.down~` or an `.up~`"))),
             };
-            mods.push(Mod { cond, reset });
+            mods.push(Mod { cond, reset, ev });
             if reset.is_some() {
                 gates.push(Gate::new(Value::Unit));
                 continue;
@@ -84,7 +94,7 @@ impl<'a> Frame<'a> {
         }
         let key = self.key(head, Role::Delay);
         let run = self.run.as_mut().ok_or(here(Internal("no run")))?;
-        run.state.mods.insert(key, DelayMods { k, mods: mods.into(), gates, last: None });
+        run.state.mods.insert(key, DelayMods { k, event, mods: mods.into(), gates, last: None });
         Ok(())
     }
 
@@ -98,8 +108,9 @@ impl<'a> Frame<'a> {
         };
         let arg = |i: usize| args.get(i).map(|a| a.expr).ok_or(here(Internal("a delay with too few arguments")));
         let (key, now) = (self.key(head, Role::Delay), self.time(at)?);
-        let (k, mods, last) = self.mods_of(&key, at).map(|m| (m.k, m.mods.clone(), m.last.clone()))?;
-        if let Some((_, v)) = last.filter(|(t, _)| *t == now.total()) {
+        let (k, mods, last, event) = self.mods_of(&key, at).map(|m| (m.k, m.mods.clone(), m.last.clone(), m.event))?;
+        let stamp = if event { self.run.as_ref().map_or(0, |r| r.serial) } else { now.total() };
+        if let Some((_, v)) = last.filter(|(t, _)| *t == stamp) {
             return Ok(v);
         }
         let saved = arg(Delay::SAVED)?;
@@ -110,6 +121,8 @@ impl<'a> Frame<'a> {
             Some(i) => Some(self.eval(arg(i)?)?),
             None => None,
         };
+        let events: Vec<ExprId> = mods.iter().filter(|m| m.ev).map(|m| m.cond).collect();
+        self.early_conditions(slot, &events)?;
         // SPEC-GAP(S-1221): the `d` of a `vdelay~` is evaluated before the conditions, and a condition inside a `when~` is read whether or not it runs the part, the conditions leftmost first
         // (provisional, as `Frame::read_conds` reads those of an instance after the arguments of its head; only a panic shows it).
         // A `reset_if~` outside every `when~` is read at its R alone, and is due where it holds; one inside is due at the R of the grid of the part (below).
@@ -117,6 +130,9 @@ impl<'a> Frame<'a> {
         let mut read = vec![false; mods.len()];
         for (b, m) in mods.iter().enumerate() {
             let inside = mods[b + 1..].iter().any(|o| o.reset.is_none());
+            if m.ev {
+                continue;
+            }
             if inside || m.reset.is_none_or(|r| on_r(now, r, k)) {
                 let Value::Bool(v) = self.eval(m.cond)? else {
                     return Err(here(Internal("a condition that is no `Bool`")));
@@ -154,7 +170,7 @@ impl<'a> Frame<'a> {
             g.held = out.clone();
             g.runs = g.runs.wrapping_add(n_of(k));
         }
-        state.last = Some((now.total(), out.clone()));
+        state.last = Some((stamp, out.clone()));
         self.set_keep(slot, stop.is_none());
         Ok(out)
     }

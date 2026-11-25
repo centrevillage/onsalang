@@ -67,7 +67,7 @@ impl FlowInfo {
                 // The held output of a guard, until it first runs (§11.10).
                 FieldOf::Node(_, Part::Held(_)) => true,
                 FieldOf::Node(_, Part::Own | Part::Init | Part::Buf | Part::W) => false,
-                FieldOf::Node(_, Part::On(_) | Part::Count(_) | Part::Ran) => false,
+                FieldOf::Node(_, Part::On(_) | Part::Count(_) | Part::Ran | Part::Open | Part::Back(_)) => false,
                 FieldOf::SampleRate | FieldOf::Tick | FieldOf::TickHi => false,
                 FieldOf::Poisoned | FieldOf::Initialized => false,
             }
@@ -206,6 +206,14 @@ impl PlanNode {
     /// of the boundary just outside it, its index. The one count of it (D-15).
     pub fn inside(&self, at: u32) -> u32 {
         self.bounds.iter().filter(|b| b.at < at).count() as u32
+    }
+
+    /// The flags of a delay an event of another stage resets ([`Part::Open`]).
+    pub fn late_flags(&self) -> Vec<Part> {
+        let own = self.clock.stage().filter(|_| self.kind.delay().is_some());
+        let late = |m: &PlanModifier| own.is_some() && m.reset != own && matches!(m.reset, Some(ClockStage::Event(_)));
+        let back: Vec<Part> = (0..).zip(&self.chain).filter(|x| late(x.1)).map(|x| Part::Back(x.0)).collect();
+        back.first().map(|_| Part::Open).into_iter().chain(back.iter().copied()).collect()
     }
 
     /// What the `.reset_if~` at the place `at` of its chain sets back to

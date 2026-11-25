@@ -156,6 +156,8 @@ pub(super) fn clock_of(body: &Body, known: &Known, root: ExprId, e: ExprId) -> R
                 return match body.called(chain.head)? {
                     Called::Flow(def) => match output_stage(body.view.flow(def)?)? {
                         Stage::Tick(m) => Ok(Clock::Tick(m + chain.sum())),
+                        // The events a call gives are those of its head, whatever `reset_if~` is on it (`.down~`, `.up~` and `when~` with events are W7-17, `rate::visit`).
+                        Stage::Event(_) => Ok(super::events::call_src(chain.head)),
                         _ => Err(Fault::Unavailable("a chain whose head is not an instance with an output at a tick")),
                     },
                     // §11.10: a chain on a delay ticks at K, the clock of its first argument (it takes no `.down~`/`.up~`, E0812, so P = W = K).
@@ -440,6 +442,9 @@ pub(super) fn enter<V: std::borrow::Borrow<Value>>(
     give(f, decl, at, given)?;
     f.run.as_mut().iter_mut().for_each(|run| {
         run.stage = at;
+        if matches!(at, Stage::Event(_)) {
+            run.serial = super::events::next_serial();
+        }
         run.gathered.clear();
         run.steps = Some(inst.steps.clone());
     });

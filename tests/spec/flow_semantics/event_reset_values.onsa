@@ -1,0 +1,712 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.10", "§11.11", "§11.3", "§11.4", "§11.9"]
+
+// `.reset_if~(..)` chains that have an event: a receiver whose condition is an event, a receiver that has an event port, and a built-in delay of an event (W7-11 U2r/t; S-559, S-562, S-1209, S-1228, S-1234, S-1236, S-1241; spec §11.10:
+// "`r` が真の刻みで、その刻みに続く x の段の前に x の状態を初期値に戻す"; "刻みで書いて速い段が読むフィールド（イベントの値を含む）は `T.default()` に戻る。カウンタは進んだまま"; "イベントの条件は、そのイベントの刻みで初期化する";
+// §11.3: "引数と修飾子の条件を字面の順に評価してから、初期化と部品の段を外の修飾子から"; §11.11: "出したイベントの刻みは、作り手の呼び出しのその刻みの仕事が済んだ直後に、呼び出し側の段の途中で行い、呼び出し側の段の残りはその後に続く";
+// "同じクロックを二つ以上の入力に渡すと、部品はイベントごとに、その入力を宣言の順に一つずつ刻む（一つの刻みで出たイベントは、次の入力の刻みの前に済ませる）"). Every value is worked out by hand from the text.
+// The outermost flows have ports at `sample` (or `block`) and are run by `process`. `gen(x)` gives the event x at each frame, `pulse(x)` gives x where x > 0, `fwd` gives the event it gets, `acc` adds the events it gets and gives the sum at
+// `sample`, `rs` is a running sum of its `sample` input. A condition on an event is read when that event ticks, that is where its producer is written (the producer gives its event right after its own work, and the lower lines of the caller
+// that are of that clock go on at once, S-1234), so for a line below the producer the reset is before that line's stage: the frame gives its own input, `acc` adds the event on a state that is already back. Where the input of a
+// receiver ticks first (a call in its argument, or an event that a line above gave), the stage comes first and the reset after it.
+
+flow gen(x: U32 at sample) -> U32 at event {
+  Some(x)
+}
+
+flow pulse(x: U32 at sample) -> U32 at event {
+  if x > 0 {
+    Some(x)
+  } else {
+    None
+  }
+}
+
+flow fwd(m: U32 at event) -> U32 at event {
+  Some(m)
+}
+
+flow gen_f(x: F32 at sample) -> F32 at event {
+  Some(x)
+}
+
+flow acc(e: U32 at event) -> U32 at sample {
+  let n = prev~(^n) + e
+  n
+}
+
+flow rs(x: U32 at sample) -> U32 at sample {
+  let y = x + prev~(^y)
+  y
+}
+
+flow tm() -> U32 at sample {
+  sample_tick()
+}
+
+// ---- a flow of `sample` reset by an event: the frame of the reset gives its own input
+
+pub flow by_gen(x: U32 at sample, r: U32 at sample) -> U32 at sample {
+  let m = gen~(r)
+  rs~(x).reset_if~(m > 0)
+}
+
+pub flow by_pulse(x: U32 at sample, r: U32 at sample) -> U32 at sample {
+  let m = pulse~(r)
+  rs~(x).reset_if~(m > 0)
+}
+
+pub flow by_big(x: U32 at sample, r: U32 at sample) -> U32 at sample {
+  let m = gen~(r)
+  rs~(x).reset_if~(m > 5)
+}
+
+flow reset_inside(x: U32 at sample, r: U32 at sample) -> U32 at sample {
+  let m = pulse~(r)
+  rs~(x).reset_if~(m > 0)
+}
+
+pub flow in_a_flow(x: U32 at sample, r: U32 at sample) -> U32 at sample {
+  reset_inside~(x, r)
+}
+
+flow with_event_input(x: U32 at sample, m: U32 at event) -> U32 at sample {
+  rs~(x).reset_if~(m > 0)
+}
+
+pub flow event_given(x: U32 at sample, r: U32 at sample) -> U32 at sample {
+  with_event_input~(x, pulse~(r))
+}
+
+pub flow in_a_let(x: U32 at sample, r: U32 at sample) -> U32 at sample {
+  let m = pulse~(r)
+  let s = rs~(x).reset_if~(m > 0)
+  s
+}
+
+test "a flow of sample reset by an event starts again at the frame of the event, and the frame gives its own input: the same in every way of writing it" {
+  // x = 1 .. 6, r = 0 0 5 0 0 7: the sum 1 3, reset at the frame 2 (3, not 6), 7 12, reset at the frame 5 (6). With the condition `m > 5` the event 5 is false: 1 3 6 10 15, reset at the frame 5: 6.
+  let xs: [U32; 6] = [1, 2, 3, 4, 5, 6]
+  let rr0: [U32; 6] = [0, 0, 5, 0, 0, 7]
+  var a: [U32; 6] = [9; 6]
+  var b: [U32; 6] = [9; 6]
+  var c: [U32; 6] = [9; 6]
+  var d: [U32; 6] = [9; 6]
+  var e: [U32; 6] = [9; 6]
+  var f: [U32; 6] = [9; 6]
+  var g: [U32; 6] = [9; 6]
+  var sa = by_gen.init(8.0)
+  var sb = by_pulse.init(8.0)
+  var sc = by_big.init(8.0)
+  var sd = in_a_flow.init(8.0)
+  var se = event_given.init(8.0)
+  var sf = in_a_let.init(8.0)
+  var sg = by_gen.init(8.0)
+  by_gen.process(inout sa, by_gen.In { x: xs, r: rr0 }, inout a)
+  by_pulse.process(inout sb, by_pulse.In { x: xs, r: rr0 }, inout b)
+  by_big.process(inout sc, by_big.In { x: xs, r: rr0 }, inout c)
+  in_a_flow.process(inout sd, in_a_flow.In { x: xs, r: rr0 }, inout d)
+  event_given.process(inout se, event_given.In { x: xs, r: rr0 }, inout e)
+  in_a_let.process(inout sf, in_a_let.In { x: xs, r: rr0 }, inout f)
+  // x = 1 1 1 1 1 1, r = 0 3 4 0 0 2: 1, reset at the frames 1 and 2 (1 1), 2 3, reset at the frame 5 (1).
+  let ones: [U32; 6] = [1, 1, 1, 1, 1, 1]
+  let rr: [U32; 6] = [0, 3, 4, 0, 0, 2]
+  by_gen.process(inout sg, by_gen.In { x: ones, r: rr }, inout g)
+  assert a == [1, 3, 3, 7, 12, 6]
+  assert b == a
+  assert c == [1, 3, 6, 10, 15, 6]
+  assert d == a
+  assert e == a
+  assert f == a
+  assert g == [1, 1, 1, 2, 3, 1]
+}
+
+// the phase counter is not touched, the fields written at a tick and read at `sample` are T.default() until the next tick
+
+pub flow tick_reset(r: U32 at sample) -> U32 at sample {
+  let m = gen~(r)
+  tm~().reset_if~(m > 0)
+}
+
+flow keep(x: U32 at sample) -> U32 at sample {
+  let e = pulse~(x)
+  e
+}
+
+pub flow keep_reset(x: U32 at sample, r: U32 at sample) -> U32 at sample {
+  let m = gen~(r)
+  keep~(x).reset_if~(m > 0)
+}
+
+flow slow_count() -> U32 at sample {
+  let c = prev~((^c + 1) at (sample / 2))
+  c at sample
+}
+
+pub flow slow_reset(r: U32 at sample) -> U32 at sample {
+  let m = gen~(r)
+  slow_count~().reset_if~(m > 0)
+}
+
+test "reset_if~ with an event does not touch sample_tick(): the time goes on" {
+  let rr: [U32; 6] = [0, 3, 0, 4, 4, 0]
+  var out: [U32; 6] = [9; 6]
+  var st = tick_reset.init(8.0)
+  tick_reset.process(inout st, rr, inout out)
+  assert out == [0, 1, 2, 3, 4, 5]
+}
+
+test "the last event inside the part is T.default() after the reset: the reset is before the stage where the part gives its own event" {
+  // x = 0 3 0 0 5 0 0: the events 3 at the frame 1 and 5 at the frame 4, held: 0 3 3 3 5 5 5. r = 0 0 1 0 1 0 0: the reset at the frame 2 gives 0 (no event there) until the frame 4, where the reset comes first and the event 5 after it.
+  let xs: [U32; 7] = [0, 3, 0, 0, 5, 0, 0]
+  let rr: [U32; 7] = [0, 0, 1, 0, 1, 0, 0]
+  var out: [U32; 7] = [9; 7]
+  var st = keep_reset.init(8.0)
+  keep_reset.process(inout st, keep_reset.In { x: xs, r: rr }, inout out)
+  assert out == [0, 3, 0, 0, 5, 5, 5]
+}
+
+test "a field of sample / 2 is T.default() after the reset until the next tick, and the counter inside starts again from its init" {
+  // The counter ticks at the frames 0 2 4 ..: 0 0 1 1 2 2 3 3 4 4. Reset at the frame 3 (no tick there): 0 at the frame 3, the tick at the frame 4 gives the init 0 again, then 1 at the frame 6: 0 0 1 0 0 0 1 1 2 2.
+  // Reset at the frame 4 (a tick): the tick writes 2 first (the slower tick comes before the sample stage that has the event) and the reset takes it back: 0 0 1 1 0 0 0 0 1 1.
+  let r3: [U32; 10] = [0, 0, 0, 1, 0, 0, 0, 0, 0, 0]
+  let r4: [U32; 10] = [0, 0, 0, 0, 1, 0, 0, 0, 0, 0]
+  var a: [U32; 10] = [9; 10]
+  var b: [U32; 10] = [9; 10]
+  var sa = slow_reset.init(8.0)
+  var sb = slow_reset.init(8.0)
+  slow_reset.process(inout sa, r3, inout a)
+  slow_reset.process(inout sb, r4, inout b)
+  assert a == [0, 0, 1, 0, 0, 0, 1, 1, 2, 2]
+  assert b == [0, 0, 1, 1, 0, 0, 0, 0, 1, 1]
+}
+
+// ---- nested, two calls of one flow, an event part nested in a flow of `sample`
+
+flow twice(x: U32 at sample) -> U32 at sample {
+  let a = rs~(x)
+  rs~(a)
+}
+
+pub flow nested_reset(x: U32 at sample, r: U32 at sample) -> U32 at sample {
+  let m = gen~(r)
+  twice~(x).reset_if~(m > 0)
+}
+
+pub flow two_calls(x: U32 at sample, r: U32 at sample, s: U32 at sample) -> U32 at sample {
+  let m1 = gen~(r)
+  let m2 = gen~(s)
+  let a = rs~(x).reset_if~(m1 > 0)
+  let b = rs~(x).reset_if~(m2 > 0)
+  a * 100 + b
+}
+
+flow acc_of(x: U32 at sample) -> U32 at sample {
+  acc~(gen~(x))
+}
+
+pub flow event_part_inside(x: U32 at sample, r: U32 at sample) -> U32 at sample {
+  let m = gen~(r)
+  acc_of~(x).reset_if~(m > 0)
+}
+
+test "the reset goes down to the instances inside: a running sum of a running sum, and a sum of events made inside" {
+  // x = 1 1 1 1 1 1, r at the frame 3: the first sum 1 2 3, then 1 2 3 (not 4 5 6), the second sum of it 1 3 6, then 1 3 6 (it is back too).
+  // acc_of: r at the frames 2 and 4: the event 1 of the frame is added to a state that is back: 1 2, 1, 2, 1, 2.
+  let ones: [U32; 6] = [1, 1, 1, 1, 1, 1]
+  let r3: [U32; 6] = [0, 0, 0, 1, 0, 0]
+  let r24: [U32; 6] = [0, 0, 1, 0, 1, 0]
+  var a: [U32; 6] = [9; 6]
+  var b: [U32; 6] = [9; 6]
+  var sa = nested_reset.init(8.0)
+  var sb = event_part_inside.init(8.0)
+  nested_reset.process(inout sa, nested_reset.In { x: ones, r: r3 }, inout a)
+  event_part_inside.process(inout sb, event_part_inside.In { x: ones, r: r24 }, inout b)
+  assert a == [1, 3, 6, 1, 3, 6]
+  assert b == [1, 2, 1, 2, 1, 2]
+}
+
+test "two calls of one flow keep their own state, and two producers that give an event at one frame reset each its call" {
+  // r gives the reset of the first at the frame 2, s of the second at the frames 2 and 4. a = 1 2 1 2 3 4, b = 1 2 1 2 1 2: 100 a + b.
+  let ones: [U32; 6] = [1, 1, 1, 1, 1, 1]
+  let r: [U32; 6] = [0, 0, 1, 0, 0, 0]
+  let s: [U32; 6] = [0, 0, 1, 0, 1, 0]
+  var out: [U32; 6] = [9; 6]
+  var st = two_calls.init(8.0)
+  two_calls.process(inout st, two_calls.In { x: ones, r: r, s: s }, inout out)
+  assert out == [101, 202, 101, 202, 301, 402]
+}
+
+// ---- a part of events reset by an event: the stage of its input before or after the reset
+
+pub flow reset_then_add(x: U32 at sample) -> U32 at sample {
+  let m = gen~(x)
+  let e1 = fwd~(m)
+  acc~(m).reset_if~(e1 >= 4)
+}
+
+pub flow same_source(x: U32 at sample) -> U32 at sample {
+  let m = gen~(x)
+  acc~(m).reset_if~(m >= 4)
+}
+
+pub flow add_then_reset(x: U32 at sample) -> U32 at sample {
+  let m = gen~(x)
+  acc~(fwd~(m)).reset_if~(m >= 4)
+}
+
+pub flow input_above_the_condition(x: U32 at sample) -> U32 at sample {
+  let m = gen~(x)
+  let e1 = fwd~(m)
+  acc~(e1).reset_if~(m >= 4)
+}
+
+pub flow sources_a_first(x: U32 at sample, r: U32 at sample) -> U32 at sample {
+  let a = gen~(x)
+  let b = pulse~(r)
+  acc~(a).reset_if~(b >= 5)
+}
+
+pub flow sources_b_first(x: U32 at sample, r: U32 at sample) -> U32 at sample {
+  let b = pulse~(r)
+  let a = gen~(x)
+  acc~(a).reset_if~(b >= 5)
+}
+
+test "an event part: a reset by an event that a line above gave comes before the add, one from the argument or from a line above the input comes after it" {
+  // x = 3 1 4 2 5 1, the condition is x >= 4. Reset then add (the frames 2 and 4 give 4 and 5): 3 4 4 6 5 6 for `e1` above and for the same event. Add then reset (4 + 4 and 7 are put back to 0): 3 4 0 2 0 1, for the
+  // argument `fwd~(m)` that gives the event first, and for `acc~(e1)` where e1 is made by a line above that line (its tick adds before the condition m is read).
+  let xs: [U32; 6] = [3, 1, 4, 2, 5, 1]
+  var a: [U32; 6] = [9; 6]
+  var b: [U32; 6] = [9; 6]
+  var c: [U32; 6] = [9; 6]
+  var d: [U32; 6] = [9; 6]
+  var sa = reset_then_add.init(8.0)
+  var sb = same_source.init(8.0)
+  var sc = add_then_reset.init(8.0)
+  var sd = input_above_the_condition.init(8.0)
+  reset_then_add.process(inout sa, xs, inout a)
+  same_source.process(inout sb, xs, inout b)
+  add_then_reset.process(inout sc, xs, inout c)
+  input_above_the_condition.process(inout sd, xs, inout d)
+  assert a == [3, 4, 4, 6, 5, 6]
+  assert b == a
+  assert c == [3, 4, 0, 2, 0, 1]
+  assert d == c
+}
+
+test "two sources: the one written first ticks first, so the reset is after the add when the input is written first and before it when the condition is" {
+  // x = 1 .. 6, r = 0 0 5 0 6 0, the condition is b >= 5 (the frames 2 and 4). Input first: 1 3, 3 added to 3 and put back to 0, 4, 5 added to 4 and put back to 0, 6. Condition first: 1 3, reset and 3, 7, reset and 5, 11.
+  let xs: [U32; 6] = [1, 2, 3, 4, 5, 6]
+  let rr: [U32; 6] = [0, 0, 5, 0, 6, 0]
+  var a: [U32; 6] = [9; 6]
+  var b: [U32; 6] = [9; 6]
+  var sa = sources_a_first.init(8.0)
+  var sb = sources_b_first.init(8.0)
+  sources_a_first.process(inout sa, sources_a_first.In { x: xs, r: rr }, inout a)
+  sources_b_first.process(inout sb, sources_b_first.In { x: xs, r: rr }, inout b)
+  assert a == [1, 3, 0, 4, 0, 6]
+  assert b == [1, 3, 3, 7, 5, 11]
+}
+
+// ---- a producer of the clock of `sample / 4`: its stage is before the stage of sample, whatever the order of the lines
+
+flow tick4() -> U32 at event {
+  Some(1) at (sample / 4)
+}
+
+pub flow slow_condition(x: U32 at sample) -> U32 at sample {
+  let ex = gen~(x)
+  let ey = tick4~()
+  acc~(ex).reset_if~(ey != 0)
+}
+
+pub flow slow_condition_above(x: U32 at sample) -> U32 at sample {
+  let ey = tick4~()
+  let ex = gen~(x)
+  acc~(ex).reset_if~(ey != 0)
+}
+
+pub flow slow_input(y: U32 at sample) -> U32 at sample {
+  let ex = tick4~()
+  let ey = gen~(y)
+  acc~(ex).reset_if~(ey != 0)
+}
+
+pub flow slow_input_below(y: U32 at sample) -> U32 at sample {
+  let ey = gen~(y)
+  let ex = tick4~()
+  acc~(ex).reset_if~(ey != 0)
+}
+
+test "the producer of sample / 4 ticks before the producers of sample of the same frame, whatever the order of the lines" {
+  // x = 1 1 1 1 1 1; the condition `tick4` gives its event at the frames 0 and 4, before the add of the frame: 1 2 3 4, then reset and 1 at the frame 4, 2: 1 2 3 4 1 2, in both orders of the two lines.
+  // The input `tick4` (the event 1 at the frames 0 and 4) with the condition y != 0 at the frame 4 (y = 0 0 0 0 1 0): the add of the frame 4 comes first, then the reset: 1 1 1 1 0 0, in both orders of the lines.
+  let ones: [U32; 6] = [1, 1, 1, 1, 1, 1]
+  let ys: [U32; 6] = [0, 0, 0, 0, 1, 0]
+  var a: [U32; 6] = [9; 6]
+  var b: [U32; 6] = [9; 6]
+  var c: [U32; 6] = [9; 6]
+  var d: [U32; 6] = [9; 6]
+  var sa = slow_condition.init(8.0)
+  var sb = slow_condition_above.init(8.0)
+  var sc = slow_input.init(8.0)
+  var sd = slow_input_below.init(8.0)
+  slow_condition.process(inout sa, ones, inout a)
+  slow_condition_above.process(inout sb, ones, inout b)
+  slow_input.process(inout sc, ys, inout c)
+  slow_input_below.process(inout sd, ys, inout d)
+  assert a == [1, 2, 3, 4, 1, 2]
+  assert b == a
+  assert c == [1, 1, 1, 1, 0, 0]
+  assert d == c
+}
+
+// ---- a built-in delay of a value of `sample` reset by an event
+
+pub flow sample_prev(x: U32 at sample, r: U32 at sample) -> U32 at sample {
+  let m = pulse~(r)
+  prev~(x, 9).reset_if~(m > 0)
+}
+
+pub flow sample_delay(x: U32 at sample, r: U32 at sample) -> U32 at sample {
+  let m = pulse~(r)
+  delay~(x, 2, 7).reset_if~(m > 0)
+}
+
+test "a delay of a value of sample is put back to its init at the frame of the event, and that frame gives the init" {
+  // prev~(x, 9), x = 1 .. 5, the event at the frame 2: 9 1, then the init 9 (the frame 2 stores 3), 3, 4. delay~(x, 2, 7), x = 1 .. 6, the event at the frame 3: 7 7 1, then the line is back at the init: 7 (the frame 3), 7 (the frame 4: the stored 4 is
+  // two frames away), 4 (the frame 5 gives the frame 3's 4).
+  let xs: [U32; 5] = [1, 2, 3, 4, 5]
+  let r2: [U32; 5] = [0, 0, 1, 0, 0]
+  let ys: [U32; 6] = [1, 2, 3, 4, 5, 6]
+  let r3: [U32; 6] = [0, 0, 0, 1, 0, 0]
+  var a: [U32; 5] = [8; 5]
+  var b: [U32; 6] = [8; 6]
+  var sa = sample_prev.init(8.0)
+  var sb = sample_delay.init(8.0)
+  sample_prev.process(inout sa, sample_prev.In { x: xs, r: r2 }, inout a)
+  sample_delay.process(inout sb, sample_delay.In { x: ys, r: r3 }, inout b)
+  assert a == [9, 1, 9, 3, 4]
+  assert b == [7, 7, 1, 7, 7, 4]
+}
+
+// ---- S-1236: the same event given to two inputs of a part ticks them one at a time, in the order of the declaration
+
+flow hit(a: U32 at event, b: U32 at event) -> U32 at sample {
+  acc~(a).reset_if~(b >= 4)
+}
+
+flow hit_reversed(b: U32 at event, a: U32 at event) -> U32 at sample {
+  acc~(a).reset_if~(b >= 4)
+}
+
+flow pair_in(a: U32 at event, b: U32 at event) -> U32 at sample {
+  let u = fwd~(a)
+  acc~(u).reset_if~(b >= 4)
+}
+
+flow three_in(a: U32 at event, b: U32 at event, c: U32 at event) -> U32 at sample {
+  let u = fwd~(a)
+  let w = acc~(u).reset_if~(b >= 4)
+  let z = acc~(c).reset_if~(b >= 4)
+  w * 1000 + z
+}
+
+pub flow hit_twice(x: U32 at sample) -> U32 at sample {
+  let m = gen~(x)
+  hit~(m, m)
+}
+
+pub flow hit_reversed_twice(x: U32 at sample) -> U32 at sample {
+  let m = gen~(x)
+  hit_reversed~(m, m)
+}
+
+pub flow pair_in_twice(x: U32 at sample) -> U32 at sample {
+  let m = gen~(x)
+  pair_in~(m, m)
+}
+
+pub flow three_times(x: U32 at sample) -> U32 at sample {
+  let m = gen~(x)
+  three_in~(m, m, m)
+}
+
+test "one event given to two inputs: the input declared first ticks first, and what its tick gives is done before the next input ticks" {
+  // x = 3 1 4 2 5 1 and the condition b >= 4. `hit(a, b)`: a ticks (adds), then b (reset): add then reset, 3 4 0 2 0 1. `hit_reversed(b, a)`: reset then add, 3 4 4 6 5 6. `pair_in`: the event u that the tick of a gives is added
+  // before b ticks (not after): add then reset, 3 4 0 2 0 1. `three_in` is w = the first of these 3 4 0 2 0 1 and z = reset then add 3 4 4 6 5 6 (b before c): 1000 w + z.
+  let xs: [U32; 6] = [3, 1, 4, 2, 5, 1]
+  var a: [U32; 6] = [9; 6]
+  var b: [U32; 6] = [9; 6]
+  var c: [U32; 6] = [9; 6]
+  var d: [U32; 6] = [9; 6]
+  var sa = hit_twice.init(8.0)
+  var sb = hit_reversed_twice.init(8.0)
+  var sc = pair_in_twice.init(8.0)
+  var sd = three_times.init(8.0)
+  hit_twice.process(inout sa, xs, inout a)
+  hit_reversed_twice.process(inout sb, xs, inout b)
+  pair_in_twice.process(inout sc, xs, inout c)
+  three_times.process(inout sd, xs, inout d)
+  assert a == [3, 4, 0, 2, 0, 1]
+  assert b == [3, 4, 4, 6, 5, 6]
+  assert c == a
+  assert d == [3003, 4004, 4, 2006, 5, 1006]
+}
+
+// ---- more than one reset_if~ in a chain: each condition resets the whole, so a frame where more than one holds is one reset
+
+pub flow chain_same(x: U32 at sample, r: U32 at sample) -> U32 at sample {
+  let m = gen~(r)
+  rs~(x).reset_if~(m >= 5).reset_if~(m >= 7)
+}
+
+pub flow chain_two_sources(x: U32 at sample, r: U32 at sample, s: U32 at sample) -> U32 at sample {
+  let a = gen~(r)
+  let b = pulse~(s)
+  rs~(x).reset_if~(a >= 5).reset_if~(b >= 1)
+}
+
+pub flow chain_sample_mixed(x: U32 at sample, r: U32 at sample, c: U32 at sample) -> U32 at sample {
+  let m = gen~(r)
+  rs~(x).reset_if~(c > 0).reset_if~(m >= 5)
+}
+
+pub flow chain_block(x: U32 at sample, k: Bool at block) -> U32 at sample {
+  let m = gen~(x)
+  rs~(x).reset_if~(m >= 5).reset_if~(k)
+}
+
+pub flow chain_false(x: U32 at sample) -> U32 at sample {
+  let m = gen~(x)
+  rs~(x).reset_if~(m >= 5).reset_if~(false)
+}
+
+pub flow chain_true(x: U32 at sample) -> U32 at sample {
+  let m = gen~(x)
+  rs~(x).reset_if~(m >= 5).reset_if~(true)
+}
+
+test "reset_if~ twice on an event: each condition resets the whole, the frame where both hold is one reset" {
+  // x = 1 .. all ones (8 frames). Same source: r = 0 5 0 7 0 0 6 0, the first holds at the frames 1 3 6, the second at 3: 1 1 2 1 2 3 1 2. Two sources: r = 0 5 0 0 6 0 0 0 (a >= 5 at 1 and 4), s = 0 0 0 2 6 0 0 0
+  // (b >= 1 at 3 and 4): reset at 1 3 4, 1 1 2 1 1 2 3 4. A condition of sample: c = 0 0 0 0 1 1 0 0 resets at 4 and 5, r = 0 5 0 0 0 7 0 0 at 1 and 5: 1 1 2 3 1 1 2 3.
+  let ones: [U32; 8] = [1, 1, 1, 1, 1, 1, 1, 1]
+  let r1: [U32; 8] = [0, 5, 0, 7, 0, 0, 6, 0]
+  let r2: [U32; 8] = [0, 5, 0, 0, 6, 0, 0, 0]
+  let s2: [U32; 8] = [0, 0, 0, 2, 6, 0, 0, 0]
+  let c3: [U32; 8] = [0, 0, 0, 0, 1, 1, 0, 0]
+  let r3: [U32; 8] = [0, 5, 0, 0, 0, 7, 0, 0]
+  var a: [U32; 8] = [9; 8]
+  var b: [U32; 8] = [9; 8]
+  var c: [U32; 8] = [9; 8]
+  var sa = chain_same.init(8.0)
+  var sb = chain_two_sources.init(8.0)
+  var sc = chain_sample_mixed.init(8.0)
+  chain_same.process(inout sa, chain_same.In { x: ones, r: r1 }, inout a)
+  chain_two_sources.process(inout sb, chain_two_sources.In { x: ones, r: r2, s: s2 }, inout b)
+  chain_sample_mixed.process(inout sc, chain_sample_mixed.In { x: ones, r: r3, c: c3 }, inout c)
+  assert a == [1, 1, 2, 1, 2, 3, 1, 2]
+  assert b == [1, 1, 2, 1, 1, 2, 3, 4]
+  assert c == [1, 1, 2, 3, 1, 1, 2, 3]
+}
+
+test "a condition of the kind block or a constant next to an event: true resets at each frame, false does nothing" {
+  // x = 1 2 3 4 5 2, the event is x itself (the frame 4 has 5 >= 5). Block true for the frames 0 .. 2 (the frame gives x: 1 2 3), false for 3 .. 5 (3 + 4 = 7, then the event resets: 5, 7).
+  // `false`: 1 3 6 10 5 7. `true`: every frame resets: 1 2 3 4 5 2.
+  let xs: [U32; 6] = [1, 2, 3, 4, 5, 2]
+  var a: [U32; 6] = [9; 6]
+  var b: [U32; 6] = [9; 6]
+  var c: [U32; 6] = [9; 6]
+  var sa = chain_block.init(8.0)
+  var sb = chain_false.init(8.0)
+  var sc = chain_true.init(8.0)
+  chain_block.process(inout sa, chain_block.Params { k: true }, xs.slice(0, 3), inout a.slice(0, 3))
+  chain_block.process(inout sa, chain_block.Params { k: false }, xs.slice(3, 6), inout a.slice(3, 6))
+  chain_false.process(inout sb, xs, inout b)
+  chain_true.process(inout sc, xs, inout c)
+  assert a == [1, 2, 3, 7, 5, 7]
+  assert b == [1, 3, 6, 10, 5, 7]
+  assert c == xs
+}
+
+// ---- a built-in delay of an event: the init and the value before the first event
+
+pub flow prev_zero(x: U32 at sample) -> U32 at sample {
+  let m = gen~(x)
+  prev~(m, 9).reset_if~(m == 0)
+}
+
+pub flow prev_before_first(x: U32 at sample) -> U32 at sample {
+  let m = pulse~(x)
+  prev~(m, 9).reset_if~(m == 7)
+}
+
+pub flow delay_two(x: U32 at sample) -> U32 at sample {
+  let m = gen~(x)
+  delay~(m, 2, 9).reset_if~(m == 6)
+}
+
+pub flow vdelay_two(x: F32 at sample) -> F32 at sample {
+  let m = gen_f~(x)
+  vdelay~(m, 2.0, 4, 7.0).reset_if~(m < 0.0)
+}
+
+pub flow loop_sum(x: U32 at sample) -> U32 at sample {
+  let m = gen~(x)
+  let s = prev~(m + ^s).reset_if~(m >= 5)
+  s
+}
+
+pub flow prev_block(x: U32 at sample, k: Bool at block) -> U32 at sample {
+  let m = pulse~(x)
+  prev~(m, 9).reset_if~(k)
+}
+
+test "prev~ of an event reset by the same event: the delay is at its init for that event, and T.default() is the value before the first event" {
+  // x = 5 2 0 3 4 0 0 6, reset where x is 0: the outputs are the event before (9 first): 9 5, then the init at the frames 2 5 6 (the delay is back before they tick), 0 at the frame 3 (the event 0 stored there), 3, 0: 9 5 9 0 3 9 9 0.
+  // Without the reset 9 5 2 0 3 4 0 0. With pulse and x = 0 0 5 0 0 7 0 4, reset where the event is 7: the value is T.default() 0 before the first event (the frames 0 1), then the init 9 (the first event 5 at the frame 2), held;
+  // at the frame 5 the reset puts it back to the init and the event 7 is stored: 9 (not 5), held; the frame 7 gives 7: 0 0 9 9 9 9 9 7.
+  let xs: [U32; 8] = [5, 2, 0, 3, 4, 0, 0, 6]
+  let ys: [U32; 8] = [0, 0, 5, 0, 0, 7, 0, 4]
+  var a: [U32; 8] = [9; 8]
+  var b: [U32; 8] = [9; 8]
+  var sa = prev_zero.init(8.0)
+  var sb = prev_before_first.init(8.0)
+  prev_zero.process(inout sa, xs, inout a)
+  prev_before_first.process(inout sb, ys, inout b)
+  assert a == [9, 5, 9, 0, 3, 9, 9, 0]
+  assert b == [0, 0, 9, 9, 9, 9, 9, 7]
+}
+
+test "delay~ and vdelay~ of an event reset by the event: the line of the stored events is back to the init with its write place" {
+  // delay~(m, 2, 9), x = 1 2 3 6 4 5 7 2, reset where x is 6 (the frame 3): the outputs are the events two before (9 9 1 2 3 6 4 5 without the reset); the frame 3 gives the init 9, the frame 4 9 (the line was back), the frame 5 the event 6
+  // of the frame 3: 9 9 1 9 9 6 4 5. vdelay~(m, 2.0, 4, 7.0), x = 1 2 3 -1 4 5 6, reset where x < 0 (the frame 3): the same two before: 7 7 1 | 7 7 -1 4.
+  let xs: [U32; 8] = [1, 2, 3, 6, 4, 5, 7, 2]
+  let fs: [F32; 7] = [1.0, 2.0, 3.0, -1.0, 4.0, 5.0, 6.0]
+  var a: [U32; 8] = [9; 8]
+  var b: [F32; 7] = [9.0; 7]
+  var sa = delay_two.init(8.0)
+  var sb = vdelay_two.init(8.0)
+  delay_two.process(inout sa, xs, inout a)
+  vdelay_two.process(inout sb, fs, inout b)
+  assert a == [9, 9, 1, 9, 9, 6, 4, 5]
+  assert b == [7.0, 7.0, 1.0, 7.0, 7.0, -1.0, 4.0]
+}
+
+test "a loop of an event delay is reset to its init: the sum of the events before, where a reset sends it to 0 again" {
+  // s is the sum of the events before the tick (prev~ of the stored m + ^s). x = 1 2 6 3 4 5 1, reset where x >= 5 (the frames 2 and 5): 0 1, the delay back (0) at the frame 2 and the 6 stored, 6, 9, back (0) at the frame 5, 5: 0 1 0 6 9 0 5.
+  let xs: [U32; 7] = [1, 2, 6, 3, 4, 5, 1]
+  var out: [U32; 7] = [9; 7]
+  var st = loop_sum.init(8.0)
+  loop_sum.process(inout st, xs, inout out)
+  assert out == [0, 1, 0, 6, 9, 0, 5]
+}
+
+test "a delay of an event with a condition of the kind block: true resets at each tick of the event, so each tick gives the init; false does nothing" {
+  // x = 0 0 5 0 3 0: the events 5 at the frame 2 and 3 at the frame 4. False: 0 0 9 9 5 5 (T.default() before the first). True: the first tick gives the init 9 and each next one too: 0 0 9 9 9 9.
+  let xs: [U32; 6] = [0, 0, 5, 0, 3, 0]
+  var a: [U32; 6] = [9; 6]
+  var b: [U32; 6] = [9; 6]
+  var sa = prev_block.init(8.0)
+  var sb = prev_block.init(8.0)
+  prev_block.process(inout sa, prev_block.Params { k: false }, xs, inout a)
+  prev_block.process(inout sb, prev_block.Params { k: true }, xs, inout b)
+  assert a == [0, 0, 9, 9, 5, 5]
+  assert b == [0, 0, 9, 9, 9, 9]
+}
+
+// ---- an event that a receiver above the producer gets through `^`, and a delay whose first argument has a call with a reset (S-1241)
+
+pub flow above_the_producer(x: U32 at sample, r: U32 at sample) -> U32 at sample {
+  let m = pulse~(r)
+  let h = acc~(prev~(^d)).reset_if~(m >= 5)
+  let d = gen~(x)
+  h
+}
+
+pub flow event_of_a_delay(x: U32 at sample) -> U32 at sample {
+  let e = prev~(^d)
+  let h = acc~(e).reset_if~(e >= 4)
+  let d = gen~(x)
+  h
+}
+
+pub flow written_position(x: U32 at sample) -> U32 at sample {
+  let e = prev~(^d)
+  let h = prev~(rs~(x).reset_if~((e at sample) >= 5))
+  let d = gen~(x)
+  h
+}
+
+test "a receiver written above its producer gets its event through ^ after its own stage, so the output of a frame is the sum before it, and an event written above it resets before the read" {
+  // The `sample` stage of `h` is where `h` is written, before `d` gives (§11.3, §11.11), so a frame gives the sum of the frames before. The events of prev~(^d) are the d before: x = 1 .. 6 gives 0 1 2 3 4 5, added after `h` is read.
+  // r = 0 0 5 0 0 6 resets before `h` is read at the frames 2 and 5: 0 0, reset and 0 (then 2 is added), 2, 5, reset and 0.
+  // The condition on that event itself, x = 1 5 2 6 3 4 (the events 0 1 5 2 6 3) and `e >= 4`, all after the read: 0 0 1, (reset and 5) 5, 7, (reset and 6) 6.
+  let xs: [U32; 6] = [1, 2, 3, 4, 5, 6]
+  let rr: [U32; 6] = [0, 0, 5, 0, 0, 6]
+  let ys: [U32; 6] = [1, 5, 2, 6, 3, 4]
+  var a: [U32; 6] = [9; 6]
+  var b: [U32; 6] = [9; 6]
+  var sa = above_the_producer.init(8.0)
+  var sb = event_of_a_delay.init(8.0)
+  above_the_producer.process(inout sa, above_the_producer.In { x: xs, r: rr }, inout a)
+  event_of_a_delay.process(inout sb, ys, inout b)
+  assert a == [0, 0, 0, 2, 5, 0]
+  assert b == [0, 0, 1, 5, 7, 6]
+}
+
+test "a call with a reset in the first argument of a delay reads the event where it is written: the last value before the producer of that event ticks again" {
+  // x = 1 7 2 3 8 1 1 1; d gives x and e is the d before, ticking where d does (below the call). At the call of the frame p the last e is the d two frames before (0 0 1 7 2 3 8 1): the reset is where that is >= 5 (the frames 3 and 6).
+  // The sums 1 8 10, 3 (reset), 11 12, 1 (reset), 2, and the delay gives each one frame later: 0 1 8 10 3 11 12 1. (The value at the end of the stage would reset at the frames 2 and 5.)
+  let xs: [U32; 8] = [1, 7, 2, 3, 8, 1, 1, 1]
+  var out: [U32; 8] = [9; 8]
+  var st = written_position.init(8.0)
+  written_position.process(inout st, xs, inout out)
+  assert out == [0, 1, 8, 10, 3, 11, 12, 1]
+}
+
+// ---- before the first event, the generated API, a run in pieces
+
+pub flow level_of_an_event(x: U32 at sample, r: U32 at sample) -> U32 at sample {
+  let m = pulse~(r)
+  rs~(x).reset_if~((m at sample) == 0)
+}
+
+test "the last event of a condition is T.default() before the first event: a condition on its value holds until the event comes" {
+  // r = 0 0 3 0 0 0: `m == 0` holds at the frames 0 and 1 (T.default()), so the sum is x there: 1 2; the event 3 at the frame 2 ends it: 5 9 14 20.
+  let xs: [U32; 6] = [1, 2, 3, 4, 5, 6]
+  let rr: [U32; 6] = [0, 0, 3, 0, 0, 0]
+  var out: [U32; 6] = [9; 6]
+  var st = level_of_an_event.init(8.0)
+  level_of_an_event.process(inout st, level_of_an_event.In { x: xs, r: rr }, inout out)
+  assert out == [1, 2, 5, 9, 14, 20]
+}
+
+test "a run in pieces, with a call of 0 frames and a reset of the state, is the run in one call" {
+  // by_gen: x = 1 .. 6, r = 0 0 5 0 0 7 gives 1 3 3 7 12 6 whichever way it is cut (the reset event is the first frame of a piece, and of a piece after a call of 0 frames). keep_reset: x = 0 3 0 0 5 0 0, r = 0 0 1 0 1 0 0:
+  // 0 3 0 0 5 5 5, the held event is in the state across the cut (the cut at 5 has 5 held at the frame 5). After `reset` the held event is T.default(): 0 0 0.
+  let xs: [U32; 6] = [1, 2, 3, 4, 5, 6]
+  let rr: [U32; 6] = [0, 0, 5, 0, 0, 7]
+  var a: [U32; 6] = [9; 6]
+  var sa = by_gen.init(8.0)
+  by_gen.process(inout sa, by_gen.In { x: xs.slice(0, 2), r: rr.slice(0, 2) }, inout a.slice(0, 2))
+  by_gen.process(inout sa, by_gen.In { x: xs.slice(2, 2), r: rr.slice(2, 2) }, inout a.slice(2, 2))
+  by_gen.process(inout sa, by_gen.In { x: xs.slice(2, 5), r: rr.slice(2, 5) }, inout a.slice(2, 5))
+  by_gen.process(inout sa, by_gen.In { x: xs.slice(5, 6), r: rr.slice(5, 6) }, inout a.slice(5, 6))
+  assert a == [1, 3, 3, 7, 12, 6]
+  let ks: [U32; 7] = [0, 3, 0, 0, 5, 0, 0]
+  let kr: [U32; 7] = [0, 0, 1, 0, 1, 0, 0]
+  var b: [U32; 7] = [9; 7]
+  var sb = keep_reset.init(8.0)
+  keep_reset.process(inout sb, keep_reset.In { x: ks.slice(0, 3), r: kr.slice(0, 3) }, inout b.slice(0, 3))
+  keep_reset.process(inout sb, keep_reset.In { x: ks.slice(3, 5), r: kr.slice(3, 5) }, inout b.slice(3, 5))
+  keep_reset.process(inout sb, keep_reset.In { x: ks.slice(5, 7), r: kr.slice(5, 7) }, inout b.slice(5, 7))
+  assert b == [0, 3, 0, 0, 5, 5, 5]
+  keep_reset.reset(inout sb)
+  keep_reset.process(inout sb, keep_reset.In { x: ks.slice(2, 3), r: kr.slice(0, 1) }, inout b.slice(0, 1))
+  keep_reset.process(inout sb, keep_reset.In { x: ks.slice(2, 4), r: kr.slice(0, 2) }, inout b.slice(1, 3))
+  assert b[0] == 0 && b[1] == 0 && b[2] == 0
+}

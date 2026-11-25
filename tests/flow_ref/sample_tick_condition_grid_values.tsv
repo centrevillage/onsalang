@@ -1,4 +1,4 @@
-# flow_ref 1 source=tests/spec/flow_semantics/sample_tick_condition_grid_values.onsa tests=11 evaluated=8 unavailable=0 skipped=3 waiting=0
+# flow_ref 1 source=tests/spec/flow_semantics/sample_tick_condition_grid_values.onsa tests=11 evaluated=11 unavailable=0 skipped=0 waiting=0
 @ a when~ in a block that is stopped from outside reads the time kept at the last tick of the grid of the body that wrote it: the ticks at 0 2 6 13 read 0 2 6 12, so the part runs at the tick 13 too
 init 0 sample_tick_condition_grid_values.gate_at sr=0x41000000
 init 1 sample_tick_condition_grid_values.gate_port sr=0x41000000
@@ -19,8 +19,20 @@ process 1 frames=16 in c=[true true true false true false true false false false
 out=[0x3f800000 0x40000000 0x40400000 0x40400000 0x40800000 0x40800000 0x3f800000 0x3f800000 0x3f800000 0x3f800000 0x3f800000 0x40000000 0x40000000 0x3f800000 0x40000000 0x40000000]
 process 2 frames=16 in c=[true true true false true false true false false false false true false true true false]
 out=[0x3f800000 0x40000000 0x40400000 0x40400000 0x40800000 0x40800000 0x3f800000 0x3f800000 0x3f800000 0x3f800000 0x3f800000 0x40000000 0x40000000 0x3f800000 0x40000000 0x40000000]
-- two when~ outside the block stop it where both hold: the grid counts the frames of c1 && c2, so the part is the one of V	skipped layout
-- a reset_if~ outside the block that comes between the runs of a tick that runs: the tick at the frame 13 reads the time 12 and runs, and the reset at the frame 14 takes back what it dealt	skipped statement
+@ two when~ outside the block stop it where both hold: the grid counts the frames of c1 && c2, so the part is the one of V
+init 0 sample_tick_condition_grid_values.two_whens_at sr=0x41000000
+init 1 sample_tick_condition_grid_values.two_whens sr=0x41000000
+process 0 frames=16 in c1=[true true true false true false true true true false false true false true true true] c2=[true true true true true true true false false true true true true true true false]
+out=[0x3f800000 0x40000000 0x40000000 0x40000000 0x40000000 0x40000000 0x40400000 0x40400000 0x40400000 0x40400000 0x40400000 0x40800000 0x40800000 0x40a00000 0x40c00000 0x40c00000]
+process 1 frames=16 in c1=[true true true false true false true true true false false true false true true true] c2=[true true true true true true true false false true true true true true true false]
+out=[0x3f800000 0x40000000 0x40000000 0x40000000 0x40000000 0x40000000 0x40400000 0x40400000 0x40400000 0x40400000 0x40400000 0x40800000 0x40800000 0x40a00000 0x40c00000 0x40c00000]
+@ a reset_if~ outside the block that comes between the runs of a tick that runs: the tick at the frame 13 reads the time 12 and runs, and the reset at the frame 14 takes back what it dealt
+init 0 sample_tick_condition_grid_values.outer_reset_at sr=0x41000000
+init 1 sample_tick_condition_grid_values.outer_reset sr=0x41000000
+process 0 frames=16 in c=[true true true false true false true false false false false true false true true false] r=[false false false false false false false false false false false false false false true false]
+out=[0x3f800000 0x40000000 0x40000000 0x40000000 0x40000000 0x40000000 0x40400000 0x40400000 0x40400000 0x40400000 0x40400000 0x40800000 0x40800000 0x40a00000 0x00000000 0x00000000]
+process 1 frames=16 in c=[true true true false true false true false false false false true false true true false] r=[false false false false false false false false false false false false false false true false]
+out=[0x3f800000 0x40000000 0x40000000 0x40000000 0x40000000 0x40000000 0x40400000 0x40400000 0x40400000 0x40400000 0x40400000 0x40800000 0x40800000 0x40a00000 0x00000000 0x00000000]
 @ a block of 4: the grid of the part counts 4 runs a tick, the ticks are the runs 0 and 4 (the frames 0 and 6) and the time kept at the frame 6 is 4, so the second tick does not run
 init 0 sample_tick_condition_grid_values.n4_at sr=0x41000000
 init 1 sample_tick_condition_grid_values.n4 sr=0x41000000
@@ -63,7 +75,13 @@ process 1 params cb=true frames=13 in c=[true true true false true false true fa
 out=[0x3f800000 0x40000000 0x40000000 0x40000000 0x40000000 0x40000000 0x40400000 0x40400000 0x40400000 0x40400000 0x40400000 0x40800000 0x40800000]
 process 1 params cb=false frames=3 in c=[true true false]
 out=[0x40a00000 0x40c00000 0x40c00000]
-- a flow that holds the block is stopped from outside: the grid of the body that wrote the condition counts the frames that the body ran, and the tick at the odd run reads the time of the run before it	skipped layout
+@ a flow that holds the block is stopped from outside: the grid of the body that wrote the condition counts the frames that the body ran, and the tick at the odd run reads the time of the run before it
+init 0 sample_tick_condition_grid_values.top sr=0x41000000
+init 1 sample_tick_condition_grid_values.top_at sr=0x41000000
+process 0 frames=16 in c=[true false true false true false true false false false false true false false true false] d=[true true true false true false true false false false false true false true true false]
+out=[0x3f800000 0x3f800000 0x40000000 0x40000000 0x40000000 0x40000000 0x40000000 0x40000000 0x40000000 0x40000000 0x40000000 0x40400000 0x40400000 0x40400000 0x40800000 0x40800000]
+process 1 frames=16 in c=[true false true false true false true false false false false true false false true false] d=[true true true false true false true false false false false true false true true false]
+out=[0x3f800000 0x3f800000 0x40000000 0x40000000 0x40000000 0x40000000 0x40000000 0x40000000 0x40000000 0x40000000 0x40000000 0x40400000 0x40400000 0x40400000 0x40800000 0x40800000]
 @ the time since a start in a block that is stopped from outside: the tick at the frame 13 reads the time 12, so a note of 13 frames from 0 is still on and one from 2 for 11 is on
 init 0 sample_tick_condition_grid_values.note_at sr=0x41000000
 init 1 sample_tick_condition_grid_values.note_direct sr=0x41000000

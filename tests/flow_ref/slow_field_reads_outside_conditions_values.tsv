@@ -1,6 +1,21 @@
-# flow_ref 1 source=tests/spec/flow_semantics/slow_field_reads_outside_conditions_values.onsa tests=5 evaluated=0 unavailable=0 skipped=5 waiting=0
-- after a reset the field of the type F32 is 0.0 until the next tick	skipped layout
-- after a reset the whole read first is M.default(), whose vel is 1.0	skipped layout
-- after a reset the element of a tuple is 0.0 until the next tick	skipped layout
-- after a reset the nested field is 0.0, not the vel that the struct declares	skipped layout
-- after a reset the whole nested value read first has the vel that the struct declares	skipped layout
+# flow_ref 1 source=tests/spec/flow_semantics/slow_field_reads_outside_conditions_values.onsa tests=5 evaluated=5 unavailable=0 skipped=0 waiting=0
+@ after a reset the field of the type F32 is 0.0 until the next tick
+init 0 slow_field_reads_outside_conditions_values.reset_sum_field sr=0x41000000
+process 0 frames=12 in x=[0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000] r=[false false false false false true false false false false false false]
+out=[0x41300000 0x41300000 0x41300000 0x41300000 0x41400000 0x00000000 0x00000000 0x00000000 0x41300000 0x41300000 0x41300000 0x41300000]
+@ after a reset the whole read first is M.default(), whose vel is 1.0
+init 0 slow_field_reads_outside_conditions_values.reset_sum_whole sr=0x41000000
+process 0 frames=12 in x=[0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000] r=[false false false false false true false false false false false false]
+out=[0x41300000 0x41300000 0x41300000 0x41300000 0x41400000 0x3f800000 0x3f800000 0x3f800000 0x41300000 0x41300000 0x41300000 0x41300000]
+@ after a reset the element of a tuple is 0.0 until the next tick
+init 0 slow_field_reads_outside_conditions_values.reset_sum_tuple sr=0x41000000
+process 0 frames=12 in x=[0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000] r=[false false false false false true false false false false false false]
+out=[0x41300000 0x41300000 0x41300000 0x41300000 0x41400000 0x00000000 0x00000000 0x00000000 0x41300000 0x41300000 0x41300000 0x41300000]
+@ after a reset the nested field is 0.0, not the vel that the struct declares
+init 0 slow_field_reads_outside_conditions_values.reset_sum_nested_field sr=0x41000000
+process 0 frames=12 in x=[0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000] r=[false false false false false true false false false false false false]
+out=[0x41300000 0x41300000 0x41300000 0x41300000 0x41400000 0x00000000 0x00000000 0x00000000 0x41300000 0x41300000 0x41300000 0x41300000]
+@ after a reset the whole nested value read first has the vel that the struct declares
+init 0 slow_field_reads_outside_conditions_values.reset_sum_nested_whole sr=0x41000000
+process 0 frames=12 in x=[0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000] r=[false false false false false true false false false false false false]
+out=[0x41300000 0x41300000 0x41300000 0x41300000 0x41400000 0x3f800000 0x3f800000 0x3f800000 0x41300000 0x41300000 0x41300000 0x41300000]

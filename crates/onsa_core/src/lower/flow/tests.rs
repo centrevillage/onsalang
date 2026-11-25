@@ -365,6 +365,41 @@ flow gen4(x: U32 at (sample / 4)) -> U32 at event { Some(x) }";
     assert!(!event_fn(f, "f.tick").contains("_hoist"), "{t}");
 }
 
+/// S-1250: a reset that an event ticks between the place a delay is written
+/// at and its store waits for the store, of a delay in another too, whose
+/// condition is read at the place of the delay; `reset` drops the flags, the
+/// soft one does not read them.
+#[test]
+fn the_reset_of_an_event_in_the_stage_of_a_delay_is_after_its_store() {
+    let f = "flow inner(x: U32 at sample) -> U32 at sample {
+  let e = prev~(^d)
+  let y = prev~(prev~(x, 9).reset_if~(e > 5), 7)
+  let d = gen~(x)
+  y
+}
+pub flow f(x: U32 at sample, c: Bool at sample) -> U32 at sample { inner~(x).reset_if~(c) }";
+    let t = event_fn(f, "inner.tick");
+    in_order(
+        &t,
+        &[
+            "s.3 = true",
+            "t.gen.tick(",
+            "t.inner.ev_0(",
+            "let y.prev_0: U32 = s.2",
+            "s.2 = x\n",
+            "s.3 = false",
+            "if s.4 {",
+            "s.4 = false",
+            "s.2 = 9:U32",
+        ],
+    );
+    let ev = event_fn(f, "inner.ev_0");
+    in_order(&ev, &["if (e > 5:U32) {", "if s.3 {", "s.4 = true", "} else {", "s.2 = 9:U32"]);
+    in_order(&event_fn(f, "inner.reset"), &["s.2 = 9:U32", "s.3 = false", "s.4 = false"]);
+    let kept = event_fn(f, "inner._reset_kept");
+    assert!(kept.contains("s.2 = 9:U32") && !kept.contains("s.3") && !kept.contains("s.4"), "{kept}");
+}
+
 /// §11.4: the stage of an event takes the time of the stage that ticks it.
 #[test]
 fn the_stage_of_an_event_takes_the_time_of_its_position() {

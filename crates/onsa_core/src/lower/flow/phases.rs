@@ -302,6 +302,10 @@ pub(super) fn reset_node(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, i
             }
         }
     }
+    // Up after a panic between its place and its store (S-1250).
+    for part in n.late_flags().into_iter().filter(|_| k == Keep::Hard) {
+        assign(out, &sfield(lw, info, s, at(part), span)?, lit(Ty::Bool, span, Lit::Bool(false)))?;
+    }
     Ok(())
 }
 
@@ -534,5 +538,5 @@ fn store_node(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, id: NodeId, 
         Some(ran) => out.push(stmt(span, StmtKind::If(ran, Block { stmts: store, value: None }, Block::default()))),
         None => out.extend(store),
     }
-    Ok(())
+    super::chain::stored(lw, cx, out, id, state)
 }

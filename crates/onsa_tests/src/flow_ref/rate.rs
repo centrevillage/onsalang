@@ -33,6 +33,14 @@ pub(super) enum Bound {
 }
 
 impl Bound {
+    /// The condition of a `when~` or `reset_if~`.
+    fn cond(self) -> Option<ExprId> {
+        match self {
+            Bound::When(c) | Bound::ResetIf(c) => Some(c),
+            Bound::Rate(_) => None,
+        }
+    }
+
     fn ratio(self) -> i32 {
         match self {
             Bound::Rate(r) => r,
@@ -248,6 +256,8 @@ pub(super) struct Guard {
     pub w: i32,
     pub at: i32,
     pub port: Option<usize>,
+    /// A `.reset_if~(c)` whose condition is an event: it is read and puts the part back at the stage of that event, not at a tick of the caller (`Frame::reset_on_event`).
+    pub ev: bool,
 }
 
 /// The clock of a condition in the caller (§11.3, its `at` included) and whether it is a value of a tick (its stage: a value of the parameter kinds with an `at` is not, §11.3).
@@ -305,6 +315,15 @@ pub(super) fn levels(
                 let (cc, outside) = (clock(cond)?, &bounds[i + 1..]);
                 all.iter_mut().for_each(|l| l.ins.push(None));
                 let prev = &all[all.len() - 1];
+                // A condition that is an event is read at the stage of that event: the part has the stages and the output of the one inside.
+                if let (Bound::ResetIf(_), Clock::Event(_)) = (bound, cc.clock) {
+                    let mut part = reset_level(prev, cond, 0);
+                    part.stages.clone_from(&prev.stages);
+                    part.made = prev.made;
+                    part.guard = part.guard.map(|g| Guard { ev: true, ..g });
+                    all.push(part);
+                    continue;
+                }
                 let tick = cond_tick(cc.clock, prev.out, outside);
                 // SPEC-GAP(S-1227): a condition that mixes a signal and a value of the parameter kinds is a value of a tick, which a boundary gathers whole (provisional (1)).
                 let mut part =
@@ -351,7 +370,7 @@ pub(super) fn levels(
         all[b].guard = Some(g);
     }
     let top = all.len() - 1;
-    let read = all.iter().filter_map(|l| l.guard.map(|g| g.at));
+    let read = all.iter().filter_map(|l| l.guard.filter(|g| !g.ev).map(|g| g.at));
     let stages: BTreeSet<i32> = read.chain(all[top].stages.iter().copied()).collect();
     all[top].stages = stages.into_iter().collect();
     Ok(all.into())
@@ -372,7 +391,7 @@ fn when_level(inside: &Level, cond: ExprId) -> Level {
         deals: false,
         stages: stages.into_iter().collect(),
         made: w,
-        guard: Some(Guard { kind: Modifier::When, cond, w, at: w, port: None }),
+        guard: Some(Guard { kind: Modifier::When, cond, w, at: w, port: None, ev: false }),
     }
 }
 
@@ -388,7 +407,7 @@ fn reset_level(inside: &Level, cond: ExprId, tick: i32) -> Level {
         deals: false,
         stages: stages.into_iter().collect(),
         made: inside.made.max(tick),
-        guard: Some(Guard { kind: Modifier::ResetIf, cond, w: tick, at: tick, port: None }),
+        guard: Some(Guard { kind: Modifier::ResetIf, cond, w: tick, at: tick, port: None, ev: false }),
     }
 }
 
@@ -425,7 +444,16 @@ pub(super) fn components(body: &Body, lets: &[(PatId, ExprId)]) -> Result<Vec<(V
         if let (true, Ok(Target::Local(l))) = (body.names(e), body.target(e)) {
             out.extend(owner.get(l));
         }
-        body.ast.sub_exprs(e).into_iter().for_each(|x| reads(body, owner, x, out));
+        // The condition of a `reset_if~` is read at the stage of its clock, not where its chain is: it makes the chain no part of the loop the producer of its event is in (S-1250: `c = prev~(^c + 1).reset_if~(e >= 5)`, `e = prev~(^d)`,
+        // `d = gen~(c)`), unless it reads a `^name` of its own.
+        let apart: Vec<ExprId> = chain_of(body, e).ok().flatten().map_or_else(Vec::new, |c| {
+            c.bounds
+                .iter()
+                .filter_map(|b| matches!(b, Bound::ResetIf(x) if !feedback(body, *x)).then_some(b.cond()))
+                .flatten()
+                .collect()
+        });
+        body.ast.sub_exprs(e).into_iter().filter(|x| !apart.contains(x)).for_each(|x| reads(body, owner, x, out));
     }
     let edges: Vec<Vec<usize>> = lets
         .iter()
@@ -544,6 +572,11 @@ fn reads_inside(body: &Body, e: ExprId, inside: &[LocalId]) -> bool {
         || body.ast.sub_exprs(e).into_iter().any(|x| reads_inside(body, x, inside))
 }
 
+/// Is `call` a built-in delay?
+fn delay_of(body: &Body, call: ExprId) -> bool {
+    matches!(body.called(call), Ok(Called::Builtin(FlowBuiltin::Delay(_))))
+}
+
 /// The slower ticks of `e` and of its parts into `out`.
 fn visit(
     view: View,
@@ -566,21 +599,26 @@ fn visit(
     // The stages of an instance that is called here are stages of this one: those of the last part of its chain (`levels`; of the head alone for no modifier).
     let (call, bounds) = chain.as_ref().map_or((e, &[][..]), |c| (c.head, &c.bounds[..]));
     let tick = |c| Ok(matches!(stage_of(body, known, root, c)?, Clock::Tick(_)));
-    let clock = |c| match clock_of(body, known, root, c)? {
-        Clock::Event(_) => Err(Fault::Unavailable("a modifier with a condition of an event clock (W7-11 U2r)")),
-        clock => Ok(CondClock { clock, tick: tick(c)? }),
-    };
+    let clock = |c| Ok(CondClock { clock: clock_of(body, known, root, c)?, tick: tick(c)? });
     // The clock K of a delay a chain is on is kept with them (§11.10: its W).
     let delay = |c: &&Chain| matches!(body.called(c.head), Ok(Called::Builtin(FlowBuiltin::Delay(_))));
     for c in chain.iter().flat_map(Chain::conds).chain(chain.iter().filter(delay).map(|c| c.head)) {
         out.1.insert(c, clock(c).map_err(here)?);
+    }
+    // A chain of `reset_if~` alone is the straight line of the events (W7-11 U2r); a `when~`, `.down~` or `.up~` with an event is W7-17.
+    let only_resets = bounds.iter().all(|b| matches!(b, Bound::ResetIf(_)));
+    if !only_resets {
+        let event = |x: ExprId| matches!(clock_of(body, known, root, x), Ok(Clock::Event(_)));
+        if chain.iter().flat_map(Chain::conds).any(event) || (delay_of(body, call) && event(call)) {
+            return Err(here(Fault::Unavailable("a modifier other than `reset_if~` with an event (W7-17)")));
+        }
     }
     if let Ok(Called::Flow(def)) = body.called(call) {
         // A chain on a call that takes or gives events (W7-17).
         let decl = view.flow(def).map_err(here)?;
         let events = decl.inputs.iter().any(|i| matches!(input_stage(i), Ok(Stage::Event(_))))
             || matches!(output_stage(decl), Ok(Stage::Event(_)));
-        if events && !bounds.is_empty() {
+        if events && !only_resets {
             return Err(here(Fault::Unavailable("a chain of modifiers on a call that takes or gives events (W7-17)")));
         }
         let body_ticks = Inst::planned(view, def, plans)?.slow;

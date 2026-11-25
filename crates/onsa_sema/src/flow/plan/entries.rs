@@ -103,7 +103,9 @@ fn close(pkg: &Package, a: &mut Analysis, f: DefId, marks: &HashMap<DefId, Mark>
         let PlanKind::Instance { callee, .. } = n.kind else {
             // A delay with a chain runs at its one stage (§11.10), a stage of this flow.
             let stage = n.clock.stage().filter(|_| n.kind.delay().is_some() && !n.chain.is_empty());
-            tables.push(stage.map(|s| steps::table(n, &[s], Some((s, Out::Value)))));
+            let mut table = stage.map(|s| steps::table(n, &[s], Some((s, Out::Value))));
+            table.iter_mut().for_each(|t| events::entries(n, None, &mut t.0));
+            tables.push(table);
             continue;
         };
         let Some(g) = table(callee) else {
@@ -116,7 +118,7 @@ fn close(pkg: &Package, a: &mut Analysis, f: DefId, marks: &HashMap<DefId, Mark>
         };
         let heads: Vec<ClockStage> = g.stages.iter().copied().chain([ClockStage::SAMPLE]).collect();
         let (mut entries, read) = steps::table(n, &heads, events::out(g));
-        entries.extend(events::entries(n, g));
+        events::entries(n, Some(g), &mut entries);
         unmade_at.extend(unmade(n, g).map(|(at, k, over)| (id, at, k, over)));
         callee_time(&mut time, info, n, g, &entries);
         tables.push(Some((entries, read)));

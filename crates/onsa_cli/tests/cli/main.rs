@@ -47,6 +47,7 @@ mod empty_brackets;
 mod error_type_sweep;
 mod event_gate_rules;
 mod event_interface_rules;
+mod event_reset_commands;
 mod event_saved_commands;
 mod event_stage_commands;
 mod excluded_readings_notes;
