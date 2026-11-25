@@ -7,9 +7,9 @@ use super::twin_event::{Ran, cover, covers, make, run};
 use super::twin_tests::heavy_seeds;
 
 /// The seeds of the gate: chosen again when a change of the generator moves what they make and `COVER` breaks.
-const GATE: [u64; 37] = [
-    0, 1, 2, 4, 5, 8, 9, 10, 11, 12, 13, 17, 19, 20, 21, 22, 23, 24, 25, 26, 31, 33, 34, 36, 37, 38, 41, 47, 50, 52,
-    54, 66, 81, 133, 156, 196, 308,
+const GATE: [u64; 53] = [
+    0, 1, 2, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 15, 16, 17, 19, 20, 21, 22, 24, 25, 26, 27, 30, 31, 33, 37, 38, 39, 41,
+    44, 46, 48, 49, 54, 57, 62, 63, 66, 72, 80, 86, 91, 94, 95, 111, 113, 147, 151, 209, 212, 224,
 ];
 
 /// The seeds are run, and each program is evaluated whole: every test is evaluated, an assert held, and no program is left out.

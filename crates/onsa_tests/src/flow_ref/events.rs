@@ -12,9 +12,18 @@ use super::expr::{Frame, Stop};
 use super::flow::{Clock, Known, Step, clock_of, enter, stage};
 use super::hoist::{caret, kept, stage_of};
 use super::scalar::{Fault, Fault::Internal};
-use super::sema_view::{Called, Stage, input_clock, output_stage};
+use super::sema_view::{Body, Called, Stage, input_clock, output_stage};
 use super::state::{NodeKey, Role};
 use super::value::Value;
+
+/// Is `e` a `^name` or a name alone, under parentheses and `at`s?
+fn bare_name(body: &Body, e: ExprId) -> bool {
+    match &body.ast.expr(e).kind {
+        ExprKind::Feedback(_) => true,
+        ExprKind::Paren(x) | ExprKind::At { expr: x, .. } => bare_name(body, *x),
+        _ => false,
+    }
+}
 
 /// The clock of the events the call `e` gives: a source of its own for each call (the clocks of two calls are not compared, §11.11).
 pub(super) fn call_src(e: ExprId) -> Clock {
@@ -63,14 +72,14 @@ impl<'a> Frame<'a> {
         let clock = stage_of(&body, known, root, e).map_err(here)?;
         // A part that reads a `^name` is made at the end of its stage (S-1244), with what the delays save, and is read fresh before.
         if matches!(clock, Clock::Event(_)) && kept(&body, known, e).map_err(here)? {
-            // A part that holds a `^name` is one read made whole at the end of the stage (S-1249): the parts in it are not parts of their own, and the value it has before its first stage is not read (it is made where it is read).
-            if caret(&body, e) {
-                return Ok(());
-            }
-            let ty = body.ty(e).map_err(here)?;
-            // A type with no default (an `Option`) has none to start from: such a part is made where it is read.
-            if let Some(d) = self.shape(ty, at).ok().and_then(|s| s.default_value()) {
-                self.hoisted.entry(e).or_insert((clock, Default::default())).1.insert(Vec::new(), d);
+            // A part that holds a `^name` is one read made whole at the end of the stage (S-1249): the parts in it are not parts of their own, and it is `T.default()` before its first stage like any other (§11.3).
+            // A bare `^name` is no computed part (a name has a place of its own, and may be written where a `sample` condition chooses it, which no stage of the event reaches): it is read where it is written.
+            if !bare_name(&body, e) {
+                let ty = body.ty(e).map_err(here)?;
+                // A type with no default (an `Option`) has none to start from: such a part is made where it is read.
+                if let Some(d) = self.shape(ty, at).ok().and_then(|s| s.default_value()) {
+                    self.hoisted.entry(e).or_insert((clock, Default::default())).1.insert(Vec::new(), d);
+                }
             }
             return Ok(());
         }

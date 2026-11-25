@@ -90,6 +90,42 @@ fn is_panic(body: &Body, e: ExprId) -> bool {
     matches!(body.ast.expr(e).kind, ExprKind::Call { .. }) && matches!(body.target(e), Ok(Target::Panic))
 }
 
+/// Does `e` read a `^name` that loops back into it (§11.3, §11.4)? A `^name` in the first argument of a delay is that delay's output when the delay is of the clock of the name (`prev~(^d)` is the delay of `d`, the same as the `let p = prev~(^d)` of it,
+/// whatever the expression it is written in; `prev~(x + ^m)` with `m` a loop of the tick of its other operand): it is a delay of its own, which a stage makes. One of another clock than the delay's is the loop of a `let` this expression is in, read where it is written
+/// (a loop has the clock that enters it, `ring_clock`, which is not that of the delay it holds). Every other `^name` is read where it is written.
+fn reads_loop(body: &Body, known: &Known, e: ExprId) -> Result<bool, Fault> {
+    if matches!(body.ast.expr(e).kind, ExprKind::Feedback(_)) {
+        return Ok(true);
+    }
+    let head = chain_of(body, e).ok().flatten().map_or(e, |c| c.head);
+    let delay = matches!(body.ast.expr(head).kind, ExprKind::Call { .. })
+        && matches!(body.called(head), Ok(Called::Builtin(FlowBuiltin::Delay(_))));
+    let first = args_of(body, head).into_iter().nth(Delay::SAVED).filter(|_| delay);
+    for x in body.ast.sub_exprs(e) {
+        if Some(x) == first {
+            if feedback(body, x) && loops_other_than(body, known, x, stage_of(body, known, e, head)?)? {
+                return Ok(true);
+            }
+        } else if reads_loop(body, known, x)? {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
+/// Does `e`, the first argument of a delay of the stage `mine`, hold a `^name` of a stage that is not `mine`?
+fn loops_other_than(body: &Body, known: &Known, e: ExprId, mine: Clock) -> Result<bool, Fault> {
+    if matches!(body.ast.expr(e).kind, ExprKind::Feedback(_)) {
+        return Ok(stage_of(body, known, e, e)? != mine);
+    }
+    for x in body.ast.sub_exprs(e) {
+        if loops_other_than(body, known, x, mine)? {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
 /// Does `x` (in the part `part`) read a local that has no clock in `known` and that `part` does not bind (a name of a block expression
 /// that the walk has not made)? Such a part cannot be made before its own stage.
 fn reads_unknown(body: &Body, known: &Known, part: ExprId, x: ExprId) -> bool {
@@ -278,7 +314,7 @@ pub(super) fn operands(body: &Body, e: ExprId) -> Vec<ExprId> {
 /// its stage (S-1244, `Frame::defer_part`): the name is below.
 pub(super) fn kept(body: &Body, known: &Known, e: ExprId) -> Result<bool, Fault> {
     let copy = body.view.is_copy(body.ty_id(e)?) || is_panic(body, e);
-    let read_in_place = feedback(body, e) && has_state(body, e);
+    let read_in_place = has_state(body, e) && reads_loop(body, known, e)?;
     // A name of an event read at a tick (`d at (sample / 4)`) is the last value at that tick, so it is a part of its own, which a name of the parameter kinds is not (§11.3).
     let slow_event = match &body.ast.expr(e).kind {
         ExprKind::At { expr, clock } if clock.ratio.is_some() => {
@@ -781,7 +817,12 @@ fn descend(
                 let locals = body.pat_locals(arm.pat).map_err(stop)?;
                 let mut seen = known.clone();
                 seen.extend(locals.iter().map(|l| (*l, sc)));
-                let gc = arm.guard.map(|g| cond_clock(&body, &seen, root, g)).transpose().map_err(stop)?;
+                // A guard with a `^name` is decided where that name is made (the end of that stage), not by its own clock, which a `^name` has none of.
+                let gc = arm.guard.map(|g| {
+                    let c = cond_clock(&body, &seen, root, g)?;
+                    if feedback(&body, g) { Ok(c.max(stage_of(&body, &seen, root, g)?)) } else { Ok(c) }
+                });
+                let gc = gc.transpose().map_err(stop)?;
                 if let (true, None, Some(v)) = (deciding, &taken, &v) {
                     if f.arm(arm.pat, v, ty, None, span)? {
                         let mine = f.pat_values(arm.pat)?;
@@ -789,7 +830,7 @@ fn descend(
                             None => taken = Some((n, mine)),
                             Some(g) => {
                                 walk(f, &seen, root, g, here, acc)?;
-                                if gc.is_some_and(|c| c <= here) && f.truth(g, span)? {
+                                if gc.is_some_and(|c| c <= here) && !feedback(&body, g) && f.truth(g, span)? {
                                     taken = Some((n, mine));
                                 }
                             }

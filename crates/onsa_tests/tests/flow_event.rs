@@ -13,6 +13,8 @@ const CASES: &[&str] = &[
     "tests/spec/flow_semantics/event_saved_values.onsa",
     "tests/spec/flow_semantics/event_saved_branch_values.onsa",
     "tests/spec/flow_semantics/event_saved_deferred_values.onsa",
+    "tests/spec/flow_semantics/event_saved_modified_values.onsa",
+    "tests/spec/flow_semantics/event_saved_inner_delay_values.onsa",
 ];
 
 fn run_file(path: &str) -> Vec<String> {

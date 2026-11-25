@@ -1,0 +1,248 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.3", "§11.4", "§11.10", "§11.11"]
+
+// W7-11 U2-e4, S-1249, S-1240, S-1244 (spec §11.3: "保存する値の残りが読むイベントの値 … は、`^名前` を読むものを除いて、評価が段の終わりでも、その読みを書いた位置 … までの最後の値である" and
+// "刻みで書いて速い段が読むフィールド … の初めの値 … は `T.default()` である"; §11.4: a delay has the clock of its first argument; §11.10: `reset_if~` puts the delay back to its `init` before the read, `when~`
+// stops it and keeps the last output): three things that a stored expression does with an event, each with a twin that writes the same value another way.
+//
+// 1. A delay with modifiers inside the first argument of another delay: the event it reads is the value where it is written, as for a delay with none. `r` below is the event `e` of the delay `prev~(^e)`, a name of an
+//    event clock that is read above the producer `let e`, so what a stored expression sees is `r` before the event of the sample. The twin moves the read into a `let t = r at sample` above (§11.3: "その遅延を含む
+//    `let` の前の … `let` に出した形と同じ値になる").
+// 2. A part of the event clock that holds a `^name`, `((^d * 2 + 1) at sample)`, is a hidden field that is `T.default()` (0) before the first event, not what its expression gives for the `d` of that time (1). The twin writes
+//    it as a `let tc: U32 = ((d * 2 + 1) at sample)` below the producer and reads it with a `^tc`, which is the value of the end of the stage.
+// 3. A delay of a bare `^name` written inside an expression, `prev~(^d)`, is the delay of the clock of `d` (§11.4), the same as `let p = prev~(^d)`: it ticks at the events of `d`, not at `sample`.
+// 4. A guard that reads a `^name` of a `match~` whose object is a constant (§11.3: the guard is a place chosen by the `^name` of the end of the stage; §11.5: every arm is evaluated, the one a guard chooses is the value), with an arm
+//    that reads the binding of its pattern and an event.
+
+flow gen2(y: U32 at sample) -> U32 at event { if y % 2 == 1 { Some(y + 1) } else { None } }
+const XS: [U32; 8] = [3, 1, 4, 1, 5, 9, 2, 6]
+const YS: [U32; 8] = [2, 7, 1, 8, 2, 8, 1, 8]
+
+// ---- 1. a delay with a modifier inside the first argument of another delay
+
+// `gen2~(y)` gives the event y + 1 when y is odd: the samples 1 2 6 (y = 7 1 1), the values 8 2 2. `r = prev~(^e)` is the event before: it is 0 at the first, 8 at the second, 2 at the third, and changes at those events,
+// so what is written above `let e` sees `r` before the event of the sample: RB = 0 0 0 8 8 8 8 2 (the sample 3 on is after the event of the sample 2, which made r 8, and the sample 7 after the event of the sample 6).
+// The inner delay stores `RB + y` = 2 7 1 16 10 16 9 10 and gives the one stored before it (0 at the first): 0 2 7 1 16 10 16 9. The outer one stores that + x (x = 3 1 4 1 5 9 2 6) = 3 3 11 2 21 19 18 15 and gives it
+// one sample after: OUT = 0 3 3 11 2 21 19 18.
+// A `reset_if~` on the inner delay at a sample where x is 3 (the sample 0) puts it back to its `init` (0) before the read, so nothing changes where it was 0 already.
+pub flow nested_reset(x: U32 at sample, y: U32 at sample) -> U32 at sample {
+  let r: U32 = prev~(^e)
+  let q1 = prev~(prev~((r at sample) + y).reset_if~(x == 3) + x)
+  let e = gen2~(y)
+  q1
+}
+
+pub flow nested_plain(x: U32 at sample, y: U32 at sample) -> U32 at sample {
+  let r: U32 = prev~(^e)
+  let q1 = prev~(prev~((r at sample) + y) + x)
+  let e = gen2~(y)
+  q1
+}
+
+pub flow nested_reset_let(x: U32 at sample, y: U32 at sample) -> U32 at sample {
+  let r: U32 = prev~(^e)
+  let t = r at sample
+  let q1 = prev~(prev~(t + y).reset_if~(x == 3) + x)
+  let e = gen2~(y)
+  q1
+}
+
+// A reset at the sample 5 (x is 9) gives the inner delay 0 there instead of the 16 it stored at the sample 4, so its outputs are 0 2 7 1 16 0 16 9 and the stored of the outer one 3 3 11 2 21 9 18 15: OUT = 0 3 3 11 2 21 9 18.
+// The `RB + y` that the sample 2 stores is 0 + 1 = 1 and is the output of the sample 3, where no reset hides it (a read at the end of the stage would store 8 + 1 = 9 there).
+pub flow nested_reset_late(x: U32 at sample, y: U32 at sample) -> U32 at sample {
+  let r: U32 = prev~(^e)
+  let q1 = prev~(prev~((r at sample) + y).reset_if~(x == 9) + x)
+  let e = gen2~(y)
+  q1
+}
+
+pub flow nested_reset_late_let(x: U32 at sample, y: U32 at sample) -> U32 at sample {
+  let r: U32 = prev~(^e)
+  let t = r at sample
+  let q1 = prev~(prev~(t + y).reset_if~(x == 9) + x)
+  let e = gen2~(y)
+  q1
+}
+
+// `when~(x != 4)` stops the inner delay at the sample 2 (x is 4): it neither reads nor stores there, and its output is the last one (2). It stores 2 7 . 16 10 16 9 10 (the sample 2 is not stored, so the sample 3 gives the 7 of the
+// sample 1): the outputs 0 2 2 7 16 10 16 9, the stored of the outer one 3 3 6 8 21 19 18 15, OUT = 0 3 3 6 8 21 19 18.
+pub flow nested_when(x: U32 at sample, y: U32 at sample) -> U32 at sample {
+  let r: U32 = prev~(^e)
+  let q1 = prev~(prev~((r at sample) + y).when~(x != 4) + x)
+  let e = gen2~(y)
+  q1
+}
+
+pub flow nested_when_let(x: U32 at sample, y: U32 at sample) -> U32 at sample {
+  let r: U32 = prev~(^e)
+  let t = r at sample
+  let q1 = prev~(prev~(t + y).when~(x != 4) + x)
+  let e = gen2~(y)
+  q1
+}
+
+test "a delay with a reset_if~ or a when~ inside the first argument of another delay reads the event where it is written" {
+  let w: [U32; 8] = [0, 3, 3, 11, 2, 21, 19, 18]
+  let late: [U32; 8] = [0, 3, 3, 11, 2, 21, 9, 18]
+  let stop: [U32; 8] = [0, 3, 3, 6, 8, 21, 19, 18]
+  let a = nested_reset.render(nested_reset.In { x: XS, y: YS }, 8.0)
+  let b = nested_plain.render(nested_plain.In { x: XS, y: YS }, 8.0)
+  let c = nested_reset_let.render(nested_reset_let.In { x: XS, y: YS }, 8.0)
+  let d = nested_reset_late.render(nested_reset_late.In { x: XS, y: YS }, 8.0)
+  let e = nested_reset_late_let.render(nested_reset_late_let.In { x: XS, y: YS }, 8.0)
+  let f = nested_when.render(nested_when.In { x: XS, y: YS }, 8.0)
+  let g = nested_when_let.render(nested_when_let.In { x: XS, y: YS }, 8.0)
+  for j in 0 ..< 8 {
+    assert a.out[j] == w[j] && b.out[j] == w[j] && c.out[j] == w[j]
+    assert d.out[j] == late[j] && e.out[j] == late[j]
+    assert f.out[j] == stop[j] && g.out[j] == stop[j]
+  }
+}
+
+// ---- 2. a part of the event clock that holds a `^name`, before the first event
+
+const GS: [U32; 9] = [1, 2, 3, 4, 5, 6, 7, 8, 9]
+
+flow gen(x: U32 at sample) -> U32 at event { if x % 3 != 0 { Some(x) } else { None } }
+const AX: [U32; 32] = [3, 1, 4, 1, 5, 9, 2, 6, 5, 3, 5, 8, 9, 7, 9, 3, 2, 3, 8, 4, 6, 2, 6, 4, 3, 3, 8, 3, 2, 7, 9, 5]
+
+// `gen~(x)` gives x when x % 3 != 0: of AX = 3 1 4 1 5 9 2 6 5 3 .. the samples 1 2 3 4 6 8 .., so `d` (the last one) is 0 at the sample 0, then 1 4 1 5 5 2 2 5 5 5 .. (the sample 5, x = 9, gives none). The part
+// `(^d * 2 + 1) at sample` is `d * 2 + 1` of the end of the stage, and 0 before the first event (the hidden field starts at `T.default()`), not the 1 that `d` = 0 would give. The delay stores part + x: at the sample 0
+// 0 + 3 = 3 (with 1 + 3 = 4 the output of the sample 1 would be 4), then 3 + 1 = 4, 9 + 4 = 13, 3 + 1 = 4, 11 + 5 = 16, 11 + 9 = 20, 5 + 2 = 7, 5 + 6 = 11, 11 + 5 = 16, 11 + 3 = 14, ..., and gives it one sample after.
+pub flow first_part(x: U32 at sample) -> U32 at sample {
+  let p: U32 = prev~(^d)
+  let q = prev~(((^d * 2 + 1) at sample) + x)
+  let d = gen~(x)
+  q + (p at sample) * 0 + (d at sample) * 0
+}
+
+pub flow first_part_let(x: U32 at sample) -> U32 at sample {
+  let p: U32 = prev~(^d)
+  let q = prev~((^tc at sample) + x)
+  let d = gen~(x)
+  let tc: U32 = ((d * 2 + 1) at sample)
+  q + (p at sample) * 0 + (d at sample) * 0
+}
+
+test "a part of an event clock that holds a ^name is T.default() before the first event" {
+  let w: [U32; 32] = [0, 3, 4, 13, 4, 16, 20, 7, 11, 16, 14, 16, 25, 26, 22, 24, 18, 7, 8, 25, 13, 15, 7, 11, 13, 12, 12, 25, 20, 7, 22, 24]
+  let a = first_part.render(AX, 8.0)
+  let b = first_part_let.render(AX, 8.0)
+  for j in 0 ..< 32 {
+    assert a.out[j] == w[j] && b.out[j] == w[j]
+  }
+}
+
+// A bare `^name` is no part of a hidden field: `(^d at sample) + 1` in the branch that a `sample` condition chooses is the `d` of the end of the stage where the branch is taken (and the same before the first event), as a
+// `^tc` of `let tc: U32 = d at sample` below the producer is. The stored value is x + x for x > 3 and (d + 1) + x for the others, d being 1 2 2 4 .. for GS = 1 .. 9 (the event of x % 3 != 0, kept at the sample 2):
+// 1 + 1 + 1, 2 + 1 + 2, 2 + 1 + 3 = 3 5 6, then 8 10 12 14 16 18, and the delay gives it one sample after.
+pub flow branch_caret_name(x: U32 at sample) -> U32 at sample {
+  let q = prev~((if x > 3 { x } else { (^d at sample) + 1 }) + x)
+  let d: U32 = gen~(x)
+  q
+}
+
+pub flow branch_caret_name_let(x: U32 at sample) -> U32 at sample {
+  let q = prev~((if x > 3 { x } else { (^tc at sample) + 1 }) + x)
+  let d: U32 = gen~(x)
+  let tc: U32 = d at sample
+  q
+}
+
+test "a bare ^name in a branch of a sample condition is the value of the end of the stage" {
+  let w: [U32; 9] = [0, 3, 5, 6, 8, 10, 12, 14, 16]
+  let a = branch_caret_name.render(GS, 8.0)
+  let b = branch_caret_name_let.render(GS, 8.0)
+  for j in 0 ..< 9 {
+    assert a.out[j] == w[j] && b.out[j] == w[j]
+  }
+}
+
+// ---- 3. a delay of a bare `^name` inside an expression ticks at the events of the name
+
+// `gen~(x)` gives the events x when x % 3 != 0 (the samples 0 1 3 4 6 7, the values 1 2 4 5 7 8). `prev~(^d)` gives the event before at each of them, so before the event of a sample it is PB = 0 0 1 1 2 4 4 5 7, which is
+// what a read written above the producer sees; it does not tick at the other samples (a delay at `sample` would give the event of the sample before, 0 1 2 3 .. 8). The delay stores PB + x = 1 2 4 5 7 10 11 13 16 and gives
+// it one sample after: 0 1 2 4 5 7 10 11 13. With a `reset_if~(x == 5)` (the sample 4) the output there is 0: 0 1 2 4 0 7 10 11 13.
+pub flow bare_delay(x: U32 at sample) -> U32 at sample {
+  let q = prev~((prev~(^d) at sample) + x)
+  let d: U32 = gen~(x)
+  q
+}
+
+pub flow bare_delay_let(x: U32 at sample) -> U32 at sample {
+  let p = prev~(^d)
+  let q = prev~((p at sample) + x)
+  let d: U32 = gen~(x)
+  q
+}
+
+pub flow bare_delay_reset(x: U32 at sample) -> U32 at sample {
+  let q = prev~((prev~(^d) at sample) + x).reset_if~(x == 5)
+  let d: U32 = gen~(x)
+  q
+}
+
+pub flow bare_delay_reset_let(x: U32 at sample) -> U32 at sample {
+  let p = prev~(^d)
+  let q = prev~((p at sample) + x).reset_if~(x == 5)
+  let d: U32 = gen~(x)
+  q
+}
+
+test "a delay of a bare ^name in an expression ticks at the events, with a modifier on the delay around it too" {
+  let a: [U32; 9] = [0, 1, 2, 4, 5, 7, 10, 11, 13]
+  let r: [U32; 9] = [0, 1, 2, 4, 0, 7, 10, 11, 13]
+  let o = bare_delay.render(GS, 8.0)
+  let t = bare_delay_let.render(GS, 8.0)
+  let ro = bare_delay_reset.render(GS, 8.0)
+  let ru = bare_delay_reset_let.render(GS, 8.0)
+  for j in 0 ..< 9 {
+    assert o.out[j] == a[j] && t.out[j] == a[j]
+    assert ro.out[j] == r[j] && ru.out[j] == r[j]
+  }
+}
+
+// ---- 4. a `^name` in the guard of a `match~` with a constant object
+
+const K2: U32 = 2
+
+// The object is `K2` (2): the arm `0` does not match, the arm `v` does with v = 2 when its guard `^k == 0` holds (k is x % 2 of the end of the stage: x even), and the arm `_` gives 1 otherwise. The arm `0` holds a delay so that the
+// `match~` has a state (E0812 without). The stored value is x + 2 for x even and 1 for x odd: for GS = 1 .. 9 it is 1 4 1 6 1 8 1 10 1, and the delay gives it one sample after: 0 1 4 1 6 1 8 1 10.
+pub flow caret_guard(x: U32 at sample) -> U32 at sample {
+  let q = prev~(match~ K2 { 0 => prev~(x), v if (^k == 0) => (x + v), _ => 1 })
+  let k: U32 = x % 2
+  q
+}
+
+// The same with the event read in the arm: `(p at sample)` is the value where it is written (PB, above), not the one of the end of the stage, whatever the guard reads. The stored value is PB + 2 for x even: x = 2 (PB 0): 2,
+// x = 4 (PB 1): 3, x = 6 (PB 4): 6, x = 8 (PB 5): 7, and 1 for x odd: 1 2 1 3 1 6 1 7 1, one sample after: 0 1 2 1 3 1 6 1 7.
+pub flow caret_guard_event(x: U32 at sample) -> U32 at sample {
+  let p: U32 = prev~(^d)
+  let q = prev~(match~ K2 { 0 => prev~(x), v if (^k == 0) => ((p at sample) + v), _ => 1 })
+  let k: U32 = x % 2
+  let d: U32 = gen~(x)
+  q
+}
+
+pub flow caret_guard_event_let(x: U32 at sample) -> U32 at sample {
+  let p: U32 = prev~(^d)
+  let t = p at sample
+  let q = prev~(match~ K2 { 0 => prev~(x), v if (^k == 0) => (t + v), _ => 1 })
+  let k: U32 = x % 2
+  let d: U32 = gen~(x)
+  q
+}
+
+test "the guard of a match~ with a constant object that reads a ^name chooses an arm at the end of the stage" {
+  let a: [U32; 9] = [0, 1, 4, 1, 6, 1, 8, 1, 10]
+  let b: [U32; 9] = [0, 1, 2, 1, 3, 1, 6, 1, 7]
+  let o = caret_guard.render(GS, 8.0)
+  let e = caret_guard_event.render(GS, 8.0)
+  let t = caret_guard_event_let.render(GS, 8.0)
+  for j in 0 ..< 9 {
+    assert o.out[j] == a[j]
+    assert e.out[j] == b[j] && t.out[j] == b[j]
+  }
+}

@@ -105,6 +105,7 @@ impl<'a> Frame<'a> {
         let saved = arg(Delay::SAVED)?;
         let slot = self.reserve_save(key.clone(), saved, at)?;
         self.early_calls(saved)?;
+        self.snapshot(slot, saved);
         let dc = match d.d_index() {
             Some(i) => Some(self.eval(arg(i)?)?),
             None => None,
