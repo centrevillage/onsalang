@@ -62,11 +62,8 @@ pub(super) fn sources(info: &FlowInfo) -> Vec<EventPlan> {
 /// but `.reset_if~` of a call of a flow with an event port or of a delay at
 /// an event, the condition at an event of a `.reset_if~` of such a chain, and
 /// that of a `.when~` of a chain with a ratio (with none it is a level, read
-/// at the clock W of the modifier, §11.10); and in a `par~` (and a `par`,
-/// whose fields are of each replica as well), an `if~` or a `match~`, its
-/// conditions, scrutinee and guards too, a call of a flow with an event port,
-/// a delay at an event, any condition at one or a computed part of one, but
-/// not a name. Not those of a callee, which stop it.
+/// at the clock W of the modifier, §11.10); in a replica or an arm too. Not
+/// those of a callee, which stop it.
 pub(super) fn form(a: &Analysis, info: &FlowInfo, ast: &Ast) -> Option<Span> {
     if info.events.is_empty() {
         return None;
@@ -77,25 +74,17 @@ pub(super) fn form(a: &Analysis, info: &FlowInfo, ast: &Ast) -> Option<Span> {
         _ => n.kind.delay().is_some() && matches!(n.clock, Clock::Event(_)),
     };
     let mut found: Vec<Span> = Vec::new();
-    let mut todo: Vec<(ExprId, bool)> =
-        info.lets.iter().map(|l| l.init).chain(info.output).map(|e| (e, false)).collect();
-    while let Some((e, inside)) = todo.pop() {
+    let mut todo: Vec<ExprId> = info.lets.iter().map(|l| l.init).chain(info.output).collect();
+    while let Some(e) = todo.pop() {
         if let Some(n) = info.node_of.get(&e).map(|&id| info.node(id)) {
-            let stops = inside || n.chain.iter().any(|m| m.ratio.is_some());
+            let stops = n.chain.iter().any(|m| m.ratio.is_some());
             if stops || n.chain.iter().any(|m| m.modifier == Modifier::When) {
                 found.extend(ticks(n).then_some(n.span));
                 let of = n.chain.iter().filter(|m| stops || m.modifier == Modifier::ResetIf);
                 found.extend(of.filter(|m| m.cond.as_ref().is_some_and(event)).map(|m| m.name));
             }
         }
-        let part = info.hoist_of(e).map(|h| info.hoist(h)).filter(|h| matches!(h.stage, ClockStage::Event(_)));
-        found.extend(part.filter(|_| inside).map(|h| h.span));
-        let inside = inside
-            || matches!(
-                ast.expr(e).kind,
-                ExprKind::Par { .. } | ExprKind::If { tilde: Some(_), .. } | ExprKind::Match { tilde: Some(_), .. }
-            );
-        todo.extend(ast.sub_exprs(e).into_iter().map(|x| (x, inside)));
+        todo.extend(ast.sub_exprs(e));
     }
     first(found)
 }

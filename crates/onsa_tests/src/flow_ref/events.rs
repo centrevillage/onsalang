@@ -49,6 +49,9 @@ fn chosen_bindings(body: &Body, e: ExprId, chosen: &mut Vec<LocalId>) {
     }
 }
 
+/// A read of an event a delay saved where it is written: the expression, the replicas of the `par`s the read is in below the delay (empty outside a `par`), and its value.
+pub(super) type Snap = (ExprId, Vec<u32>, Value);
+
 /// A number for each run of an event stage, whichever instance (a delay of an event keeps what it gave for the run it gave it in).
 pub(super) fn next_serial() -> u64 {
     static SERIAL: AtomicU64 = AtomicU64::new(1);
@@ -58,6 +61,28 @@ pub(super) fn next_serial() -> u64 {
 /// The clock of the events the call `e` gives: a source of its own for each call (the clocks of two calls are not compared, §11.11).
 pub(super) fn call_src(e: ExprId) -> Clock {
     Clock::Event(0x8000_0000 | e.0)
+}
+
+/// The clock `e` is a part of that an event stage makes and keeps: of an event clock, under the guard (a field read of a name is free of it, S-1197), and kept (`hoist::kept`). It is the one judgment of `default_parts`.
+fn event_part(body: &Body, known: &Known, root: ExprId, (e, guard): (ExprId, Clock)) -> Result<Option<Clock>, Fault> {
+    let clock = stage_of(body, known, root, e)?;
+    let free = field_of(body, e)
+        .is_some_and(|n| !matches!(body.target(n), Ok(Target::Local(l)) if body.bound_within(*l, root)));
+    let clock = made_at(body, e, (clock, if free { Clock::Const } else { guard }));
+    Ok((matches!(clock, Clock::Event(_)) && kept(body, known, e)?).then_some(clock))
+}
+
+/// Does `e`, or what is in it, hold a part that `default_parts` gives a default?
+fn holds_part(body: &Body, known: &Known, root: ExprId, (e, guard): (ExprId, Clock)) -> Result<bool, Fault> {
+    if event_part(body, known, root, (e, guard))?.is_some() {
+        return Ok(true);
+    }
+    for (x, k, g) in kids(body, known, root, e, guard)? {
+        if holds_part(body, &k, root, (x, g))? {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }
 
 impl<'a> Frame<'a> {
@@ -98,6 +123,7 @@ impl<'a> Frame<'a> {
 
     /// The largest parts of `e` (a step of a faster clock) that an event stage makes and keeps (`hoist::walk`) start at `T.default()`; a step of the event clock itself is run whole in its stage and has no part. A part under a condition
     /// of a later stage (`sample`) is not made by the event stage, as `walk` goes (`guard` is the clock of the conditions on the way to it), but a field read of a name is, whatever the conditions say (S-1197, `hoist::free`).
+    /// The body of a `par~` has a part for each replica (S-1140, `hoist::walk`), each starting at its default; one with no part is not walked.
     fn default_parts(
         &mut self,
         known: &Known,
@@ -106,27 +132,29 @@ impl<'a> Frame<'a> {
         at: Span,
     ) -> Result<(), Stop> {
         let (body, here) = (self.body, |fault| Stop { fault, at });
-        let clock = stage_of(&body, known, root, e).map_err(here)?;
-        let free = field_of(&body, e)
-            .is_some_and(|n| !matches!(body.target(n), Ok(Target::Local(l)) if body.bound_within(*l, root)));
-        let clock = made_at(&body, e, (clock, if free { Clock::Const } else { guard }));
-        // A part that reads a `^name` is made at the end of its stage (S-1244), with what the delays save, and is read fresh before.
-        if matches!(clock, Clock::Event(_)) && kept(&body, known, e).map_err(here)? {
+        if let Some(clock) = event_part(&body, known, root, (e, guard)).map_err(here)? {
             // A part that holds a `^name` is one read made whole at the end of the stage (S-1249): the parts in it are not parts of their own, and it is `T.default()` before its first stage like any other (§11.3).
             // A bare `^name` is no computed part (a name has a place of its own, and may be written where a `sample` condition chooses it, which no stage of the event reaches): it is read where it is written.
             if !bare_name(&body, e) {
                 let ty = body.ty(e).map_err(here)?;
                 // A type with no default (an `Option`) has none to start from: such a part is made where it is read.
                 if let Some(d) = self.shape(ty, at).ok().and_then(|s| s.default_value()) {
-                    self.hoisted.entry(e).or_insert((clock, Default::default())).1.insert(Vec::new(), d);
+                    let replicas = self.run.as_ref().map(|r| r.replicas.clone()).unwrap_or_default();
+                    self.hoisted.entry(e).or_insert((clock, Default::default())).1.insert(replicas, d);
                 }
             }
             return Ok(());
         }
-        for (x, k, g) in kids(&body, known, root, e, guard).map_err(here)? {
-            self.default_parts(&k, root, (x, g), at)?;
+        let kids = kids(&body, known, root, e, guard).map_err(here)?;
+        let in_par = matches!(body.ast.expr(e).kind, ExprKind::Par { .. });
+        if in_par && !holds_part(&body, known, root, (e, guard)).map_err(here)? {
+            return Ok(());
         }
-        Ok(())
+        let each = |f: &mut Self| kids.iter().try_for_each(|(x, k, g)| f.default_parts(k, root, (*x, *g), at));
+        match in_par {
+            true => self.replicate(e, |_: &()| 0, each).map(drop),
+            false => each(self),
+        }
     }
 
     /// The instance of a flow that gives events, made by the call `call`: its output is `T.default()` of the type of the event until it gives one.
@@ -150,14 +178,14 @@ impl<'a> Frame<'a> {
     pub(super) fn fire_emitted(&mut self, key: &NodeKey) -> Result<(), Stop> {
         let given = self.run.as_mut().and_then(|r| r.state.children.get_mut(key)).and_then(|c| c.emitted.take());
         match given {
-            Some(_) => self.fire(call_src(key.call), self.body.ast.expr(key.call).span),
+            Some(_) => self.fire(key, self.body.ast.expr(key.call).span),
             None => Ok(()),
         }
     }
 
     /// The stage `src` of this instance, run in the middle of the stage it is in: its `let`s and the work of its calls, then what its delays saved is stored (only those it saved). The stage and the step it is in are put back after.
-    fn fire(&mut self, src: Clock, at: Span) -> Result<(), Stop> {
-        let Clock::Event(k) = src else { return Ok(()) };
+    fn fire(&mut self, key: &NodeKey, at: Span) -> Result<(), Stop> {
+        let Clock::Event(k) = call_src(key.call) else { return Ok(()) };
         let run = self.run.as_mut().ok_or(Stop { fault: Internal("no run"), at })?;
         let Some(steps) = run.steps.clone() else {
             return Err(Stop { fault: Fault::Unavailable("an event stage outside an instance"), at });
@@ -166,11 +194,15 @@ impl<'a> Frame<'a> {
             (run.stage, std::mem::take(&mut run.gathered), run.step.take(), run.saves_len(), run.serial);
         run.stage = Stage::Event(k);
         run.serial = next_serial();
+        // A maker in a replica of a `par~` runs the stage of that replica: the walk goes through the replicas the call is in, whichever it is called from (`Frame::replicate`).
+        let inside = (std::mem::take(&mut run.replicas), std::mem::take(&mut run.scope));
+        let pin = run.pin.replace((key.call, key.replicas.clone()));
         let (mut out, mine) = (Value::Unit, Stage::Event(k));
         let ran = steps.last().is_some_and(|s| s.pat.is_none() && !s.emits && s.clock.runs_at(mine));
         let done = stage(self, &steps, &mut out, mine).and_then(|()| self.commit_from(at, from));
         if let Some(run) = self.run.as_mut() {
             (run.stage, run.gathered, run.step, run.serial) = (was, gathered, step, serial);
+            (run.replicas, run.scope, run.pin) = (inside.0, inside.1, pin);
             if ran && done.is_ok() {
                 run.set_out = Some(out);
             }
@@ -264,47 +296,49 @@ impl<'a> Frame<'a> {
     }
 
     /// The reads of the names of an event in `expr` and what they are now (S-1240): for a delay that saves `expr`, and for a part of a slower clock that reads a `^name` and is made at the end of its stage (S-1249: the `p` of `(p at (sample / 4)) * 2 + ^k`).
-    pub(super) fn event_reads(&self, expr: ExprId) -> Vec<(ExprId, Value)> {
+    pub(super) fn event_reads(&self, expr: ExprId) -> Vec<Snap> {
         let known = self.run.as_ref().and_then(|r| r.steps.clone()).and_then(|s| s.first().map(|s| s.known.clone()));
-        let mut parts = Vec::new();
-        if let Some(known) = known {
-            let mut chosen = Vec::new();
-            chosen_bindings(&self.body, expr, &mut chosen);
-            self.reads_of_events(&known, (expr, &chosen), expr, &mut parts);
-        }
+        known.map_or_else(Vec::new, |known| self.event_reads_in(&known, expr))
+    }
+
+    /// [`Self::event_reads`] with the clocks of the names `known` as the walk that reaches `expr` has them (the index of a `par` around it too).
+    pub(super) fn event_reads_in(&self, known: &Known, expr: ExprId) -> Vec<Snap> {
+        let (mut parts, mut chosen) = (Vec::new(), Vec::new());
+        chosen_bindings(&self.body, expr, &mut chosen);
+        self.reads_of_events(known, (expr, &chosen), expr, &mut parts);
         parts
     }
 
     /// `root` and the bindings of the arms that a `^name` chooses (S-1249); a part of an event clock that reads one is made at the end of the stage whole, as one that has a `^name` is.
-    fn reads_of_events(
-        &self,
-        known: &Known,
-        (root, chosen): (ExprId, &[LocalId]),
-        e: ExprId,
-        out: &mut Vec<(ExprId, Value)>,
-    ) {
+    fn reads_of_events(&self, known: &Known, (root, chosen): (ExprId, &[LocalId]), e: ExprId, out: &mut Vec<Snap>) {
         let body = self.body;
-        let event = matches!(clock_of(&body, known, root, e), Ok(Clock::Event(_)));
+        // A part in a `par` has a clock only with the index of the `par` (`clock_of` stops at it), so the part a stage kept says it is of an event clock.
+        let kept = self.hoisted.get(&e).filter(|k| matches!(k.0, Clock::Event(_) | Clock::Const));
+        let event = matches!(clock_of(&body, known, root, e), Ok(Clock::Event(_)))
+            || kept.is_some_and(|k| matches!(k.0, Clock::Event(_)));
         if matches!(body.ast.expr(e).kind, ExprKind::Feedback(_))
             || (event && (caret(&body, e) || reads_any(&body, e, chosen)))
         {
             return;
         }
-        // A part of an event clock that a stage kept is read as it is where the delay is written too, and so is a read that the delay around this one saved where it is written (`Clock::Const`: no part of a stage, `commit_from`).
+        // A part of an event clock that a stage kept is read as it is where the delay is written too, and so is a read that the delay around this one saved where it is written (`Clock::Const`: no part of a stage, `commit_from`). A part
+        // in a `par` has a value for each replica, all of them are read (S-1140).
         let replicas = self.run.as_ref().map(|r| r.replicas.clone()).unwrap_or_default();
-        if let Some(v) = self
-            .hoisted
-            .get(&e)
-            .filter(|k| matches!(k.0, Clock::Event(_) | Clock::Const))
-            .and_then(|k| k.1.get(&replicas))
-        {
-            out.push((e, v.clone()));
-            return;
+        if let Some(k) = kept {
+            let before = out.len();
+            out.extend(
+                k.1.iter()
+                    .filter(|(r, _)| r.starts_with(&replicas))
+                    .map(|(r, v)| (e, r[replicas.len()..].to_vec(), v.clone())),
+            );
+            if out.len() > before {
+                return;
+            }
         }
         if let (true, Ok(Target::Local(l))) = (body.names(e), body.target(e)) {
             let read = known.get(l).and_then(|s| s.read);
             if let (Some(Clock::Event(_)), Some(v)) = (read, self.locals.get(l)) {
-                out.push((e, v.clone()));
+                out.push((e, Vec::new(), v.clone()));
             }
         }
         for x in body.ast.sub_exprs(e) {

@@ -59,6 +59,10 @@ mod twin_order;
 mod twin_order_tests;
 #[path = "flow_ref/twin_pan.rs"]
 mod twin_pan;
+#[path = "flow_ref/twin_replica_event.rs"]
+mod twin_replica_event;
+#[path = "flow_ref/twin_replica_event_tests.rs"]
+mod twin_replica_event_tests;
 #[path = "flow_ref/twin_reset.rs"]
 mod twin_reset;
 #[path = "flow_ref/twin_reset_event.rs"]

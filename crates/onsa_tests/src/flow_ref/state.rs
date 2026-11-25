@@ -123,7 +123,7 @@ pub(super) struct Save {
     field: Option<Clock>,
     /// The values the reads of an event it holds had where they are written (S-1240, §11.3): a name of an event and a part of an event clock that a stage kept, by the expression that reads it (one name may be read at the end of the stage in
     /// another place, where a `^name` in a condition chooses it), read so at the end of the stage, not the last ones.
-    pub(super) snap_parts: Vec<(ExprId, Value)>,
+    pub(super) snap_parts: Vec<super::events::Snap>,
     /// A `reset_if~` of an event that came after the delay was read and before it is stored: the delay goes back to its `init` after the store (S-1250 (B), `Frame::reset_delay`).
     reset: bool,
     /// The delays inside what it saves (the first argument of the delay it is, read where it is saved) that a `reset_if~` of an event came for before they were read: they go back after this store (S-1250 (B)).
@@ -147,6 +147,9 @@ pub struct Run {
     /// The replica of each `par~` the evaluation is inside of, and the bindings of those (`i`, an arm of a `match~`).
     pub(super) replicas: Vec<u32>,
     pub(super) scope: Vec<(LocalId, Value)>,
+    /// The event stage of a maker inside `par~`s, run in the middle of the stage of its replica: the call and the replica of each `par~` around it. A `par~` that holds the call is walked for that replica alone (§11.5, §11.11: the events of a
+    /// replica are its own), the others as always (`events::fire`, `Frame::replicate`).
+    pub(super) pin: Option<(ExprId, Vec<u32>)>,
     /// The stage of this instance that the evaluation is in (`enter` sets it): a call reads in it (`Frame::call`).
     pub(super) stage: Stage,
     /// The calls whose gathered arguments this stage has made (`hoist::gather_args`).
@@ -182,6 +185,7 @@ impl Run {
             plans,
             replicas: Vec::new(),
             scope: Vec::new(),
+            pin: None,
             stage: Stage::Init,
             gathered: BTreeSet::new(),
             step: None,
@@ -348,10 +352,10 @@ impl<'a> Frame<'a> {
 
     /// A part that the stage `here` makes and that reads a `^name` (S-1244, §11.2, §11.3): the name is a `let` of this stage or below it, so the part is made at the end of the stage, after the `let`s and the output, in the order of the saves of the delays
     /// (the place where it is written), and kept in its field like any part made by a stage before. Once for each replica in a stage.
-    pub(super) fn defer_part(&mut self, e: ExprId, here: Clock) -> Result<(), Stop> {
+    pub(super) fn defer_part(&mut self, e: ExprId, here: Clock, known: &Known) -> Result<(), Stop> {
         let (key, at) = (self.key(e, Role::Delay), self.body.ast.expr(e).span);
         // The names of an event it reads are the values where they are written, a `^name` the end of the stage (S-1249).
-        let snap_parts = self.event_reads(e);
+        let snap_parts = self.event_reads_in(known, e);
         let run = self
             .run
             .as_mut()
@@ -480,23 +484,27 @@ impl<'a> Frame<'a> {
                 self.hoisted.get_mut(&expr).into_iter().for_each(|(_, kept)| drop(kept.remove(&key.replicas)));
             }
             let before = self.run.as_ref().map_or(0, |r| r.saves.len());
+            let at_key = |rel: &[u32]| key.replicas.iter().chain(rel).copied().collect::<Vec<u32>>();
             let was_parts: Vec<_> = parts_snap
                 .iter()
-                .map(|(e, _)| (*e, self.hoisted.get(e).and_then(|k| k.1.get(&key.replicas)).cloned()))
+                .map(|(e, rel, _)| (*e, at_key(rel), self.hoisted.get(e).and_then(|k| k.1.get(&at_key(rel))).cloned()))
                 .collect();
             let made: Vec<ExprId> =
-                parts_snap.iter().map(|(e, _)| *e).filter(|e| !self.hoisted.contains_key(e)).collect();
-            for (e, v) in parts_snap {
-                self.hoisted.entry(e).or_insert((Clock::Const, HashMap::new())).1.insert(key.replicas.clone(), v);
+                parts_snap.iter().map(|(e, ..)| *e).filter(|e| !self.hoisted.contains_key(e)).collect();
+            for (e, rel, v) in parts_snap {
+                self.hoisted.entry(e).or_insert((Clock::Const, HashMap::new())).1.insert(at_key(&rel), v);
             }
             let value = self.with_bindings(&key.replicas, scope, |f| match call {
                 Some(call) => f.eval_in_arms(call, expr),
                 None => f.eval(expr),
             });
             made.iter().for_each(|e| drop(self.hoisted.remove(e)));
-            for (e, v) in was_parts {
-                if let (Some(v), Some(k)) = (v, self.hoisted.get_mut(&e)) {
-                    k.1.insert(key.replicas.clone(), v);
+            for (e, at, was) in was_parts {
+                if let Some(k) = self.hoisted.get_mut(&e) {
+                    match was {
+                        Some(v) => drop(k.1.insert(at, v)),
+                        None => drop(k.1.remove(&at)),
+                    }
                 }
             }
             let value = value?;

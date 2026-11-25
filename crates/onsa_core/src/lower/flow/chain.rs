@@ -482,7 +482,8 @@ pub(super) fn stored(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, id: N
 /// The stage of the events of the instance of the walk (§11.11) after its run
 /// that gave `v`, the event or none: of an event its function, the one place
 /// that calls it, at the time of this one, which gives the event of the
-/// output or none to this function that gives it (`FlowInfo::gives`).
+/// output or none to this function that gives it (`FlowInfo::gives`); in a
+/// `par~`, of this replica.
 fn give(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, w: &Walk, v: Expr) -> R<()> {
     let (span, none) = (w.span, || internal(w.span, "an event given out of no source"));
     let Clock::Event(src) = w.n.clock else { return Err(none()) };
@@ -495,8 +496,11 @@ fn give(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, w: &Walk, v: Expr)
     let v = materialize(cx, v, out, "__event");
     let some = super::event_option(lw.a, span)?.keep;
     let event = payload(lw, v.clone(), some, 0)?;
+    let vars = around(w.info, w.n.owner).into_iter().map(|p| range(w.info, p, span));
+    let vars = vars.map(|r| Ok(local_expr(cx, LocalId(r?.0.0), span)));
+    let inputs = vars.chain([Ok(event)]).collect::<R<Vec<_>>>()?;
     let ret = gave.as_ref().map_or(Ty::Unit, |g| g.ty.clone());
-    let stage = StageRun { g: w.info, f: f_id, ret, x, state, time, lets: Vec::new(), inputs: vec![event] };
+    let stage = StageRun { g: w.info, f: f_id, ret, x, state, time, lets: Vec::new(), inputs };
     let call = call_stage(stage, span)?;
     match gave {
         Some(g) => assign(&mut arm, &g, call)?,

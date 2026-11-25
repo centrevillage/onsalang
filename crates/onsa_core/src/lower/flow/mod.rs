@@ -111,7 +111,7 @@ mod tests;
 use boundary::{gen_params_default, gen_process, gen_process_inplace, gen_render};
 pub(crate) use branches::{tilde_if, tilde_match};
 pub(crate) use generated::burst_ty;
-use generated::{Gen, init_value, replica_loop, replicas_place, ring_len, sfield, spread};
+use generated::{Gen, around, init_value, range, replicas, replicas_place, ring_len, sfield, spread};
 pub(crate) use hoist::HoistUses;
 pub(crate) use nodes::lower_flow_expr;
 use phases::{StageRun, call_stage, drive, gen_ctl, gen_init, gen_reset, gen_stage};
@@ -309,6 +309,9 @@ pub(crate) struct StageCx {
     /// The event of the function of the stage of a call, its parameter: the
     /// value of that call there ([`nodes::instance`]).
     source: Option<Expr>,
+    /// Of that function, the `par~`s around the call (§11.11): it is of the
+    /// replica that gave the event, takes their variables and makes no loop of them.
+    pinned: Vec<NodeId>,
     /// Of a function that gives the event of the output of the flow or none
     /// and does not make it (`FlowInfo::gives`), the local of what the stage
     /// it ticks gives it ([`chain`]).

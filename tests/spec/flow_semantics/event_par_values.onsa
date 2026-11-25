@@ -1,0 +1,485 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.5", "§11.11", "§11.3", "§11.4", "§11.10"]
+
+// The events inside a `par~` (W7-17 U6a/t; S-1096, S-1233, S-1234, S-1235, S-1236, S-1240, S-1249, S-1250; spec §11.5: "`e` の中の flow 呼び出しは、複製ごとに別のインスタンスになる。`e` のクロックが、`e` の中の呼び出しの
+// イベントの出力のクロックのときは、複製ごとに別のクロックで最大が無いので E0815。イベントは複製の中で受け手に渡すか、複製の中で `at sample` を付ける"; §11.11: "出したイベントの刻みは、作り手の呼び出しのその刻みの仕事
+// （保存まで）が済んだ直後に、呼び出し側の段の途中で行い…（`par~` の中では、その複製の本体）"; §11.10: `reset_if~` はイベントの刻みで、`when~` はイベントの値を最後の値の水準で読む).
+// Each replica has a clock of its own for the events it makes, so its receiver sums only its own events. The input is `XS` (10 frames), the event of `hit~(x, k)` is `x` where `x % k == 0`:
+//   XS     = 6 1 4 9 8 5 12 7 0 3
+//   hit 2  = 6@0 4@2 8@4 12@6 0@8         hit 3 = 6@0 9@3 12@6 0@8 3@9         hit 4 = 4@2 8@4 12@6 0@8
+// (a `0` is an event too, and the frame 0, 6 and 8 have two replicas that give an event at the same place). A receiver `acc` gives the sum of its events and `cnt` their number, both read at `sample` as the last value (0 before
+// the first event). The values of the arrays are worked out by hand from these lists, and the output of the replicas is an array `[U32; N] at sample` (the replica k is `o.out[k]`).
+
+const XS: [U32; 10] = [6, 1, 4, 9, 8, 5, 12, 7, 0, 3]
+
+flow hit(x: U32 at sample, k: U32 at block) -> U32 at event {
+  if x % k == 0 {
+    Some(x)
+  } else {
+    None
+  }
+}
+
+// An event where x has the same rest by 5 as k (k up to 2^32 - 1 can be a replica number).
+flow five(x: U32 at sample, k: U32 at init) -> U32 at event {
+  if x % 5 == k % 5 {
+    Some(x)
+  } else {
+    None
+  }
+}
+
+flow inc(m: U32 at event) -> U32 at event {
+  Some(m + 1)
+}
+
+// The k-th tick of `sample / 4` (the frames 0 4 8) gives `j + 1 + 10 * k` (j is the number of the tick from 0).
+flow slow(k: U32 at block) -> U32 at event {
+  let c = prev~((^c + 1) at (sample / 4))
+  Some(c + 1 + k * 10)
+}
+
+rt fn bit(m: U32) -> U32 {
+  1
+}
+
+flow acc(e: U32 at event) -> U32 at sample {
+  let n = prev~(^n) + e
+  n
+}
+
+flow cnt(e: U32 at event) -> U32 at sample {
+  let n = prev~(^n) + bit(e)
+  n
+}
+
+flow run(x: U32 at sample) -> U32 at sample {
+  let n = prev~(^n) + x
+  n
+}
+
+// A maker and its receiver in a flow of its own, so the replica has no event at its border.
+flow lane(x: U32 at sample, k: U32 at block) -> U32 at sample {
+  let d = hit~(x, k)
+  acc~(d)
+}
+
+// ---- a maker and a receiver in a replica: 2, 3 replicas, a range that does not start at 0, `..=`, the end of U32
+
+pub flow two_lanes(x: U32 at sample) -> [U32; 2] at sample {
+  par~ i in 0 ..< 2 { acc~(hit~(x, i + 2)) }
+}
+
+pub flow three_lanes(x: U32 at sample) -> [U32; 3] at sample {
+  par~ i in 0 ..< 3 { acc~(hit~(x, i + 2)) }
+}
+
+pub flow from_three(x: U32 at sample) -> [U32; 2] at sample {
+  par~ i in 3 ..< 5 { acc~(hit~(x, i)) }
+}
+
+pub flow closed_range(x: U32 at sample) -> [U32; 3] at sample {
+  par~ i in 2 ..= 4 { acc~(hit~(x, i)) }
+}
+
+pub flow through_a_flow(x: U32 at sample) -> [U32; 2] at sample {
+  par~ i in 0 ..< 2 { lane~(x, i + 2) }
+}
+
+pub flow top_closed(x: U32 at sample) -> [U32; 2] at sample {
+  par~ i in 4294967294 ..= 4294967295 { acc~(five~(x, i)) }
+}
+
+pub flow top_open(x: U32 at sample) -> [U32; 2] at sample {
+  par~ i in 4294967293 ..< 4294967295 { acc~(five~(x, i)) }
+}
+
+test "each replica of a par~ has the events of its own: the receiver of the replica sums only the events its own maker gave" {
+  // The sums of hit 2, hit 3 and hit 4 (the replicas 0 1 2): the first two are the same in the two- and the three-lane flow, a flow of its own for the lane makes no difference.
+  let a = two_lanes.render(XS, 8.0)
+  let b = three_lanes.render(XS, 8.0)
+  let c = through_a_flow.render(XS, 8.0)
+  let w0: [U32; 10] = [6, 6, 10, 10, 18, 18, 30, 30, 30, 30]
+  let w1: [U32; 10] = [6, 6, 6, 15, 15, 15, 27, 27, 27, 30]
+  let w2: [U32; 10] = [0, 0, 4, 4, 12, 12, 24, 24, 24, 24]
+  for t in 0 ..< 10 {
+    assert a.out[0][t] == w0[t] && a.out[1][t] == w1[t]
+    assert b.out[0][t] == w0[t] && b.out[1][t] == w1[t] && b.out[2][t] == w2[t]
+    assert c.out[0][t] == w0[t] && c.out[1][t] == w1[t]
+  }
+}
+
+test "the number of the replica i is the value of the range: it starts at a and `..=` includes the end" {
+  // from_three: i = 3 and 4, the divisors 3 and 4 (hit 3, hit 4). closed_range: i = 2 3 4, the sums of hit 2, hit 3, hit 4.
+  let a = from_three.render(XS, 8.0)
+  let b = closed_range.render(XS, 8.0)
+  let w3: [U32; 10] = [6, 6, 6, 15, 15, 15, 27, 27, 27, 30]
+  let w4: [U32; 10] = [0, 0, 4, 4, 12, 12, 24, 24, 24, 24]
+  let w2: [U32; 10] = [6, 6, 10, 10, 18, 18, 30, 30, 30, 30]
+  for t in 0 ..< 10 {
+    assert a.out[0][t] == w3[t] && a.out[1][t] == w4[t]
+    assert b.out[0][t] == w2[t] && b.out[1][t] == w3[t] && b.out[2][t] == w4[t]
+  }
+}
+
+test "a range that ends at the largest U32 has the replicas of its last values" {
+  // 4294967294 % 5 = 4 and 4294967295 % 5 = 0, 4294967293 % 5 = 3. The rest by 5 of XS is 1 1 4 4 3 0 2 2 0 3: the rest 4 is at the frames 2 (4) and 3 (9), 0 at 5 (5) and 8 (0), 3 at 4 (8) and 9 (3).
+  let a = top_closed.render(XS, 8.0)
+  let b = top_open.render(XS, 8.0)
+  let r4: [U32; 10] = [0, 0, 4, 13, 13, 13, 13, 13, 13, 13]
+  let r0: [U32; 10] = [0, 0, 0, 0, 0, 5, 5, 5, 5, 5]
+  let r3: [U32; 10] = [0, 0, 0, 0, 8, 8, 8, 8, 8, 11]
+  for t in 0 ..< 10 {
+    assert a.out[0][t] == r4[t] && a.out[1][t] == r0[t]
+    assert b.out[0][t] == r3[t] && b.out[1][t] == r4[t]
+  }
+}
+
+// ---- a flow from event to event between the maker and the receiver, a computed expression of an event, a maker at sample / 4
+
+pub flow two_stages(x: U32 at sample) -> [U32; 2] at sample {
+  par~ i in 0 ..< 2 { acc~(inc~(hit~(x, i + 3))) }
+}
+
+pub flow slow_lanes() -> [U32; 2] at sample {
+  par~ i in 0 ..< 2 { acc~(slow~(i)) }
+}
+
+test "an event goes through a flow of events inside a replica: the receiver has the event of the flow in the middle" {
+  // hit 3 gives 6@0 9@3 12@6 0@8 3@9, inc gives 7 10 13 1 4; hit 4 gives 4@2 8@4 12@6 0@8, inc gives 5 9 13 1. Sums 7 7 7 17 17 17 30 30 31 35 and 0 0 5 5 14 14 27 27 28 28.
+  let o = two_stages.render(XS, 8.0)
+  let w0: [U32; 10] = [7, 7, 7, 17, 17, 17, 30, 30, 31, 35]
+  let w1: [U32; 10] = [0, 0, 5, 5, 14, 14, 27, 27, 28, 28]
+  for t in 0 ..< 10 {
+    assert o.out[0][t] == w0[t] && o.out[1][t] == w1[t]
+  }
+}
+
+test "a maker at sample / 4 in a replica gives its events at the ticks of its own, the values of the replica" {
+  // The ticks are the frames 0 4 8 and give 1 2 3 (replica 0) and 11 12 13 (replica 1); the sums are held up to the next tick.
+  let o = slow_lanes.render(10, 8.0)
+  let w0: [U32; 10] = [1, 1, 1, 1, 3, 3, 3, 3, 6, 6]
+  let w1: [U32; 10] = [11, 11, 11, 11, 23, 23, 23, 23, 36, 36]
+  for t in 0 ..< 10 {
+    assert o.out[0][t] == w0[t] && o.out[1][t] == w1[t]
+  }
+}
+
+// ---- an event of the outside read in a replica: by a receiver (a computed expression), by prev~, as a level of a condition, as an event of the condition of a reset
+
+// `d` is hit 4: 4@2 8@4 12@6 0@8, and it is above the replicas, so its tick is before the work of the replica of the same frame.
+pub flow outer_computed(x: U32 at sample) -> [U32; 2] at sample {
+  let d = hit~(x, 4)
+  par~ i in 0 ..< 2 { acc~(d + i) }
+}
+
+pub flow outer_prev(x: U32 at sample) -> [U32; 2] at sample {
+  let d = hit~(x, 4)
+  par~ i in 0 ..< 2 { prev~(d) + i }
+}
+
+pub flow outer_elements(x: U32 at sample) -> U32 at sample {
+  let d = hit~(x, 4)
+  let ys = par~ i in 0 ..< 2 { prev~(d) + i }
+  acc~(ys[1])
+}
+
+pub flow outer_reset(x: U32 at sample) -> [U32; 2] at sample {
+  let d = hit~(x, 4)
+  par~ i in 0 ..< 2 { acc~(hit~(x, 3)).reset_if~(d % 8 == 4 * i) }
+}
+
+pub flow outer_when(x: U32 at sample) -> [U32; 2] at sample {
+  let d = hit~(x, 4)
+  par~ i in 0 ..< 2 { run~(x).when~(d % 8 == 4 * i) }
+}
+
+test "an event of the outside is read in a replica by a receiver: the expression d + i is computed at each event of d with the number of the replica" {
+  // d = 4@2 8@4 12@6 0@8: the receiver of the replica 0 sums 4 8 12 0, that of the replica 1 sums 5 9 13 1.
+  let o = outer_computed.render(XS, 8.0)
+  let w0: [U32; 10] = [0, 0, 4, 4, 12, 12, 24, 24, 24, 24]
+  let w1: [U32; 10] = [0, 0, 5, 5, 14, 14, 27, 27, 28, 28]
+  for t in 0 ..< 10 {
+    assert o.out[0][t] == w0[t] && o.out[1][t] == w1[t]
+  }
+}
+
+test "prev~ of an event of the outside in a replica gives the event before, and an expression of the event with i is T.default() before the first event, not i" {
+  // prev~(d) at the events of d: 0 4 8 12 (the first is the init). The expression prev~(d) + i is 0 and 1 at the first event; before it (the frames 0 and 1) it is T.default() of the whole expression, 0 in both replicas.
+  let o = outer_prev.render(XS, 8.0)
+  let w0: [U32; 10] = [0, 0, 0, 0, 4, 4, 8, 8, 12, 12]
+  let w1: [U32; 10] = [0, 0, 1, 1, 5, 5, 9, 9, 13, 13]
+  for t in 0 ..< 10 {
+    assert o.out[0][t] == w0[t] && o.out[1][t] == w1[t]
+  }
+}
+
+test "an element of the array of a par~ whose clock is the event of the outside is an event: a receiver of it has the events of d with the value prev~(d) + 1" {
+  // The events at the frames 2 4 6 8 have the values 1 5 9 13: the sums 1 6 15 28.
+  let o = outer_elements.render(XS, 8.0)
+  let w: [U32; 10] = [0, 0, 1, 1, 6, 6, 15, 15, 28, 28]
+  for t in 0 ..< 10 {
+    assert o.out[t] == w[t]
+  }
+}
+
+test "reset_if~ of an event of the outside in a replica puts the receiver back at the event, before the work of the replica of that frame" {
+  // The receiver sums hit 3 (6@0 9@3 12@6 0@8 3@9). d % 8 == 0 is at the events 8@4 and 0@8 (replica 0), d % 8 == 4 at 4@2 and 12@6 (replica 1). At the frame 6 the replica 1 is put back and then adds the 12 of the frame,
+  // at the frame 8 the replica 0 is put back and adds a 0 (the event is the 0, a count would be 1).
+  let o = outer_reset.render(XS, 8.0)
+  let w0: [U32; 10] = [6, 6, 6, 15, 0, 0, 12, 12, 0, 3]
+  let w1: [U32; 10] = [6, 6, 0, 9, 9, 9, 12, 12, 12, 15]
+  for t in 0 ..< 10 {
+    assert o.out[0][t] == w0[t] && o.out[1][t] == w1[t]
+  }
+}
+
+test "when~ of an event of the outside in a replica reads the last value of the expression as a level: false before the first event, and the output is kept while stopped" {
+  // The condition is true for the replica 0 after d = 8 and d = 0 (the frames 4 5, 8 9) and for the replica 1 after d = 4 and d = 12 (2 3, 6 7). `run` sums x of the frames it runs: XS = 6 1 4 9 8 5 12 7 0 3.
+  let o = outer_when.render(XS, 8.0)
+  let w0: [U32; 10] = [0, 0, 0, 0, 8, 13, 13, 13, 13, 16]
+  let w1: [U32; 10] = [0, 0, 4, 13, 13, 13, 25, 32, 32, 32]
+  for t in 0 ..< 10 {
+    assert o.out[0][t] == w0[t] && o.out[1][t] == w1[t]
+  }
+}
+
+// ---- the clock of the replica's events read at sample, and the output of a delay of them, in the replica (the `at sample` that §11.5 asks for)
+
+pub flow last_in_replicas(x: U32 at sample) -> [U32; 2] at sample {
+  par~ i in 0 ..< 2 { hit~(x, i + 2) at sample }
+}
+
+pub flow delay_in_replicas(x: U32 at sample) -> [U32; 2] at sample {
+  par~ i in 0 ..< 2 { prev~(hit~(x, i + 2)) at sample }
+}
+
+test "at sample in the replica makes the last event of the replica a value of sample: 0 before the first event, the last value after it" {
+  // hit 2 gives 6@0 4@2 8@4 12@6 0@8 and hit 3 gives 6@0 9@3 12@6 0@8 3@9; the last value is held between the events (a 0 is an event: it replaces the 12).
+  let o = last_in_replicas.render(XS, 8.0)
+  let w0: [U32; 10] = [6, 6, 4, 4, 8, 8, 12, 12, 0, 0]
+  let w1: [U32; 10] = [6, 6, 6, 9, 9, 9, 12, 12, 0, 3]
+  for t in 0 ..< 10 {
+    assert o.out[0][t] == w0[t] && o.out[1][t] == w1[t]
+  }
+}
+
+test "the delay of an event in the replica counts the events of its own replica, and is read at sample as the last output" {
+  // At the events of hit 2 the delay gives 0 6 4 8 12, at those of hit 3 it gives 0 6 9 12 0.
+  let o = delay_in_replicas.render(XS, 8.0)
+  let w0: [U32; 10] = [0, 0, 6, 6, 4, 4, 8, 8, 12, 12]
+  let w1: [U32; 10] = [0, 0, 0, 6, 6, 6, 9, 9, 12, 0]
+  for t in 0 ..< 10 {
+    assert o.out[0][t] == w0[t] && o.out[1][t] == w1[t]
+  }
+}
+
+// ---- a par~ in a par~: the number of the outer and of the inner replica are not taken for each other
+
+rt fn fold3(a: [U32; 3]) -> U32 {
+  a[0] + a[1] * 10 + a[2] * 100
+}
+
+// The divisor is (i + 1) * j: i = 0 gives 2 3 4 and i = 1 gives 4 6 8. `cnt` counts the events (at most 5 in 10 frames: a digit each).
+pub flow grid(x: U32 at sample) -> [U32; 2] at sample {
+  par~ i in 0 ..< 2 { fold3(par~ j in 2 ..= 4 { cnt~(hit~(x, (i + 1) * j)) }) }
+}
+
+test "a par~ of 2 with a par~ of 3 inside has six makers and six receivers, each with the divisor (i + 1) * j" {
+  // The numbers of the events: hit 2 5, hit 3 5, hit 4 4 (6@0 4@2 8@4 12@6 0@8; 6@0 9@3 12@6 0@8 3@9; 4@2 8@4 12@6 0@8), hit 6 3 (6@0 12@6 0@8), hit 8 2 (8@4 0@8). The replica i gives c(j = 2) + 10 c(3) + 100 c(4).
+  let o = grid.render(XS, 8.0)
+  let w0: [U32; 10] = [11, 11, 112, 122, 223, 223, 334, 334, 445, 455]
+  let w1: [U32; 10] = [10, 10, 11, 11, 112, 112, 123, 123, 234, 234]
+  for t in 0 ..< 10 {
+    assert o.out[0][t] == w0[t] && o.out[1][t] == w1[t]
+  }
+}
+
+// ---- the binding of an arm of a match~ read by a par~ inside the arm
+
+pub flow arm_binding(x: U32 at sample, k: U32 at block) -> [U32; 2] at sample {
+  match~ k {
+    0 => par~ j in 0 ..< 2 { acc~(hit~(x, j + 7)) },
+    n => par~ j in 0 ..< 2 { acc~(hit~(x, n + j + 1)) },
+  }
+}
+
+test "a par~ in the arm of a match~ that reads the binding of the arm: the arm that is chosen gives its replicas, and the other arm has the binding T.default() (0)" {
+  // k = 0 chooses the first arm: the divisors 7 and 8 (hit 7: 7@7 0@8, hit 8: 8@4 0@8). k = 2 chooses the second, with n = 2: the divisors 3 and 4. The other arm runs too: its divisors with n = 0 are 1 and 2, no panic.
+  let a = arm_binding.render(arm_binding.Params { k: 0 }, XS, 8.0)
+  let b = arm_binding.render(arm_binding.Params { k: 2 }, XS, 8.0)
+  let a0: [U32; 10] = [0, 0, 0, 0, 0, 0, 0, 7, 7, 7]
+  let a1: [U32; 10] = [0, 0, 0, 0, 8, 8, 8, 8, 8, 8]
+  let b0: [U32; 10] = [6, 6, 6, 15, 15, 15, 27, 27, 27, 30]
+  let b1: [U32; 10] = [0, 0, 4, 4, 12, 12, 24, 24, 24, 24]
+  for t in 0 ..< 10 {
+    assert a.out[0][t] == a0[t] && a.out[1][t] == a1[t]
+    assert b.out[0][t] == b0[t] && b.out[1][t] == b1[t]
+  }
+}
+
+// ---- a delay of the replica above the maker of the events it reads (`^name`), and what a delay stores in a replica (S-1240, S-1249, S-1250)
+
+flow gen(x: U32 at sample) -> U32 at event {
+  Some(x)
+}
+
+// The event of `x` when x % 3 != 0 (GS = 1 .. 9): p = prev~(^d) is 0 0 1 1 2 4 4 5 7 before the event of the frame (PB) and 0 1 1 2 4 4 5 7 7 at the end of the frame (PA); the last event is DA = 1 2 2 4 5 5 7 8 8.
+flow gen3(x: U32 at sample) -> U32 at event {
+  if x % 3 != 0 {
+    Some(x)
+  } else {
+    None
+  }
+}
+
+const GS: [U32; 9] = [1, 2, 3, 4, 5, 6, 7, 8, 9]
+
+pub flow above_in_replicas(x: U32 at sample) -> [U32; 2] at sample {
+  let h = par~ i in 0 ..< 2 { acc~(prev~(^d) + i) }
+  let d = gen~(x)
+  h
+}
+
+pub flow caret_in_replicas(x: U32 at sample) -> [U32; 2] at sample {
+  let p = prev~(^d)
+  let ys = par~ i in 0 ..< 2 { prev~(((p * ^d) at sample) + i) }
+  let d = gen3~(x)
+  ys
+}
+
+pub flow place_in_replicas(x: U32 at sample) -> [U32; 2] at sample {
+  let p = prev~(^d)
+  let ys = par~ i in 0 ..< 2 { prev~(((p * 2) at sample) + i) }
+  let d = gen3~(x)
+  ys
+}
+
+// S-1250: `prev~(x + i, 9)` reset by `e >= 5 + 2 i` (e is the event of d one before, d is below the delay): the reset at a frame comes after the delay has stored, so the value is 9 at the next frame only.
+pub flow reset_in_replicas(x: U32 at sample) -> [U32; 2] at sample {
+  let e = prev~(^d)
+  let ys = par~ i in 0 ..< 2 { prev~(x + i, 9).reset_if~(e >= 5 + 2 * i) }
+  let d = gen~(x)
+  ys
+}
+
+test "a receiver of a replica above the maker has the events of the frames before, its replica's own value i added to each" {
+  // The events are x of the frames, the receiver gets the delayed one (0 at the frame 0) plus i; the output read above the maker is the sum of the frames before: the replica 0 has x0 .. x(t-2) and the replica 1 has that and t more.
+  let o = above_in_replicas.render(XS, 8.0)
+  let w0: [U32; 10] = [0, 0, 6, 7, 11, 20, 28, 33, 45, 52]
+  let w1: [U32; 10] = [0, 1, 8, 10, 15, 25, 34, 40, 53, 61]
+  for t in 0 ..< 10 {
+    assert o.out[0][t] == w0[t] && o.out[1][t] == w1[t]
+  }
+}
+
+test "what a delay of a replica stores: a ^name makes the event value that of the end of the stage, a read with no ^name the value where it is written" {
+  // The product p * ^d at the end of the stage is PA * DA = 0 2 2 8 20 20 35 56 56, the delay stores it + i and gives it one frame later. The twin has (p * 2) at sample, 2 PB = 0 0 2 2 4 8 8 10 14 + i.
+  let a = caret_in_replicas.render(GS, 8.0)
+  let b = place_in_replicas.render(GS, 8.0)
+  let a0: [U32; 9] = [0, 0, 2, 2, 8, 20, 20, 35, 56]
+  let a1: [U32; 9] = [0, 1, 3, 3, 9, 21, 21, 36, 57]
+  let b0: [U32; 9] = [0, 0, 0, 2, 2, 4, 8, 8, 10]
+  let b1: [U32; 9] = [0, 1, 1, 3, 3, 5, 9, 9, 11]
+  for t in 0 ..< 9 {
+    assert a.out[0][t] == a0[t] && a.out[1][t] == a1[t]
+    assert b.out[0][t] == b0[t] && b.out[1][t] == b1[t]
+  }
+}
+
+test "a reset_if~ of an event that comes after the delay of its replica acts after the store: the value 9 is given at the next frame (S-1250)" {
+  // x = 1 6 2 7 3 4 1 1, e = 0 1 6 2 7 3 4 1. The replica 0 is reset where e >= 5 (the frames 2 and 4) and gives 9 1 6 9 7 9 4 1 (the table of S-1250); the replica 1 stores x + 1 and is reset where e >= 7 (the frame 4 only): 9 2 7 3 8 9 5 2.
+  let xs: [U32; 8] = [1, 6, 2, 7, 3, 4, 1, 1]
+  let o = reset_in_replicas.render(xs, 8.0)
+  let w0: [U32; 8] = [9, 1, 6, 9, 7, 9, 4, 1]
+  let w1: [U32; 8] = [9, 2, 7, 3, 8, 9, 5, 2]
+  for t in 0 ..< 8 {
+    assert o.out[0][t] == w0[t] && o.out[1][t] == w1[t]
+  }
+}
+
+// ---- a par~ as the first argument of a delay, as the argument of a maker, as the condition of an if~
+
+rt fn lead(a: [U32; 2]) -> Bool {
+  a[0] > a[1]
+}
+
+// An event when the first sum is larger than the second: the difference.
+flow wider(a: [U32; 2] at sample) -> U32 at event {
+  if a[0] > a[1] {
+    Some(a[0] - a[1])
+  } else {
+    None
+  }
+}
+
+pub flow par_in_a_delay(x: U32 at sample) -> [U32; 2] at sample {
+  prev~(par~ i in 0 ..< 2 { acc~(hit~(x, i + 2)) })
+}
+
+pub flow par_in_a_maker(x: U32 at sample) -> U32 at sample {
+  acc~(wider~(par~ i in 0 ..< 2 { acc~(hit~(x, i + 2)) }))
+}
+
+pub flow par_in_a_condition(x: U32 at sample) -> U32 at sample {
+  if~ lead(par~ i in 0 ..< 2 { cnt~(hit~(x, i + 2)) }) {
+    prev~(x)
+  } else {
+    x
+  }
+}
+
+test "a par~ with events inside as the first argument of a delay: the sums of the frame before" {
+  let o = par_in_a_delay.render(XS, 8.0)
+  let w0: [U32; 10] = [0, 6, 6, 10, 10, 18, 18, 30, 30, 30]
+  let w1: [U32; 10] = [0, 6, 6, 6, 15, 15, 15, 27, 27, 27]
+  for t in 0 ..< 10 {
+    assert o.out[0][t] == w0[t] && o.out[1][t] == w1[t]
+  }
+}
+
+test "a par~ with events inside in the argument of a maker, and in the condition of an if~ that runs both of its arms" {
+  // The sums of hit 2 and hit 3 are 6 6 10 10 18 18 30 30 30 30 and 6 6 6 15 15 15 27 27 27 30: `wider` gives 4@2, 3@4, 3@5 .. 3@8 and the receiver sums them. The counts are 1 1 2 2 3 3 4 4 5 5 and
+  // 1 1 1 2 2 2 3 3 4 5, the first is larger at the frames 2 4 5 6 7 8, where the if~ takes the delay of x (x of the frame before) and elsewhere x.
+  let a = par_in_a_maker.render(XS, 8.0)
+  let b = par_in_a_condition.render(XS, 8.0)
+  let wa: [U32; 10] = [0, 0, 4, 4, 7, 10, 13, 16, 19, 19]
+  let wb: [U32; 10] = [6, 1, 1, 9, 9, 8, 5, 12, 7, 3]
+  for t in 0 ..< 10 {
+    assert a.out[t] == wa[t] && b.out[t] == wb[t]
+  }
+}
+
+// ---- a flow of its own with a par~ that has events inside, put back by the reset_if~ outside
+
+flow lanes(x: U32 at sample) -> [U32; 3] at sample {
+  par~ i in 0 ..< 3 { acc~(hit~(x, i + 2)) }
+}
+
+pub flow reset_lanes(x: U32 at sample) -> [U32; 3] at sample {
+  lanes~(x).reset_if~(x == 12)
+}
+
+pub flow reset_lanes_by_an_event(x: U32 at sample) -> [U32; 3] at sample {
+  let d = hit~(x, 5)
+  lanes~(x).reset_if~(d == 0)
+}
+
+test "a reset_if~ outside a flow with a par~ puts back every replica: the sums, and the last values of the receivers" {
+  // x == 12 is the frame 6 (all three replicas have the event 12 there: the sum 12 after the reset), the replica 1 adds the 3 of the frame 9. hit 5 gives 5@5 and 0@8: d == 0 is at the frame 8,
+  // where the replicas are put back before the event 0 of x of that frame (the sums are 0 and the replica 1 adds the 3 of the frame 9).
+  let a = reset_lanes.render(XS, 8.0)
+  let b = reset_lanes_by_an_event.render(XS, 8.0)
+  let a0: [U32; 10] = [6, 6, 10, 10, 18, 18, 12, 12, 12, 12]
+  let a1: [U32; 10] = [6, 6, 6, 15, 15, 15, 12, 12, 12, 15]
+  let a2: [U32; 10] = [0, 0, 4, 4, 12, 12, 12, 12, 12, 12]
+  let b0: [U32; 10] = [6, 6, 10, 10, 18, 18, 30, 30, 0, 0]
+  let b1: [U32; 10] = [6, 6, 6, 15, 15, 15, 27, 27, 0, 3]
+  let b2: [U32; 10] = [0, 0, 4, 4, 12, 12, 24, 24, 0, 0]
+  for t in 0 ..< 10 {
+    assert a.out[0][t] == a0[t] && a.out[1][t] == a1[t] && a.out[2][t] == a2[t]
+    assert b.out[0][t] == b0[t] && b.out[1][t] == b1[t] && b.out[2][t] == b2[t]
+  }
+}

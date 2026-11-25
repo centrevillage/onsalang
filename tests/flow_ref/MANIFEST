@@ -23,8 +23,11 @@ file down_gather_inline_args.tsv rows=46 tests=3 evaluated=3 unavailable=0 skipp
 file down_two_boundaries_values.tsv rows=315 tests=18 evaluated=17 unavailable=0 skipped=1 waiting=0
 file enum_construct.tsv rows=21 tests=6 evaluated=6 unavailable=0 skipped=0 waiting=0
 file enum_construct_match.tsv rows=9 tests=2 evaluated=2 unavailable=0 skipped=0 waiting=1
+file event_arm_values.tsv rows=73 tests=14 evaluated=14 unavailable=0 skipped=0 waiting=0
 file event_condition_values.tsv rows=104 tests=21 evaluated=21 unavailable=0 skipped=0 waiting=0
 file event_hoist_values.tsv rows=34 tests=7 evaluated=7 unavailable=0 skipped=0 waiting=0
+file event_par_part_values.tsv rows=96 tests=21 evaluated=21 unavailable=0 skipped=0 waiting=0
+file event_par_values.tsv rows=106 tests=20 evaluated=20 unavailable=0 skipped=0 waiting=0
 file event_part_values.tsv rows=45 tests=7 evaluated=7 unavailable=0 skipped=0 waiting=0
 file event_read_values.tsv rows=107 tests=16 evaluated=16 unavailable=0 skipped=0 waiting=0
 file event_reset_delay_values.tsv rows=115 tests=14 evaluated=14 unavailable=0 skipped=0 waiting=0
@@ -187,4 +190,4 @@ file when_identity_regressions.tsv rows=78 tests=5 evaluated=5 unavailable=0 ski
 file when_slow_head_values.tsv rows=47 tests=5 evaluated=5 unavailable=0 skipped=0 waiting=0
 file when_slow_values.tsv rows=86 tests=9 evaluated=9 unavailable=0 skipped=0 waiting=0
 file when_values.tsv rows=77 tests=10 evaluated=10 unavailable=0 skipped=0 waiting=0
-total files=188 rows=8338 tests=1406 evaluated=1343 unavailable=2 skipped=61 waiting=7
+total files=191 rows=8613 tests=1461 evaluated=1398 unavailable=2 skipped=61 waiting=7

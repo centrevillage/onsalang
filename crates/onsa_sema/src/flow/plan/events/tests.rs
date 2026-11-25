@@ -342,9 +342,8 @@ fn the_chains_not_run() {
 
 /// The level of an event in the condition of a `.when~` (§11.10): of a chain
 /// of `.when~` and periodic `.reset_if~`, of a flow with no event port or of
-/// a delay at a tick; not beside a ratio, inside it or outside it, nor in a
-/// `par~` or an arm; with a `.reset_if~` at an event, the place is that of
-/// the `.reset_if~` on either side.
+/// a delay at a tick; not beside a ratio, inside it or outside it; with a
+/// `.reset_if~` at an event, the place is that of the `.reset_if~` on either side.
 #[test]
 fn the_levels_of_a_when_that_run() {
     for run in [
@@ -363,46 +362,49 @@ fn the_levels_of_a_when_that_run() {
         ("  own~(x).reset_if~(m > 3).when~(m > 4)", "reset_if"),
         ("  own~(x).when~(m > 4).reset_if~(m > 3)", "reset_if"),
         ("  cnt~(m).when~(m > 3)", "cnt~(m)"),
-        ("  let y = par~ i in 0..<2 { own~(x).when~(m > 3) + i }\n  y[0]", "when"),
-        ("  if~ c { own~(x).when~(m > 3) } else { x }", "when"),
-        ("  match~ x { 0 => prev~(x).when~(m > 3), v => v }", "when"),
     ] {
         assert_eq!(forms(stop).as_deref(), Some(at), "{stop}");
     }
 }
 
-/// The forms in a `par~`, an `if~` and a `match~` (the conditions, the
+/// The forms in a `par~`, a `par`, an `if~` and a `match~` (the conditions, the
 /// scrutinee and the guards too): a call of a flow with an event port, a
-/// delay at an event, a computed part of one; not a name of one.
+/// delay at an event, a condition at one and a computed part of one run; a
+/// chain that does not run elsewhere does not there.
 #[test]
-fn the_branches_not_run() {
-    let par = "  let y = par~ i in 0..<2 { cnt~(m) + i }\n  y[0] + y[1]";
-    assert_eq!(forms(par).as_deref(), Some("cnt~(m)"));
-    let par = "  let y = par~ i in 0..<2 { (prev~(m) at sample) + prev~(x) + i }\n  y[0] + y[1]";
-    assert_eq!(forms(par).as_deref(), Some("prev~(m)"));
-    let par = "  let y = par~ i in 0..<2 { ((m * 2) at sample) + prev~(x) + i }\n  y[0] + y[1]";
-    assert_eq!(forms(par).as_deref(), Some("m * 2"));
-    let par = "  let y = par~ i in 0..<2 { own~(x).reset_if~(m > 3) + i }\n  y[0] + y[1]";
-    assert_eq!(forms(par).as_deref(), Some("reset_if"));
-    // The fields of a `par` are of each replica too.
-    let par = "  let y = par i in 0..<2 { ((m * 2) at sample) + x + i }\n  y[0] + y[1]";
-    assert_eq!(forms(par).as_deref(), Some("m * 2"));
-    let par = "  let y = par~ i in 0..<2 { (m at sample) + prev~(x) + i + own~(x) }\n  y[0] + y[1]";
-    assert_eq!(forms(par), None);
-    let if_ = "  if~ c { cnt~(gen~(x)) } else { prev~(x) }";
-    assert_eq!(forms(if_).as_deref(), Some("cnt~(gen~(x))"));
-    let if_ = "  if~ ((m * 2) at sample) > x { prev~(x) } else { x }";
-    assert_eq!(forms(if_).as_deref(), Some("m * 2"));
-    let if_ = "  if~ (m at sample) > x { prev~(x) } else { m at sample }";
-    assert_eq!(forms(if_), None);
-    let m_ = "  match~ cnt~(m) { 0 => prev~(x), v => v }";
-    assert_eq!(forms(m_).as_deref(), Some("cnt~(m)"));
-    let m_ = "  let y = match~ m { v if m > 3 => prev~(v), v => v }\n  y at sample";
-    assert_eq!(forms(m_).as_deref(), Some("prev~(v)"));
-    let m_ = "  match~ (m at sample) { 0 => own~(x), v => v }";
-    assert_eq!(forms(m_), None);
-    // A plain `if` and `match` hold computed parts under a guard.
-    assert_eq!(forms("  let y = if m > 3 { m * 2 } else { m }\n  y at sample"), None);
+fn the_replicas_and_the_arms() {
+    for run in [
+        "  let y = par~ i in 0..<2 { cnt~(m) + i }\n  y[0] + y[1]",
+        "  let y = par~ i in 0..<2 { cnt~(gen~(x + i)) }\n  y[0] + y[1]",
+        "  let y = par~ i in 0..<2 { (prev~(m) at sample) + prev~(x) + i }\n  y[0] + y[1]",
+        "  let y = par~ i in 0..<2 { ((m * 2) at sample) + prev~(x) + i }\n  y[0] + y[1]",
+        "  let y = par~ i in 0..<2 { own~(x).reset_if~(m > 3) + i }\n  y[0] + y[1]",
+        "  let y = par~ i in 0..<2 { cnt~(m).reset_if~(gen~(x + i) > 3) }\n  y[0] + y[1]",
+        "  let y = par~ i in 0..<2 { own~(x).when~(m > 3) + i }\n  y[0]",
+        "  let y = par i in 0..<2 { ((m * 2) at sample) + x + i }\n  y[0] + y[1]",
+        "  prev~((par i in 0..<2 { ((m * 2) at sample) + x + i })[1])",
+        "  if~ c { cnt~(gen~(x)) } else { prev~(x) }",
+        "  if~ c { own~(x).when~(m > 3) } else { x }",
+        "  if~ ((m * 2) at sample) > x { prev~(x) } else { x }",
+        "  match~ cnt~(m) { 0 => prev~(x), v => v }",
+        "  let y = match~ m { v if m > 3 => prev~(v), v => v }\n  y at sample",
+        "  match~ x { 0 => prev~(x).when~(m > 3), v => cnt~(m).reset_if~(m > 3) + v }",
+    ] {
+        assert_eq!(forms(run), None, "{run}");
+    }
+    for (stop, at) in [
+        ("  let y = par~ i in 0..<2 { cnt~(m).when~(c) + i }\n  y[0]", "cnt~(m)"),
+        ("  let y = par~ i in 0..<2 { own~(x + i).when~(c).reset_if~(m > 3) }\n  y[0]", "reset_if"),
+        (
+            "  let y = par~ i in 0..<2 { par~ j in 0..<2 { cnt~(gen~(x)).down~(2) at sample } }\n  y[0][0]",
+            "cnt~(gen~(x))",
+        ),
+        ("  if~ c { own~(3).when~(m > 3).down~(2) at sample } else { prev~(x) }", "when"),
+        ("  if~ cnt~(m).when~(c) > 3 { prev~(x) } else { x }", "cnt~(m)"),
+        ("  match~ x { 0 => prev~(x).when~(c).reset_if~(m > 3), v => v }", "reset_if"),
+    ] {
+        assert_eq!(forms(stop).as_deref(), Some(at), "{stop}");
+    }
 }
 
 /// S-1237: a source nothing outside it ticks, on the way to the output, not
@@ -431,7 +433,7 @@ fn a_source_its_own_output_ticks_is_not_run() {
 #[test]
 fn a_caller_of_a_form_not_run_has_its_sources() {
     let (_, a, _) = analysis(
-        "flow bad(x: U32 at sample, m: U32 at event) -> U32 at event {\n  let y = par~ i in 0..<2 { cnt~(m) + i }\n  if y[0] > x { Some(y[1]) } else { None }\n}\n\
+        "flow bad(x: U32 at sample, m: U32 at event) -> U32 at event {\n  let y = cnt~(m).when~(x > 1)\n  if y > x { Some(y) } else { None }\n}\n\
          pub flow top(x: U32 at sample, m: U32 at event) -> U32 at sample {\n  let d = bad~(x, m)\n  let n = cnt~(d)\n  n + (prev~(d) at sample)\n}\n\
          pub flow on(x: U32 at sample, m: U32 at event) -> U32 at event {\n  let d = bad~(x, m)\n  Some(d)\n}\n\
          pub flow last(x: U32 at sample, m: U32 at event) -> U32 at sample {\n  cnt~(on~(x, m))\n}\n",

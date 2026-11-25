@@ -8,9 +8,10 @@
 //!   state of each (§12.4).
 //! - From W7-11 U2r a chain of `reset_if~` only (one or more) runs when it has an event: a receiver whose condition is an event, a receiver that has an event port (a call of a flow with an event input, or an argument that is an
 //!   event), and a built-in delay of an event (its condition is the event of its own or a kind `block`). The forms that are E0200 after U2r (until W7-17): a call with `when~`, `.down~` or `.up~` whose callee has an event port, a
-//!   chain that has a `.reset_if~` at an event and a `when~`, `.down~` or `.up~`, or a `when~` at an event and a `.down~` or `.up~` (from U3 one with none of them runs), an event in a `par~`, an `if~` or a `match~`, a source that ticks by itself (`let d = fwd~(prev~(^d))`, on the path of the output, off it, and in a loop
+//!   chain that has a `.reset_if~` at an event and a `when~`, `.down~` or `.up~`, or a `when~` at an event and a `.down~` or `.up~` (from U3 one with none of them runs), a source that ticks by itself (`let d = fwd~(prev~(^d))`, on the path of the output, off it, and in a loop
 //!   of two). Each is one E0200 for the flow that has the form, at a place in that flow (the spec fixes the code and says that it is where the form is found, §18.1; so only the lines of the flow are asked), in `test`,
 //!   `dump --core` and `graph <that flow>`; the flows that run in the same package are not stopped (`graph` of one is drawn), and the tests do not run.
+//! - From W7-17 U6a an event in a `par~`, a `par`, an `if~` and a `match~` runs (in a replica and an arm, in a condition, a scrutinee and a guard); a chain that is E0200 elsewhere is E0200 in a replica and an arm too.
 //! - A package with a mistake of the clock in a flow with an event (E0815: the events of two inputs in one sum) has that diagnostic and no E0200, in every command: the check stops what goes on to the Core.
 //!
 //! Not written here: a flow with an event in a package that is a dependency (a dependency other than `std` is E0200 of the manifest in this version, §15.3, and `std` has no flow with an event), so the form "the own package does
@@ -62,10 +63,20 @@ const ROOTLESS_LOOP: &str = "pub flow rootless_loop(x: F32 at sample) -> U32 at 
 const DELAY_MODIFIER: &str =
     "pub flow delay_modifier(m: U32 at event, c: Bool at block) -> U32 at sample {\n  prev~(m).reset_if~(c)\n}\n";
 const PAR_EVENT: &str = "pub flow par_event(m: U32 at event) -> U32 at sample {\n  let ys = par~ i in 0 ..< 2 {\n    prev~(m)\n  }\n  ys[0] + ys[1]\n}\n";
+/// The makers of events in a `par~`, the parts of events in a `par` (one a delay stores), an event in a condition and a guard, and a level of an event in a `par~`.
+const PAR_MAKER: &str = "pub flow par_maker(x: F32 at sample) -> U32 at sample {\n  let ys = par~ i in 0 ..< 2 {\n    par~ j in 1 ..= 3 {\n      acc~(with_event_out~(x + F32.round_from(i * j)))\n    }\n  }\n  ys[0][1] + ys[1][2]\n}\n";
+const PAR_PARTS: &str = "pub flow par_parts(x: U32 at sample, m: U32 at event) -> U32 at sample {\n  let ys = par i in 0 ..< 2 {\n    x + ((m * i) at sample)\n  }\n  prev~((par i in 0 ..< 2 {\n    x + ((m * (i + 1)) at sample)\n  })[1]) + ys[1]\n}\n";
+const COND_EVENT: &str = "pub flow cond_event(x: F32 at sample) -> F32 at sample {\n  if~ acc~(with_event_out~(x)) > 3 {\n    lp~(x)\n  } else {\n    prev~(x)\n  }\n}\n";
+const GUARD_EVENT: &str = "pub flow guard_event(m: U32 at event) -> U32 at sample {\n  let y = match~ m {\n    n if m > 3 => prev~(n),\n    n => n,\n  }\n  y\n}\n";
+/// The chains that stay E0200, in a replica, an arm and a condition.
+const PAR_CHAIN: &str = "pub flow par_chain(x: F32 at sample) -> U32 at sample {\n  let ys = par~ i in 0 ..< 2 {\n    par~ j in 0 ..< 2 {\n      acc~(with_event_out~(x)).down~(2) at sample\n    }\n  }\n  ys[0][0]\n}\n";
+const IF_CHAIN: &str = "pub flow if_chain(x: F32 at sample, c: Bool at sample) -> F32 at sample {\n  if~ c {\n    lp~(x).when~(c).reset_if~(with_event_out~(x) != 0)\n  } else {\n    x\n  }\n}\n";
+const COND_CHAIN: &str = "pub flow cond_chain(x: F32 at sample, c: Bool at sample) -> F32 at sample {\n  if~ acc~(with_event_out~(x)).when~(c) > 3 {\n    prev~(x)\n  } else {\n    x\n  }\n}\n";
+const MATCH_CHAIN: &str = "pub flow match_chain(x: F32 at sample, k: U32 at sample) -> F32 at sample {\n  let d = with_event_out~(x)\n  match~ k {\n    0 => lp~(0.5).when~(d != 0).down~(2) at sample,\n    _ => prev~(x),\n  }\n}\n";
 const IF_EVENT: &str = "pub flow if_event(m: U32 at event, c: Bool at sample) -> U32 at sample {\n  if~ c {\n    prev~(m)\n  } else {\n    0\n  }\n}\n";
 const MATCH_EVENT: &str = "pub flow match_event(m: U32 at event, k: U32 at sample) -> U32 at sample {\n  match~ k {\n    0 => prev~(m),\n    _ => 0,\n  }\n}\n";
 
-/// A condition of a `when~` at an event (a level, W7-11 U3): the chain of `when~` and periodic `reset_if~` runs; a `.down~` in the chain, a `reset_if~` at an event with it, a part with an event port and a `par~` stay E0200 (W7-17).
+/// A condition of a `when~` at an event (a level, W7-11 U3): the chain of `when~` and periodic `reset_if~` runs; a `.down~` in the chain, a `reset_if~` at an event with it and a part with an event port stay E0200 (W7-17).
 const WHEN_LEVEL: &str = "pub flow when_level(x: F32 at sample, c: Bool at sample) -> F32 at sample {\n  let d = with_event_out~(x)\n  lp~(x).when~(d != 0).reset_if~(c).when~(d < 9)\n}\n";
 const WHEN_DELAY: &str = "pub flow when_delay(x: F32 at sample) -> F32 at sample {\n  let d = with_event_out~(x)\n  prev~(prev~(x).when~(d != 0))\n}\n";
 const WHEN_DOWN: &str = "pub flow when_down(x: F32 at sample) -> F32 at sample {\n  let d = with_event_out~(x)\n  lp~(0.5).when~(d != 0).down~(2) at sample\n}\n";
@@ -201,12 +212,17 @@ fn interface_has_the_sizes_of_the_states_of_the_flows_that_run_u2() {
 
 // ---------------------------------------------------------------- the forms that stay E0200 after U2
 
-/// An event in a `par~`, an `if~` and a `match~`: each flow that has the form is one E0200 (their heads have an event, so they stop before U2 too). The delay of an event with a `reset_if~` is not in the list from U2r
-/// (`delay_modifier` runs: `a_package_of_reset_if_chains_on_events_runs_u2r`).
+/// A chain that stays E0200 elsewhere (a `when~` and a `.down~` on a part with an event port, a `when~` beside a `reset_if~` at an event, a `when~` at an event beside a `.down~`) is one E0200 in a replica (of two `par~`s) and an arm
+/// of an `if~` and a `match~` too, and in the condition of an `if~`; the flows that run beside it are not stopped.
 #[test]
-fn events_in_par_and_branches_are_one_e0200_for_each_flow() {
-    let names = ["par_event", "if_event", "match_event"];
-    assert_each_stops("event_stay_inside", &[PAR_EVENT, IF_EVENT, MATCH_EVENT], &names);
+fn a_chain_not_run_is_one_e0200_in_a_replica_and_an_arm_u6a() {
+    let flows = [EVENT_OUT, ACC, LP, PAR_EVENT, PAR_MAKER, IF_EVENT, PAR_CHAIN, IF_CHAIN, COND_CHAIN, MATCH_CHAIN];
+    assert_each_stops("event_stay_inside", &flows, &["par_chain", "if_chain", "cond_chain", "match_chain"]);
+    let (d, _) = package("event_stay_inside_beside", &flows);
+    for flow in ["par_event", "par_maker", "if_event"] {
+        let out = run(d.root(), &["graph", flow]);
+        assert_eq!(out.code, 0, "graph {flow}: {}{}", out.stdout, out.stderr);
+    }
 }
 
 /// A `when~` or a `.down~` on a call whose callee has an event port, a chain that has an event condition and a `when~` or a `.down~` (before or after the `reset_if~`), and a source that ticks by itself (on the path of the
@@ -294,21 +310,43 @@ fn reset_if_chains_that_run_beside_a_mixed_chain_are_not_stopped_u2r() {
     }
 }
 
-/// A level of an event in the condition of a `when~` (U3): the chains that run are tested and drawn beside a `.down~` in the chain, a `reset_if~` at an event, a part with an event port and a `par~`, one E0200 each.
+/// An event in a `par~` (read from outside and made in it), a `par`, an `if~` and a `match~`: `check` has no diagnostic, `test` passes (1 passed), `dump --core` and `graph` go on, no E0200 is said and `interface` has the sizes
+/// of their states (§12.4).
+#[test]
+fn a_package_of_events_in_replicas_and_arms_runs_u6a() {
+    let names = ["par_event", "par_maker", "par_parts", "if_event", "cond_event", "match_event", "guard_event"];
+    let forms = [PAR_EVENT, PAR_MAKER, PAR_PARTS, IF_EVENT, COND_EVENT, MATCH_EVENT, GUARD_EVENT];
+    let flows = [&[EVENT_OUT, ACC, LP][..], &forms].concat();
+    let (d, _) = package("event_inside_run", &flows);
+    assert_checks("event_inside_run", &d);
+    let dir = d.arg();
+    let mut out = run(d.root(), &["test"]);
+    assert!(out.code == 0 && out.stdout.contains("1 passed, 0 failed"), "test: {}{}", out.stdout, out.stderr);
+    for args in
+        [vec!["dump", "--core", dir.as_str()], vec!["interface"]].into_iter().chain(names.map(|n| vec!["graph", n]))
+    {
+        out = run(d.root(), &args);
+        assert_eq!(out.code, 0, "{args:?}: {}{}", out.stdout, out.stderr);
+        assert!(errors(&out).is_empty() && !out.stdout.contains("not available"), "{args:?}: {}", out.stdout);
+        assert_no_internal_error("event_inside_run", &args, &out);
+    }
+}
+
+/// A level of an event in the condition of a `when~` (U3): the chains that run are tested and drawn beside a `.down~` in the chain, a `reset_if~` at an event and a part with an event port, one E0200 each.
 #[test]
 fn the_levels_of_an_event_in_a_when_run_and_the_other_chains_stop_u3() {
-    let runs = [EVENT_OUT, ACC, LP, WHEN_LEVEL, WHEN_DELAY];
+    let runs = [EVENT_OUT, ACC, LP, WHEN_LEVEL, WHEN_DELAY, WHEN_PAR];
     let (d, _) = package("event_when_run", &runs);
     assert_checks("event_when_run", &d);
     let out = run(d.root(), &["test"]);
     assert_eq!(out.code, 0, "test: {}{}", out.stdout, out.stderr);
     assert!(errors(&out).is_empty() && out.stdout.contains("1 passed, 0 failed"), "test: {}{}", out.stdout, out.stderr);
-    for flow in ["when_level", "when_delay"] {
+    for flow in ["when_level", "when_delay", "when_par"] {
         let out = run(d.root(), &["graph", flow]);
         assert_eq!(out.code, 0, "graph {flow}: {}{}", out.stdout, out.stderr);
     }
-    let stays = [EVENT_OUT, ACC, LP, WHEN_LEVEL, WHEN_DOWN, WHEN_MIXED, WHEN_PORT, WHEN_PAR];
-    assert_each_stops("event_when_stay", &stays, &["when_down", "when_mixed", "when_port", "when_par"]);
+    let stays = [EVENT_OUT, ACC, LP, WHEN_LEVEL, WHEN_DOWN, WHEN_MIXED, WHEN_PORT];
+    assert_each_stops("event_when_stay", &stays, &["when_down", "when_mixed", "when_port"]);
 }
 
 // ---------------------------------------------------------------- a flow with an event is in `onsa graph` only where it is drawn

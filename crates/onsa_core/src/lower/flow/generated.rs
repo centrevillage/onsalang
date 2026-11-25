@@ -89,28 +89,54 @@ pub(super) fn ring_len(kind: &PlanKind, span: Span) -> R<u32> {
 /// over them is of the variable, `from..<from + count`, when that end fits
 /// in `U32`; past it (a last of `U32`'s maximum, S-257) it counts them with
 /// a local `k` of its own from 0 and binds the variable to `from + k`, and
-/// no end past the last is made.
+/// no end past the last is made. Of one the function is of a replica of
+/// ([`StageCx::pinned`]), that replica alone, with no loop.
 pub(super) struct Replicas {
     var: onsa_sema::LocalId,
     from: u32,
     count: u32,
     /// The counter of the loop when `from + count` is past `U32`.
     k: Option<LocalId>,
+    pinned: bool,
 }
 
-/// The replicas of the `par~` of `kind`, with the locals of a loop over
-/// them in `cx`; of another node, an internal error.
-pub(super) fn replica_loop(cx: &mut FnCx, kind: &PlanKind, span: Span) -> R<Replicas> {
-    let &PlanKind::Par { var, from, count, .. } = kind else {
-        return Err(internal(span, "the replicas of no `par~`"));
+/// The variable of the `par~` `id`, its first value and the number of its replicas.
+pub(super) fn range(info: &FlowInfo, id: NodeId, span: Span) -> R<(onsa_sema::LocalId, u32, u32)> {
+    match info.node(id).kind {
+        PlanKind::Par { var, from, count, .. } => Ok((var, from, count)),
+        _ => Err(internal(span, "the replicas of no `par~`")),
+    }
+}
+
+/// The `par~`s (and the `par`s) around what `owner` owns, the outermost first.
+pub(super) fn around(info: &FlowInfo, mut owner: Owner) -> Vec<NodeId> {
+    let mut pars = Vec::new();
+    while let Owner::Par(p) = owner {
+        pars.insert(0, p);
+        owner = info.node(p).owner;
+    }
+    pars
+}
+
+/// The replicas of the `par~` `id`, with the locals of a loop over them in
+/// `cx`, and the state of the one of the iteration in `state` (or it, of none).
+pub(super) fn replicas(lw: &Lowerer, cx: &mut FnCx, id: NodeId, state: &Expr, span: Span) -> R<(Replicas, Expr)> {
+    let f = cx.flow.as_ref().expect("flow context");
+    let (info, pinned) = (f.info, f.now.pinned.contains(&id));
+    let (var, from, count) = range(info, id, span)?;
+    let k = (!pinned && from.checked_add(count).is_none()).then(|| cx.temp("k", Ty::u32()));
+    let r = Replicas { var, from, count, k, pinned };
+    let own = FieldOf::Node(id, Part::Own);
+    let elem = match info.field_at(own) {
+        Some(_) => index(sfield(lw, info, state, own, span)?, r.index(cx, span))?,
+        None => state.clone(),
     };
-    let k = from.checked_add(count).is_none().then(|| cx.temp("k", Ty::u32()));
-    Ok(Replicas { var, from, count, k })
+    Ok((r, elem))
 }
 
 /// The place of a replica in a local `name` at the head of the function,
 /// `Zeroed` in `out`, of an element `ty` for each of the replicas of `pars`
-/// (the outermost first).
+/// (the outermost first) that is not pinned.
 pub(super) fn replicas_place(
     cx: &mut FnCx,
     out: &mut Vec<Stmt>,
@@ -119,14 +145,9 @@ pub(super) fn replicas_place(
     pars: &[NodeId],
     span: Span,
 ) -> R<Expr> {
-    let info = cx.flow.as_ref().expect("flow context").info;
-    let mut each = Vec::with_capacity(pars.len());
-    for &p in pars {
-        let PlanKind::Par { var, from, count, .. } = info.node(p).kind else {
-            return Err(internal(span, "a place of replicas in no `par~`"));
-        };
-        each.push((var, from, count));
-    }
+    let f = cx.flow.as_ref().expect("flow context");
+    let pars = pars.iter().filter(|p| !f.now.pinned.contains(p));
+    let each = pars.map(|&p| range(f.info, p, span)).collect::<R<Vec<_>>>()?;
     let ty = each.iter().rev().fold(ty, |t, &(_, _, n)| Ty::Array(Box::new(t), n));
     let l = cx.temp(name, ty.clone());
     out.push(stmt(span, StmtKind::Let(l, Expr::new(ty, span, ExprKind::Zeroed))));
@@ -138,7 +159,7 @@ pub(super) fn replicas_place(
 }
 
 /// The index of the replica of the variable `var` of a `par~` from `from`
-/// (`var - from`): in a loop over them ([`Replicas::each`]).
+/// (`var - from`): in a loop over them ([`Replicas::each`]) or pinned.
 fn var_index(cx: &FnCx, var: onsa_sema::LocalId, from: u32, span: Span) -> Expr {
     let v = local_expr(cx, LocalId(var.0), span);
     if from == 0 { v } else { checked_binary(BinOp::Sub, v, u32_lit(span, from)) }
@@ -153,18 +174,22 @@ impl Replicas {
         }
     }
 
-    /// The loop over them, of the variable of the `par~`, with the body `stmts`.
-    pub(super) fn each(&self, cx: &FnCx, span: Span, mut stmts: Vec<Stmt>) -> Stmt {
+    /// The body `stmts` in a loop over them, of the variable of the `par~`,
+    /// into `out`; of the one of the function, as it is.
+    pub(super) fn each(&self, cx: &FnCx, out: &mut Vec<Stmt>, span: Span, mut stmts: Vec<Stmt>) {
+        if self.pinned {
+            return out.append(&mut stmts);
+        }
         let var = LocalId(self.var.0);
-        // With no `k`, `from + count` fits in `U32` ([`replica_loop`], the one maker).
+        // With no `k`, `from + count` fits in `U32` ([`replicas`], the one maker).
         let Some(k) = self.k else {
             let (from, to) = (u32_lit(span, self.from), u32_lit(span, self.from + self.count));
-            return stmt(span, StmtKind::ForRange(var, from, to, Block { stmts, value: None }));
+            return out.push(stmt(span, StmtKind::ForRange(var, from, to, Block { stmts, value: None })));
         };
         let at = checked_binary(BinOp::Add, u32_lit(span, self.from), self.index(cx, span));
         stmts.insert(0, stmt(span, StmtKind::Let(var, at)));
         let (zero, count) = (u32_lit(span, 0), u32_lit(span, self.count));
-        stmt(span, StmtKind::ForRange(k, zero, count, Block { stmts, value: None }))
+        out.push(stmt(span, StmtKind::ForRange(k, zero, count, Block { stmts, value: None })));
     }
 }
 
@@ -217,6 +242,7 @@ impl<'b> Gen<'b> {
                 heads: Vec::new(),
                 sample_rate: lit(Ty::Float(FloatKind::F32), span, Lit::F32(0.0)),
                 source: None,
+                pinned: Vec::new(),
                 gave: None,
                 time: Vec::new(),
                 scopes: Vec::new(),

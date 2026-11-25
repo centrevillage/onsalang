@@ -181,18 +181,14 @@ fn work_of(
         AK::Match { tilde: Some(_), .. } => tilde_match_work(lw, cx, info, e, s, state, out)?,
         AK::Par { body, .. } => {
             let Some(&id) = info.node_of.get(&e) else { return Err(internal(span, "a `par~` of no node")) };
-            let r = replica_loop(cx, &info.node(id).kind, span)?;
-            let elem = match info.field_at(FieldOf::Node(id, Part::Own)) {
-                Some(_) => index(sfield(lw, info, state, FieldOf::Node(id, Part::Own), span)?, r.index(cx, span))?,
-                None => state.clone(),
-            };
+            let (r, elem) = replicas(lw, cx, id, state, span)?;
             cx.flow.as_mut().unwrap().push_scope(elem.clone());
             let mut b = Vec::new();
             let done = work(lw, cx, info, *body, s, &elem, &mut b);
             cx.flow.as_mut().unwrap().now.scopes.pop();
             done?;
             if !b.is_empty() {
-                out.push(r.each(cx, span, b));
+                r.each(cx, out, span, b);
             }
         }
         _ => {

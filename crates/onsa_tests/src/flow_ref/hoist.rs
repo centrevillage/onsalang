@@ -539,7 +539,7 @@ fn walk(f: &mut Frame, known: &Known, root: ExprId, e: ExprId, here: Clock, guar
     if made == here && kept(&body, known, e).map_err(stop)? {
         // A part that reads a `^name` is made at the end of the stage, after the `let`s and the output, with what the delays save (S-1244).
         if caret(&body, e) && f.run.is_some() {
-            return f.defer_part(e, here);
+            return f.defer_part(e, here, known);
         }
         // The value of the call before is stale: made again by this stage (the parts it holds that a slower stage kept stay).
         let replicas = f.run.as_ref().map(|r| r.replicas.clone()).unwrap_or_default();
@@ -652,8 +652,17 @@ pub(super) fn hoisted_calls(f: &mut Frame, e: ExprId) -> Result<(), Stop> {
     }
     match &body.ast.expr(e).kind {
         ExprKind::Par { body: inner, .. } => return f.replicate(e, |_: &()| 0, |f| hoisted_calls(f, *inner)).map(drop),
-        // The bindings of an arm and of a block are made where the expression is evaluated: what is in them is reached there.
-        ExprKind::Match { .. } | ExprKind::Block(_) => return Ok(()),
+        // The calls of the lets and the tail of a block (an arm of an `if~` is one) that read none of what the block binds do their work as any other; one that reads a name of the block is reached where the block is evaluated.
+        ExprKind::Block(b) => {
+            let inits = b.stmts.iter().filter_map(|s| match &body.ast.stmt(*s).kind {
+                StmtKind::Let { init, .. } => Some(*init),
+                _ => None,
+            });
+            let inits: Vec<ExprId> = inits.chain(b.tail).filter(|x| !reads_bound_within(&body, *x, e)).collect();
+            return inits.into_iter().try_for_each(|x| hoisted_calls(f, x));
+        }
+        // The bindings of an arm are made where the expression is evaluated: what is in them is reached there.
+        ExprKind::Match { .. } => return Ok(()),
         _ => {}
     }
     let called = matches!(body.ast.expr(e).kind, ExprKind::Call { .. });
@@ -670,6 +679,12 @@ pub(super) fn hoisted_calls(f: &mut Frame, e: ExprId) -> Result<(), Stop> {
         }
         _ => Ok(()),
     }
+}
+
+/// Does `x` read a name that is bound inside `within`?
+fn reads_bound_within(body: &Body, x: ExprId, within: ExprId) -> bool {
+    matches!(body.target(x), Ok(Target::Local(l)) if body.names(x) && body.bound_within(*l, within))
+        || body.ast.sub_exprs(x).into_iter().any(|y| reads_bound_within(body, y, within))
 }
 
 /// Does `e` hold a call of an instance or a delay (what has state, §11.5)?

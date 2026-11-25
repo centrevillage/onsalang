@@ -49,6 +49,7 @@ mod event_gate_rules;
 mod event_insertions;
 mod event_interface_rules;
 mod event_read_commands;
+mod event_replica_commands;
 mod event_reset_commands;
 mod event_saved_commands;
 mod event_stage_commands;

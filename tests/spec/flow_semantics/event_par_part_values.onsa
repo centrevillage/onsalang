@@ -1,0 +1,476 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.3", "§11.5", "§11.11", "§11.4"]
+
+// The computed expressions of an event in a `par` that has no `~` (W7-17 U6a/t; P2; S-1158, S-1197, S-1233, S-1240, S-1249; spec §11.11: "周期の刻みのクロックの被演算子の無いイベントの値の式は、そのイベントのクロックの式で、その刻みごとに評価する"
+// and "最初のイベントの前は `T.default()`"; §11.3: "段が刻みの計算した部分式は、より速い式の中でもその刻みで評価し、値を隠れたフィールドに置く"; "隠れたフィールドの型はその読み（連なりの全体）の型"; "`^名前` を書いたイベントの段の部分式だけが、
+// 使う段の終わりの値"; §11.5: `par` は状態を持たない複製で、`i` は init の値).
+// A `par` whose body reads an event (`m + i`) is one expression of the clock of the event: it is computed at each event of `m` and written to a hidden field of the type of the whole `par` (an array), so before the first event it is
+// the array of 0s (`T.default()` of the array, not `m + i` with m = 0). A `par` that reads `(m at sample)` is an expression of `sample` (`[0, 1]` before the first event). The input is `XS` (12 frames), the event `m` is the
+// odd values: 3@1 5@4 7@7 9@8 11@11. Every value is worked out by hand.
+
+const XS: [U32; 12] = [2, 3, 4, 6, 5, 8, 10, 7, 9, 12, 14, 11]
+
+flow ev(x: U32 at sample) -> U32 at event {
+  if x % 2 == 1 {
+    Some(x)
+  } else {
+    None
+  }
+}
+
+flow gen(x: U32 at sample) -> U32 at event {
+  Some(x)
+}
+
+flow sum_pair(e: [U32; 2] at event) -> U32 at sample {
+  let n = prev~(^n) + e[0] * 10 + e[1]
+  n
+}
+
+flow lin(x: U32 at sample, v: [U32; 2] at sample) -> U32 at sample {
+  x * v[0] + v[1]
+}
+
+rt fn weigh(a: [[U32; 2]; 2]) -> U32 {
+  a[0][0] + a[0][1] * 100 + a[1][0] * 10000 + a[1][1] * 1000000
+}
+
+rt fn pair(a: [U32; 2]) -> U32 {
+  a[0] * 100 + a[1]
+}
+
+// ---- a par of an event: its whole array is the field, before the first event it is [0, 0]
+
+pub flow ev_par(x: U32 at sample) -> [U32; 2] at sample {
+  let m = ev~(x)
+  par i in 0 ..< 2 { m + i }
+}
+
+pub flow at_par(x: U32 at sample) -> [U32; 2] at sample {
+  let m = ev~(x)
+  par i in 0 ..< 2 { (m at sample) + i }
+}
+
+test "a par of an event is computed at the events, and is the array of 0s before the first one" {
+  // The last values are [m, m + 1] after each event; `ev_par` is [0, 0] at the frame 0, where `at_par` (an expression of sample over the last value, 0) is [0, 1].
+  let a = ev_par.render(XS, 8.0)
+  let b = at_par.render(XS, 8.0)
+  let w0: [U32; 12] = [0, 3, 3, 3, 5, 5, 5, 7, 9, 9, 9, 11]
+  let w1: [U32; 12] = [0, 4, 4, 4, 6, 6, 6, 8, 10, 10, 10, 12]
+  let v1: [U32; 12] = [1, 4, 4, 4, 6, 6, 6, 8, 10, 10, 10, 12]
+  for t in 0 ..< 12 {
+    assert a.out[0][t] == w0[t] && a.out[1][t] == w1[t]
+    assert b.out[0][t] == w0[t] && b.out[1][t] == v1[t]
+  }
+}
+
+// ---- in an expression of a periodic clock, as an argument of a flow (an event input, a sample input)
+
+pub flow in_a_sum(x: U32 at sample) -> U32 at sample {
+  let m = ev~(x)
+  let ys = par i in 0 ..< 3 { m * (i + 1) }
+  x + ys[2]
+}
+
+pub flow in_a_sum_inline(x: U32 at sample) -> U32 at sample {
+  let m = ev~(x)
+  x + (par i in 0 ..< 3 { m * (i + 1) })[2]
+}
+
+pub flow to_an_event_input(x: U32 at sample) -> U32 at sample {
+  let m = ev~(x)
+  sum_pair~(par i in 0 ..< 2 { m + i })
+}
+
+pub flow to_a_sample_input(x: U32 at sample) -> U32 at sample {
+  let m = ev~(x)
+  lin~(x, par i in 0 ..< 2 { m + i })
+}
+
+test "a par of an event read in a sum at sample is its last value, 0 before the first event, written inline or in a let" {
+  // ys[2] = 3 m: 0 9 9 9 15 15 15 21 27 27 27 33, plus x.
+  let a = in_a_sum.render(XS, 8.0)
+  let b = in_a_sum_inline.render(XS, 8.0)
+  let w: [U32; 12] = [2, 12, 13, 15, 20, 23, 25, 28, 36, 39, 41, 44]
+  for t in 0 ..< 12 {
+    assert a.out[t] == w[t] && b.out[t] == w[t]
+  }
+}
+
+test "a par of an event given to a flow: an event input has the array at each event, a sample input reads the last array" {
+  // sum_pair adds 10 m + (m + 1) at each event: 34 56 78 100 122, the sums 34 90 168 268 390. `lin` is x * m + (m + 1) with the last m: the frame 0 has the array [0, 0] and is 0 (not 2 * 0 + 1).
+  let a = to_an_event_input.render(XS, 8.0)
+  let b = to_a_sample_input.render(XS, 8.0)
+  let wa: [U32; 12] = [0, 34, 34, 34, 90, 90, 90, 168, 268, 268, 268, 390]
+  let wb: [U32; 12] = [0, 13, 16, 22, 31, 46, 56, 57, 91, 118, 136, 133]
+  for t in 0 ..< 12 {
+    assert a.out[t] == wa[t] && b.out[t] == wb[t]
+  }
+}
+
+// ---- in the arms of an if~: both arms run, a part is computed at the events whether the arm is chosen or not
+
+pub flow in_an_arm(x: U32 at sample) -> U32 at sample {
+  let m = ev~(x)
+  if~ x % 4 == 2 {
+    prev~(x) + (par i in 0 ..< 2 { m + i })[1]
+  } else {
+    x + (par i in 0 ..< 2 { m * 2 + i })[1]
+  }
+}
+
+test "a par of an event in an arm is computed at the events even where the arm is not chosen: the frame 6 reads the event of the frame 4, and the frame 0 the default" {
+  // The then arm (x % 4 == 2) is chosen at the frames 0 3 6 10: prev~(x) + m + 1 with the last m, 0 + 0 at the frame 0 (before the first event the part is 0), 4 + 4 = 8, 8 + 6 = 14 (m = 5 came at the frame 4, in the else arm), 12 + 10 = 22.
+  // The else arm is x + 2 m + 1: 3 + 7, 4 + 7, 5 + 11, 8 + 11, 7 + 15, 9 + 19, 12 + 19, 11 + 23.
+  let o = in_an_arm.render(XS, 8.0)
+  let w: [U32; 12] = [0, 10, 11, 8, 16, 19, 14, 22, 28, 31, 22, 34]
+  for t in 0 ..< 12 {
+    assert o.out[t] == w[t]
+  }
+}
+
+// ---- the first argument of a delay: prev~, delay~, vdelay~, a block value in it
+
+pub flow prev_of_par(x: U32 at sample) -> [U32; 2] at sample {
+  let m = ev~(x)
+  prev~(par i in 0 ..< 2 { m + i })
+}
+
+pub flow delay_of_par(x: U32 at sample) -> [U32; 2] at sample {
+  let m = ev~(x)
+  delay~(par i in 0 ..< 2 { m * 10 + i }, 2)
+}
+
+pub flow prev_of_par_with_block(x: U32 at sample, r: U32 at block) -> U32 at sample {
+  let m = ev~(x)
+  let q = prev~(par i in 0 ..< 2 { m * r + i })
+  q[1]
+}
+
+flow evf(x: F32 at sample) -> F32 at event {
+  if x > 0.0 {
+    Some(x)
+  } else {
+    None
+  }
+}
+
+pub flow vdelay_of_par(x: F32 at sample, d: F32 at block) -> F32 at sample {
+  let m = evf~(x)
+  vdelay~((par i in 0 ..< 2 { m + F32.round_from(i) })[1], d, 4)
+}
+
+test "prev~ and delay~ of a par of an event store the array at the event and give the one before it, the one two before it: the arrays of 0s at the first events" {
+  // The arrays at the events are [m, m + 1] and [10 m, 10 m + 1] for m = 3 5 7 9 11. prev~ gives at the events [0 0] [3 4] [5 6] [7 8] [9 10], delay~ (2) gives [0 0] [0 0] [30 31] [50 51] [70 71].
+  let a = prev_of_par.render(XS, 8.0)
+  let b = delay_of_par.render(XS, 8.0)
+  let a0: [U32; 12] = [0, 0, 0, 0, 3, 3, 3, 5, 7, 7, 7, 9]
+  let a1: [U32; 12] = [0, 0, 0, 0, 4, 4, 4, 6, 8, 8, 8, 10]
+  let b0: [U32; 12] = [0, 0, 0, 0, 0, 0, 0, 30, 50, 50, 50, 70]
+  let b1: [U32; 12] = [0, 0, 0, 0, 0, 0, 0, 31, 51, 51, 51, 71]
+  for t in 0 ..< 12 {
+    assert a.out[0][t] == a0[t] && a.out[1][t] == a1[t]
+    assert b.out[0][t] == b0[t] && b.out[1][t] == b1[t]
+  }
+}
+
+test "a part with a block value in the delay of a par is computed at the event with the block value of that time" {
+  // r is 10 for the frames 0 .. 5 and 100 for the frames 6 .. 11. The stored element 1 is m * r + 1 at the events: 31@1 51@4 701@7 901@8 (and 1101@11), the delay gives the one before.
+  let xs = XS
+  var o: [U32; 12] = [0; 12]
+  var s = prev_of_par_with_block.init(8.0)
+  prev_of_par_with_block.process(inout s, prev_of_par_with_block.Params { r: 10 }, xs.slice(0, 6), inout o.slice(0, 6))
+  prev_of_par_with_block.process(inout s, prev_of_par_with_block.Params { r: 100 }, xs.slice(6, 12), inout o.slice(6, 12))
+  assert o == [0, 0, 0, 0, 31, 31, 31, 51, 701, 701, 701, 901]
+}
+
+test "vdelay~ of an element of a par of an event is stored at the events, and its length is read at them: d = 1.5 is the mean of the two values before" {
+  // x = 0 2 0 0 4 0 6 0 0 10: the events are 2@1 4@4 6@6 10@9, the element is m + 1 = 3 5 7 11. The output at an event is 0.5 * e[n - 1] + 0.5 * e[n - 2] (the buffer starts with 0): 0, 1.5, 4, 6.
+  let xs: [F32; 10] = [0.0, 2.0, 0.0, 0.0, 4.0, 0.0, 6.0, 0.0, 0.0, 10.0]
+  let o = vdelay_of_par.render(vdelay_of_par.Params { d: 1.5 }, xs, 8.0)
+  let w: [F32; 10] = [0.0, 0.0, 0.0, 0.0, 1.5, 1.5, 4.0, 4.0, 4.0, 6.0]
+  for t in 0 ..< 10 {
+    assert o.out[t] == w[t]
+  }
+}
+
+// ---- a par in a par, a par in a par~, the number of the outer and of the inner replica
+
+pub flow nested_par(x: U32 at sample) -> U32 at sample {
+  let m = ev~(x)
+  weigh(par i in 0 ..< 2 { par j in 0 ..< 2 { m + i * 2 + j } })
+}
+
+pub flow par_in_a_par_tilde(x: U32 at sample) -> [U32; 2] at sample {
+  let m = ev~(x)
+  par~ k in 0 ..< 2 { pair(prev~(par j in 0 ..< 2 { m * (k + 1) + j })) }
+}
+
+test "a par in a par is the array of arrays [[m, m + 1], [m + 2, m + 3]]: the outer number i is the row, the inner j the column" {
+  // weigh = m + (m + 1) 100 + (m + 2) 10000 + (m + 3) 1000000, 0 before the first event.
+  let o = nested_par.render(XS, 8.0)
+  let w: [U32; 12] = [0, 6050403, 6050403, 6050403, 8070605, 8070605, 8070605, 10090807, 12111009, 12111009, 12111009, 14131211]
+  for t in 0 ..< 12 {
+    assert o.out[t] == w[t]
+  }
+}
+
+test "a par in a par~: each replica k has the part with its own number, and the delay of the replica gives the one before" {
+  // The array stored at the event is [m (k + 1), m (k + 1) + 1], weighed by 100 and 1: k = 0 gives 304 506 708 910 at the events 4 7 8 11 (0 at the first), k = 1 gives 607 1011 1415 1819.
+  let o = par_in_a_par_tilde.render(XS, 8.0)
+  let w0: [U32; 12] = [0, 0, 0, 0, 304, 304, 304, 506, 708, 708, 708, 910]
+  let w1: [U32; 12] = [0, 0, 0, 0, 607, 607, 607, 1011, 1415, 1415, 1415, 1819]
+  for t in 0 ..< 12 {
+    assert o.out[0][t] == w0[t] && o.out[1][t] == w1[t]
+  }
+}
+
+// ---- a ^name in the part: the value of the end of the stage, with the maker below the delay
+
+pub flow part_with_a_maker_below(x: U32 at sample) -> [U32; 2] at sample {
+  let q = prev~(par i in 0 ..< 2 { ^d * 10 + i })
+  let d = gen~(x)
+  q at sample
+}
+
+test "a part with a ^name stored by a delay is the value of the end of the stage: the event of the frame itself, and the delay gives it a frame later" {
+  // The event d is x of each frame. The array stored at the frame t is [10 x(t), 10 x(t) + 1], and the delay gives the one of the frame before (the first is [0, 0]).
+  let o = part_with_a_maker_below.render(XS, 8.0)
+  let w0: [U32; 12] = [0, 20, 30, 40, 60, 50, 80, 100, 70, 90, 120, 140]
+  let w1: [U32; 12] = [0, 21, 31, 41, 61, 51, 81, 101, 71, 91, 121, 141]
+  for t in 0 ..< 12 {
+    assert o.out[0][t] == w0[t] && o.out[1][t] == w1[t]
+  }
+}
+
+// ---- a part of an event mixed with a value of sample in the first argument of a delay (W7-17 U6a/e; §11.11: "四つの所（組込みの遅延の第 1 引数、…）では、`at` の下に無いイベントの値が周期の刻みのクロックの値と混ざると E0815", so the event is read with `at sample`)
+// The part `(m + i + 1)` is a computed expression of the event clock of `m`, one for each replica `i` of the `par`: it is made at the events (and is 0, not `i + 1`, before the first one), `at sample` reads its last value, and the delay stores
+// `x + part` at each frame. The delay gives the value of the frame before (`prev~`), two before (`delay~` of 2, `vdelay~` of 2.0), and 0 up to then. XS = 2 3 4 6 5 8 10 7 9 12 14 11, the last m is
+//   m = 0 3 3 3 5 5 5 7 9 9 9 11, and the field of the replica 1 (m + 2) is 0 5 5 5 7 7 7 9 11 11 11 13, that of the replica 0 (m + 1) is 0 4 4 4 6 6 6 8 10 10 10 12.
+
+pub flow mixed_prev(x: U32 at sample) -> U32 at sample {
+  let m = ev~(x)
+  prev~((par i in 0 ..< 2 { x + ((m + i + 1) at sample) })[1])
+}
+
+pub flow mixed_via_a_let(x: U32 at sample) -> U32 at sample {
+  let m = ev~(x)
+  let t = par i in 0 ..< 2 { x + ((m + i + 1) at sample) }
+  prev~(t[1])
+}
+
+pub flow mixed_delay(x: U32 at sample) -> U32 at sample {
+  let m = ev~(x)
+  delay~((par i in 0 ..< 2 { x + ((m + i + 1) at sample) })[0], 2)
+}
+
+pub flow mixed_vdelay(x: F32 at sample, d: F32 at block) -> F32 at sample {
+  let m = evf~(x)
+  vdelay~((par i in 0 ..< 2 { x + ((m * 2.0 + F32.round_from(i)) at sample) })[1], d, 4)
+}
+
+test "a part of an event mixed with x in the first argument of prev~, written inline or in a let, is the part of its replica made at the events: x + m + 2 stored at each frame, 0 before the first event" {
+  // x + (m + 2): 2 8 9 11 12 15 17 16 20 23 25 24 (the frame 0 is 2 + 0, not 2 + 2: the part is 0 before the first event); prev~ gives the frame before.
+  let a = mixed_prev.render(XS, 8.0)
+  let b = mixed_via_a_let.render(XS, 8.0)
+  let w: [U32; 12] = [0, 2, 8, 9, 11, 12, 15, 17, 16, 20, 23, 25]
+  for t in 0 ..< 12 {
+    assert a.out[t] == w[t] && b.out[t] == w[t]
+  }
+}
+
+test "delay~ of 2 of the element 0 stores x + m + 1 at each frame and gives it two frames later" {
+  // x + (m + 1): 2 7 8 10 11 14 16 15 19 22 24 23, two frames later.
+  let o = mixed_delay.render(XS, 8.0)
+  let w: [U32; 12] = [0, 0, 2, 7, 8, 10, 11, 14, 16, 15, 19, 22]
+  for t in 0 ..< 12 {
+    assert o.out[t] == w[t]
+  }
+}
+
+test "vdelay~ of a length 2.0 of x + 2 m + 1 (the replica 1) gives the value of two frames before: the part is 0.0 up to the first event" {
+  // x = 0 2 0 0 4 0 6 0 0 10, the events 2@1 4@4 6@6 10@9: the part (2 m + 1) is 0 5 5 5 9 9 13 13 13 21, the stored x + part is 0 7 5 5 13 9 19 13 13 31.
+  let xs: [F32; 10] = [0.0, 2.0, 0.0, 0.0, 4.0, 0.0, 6.0, 0.0, 0.0, 10.0]
+  let o = mixed_vdelay.render(mixed_vdelay.Params { d: 2.0 }, xs, 8.0)
+  let w: [F32; 10] = [0.0, 0.0, 0.0, 7.0, 5.0, 5.0, 13.0, 9.0, 19.0, 13.0]
+  for t in 0 ..< 10 {
+    assert o.out[t] == w[t]
+  }
+}
+
+// ---- in a par~ (the number of the replica k and the inner i), a par in a par, a block value that changes between the events
+
+pub flow mixed_in_replicas(x: U32 at sample) -> [U32; 2] at sample {
+  let m = ev~(x)
+  par~ k in 0 ..< 2 { prev~((par i in 0 ..< 2 { x + ((m * (k + 1) + i) at sample) })[1]) }
+}
+
+pub flow mixed_nested(x: U32 at sample) -> U32 at sample {
+  let m = ev~(x)
+  prev~((par i in 0 ..< 2 { par j in 0 ..< 2 { x + ((m * 10 + i * 2 + j) at sample) } })[1][0])
+}
+
+pub flow mixed_with_block(x: U32 at sample, r: U32 at block) -> U32 at sample {
+  let m = ev~(x)
+  prev~((par i in 0 ..< 2 { x + ((m * r + i + 1) at sample) })[1])
+}
+
+test "a par~ of delays of a par of an event: the replica k has the part m (k + 1) + 1 of its own, and its own delay" {
+  // k = 0: x + m + 1 = 2 7 8 10 11 14 16 15 19 22 24 23; k = 1: x + 2 m + 1 = 2 10 11 13 16 19 21 22 28 31 33 34. Each is given a frame later.
+  let o = mixed_in_replicas.render(XS, 8.0)
+  let w0: [U32; 12] = [0, 2, 7, 8, 10, 11, 14, 16, 15, 19, 22, 24]
+  let w1: [U32; 12] = [0, 2, 10, 11, 13, 16, 19, 21, 22, 28, 31, 33]
+  for t in 0 ..< 12 {
+    assert o.out[0][t] == w0[t] && o.out[1][t] == w1[t]
+  }
+}
+
+test "a par in a par in the first argument of prev~: the element [1][0] has the part 10 m + 2 (the outer number is the first index, the inner the second)" {
+  // x + 10 m + 2: 2 35 36 38 57 60 62 79 101 104 106 123, given a frame later.
+  let o = mixed_nested.render(XS, 8.0)
+  let w: [U32; 12] = [0, 2, 35, 36, 38, 57, 60, 62, 79, 101, 104, 106]
+  for t in 0 ..< 12 {
+    assert o.out[t] == w[t]
+  }
+}
+
+test "a part with a block value is made at the event with the block value of that time, and a change of the block value between two events does not change it" {
+  // r is 10 for the frames 0 .. 5 and 100 for the frames 6 .. 11. The part m r + 2 is 32@1 52@4 702@7 902@8 1102@11 (the frame 6 still has the 52 of the event of the frame 4, not 5 * 100 + 2). The stored x + part is
+  // 2 35 36 38 57 60 62 709 911 914 916 1113, given a frame later.
+  let xs = XS
+  var o: [U32; 12] = [0; 12]
+  var s = mixed_with_block.init(8.0)
+  mixed_with_block.process(inout s, mixed_with_block.Params { r: 10 }, xs.slice(0, 6), inout o.slice(0, 6))
+  mixed_with_block.process(inout s, mixed_with_block.Params { r: 100 }, xs.slice(6, 12), inout o.slice(6, 12))
+  assert o == [0, 2, 35, 36, 38, 57, 60, 62, 709, 911, 914, 916]
+}
+
+// ---- the delay written above the maker, with the part of a ^name; a delay of the event (`prev~(^d)`) read in the part; the arms of a match~ with a delay and a par each
+
+pub flow mixed_with_a_maker_below(x: U32 at sample) -> U32 at sample {
+  let q = prev~((par i in 0 ..< 2 { x + ((^d + i + 1) at sample) })[1])
+  let d = ev~(x)
+  q
+}
+
+pub flow mixed_with_a_delayed_event(x: U32 at sample) -> U32 at sample {
+  let e = prev~(^d)
+  let q = prev~((par i in 0 ..< 2 { x + ((e + i + 1) at sample) })[1])
+  let d = ev~(x)
+  q
+}
+
+pub flow mixed_in_arms(x: U32 at sample) -> U32 at sample {
+  let m = ev~(x)
+  match~ x % 2 {
+    0 => prev~((par i in 0 ..< 2 { x + ((m + i + 1) at sample) })[0]),
+    _ => prev~((par i in 0 ..< 2 { x + ((m * 2 + i) at sample) })[1]),
+  }
+}
+
+test "the part of a ^name read by a delay written above the maker is the value of the end of the stage: the event of the frame itself, so it is the same as the delay written below the maker" {
+  // ^d is m (the event of the frame is in): the part m + 2 is 0 5 5 5 7 7 7 9 11 11 11 13 and x + part is 2 8 9 11 12 15 17 16 20 23 25 24, given a frame later: as `mixed_prev`.
+  let o = mixed_with_a_maker_below.render(XS, 8.0)
+  let w: [U32; 12] = [0, 2, 8, 9, 11, 12, 15, 17, 16, 20, 23, 25]
+  for t in 0 ..< 12 {
+    assert o.out[t] == w[t]
+  }
+}
+
+test "a delay written above the maker that saves a part with the name e of an event (not a ^name) saves it where it is written: the event of the frame comes after, so the part is the one of the event before" {
+  // §11.3: the value is the one the delay would save evaluated where it is written, but for a `^name`; `e` is a name (`let e = prev~(^d)` is the event before at the events 3@1 5@4 7@7 9@8 11@11: e = 0 3 5 7 9). The part
+  // e + 2 is 0 before the first event and 2 5 7 9 11 at the events, so the value where the delay is written (the event of the frame is not given yet) is 0 0 2 2 2 5 5 5 7 9 9 9, and the stored x + part is 2 3 6 8 7 13 15 12 16 21 23 20,
+  // given a frame later. (`mixed_with_a_maker_below` reads `^d` itself, the value of the end of the stage, and is the value of `mixed_prev`.)
+  let o = mixed_with_a_delayed_event.render(XS, 8.0)
+  let w: [U32; 12] = [0, 2, 3, 6, 8, 7, 13, 15, 12, 16, 21, 23]
+  for t in 0 ..< 12 {
+    assert o.out[t] == w[t]
+  }
+}
+
+pub flow saved_plain(x: U32 at sample) -> U32 at sample {
+  let e = prev~(^d)
+  let q = prev~(x + ((e + 2) at sample))
+  let d = ev~(x)
+  q
+}
+
+pub flow saved_via_a_let(x: U32 at sample) -> U32 at sample {
+  let e = prev~(^d)
+  let t = par i in 0 ..< 2 { x + ((e + i + 1) at sample) }
+  let q = prev~(t[1])
+  let d = ev~(x)
+  q
+}
+
+pub flow saved_in_replicas(x: U32 at sample) -> [U32; 2] at sample {
+  let e = prev~(^d)
+  let q = par~ k in 0 ..< 2 { prev~((par i in 0 ..< 2 { x + ((e + k + i + 1) at sample) })[1]) }
+  let d = ev~(x)
+  q
+}
+
+pub flow saved_nested(x: U32 at sample) -> U32 at sample {
+  let e = prev~(^d)
+  let q = prev~((par i in 0 ..< 2 { par j in 0 ..< 2 { x + ((e * 10 + i * 2 + j) at sample) } })[1][0])
+  let d = ev~(x)
+  q
+}
+
+pub flow saved_in_arms(x: U32 at sample) -> U32 at sample {
+  let e = prev~(^d)
+  let q = match~ x % 2 {
+    0 => prev~((par i in 0 ..< 2 { x + ((e + i + 1) at sample) })[0]),
+    _ => prev~((par i in 0 ..< 2 { x + ((e * 2 + i) at sample) })[1]),
+  }
+  let d = ev~(x)
+  q
+}
+
+test "the part e + 2 of a name e saved where it is written is the same inside a par, in a let, in a par~, in a par in a par and in the arms of a match~ as it is outside a par" {
+  // Where the delay is written the part is 0 0 2 2 2 5 5 5 7 9 9 9 (e + 2 at the events 2@1 5@4 7@7 9@8 11@11, the event of the frame is not given yet): the stored x + part is 2 3 6 8 7 13 15 12 16 21 23 20.
+  // The replica k = 1 of the par~ has the part e + 3 (0 0 3 3 3 6 6 6 8 10 10 10, stored 2 3 7 9 8 14 16 13 17 22 24 21). The nested par has 10 e + 2 (0 0 2 2 2 32 32 32 52 72 72 72, stored 2 3 6 8 7 40 42 39 61 84 86 83).
+  // The arms: the arm 0 (even x) stores x + e + 1 (2 3 5 7 6 12 14 11 15 20 22 19), the arm _ (odd x) stores x + 2 e + 1 (2 3 5 7 6 15 17 14 20 27 29 26), and the value is the one of the arm chosen by x, a frame later.
+  let a = saved_plain.render(XS, 8.0)
+  let b = saved_via_a_let.render(XS, 8.0)
+  let c = saved_in_replicas.render(XS, 8.0)
+  let d = saved_nested.render(XS, 8.0)
+  let f = saved_in_arms.render(XS, 8.0)
+  let w: [U32; 12] = [0, 2, 3, 6, 8, 7, 13, 15, 12, 16, 21, 23]
+  let w1: [U32; 12] = [0, 2, 3, 7, 9, 8, 14, 16, 13, 17, 22, 24]
+  let wn: [U32; 12] = [0, 2, 3, 6, 8, 7, 40, 42, 39, 61, 84, 86]
+  let wm: [U32; 12] = [0, 2, 3, 5, 7, 6, 12, 17, 14, 15, 20, 29]
+  for t in 0 ..< 12 {
+    assert a.out[t] == w[t] && b.out[t] == w[t]
+    assert c.out[0][t] == w[t] && c.out[1][t] == w1[t]
+    assert d.out[t] == wn[t] && f.out[t] == wm[t]
+  }
+}
+
+test "the arms of a match~ with a delay and a par each: every arm stores its x + part at each frame, chosen or not, and the value is the one the chosen arm stored the frame before" {
+  // The arm 0 (even x) stores x + m + 1 = 2 7 8 10 11 14 16 15 19 22 24 23, the arm _ (odd x) stores x + 2 m + 1 = 2 10 11 13 16 19 21 22 28 31 33 34 (the parts are 0 up to the first event). The even x are at the frames 0 2 3 5 6 9 10, the odd
+  // x at 1 4 7 8 11: the value of a frame is the one of the chosen arm at the frame before.
+  let o = mixed_in_arms.render(XS, 8.0)
+  let w: [U32; 12] = [0, 2, 7, 8, 13, 11, 14, 21, 22, 19, 22, 33]
+  for t in 0 ..< 12 {
+    assert o.out[t] == w[t]
+  }
+}
+
+// ---- a par in a par of other lengths in the first argument of a delay: the parts of each have a place of their own
+
+pub flow mixed_two_by_three(x: U32 at sample) -> U32 at sample {
+  let m = ev~(x)
+  prev~((par i in 0 ..< 2 { (par j in 0 ..< 3 { x + ((m * (i * 3 + j)) at sample) })[2] })[1])
+}
+
+test "a par of three in a par of two in the first argument of a delay: the element i = 1, j = 2 stores x + 5 m" {
+  // m is 0 at the frame 0, then 3 3 3 5 5 5 7 9 9 9 11: x + 5 m is 2 18 19 21 30 33 35 42 54 57 59 66, given a frame later.
+  let o = mixed_two_by_three.render(XS, 8.0)
+  let w: [U32; 12] = [0, 2, 18, 19, 21, 30, 33, 35, 42, 54, 57, 59]
+  for t in 0 ..< 12 {
+    assert o.out[t] == w[t]
+  }
+}

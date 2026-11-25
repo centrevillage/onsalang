@@ -400,6 +400,90 @@ pub flow f(x: U32 at sample, c: Bool at sample) -> U32 at sample { inner~(x).res
     assert!(kept.contains("s.2 = 9:U32") && !kept.contains("s.3") && !kept.contains("s.4"), "{kept}");
 }
 
+/// §11.11: the stage of a call in a `par~` is of the replica that gave the
+/// event. It takes the variables of the `par~`s around the call alone, the
+/// outermost first, after the time, and makes no loop of them; of those inside
+/// it, in its work and in its stores, one; a replica past `U32` is at the
+/// variable less the first.
+#[test]
+fn the_stage_of_a_call_in_a_par_is_of_the_replica_that_gave_the_event() {
+    let f = "pub flow f(x: U32 at sample) -> U32 at sample {
+  let r = par~ i in 0..<2 { par~ j in 1..<4 { cnt~(stamp~(gen~(x * i + j))) } }
+  r[0][1] + r[1][2]
+}";
+    let t = event_fn(f, "f.tick");
+    in_order(&t, &["for i in 0:U32..2:U32", "for j in 1:U32..4:U32", "t.f.ev_0(inout s, t, i, j, payload("]);
+    assert!(!t.contains("ev_1"), "{t}");
+    let e = event_fn(f, "f.ev_0");
+    let first = "t.stamp.ev_0(inout s.1[i].0[(j - 1:U32)].1, t, ev)";
+    in_order(
+        &e,
+        &["inout s: t.f.State, t: U32, i: U32, j: U32, ev: U32) -> ()", first, "t.f.ev_1(inout s, i, j, payload("],
+    );
+    let e1 = event_fn(f, "f.ev_1");
+    in_order(
+        &e1,
+        &["inout s: t.f.State, i: U32, j: U32, ev: U32) -> ()", "t.cnt.ev_0(inout s.1[i].0[(j - 1:U32)].0, ev)"],
+    );
+    assert!(!e.contains("for ") && !e1.contains("for "), "{e}{e1}");
+    let f = "pub flow f(x: U32 at sample) -> U32 at sample {
+  let d = gen~(x)
+  let r = par~ i in 4294967294..=4294967295 {
+    (match~ fwd~(d + i) { 0 => 9, n => (par~ j in 0..<3 { match~ n + j { 0 => 1, v => prev~(v) } })[2] }) at sample
+  }
+  r[0] + r[1]
+}";
+    let e = event_fn(f, "f.ev_0");
+    in_order(
+        &e,
+        &[
+            "(inout s: t.f.State, ev: U32) -> ()",
+            "for k",
+            "let i: U32 = (4294967294:U32 + k",
+            "t.f.ev_1(inout s, i, payload(",
+        ],
+    );
+    let e = event_fn(f, "f.ev_1");
+    in_order(
+        &e,
+        &[
+            "(inout s: t.f.State, i: U32, ev: U32) -> ()",
+            "let __bind.v: [U32; 3] = zeroed",
+            "__bind.v[j] = v\n",
+            "s.1[(i - 4294967294:U32)].1[j].0 = __bind.v[j]",
+        ],
+    );
+    at(&e, "let __bind.n: U32 = zeroed");
+    assert_eq!((e.matches("for ").count(), e.matches("for j in 0:U32..3:U32").count()), (2, 2), "{e}");
+}
+
+/// S-1240: a part a delay stores in a `par` is read where the delay is
+/// written, of each replica, in loops over the `par`s inside the delay alone.
+#[test]
+fn what_a_delay_stores_of_events_in_a_par_is_read_of_each_replica() {
+    let f = "pub flow f(x: U32 at sample) -> U32 at sample {
+  let p = prev~(^d)
+  let o = par~ i in 0..<2 {
+    prev~((par j in 0..<3 { par l in 1..<5 { x + ((p * (i + j + l)) at sample) } })[1][2])
+  }
+  let d: U32 = gen~(x)
+  o[0] + o[1]
+}";
+    let t = event_fn(f, "f.tick");
+    let parts =
+        ["let __early", "let o@", "for i in", "for j in", "for l in", "__early.o.prev_0[i][j][(l - 1:U32)] = s.1[i]."];
+    let all: Vec<usize> = parts.iter().map(|p| t.find(p).unwrap_or_else(|| panic!("{p}: {t}"))).collect();
+    assert!(all.is_sorted(), "{t}");
+    in_order(
+        &t,
+        &[
+            "let __early.o.prev_0: [[[U32; 4]; 3]; 2] = zeroed",
+            "t.gen.tick(",
+            "(x + __early.o.prev_0[i][j][(l - 1:U32)])",
+        ],
+    );
+}
+
 /// §11.4: the stage of an event takes the time of the stage that ticks it.
 #[test]
 fn the_stage_of_an_event_takes_the_time_of_its_position() {

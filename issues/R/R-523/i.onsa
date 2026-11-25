@@ -1,0 +1,10 @@
+flow half(x: U32 at sample) -> U32 at sample {
+  x
+}
+
+@export
+pub flow fa(x: U32 at sample) -> U32 at sample {
+  let y = half~(3).down~(2)
+  let r = par~ i in 4294967294 ..= 4294967295 { prev~(x) + ((y * (i - 4294967294)) at sample) }
+  r[0] * 1000 + r[1]
+}

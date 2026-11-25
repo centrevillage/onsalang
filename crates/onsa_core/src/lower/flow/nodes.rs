@@ -43,7 +43,7 @@ pub(crate) fn lower_flow_expr(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId) -> R<O
         let state = f.now.scopes.last().ok_or_else(|| internal(span, "node outside a state scope"))?.state.clone();
         (f.now.stage, f.info, id, state)
     };
-    let (name, at) = (&info.node(id).path, |p| FieldOf::Node(id, p));
+    let name = &info.node(id).path;
     // A node is read in the function of the stage the plan gives it, a
     // `par~` where its body is.
     let outside = || internal(span, format!("`{name}` evaluated outside the function of its tick"));
@@ -71,23 +71,18 @@ pub(crate) fn lower_flow_expr(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId) -> R<O
             return Ok(Some(after(stmts, v)));
         }
         PlanKind::Par { body, .. } => {
-            let r = replica_loop(cx, &info.node(id).kind, span)?;
+            let (r, elem_state) = replicas(lw, cx, id, &state, span)?;
             let ty = lw.core_ty(cx.info.expr_types[&e], &[], span)?;
             let arr = cx.temp(name, ty.clone());
             stmts.push(stmt(span, StmtKind::Let(arr, Expr::new(ty.clone(), span, ExprKind::Zeroed))));
             let arr_e = local_expr(cx, arr, span);
             let idx = r.index(cx, span);
-            let elem_state = if info.field(at(Part::Own)).is_some() {
-                index(sfield(lw, info, &state, at(Part::Own), span)?, idx.clone())?
-            } else {
-                state.clone()
-            };
-            cx.flow.as_mut().unwrap().push_scope(elem_state.clone());
+            cx.flow.as_mut().unwrap().push_scope(elem_state);
             let mut loop_body = Vec::new();
             let v = lower_expr(lw, cx, *body)?;
             assign(&mut loop_body, &index(arr_e.clone(), idx)?, v)?;
             cx.flow.as_mut().unwrap().now.scopes.pop();
-            stmts.push(r.each(cx, span, loop_body));
+            r.each(cx, &mut stmts, span, loop_body);
             arr_e
         }
     };
@@ -205,7 +200,8 @@ pub(super) fn delay_work(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, i
 /// The reads `saved` of events in what the end of the stage evaluates, of the
 /// delay or the hoisted part `of` by its path and its owner (S-1240, S-1249,
 /// [`PlanNode::saved`]), as values of this place, after the work in it: each
-/// once, where it is first reached, under no condition (a read of a field).
+/// once, where it is first reached, under no condition (a read of a field); of
+/// a part in a `par` inside `of`, of each replica, in a loop over them.
 pub(super) fn saved_reads(
     lw: &mut Lowerer,
     cx: &mut FnCx,
@@ -217,8 +213,24 @@ pub(super) fn saved_reads(
         if cx.flow.as_ref().expect("flow context").now.expr_override.contains_key(&e) {
             continue;
         }
+        let (info, span) = (cx.flow.as_ref().expect("flow context").info, cx.ast.expr(e).span);
+        let owner = info.hoist_of(e).map_or(of.1, |h| info.hoist(h).owner);
+        let mut loops = Vec::new();
+        for p in around(info, owner).into_iter().skip(around(info, of.1).len()) {
+            let state = super::branches::here(cx, span)?.1;
+            let (r, elem) = replicas(lw, cx, p, &state, span)?;
+            cx.flow.as_mut().unwrap().push_scope(elem);
+            loops.push(r);
+        }
+        let mut body = Vec::new();
         let v = lower_expr(lw, cx, e)?;
-        let v = keep(cx, out, of, v)?;
+        let v = keep(cx, &mut body, (of.0, owner), v)?;
+        for r in loops.into_iter().rev() {
+            cx.flow.as_mut().unwrap().now.scopes.pop();
+            let inner = std::mem::take(&mut body);
+            r.each(cx, &mut body, span, inner);
+        }
+        out.append(&mut body);
         cx.flow.as_mut().unwrap().now.expr_override.insert(e, v);
     }
     Ok(())
@@ -227,13 +239,8 @@ pub(super) fn saved_reads(
 /// `v`, made in the scope of `owner` for `name`, as a value the end of the
 /// stage reads: a `let` ([`super::chain::hold`]); in a `par~`, whose loop ends
 /// before, the element of the replica of a local of the function.
-fn keep(cx: &mut FnCx, out: &mut Vec<Stmt>, (name, mut owner): (&str, Owner), v: Expr) -> R<Expr> {
-    let info = cx.flow.as_ref().expect("flow context").info;
-    let mut pars = Vec::new();
-    while let Owner::Par(p) = owner {
-        pars.insert(0, p);
-        owner = info.node(p).owner;
-    }
+fn keep(cx: &mut FnCx, out: &mut Vec<Stmt>, (name, owner): (&str, Owner), v: Expr) -> R<Expr> {
+    let pars = around(cx.flow.as_ref().expect("flow context").info, owner);
     if pars.is_empty() {
         return Ok(super::chain::hold(cx, out, v, name));
     }

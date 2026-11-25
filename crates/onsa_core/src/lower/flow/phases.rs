@@ -76,14 +76,13 @@ fn each_node(
         let span = cx.ast.expr(n.expr).span;
         f(lw, cx, out, id, state)?;
         let PlanKind::Par { children, state: true, .. } = &n.kind else { continue };
-        let r = replica_loop(cx, &n.kind, span)?;
-        let elem = index(sfield(lw, info, state, FieldOf::Node(id, Part::Own), span)?, r.index(cx, span))?;
+        let (r, elem) = replicas(lw, cx, id, state, span)?;
         let mut body = Vec::new();
         cx.flow.as_mut().unwrap().push_scope(elem.clone());
         each_node(lw, cx, &mut body, children, &elem, f)?;
         cx.flow.as_mut().unwrap().now.scopes.pop();
         if !body.is_empty() {
-            out.push(r.each(cx, span, body));
+            r.each(cx, out, span, body);
         }
     }
     Ok(())
@@ -180,16 +179,14 @@ fn defaults(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, fields: &[Fiel
             assign(out, &place, v)?;
         }
         let FieldOf::Node(id, Part::Own) = f.of else { continue };
-        let kind = &info.node(id).kind;
-        let PlanKind::Par { fields: inner, .. } = kind else { continue };
+        let PlanKind::Par { fields: inner, .. } = &info.node(id).kind else { continue };
         if !starts_default(info, inner) {
             continue;
         }
-        let r = replica_loop(cx, kind, span)?;
-        let elem = index(sfield(lw, info, state, f.of, span)?, r.index(cx, span))?;
+        let (r, elem) = replicas(lw, cx, id, state, span)?;
         let mut body = Vec::new();
         defaults(lw, cx, &mut body, inner, &elem)?;
-        out.push(r.each(cx, span, body));
+        r.each(cx, out, span, body);
     }
     Ok(())
 }
@@ -327,8 +324,8 @@ pub(super) fn gen_ctl<'b>(lw: &mut Lowerer<'b>, shape: &FlowShape, info: &'b Flo
 
 /// The function of the stage `stage` (§11.4, §11.9): `tick(inout s, [t],
 /// <Sig inputs>)` of the `sample` of the body, `tick_<N>(inout s, [t],
-/// <its inputs>)` of a slower one, `ev_<k>(inout s, [t], <its event>)` of a
-/// source of events (§11.11), which [`drive`] or a caller
+/// <its inputs>)` of a slower one, `ev_<k>(inout s, [t], [<its replica>],
+/// <its event>)` of a source of events (§11.11), which [`drive`] or a caller
 /// ([`super::chain::entry`]) calls through [`call_stage`]; the words of the
 /// time `t`, `t_hi` of a stage that takes them (`FlowInfo::time_words`).
 /// In order (§11.3, S-1233): its inputs the state keeps stored, its `let`s
@@ -365,6 +362,10 @@ pub(super) fn gen_stage<'b>(
         let t = g.cx.info.expr_types.get(&info.node(id).expr).copied();
         let t = t.ok_or_else(|| internal(span, "an event of no type"))?;
         let t = lw.core_ty(t, &[], span)?;
+        for p in around(info, info.node(id).owner) {
+            g.param_local(LocalId(range(info, p, span)?.0.0), Mode::Borrow);
+            g.flow().now.pinned.push(p);
+        }
         let v = g.param("ev", Mode::Borrow, t);
         g.flow().now.source = Some(v);
     }

@@ -38,7 +38,14 @@ impl<'a> Frame<'a> {
         }
         self.run.as_ref().ok_or(here(Unavailable("a `par~` outside an instance of a flow")))?;
         let mut out = Vec::with_capacity(n.min(1024));
-        for k in 0..n {
+        // An event stage of a maker in a replica goes through that replica of the `par~` that holds the maker (`events::fire`), the replica its own `par~` of the same depth is in.
+        let pinned = self.run.as_ref().and_then(|r| {
+            let (call, ks) = r.pin.as_ref()?;
+            let (outer, inner) = (self.body.ast.expr(par).span, self.body.ast.expr(*call).span);
+            let holds = outer.file == inner.file && outer.start <= inner.start && inner.end <= outer.end;
+            holds.then(|| ks.get(r.replicas.len()).copied()).flatten()
+        });
+        for k in (0..n).filter(|k| pinned.is_none_or(|p| p as usize == *k)) {
             let i = Value::int(IntKind::U32, lo + k as i128);
             let value = self.with_bindings(&[k as u32], vec![(var, i)], |f| go(f))?;
             // The values of all the replicas are as many places as the first has, n times (as `[e; N]` is held, `aggregate.rs`):

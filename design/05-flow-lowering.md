@@ -86,7 +86,7 @@ rt fn resonator.process(inout s, params, input: Span[F32], inout output: Span[F3
   - 組込みの遅延の受け手は `Ports::delay`（P = W = 第 1 引数のクロック K）で、表は段 K 一つ。保存は `store_node` が `Part::Ran` で守り、止まっている間も保存する値と `vdelay~` の `d` は評価する。
   - 修飾子の門（`ModifierChain::gate`・`check::gated`・`Feature::InstanceModifiers`）は無い。修飾子で E0200 にするのは `Feature::ResetTicksPastU32`（S-1225）だけで、イベントのクロックの条件は、`reset_if~` が下の U2r、`when~` が下の U3、他は E0200（W7-17）。
 - 追記（2026-11-25、W7-11 U2）: イベントの段の降下（§11.11）。
-  - 源（イベントの入力と、イベントを出す呼び出し）ごとの段 `ClockStage::Event(src)` を、関数 `ev_<k>(inout s, [t], <イベント>)` に降ろす（`k` は `FlowInfo::events` の番号、`FlowFns::events`）。
+  - 源（イベントの入力と、イベントを出す呼び出し）ごとの段 `ClockStage::Event(src)` を、関数 `ev_<k>(inout s, [t], [<複製の添字>], <イベント>)` に降ろす（`k` は `FlowInfo::events` の番号、`FlowFns::events`）。
     生成器は `phases::gen_stage` の一つで、段の中の順も遅い刻みの段と同じである。呼び出しの源の関数だけの枝は `StageCx` の二つで、`source`（引数のイベント）と `gave`（出力のイベントの受け）。
   - 計画の表（`plan/events.rs`、`plan/entries.rs` の `close`）: イベントの入力に結び付いた源ごとの `Entry`（同じ源の二つの入力は `Run` を二つ、宣言の順、S-1236）と、
     `EventPlan { src, from, parent, gives }`。`parent` は、作り手の出す段（`Op::Run { out: Out::Event }`）を呼ぶこの flow の段で、源は `parent` の森になる。
@@ -108,5 +108,10 @@ rt fn resonator.process(inout s, params, input: Span[F32], inout output: Span[F3
     `reset`（`Keep::Hard`）は旗も下ろす（間で panic した後）。`reset_if~`（`_reset_kept`）は、旗が下りている所でしか呼ばれないので触れない。旗は戻しの位置ごとなので、W7-17 で境界・守りと重ねても `reset_parts(at)` のまま使える。
   - イベントの値の条件の `when~`（U3、水準）: 条件を読む口（`guard_cond`）は W の刻みで、`Op::When` は周期の条件と同じに、書いた位置で読んだ値（欄なら `hold` の `let`）を使う。イベントの段では条件の欄を書くだけで、受け手は動かない。Core と計画の表に専用の枝は無い。
   - 段ごとの歩き: `let`（と出力）がその段の `let` でなくても段の仕事（呼び出しの仕事、遅延の保存）を持つかは `FlowInfo::work`（`work_in`）が持ち、段の関数はその `let` を書いた位置で歩く（S-1233）。
-  - 動かない形（`.when~`・`.up~`・`.down~` を含む連鎖の、イベントで動く受け手とイベントの `reset_if~`、`.up~`・`.down~` を含む連鎖のイベントの `when~`、`par~`・`if~`・`match~` の中、自分の出力だけで刻む源。W7-17）は `FlowInfo::event_form` が持ち、`lower_flow` と `graph` が E0200 を出す（`FlowInfo::event_gate`）。
+  - 複製と腕（W7-17 U6a）: `if~`・`match~` の腕・条件・対象・ガードと、外のイベントを読む `par~`・`par` は、周期の段と同じ歩き（`tilde_if_work`・`tilde_match_work`・複製の輪）で、専用の枝は無い。
+    `par~` の中の呼び出しの源の段は、出した複製の本体だけを歩く（§11.11）。`ev_<k>` は、源のノードの `owner` の鎖の `par~` の添字（外から）を `ev` の前の引数で受け、`StageCx::pinned` に持つ。渡すのは `chain::give`（輪の中か、固定した関数の中で、どちらも添字は局所）である。
+    複製の輪を作る口は `generated::replicas` の一つで、固定した `par~` は輪を作らず本体を一度だけ置き（`Replicas::each`。添字は `var - from`）、関数の頭の置き場所（`replicas_place`）もその次元を持たない。
+    固定するのは `owner` の鎖だけで、内側の `par~`（`match~` の束縛を読む形）は輪のままである。入力の源の署名と計画の表は変わらない（複製の値がそのイベントのクロックになる形は E0815 なので、源の段の仕事はその複製の本体の外に無い）。
+    遅延（か段の終わりに回る巻き上げ）が保存する式の中の `par` の計算した部分式は、`nodes::saved_reads` が、`Hoist::owner` から遅延の `owner` までの `par` の輪を書いた位置で開き、複製ごとの値を関数の頭の配列に取る（S-1240）。
+  - 動かない形（`.when~`・`.up~`・`.down~` を含む連鎖の、イベントで動く受け手とイベントの `reset_if~`、`.up~`・`.down~` を含む連鎖のイベントの `when~`（どれも複製と腕の中でも）、自分の出力だけで刻む源。W7-17）は `FlowInfo::event_form` が持ち、`lower_flow` と `graph` が E0200 を出す（`FlowInfo::event_gate`）。
 - （2026-10-06、点検 C-66: 例を S-27、S-30、S-33、S-44、S-86、S-102、R-13、R-92 に合わせた。名前と巻き上げの細部は点検の C-36。）

@@ -12,7 +12,7 @@ use onsa_syntax::ast::{CallKind, ClockRatio, ExprId, ExprKind, PatId, RatioOp};
 use super::call::parts;
 use super::expr::{Frame, LIMITS, LOW_STACK, Stop};
 use super::flow::{Clock, Ctx, Inst, Known, Plans, Seen, Step, clock_of, join};
-use super::hoist::{feedback, stage_of};
+use super::hoist::{feedback, kids, stage_of};
 use super::scalar::Fault;
 use super::sema_view::{Body, Called, Stage, View, input_ratio, input_stage, output_stage};
 use super::value::Value;
@@ -626,6 +626,13 @@ fn visit(
         let body_ticks = Inst::planned(view, def, plans)?.slow;
         let parts = levels(view.flow(def).map_err(here)?, &body_ticks, bounds, &clock).map_err(here)?;
         out.0.extend(parts[parts.len() - 1].stages.iter().copied().filter(|s| *s < 0));
+    }
+    // The arms of a `match` see their bindings with the clocks the object and the guards give them (§11.5): a condition of a modifier that reads one is of that clock (`hoist::kids`).
+    if matches!(body.ast.expr(e).kind, ExprKind::Match { .. }) {
+        return kids(body, known, root, e, Clock::Const)
+            .map_err(here)?
+            .into_iter()
+            .try_for_each(|(x, k, _)| visit(view, body, &k, root, x, plans, out));
     }
     let inside = match &chain {
         Some(c) => args_of(body, c.head).into_iter().chain(c.conds()).collect(),
