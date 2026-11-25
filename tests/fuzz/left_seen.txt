@@ -42,6 +42,7 @@ fix|E0003|move `…` to the end of the line before|E0001	a number has no suffix
 fix|E0003|move `…` to the end of the line before|E0001	number prefix without digits
 fix|E0003|move `…` to the end of the line before|E0002	a `…` that opens a list is written right after the token before it
 fix|E0003|move `…` to the end of the line before|E0002	expected `…` (a function body), found `…`
+fix|E0003|move `…` to the end of the line before|E0002	expected `…` (a function body), found identifier
 fix|E0003|move `…` to the end of the line before|E0002	expected `…` after `…`
 fix|E0003|move `…` to the end of the line before|E0002	expected `…` or `…`, found identifier
 fix|E0003|move `…` to the end of the line before|E0002	expected `…` or `…`, found integer literal
