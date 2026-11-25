@@ -498,3 +498,64 @@ fn the_stage_of_an_event_takes_the_time_of_its_position() {
         &["(inout s: t.f.State, t: U32, ev: U32)", "t.stamp.ev_0(inout s.", "t.f.ev_1(inout s, payload("],
     );
 }
+
+/// §11.11, S-1251: a tick whose runs of an `.up~` give several events gives
+/// them in an array, one place each in the order they came, a `None` of the
+/// source taking none; the caller runs the stage of each after the whole work
+/// of the callee, in their order. The stage of an event gives one.
+#[test]
+fn a_tick_gives_several_events_in_an_array_in_their_order() {
+    let f = "flow two() -> U32 at event { let d = gen~(1).up~(2)\n  let b = fwd~(d)\n  Some(b) }
+flow four() -> U32 at event { let d = two~().up~(2)\n  Some(d) }
+pub flow f() -> U32 at sample { cnt~(four~()) }";
+    let t = event_fn(f, "two.tick");
+    in_order(
+        &t,
+        &[
+            "-> [std.core.Option__U32; 2]",
+            "let __out: [std.core.Option__U32; 2] = [std.core.Option__U32.None; 2]",
+            "let __n: U32 = 0:U32",
+            "for __j",
+            "Some => {",
+            "__out[__n] = t.two.ev_0(inout s, payload(__event, Some, 0))",
+            "__n = (__n + 1:U32)",
+            "_ => {",
+        ],
+    );
+    let e = event_fn(f, "two.ev_0");
+    in_order(&e, &["-> std.core.Option__U32", "__out = t.two.ev_1(inout s, payload(__event, Some, 0))"]);
+    let t = event_fn(f, "four.tick");
+    let events = "let __events: [std.core.Option__U32; 2] = t.two.tick(inout s.0)";
+    in_order(
+        &t,
+        &["-> [std.core.Option__U32; 4]", "for __j", events, "for __i", "= __events[__i]", "__out[__n] = t.four.ev_0("],
+    );
+    let t = event_fn(f, "f.tick");
+    in_order(
+        &t,
+        &["-> U32", "t.four.tick(inout s.", "for __i", "= __events[__i]", "t.f.ev_0(inout s, ", "t.cnt.tick("],
+    );
+    assert!(!t.contains("__n"), "{t}");
+}
+
+/// §11.4, S-1217: the time of the stage of an event inside an `.up~` is that
+/// of its run 0, of each `.up~` around it, and divided by a `.down~`.
+#[test]
+fn the_time_of_an_event_in_an_up_is_of_its_run_0() {
+    let f = "pub flow f(x: U32 at sample) -> U32 at sample {
+  let d = gen~(x)
+  let a = stamp~(d).up~(2)
+  let b = stamp~(d).up~(4).down~(2)
+  (a at sample) + (b at sample)
+}";
+    let e = event_fn(f, "f.ev_0");
+    let parts = [
+        "((t << 1:U32) | 0:U32)",
+        "t.stamp.ev_0(inout s.",
+        "t.f.ev_1(",
+        "((t >> 1:U32) | (t_hi << 31:U32))",
+        " << 2:U32) | 0:U32)",
+    ];
+    let places: Vec<usize> = parts.iter().map(|p| e.find(p).unwrap_or_else(|| panic!("{p}: {e}"))).collect();
+    assert!(places.is_sorted(), "{e}");
+}

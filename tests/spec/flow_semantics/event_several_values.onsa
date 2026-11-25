@@ -1,0 +1,356 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.11", "§11.9", "§11.10", "§11.3", "§11.4"]
+
+// Several events in one stage (W7-17 U4/t2 R3; S-1207, S-1229, S-1209, S-1234, S-1235, S-1236; spec §11.11: "`.up~`・`.down~` の部品の中から出るイベントの位置は、内側の刻みが動く呼び出し側の位置（上りを下りが包む連鎖では、どの走りが出しても
+// 境界の刻みの位置）で、同じ位置には内側の刻みの順に並ぶ。走りごとに、その走りの直後に受け手の刻みを行う。`when~` で止まっている間は、周期のクロックの式の出力は出さず"; "出したイベントの刻みは、作り手の呼び出しのその刻みの仕事
+// （保存まで）が済んだ直後に"; §11.4: `sample_tick()` of a body is, from the outermost modifier in, divided by N under `.down~(N)` and N times it plus the run j under `.up~(N)`, and `when~` does not change it).
+// A maker under `.up~(M)` gives M events at each position, one for each run, in the order of the runs. Its run j at the frame p has `sample_tick()` M p + j, so the event `jv` gives (the value `sample_tick()`) is the number of the run
+// from the start. `ord` appends the digit of each event (n * 10 + e), so the order of the events is the number it gives at the frame (the runs stay under ten events: U32); `acc` sums the events. No port of an outermost flow is an
+// event (W10-07): a flow with events inside has its ports at `sample`. Every value is worked out by hand from the text.
+
+flow jv() -> U32 at event {
+  Some(sample_tick())
+}
+
+flow ord(e: U32 at event) -> U32 at sample {
+  let n = prev~(^n) * 10 + e
+  n
+}
+
+flow acc(e: U32 at event) -> U32 at sample {
+  let n = prev~(^n) + e
+  n
+}
+
+flow lo2(v: U32 at (sample * 2)) -> U32 at sample {
+  v[0]
+}
+
+flow hi2(v: U32 at (sample * 2)) -> U32 at sample {
+  v[1]
+}
+
+// a maker wrapped in a flow of its own: one event of the wrapper for each event of the maker; twice wrapped, four a frame
+flow wrap() -> U32 at event {
+  Some(jv~().up~(2))
+}
+
+flow wrap2() -> U32 at event {
+  Some(wrap~().up~(2))
+}
+
+// ---- a maker under .up~(2), and the same wrapped in a flow, wrapped twice, and with a modifier on the wrapper
+
+pub flow t_up2() -> U32 at sample {
+  ord~(jv~().up~(2))
+}
+
+pub flow t_wrap() -> U32 at sample {
+  ord~(wrap~())
+}
+
+pub flow t_wrap2() -> U32 at sample {
+  ord~(wrap2~())
+}
+
+pub flow t_wrap_up2() -> U32 at sample {
+  let d = wrap~().up~(2)
+  ord~(d)
+}
+
+pub flow t_wrap_down2() -> U32 at sample {
+  let d = wrap~().down~(2)
+  ord~(d)
+}
+
+pub flow t_wrap_when(g: Bool at sample) -> U32 at sample {
+  let d = wrap~().when~(g)
+  ord~(d)
+}
+
+test "a maker under .up~(2) gives two events a frame in the order of its runs, and the wrapper gives the same events" {
+  // The runs have `sample_tick()` 0 1 | 2 3 | 4 5: the frame 0 appends 0 and 1 (1), the frame 1 appends 2 and 3 (123), the frame 2 appends 4 and 5 (12345).
+  var a: [U32; 3] = [9; 3]
+  var b: [U32; 3] = [9; 3]
+  var sa = t_up2.init(8.0)
+  var sb = t_wrap.init(8.0)
+  t_up2.process(inout sa, inout a)
+  t_wrap.process(inout sb, inout b)
+  assert a == [1, 123, 12345]
+  assert b == a
+}
+
+test "a wrapper twice wrapped, and a wrapper with .up~(2), gives four events a frame: the tick of the inner is 2 (2 p + i) + j" {
+  // The frame p has the events 4 p .. 4 p + 3: the frame 0 gives 0 1 2 3 (123), the frame 1 gives 4 5 6 7 (1234567). `wrap2~()` and `wrap~().up~(2)` are the same four events.
+  var a: [U32; 2] = [9; 2]
+  var b: [U32; 2] = [9; 2]
+  var sa = t_wrap2.init(8.0)
+  var sb = t_wrap_up2.init(8.0)
+  t_wrap2.process(inout sa, inout a)
+  t_wrap_up2.process(inout sb, inout b)
+  assert a == [123, 1234567]
+  assert b == a
+}
+
+test "a wrapper under .down~(2) gives its two events at the frames of its ticks, 0 2 4, and none between them" {
+  // The wrapper has the tick k at the frame 2 k (`sample_tick()` k), its maker the runs 2 k and 2 k + 1: 0 1 at the frame 0 (1), 2 3 at the frame 2 (123), 4 5 at the frame 4 (12345).
+  var a: [U32; 6] = [9; 6]
+  var sa = t_wrap_down2.init(8.0)
+  t_wrap_down2.process(inout sa, inout a)
+  assert a == [1, 1, 123, 123, 12345, 12345]
+}
+
+test "a wrapper under when~ gives no events on the frames where it stops, and its sample_tick() goes on (the position of the caller)" {
+  // g = true false true true: the frame 1 gives nothing (1). The frames 2 and 3 have the runs 4 5 and 6 7 of `sample_tick()` 2 p + j, as in the run with no `when~`: 14 and 145, then 1456 and 14567.
+  let g: [Bool; 4] = [true, false, true, true]
+  var a: [U32; 4] = [9; 4]
+  var sa = t_wrap_when.init(8.0)
+  t_wrap_when.process(inout sa, g, inout a)
+  assert a == [1, 1, 145, 14567]
+}
+
+// ---- a receiver in the same flow as the maker, a call that is reset by its own events, more than one receiver
+
+flow rec() -> U32 at sample {
+  let d = jv~()
+  acc~(d)
+}
+
+pub flow t_rec_lo() -> U32 at sample {
+  let u = rec~().up~(2)
+  lo2~(u)
+}
+
+pub flow t_rec_hi() -> U32 at sample {
+  let u = rec~().up~(2)
+  hi2~(u)
+}
+
+pub flow t_rec_out() -> U32 at sample {
+  acc~(jv~().up~(2))
+}
+
+test "a receiver in the body of the maker ticks right after each run: the two elements of a frame are the sums after each of the two events" {
+  // The runs have `sample_tick()` 2 p + j, and `acc` adds it before its own run: after the events 0 1 | 2 3 | 4 5 the sums are 0 1 | 3 6 | 10 15, the first of each frame in `lo`, the second in `hi`.
+  // A receiver outside the part ticks after both runs: the sum at the end of the frame is the second element, 1 6 15.
+  var lo: [U32; 3] = [9; 3]
+  var hi: [U32; 3] = [9; 3]
+  var out: [U32; 3] = [9; 3]
+  var s1 = t_rec_lo.init(8.0)
+  var s2 = t_rec_hi.init(8.0)
+  var s3 = t_rec_out.init(8.0)
+  t_rec_lo.process(inout s1, inout lo)
+  t_rec_hi.process(inout s2, inout hi)
+  t_rec_out.process(inout s3, inout out)
+  assert lo == [0, 3, 10]
+  assert hi == [1, 6, 15]
+  assert out == hi
+}
+
+flow cnt_ev() -> U32 at event {
+  let c = prev~(^c) + 1
+  Some(c)
+}
+
+pub flow self_reset() -> U32 at sample {
+  let e = prev~(^d)
+  let d = cnt_ev~().up~(2).reset_if~(e == 2)
+  ord~(d)
+}
+
+test "a call under .up~(2) that is reset by its own events: the reset comes after the run that gave the event, before the next run" {
+  // `cnt_ev` gives 1 2 3 ...; `e` is the event before (0 at the first). The run with the event 3 has e = 2, so the call is put back after it and the next run gives 1 again: the events are 1 2 3 1 2 3 ...,
+  // two a frame: 1 2 | 3 1 | 2 3. The condition at the run 0 is 0 == 2 and at the run 1 is 1 == 2, both false.
+  var a: [U32; 3] = [9; 3]
+  var sa = self_reset.init(8.0)
+  self_reset.process(inout sa, inout a)
+  assert a == [12, 1231, 123123]
+}
+
+pub flow two_receivers() -> U32 at sample {
+  let d = jv~().up~(2)
+  let r = ord~(d).reset_if~(d == 2)
+  r * 1000 + acc~(d)
+}
+
+test "two receivers of one maker: one reset by an event of the maker comes back to 0 before it adds that event, the other sums all" {
+  // The events 0 1 | 2 3 | 4 5. The first receiver puts back at the event 2 (before it adds the 2, as `acc~(m).reset_if~(m != 0)`): 1 | 2 23 | 234 2345. The second sums 1 6 15. The frame gives r * 1000 + sum.
+  var a: [U32; 3] = [9; 3]
+  var sa = two_receivers.init(8.0)
+  two_receivers.process(inout sa, inout a)
+  assert a == [1001, 23006, 2345015]
+}
+
+// ---- events that are not there in every run, and events of other types
+
+flow odd_run() -> U32 at event {
+  let t = sample_tick()
+  if t % 2 == 0 {
+    Some(t + 1)
+  } else {
+    None
+  }
+}
+
+flow even_run() -> U32 at event {
+  let t = sample_tick()
+  if t % 2 == 1 {
+    Some(t + 1)
+  } else {
+    None
+  }
+}
+
+pub flow gap_first() -> U32 at sample {
+  ord~(odd_run~().up~(2))
+}
+
+pub flow gap_second() -> U32 at sample {
+  ord~(even_run~().up~(2))
+}
+
+test "a run that gives None gives no event: the first of the two runs (1 3 5 at the frames 0 1 2) or the second (2 4 6)" {
+  // `odd_run` gives t + 1 where t = 2 p + j is even, that is at j = 0: the events 1 3 5, one a frame (1, 13, 135). `even_run` at j = 1: 2 4 6 (2, 24, 246).
+  var a: [U32; 3] = [9; 3]
+  var b: [U32; 3] = [9; 3]
+  var sa = gap_first.init(8.0)
+  var sb = gap_second.init(8.0)
+  gap_first.process(inout sa, inout a)
+  gap_second.process(inout sb, inout b)
+  assert a == [1, 13, 135]
+  assert b == [2, 24, 246]
+}
+
+flow flip() -> Bool at event {
+  Some(sample_tick() % 2 == 0)
+}
+
+flow digits(e: Bool at event) -> U32 at sample {
+  let n = prev~(^n) * 10 + (if e { 1 } else { 2 })
+  n
+}
+
+flow half() -> F32 at event {
+  Some(F32.round_from(sample_tick()) * 0.5)
+}
+
+flow facc(e: F32 at event) -> F32 at sample {
+  let n = prev~(^n) + e
+  n
+}
+
+pub struct P: Default {
+  a: U32,
+  b: U32,
+}
+
+flow pv() -> P at event {
+  Some(P { a: sample_tick(), b: sample_tick() * 2 })
+}
+
+flow pacc(e: P at event) -> U32 at sample {
+  let n = prev~(^n) + e.a * 100 + e.b
+  n
+}
+
+pub flow ty_bool() -> U32 at sample {
+  digits~(flip~().up~(2))
+}
+
+pub flow ty_f32() -> F32 at sample {
+  facc~(half~().up~(2))
+}
+
+pub flow ty_struct() -> U32 at sample {
+  pacc~(pv~().up~(2))
+}
+
+test "the events of a run of a Bool, an F32 and a struct come in the order of the runs, two a frame" {
+  // Bool: `sample_tick() % 2 == 0` is true at j = 0, false at j = 1: the digits 1 2 at each frame (12, 1212, 121212). F32: 0.0 0.5 | 1.0 1.5 | 2.0 2.5 summed: 0.5, 3.0, 7.5.
+  // Struct: the event t has the fields (t, 2 t) and adds 100 t + 2 t = 102 t: the frames add 102 (0 + 1), 102 * 5 (2 + 3), 102 * 9 (4 + 5): 102, 612, 1530.
+  var a: [U32; 3] = [9; 3]
+  var b: [F32; 3] = [9.0; 3]
+  var c: [U32; 3] = [9; 3]
+  var sa = ty_bool.init(8.0)
+  var sb = ty_f32.init(8.0)
+  var sc = ty_struct.init(8.0)
+  ty_bool.process(inout sa, inout a)
+  ty_f32.process(inout sb, inout b)
+  ty_struct.process(inout sc, inout c)
+  assert a == [12, 1212, 121212]
+  assert b == [0.5, 3.0, 7.5]
+  assert c == [102, 612, 1530]
+}
+
+pub flow m8_digits() -> U32 at sample {
+  ord~(jv~().up~(8))
+}
+
+pub flow m8_sum() -> U32 at sample {
+  acc~(jv~().up~(8))
+}
+
+test "a maker under .up~(8) gives eight events a frame: 0 .. 7 in one frame, the frame p has 8 p .. 8 p + 7" {
+  // One frame: the digits 0 .. 7 (1234567). The sums: 28, then 28 + (8 + .. + 15) = 120, then 120 + (16 + .. + 23) = 276.
+  var a: [U32; 1] = [9; 1]
+  var b: [U32; 3] = [9; 3]
+  var sa = m8_digits.init(8.0)
+  var sb = m8_sum.init(8.0)
+  m8_digits.process(inout sa, inout a)
+  m8_sum.process(inout sb, inout b)
+  assert a == [1234567]
+  assert b == [28, 120, 276]
+}
+
+// ---- a maker in a block, and a wrapper in a block
+
+pub flow block_4_2() -> U32 at sample {
+  ord~(jv~().up~(4).down~(2))
+}
+
+pub flow block_2_4() -> U32 at sample {
+  ord~(jv~().up~(2).down~(4))
+}
+
+pub flow block_wrap() -> U32 at sample {
+  let d = wrap~().up~(2).down~(2)
+  ord~(d)
+}
+
+test "makers in a block give their events at the position of the tick of the boundary, in the order of the runs" {
+  // `.up~(4).down~(2)`: the ticks are the even frames c, the run j has `sample_tick()` 4 (c / 2) + j = 2 c + j: the frame 0 has 0 1 2 3 (123), the frame 2 has 4 5 6 7 (1234567); the odd frames have none.
+  // `.up~(2).down~(4)`: the ticks are 0 4, the run j has c / 2 + j: 0 1 at the frame 0, 2 3 at the frame 4. A wrapper (two events a run) in `.up~(2).down~(2)`: the run j of the tick c has 2 (c + j) + i: 0 1 2 3 at c = 0, 4 .. 7 at c = 2.
+  var a: [U32; 4] = [9; 4]
+  var b: [U32; 6] = [9; 6]
+  var c: [U32; 4] = [9; 4]
+  var sa = block_4_2.init(8.0)
+  var sb = block_2_4.init(8.0)
+  var sc = block_wrap.init(8.0)
+  block_4_2.process(inout sa, inout a)
+  block_2_4.process(inout sb, inout b)
+  block_wrap.process(inout sc, inout c)
+  assert a == [123, 123, 1234567, 1234567]
+  assert b == [1, 1, 1, 1, 123, 123]
+  assert c == [123, 123, 1234567, 1234567]
+}
+
+test "the calls of process cut the run anywhere, a call of 0 frames too, and reset starts again: the values of one run" {
+  // t_wrap_up2 is 123 1234567 (frame 0, frame 1) in one call, cut at 1, and after a call of 0 frames; t_up2 gives 1 123 12345 and after `reset` the same again.
+  var a: [U32; 2] = [9; 2]
+  var sa = t_wrap_up2.init(8.0)
+  t_wrap_up2.process(inout sa, inout a.slice(0, 1))
+  t_wrap_up2.process(inout sa, inout a.slice(1, 1))
+  t_wrap_up2.process(inout sa, inout a.slice(1, 2))
+  assert a == [123, 1234567]
+  var b: [U32; 3] = [9; 3]
+  var sb = t_up2.init(8.0)
+  t_up2.process(inout sb, inout b)
+  assert b == [1, 123, 12345]
+  t_up2.reset(inout sb)
+  var c: [U32; 3] = [9; 3]
+  t_up2.process(inout sb, inout c.slice(0, 2))
+  t_up2.process(inout sb, inout c.slice(2, 3))
+  assert c == [1, 123, 12345]
+}

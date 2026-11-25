@@ -1,0 +1,187 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.4", "§11.9", "§11.10", "§11.11", "§11.3"]
+
+// The time of an event stage under a modifier, and the fields of event values that a `reset_if~` puts back (W7-17 U4/t, M3; S-565, S-1186, S-1217, S-1229; spec §11.4: `sample_tick()` is N times plus the step in `.up~(N)`, divided by N and cut in
+// `.down~(N)`, the caller's under `when~` (also when stopped), the position's in an event stage ("外から来たイベントの段では、何歩目かを 0 とする"); §11.10: the fields that a faster stage reads, event values among them, go back to `T.default()`).
+// Every value is worked out by hand. The time of an event at the frame f is f in the caller, floor(f / 4) in `.down~(4)`, 2 f in `.up~(2)`, 2 floor(f / 2) in `.up~(2).down~(2)`, and the same under a `when~`. `stamp` reads it in the
+// stage of its event (`t`) and in the stage of sample: 100 t + the time of the run. The time of an event that a run of `.up~` gives is not here (S-1252).
+
+flow pulse(y: U32 at sample) -> U32 at event {
+  if y > 0 {
+    Some(y)
+  } else {
+    None
+  }
+}
+
+flow stamp(e: U32 at event) -> U32 at sample {
+  let t = e + sample_tick()
+  (t at sample) * 100 + sample_tick()
+}
+
+flow tt(e: U32 at event) -> U32 at sample {
+  let t = e + sample_tick()
+  t
+}
+
+flow g2(x: U32 at (sample * 2)) -> U32 at sample {
+  x[0] * 1000 + x[1]
+}
+
+// ---- the time of the event stage: the caller's under when~ (stopped frames too), the quotient under .down~, the step 0 under .up~, a part of a chain inside a chain
+
+pub flow t_plain(y: U32 at sample) -> U32 at sample {
+  stamp~(pulse~(y))
+}
+
+pub flow t_when(y: U32 at sample, g: Bool at sample) -> U32 at sample {
+  stamp~(pulse~(y)).when~(g)
+}
+
+pub flow t_down(y: U32 at sample) -> U32 at sample {
+  stamp~(pulse~(y)).down~(4) at sample
+}
+
+pub flow t_up(y: U32 at sample) -> U32 at sample {
+  g2~(stamp~(pulse~(y)).up~(2))
+}
+
+pub flow t_chunk(y: U32 at sample) -> U32 at sample {
+  tt~(pulse~(y)).up~(2).down~(2)
+}
+
+pub flow t_nest(y: U32 at sample, k: Bool at block) -> U32 at sample {
+  tt~(pulse~(y)).down~(2).when~(k) at sample
+}
+
+test "the time of an event stage is the time of the caller, and under when~ it goes on while the part is stopped" {
+  // y = 0 0 0 8 0 0 4 0: the events 8 (the frame 3) and 4 (the frame 6) are read as t = 8 + 3 = 11 and 4 + 6 = 10. Plain, the output 100 t + the time is 0 1 2 1103 1104 1105 1006 1007.
+  // g = T F F F T T T F: the event of the stopped frame 3 has the time 3 of the caller (the time of the runs before it, 1, would give 9), and is read at the run of the frame 4: 1104; the frame 7 is stopped and keeps 1006.
+  let ys: [U32; 8] = [0, 0, 0, 8, 0, 0, 4, 0]
+  let a = t_plain.render(ys, 8.0)
+  let b = t_when.render(t_when.In { y: ys, g: [true, false, false, false, true, true, true, false] }, 8.0)
+  let w_a: [U32; 8] = [0, 1, 2, 1103, 1104, 1105, 1006, 1007]
+  let w_b: [U32; 8] = [0, 0, 0, 0, 1104, 1105, 1006, 1006]
+  for i in 0 ..< 8 {
+    assert a.out[i] == w_a[i]
+    assert b.out[i] == w_b[i]
+  }
+}
+
+test "under .down~(4) the time of an event is cut to the part's tick, and the part reads at its ticks (the frames 0 4 8) the events before them" {
+  // y = 0 0 0 5 0 6 0 0 0 2 0 0: the events at the frames 3 5 9 have t = 5 + 0, 6 + 1, 2 + 2 (5, 7, 4). The ticks read the last t before the frame: 0 at the frame 0, 5 at the frame 4, 7 at the frame 8 (the event of the
+  // frame 9 comes after), with the time 0 1 2 of the tick: 0, 501, 702, held four frames.
+  let a = t_down.render([0, 0, 0, 5, 0, 6, 0, 0, 0, 2, 0, 0], 8.0)
+  let w_a: [U32; 12] = [0, 0, 0, 0, 501, 501, 501, 501, 702, 702, 702, 702]
+  for i in 0 ..< 12 {
+    assert a.out[i] == w_a[i]
+  }
+}
+
+test "under .up~(2) an event from outside is read at the step 0 of the frame (2 f), and the two runs of the frame take the steps 2 f and 2 f + 1" {
+  // y = 0 5 0 2 0 9: the events at the frames 1 3 5 have t = 5 + 2, 2 + 6, 9 + 10 (7, 8, 19). The runs give 100 t + 2 f and 100 t + 2 f + 1, and g2 is the first element times 1000 plus the second: the frame 0 has t = 0 (1),
+  // the frame 1 702 and 703 (702703), the frame 2 704705 with the t of the frame 1, the frame 3 806807, 4 808809, 5 1910 and 1911.
+  let a = t_up.render([0, 5, 0, 2, 0, 9], 8.0)
+  let w_a: [U32; 6] = [1, 702703, 704705, 806807, 808809, 1911911]
+  for i in 0 ..< 6 {
+    assert a.out[i] == w_a[i]
+  }
+}
+
+test "in a chunk .up~(2).down~(2) the time is 2 floor(f / 2) and the boundary run at an even frame reads the events of the frames before it" {
+  // y = 0 5 0 2 6 0 0 0: the events at the frames 1 3 4 have t = 5 + 0, 2 + 2, 6 + 4 (5, 4, 10). The boundary runs are at the frames 0 2 4 6 and read the events before them: 0, 5 (the frame 1), 4 (the frame 3; the event of the frame 4
+  // comes after the run of the frame 4), 10; each run deals its value to the frame and the next one.
+  let a = t_chunk.render([0, 5, 0, 2, 6, 0, 0, 0], 8.0)
+  let w_a: [U32; 8] = [0, 0, 5, 5, 4, 4, 10, 10]
+  for i in 0 ..< 8 {
+    assert a.out[i] == w_a[i]
+  }
+}
+
+test "a chain of .down~(2) and .when~: the events of the blocks that stop have the time of the caller divided by 2, and the blocks that run read them" {
+  // The first block (4 frames) has k = false: the events 5 at the frame 1 and 3 at the frame 2 have t = 5 + 0 and 3 + 1 (5, 4; the part's own time while stopped, 0, would give 3), the output is 0 (never ran). The second block has
+  // k = true: the ticks at the frames 4 and 6 read the last t, 4.
+  var out: [U32; 8] = [9; 8]
+  var st = t_nest.init(8.0)
+  t_nest.process(inout st, t_nest.Params { k: false }, [0, 5, 3, 0], inout out.slice(0, 4))
+  t_nest.process(inout st, t_nest.Params { k: true }, [0, 0, 0, 0], inout out.slice(4, 8))
+  assert out == [0, 0, 0, 0, 4, 4, 4, 4]
+}
+
+// ---- the fields of event values that a reset_if~ puts back: the copy of an input, a computed expression, a delay of an event; the caller's own fields are not touched
+
+flow cp(m: U32 at event) -> U32 at sample {
+  m
+}
+
+flow sb(m: U32 at event) -> U32 at sample {
+  m * 2 + 1
+}
+
+flow lg(m: U32 at event) -> U32 at sample {
+  let p = prev~(m)
+  p
+}
+
+pub flow f_part(y: U32 at sample, r: Bool at sample) -> U32 at sample {
+  let d = pulse~(y)
+  let a = cp~(d).reset_if~(r)
+  let b = sb~(d).reset_if~(r)
+  let e = lg~(d).reset_if~(r)
+  a + b * 100 + e * 10000
+}
+
+pub flow f_caller(y: U32 at sample, r: Bool at sample) -> U32 at sample {
+  let d = pulse~(y)
+  let a = cp~(d).reset_if~(r)
+  a * 100 + ((d * 2 + 1) at sample)
+}
+
+test "a reset puts back the fields of the event values inside the part to T.default(), not to the value of their expression on a default input" {
+  // y = 0 3 0 5 0 0 4 0, r at the frame 4. The three parts give m: 0 3 3 5 | 0 0 4 4; 2 m + 1: 0 7 7 11 | 0 0 9 9 (the field is 0 after the reset, not 1); the delay of m: 0 0 0 3 | 0 0 0 0 (the delay is back to its init, 0,
+  // so the event 4 of the frame 6 gives 0, not the 5 before). Packed as a + 100 b + 10000 e.
+  let a = f_part.render(f_part.In { y: [0, 3, 0, 5, 0, 0, 4, 0], r: [false, false, false, false, true, false, false, false] }, 8.0)
+  let w_a: [U32; 8] = [0, 703, 703, 31105, 0, 0, 904, 904]
+  for i in 0 ..< 8 {
+    assert a.out[i] == w_a[i]
+  }
+}
+
+test "the fields of the caller are not put back by the reset of a part: the 2 d + 1 that the caller reads stays" {
+  // The same events and r: the part gives m (0 3 3 5 0 0 4 4) times 100, the caller's own 2 d + 1 (0 7 7 11 11 11 9 9) is added and is not 0 at the frame 4.
+  let a = f_caller.render(f_caller.In { y: [0, 3, 0, 5, 0, 0, 4, 0], r: [false, false, false, false, true, false, false, false] }, 8.0)
+  let w_a: [U32; 8] = [0, 307, 307, 511, 11, 11, 409, 409]
+  for i in 0 ..< 8 {
+    assert a.out[i] == w_a[i]
+  }
+}
+
+// ---- a reset at a stopped frame: outside the when~ it puts the fields back there, inside it a reset of a sample condition does not happen on a stopped frame
+
+pub flow s_outer(y: U32 at sample, g: Bool at sample, r: Bool at sample) -> U32 at sample {
+  let d = pulse~(y)
+  cp~(d).when~(g).reset_if~(r)
+}
+
+pub flow s_inner(y: U32 at sample, g: Bool at sample, r: Bool at sample) -> U32 at sample {
+  let d = pulse~(y)
+  cp~(d).reset_if~(r).when~(g)
+}
+
+test "a reset at a stopped frame outside the when~ puts the fields back, so the next run reads T.default() and the event that came before is lost; inside, it does not happen" {
+  // y = 0 3 5 0 0 0 (the events 3 and 5 at the frames 1 and 2), g = T T F F T T, the reset r at the frame 3. Outside: the frame 3 gives 0 (the kept output is put back) and the run of the frame 4 reads the field, 0. Inside: no reset
+  // happens at the stopped frame, the frame 3 keeps 3 and the frame 4 reads the 5 of the stopped frame.
+  let ys: [U32; 6] = [0, 3, 5, 0, 0, 0]
+  let gs: [Bool; 6] = [true, true, false, false, true, true]
+  let rs: [Bool; 6] = [false, false, false, true, false, false]
+  let a = s_outer.render(s_outer.In { y: ys, g: gs, r: rs }, 8.0)
+  let b = s_inner.render(s_inner.In { y: ys, g: gs, r: rs }, 8.0)
+  let w_a: [U32; 6] = [0, 3, 3, 0, 0, 0]
+  let w_b: [U32; 6] = [0, 3, 3, 3, 5, 5]
+  for i in 0 ..< 6 {
+    assert a.out[i] == w_a[i]
+    assert b.out[i] == w_b[i]
+  }
+}

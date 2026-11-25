@@ -37,8 +37,8 @@ pub enum Part {
     /// Of a delay with a `.when~` in its chain: it ran at this tick, so it
     /// stores (§11.4, §11.10, S-1220).
     Ran,
-    /// Of a delay an event of another stage resets (§11.3, S-1250): between its
-    /// place and its store; the reset at this place of its chain waits for that store.
+    /// Of a delay with a late reset ([`PlanNode::late`], §11.3, S-1250): between its
+    /// place and its store; the late reset at this place of its chain waits for that store.
     Open,
     Back(u32),
 }

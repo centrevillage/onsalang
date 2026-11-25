@@ -7,6 +7,8 @@ use super::sema_view::View;
 use super::value::{IntKind, Value};
 
 const TABLE: &str = include_str!("par_arm_values.md");
+/// The table of the chains (W7-17 U4: `when~` and `reset_if~` on a call with events, the ratios, the blocks, several events in one stage, the order of the receivers, the twins, the readings S-1251 decides), the same form.
+const CHAINS: &str = include_str!("chain_event_values.md");
 
 struct Case {
     id: String,
@@ -83,8 +85,8 @@ fn run(common: &str, case: &Case) -> Result<Vec<i128>, String> {
 }
 
 /// The cases that agree, those the evaluator does not run (with why), and those that differ.
-fn report(take: &dyn Fn(&str) -> bool) -> (Vec<String>, Vec<(String, String)>, Vec<String>) {
-    let (common, all) = cases(TABLE);
+fn report(table: &str, take: &dyn Fn(&str) -> bool) -> (Vec<String>, Vec<(String, String)>, Vec<String>) {
+    let (common, all) = cases(table);
     let (mut passed, mut stopped, mut failed) = (Vec::new(), Vec::new(), Vec::new());
     for case in all.iter().filter(|c| take(&c.id)) {
         match run(&common, case) {
@@ -98,10 +100,17 @@ fn report(take: &dyn Fn(&str) -> bool) -> (Vec<String>, Vec<(String, String)>, V
 
 #[test]
 fn the_cases_of_par_par_and_the_arms_run_on_the_evaluator_with_the_values_written_by_hand() {
-    let (passed, stopped, failed) = report(&|_| true);
+    let (passed, stopped, failed) = report(TABLE, &|_| true);
     assert!(failed.is_empty(), "{failed:#?}");
-    // P1-3 is a `.when~` on a call that takes events (M1, not in this unit): `Unavailable` until the evaluator has it, and the only one.
-    let names: Vec<&str> = stopped.iter().map(|(id, _)| id.as_str()).collect();
-    assert_eq!(names, ["P1-3"], "{stopped:#?}");
-    assert_eq!(passed.len(), 21, "{passed:?}");
+    // P1-3 is a `.when~` on a call that takes events (M1, W7-17 U4): it runs with the others.
+    assert!(stopped.is_empty(), "{stopped:#?}");
+    assert_eq!(passed.len(), 22, "{passed:?}");
+}
+
+#[test]
+fn the_cases_of_the_chains_run_on_the_evaluator_with_the_values_written_by_hand() {
+    let (passed, stopped, failed) = report(CHAINS, &|_| true);
+    assert!(failed.is_empty(), "{failed:#?}");
+    assert!(stopped.is_empty(), "{stopped:#?}");
+    assert_eq!(passed.len(), 72, "{passed:?}");
 }

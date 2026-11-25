@@ -44,7 +44,7 @@ pub(super) fn table(n: &PlanNode, heads: &[ClockStage], to: Option<(ClockStage, 
             // The walk of the clocks gives the stage of each of a chain with no diagnostic.
             match m.reset {
                 Some(ClockStage::Tick(r)) => level = reset(n, at, r, level, &mut dealt),
-                // No boundary and no guard with it ([`events::form`]): none takes an array ([`taker`]).
+                // It takes no array ([`taker`]): of a tick, or of an event.
                 Some(ClockStage::Event(_)) => {}
                 _ => onsa_diag::internal::bug(Some(m.name), "a `.reset_if~` of no stage"),
             }
@@ -250,7 +250,7 @@ fn takes(n: &PlanNode, at: u32) -> bool {
 /// `.reset_if~` that [`takes`] it), the count of the boundaries inside it ([`arm`]).
 fn taker(n: &PlanNode, at: u32) -> Option<u32> {
     let takes = |&(a, m): &(u32, &PlanModifier)| {
-        n.guards.iter().any(|g| g.at == a) || m.modifier == Modifier::ResetIf && takes(n, a)
+        n.guards.iter().any(|g| g.at == a) || matches!(m.reset, Some(ClockStage::Tick(_))) && takes(n, a)
     };
     (at + 1..).zip(&n.chain[at as usize + 1..]).find(takes).map(|(a, _)| n.inside(a))
 }

@@ -84,28 +84,31 @@ rt fn resonator.process(inout s, params, input: Span[F32], inout output: Span[F3
   - 条件の `sample_tick()` だけの式は、W の `at` を付けた式と同じに扱う（S-1230。`guard_cond` の `ArgRead::at` が W、`settle` が根を W に落とし、外の `when~` で読む段が速くなる所だけ `Choose::place` が W の段の隠れた欄に置く）。
   - 境界の内に書いた条件は頭の入力と同じに集める（`Port::Cond`、`bounds::cond_ring`）。欄は `Part::On`・`Count`・`Held` と、`when~` で止まる遅延の `Part::Ran`（名前と並びは S-1220 の仮、`plan/names.rs`）。
   - 組込みの遅延の受け手は `Ports::delay`（P = W = 第 1 引数のクロック K）で、表は段 K 一つ。保存は `store_node` が `Part::Ran` で守り、止まっている間も保存する値と `vdelay~` の `d` は評価する。
-  - 修飾子の門（`ModifierChain::gate`・`check::gated`・`Feature::InstanceModifiers`）は無い。修飾子で E0200 にするのは `Feature::ResetTicksPastU32`（S-1225）だけで、イベントのクロックの条件は、`reset_if~` が下の U2r、`when~` が下の U3、他は E0200（W7-17）。
+  - 修飾子の門（`ModifierChain::gate`・`check::gated`・`Feature::InstanceModifiers`）は無い。修飾子で E0200 にするのは `Feature::ResetTicksPastU32`（S-1225）だけで、イベントのクロックの条件は、`reset_if~` が下の U2r、`when~` が下の U3、他の修飾子と組む形が下の U4。
 - 追記（2026-11-25、W7-11 U2）: イベントの段の降下（§11.11）。
   - 源（イベントの入力と、イベントを出す呼び出し）ごとの段 `ClockStage::Event(src)` を、関数 `ev_<k>(inout s, [t], [<複製の添字>], <イベント>)` に降ろす（`k` は `FlowInfo::events` の番号、`FlowFns::events`）。
     生成器は `phases::gen_stage` の一つで、段の中の順も遅い刻みの段と同じである。呼び出しの源の関数だけの枝は `StageCx` の二つで、`source`（引数のイベント）と `gave`（出力のイベントの受け）。
   - 計画の表（`plan/events.rs`、`plan/entries.rs` の `close`）: イベントの入力に結び付いた源ごとの `Entry`（同じ源の二つの入力は `Run` を二つ、宣言の順、S-1236）と、
-    `EventPlan { src, from, parent, gives }`。`parent` は、作り手の出す段（`Op::Run { out: Out::Event }`）を呼ぶこの flow の段で、源は `parent` の森になる。
+    `EventPlan { src, from, parent, gives }`。`parent` は、作り手の出す段（`Op::Run { out: Out::Event }`。`Each`・`When` の中も）を呼ぶこの flow の段で、源は `parent` の森になる。
   - 呼ぶ所: `ev_<k>` を呼ぶのは、`chain::give`（作り手の `Run` の直後の `Switch` の `Some` の腕。式の途中のその場所、S-1234・S-1235）と、入力の源を刻む呼び出し側の `Run` だけである。
     時間は呼ぶ段の引数から取る（表が `parent` の語の数まで閉じてある）。
   - 作り手のノードは、自分のイベントの段では「引数と条件 → その段の ops → 値は `source`」（`nodes::instance`。周期の段で済んだ仕事は `done` が段の関数ごとなので混ざらない）。
-  - 出力が呼び出しのイベントの flow は、出す段から `FlowInfo::emit` までの関数（`FlowInfo::gives`）が `Option` を返し、途中の関数は頭の局所 `__out`（初めは `None`）で受けて、保存の後に返す。
+  - 出力が呼び出しのイベントの flow は、出す段から `FlowInfo::emit` までの関数（`FlowInfo::gives`）が `Option` を返し、途中の関数は頭の局所 `__out`（初めは `None`）で受けて、保存の後に返す（一回に複数出す段は下の U4）。
     見出しにイベントのある flow は `process`・`render` を作らない（`FlowDef::awaits_events`、W10-07）。
   - 場所の持ち直し: 書いた位置の値を後の文で読むもの（`chain::hold`。引数、段の終わりに読む条件）は、イベントのある flow では状態の欄も `let` に写す。間にイベントの段が走って欄を書くためである。イベントの無い flow の C は変わらない。
   - 段の終わりに評価する式の中のイベントの読み（S-1240・S-1249）: `^` を付けない読み（イベントの名前と、`^` を自分で読まないイベントの段の巻き上げ）は、書いた位置の値である。
     sema が、周期の遅延ごと（`PlanNode::saved`）と、段の終わりに回る遅い刻みの巻き上げごと（`Hoist::saved`）に、読む式の列を一つの関数 `events::saved` で作る。「`^` を自分で読む」（`^` で選ぶ `match`・`match~` の束縛も）は `FlowInfo::back`、道の条件も数える「段の終わりに回る」は `FlowInfo::late`。
     Core は、書いた位置の歩き（`lower_flow_expr`・`delay_work`・`hoist::work`）で第 1 引数か巻き上げの中の仕事の後に、`nodes::saved_reads` が列の値を局所に取り、`expr_override` に置く（条件によらず一度。欄の読みは panic しない）。
     イベントの段の遅延と巻き上げには要らない（読むのはその段の値だけで、段の間に変わらない）。
-  - `reset_if~` だけの連鎖（U2r）: 条件が戻す段は `PlanModifier::reset`（`Tick` かイベント。書くのは `guard_cond` と、イベントの遅延の `event_delay_modifier`。イベントの遅延のパラメータの種類・定数・`sample_tick()` だけの条件は、遅延のイベント）。
+  - `reset_if~` の連鎖（U2r）: 条件が戻す段は `PlanModifier::reset`（`Tick` かイベント。書くのは `guard_cond` と、イベントの遅延の `event_delay_modifier`。イベントの遅延のパラメータの種類・定数・`sample_tick()` だけの条件は、遅延のイベント）。
     イベントの戻しは枠の段の表（`steps` の `Level`）に入れず、`events::entries` がその源の `Entry` の先頭に置く（外の修飾子が先。`Entry` は段ごとに一つで、S-1236 の二つの刻みの前に一度だけ戻す）。呼び出しにも遅延にも同じ関数を使う。Core は `Op::Reset` の今の道のままである。
-  - 書いた位置から保存までの間に来る戻し（S-1250）: その段と違う段のイベントの戻しを持つ組込みの遅延だけが、欄 `Part::Open` と、戻しごとの `Part::Back(at)` を持つ（`PlanNode::late_flags`）。
+  - 書いた位置から保存までの間に来る戻し（S-1250）: その間に刻みうるイベントの戻しを持つ組込みの遅延だけが、欄 `Part::Open` と、戻しごとの `Part::Back(at)` を持つ（`PlanNode::late`・`late_flags`）。
+    刻みうるかは表（`events::late`。`parent` が要るので `events::table` の後）が決める: 戻しのイベントから `parent` を上に辿り（自分を含む）、遅延の段の関数で出す呼び出しに着き、その呼び出しが遅延より後のとき。
+    前後は連鎖の全体の終わり（頭と、条件の式の終わりの最大）の字面で比べる（§11.3 の評価の順は字面の順で、連鎖の頭は条件の後に動く）。付けすぎは値を変えず、付け漏れは黙った誤りになる。
+    入力のイベントと別の段の作り手は、段の関数の途中では刻まない（段の関数は `give` でだけ入れ子になる）。
     `Open` は書いた位置で立てる（`chain::opened`。読む所か、他の遅延の第 1 引数の中なら `delay_work` の終わり）。イベントの段の `Op::Reset` は、`Open` が立っていれば `Back(at)` を立てるだけにし、`store_node` が保存の後に `chain::stored` で両方を下ろして戻す。
     遅延の状態は書いた位置から保存まで変わらないので、段の終わりに読む入れ子と、`d` に `^名前` のある `vdelay~` も同じ規則で揃い、評価と panic の順は変わらない。遅延と同じ段の戻しは読みの前なので旗を見ない。
-    `reset`（`Keep::Hard`）は旗も下ろす（間で panic した後）。`reset_if~`（`_reset_kept`）は、旗が下りている所でしか呼ばれないので触れない。旗は戻しの位置ごとなので、W7-17 で境界・守りと重ねても `reset_parts(at)` のまま使える。
+    `reset`（`Keep::Hard`）は旗も下ろす（間で panic した後）。`reset_if~`（`_reset_kept`）は、旗が下りている所でしか呼ばれないので触れない。旗は戻しの位置ごとなので、守りと重ねても `reset_parts(at)` のまま使える（遅延に比は付かない）。
   - イベントの値の条件の `when~`（U3、水準）: 条件を読む口（`guard_cond`）は W の刻みで、`Op::When` は周期の条件と同じに、書いた位置で読んだ値（欄なら `hold` の `let`）を使う。イベントの段では条件の欄を書くだけで、受け手は動かない。Core と計画の表に専用の枝は無い。
   - 段ごとの歩き: `let`（と出力）がその段の `let` でなくても段の仕事（呼び出しの仕事、遅延の保存）を持つかは `FlowInfo::work`（`work_in`）が持ち、段の関数はその `let` を書いた位置で歩く（S-1233）。
   - 複製と腕（W7-17 U6a）: `if~`・`match~` の腕・条件・対象・ガードと、外のイベントを読む `par~`・`par` は、周期の段と同じ歩き（`tilde_if_work`・`tilde_match_work`・複製の輪）で、専用の枝は無い。
@@ -113,5 +116,9 @@ rt fn resonator.process(inout s, params, input: Span[F32], inout output: Span[F3
     複製の輪を作る口は `generated::replicas` の一つで、固定した `par~` は輪を作らず本体を一度だけ置き（`Replicas::each`。添字は `var - from`）、関数の頭の置き場所（`replicas_place`）もその次元を持たない。
     固定するのは `owner` の鎖だけで、内側の `par~`（`match~` の束縛を読む形）は輪のままである。入力の源の署名と計画の表は変わらない（複製の値がそのイベントのクロックになる形は E0815 なので、源の段の仕事はその複製の本体の外に無い）。
     遅延（か段の終わりに回る巻き上げ）が保存する式の中の `par` の計算した部分式は、`nodes::saved_reads` が、`Hoist::owner` から遅延の `owner` までの `par` の輪を書いた位置で開き、複製ごとの値を関数の頭の配列に取る（S-1240）。
-  - 動かない形（`.when~`・`.up~`・`.down~` を含む連鎖の、イベントで動く受け手とイベントの `reset_if~`、`.up~`・`.down~` を含む連鎖のイベントの `when~`（どれも複製と腕の中でも）、自分の出力だけで刻む源。W7-17）は `FlowInfo::event_form` が持ち、`lower_flow` と `graph` が E0200 を出す（`FlowInfo::event_gate`）。
+  - 比・`when~` と組むイベントと、一回に複数出す段（W7-17 U4）: イベントの刻みは境界にも守りにも止められないので、`events::entries` の `Entry` は連鎖によらず同じで、周期の段だけを `steps` が境界と守りで包む。イベントの `reset_if~` は配列を取らない（`steps::taker`）。
+    - `.up~` の中のイベントの段は `Each` の中に無く、走り j を持たない。時間は 0 歩目として渡す（`chain::child_time`、§11.4）。
+    - 周期の段の `Each` の中から出すイベントを自分の出力にする flow は、出す段 `FlowInfo::emit` の一回の走りで `FlowInfo::burst` 個までを出す（`events::most`: 比 N の段 y の作り手は `N >> |y|` 回、`once` は 1 回、`when~` は動いたとして数える。途中の作り手の積。`.up~` の N の積の上限 2^24（S-1089）を超えない）。イベントの段は一つ（`Run` が `Each` の外にある）。
+    - `burst` が 1 なら `Option` のまま。多ければその周期の段の関数だけが `[Option[E]; burst]` を返す: `__out` と次の場所 `__n`（`mod.rs` の `Gave`）に、中の源の段が返した順に入れる（`None` を返した所は穴で、`None` の作り手は場所を使わない）。呼ぶ側の `give` は、呼び先の仕事の全体（保存まで）の後に、順に一つずつ刻む（S-1251）。
+  - 動かない形（自分の出力だけで刻む源、S-1237。W7-17）は `FlowInfo::event_form` が持ち、`lower_flow` と `graph` が E0200 を出す（`FlowInfo::event_gate`）。
 - （2026-10-06、点検 C-66: 例を S-27、S-30、S-33、S-44、S-86、S-102、R-13、R-92 に合わせた。名前と巻き上げの細部は点検の C-36。）

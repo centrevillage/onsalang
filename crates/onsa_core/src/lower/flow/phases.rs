@@ -333,7 +333,8 @@ pub(super) fn gen_ctl<'b>(lw: &mut Lowerer<'b>, shape: &FlowShape, info: &'b Flo
 /// that makes it (`FlowInfo::out_stage`), the stores of its nodes ([`end`]),
 /// and last in `tick` the counter of the phase advanced when it is
 /// the grid of the slower stages (`FlowInfo::counter`). Its value is the
-/// output, or what the stage it ticks gave of it (`FlowInfo::gives`).
+/// output, or what the stage it ticks gave of it (`FlowInfo::gives`, of a
+/// tick that gives several an array of them, `FlowInfo::burst`).
 pub(super) fn gen_stage<'b>(
     lw: &mut Lowerer<'b>,
     shape: &FlowShape,
@@ -345,7 +346,13 @@ pub(super) fn gen_stage<'b>(
     let fid = fns.stage_fn(stage).ok_or_else(|| internal(span, format!("no function of the stage {stage:?}")))?;
     let makes_out = info.out_stage == Some(stage);
     let gives = info.gives(stage) && !makes_out;
-    let out_ty = if makes_out || gives { shape.out_val.clone() } else { Ty::Unit };
+    // Several of a tick, which runs the stage of an `.up~` (an event ticks a stage once).
+    let many = Some(info.burst).filter(|&n| gives && n > 1 && !matches!(stage, ClockStage::Event(_)));
+    let out_ty = match many {
+        Some(n) => Ty::Array(Box::new(shape.out_val.clone()), n),
+        None if makes_out || gives => shape.out_val.clone(),
+        None => Ty::Unit,
+    };
     let mut g = Gen::new(lw, shape, info, stage, out_ty.clone())?;
     let s = g.param("s", Mode::Inout, Ty::Struct(shape.state_ty));
     for name in ["t", "t_hi"].into_iter().take(info.time_words(stage)) {
@@ -383,10 +390,15 @@ pub(super) fn gen_stage<'b>(
     g.state_overrides(lw, info, &s)?;
     let mut out = None;
     if gives {
-        let Ty::Enum(ty) = out_ty else { return Err(internal(span, "an event given out in no `Option`")) };
+        let Ty::Enum(ty) = shape.out_val else { return Err(internal(span, "an event given out in no `Option`")) };
         let none = ExprKind::Variant { ty, tag: super::event_option(lw.a, span)?.exit, fields: Vec::new() };
-        let gave = g.let_("__out", Expr::new(out_ty.clone(), span, none));
-        g.flow().now.gave = Some(gave.clone());
+        let mut none = Expr::new(shape.out_val.clone(), span, none);
+        if let Some(n) = many {
+            none = Expr::new(out_ty.clone(), span, ExprKind::Repeat { elem: Box::new(none), n });
+        }
+        let gave = g.let_("__out", none);
+        let next = many.map(|_| g.let_("__n", u32_lit(span, 0)));
+        g.flow().now.gave = Some(super::Gave { out: gave.clone(), next });
         out = Some(gave);
     }
     g.const_lets(lw, info)?;

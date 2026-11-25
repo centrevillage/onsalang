@@ -915,10 +915,3 @@ target = "tests/spec/flow_clock/modifier_n_const_expressions_w9_03.onsa"
 reasons = ["S-1077"]
 until = "W9-03"
 note = "修飾子の N の算術は W9-03 まで E0200（FlowConstExprs）"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/flow_semantics/event_when_rate_values.onsa"
-reasons = ["S-563", "S-1209"]
-until = "W7-17"
-note = "比のある連鎖（.down~）の when~ のイベントの水準。今は降下の E0200（W7-17 が開く）"

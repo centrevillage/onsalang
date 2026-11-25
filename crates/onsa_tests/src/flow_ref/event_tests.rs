@@ -20,12 +20,11 @@ fn show(r: &Report) -> String {
 fn the_straight_cases_of_the_table_pass_with_the_values_written_by_hand() {
     let r = run_cases(VALUES, &straight);
     assert!(r.failed.is_empty(), "{:#?}", r.failed);
-    // A `when~` with an event runs from U3 (h5, h10, i2a). The cases whose chain has a rate (h7) or whose flow takes events and has a `when~` (i4) stop with `Unavailable` (W7-17), and no other does.
-    let later: Vec<&str> = r.unavailable.iter().map(|(id, _)| id.as_str()).collect();
-    assert_eq!(later, ["h7", "i4"], "{}", show(&r));
+    // A `when~` with an event runs from U3 (h5, h10, i2a), a chain with a rate (h7) and a flow that takes events under a `when~` (i4) from W7-17: none of them stops.
+    assert!(r.unavailable.is_empty(), "{}", show(&r));
     assert_eq!(r.passed.len() + r.unavailable.len() + r.gap.len(), r.count, "{}", show(&r));
-    // a1 .. a6, b1 .. b3, c1 .. c5b, h1 .. h6, h8 .. h11, i1, i2a, i2b, i3, i5a, i5b, k-a1, k-b1; b4 is not settled by the text.
-    assert_eq!(r.passed.len(), 33, "{}", show(&r));
+    // a1 .. a6, b1 .. b3, c1 .. c5b, h1 .. h11, i1 .. i5b, k-a1, k-b1; b4 is not settled by the text.
+    assert_eq!(r.passed.len(), 35, "{}", show(&r));
     assert_eq!(r.gap, ["b4"]);
 }
 

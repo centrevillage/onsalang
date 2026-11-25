@@ -127,9 +127,9 @@ features! {
     /// `event` at the boundary, as [`Feature::ConversionFlowBoundary`], until
     /// W10-07 makes the events of the generated API.
     EventBoundary: Language, "{} of a flow with an input or an output at `event`", None;
-    /// §11.11, S-560: a form of the events the check reads and this version
+    /// §11.11, S-1237: the form of the events the check reads and this version
     /// does not run (W7-17).
-    EventClocks: Language, "running an event given to a part under a `.when~`, an `.up~` or a `.down~`, in the condition of a `.reset_if~` of such a chain or of a `.when~` with an `.up~` or a `.down~`, or one that only an output of its own ticks", None;
+    EventClocks: Language, "running an event that only an output of its own ticks", None;
     /// §11.3, S-1195: `{}`: the clock of the part. A computed part of a tick
     /// of a type that is not Copy read at a faster stage (provisional).
     NonCopyTickParts: Language, "a value that is not Copy computed at the clock `{}` and read at a faster clock",

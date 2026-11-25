@@ -104,6 +104,10 @@ fn an_event_put_at_the_head_of_a_flow_leaves_the_diagnostics_and_the_values_as_t
         if !ended_well(&base) || !base.diags.is_empty() {
             continue;
         }
+        // Its tests do not run as they are: a form this version does not lower (E0200, of `tests/pending.toml`).
+        if run_tests && run_texts(&["test", "--json"], &text).code != 0 {
+            continue;
+        }
         let (flow, at, _) = from[rng.below(from.len())].clone();
         // The tests are run with the insertions that lower: a `match` with guards in the value of a flow is E0200 on the way to a run (W8-06), so its program is checked only.
         let (kind, put) =

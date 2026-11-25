@@ -1,0 +1,32 @@
+# flow_ref 1 source=tests/spec/flow_semantics/event_time_values.onsa tests=8 evaluated=8 unavailable=0 skipped=0 waiting=0
+@ the time of an event stage is the time of the caller, and under when~ it goes on while the part is stopped
+render event_time_values.t_plain sr=0x41000000 in y=[0 0 0 8 0 0 4 0]
+out=[0 1 2 1103 1104 1105 1006 1007]
+render event_time_values.t_when sr=0x41000000 in y=[0 0 0 8 0 0 4 0] g=[true false false false true true true false]
+out=[0 0 0 0 1104 1105 1006 1006]
+@ under .down~(4) the time of an event is cut to the part's tick, and the part reads at its ticks (the frames 0 4 8) the events before them
+render event_time_values.t_down sr=0x41000000 in y=[0 0 0 5 0 6 0 0 0 2 0 0]
+out=[0 0 0 0 501 501 501 501 702 702 702 702]
+@ under .up~(2) an event from outside is read at the step 0 of the frame (2 f), and the two runs of the frame take the steps 2 f and 2 f + 1
+render event_time_values.t_up sr=0x41000000 in y=[0 5 0 2 0 9]
+out=[1 702703 704705 806807 808809 1911911]
+@ in a chunk .up~(2).down~(2) the time is 2 floor(f / 2) and the boundary run at an even frame reads the events of the frames before it
+render event_time_values.t_chunk sr=0x41000000 in y=[0 5 0 2 6 0 0 0]
+out=[0 0 5 5 4 4 10 10]
+@ a chain of .down~(2) and .when~: the events of the blocks that stop have the time of the caller divided by 2, and the blocks that run read them
+init 0 event_time_values.t_nest sr=0x41000000
+process 0 params k=false frames=4 in y=[0 5 3 0]
+out=[0 0 0 0]
+process 0 params k=true frames=4 in y=[0 0 0 0]
+out=[4 4 4 4]
+@ a reset puts back the fields of the event values inside the part to T.default(), not to the value of their expression on a default input
+render event_time_values.f_part sr=0x41000000 in y=[0 3 0 5 0 0 4 0] r=[false false false false true false false false]
+out=[0 703 703 31105 0 0 904 904]
+@ the fields of the caller are not put back by the reset of a part: the 2 d + 1 that the caller reads stays
+render event_time_values.f_caller sr=0x41000000 in y=[0 3 0 5 0 0 4 0] r=[false false false false true false false false]
+out=[0 307 307 511 11 11 409 409]
+@ a reset at a stopped frame outside the when~ puts the fields back, so the next run reads T.default() and the event that came before is lost; inside, it does not happen
+render event_time_values.s_outer sr=0x41000000 in y=[0 3 5 0 0 0] g=[true true false false true true] r=[false false false true false false]
+out=[0 3 3 0 0 0]
+render event_time_values.s_inner sr=0x41000000 in y=[0 3 5 0 0 0] g=[true true false false true true] r=[false false false true false false]
+out=[0 3 3 3 5 5]

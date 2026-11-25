@@ -240,7 +240,9 @@ fn run_sweep() {
             break;
         }
         let Ok(text) = std::fs::read_to_string(path) else { continue };
-        if text.contains("//~") || text.contains("#~") {
+        // Nor a program at the limit of the nesting (§2.5), with no room for a level more.
+        let at_limit = path.file_name().is_some_and(|n| n.to_string_lossy().starts_with("boundary_"));
+        if text.contains("//~") || text.contains("#~") || at_limit {
             continue;
         }
         let has_rt = text.contains("rt fn");

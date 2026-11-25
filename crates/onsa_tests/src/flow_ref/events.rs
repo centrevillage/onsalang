@@ -89,7 +89,7 @@ impl<'a> Frame<'a> {
     /// The output step gave `v`, an `Option` of the event: a `Some` is an event of this entry (the value of the output from now), `None` gives none.
     pub(super) fn emit(&mut self, v: &Value) {
         if let (Value::Enum { tag: 1, fields }, Some(run)) = (v, self.run.as_mut()) {
-            run.emitted = fields.first().cloned();
+            run.emitted.extend(fields.first().cloned());
         }
     }
 
@@ -176,11 +176,16 @@ impl<'a> Frame<'a> {
 
     /// The call at `key` did its work and gave an event: the stage of its source runs now, before the rest of this stage (S-1234).
     pub(super) fn fire_emitted(&mut self, key: &NodeKey) -> Result<(), Stop> {
-        let given = self.run.as_mut().and_then(|r| r.state.children.get_mut(key)).and_then(|c| c.emitted.take());
-        match given {
-            Some(_) => self.fire(key, self.body.ast.expr(key.call).span),
-            None => Ok(()),
+        let given =
+            self.run.as_mut().and_then(|r| r.state.children.get_mut(key)).map(|c| std::mem::take(&mut c.emitted));
+        // Each event of the entry (the events of the runs of a body under `.up~(N)` come in order) ticks after the work of the entry, with the value of that event as the output of the call.
+        for v in given.unwrap_or_default() {
+            if let Some(c) = self.run.as_mut().and_then(|r| r.state.children.get_mut(key)) {
+                c.out = v;
+            }
+            self.fire(key, self.body.ast.expr(key.call).span)?;
         }
+        Ok(())
     }
 
     /// The stage `src` of this instance, run in the middle of the stage it is in: its `let`s and the work of its calls, then what its delays saved is stored (only those it saved). The stage and the step it is in are put back after.
@@ -239,6 +244,10 @@ impl<'a> Frame<'a> {
                 true => {
                     let key = self.key(chain.head, Role::Delay);
                     self.reset_delay(&key, at)?;
+                    // The output each `when~` inside the reset holds goes back too (§11.10): a reset inside the `when~` leaves it.
+                    if let Some(m) = self.run.as_mut().and_then(|r| r.state.mods.get_mut(&key)) {
+                        m.put_back(i);
+                    }
                 }
                 false => {
                     let key = self.key(chain.head, Role::Child);

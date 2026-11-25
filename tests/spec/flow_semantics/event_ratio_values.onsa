@@ -1,0 +1,381 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.11", "§11.10", "§11.9", "§11.3", "§11.4"]
+
+// Events in a chain with a ratio (`.down~(N)`, `.up~(N)`; W7-17 U4/t2 R1; S-559, S-562, S-564, S-1207, S-1209, S-1217, S-1228, S-1229, S-1234, S-1235; spec §11.11: "`.down~`・`.up~` の部品の中の `at event` の入力も、全ての位置のイベントで動く
+// （`.up~` の中では、その位置の最初の刻みの前）"; "同じ位置で速い段が出したイベントは、それより遅い周期の刻みには次の刻みで見える"; "`.up~`・`.down~` の部品の中から出るイベントの位置は、内側の刻みが動く呼び出し側の位置"; §11.9: "同じ位置では、入力のイベントの刻み、
+// 遅い刻み、`sample` の刻みの順に並ぶ"; §11.10: "イベントの条件は、外の `when~` が止めている間もその刻みで初期化する。`.down~(N)` の内（左）に書いた形でも、走りの時点でなく、そのイベントの刻みで初期化する"; "`x.when~(c).reset_if~(r)` は…保持した出力も `T.default()` に戻る、
+// `x.reset_if~(r).when~(c)` は動く刻みにだけ初期化する（イベントの条件ではどちらも止まっている間に初期化し、違いは保持した出力を戻すかだけ）"; "部品の外に書いた `at` の欄も、次の自分の刻みまで前の値である").
+// The outermost flows have ports at `sample` (or `block`) and are run by `process`. `gen(x)` gives the event x at each frame, `pulse(x)` gives x where x > 0, `fwd` gives the event it gets, `acc` sums the events it gets and gives the sum at `sample`
+// (the last value of the event at the tick of the call), `ord` appends each event as a digit, `tagged` gives 100 times that sum plus `sample_tick()`. A part under `.down~(N)` is a stage of `sample / N` of the caller, before the `sample` stage of
+// its frame, so it sees the events of the frames before it, not the event that a producer of `sample` gives at the frame of the tick. Every value is worked out by hand from the text.
+
+flow gen(x: U32 at sample) -> U32 at event {
+  Some(x)
+}
+
+flow pulse(x: U32 at sample) -> U32 at event {
+  if x > 0 {
+    Some(x)
+  } else {
+    None
+  }
+}
+
+flow fwd(m: U32 at event) -> U32 at event {
+  Some(m)
+}
+
+flow dig(k: U32 at block) -> U32 at event {
+  Some(k)
+}
+
+flow acc(e: U32 at event) -> U32 at sample {
+  let n = prev~(^n) + e
+  n
+}
+
+flow tagged(e: U32 at event) -> U32 at sample {
+  let n = prev~(^n) + e
+  (n at sample) * 100 + sample_tick()
+}
+
+flow count() -> U32 at sample {
+  let n = prev~(^n) + 1
+  n
+}
+
+flow lo2(v: U32 at (sample * 2)) -> U32 at sample {
+  v[0]
+}
+
+flow hi2(v: U32 at (sample * 2)) -> U32 at sample {
+  v[1]
+}
+
+flow pair2(v: U32 at (sample * 2)) -> U32 at sample {
+  v[0] * 10 + v[1]
+}
+
+// ---- a receiver with an event port under .down~(4) and under .up~(2)
+
+pub flow rx_down4(x: U32 at sample) -> U32 at sample {
+  let d = pulse~(x)
+  acc~(d).down~(4) at sample
+}
+
+pub flow rx_up2_lo(x: U32 at sample) -> U32 at sample {
+  let d = pulse~(x)
+  let u = tagged~(d).up~(2)
+  lo2~(u)
+}
+
+pub flow rx_up2_hi(x: U32 at sample) -> U32 at sample {
+  let d = pulse~(x)
+  let u = tagged~(d).up~(2)
+  hi2~(u)
+}
+
+test "a receiver under .down~(4) runs at the frames 0 4 8 and sees the events of the frames before it, all of them: an event at the frame of a tick comes at the next tick" {
+  // x = 1 0 0 0 | 2 5 0 0 | 0 0 7 0 (events at the frames 0 4 5 10). The tick 0 has no event before it (0). The tick 4 sees the frame 0 (1), not its own frame 4. The tick 8 sees the frames 0 4 5 (1 + 2 + 5 = 8), the event of the frame 10 is for the tick 12.
+  let xs: [U32; 12] = [1, 0, 0, 0, 2, 5, 0, 0, 0, 0, 7, 0]
+  var a: [U32; 12] = [9; 12]
+  var sa = rx_down4.init(8.0)
+  rx_down4.process(inout sa, xs, inout a)
+  assert a == [0, 0, 0, 0, 1, 1, 1, 1, 8, 8, 8, 8]
+}
+
+test "a receiver under .up~(2) gets the event of its frame before its first run: both runs see the sum up to the frame, and sample_tick() is 2 p + j" {
+  // x = 1 0 2 0 0 3 (events at the frames 0 2 5): the sums at the frames are 1 1 3 3 3 6. The run j of the frame p gives sum * 100 + 2 p + j: j = 0 100 102 304 306 308 610, j = 1 101 103 305 307 309 611.
+  let xs: [U32; 6] = [1, 0, 2, 0, 0, 3]
+  var lo: [U32; 6] = [9; 6]
+  var hi: [U32; 6] = [9; 6]
+  var s1 = rx_up2_lo.init(8.0)
+  var s2 = rx_up2_hi.init(8.0)
+  rx_up2_lo.process(inout s1, xs, inout lo)
+  rx_up2_hi.process(inout s2, xs, inout hi)
+  assert lo == [100, 102, 304, 306, 308, 610]
+  assert hi == [101, 103, 305, 307, 309, 611]
+}
+
+// ---- a maker under .down~(2): its events are at the frames of its ticks, in the stage of `sample / 2`, before the events that a maker of `sample` gives at the same frame
+
+pub flow mk_order() -> U32 at sample {
+  let a = dig~(3).down~(2)
+  let b = dig~(5)
+  acc~(b).reset_if~(a != 0)
+}
+
+test "at a frame where a maker of sample / 2 and a maker of sample both give an event, the first comes first: the reset by the first is before the add of the second" {
+  // `dig~(3).down~(2)` gives its event at the even frames, in the stage of `sample / 2`; `dig~(5)` gives 5 at each frame later, in the stage of `sample`. The reset at an even frame comes before the add: 5 10 5 10 ... (not 0 10 0 10).
+  var a: [U32; 8] = [9; 8]
+  var sa = mk_order.init(8.0)
+  mk_order.process(inout sa, inout a)
+  assert a == [5, 10, 5, 10, 5, 10, 5, 10]
+}
+
+// ---- a flow that gives an event for each event it gets: once for each, whatever the ratio
+
+pub flow fw_plain(x: U32 at sample) -> U32 at sample {
+  acc~(fwd~(gen~(x)))
+}
+
+pub flow fw_down4(x: U32 at sample) -> U32 at sample {
+  let d = fwd~(gen~(x)).down~(4)
+  acc~(d)
+}
+
+pub flow fw_up2(x: U32 at sample) -> U32 at sample {
+  let d = fwd~(gen~(x)).up~(2)
+  acc~(d)
+}
+
+test "a flow that gives the event it gets, under .down~(4) or .up~(2), gives it once: the sums are those of the call with no chain" {
+  // x = 1 .. 6: the events 1 .. 6 once each, the sums 1 3 6 10 15 21 (a run twice for a `.up~(2)` would give 2 6 12 ...).
+  let xs: [U32; 6] = [1, 2, 3, 4, 5, 6]
+  var a: [U32; 6] = [9; 6]
+  var b: [U32; 6] = [9; 6]
+  var c: [U32; 6] = [9; 6]
+  var sa = fw_plain.init(8.0)
+  var sb = fw_down4.init(8.0)
+  var sc = fw_up2.init(8.0)
+  fw_plain.process(inout sa, xs, inout a)
+  fw_down4.process(inout sb, xs, inout b)
+  fw_up2.process(inout sc, xs, inout c)
+  assert a == [1, 3, 6, 10, 15, 21]
+  assert b == a
+  assert c == a
+}
+
+// ---- a head that gathers and has an event port
+
+flow ge(x: U32 at (sample * 4), e: U32 at event) -> U32 at sample {
+  let n = prev~(^n) + e
+  x[0] + x[1] + x[2] + x[3] + n * 1000
+}
+
+pub flow gather_event(x: U32 at sample, y: U32 at sample) -> U32 at sample {
+  let d = gen~(y)
+  ge~(x, d).down~(4) at sample
+}
+
+test "a head with a gathered input and an event input under .down~(4): the window is the four frames before the tick, the events are all those before the tick" {
+  // x = 1 .. 12, y = 1 0 0 0 | 2 0 0 5 | 0 0 0 0. The tick 0 gathers the default (0) and has no event. The tick 4 has the window 1 2 3 4 (10) and the events of the frames 0 .. 3 (1): 10 + 1000. The tick 8 has 5 + 6 + 7 + 8 = 26 and the events
+  // of the frames 0 .. 7 (1 + 2 + 5 = 8): 26 + 8000.
+  let xs: [U32; 12] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+  let ys: [U32; 12] = [1, 0, 0, 0, 2, 0, 0, 5, 0, 0, 0, 0]
+  var a: [U32; 12] = [9; 12]
+  var sa = gather_event.init(8.0)
+  gather_event.process(inout sa, gather_event.In { x: xs, y: ys }, inout a)
+  assert a == [0, 0, 0, 0, 1010, 1010, 1010, 1010, 8026, 8026, 8026, 8026]
+}
+
+// ---- reset_if~ with an event, inside and outside a boundary that gathers
+
+flow win(x: U32 at (sample * 2)) -> U32 at sample {
+  let c = prev~(^c) + 1
+  (x[0] * 10 + x[1]) * 100 + c
+}
+
+pub flow rst_none(x: U32 at sample) -> U32 at sample {
+  win~(x).down~(2) at sample
+}
+
+pub flow rst_in(x: U32 at sample, r: U32 at sample) -> U32 at sample {
+  let m = pulse~(r)
+  win~(x).reset_if~(m > 0).down~(2) at sample
+}
+
+pub flow rst_out(x: U32 at sample, r: U32 at sample) -> U32 at sample {
+  let m = pulse~(r)
+  win~(x).down~(2).reset_if~(m > 0) at sample
+}
+
+test "a reset by an event between two ticks: inside the boundary it puts back the part only, outside it puts back the ring of the window too" {
+  // x = 1 .. 8; `win` gives (x[0] * 10 + x[1]) * 100 + c, c its runs, at the ticks 0 2 4 6 (the ticks gather the two frames before them). No reset: 1 1202 3403 5604, each held two frames. The event at the frame 3 (between the ticks 2 and 4):
+  // inside, c goes back (the next tick gives 1) and the window of the tick 4 is 3 4: 3401, then 5602. Outside, the ring is back too, so the window of the tick 4 has the 0 of the frame 2 and then the 4 of the frame 3: 401, then 5602.
+  // The output at `sample` that the caller holds between the ticks is the caller's value and is not touched (frame 3 still holds 1202).
+  let xs: [U32; 8] = [1, 2, 3, 4, 5, 6, 7, 8]
+  let r3: [U32; 8] = [0, 0, 0, 1, 0, 0, 0, 0]
+  var a: [U32; 8] = [9; 8]
+  var b: [U32; 8] = [9; 8]
+  var c: [U32; 8] = [9; 8]
+  var sa = rst_none.init(8.0)
+  var sb = rst_in.init(8.0)
+  var sc = rst_out.init(8.0)
+  rst_none.process(inout sa, xs, inout a)
+  rst_in.process(inout sb, rst_in.In { x: xs, r: r3 }, inout b)
+  rst_out.process(inout sc, rst_out.In { x: xs, r: r3 }, inout c)
+  assert a == [1, 1, 1202, 1202, 3403, 3403, 5604, 5604]
+  assert b == [1, 1, 1202, 1202, 3401, 3401, 5602, 5602]
+  assert c == [1, 1, 1202, 1202, 401, 401, 5602, 5602]
+}
+
+test "a reset by an event at the frame of a tick comes after the tick: the part is back for the next tick, and the ring written from the frame of the event is kept" {
+  // The event at the frame 4: the tick 4 has run before it (3403), c goes back (the tick 6 gives 1: 5601), the window of the tick 6 is 5 6 (the frames 4 and 5, written after the reset), so inside and outside are the same.
+  let xs: [U32; 8] = [1, 2, 3, 4, 5, 6, 7, 8]
+  let r4: [U32; 8] = [0, 0, 0, 0, 1, 0, 0, 0]
+  var b: [U32; 8] = [9; 8]
+  var c: [U32; 8] = [9; 8]
+  var sb = rst_in.init(8.0)
+  var sc = rst_out.init(8.0)
+  rst_in.process(inout sb, rst_in.In { x: xs, r: r4 }, inout b)
+  rst_out.process(inout sc, rst_out.In { x: xs, r: r4 }, inout c)
+  assert b == [1, 1, 1202, 1202, 3403, 3403, 5601, 5601]
+  assert c == b
+}
+
+// ---- when~, a ratio and a reset by an event, in the three orders
+
+pub flow ord_a(v: U32 at sample, r: U32 at sample) -> U32 at sample {
+  let a = gen~(v)
+  let m = pulse~(r)
+  count~().down~(2).when~(a != 0).reset_if~(m > 0) at sample
+}
+
+pub flow ord_b(v: U32 at sample, r: U32 at sample) -> U32 at sample {
+  let a = gen~(v)
+  let m = pulse~(r)
+  count~().when~(a != 0).down~(2).reset_if~(m > 0) at sample
+}
+
+pub flow ord_c(v: U32 at sample, r: U32 at sample) -> U32 at sample {
+  let a = gen~(v)
+  let m = pulse~(r)
+  count~().reset_if~(m > 0).down~(2).when~(a != 0) at sample
+}
+
+test "when~ and .down~(2) in either order read the level at the ticks; a reset by an event reaches the output the when~ holds only where the when~ is inside it" {
+  // v = 1 1 1 1 0 0 1 1 1 1 1 1, the level of a at the ticks 0 2 4 6 8 10 is the last event before the frame: false true true false true true. The counter runs at 2 4 8 10 (1 2 then 1 2 after the reset), at the tick 6 the part is stopped.
+  // The event at the frame 5 (between the ticks 4 and 6) puts back the counter (all three) and, where the `when~` is inside the `reset_if~` (a and b), the output the `when~` holds: the stopped tick 6 gives 0. In c the `when~` is outside
+  // and keeps its output, 2. Before the first run the output is T.default() (0).
+  let vs: [U32; 12] = [1, 1, 1, 1, 0, 0, 1, 1, 1, 1, 1, 1]
+  let rs: [U32; 12] = [0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0]
+  var a: [U32; 12] = [9; 12]
+  var b: [U32; 12] = [9; 12]
+  var c: [U32; 12] = [9; 12]
+  var sa = ord_a.init(8.0)
+  var sb = ord_b.init(8.0)
+  var sc = ord_c.init(8.0)
+  ord_a.process(inout sa, ord_a.In { v: vs, r: rs }, inout a)
+  ord_b.process(inout sb, ord_b.In { v: vs, r: rs }, inout b)
+  ord_c.process(inout sc, ord_c.In { v: vs, r: rs }, inout c)
+  assert a == [0, 0, 1, 1, 2, 2, 0, 0, 1, 1, 2, 2]
+  assert b == a
+  assert c == [0, 0, 1, 1, 2, 2, 2, 2, 1, 1, 2, 2]
+}
+
+pub flow wd_acc(x: U32 at sample, y: U32 at sample) -> U32 at sample {
+  let v = gen~(x)
+  let d = pulse~(y)
+  acc~(d).down~(4).when~(v != 0) at sample
+}
+
+pub flow wd_acc_rev(x: U32 at sample, y: U32 at sample) -> U32 at sample {
+  let v = gen~(x)
+  let d = pulse~(y)
+  acc~(d).when~(v != 0).down~(4) at sample
+}
+
+test "a receiver of events under .down~(4) and when~ of the level of an event, in either order: the part is stopped between runs but the events are still taken" {
+  // x = 0 0 5 5 | 0 0 0 0 | 0 0 0 7 | 7 0 0 0: the level read at the ticks 0 4 8 12 is the last event before the frame: false true false true. y has the events 1 (frame 0), 2 (frame 4), 3 (frame 10), 4 (frame 13).
+  // The tick 0 is stopped before any run (0). The tick 4 runs and gives the sum of the events before it (1). The tick 8 is stopped and keeps 1 although the event 2 came in the run before. The tick 12 gives 1 + 2 + 3 = 6 (the event 3 came while it was stopped at the ticks).
+  let xs: [U32; 16] = [0, 0, 5, 5, 0, 0, 0, 0, 0, 0, 0, 7, 7, 0, 0, 0]
+  let ys: [U32; 16] = [1, 0, 0, 0, 2, 0, 0, 0, 0, 0, 3, 0, 0, 4, 0, 0]
+  var a: [U32; 16] = [9; 16]
+  var b: [U32; 16] = [9; 16]
+  var sa = wd_acc.init(8.0)
+  var sb = wd_acc_rev.init(8.0)
+  wd_acc.process(inout sa, wd_acc.In { x: xs, y: ys }, inout a)
+  wd_acc_rev.process(inout sb, wd_acc_rev.In { x: xs, y: ys }, inout b)
+  assert a == [0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 6, 6, 6, 6]
+  assert b == a
+}
+
+// ---- a bundle of `sample * 2` that a when~ stops, and a reset by an event
+
+pub flow bu_when(v: U32 at sample) -> U32 at sample {
+  let a = gen~(v)
+  let u = count~().up~(2).when~(a != 0)
+  pair2~(u)
+}
+
+pub flow bu_when_reset(v: U32 at sample, r: U32 at sample) -> U32 at sample {
+  let a = gen~(v)
+  let m = pulse~(r)
+  let u = count~().up~(2).when~(a != 0).reset_if~(m > 0)
+  pair2~(u)
+}
+
+pub flow bu_reset_when(v: U32 at sample, r: U32 at sample) -> U32 at sample {
+  let a = gen~(v)
+  let m = pulse~(r)
+  let u = count~().up~(2).reset_if~(m > 0).when~(a != 0)
+  pair2~(u)
+}
+
+test "a part under .up~(2) with a when~ of an event: the bundle of a stopped frame is two copies of the last output; a reset by an event at a stopped frame puts it back only if the reset is outside the when~" {
+  // v = 1 1 0 0 1 1: the part runs at the frames 0 1 4 5 (the event of the frame is before the call), two runs a frame: 1 2 | 3 4 | stopped: 4 4 | 4 4 | 5 6 | 7 8, as two digits 12 34 44 44 56 78.
+  // The event at the frame 3, a stopped frame: with the reset outside the when~ the held output is T.default() at that frame (0 0) and the counter is back (12 34 after it); with the reset inside the held output stays (44), the counter is back too.
+  let vs: [U32; 6] = [1, 1, 0, 0, 1, 1]
+  let r3: [U32; 6] = [0, 0, 0, 1, 0, 0]
+  var a: [U32; 6] = [9; 6]
+  var b: [U32; 6] = [9; 6]
+  var c: [U32; 6] = [9; 6]
+  var sa = bu_when.init(8.0)
+  var sb = bu_when_reset.init(8.0)
+  var sc = bu_reset_when.init(8.0)
+  bu_when.process(inout sa, vs, inout a)
+  bu_when_reset.process(inout sb, bu_when_reset.In { v: vs, r: r3 }, inout b)
+  bu_reset_when.process(inout sc, bu_reset_when.In { v: vs, r: r3 }, inout c)
+  assert a == [12, 34, 44, 44, 56, 78]
+  assert b == [12, 34, 44, 0, 12, 34]
+  assert c == [12, 34, 44, 44, 12, 34]
+}
+
+// ---- a reset by an event of a chain that has a boundary that deals, below an `.up~` that goes past it
+
+flow echo(x: U32 at (sample * 2)) -> U32 at (sample * 2) {
+  x
+}
+
+flow dig4(v: U32 at (sample * 4)) -> U32 at sample {
+  v[0] * 1000 + v[1] * 100 + v[2] * 10 + v[3]
+}
+
+pub flow up_plain(k: U32 at block) -> U32 at sample {
+  let u = echo~(k).down~(2).up~(4)
+  dig4~(u)
+}
+
+pub flow up_out(k: U32 at block, r: U32 at sample) -> U32 at sample {
+  let m = pulse~(r)
+  let u = echo~(k).down~(2).reset_if~(m > 0).up~(4)
+  dig4~(u)
+}
+
+pub flow up_in(k: U32 at block, r: U32 at sample) -> U32 at sample {
+  let m = pulse~(r)
+  let u = echo~(k).reset_if~(m > 0).down~(2).up~(4)
+  dig4~(u)
+}
+
+test "an event between the boundary that deals and the .up~ that goes past it puts back the ring and the dealt array only when it is outside the boundary, before the first run of its frame" {
+  // The part is `echo~(k).down~(2)` run four times a frame by `.up~(4)`; the boundary ticks at the even runs and gathers the two runs before it (default before the first), so the runs of the first frame give 0 0 7 7 (77, k = 7)
+  // and then 7 7 7 7 (7777). The event at the frame 1 comes before the first run of that frame: outside the boundary the ring and the array are default again, the tick at the run 0 gathers 0 0, and the frame gives 0 0 7 7 (77).
+  // Inside the boundary the reset touches neither: the frames give 77 7777 7777.
+  let rr: [U32; 3] = [0, 1, 0]
+  var a: [U32; 3] = [9; 3]
+  var b: [U32; 3] = [9; 3]
+  var c: [U32; 3] = [9; 3]
+  var sa = up_plain.init(8.0)
+  var sb = up_out.init(8.0)
+  var sc = up_in.init(8.0)
+  up_plain.process(inout sa, up_plain.Params { k: 7 }, inout a)
+  up_out.process(inout sb, up_out.Params { k: 7 }, rr, inout b)
+  up_in.process(inout sc, up_in.Params { k: 7 }, rr, inout c)
+  assert a == [77, 7777, 7777]
+  assert b == [77, 77, 7777]
+  assert c == a
+}

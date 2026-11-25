@@ -14,7 +14,7 @@ use super::expr::{Frame, LIMITS, LOW_STACK, Stop};
 use super::flow::{Clock, Ctx, Inst, Known, Plans, Seen, Step, clock_of, join};
 use super::hoist::{feedback, kids, stage_of};
 use super::scalar::Fault;
-use super::sema_view::{Body, Called, Stage, View, input_ratio, input_stage, output_stage};
+use super::sema_view::{Body, Called, Stage, View, input_ratio, output_stage};
 use super::value::Value;
 use onsa_sema::def::FlowDef;
 
@@ -352,7 +352,8 @@ pub(super) fn levels(
         let next = Level {
             ratio: r,
             ins,
-            out: prev.out + r,
+            // The events a head gives are no stream: a boundary does not move their clock (§11.11, the position of an event is the one of the caller).
+            out: if matches!(output_stage(decl), Ok(Stage::Event(_))) { 0 } else { prev.out + r },
             gathers,
             deals,
             stages: stages.into_iter().collect(),
@@ -572,11 +573,6 @@ fn reads_inside(body: &Body, e: ExprId, inside: &[LocalId]) -> bool {
         || body.ast.sub_exprs(e).into_iter().any(|x| reads_inside(body, x, inside))
 }
 
-/// Is `call` a built-in delay?
-fn delay_of(body: &Body, call: ExprId) -> bool {
-    matches!(body.called(call), Ok(Called::Builtin(FlowBuiltin::Delay(_))))
-}
-
 /// The slower ticks of `e` and of its parts into `out`.
 fn visit(
     view: View,
@@ -605,24 +601,7 @@ fn visit(
     for c in chain.iter().flat_map(Chain::conds).chain(chain.iter().filter(delay).map(|c| c.head)) {
         out.1.insert(c, clock(c).map_err(here)?);
     }
-    // The straight line of the events (W7-11 U2r, U3): a chain of `reset_if~` of events alone, or of `when~`s (a signal or an event level) and `reset_if~`s of signals, on a call that gives or takes no events or on a periodic delay.
-    // A rate, a `when~` with a `reset_if~` of an event, and a `when~` on a call that gives or takes events are W7-17 (a `when~` on a delay of events is E0020).
-    let event = |x: ExprId| matches!(clock_of(body, known, root, x), Ok(Clock::Event(_)));
-    let (rate, when) =
-        (bounds.iter().any(|b| matches!(b, Bound::Rate(_))), bounds.iter().any(|b| matches!(b, Bound::When(_))));
-    let reset_event = bounds.iter().any(|b| matches!(b, Bound::ResetIf(c) if event(*c)));
-    let later = rate || (when && reset_event);
-    if later && (chain.iter().flat_map(Chain::conds).any(event) || (delay_of(body, call) && event(call))) {
-        return Err(here(Fault::Unavailable("a modifier other than `reset_if~` with an event (W7-17)")));
-    }
     if let Ok(Called::Flow(def)) = body.called(call) {
-        // A chain on a call that takes or gives events (W7-17).
-        let decl = view.flow(def).map_err(here)?;
-        let events = decl.inputs.iter().any(|i| matches!(input_stage(i), Ok(Stage::Event(_))))
-            || matches!(output_stage(decl), Ok(Stage::Event(_)));
-        if events && (rate || when) {
-            return Err(here(Fault::Unavailable("a chain of modifiers on a call that takes or gives events (W7-17)")));
-        }
         let body_ticks = Inst::planned(view, def, plans)?.slow;
         let parts = levels(view.flow(def).map_err(here)?, &body_ticks, bounds, &clock).map_err(here)?;
         out.0.extend(parts[parts.len() - 1].stages.iter().copied().filter(|s| *s < 0));

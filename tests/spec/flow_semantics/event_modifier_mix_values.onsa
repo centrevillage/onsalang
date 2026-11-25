@@ -1,0 +1,243 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.10", "§11.11", "§11.3", "§11.4"]
+
+// One chain with a `.when~` and a `.reset_if~` whose condition is an event (W7-17 U4/t, M2; S-559, S-562, S-1209, S-1228, S-1236, S-1241, S-1250; spec §11.10: `x.when~(c).reset_if~(r)` resets also the stopped frames and the kept output,
+// `x.reset_if~(r).when~(c)` does not put the kept output back; an event resets at its tick whether the part is stopped or not; §11.3: a delay with modifiers is read where it is written, and a reset that comes after the write and before the store
+// takes effect after the store (S-1250); §11.11: an event comes in the order of the ticks). Every value is worked out by hand. `pulse(y)` gives y where y > 0 (`m > 0` holds at its events), `cnt` counts its runs, `acc` adds its events; a delay
+// with an init of 90 shows the reset. The frames: x = 1 .. 12, g = T T T F F T T F T T F T (the frames 3 4 7 10 stop), y = 0 0 1 0 1 0 0 0 1 0 1 0 (the events at the frames 2 4 8 10).
+
+const XS: [U32; 12] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+const GS: [Bool; 12] = [true, true, true, false, false, true, true, false, true, true, false, true]
+const YS: [U32; 12] = [0, 0, 1, 0, 1, 0, 0, 0, 1, 0, 1, 0]
+
+flow pulse(y: U32 at sample) -> U32 at event {
+  if y > 0 {
+    Some(y)
+  } else {
+    None
+  }
+}
+
+flow gen(x: U32 at sample) -> U32 at event {
+  Some(x)
+}
+
+flow acc(e: U32 at event) -> U32 at sample {
+  let n = prev~(^n) + e
+  n
+}
+
+flow cnt() -> U32 at sample {
+  let n = prev~(^n) + 1
+  n
+}
+
+// ---- a part that counts its runs, reset by an event of another source: outside the `when~` and inside it, in a flow of its own, and with the time in the condition
+
+pub flow c_outer(y: U32 at sample, g: Bool at sample) -> U32 at sample {
+  let m = pulse~(y)
+  cnt~().when~(g).reset_if~(m > 0)
+}
+
+pub flow c_inner(y: U32 at sample, g: Bool at sample) -> U32 at sample {
+  let m = pulse~(y)
+  cnt~().reset_if~(m > 0).when~(g)
+}
+
+flow gated_cnt(g: Bool at sample) -> U32 at sample {
+  cnt~().when~(g)
+}
+
+flow cnt_reset(m: U32 at event) -> U32 at sample {
+  cnt~().reset_if~(m > 0)
+}
+
+pub flow c_part_outer(y: U32 at sample, g: Bool at sample) -> U32 at sample {
+  let m = pulse~(y)
+  gated_cnt~(g).reset_if~(m > 0)
+}
+
+pub flow c_part_inner(y: U32 at sample, g: Bool at sample) -> U32 at sample {
+  cnt_reset~(pulse~(y)).when~(g)
+}
+
+pub flow t_cond_outer(y: U32 at sample, g: Bool at sample) -> U32 at sample {
+  let m = pulse~(y)
+  cnt~().when~(g).reset_if~(m > 0 && sample_tick() % 4 == 0)
+}
+
+pub flow t_cond_inner(y: U32 at sample, g: Bool at sample) -> U32 at sample {
+  let m = pulse~(y)
+  cnt~().reset_if~(m > 0 && sample_tick() % 4 == 0).when~(g)
+}
+
+test "an event resets the part also on the stopped frames; outside the when~ it puts the kept output back, inside it does not" {
+  // The runs are the frames 0 1 2 5 6 8 9 11. Outside: the reset of the frame 2 is before its run (1), the frame 3 keeps 1, the reset at the stopped frame 4 gives 0 (state and kept output), 5 6 run 1 2, the frame 7 keeps 2, the reset
+  // of the frame 8 is before its run (1), 9 gives 2, the reset at the stopped frame 10 gives 0, the frame 11 runs 1. Inside: the same states, and the stopped frames 4 and 10 keep the output of the frame before them (1 and 2).
+  let a = c_outer.render(c_outer.In { y: YS, g: GS }, 8.0)
+  let b = c_inner.render(c_inner.In { y: YS, g: GS }, 8.0)
+  let c = c_part_outer.render(c_part_outer.In { y: YS, g: GS }, 8.0)
+  let d = c_part_inner.render(c_part_inner.In { y: YS, g: GS }, 8.0)
+  let w_ac: [U32; 12] = [1, 2, 1, 1, 0, 1, 2, 2, 1, 2, 0, 1]
+  let w_bd: [U32; 12] = [1, 2, 1, 1, 1, 1, 2, 2, 1, 2, 2, 1]
+  for i in 0 ..< 12 {
+    assert a.out[i] == w_ac[i]
+    assert b.out[i] == w_bd[i]
+    assert c.out[i] == w_ac[i]
+    assert d.out[i] == w_bd[i]
+  }
+}
+
+test "the time in the condition of a reset with an event is the time of the caller: the reset happens where the event and the time say, outside the when~ it puts the kept output back at a stopped frame" {
+  // `m > 0 && sample_tick() % 4 == 0` is true at the frames 4 and 8 only (the events are at 2 4 8 10). Outside: 1 2 3 | 3 | the stopped frame 4 gives 0 | 1 2 | 2 | 1 2 | 2 (no reset at 10) | 3. Inside: the frame 4 keeps 3.
+  let a = t_cond_outer.render(t_cond_outer.In { y: YS, g: GS }, 8.0)
+  let b = t_cond_inner.render(t_cond_inner.In { y: YS, g: GS }, 8.0)
+  let w_a: [U32; 12] = [1, 2, 3, 3, 0, 1, 2, 2, 1, 2, 2, 3]
+  let w_b: [U32; 12] = [1, 2, 3, 3, 3, 1, 2, 2, 1, 2, 2, 3]
+  for i in 0 ..< 12 {
+    assert a.out[i] == w_a[i]
+    assert b.out[i] == w_b[i]
+  }
+}
+
+// ---- a built-in delay: a ring of two put back to its init
+
+pub flow d_outer(x: U32 at sample, y: U32 at sample, g: Bool at sample) -> U32 at sample {
+  let m = pulse~(y)
+  delay~(x, 2, 90).when~(g).reset_if~(m > 0)
+}
+
+pub flow d_inner(x: U32 at sample, y: U32 at sample, g: Bool at sample) -> U32 at sample {
+  let m = pulse~(y)
+  delay~(x, 2, 90).reset_if~(m > 0).when~(g)
+}
+
+test "delay~ of 2 under a chain with an event: the reset gives the init for the next two runs, the kept output is put back only outside" {
+  // The events at the frames 4 (stopped) and 9 (runs). The runs are 0 1 2 5 6 8 9 11 and the output is x of two runs before: 90 90 1 | (3: keeps 1) | the reset of the stopped frame 4: outside 0, inside keeps 1 | 5 6 give the init
+  // (the ring was put back), the frame 7 keeps it | 8 gives the x of the run of the frame 5 (6) | the reset of the frame 9 is before its run: the init, the frame 10 keeps it, the frame 11 reads the init (the ring has the x of the frame 9 after it).
+  let ys: [U32; 12] = [0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0]
+  let a = d_outer.render(d_outer.In { x: XS, y: ys, g: GS }, 8.0)
+  let b = d_inner.render(d_inner.In { x: XS, y: ys, g: GS }, 8.0)
+  let w_a: [U32; 12] = [90, 90, 1, 1, 0, 90, 90, 90, 6, 90, 90, 90]
+  let w_b: [U32; 12] = [90, 90, 1, 1, 1, 90, 90, 90, 6, 90, 90, 90]
+  for i in 0 ..< 12 {
+    assert a.out[i] == w_a[i]
+    assert b.out[i] == w_b[i]
+  }
+}
+
+// ---- a delay written above the maker of the event it is reset by (S-1250): the reset comes after the write and before the store, so it takes effect after the store; below the maker it comes before the read
+
+pub flow a_outer(x: U32 at sample, g: Bool at sample) -> U32 at sample {
+  let e = prev~(^d)
+  let c = prev~(x, 9).when~(g).reset_if~(e >= 5)
+  let d = gen~(x)
+  c
+}
+
+pub flow a_inner(x: U32 at sample, g: Bool at sample) -> U32 at sample {
+  let e = prev~(^d)
+  let c = prev~(x, 9).reset_if~(e >= 5).when~(g)
+  let d = gen~(x)
+  c
+}
+
+pub flow b_outer(x: U32 at sample, g: Bool at sample) -> U32 at sample {
+  let d = gen~(x)
+  let e = prev~(d)
+  prev~(x, 9).when~(g).reset_if~(e >= 5)
+}
+
+pub flow n_outer(x: U32 at sample, g: Bool at sample) -> U32 at sample {
+  let e = prev~(^d)
+  let c = prev~(prev~(x, 9).when~(g).reset_if~(e >= 5), 7)
+  let d = gen~(x)
+  c
+}
+
+test "a delay with a reset of an event of a maker below it, stopped on some frames: the reset takes effect after the store of its own frame" {
+  // x = 1 6 2 7 3 4 1 1, g = T T T F F T T T. `e` is the event before the last one: 0 1 6 2 7 3 4 1, so `e >= 5` is true at the frames 2 and 4. Without a stop the frame 2 reads 6, stores 2 and is put back: 9 1 6 9 7 9 4 1 (S-1250).
+  // Outside, written above the maker: the frame 2 reads 6 and puts back the kept output after; the stopped frame 3 gives 0; the frame 4 is stopped, put back, gives 0; 5 reads the init 9. Inside: the stopped frames keep 6 and 9.
+  // Below the maker (outside) the reset is before the read: the frame 2 reads 9 and stores 2 after it (the frame 3 keeps 9), the stopped frame 4 gives 0.
+  let xs: [U32; 8] = [1, 6, 2, 7, 3, 4, 1, 1]
+  let gs: [Bool; 8] = [true, true, true, false, false, true, true, true]
+  let a = a_outer.render(a_outer.In { x: xs, g: gs }, 8.0)
+  let b = a_inner.render(a_inner.In { x: xs, g: gs }, 8.0)
+  let c = b_outer.render(b_outer.In { x: xs, g: gs }, 8.0)
+  let w_a: [U32; 8] = [9, 1, 6, 0, 0, 9, 4, 1]
+  let w_b: [U32; 8] = [9, 1, 6, 6, 6, 9, 4, 1]
+  let w_c: [U32; 8] = [9, 1, 9, 9, 0, 9, 4, 1]
+  for i in 0 ..< 8 {
+    assert a.out[i] == w_a[i]
+    assert b.out[i] == w_b[i]
+    assert c.out[i] == w_c[i]
+  }
+}
+
+test "a delay with such a chain in its first argument stores what the chain read where it is written: the delay of the outputs above, with an init of 7" {
+  // The outputs of the chain written outside are 9 1 6 0 0 9 4 1 (above test), so the outer delay gives 7 and then these one frame late.
+  let xs: [U32; 8] = [1, 6, 2, 7, 3, 4, 1, 1]
+  let gs: [Bool; 8] = [true, true, true, false, false, true, true, true]
+  let a = n_outer.render(n_outer.In { x: xs, g: gs }, 8.0)
+  let w_a: [U32; 8] = [7, 9, 1, 6, 0, 0, 9, 4]
+  for i in 0 ..< 8 {
+    assert a.out[i] == w_a[i]
+  }
+}
+
+// ---- a part that adds events, reset by the events of its own source and of another source: the order is the order of the ticks
+
+pub flow s_outer(x: U32 at sample, g: Bool at sample) -> U32 at sample {
+  let d = gen~(x)
+  acc~(d).when~(g).reset_if~(d > 4)
+}
+
+pub flow s_inner(x: U32 at sample, g: Bool at sample) -> U32 at sample {
+  let d = gen~(x)
+  acc~(d).reset_if~(d > 4).when~(g)
+}
+
+pub flow m_first(x: U32 at sample, y: U32 at sample, g: Bool at sample) -> U32 at sample {
+  let m = pulse~(y)
+  let d = gen~(x)
+  acc~(d).when~(g).reset_if~(m > 0)
+}
+
+pub flow d_first(x: U32 at sample, y: U32 at sample, g: Bool at sample) -> U32 at sample {
+  let d = gen~(x)
+  let m = pulse~(y)
+  acc~(d).when~(g).reset_if~(m > 0)
+}
+
+test "a reset by the event the part adds comes before the add (the frame gives its own event), outside the when~ it also puts back the kept output of a stopped frame" {
+  // x = 3 1 6 2 1 5 1 2, g = T T F T F F T T, the reset where d > 4 (the frames 2 and 5, both stopped): at the frame 2 the sum is put back and 6 is added (the sum 6, and 0 as the kept output outside), the frame 3 reads 8.
+  // The sums are 3 4 6 8 9 5 6 8 at the end of each frame.
+  let xs: [U32; 8] = [3, 1, 6, 2, 1, 5, 1, 2]
+  let gs: [Bool; 8] = [true, true, false, true, false, false, true, true]
+  let a = s_outer.render(s_outer.In { x: xs, g: gs }, 8.0)
+  let b = s_inner.render(s_inner.In { x: xs, g: gs }, 8.0)
+  let w_a: [U32; 8] = [3, 4, 0, 8, 8, 0, 6, 8]
+  let w_b: [U32; 8] = [3, 4, 4, 8, 8, 8, 6, 8]
+  for i in 0 ..< 8 {
+    assert a.out[i] == w_a[i]
+    assert b.out[i] == w_b[i]
+  }
+}
+
+test "the events of two makers at one frame tick in the order they are written: reset then add when the maker of the reset is above, add then reset when it is below" {
+  // x = 1 .. 8, y = 0 0 1 0 0 1 0 0 (the events at the frames 2 and 5), g = T F T T F F T T. Reset first at the frame 2: the sum is put back, 3 is added and read: 3 (the frame 5 is stopped and gives 0 as the outside kept output).
+  // Add first: the 3 of the frame is added to the 3 of the frames 0 1 and the sum is put back before the call reads: 0.
+  let xs: [U32; 8] = [1, 2, 3, 4, 5, 6, 7, 8]
+  let ys: [U32; 8] = [0, 0, 1, 0, 0, 1, 0, 0]
+  let gs: [Bool; 8] = [true, false, true, true, false, false, true, true]
+  let a = m_first.render(m_first.In { x: xs, y: ys, g: gs }, 8.0)
+  let b = d_first.render(d_first.In { x: xs, y: ys, g: gs }, 8.0)
+  let w_a: [U32; 8] = [1, 1, 3, 7, 7, 0, 13, 21]
+  let w_b: [U32; 8] = [1, 1, 0, 4, 4, 0, 7, 15]
+  for i in 0 ..< 8 {
+    assert a.out[i] == w_a[i]
+    assert b.out[i] == w_b[i]
+  }
+}

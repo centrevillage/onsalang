@@ -1,0 +1,91 @@
+# flow_ref 1 source=tests/spec/flow_semantics/event_several_values.onsa tests=12 evaluated=12 unavailable=0 skipped=0 waiting=0
+@ a maker under .up~(2) gives two events a frame in the order of its runs, and the wrapper gives the same events
+init 0 event_several_values.t_up2 sr=0x41000000
+init 1 event_several_values.t_wrap sr=0x41000000
+process 0 frames=3
+out=[1 123 12345]
+process 1 frames=3
+out=[1 123 12345]
+@ a wrapper twice wrapped, and a wrapper with .up~(2), gives four events a frame: the tick of the inner is 2 (2 p + i) + j
+init 0 event_several_values.t_wrap2 sr=0x41000000
+init 1 event_several_values.t_wrap_up2 sr=0x41000000
+process 0 frames=2
+out=[123 1234567]
+process 1 frames=2
+out=[123 1234567]
+@ a wrapper under .down~(2) gives its two events at the frames of its ticks, 0 2 4, and none between them
+init 0 event_several_values.t_wrap_down2 sr=0x41000000
+process 0 frames=6
+out=[1 1 123 123 12345 12345]
+@ a wrapper under when~ gives no events on the frames where it stops, and its sample_tick() goes on (the position of the caller)
+init 0 event_several_values.t_wrap_when sr=0x41000000
+process 0 frames=4 in g=[true false true true]
+out=[1 1 145 14567]
+@ a receiver in the body of the maker ticks right after each run: the two elements of a frame are the sums after each of the two events
+init 0 event_several_values.t_rec_lo sr=0x41000000
+init 1 event_several_values.t_rec_hi sr=0x41000000
+init 2 event_several_values.t_rec_out sr=0x41000000
+process 0 frames=3
+out=[0 3 10]
+process 1 frames=3
+out=[1 6 15]
+process 2 frames=3
+out=[1 6 15]
+@ a call under .up~(2) that is reset by its own events: the reset comes after the run that gave the event, before the next run
+init 0 event_several_values.self_reset sr=0x41000000
+process 0 frames=3
+out=[12 1231 123123]
+@ two receivers of one maker: one reset by an event of the maker comes back to 0 before it adds that event, the other sums all
+init 0 event_several_values.two_receivers sr=0x41000000
+process 0 frames=3
+out=[1001 23006 2345015]
+@ a run that gives None gives no event: the first of the two runs (1 3 5 at the frames 0 1 2) or the second (2 4 6)
+init 0 event_several_values.gap_first sr=0x41000000
+init 1 event_several_values.gap_second sr=0x41000000
+process 0 frames=3
+out=[1 13 135]
+process 1 frames=3
+out=[2 24 246]
+@ the events of a run of a Bool, an F32 and a struct come in the order of the runs, two a frame
+init 0 event_several_values.ty_bool sr=0x41000000
+init 1 event_several_values.ty_f32 sr=0x41000000
+init 2 event_several_values.ty_struct sr=0x41000000
+process 0 frames=3
+out=[12 1212 121212]
+process 1 frames=3
+out=[0x3f000000 0x40400000 0x40f00000]
+process 2 frames=3
+out=[102 612 1530]
+@ a maker under .up~(8) gives eight events a frame: 0 .. 7 in one frame, the frame p has 8 p .. 8 p + 7
+init 0 event_several_values.m8_digits sr=0x41000000
+init 1 event_several_values.m8_sum sr=0x41000000
+process 0 frames=1
+out=[1234567]
+process 1 frames=3
+out=[28 120 276]
+@ makers in a block give their events at the position of the tick of the boundary, in the order of the runs
+init 0 event_several_values.block_4_2 sr=0x41000000
+init 1 event_several_values.block_2_4 sr=0x41000000
+init 2 event_several_values.block_wrap sr=0x41000000
+process 0 frames=4
+out=[123 123 1234567 1234567]
+process 1 frames=6
+out=[1 1 1 1 123 123]
+process 2 frames=4
+out=[123 123 1234567 1234567]
+@ the calls of process cut the run anywhere, a call of 0 frames too, and reset starts again: the values of one run
+init 0 event_several_values.t_wrap_up2 sr=0x41000000
+process 0 frames=1
+out=[123]
+process 0 frames=0
+out=[]
+process 0 frames=1
+out=[1234567]
+init 1 event_several_values.t_up2 sr=0x41000000
+process 1 frames=3
+out=[1 123 12345]
+reset 1
+process 1 frames=2
+out=[1 123]
+process 1 frames=1
+out=[12345]

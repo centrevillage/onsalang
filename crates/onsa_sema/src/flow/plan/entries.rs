@@ -85,7 +85,7 @@ pub(crate) fn walk(pkg: &Package, a: &mut Analysis) {
 fn close(pkg: &Package, a: &mut Analysis, f: DefId, marks: &HashMap<DefId, Mark>, most: &HashMap<DefId, Most>) -> Most {
     let info = a.flows.get(&f)?;
     let mut time = own_time(info);
-    // The gate of a flow not planned (`FlowInfo::event_gate`) stops what reads its entries.
+    // A flow in error, whose entries nothing reads.
     if !info.planned() {
         if let Some(info) = a.flows.get_mut(&f) {
             info.time = time;
@@ -142,22 +142,31 @@ fn close(pkg: &Package, a: &mut Analysis, f: DefId, marks: &HashMap<DefId, Mark>
         }
     }
     let gives = a.def(f).as_flow().is_some_and(FlowDef::gives_events);
-    let ticked = match events::table(info, gives, &tables, &mut time) {
+    let burst_of = |g| a.flows.get(&g).map_or(1, |g| g.burst);
+    let ticked = match events::table(info, gives, &tables, burst_of, &mut time) {
         Ok(ticked) => ticked,
         Err(at) => {
-            // A form not run (`FlowInfo::event_form`), as those of the body.
+            // The form not run (`FlowInfo::event_form`).
             let time = own_time(info);
             a.flows.entry(f).and_modify(|info| (info.event_form, info.time) = (Some(at), time));
             return None;
         }
     };
+    let ast = || match crate::module_of_def(pkg, a, f) {
+        Some(m) => &m.parsed.ast,
+        None => onsa_diag::internal::bug(None, "a flow of no module"),
+    };
+    let ast = (!ticked.events.is_empty()).then(ast);
+    let late = |id| ast.map_or(Vec::new(), |ast| events::late(info, &ticked.events, ast, NodeId(id)));
+    let late: Vec<Vec<u32>> = (0..info.nodes.len() as u32).map(late).collect();
     let callers = tables.iter().flatten().flat_map(|t| &t.0).map(|e| e.caller);
     stages.extend(callers.filter(|s| s.slow_tick()));
     let Some(flow) = a.flows.get_mut(&f) else { onsa_diag::internal::bug(None, "a flow closed out of the table") };
     let set = |n: &mut PlanNode, (e, read)| (n.entries, n.read) = (e, read);
     flow.nodes.iter_mut().zip(tables).for_each(|(n, t)| t.into_iter().for_each(|t| set(n, t)));
+    flow.nodes.iter_mut().zip(late).for_each(|(n, late)| n.late = late);
     (flow.stages, flow.time) = (stages.into_iter().collect(), time);
-    (flow.events, flow.emit) = ticked;
+    (flow.events, flow.emit, flow.burst) = (ticked.events, ticked.emit, ticked.burst);
     node_work(flow);
     fields::build(flow);
     // The E0808 of the path first, one of the flow, as before S-1216.

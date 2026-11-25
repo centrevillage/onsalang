@@ -78,8 +78,9 @@
 //!   those of `sample_tick()` (the `time` comes of them), and the `let`s that
 //!   hold work of a stage ([`FlowInfo::work_in`]; `late`, what is of its end,
 //!   and `back`, by a `^name` of its own).
-//! - `events`, `emit` — the event clocks (§11.11, [`plan`]'s `events`): their
-//!   sources, the stage that ticks each and the one that gives the output out.
+//! - `events`, `emit`, `burst` — the event clocks (§11.11, [`plan`]'s `events`): their
+//!   sources, the stage that ticks each, the one that gives the output out and the
+//!   most events a run of it gives.
 //! - `read_at: HashMap<LocalId, BTreeSet<ClockStage>>` — the stages at which
 //!   each local is read (inputs, `let`s, `par` variables, match bindings;
 //!   S-05): each argument of a node at the stage of its clock
@@ -363,9 +364,12 @@ pub struct FlowInfo {
     /// event input; none of another flow, and of events that come of a call
     /// of a callee with no table.
     pub emit: Option<ClockStage>,
+    /// The most events one run of the function of [`FlowInfo::emit`] gives out
+    /// (§11.9, §11.11), 1 but of an `.up~` on the way to it: that many
+    /// `Option`s, of a tick alone (an event ticks a stage once).
+    pub burst: u32,
     /// The form of the event clock this version checks and does not run
-    /// (§11.11, W7-17): of the body, or a source nothing outside it ticks
-    /// (`plan`'s `events`).
+    /// (§11.11, S-1237): a source nothing outside it ticks (`plan`'s `events`).
     pub(crate) event_form: Option<Span>,
     pub complete: bool,
 }

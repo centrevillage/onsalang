@@ -54,6 +54,13 @@ impl DelayMods {
     }
 }
 
+impl DelayMods {
+    /// A `reset_if~` of an event that wraps the first `inside` modifiers comes: the output each `when~` among them holds goes back to `T.default()`.
+    pub(super) fn put_back(&mut self, inside: usize) {
+        self.gates.iter_mut().take(inside).for_each(|g| g.reset(true));
+    }
+}
+
 /// Is the time `grid` at a tick of R of a chain on a delay that ticks at K (every tick of K for an R that is not slower)?
 fn on_r(grid: Ctx, r: i32, k: i32) -> bool {
     r >= k || on_tick(grid, r)

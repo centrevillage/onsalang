@@ -184,6 +184,10 @@ pub struct PlanNode {
     /// Of a delay at a tick, what it stores reads of events where it is
     /// written ([`events::saved`], §11.3, S-1240); none of another node.
     pub saved: Vec<ExprId>,
+    /// Of a delay, its resets that may come between the place it is written at
+    /// and its store ([`events::late`], S-1250), by their place in `chain`;
+    /// made by the walk of the table ([`entries`]).
+    pub late: Vec<u32>,
 }
 
 /// The work of an instance in the function of the stage `caller` of this
@@ -563,7 +567,6 @@ impl FlowInfo {
 /// body ([`events`]). The walk of the table ([`entries`]) adds those of its
 /// callees and makes the fields of the state after.
 pub(super) fn build(
-    a: &Analysis,
     info: &mut FlowInfo,
     recorded: Vec<Recorded>,
     w: &Walked,
@@ -628,6 +631,7 @@ pub(super) fn build(
             entries: Vec::new(),
             read: Read::Run,
             saved: Vec::new(),
+            late: Vec::new(),
         }
     });
     info.nodes = nodes.collect();
@@ -636,7 +640,6 @@ pub(super) fn build(
     super::hoist::table(info, ast, hoisted);
     info.stages = stage::slow_stages(info);
     info.events = events::sources(info);
-    info.event_form = events::form(a, info, ast);
     if info.events.is_empty() {
         return;
     }

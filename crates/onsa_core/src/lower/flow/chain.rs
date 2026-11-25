@@ -118,7 +118,8 @@ impl<'a> Walk<'a> {
 /// before it is cut to `U32`); of an `.up~(2^s)` at its run `j`, the count
 /// 2^s times and j: `[(c << s) | j]`,
 /// `[(t << s) | j, (t_hi << s) | (t >> (32 − s))]`; the arm of j there and
-/// of none else. The one step of the counters and the time.
+/// of none else (an `.up~` around the stage of an event has no j, its time the
+/// run 0, [`child_time`]). The one step of the counters and the time.
 fn fold(words: &[Expr], r: Ratio, j: Option<&Expr>, span: Span) -> R<Vec<Expr>> {
     let s = Some(r.0.unsigned_abs()).filter(|&s| s > 0 && s < 32);
     let s = s.ok_or_else(|| internal(span, format!("a count under a boundary of the ratio {r:?}")))?;
@@ -142,12 +143,15 @@ fn fold(words: &[Expr], r: Ratio, j: Option<&Expr>, span: Span) -> R<Vec<Expr>> 
 /// `let`s `t_in`, `t_hi_in` into `out` that the next shares, cut to `words`.
 fn child_time(cx: &mut FnCx, out: &mut Vec<Stmt>, w: &Walk, words: usize) -> R<Vec<Expr>> {
     let mut time = cx.flow.as_ref().expect("flow context").now.time.clone();
+    // The stage of an event in an `.up~` is of no run of it: the run 0 (§11.4).
+    let first = u32_lit(w.span, 0);
     for (k, b) in w.n.bounds.iter().enumerate().rev() {
         // One word divided would lose the upper (S-1211): the table gives two under a `.down~`.
         if b.ratio.slower_than_body() && time.len() != 2 {
             return Err(internal(w.span, "one word of time"));
         }
-        let kept = fold(&time, b.ratio, w.j(k), w.span)?.into_iter().take(if k == 0 { words } else { 2 });
+        let j = w.j(k).or((!b.ratio.slower_than_body()).then_some(&first));
+        let kept = fold(&time, b.ratio, j, w.span)?.into_iter().take(if k == 0 { words } else { 2 });
         time = kept.zip(["t_in", "t_hi_in"]).map(|(e, name)| materialize(cx, e, out, name)).collect();
     }
     let time = time.get(..words).ok_or_else(|| internal(w.span, format!("a callee of {words} words of time")))?;
@@ -482,8 +486,9 @@ pub(super) fn stored(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, id: N
 /// The stage of the events of the instance of the walk (§11.11) after its run
 /// that gave `v`, the event or none: of an event its function, the one place
 /// that calls it, at the time of this one, which gives the event of the
-/// output or none to this function that gives it (`FlowInfo::gives`); in a
-/// `par~`, of this replica.
+/// output or none to this function that gives it (`FlowInfo::gives`,
+/// [`Gave`]); in a `par~`, of this replica. Of a callee that gives several
+/// (`FlowInfo::burst`), of each in their order, after all its work (S-1251).
 fn give(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, w: &Walk, v: Expr) -> R<()> {
     let (span, none) = (w.span, || internal(w.span, "an event given out of no source"));
     let Clock::Event(src) = w.n.clock else { return Err(none()) };
@@ -493,22 +498,42 @@ fn give(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, w: &Walk, v: Expr)
     let state = f.now.scopes.first().ok_or_else(none)?.state.clone();
     let (time, gave) = (f.now.time.clone(), f.now.gave.clone().filter(|_| f.info.gives(x)));
     let mut arm = Vec::new();
-    let v = materialize(cx, v, out, "__event");
+    let mut one = Vec::new();
+    let (v, each) = match v.ty {
+        Ty::Array(_, n) => {
+            let (all, i) = (materialize(cx, v, out, "__events"), cx.temp("__i", Ty::u32()));
+            (hold(cx, &mut one, index(all, local_expr(cx, i, span))?, "__event"), Some((i, n)))
+        }
+        _ => (materialize(cx, v, out, "__event"), None),
+    };
     let some = super::event_option(lw.a, span)?.keep;
     let event = payload(lw, v.clone(), some, 0)?;
     let vars = around(w.info, w.n.owner).into_iter().map(|p| range(w.info, p, span));
     let vars = vars.map(|r| Ok(local_expr(cx, LocalId(r?.0.0), span)));
     let inputs = vars.chain([Ok(event)]).collect::<R<Vec<_>>>()?;
-    let ret = gave.as_ref().map_or(Ty::Unit, |g| g.ty.clone());
+    let gave = gave.map(|g| Ok((g.place()?, g.next))).transpose()?;
+    let ret = gave.as_ref().map_or(Ty::Unit, |g| g.0.ty.clone());
     let stage = StageRun { g: w.info, f: f_id, ret, x, state, time, lets: Vec::new(), inputs };
     let call = call_stage(stage, span)?;
     match gave {
-        Some(g) => assign(&mut arm, &g, call)?,
+        Some((place, next)) => {
+            assign(&mut arm, &place, call)?;
+            if let Some(n) = next {
+                assign(&mut arm, &n, checked_binary(BinOp::Add, n.clone(), u32_lit(span, 1)))?;
+            }
+        }
         None => expr_stmt(&mut arm, call),
     }
     let arms = vec![(some, Block { stmts: arm, value: None })];
     let default = Some(Block::default());
-    expr_stmt(out, Expr::new(Ty::Unit, span, ExprKind::Switch { scrutinee: Box::new(v), arms, default }));
+    expr_stmt(&mut one, Expr::new(Ty::Unit, span, ExprKind::Switch { scrutinee: Box::new(v), arms, default }));
+    match each {
+        None => out.append(&mut one),
+        Some((i, n)) => {
+            let body = Block { stmts: one, value: None };
+            out.push(stmt(span, StmtKind::ForRange(i, u32_lit(span, 0), u32_lit(span, n), body)));
+        }
+    }
     Ok(())
 }
 

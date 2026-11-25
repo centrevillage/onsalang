@@ -14,7 +14,7 @@ use super::flow::{Clock, Ctx, Inst, enter};
 use super::hoist::{forget_early, gather_args, hoisted_calls, keep_early, operands};
 use super::rate::{Guard, Level, counted, dealt, elements, n_of, on_tick, phase, port_exprs, slice, time_of};
 use super::scalar::{Fault, Fault::Internal};
-use super::sema_view::{Called, Stage, input_stage};
+use super::sema_view::{Called, Stage, input_stage, output_stage};
 use super::state::{NodeKey, Role, Store};
 use super::value::Value;
 
@@ -123,7 +123,7 @@ impl<'a> Frame<'a> {
         let ins = self.run.as_ref().and_then(|r| r.state.children.get(key)).map(|c| c.fed.clone());
         self.run_level(key, &levels, levels.len() - 1, sx, caller, ins.ok_or(here(Internal("no instance")))?)?;
         self.child_mut(key, at)?.done = Some((caller.total(), s));
-        self.fire_emitted(key)
+        Ok(())
     }
 
     /// The arguments of the ports of the head that this frame reads at the stage `sx` of this one (the inputs of the head and the conditions a boundary gathers, `rate::port_exprs`): those the last boundary does not gather, at
@@ -438,7 +438,9 @@ impl<'a> Frame<'a> {
         self.in_child(key, |f, inst, decl| {
             f.run.as_mut().ok_or(Stop { fault: Internal("no run"), at })?.ctx = ctx;
             enter(f, inst, decl, stage, &now)
-        })
+        })?;
+        // An event the run gave is ticked at once, after the whole work of the run (S-1251, §11.11): a head under `.up~(N)` runs N times in a frame, each with its own event.
+        self.fire_emitted(key)
     }
 
     /// What the part `b` of the chain at `key` gives in its frame at the time `ctx`, the output boundary (§11.9): `m` its clock, a burst of its `2^m` values for `m > 0` (`Value::Burst`) and one value for `m <= 0`. The head gives
@@ -450,10 +452,12 @@ impl<'a> Frame<'a> {
         let child = run.state.children.get(key).ok_or(here(Internal("an instance with no state")))?;
         let (lv, burst) = (&levels[b], |es: Vec<Value>, m| counted(&es, m).map(|()| Value::Burst(es)).map_err(here));
         let r = lv.ratio;
-        if lv.when().is_some() {
+        // The event a head gave is the value of the call, whatever stops it (no output is held, §11.11); a `when~` keeps the last output of a part that gives a value.
+        let gives = matches!(self.body.view.flow(child.def).map(output_stage), Ok(Ok(Stage::Event(_))));
+        if lv.when().is_some() && !gives {
             return child.whens.get(b).and_then(Option::as_ref).map(|g| g.held.clone()).ok_or(here(Internal(NO_GATE)));
         }
-        if lv.reset().is_some() {
+        if lv.reset().is_some() || lv.when().is_some() {
             return self.level_out(key, levels, b - 1, ctx, at);
         }
         match (b, r.cmp(&0)) {

@@ -24,6 +24,13 @@ const CASES: &[&str] = &[
     "tests/spec/flow_semantics/event_par_values.onsa",
     "tests/spec/flow_semantics/event_par_part_values.onsa",
     "tests/spec/flow_semantics/event_arm_values.onsa",
+    "tests/spec/flow_semantics/event_when_rate_values.onsa",
+    "tests/spec/flow_semantics/event_when_receiver_values.onsa",
+    "tests/spec/flow_semantics/event_modifier_mix_values.onsa",
+    "tests/spec/flow_semantics/event_time_values.onsa",
+    "tests/spec/flow_semantics/event_ratio_values.onsa",
+    "tests/spec/flow_semantics/event_block_values.onsa",
+    "tests/spec/flow_semantics/event_several_values.onsa",
 ];
 
 fn run_file(path: &str) -> Vec<String> {

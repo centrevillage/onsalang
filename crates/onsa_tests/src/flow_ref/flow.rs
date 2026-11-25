@@ -156,7 +156,7 @@ pub(super) fn clock_of(body: &Body, known: &Known, root: ExprId, e: ExprId) -> R
                 return match body.called(chain.head)? {
                     Called::Flow(def) => match output_stage(body.view.flow(def)?)? {
                         Stage::Tick(m) => Ok(Clock::Tick(m + chain.sum())),
-                        // The events a call gives are those of its head, whatever `reset_if~` is on it (`.down~`, `.up~` and `when~` with events are W7-17, `rate::visit`).
+                        // The events a call gives are those of its head, whatever modifier is on it (a boundary does not move them, `rate::levels`).
                         Stage::Event(_) => Ok(super::events::call_src(chain.head)),
                         _ => Err(Fault::Unavailable("a chain whose head is not an instance with an output at a tick")),
                     },
@@ -268,7 +268,7 @@ pub struct Inst {
     hoisted: Hoisted,
     pub(super) out: Value,
     /// The event an entry of this instance gave (§11.11), taken by whoever ran the entry (`Frame::fire_emitted`).
-    pub(super) emitted: Option<Value>,
+    pub(super) emitted: Vec<Value>,
     pub(super) state: InstState,
     /// The index of each `par~` around the call that made it, which the arguments of its `block` stage and what a ring gathers of them may read (the bindings of an arm they read are made by `Frame::eval_in_arms`).
     pub(super) scope: Vec<(LocalId, Value)>,
@@ -453,9 +453,9 @@ pub(super) fn enter<V: std::borrow::Borrow<Value>>(
     let done = enter_end(f, inst, decl, at, whole);
     // What the entry gave: the event, which is the value of the output from now (§11.11), and the value an event stage of the caller's own made (`Frame::fire`).
     if let Some(run) = f.run.as_mut() {
-        if let Some(p) = run.emitted.take() {
-            inst.out = p.clone();
-            inst.emitted = Some(p);
+        if let Some(p) = run.emitted.last().cloned() {
+            inst.out = p;
+            inst.emitted.append(&mut run.emitted);
         }
         if let Some(v) = run.set_out.take() {
             inst.out = v;
@@ -536,7 +536,7 @@ impl Inst {
                 locals: HashMap::new(),
                 hoisted: HashMap::new(),
                 out: Value::Unit,
-                emitted: None,
+                emitted: Vec::new(),
                 state: InstState::default(),
                 scope: Vec::new(),
             },
@@ -576,9 +576,11 @@ impl Inst {
             };
             for i in members {
                 let (pat, init) = lets[i];
+                let own = seen_of(body, &known, init, init).map_err(at(init))?;
+                // A step of a loop that gives events of its own (a call of a maker) keeps its source: two makers in one loop (`let a = f~(prev~(^b))`, `let b = g~(a)`) have no one clock, `join` of two sources is none.
                 let clock = match ring {
-                    Some(c) => Seen::both(c),
-                    None => seen_of(body, &known, init, init).map_err(at(init))?,
+                    Some(c) if !matches!((c, own.stage), (Clock::Event(_), Clock::Event(_))) => Seen::both(c),
+                    _ => own,
                 };
                 // SPEC-GAP(S-1119): the locals the pattern binds (a `let` taken apart) have the clock of the whole right
                 // side, as the interpreter has it; the other reading gives each the clock of its own element.
@@ -771,9 +773,7 @@ impl<'a> Instance<'a> {
 
     /// The event the last entry gave, if one, is taken with the position (`Events::took`).
     fn gave(&mut self, took: &mut Vec<(usize, Value)>, at: usize) {
-        if let Some(v) = self.me.emitted.take() {
-            took.push((at, v));
-        }
+        took.extend(std::mem::take(&mut self.me.emitted).into_iter().map(|v| (at, v)));
     }
 
     /// `render` (§11.6): `init` and one `process` of all the frames, the call a test makes. A flow with `sample` inputs

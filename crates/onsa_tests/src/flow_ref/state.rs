@@ -160,8 +160,8 @@ pub struct Run {
     late_cells: Vec<LateCell>,
     /// The steps of the instance this evaluation runs (`enter`): an event stage of its own is run from inside another stage (`Frame::fire`).
     pub(super) steps: Option<Rc<[super::flow::Step]>>,
-    /// The event the output step gave in this entry, and the value of the output an event stage run inside it made (`enter` takes them).
-    pub(super) emitted: Option<Value>,
+    /// The events the output step gave in this entry, in order (a call under `.up~(N)` in its body gives one for each run), and the value of the output an event stage run inside it made (`enter` takes them).
+    pub(super) emitted: Vec<Value>,
     pub(super) set_out: Option<Value>,
     /// The number of the run of an event stage that this evaluation is in (`events::next_serial`): what a delay of an event gave in it is kept for it alone, as the time is for a delay of a tick.
     pub(super) serial: u64,
@@ -191,7 +191,7 @@ impl Run {
             step: None,
             late_cells: Vec::new(),
             steps: None,
-            emitted: None,
+            emitted: Vec::new(),
             set_out: None,
             serial: 0,
         }

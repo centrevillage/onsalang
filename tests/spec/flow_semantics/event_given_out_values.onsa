@@ -1,0 +1,113 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.11", "§11.9", "§11.10"]
+
+// The events a flow gives out of the events within it, given back to the same call (W7-17 U4; S-1251): the receivers of the caller are ticked after the whole work of the tick the caller had the maker do (the stores too), in the order of the events;
+// written out, with no flow around, after each run of an `.up~`. The values are by hand from the text.
+
+// The parts. `beat` gives an event each frame; `cnt` adds the events; `fwd` gives out each event it gets.
+flow beat(v: U32 at sample) -> U32 at event { Some(v + 1) }
+flow fwd(m: U32 at event) -> U32 at event { Some(m) }
+flow cnt(m: U32 at event) -> U32 at sample {
+  let n = prev~(^n) + m
+  n
+}
+// one event a tick: the number of the ticks so far, 1 2 3 ...
+flow bm() -> U32 at event {
+  let k = prev~(^k) + 1
+  Some(k at sample)
+}
+// the sum of its events and of the events of `m` so far, given out each tick
+flow sum_out(m: U32 at event) -> U32 at event {
+  let n = prev~(^n) + m
+  Some((n at sample) + 1)
+}
+
+// f1: a flow that gives out the event of a part of it, with work of its own below the part (in the same stage)
+flow w1(m: U32 at event) -> U32 at event {
+  let d = beat~(prev~(^s))
+  let s: U32 = prev~(^s) + (m at sample)
+  Some(d)
+}
+pub flow f1() -> U32 at sample {
+  let a = w1~(prev~(^b))
+  let b = fwd~(a)
+  a at sample
+}
+
+// f2: the same with two events in a tick of the flow
+flow w2(m: U32 at event) -> U32 at event {
+  let d = sum_out~(m).up~(2)
+  Some(d)
+}
+pub flow f2() -> U32 at sample {
+  let a = w2~(prev~(^b))
+  let b = fwd~(a)
+  cnt~(a)
+}
+// f2d: written out, with no flow around
+pub flow f2d() -> U32 at sample {
+  let a = sum_out~(prev~(^b)).up~(2)
+  let b = fwd~(a)
+  cnt~(a)
+}
+
+// f3: the receiver of the events is a `.reset_if~` on the flow itself
+flow bm2() -> U32 at event { Some(bm~().up~(2)) }
+pub flow f3() -> U32 at sample {
+  let e = prev~(^d)
+  let d: U32 = bm2~().reset_if~(e == 2)
+  cnt~(d)
+}
+// f3d: written out
+pub flow f3d() -> U32 at sample {
+  let e = prev~(^d)
+  let d: U32 = bm~().up~(2).reset_if~(e == 2)
+  cnt~(d)
+}
+
+test "one event a tick, with work of its own below the part that gives it: the event comes back to the input of the flow after that work" {
+  // The tick of w1 gives P + 1 (P the sum s before), then s = P + M (M the last event of m, 0 before the first); the event a comes after, and gives m the b before. P and M by the frames: 0 0, 0 0, 0 1, 1 1, 2 1: a = 1 1 1 2 3.
+  let o = f1.render(5, 8.0)
+  let w: [U32; 5] = [1, 1, 1, 2, 3]
+  for i in 0 ..< 5 {
+    assert o.out[i] == w[i]
+  }
+}
+
+test "two events a tick of the flow: the two are ticked after both runs" {
+  // Both runs give the same N + 1 (the sum N before the tick), then the two events are ticked one after the other: each adds the b before to N. The events are 1 1, 2 2, 5 5, 12 12, 29 29, the sums 2 6 16 40 98.
+  let o = f2.render(5, 8.0)
+  let w: [U32; 5] = [2, 6, 16, 40, 98]
+  for i in 0 ..< 5 {
+    assert o.out[i] == w[i]
+  }
+}
+
+test "the same written out: each event is ticked after its run, and the next run sees it" {
+  // The events are 1 1, 2 3, 5 8, 13 21, 34 55 and the sums 2 7 20 54 143.
+  let o = f2d.render(5, 8.0)
+  let w: [U32; 5] = [2, 7, 20, 54, 143]
+  for i in 0 ..< 5 {
+    assert o.out[i] == w[i]
+  }
+}
+
+test "two events a tick and a reset_if~ of the flow by its own events: the reset is after both runs" {
+  // The events are 1 2, 3 4 (at the 3 the event before is 2: the reset, for the next tick), 1 2, 3 4, 1 2: the sums 3 10 13 20 23.
+  let o = f3.render(5, 8.0)
+  let w: [U32; 5] = [3, 10, 13, 20, 23]
+  for i in 0 ..< 5 {
+    assert o.out[i] == w[i]
+  }
+}
+
+test "the same written out: the reset is after the run that gave the event, before the next run" {
+  // The events are 1 2, 3 1, 2 3, 1 2, 3 1: the sums 3 7 12 15 19.
+  let o = f3d.render(5, 8.0)
+  let w: [U32; 5] = [3, 7, 12, 15, 19]
+  for i in 0 ..< 5 {
+    assert o.out[i] == w[i]
+  }
+}

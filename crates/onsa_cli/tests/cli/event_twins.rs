@@ -8,6 +8,9 @@
 //! through `prev~(^d)`; 1 to 3 receivers with 1 to 3 conditions each (an event, or a value of `x`, or a constant), the argument of a receiver is `x`, `x + 1`, an earlier receiver or a receiver of its own (a chain
 //! inside a chain); the producer, the reader and the receivers are in any order that reads only what is above (`^` where the name is below). The output is the sum of the receivers, `r0 + r1 * 100 + ..`.
 //!
+//! Places (W7-17 U4): the same twins, written out, of a delay at the places an event comes late to or a chain of a part (the argument and the conditions of the call that gives the event, an event that event ticks, a delay of an
+//! event, two conditions, the ring of a condition a boundary gathers).
+//!
 //! Models (4 seeds, 5 programs each): a program has 2 to 3 sources of events (the four producers), 0 to 2 readers (`prev~(d)`) and 1 to 3 delays of an event (`prev~(d, init).reset_if~(..)` of a source or a reader, 0
 //! to 3 conditions each; an event of a source or a reader above it, or a constant), written in any order that reads only what is above, output `(e0 at sample) + (e1 at sample) * 100 + ..` (the value of an event
 //! delay as `sample` is the output of its last tick). The expected values are computed here by a model of the text of the spec, written once for all of them:
@@ -323,6 +326,82 @@ fn a_chain_of_resets_with_events_gives_the_same_values_when_its_delays_are_in_fl
         let (text, tests) = twin_module(seed);
         wrong.extend(failures(&text, tests).into_iter().map(|w| format!("seed {seed:#x}: {w}")));
     }
+    assert!(wrong.is_empty(), "{wrong:#?}");
+}
+
+/// The flows of the twins of the places ([`PLACES`]).
+const PLACE_FLOWS: &str = "flow kk() -> U32 at event {
+  let k = prev~(^k) + 1
+  Some(k at sample)
+}
+flow fwd(m: U32 at event) -> U32 at event { Some(m) }
+flow pv(v: U32 at sample) -> U32 at sample { prev~(v, 9) }
+flow pve(m: U32 at event) -> U32 at event {
+  let p = prev~(m, 9)
+  Some(p)
+}
+flow runs() -> U32 at sample {
+  let k = prev~(^k) + 1
+  k
+}
+flow lump(x: U32 at sample) -> U32 at sample { runs~().when~(x > 2).up~(2).down~(2) }
+";
+
+/// The twins of the places: a body straight, and with the delay (or the chain) in a flow of its own.
+const PLACES: [(&str, &str); 9] = [
+    (
+        "let e = prev~(^d); let d: U32 = kk~().reset_if~(prev~(x, 9).reset_if~(e >= 3) > 7); d at sample",
+        "let e = prev~(^d); let d: U32 = kk~().reset_if~(pv~(x).reset_if~(e >= 3) > 7); d at sample",
+    ),
+    (
+        "let e = prev~(^d); let d: U32 = kk~().when~(prev~(x, 9).reset_if~(e >= 3) > 3); d at sample",
+        "let e = prev~(^d); let d: U32 = kk~().when~(pv~(x).reset_if~(e >= 3) > 3); d at sample",
+    ),
+    (
+        "let e = prev~(^d); let d: U32 = pc~(prev~(x, 9).reset_if~(e >= 5)); d at sample",
+        "let e = prev~(^d); let d: U32 = pc~(pv~(x).reset_if~(e >= 5)); d at sample",
+    ),
+    (
+        "let e = prev~(^g); let q = prev~(x, 9).reset_if~(e >= 5); let d = pc~(x); let g: U32 = fwd~(d); q",
+        "let e = prev~(^g); let q = pv~(x).reset_if~(e >= 5); let d = pc~(x); let g: U32 = fwd~(d); q",
+    ),
+    (
+        "let e = prev~(^g); let d = pc~(x); let q = prev~(d, 9).reset_if~(e >= 5); let g: U32 = fwd~(d); q at sample",
+        "let e = prev~(^g); let d = pc~(x); let q = pve~(d).reset_if~(e >= 5); let g: U32 = fwd~(d); q at sample",
+    ),
+    (
+        "let e = prev~(^d); let f = prev~(^g); let q = prev~(x, 9).reset_if~(e >= 9).reset_if~(f >= 5); let d: U32 = pc~(x); let g: U32 = pz~(x); q",
+        "let e = prev~(^d); let f = prev~(^g); let q = pv~(x).reset_if~(e >= 9).reset_if~(f >= 5); let d: U32 = pc~(x); let g: U32 = pz~(x); q",
+    ),
+    (
+        "let e = prev~(^d); let q = prev~(x, 9).reset_if~(e >= 2); let d: U32 = kk~().up~(2).reset_if~(q > 5); q",
+        "let e = prev~(^d); let q = pv~(x).reset_if~(e >= 2); let d: U32 = kk~().up~(2).reset_if~(q > 5); q",
+    ),
+    (
+        "let d = pz~(x); runs~().when~(x > 2).up~(2).down~(2).reset_if~(d >= 5)",
+        "let d = pz~(x); lump~(x).reset_if~(d >= 5)",
+    ),
+    (
+        "let d = pz~(x); runs~().when~(x > 2).up~(2).down~(2).reset_if~(d >= 5).when~(d != 7)",
+        "let d = pz~(x); lump~(x).reset_if~(d >= 5).when~(d != 7)",
+    ),
+];
+
+/// §11.3, §11.5, §11.10, S-1250: a delay (or a chain) an event resets is the same straight and in a flow of its own, where the event comes after the place of the delay and before its store.
+#[test]
+fn a_delay_at_the_places_a_late_event_resets_gives_the_same_values_in_a_flow_of_its_own_u4() {
+    let xs = [1, 6, 2, 7, 3, 4, 1, 1, 5, 2, 8, 1, 3, 2];
+    let mut text = head(&xs, PLACE_FLOWS);
+    for (i, (a, b)) in PLACES.iter().enumerate() {
+        for (name, body) in [("fa", a), ("fb", b)] {
+            let body = body.replace("; ", "\n  ");
+            text += &format!("pub flow {name}{i}(x: U32 at sample) -> U32 at sample {{\n  {body}\n}}\n");
+        }
+        text += &format!(
+            "test \"place {i}\" {{\n  let a = fa{i}.render(XS, 8.0)\n  let b = fb{i}.render(XS, 8.0)\n  var sum: U32 = 0\n  for i in 0 ..< {N} {{\n    assert a.out[i] == b.out[i]\n    sum = sum + a.out[i]\n  }}\n  assert sum > 0\n}}\n"
+        );
+    }
+    let wrong = failures(&text, PLACES.len());
     assert!(wrong.is_empty(), "{wrong:#?}");
 }
 

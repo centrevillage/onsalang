@@ -1,0 +1,305 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.10", "§11.11", "§11.9", "§11.3"]
+
+// `.when~(c)` on a receiver that has an event port, or whose output is an event (W7-17 U4/t, M1; S-562, S-1209, S-1228, S-1239; spec §11.10: the events that come to a stopped part are processed, the output is kept ("一度も動いていなければ
+// `T.default()`"), the condition on an event is the level at the call; §11.11: "`when~` で止まっている間は、周期のクロックの式の出力は出さず"; §11.9: the grid inside counts the frames that ran, a stopped part's slow ticks are in the stage of W (S-1228)).
+// Every value is worked out by hand; the outermost flows have ports at `sample`. `gen` gives the event x at each frame, `lv` gives it but where x is 2, `pulse` where x > 0, `fwd` gives back what it gets, `every2` gives 1 2 3 .. at the
+// ticks of its own `sample / 2`. `acc` adds the events it gets and gives the sum: the sum is its state, the output is read only where it runs, and a stopped frame gives the last output read.
+
+pub struct Stamp: Default {
+  n: U32 = 50,
+}
+
+flow gen(x: U32 at sample) -> U32 at event {
+  Some(x)
+}
+
+flow lv(x: U32 at sample) -> U32 at event {
+  if x == 2 {
+    None
+  } else {
+    Some(x)
+  }
+}
+
+flow pulse(y: U32 at sample) -> U32 at event {
+  if y > 0 {
+    Some(y)
+  } else {
+    None
+  }
+}
+
+flow fwd(m: U32 at event) -> U32 at event {
+  Some(m)
+}
+
+flow every2() -> U32 at event {
+  let c = prev~((^c + 1) at (sample / 2))
+  Some(c + 1)
+}
+
+flow acc(e: U32 at event) -> U32 at sample {
+  let n = prev~(^n) + e
+  n
+}
+
+flow acc_stamp(e: U32 at event) -> Stamp at sample {
+  let n = prev~(^n) + e
+  Stamp { n: n }
+}
+
+flow acc_half(e: U32 at event) -> U32 at (sample / 2) {
+  let n = prev~(^n) + e
+  n
+}
+
+flow cnt() -> U32 at sample {
+  let n = prev~(^n) + 1
+  n
+}
+
+flow grid_acc(e: U32 at event) -> U32 at sample {
+  let n = prev~(^n) + e
+  let k = prev~((^k + 1) at (sample / 2))
+  n * 100 + (k at sample)
+}
+
+flow delayed(e: U32 at event, x: U32 at sample) -> U32 at sample {
+  let n = prev~(^n) + e
+  n + prev~(x)
+}
+
+flow nested(e: U32 at event) -> U32 at sample {
+  let a = acc~(e)
+  let c = cnt~()
+  a * 100 + c
+}
+
+// ---- the condition: the level of the receiver's own source, of another source (false before its first event), a `sample` value
+
+pub flow r_same(x: U32 at sample) -> U32 at sample {
+  let d = gen~(x)
+  acc~(d).when~(d > 2)
+}
+
+pub flow r_other(x: U32 at sample, y: U32 at sample) -> U32 at sample {
+  let d = gen~(x)
+  let v = lv~(y)
+  acc~(d).when~(v == 0)
+}
+
+pub flow r_sample(x: U32 at sample, g: Bool at sample) -> U32 at sample {
+  let d = gen~(x)
+  acc~(d).when~(g)
+}
+
+pub flow r_default(x: U32 at sample, g: Bool at sample) -> U32 at sample {
+  let s = acc_stamp~(gen~(x)).when~(g)
+  s.n
+}
+
+test "the events that come while the receiver is stopped are in its state, and the output kept is the one of the last frame that ran" {
+  // x = 3 1 1 4 1 2 5 1: the level `d > 2` is true at the frames 0 3 6, the sums are 3 4 5 9 10 12 17 18 and the frames that run read 3, 9, 17.
+  let a = r_same.render([3, 1, 1, 4, 1, 2, 5, 1], 8.0)
+  let w_a: [U32; 8] = [3, 3, 3, 9, 9, 9, 17, 17]
+  for i in 0 ..< 8 {
+    assert a.out[i] == w_a[i]
+  }
+}
+
+test "the level of another source is false before its first event, and a sample condition stops the frames it says" {
+  // y has the events 1 0 1 0 at the frames 2 4 7 8: `v == 0` is false at 0 .. 3 (the output 0 is T.default()), true at 4 5 6, false at 7, true from 8. x = 1 .. 12: the sums 1 3 6 10 15 21 28 36 45 55 66 78, the first run reads 15.
+  // With the `sample` condition the frames 3 6 10 stop, and a stopped frame is not lost from the sum.
+  let xs: [U32; 12] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+  let a = r_other.render(r_other.In { x: xs, y: [2, 2, 1, 2, 0, 2, 2, 1, 0, 2, 2, 2] }, 8.0)
+  let b = r_sample.render(r_sample.In { x: xs, g: [true, true, true, false, true, true, false, true, true, true, false, true] }, 8.0)
+  let w_a: [U32; 12] = [0, 0, 0, 0, 15, 21, 28, 28, 45, 55, 66, 78]
+  let w_b: [U32; 12] = [1, 3, 6, 6, 15, 21, 21, 36, 45, 55, 55, 78]
+  for i in 0 ..< 12 {
+    assert a.out[i] == w_a[i]
+    assert b.out[i] == w_b[i]
+  }
+}
+
+test "an output that was never read is T.default() of its type, not the value the events made" {
+  // The Default of Stamp has n = 50: 50 at the frames 0 1 2 although the sum is 1 2 3; the frame 3 runs and reads 4, the frame 4 keeps it, the frame 5 reads 6.
+  let a = r_default.render(r_default.In { x: [1, 1, 1, 1, 1, 1], g: [false, false, false, true, false, true] }, 8.0)
+  let w_a: [U32; 6] = [50, 50, 50, 4, 4, 6]
+  for i in 0 ..< 6 {
+    assert a.out[i] == w_a[i]
+  }
+}
+
+// ---- a maker stopped: what a `sample` expression gives is not given, what the events of its input give is given
+
+pub flow m_gen(x: U32 at sample, g: Bool at sample) -> U32 at sample {
+  acc~(gen~(x).when~(g))
+}
+
+pub flow m_fwd(x: U32 at sample, g: Bool at sample) -> U32 at sample {
+  let d = gen~(x)
+  acc~(fwd~(d).when~(g))
+}
+
+pub flow m_half(g: Bool at sample) -> U32 at sample {
+  acc~(every2~().when~(g))
+}
+
+test "a stopped maker that gives from a sample expression gives nothing, one that gives from the events it gets still gives them, and a grid of sample / 2 counts the frames that ran" {
+  // x = 1 .. 8, g = T T F T F F T T. `gen` gives at the frames 0 1 3 6 7 (1 2 4 7 8): the sums 1 3 3 7 7 7 14 22. `fwd` gives each event of the `gen` that is not stopped: 1 3 6 10 15 21 28 36.
+  // `every2` ticks at the 0th, 2nd and 4th frame that ran, the frames 0 3 7 (an unstopped one: 0 2 4 6): the events 1 2 3, summed 1 1 1 3 3 3 3 6.
+  let gs: [Bool; 8] = [true, true, false, true, false, false, true, true]
+  let xs: [U32; 8] = [1, 2, 3, 4, 5, 6, 7, 8]
+  let a = m_gen.render(m_gen.In { x: xs, g: gs }, 8.0)
+  let b = m_fwd.render(m_fwd.In { x: xs, g: gs }, 8.0)
+  let c = m_half.render(gs, 8.0)
+  let w_a: [U32; 8] = [1, 3, 3, 7, 7, 7, 14, 22]
+  let w_b: [U32; 8] = [1, 3, 6, 10, 15, 21, 28, 36]
+  let w_c: [U32; 8] = [1, 1, 1, 3, 3, 3, 3, 6]
+  for i in 0 ..< 8 {
+    assert a.out[i] == w_a[i]
+    assert b.out[i] == w_b[i]
+    assert c.out[i] == w_c[i]
+  }
+}
+
+// ---- inside the receiver: a grid of its own, a delay, an instance, a second `when~`; an output at sample / 2
+
+pub flow r_grid(x: U32 at sample, g: Bool at sample) -> U32 at sample {
+  grid_acc~(gen~(x)).when~(g)
+}
+
+pub flow r_delay(x: U32 at sample, g: Bool at sample) -> U32 at sample {
+  delayed~(gen~(x), x).when~(g)
+}
+
+pub flow r_nested(x: U32 at sample, g: Bool at sample) -> U32 at sample {
+  nested~(gen~(x)).when~(g)
+}
+
+pub flow r_twice(x: U32 at sample, g: Bool at sample) -> U32 at sample {
+  let d = gen~(x)
+  acc~(d).when~(d > 2).when~(g)
+}
+
+pub flow r_half(x: U32 at sample) -> U32 at sample {
+  let d = gen~(x)
+  acc_half~(d).when~(d > 1) at sample
+}
+
+test "a grid, a delay and an instance inside the receiver count the frames that ran, and the sum counts all the events" {
+  // x = 1 .. 8, g = T T F F T T T T: the runs are the frames 0 1 4 5 6 7, the sums 1 3 6 10 15 21 28 36. grid_acc: n * 100 + k, k the ticks of the grid (the runs 0 2 4 give 0 1 2). delayed: n + the x of the run before (0 at the first).
+  // nested: n * 100 + the number of runs (1 .. 6).
+  let xs: [U32; 8] = [1, 2, 3, 4, 5, 6, 7, 8]
+  let gs: [Bool; 8] = [true, true, false, false, true, true, true, true]
+  let a = r_grid.render(r_grid.In { x: xs, g: gs }, 8.0)
+  let b = r_delay.render(r_delay.In { x: xs, g: gs }, 8.0)
+  let c = r_nested.render(r_nested.In { x: xs, g: gs }, 8.0)
+  let w_a: [U32; 8] = [100, 300, 300, 300, 1501, 2101, 2802, 3602]
+  let w_b: [U32; 8] = [1, 4, 4, 4, 17, 26, 34, 43]
+  let w_c: [U32; 8] = [101, 302, 302, 302, 1503, 2104, 2805, 3606]
+  for i in 0 ..< 8 {
+    assert a.out[i] == w_a[i]
+    assert b.out[i] == w_b[i]
+    assert c.out[i] == w_c[i]
+  }
+}
+
+test "when~(a).when~(b) runs where both hold, the level of the events and a sample condition" {
+  // x = 3 1 4 4 1 5 2 6: the level d > 2 is T F T T F T F T; g = T T F T T T T F. Both: the frames 0 3 5. The sums 3 4 8 12 13 18 20 26.
+  let a = r_twice.render(r_twice.In { x: [3, 1, 4, 4, 1, 5, 2, 6], g: [true, true, false, true, true, true, true, false] }, 8.0)
+  let w_a: [U32; 8] = [3, 3, 3, 12, 12, 18, 18, 18]
+  for i in 0 ..< 8 {
+    assert a.out[i] == w_a[i]
+  }
+}
+
+test "a receiver whose output is at sample / 2 reads the level at its ticks, before the events of the frame, and runs the two frames from a tick where it holds" {
+  // x = 3 1 1 4 1 2 5 1 5 0 0 2. At the tick of the frame f the level is that of the events up to the frame f - 1: false at 0 and 2 (the event 1), true at 4 (4) and 6 (2), false at 8 (1) and 10 (0). It runs the frames 4 5 and 6 7
+  // and reads the sum of the frames 0 .. 3 (9) at 4 and of 0 .. 5 (12) at 6; the stopped frames keep 12.
+  let a = r_half.render([3, 1, 1, 4, 1, 2, 5, 1, 5, 0, 0, 2], 8.0)
+  let w_a: [U32; 12] = [0, 0, 0, 0, 9, 9, 12, 12, 12, 12, 12, 12]
+  for i in 0 ..< 12 {
+    assert a.out[i] == w_a[i]
+  }
+}
+
+// ---- a twin: a let for the level
+
+pub flow w_let(x: U32 at sample) -> U32 at sample {
+  let d = gen~(x)
+  let on = d > 2
+  acc~(d).when~(on)
+}
+
+test "a let for the level gives the values of the direct form" {
+  let xs: [U32; 8] = [3, 1, 1, 4, 1, 2, 5, 1]
+  let a = w_let.render(xs, 8.0)
+  let w_a: [U32; 8] = [3, 3, 3, 9, 9, 9, 17, 17]
+  for i in 0 ..< 8 {
+    assert a.out[i] == w_a[i]
+  }
+}
+
+// ---- the order of the events of two makers at one position, the maker of the slow tick stopped by when~ or not (S-1228)
+
+pub flow o_plain_first(y: U32 at sample) -> U32 at sample {
+  let ex = every2~()
+  let ey = pulse~(y)
+  acc~(ex).reset_if~(ey > 0)
+}
+
+pub flow o_plain_second(y: U32 at sample) -> U32 at sample {
+  let ey = pulse~(y)
+  let ex = every2~()
+  acc~(ex).reset_if~(ey > 0)
+}
+
+pub flow o_when_first(y: U32 at sample, g: Bool at sample) -> U32 at sample {
+  let ex = every2~().when~(g)
+  let ey = pulse~(y)
+  acc~(ex).reset_if~(ey > 0)
+}
+
+pub flow o_when_second(y: U32 at sample, g: Bool at sample) -> U32 at sample {
+  let ey = pulse~(y)
+  let ex = every2~().when~(g)
+  acc~(ex).reset_if~(ey > 0)
+}
+
+test "the tick of a maker of sample / 2 comes before the makers of sample, wherever it is written, and under when~ it comes where it is written" {
+  // y = 0 0 0 5 0 0 5 0: `ey` ticks at the frames 3 and 6 and puts the sum back; `ex` gives 1 2 3 4 at the frames 0 2 4 6. The slow tick is before the stage of `sample`, so at the frame 6 the sum 3 + 4 is put back to 0 whichever is
+  // written first: 1 1 3 0 3 3 0 0. Under a when~ that always runs, the tick of `every2` is in the stage of sample at its line: written first it is the same, written second the reset comes first and the 4 is kept: 1 1 3 0 3 3 4 4.
+  let ys: [U32; 8] = [0, 0, 0, 5, 0, 0, 5, 0]
+  let on: [Bool; 8] = [true; 8]
+  let a = o_plain_first.render(ys, 8.0)
+  let b = o_plain_second.render(ys, 8.0)
+  let c = o_when_first.render(o_when_first.In { y: ys, g: on }, 8.0)
+  let d = o_when_second.render(o_when_second.In { y: ys, g: on }, 8.0)
+  let w_ab: [U32; 8] = [1, 1, 3, 0, 3, 3, 0, 0]
+  let w_d: [U32; 8] = [1, 1, 3, 0, 3, 3, 4, 4]
+  for i in 0 ..< 8 {
+    assert a.out[i] == w_ab[i]
+    assert b.out[i] == w_ab[i]
+    assert c.out[i] == w_ab[i]
+    assert d.out[i] == w_d[i]
+  }
+}
+
+test "a stopped maker ticks its grid on the frames that ran, so its events fall on the frames of the other maker in the order the lines are written" {
+  // g = T T F T T F T T: the frames that ran are 0 1 3 4 6 7, `every2` ticks at the 0th 2nd 4th of them: the frames 0 3 6 with 1 2 3. `ey` is at 3 and 6. Written first: added, then put back: 1 1 1 0 0 0 0 0.
+  // Written second: put back, then added: 1 1 1 2 2 2 3 3.
+  let ys: [U32; 8] = [0, 0, 0, 5, 0, 0, 5, 0]
+  let gs: [Bool; 8] = [true, true, false, true, true, false, true, true]
+  let a = o_when_first.render(o_when_first.In { y: ys, g: gs }, 8.0)
+  let b = o_when_second.render(o_when_second.In { y: ys, g: gs }, 8.0)
+  let w_a: [U32; 8] = [1, 1, 1, 0, 0, 0, 0, 0]
+  let w_b: [U32; 8] = [1, 1, 1, 2, 2, 2, 3, 3]
+  for i in 0 ..< 8 {
+    assert a.out[i] == w_a[i]
+    assert b.out[i] == w_b[i]
+  }
+}

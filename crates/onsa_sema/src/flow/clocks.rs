@@ -125,7 +125,7 @@ pub(crate) fn finish_flow(
             _ => ClockStage::SAMPLE,
         };
         info.out_stage = Some(info.run_stage(out));
-        super::plan::build(a, &mut info, recorded, &w, ast, std::mem::take(&mut m.hoisted));
+        super::plan::build(&mut info, recorded, &w, ast, std::mem::take(&mut m.hoisted));
         (info.checks, info.const_conds) = (std::mem::take(&mut m.checks), std::mem::take(&mut m.const_conds));
         let unused = super::reads::unused(a, id, ast, &info, &fcx);
         a.diagnostics.extend(unused);

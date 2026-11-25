@@ -1,0 +1,270 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.11", "§11.10", "§11.9", "§11.4", "§11.3"]
+
+// Events in a block (`x.up~(M).down~(N)`; W7-17 U4/t2 R2; S-1207, S-1229, S-1209, S-1217, S-1228; spec §11.11: "上りを下りが包む連鎖の中でも同じで、境界の刻みの走りは、その刻みより前に並ぶイベントを全て処理した後の状態を見る
+// （境界より後の位置のイベントは、次の境界の走りから見える。同じ位置で速い段が出したイベントも次の境界から）"; "どの走りが出しても境界の刻みの位置で、同じ位置には内側の刻みの順に並ぶ"; §11.10: "境界の内に書いた修飾子の条件は…パラメータの種類と
+// イベントの値は走りの時点で読む"; "塊の外の `when~` は、W の刻みで塊を一つの部品として止め、止まっている間は境界も集めない"; "左にある `.down~` の境界の集める輪と配る配列" are put back by a `reset_if~` outside the boundary and not by one inside (§11.9: "変換の flow に
+// （境界の内で）付けた `reset_if~` は触れない"); §11.4: `sample_tick()` of a body is, from the outermost modifier in, divided by N under `.down~(N)` and N times it plus the run j under `.up~(N)`).
+// A block `x.up~(M).down~(N)` runs x M times at each tick of the boundary, that is at the frames c that are multiples of N, and deals the outputs to the frames c .. c + N - 1. The run j at the tick c has `sample_tick()` M floor(c / N) + j.
+// A run sees the events of the positions before c (all of them: the events of the frames c and c + 1 come after the run and are seen at the next tick), and an event that a run gives is at the position c, in the order of the runs. The head's input
+// at `sample` is gathered by the boundary and comes N frames late. `acc` sums the events it gets and gives the sum at `sample`, `tagged` gives at `sample` 100 times that sum plus `sample_tick()` (the sum is read `at sample`: a sum of an event value and `sample_tick()` alone is an expression of the event, S-1232), `ord` appends the events as digits. Every value is worked out by hand from the text.
+
+flow gen(x: U32 at sample) -> U32 at event {
+  Some(x)
+}
+
+flow pulse(x: U32 at sample) -> U32 at event {
+  if x > 0 {
+    Some(x)
+  } else {
+    None
+  }
+}
+
+flow jv() -> U32 at event {
+  Some(sample_tick())
+}
+
+// an event at each tick of `sample / 2` of its body, the number of the tick from 1
+flow gen2() -> U32 at event {
+  let c = prev~((^c + 1) at (sample / 2))
+  Some(c + 1)
+}
+
+flow acc(e: U32 at event) -> U32 at sample {
+  let n = prev~(^n) + e
+  n
+}
+
+flow tagged(e: U32 at event) -> U32 at sample {
+  let n = prev~(^n) + e
+  (n at sample) * 100 + sample_tick()
+}
+
+flow ord(e: U32 at event) -> U32 at sample {
+  let n = prev~(^n) * 10 + e
+  n
+}
+
+// a running sum of its input at `sample`
+flow cs(x: U32 at sample) -> U32 at sample {
+  let n = prev~(^n) + x
+  n
+}
+
+flow lo2(v: U32 at (sample * 2)) -> U32 at sample {
+  v[0]
+}
+
+flow hi2(v: U32 at (sample * 2)) -> U32 at sample {
+  v[1]
+}
+
+// ---- a receiver in a block: it sees the events before the tick, and the events of the frames c and c + 1 are for the next tick
+
+pub flow rb_tag(x: U32 at sample) -> U32 at sample {
+  let d = pulse~(x)
+  tagged~(d).up~(2).down~(2)
+}
+
+flow rb_inner(x: U32 at sample) -> U32 at sample {
+  let d = pulse~(x)
+  tagged~(d).up~(2).down~(2)
+}
+
+pub flow rb_wrapped(x: U32 at sample) -> U32 at sample {
+  rb_inner~(x)
+}
+
+test "a receiver in .up~(2).down~(2) sees at a tick the events before the frame of the tick: the events of the frames c and c + 1 come at the tick c + 2, and the run j has sample_tick() c + j" {
+  // x = 0 5 0 3 0 0 0 7 0 0 (events at the frames 1 3 7). The ticks are 0 2 4 6 8: the sums before them are 0, 5 (the frame 1), 8 (the frame 3), 8 (the event of the frame 7 is after the tick 6), 15. Each frame is the sum * 100 + the frame.
+  // A flow of its own that holds the block gives the same.
+  let xs: [U32; 10] = [0, 5, 0, 3, 0, 0, 0, 7, 0, 0]
+  var a: [U32; 10] = [9; 10]
+  var b: [U32; 10] = [9; 10]
+  var sa = rb_tag.init(8.0)
+  var sb = rb_wrapped.init(8.0)
+  rb_tag.process(inout sa, xs, inout a)
+  rb_wrapped.process(inout sb, xs, inout b)
+  assert a == [0, 1, 502, 503, 804, 805, 806, 807, 1508, 1509]
+  assert b == a
+}
+
+pub flow rb_up4_lo(x: U32 at sample) -> U32 at sample {
+  let d = gen~(x)
+  let u = tagged~(d).up~(4).down~(2)
+  lo2~(u)
+}
+
+pub flow rb_up4_hi(x: U32 at sample) -> U32 at sample {
+  let d = gen~(x)
+  let u = tagged~(d).up~(4).down~(2)
+  hi2~(u)
+}
+
+pub flow rb_down4(x: U32 at sample) -> U32 at sample {
+  let d = gen~(x)
+  tagged~(d).up~(2).down~(4) at sample
+}
+
+pub flow rb_two(x: U32 at sample) -> U32 at sample {
+  let d = gen~(x)
+  tagged~(d).up~(4).down~(2).down~(2)
+}
+
+test "the same with the ratios 4 and 2, 2 and 4, and 4 2 2: every run of a tick sees the same events, and sample_tick() is 4 floor(c / 2) + j, 2 floor(c / 4) + j, c + j" {
+  // x = 1 .. 12, the sums before the ticks c: 0 (c = 0), 3 (2), 10 (4), 21 (6), 36 (8). `.up~(4).down~(2)` gives two elements to each frame, the run j (0 .. 3) at the tick c has sample_tick() 2 c + j: the frame p has the runs 2 (p - c) and 2 (p - c) + 1,
+  // so lo = sum * 100 + 2 p and hi is one more. `.up~(2).down~(4)` has an output of `sample / 2`, the run j at c has c / 2 + j, held two frames. `.up~(4).down~(2).down~(2)` runs four times at the frames 0 4 8 with c + j.
+  let xs: [U32; 12] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+  var lo: [U32; 8] = [9; 8]
+  var hi: [U32; 8] = [9; 8]
+  var d: [U32; 12] = [9; 12]
+  var t: [U32; 12] = [9; 12]
+  var s1 = rb_up4_lo.init(8.0)
+  var s2 = rb_up4_hi.init(8.0)
+  var s3 = rb_down4.init(8.0)
+  var s4 = rb_two.init(8.0)
+  rb_up4_lo.process(inout s1, xs.slice(0, 8), inout lo)
+  rb_up4_hi.process(inout s2, xs.slice(0, 8), inout hi)
+  rb_down4.process(inout s3, xs, inout d)
+  rb_two.process(inout s4, xs, inout t)
+  assert lo == [0, 2, 304, 306, 1008, 1010, 2112, 2114]
+  assert hi == [1, 3, 305, 307, 1009, 1011, 2113, 2115]
+  assert d == [0, 0, 1, 1, 1002, 1002, 1003, 1003, 3604, 3604, 3605, 3605]
+  assert t == [0, 1, 2, 3, 1004, 1005, 1006, 1007, 3608, 3609, 3610, 3611]
+}
+
+// ---- a maker in a block: its events are at the position of the tick, in the order of the runs, from the stage of `sample` and of `sample / 2`
+
+pub flow mb_jv() -> U32 at sample {
+  ord~(jv~().up~(2).down~(2))
+}
+
+pub flow mb_gen2_2() -> U32 at sample {
+  ord~(gen2~().up~(2).down~(2))
+}
+
+pub flow mb_gen2_4() -> U32 at sample {
+  ord~(gen2~().up~(4).down~(2))
+}
+
+flow mb_inner() -> U32 at sample {
+  ord~(jv~().up~(2).down~(2))
+}
+
+pub flow mb_wrapped() -> U32 at sample {
+  mb_inner~()
+}
+
+test "a maker in .up~(2).down~(2) gives its two events at the frame of the tick, not at the frame of each run" {
+  // The ticks are the even frames c, the runs have sample_tick() c and c + 1: the frame 0 has 0 1 (1), the frame 2 has 2 3 (123), the frame 4 has 4 5 (12345), the frame 6 has 6 7 (1234567): at an odd frame nothing is added.
+  // A flow of its own that holds the block gives the same.
+  var a: [U32; 8] = [9; 8]
+  var b: [U32; 8] = [9; 8]
+  var sa = mb_jv.init(8.0)
+  var sb = mb_wrapped.init(8.0)
+  mb_jv.process(inout sa, inout a)
+  mb_wrapped.process(inout sb, inout b)
+  assert a == [1, 1, 123, 123, 12345, 12345, 1234567, 1234567]
+  assert b == a
+}
+
+test "a maker whose event is of the stage sample / 2 of its body gives an event for each run whose sample_tick() is even: one at each tick of .up~(2).down~(2), two of .up~(4).down~(2)" {
+  // The count is the number of the event from 1. In `.up~(2).down~(2)` the runs at the tick c have sample_tick() c and c + 1 (c even): the run 0 is on the grid of 2, so the event 1 at the frame 0, 2 at the frame 2 ...: 1 12 123 1234.
+  // In `.up~(4).down~(2)` the runs have 2 c + j: j = 0 and 2 are on the grid, so two events at each tick: 1 2 | 3 4 | 5 6 | 7 8.
+  var a: [U32; 8] = [9; 8]
+  var b: [U32; 8] = [9; 8]
+  var sa = mb_gen2_2.init(8.0)
+  var sb = mb_gen2_4.init(8.0)
+  mb_gen2_2.process(inout sa, inout a)
+  mb_gen2_4.process(inout sb, inout b)
+  assert a == [1, 1, 12, 12, 123, 123, 1234, 1234]
+  assert b == [12, 12, 1234, 1234, 123456, 123456, 12345678, 12345678]
+}
+
+// ---- reset_if~ with an event, inside and outside the boundary of a block: the ring that gathers and the array that deals
+
+pub flow bk_none(x: U32 at sample) -> U32 at sample {
+  cs~(x).up~(2).down~(2)
+}
+
+pub flow bk_in(x: U32 at sample, r: U32 at sample) -> U32 at sample {
+  let m = pulse~(r)
+  cs~(x).reset_if~(m > 0).up~(2).down~(2)
+}
+
+pub flow bk_out(x: U32 at sample, r: U32 at sample) -> U32 at sample {
+  let m = pulse~(r)
+  cs~(x).up~(2).down~(2).reset_if~(m > 0)
+}
+
+test "a reset by an event at the frame 3, between the ticks 2 and 4: inside the boundary it puts back the sum only, outside it puts back the ring and the dealt array too" {
+  // x = 1 .. 8. `cs` adds the two gathered frames before the tick, two runs, and the runs are dealt to the frames of the tick: 0 0 | 1 3 | 6 10 | 15 21 (the sum of the frames 0 .. c - 3, so late by 2).
+  // Inside: the event at the frame 3 puts the sum back to 0 after the tick 2 has dealt 1 3 (kept); the tick 4 adds x2 x3 = 3 4: 3 7, the tick 6 adds 5 6: 12 18. Outside: the element of the frame 3 (3) is put back to 0, the ring has the 0 of the frame 2
+  // and then the x3 = 4 written after the reset, so the tick 4 adds 0 4: 0 4; the tick 6 adds 5 6: 9 15.
+  let xs: [U32; 8] = [1, 2, 3, 4, 5, 6, 7, 8]
+  let r3: [U32; 8] = [0, 0, 0, 1, 0, 0, 0, 0]
+  var a: [U32; 8] = [9; 8]
+  var b: [U32; 8] = [9; 8]
+  var c: [U32; 8] = [9; 8]
+  var sa = bk_none.init(8.0)
+  var sb = bk_in.init(8.0)
+  var sc = bk_out.init(8.0)
+  bk_none.process(inout sa, xs, inout a)
+  bk_in.process(inout sb, bk_in.In { x: xs, r: r3 }, inout b)
+  bk_out.process(inout sc, bk_out.In { x: xs, r: r3 }, inout c)
+  assert a == [0, 0, 1, 3, 6, 10, 15, 21]
+  assert b == [0, 0, 1, 3, 3, 7, 12, 18]
+  assert c == [0, 0, 1, 0, 0, 4, 9, 15]
+}
+
+test "a reset by an event at the frame 4, the frame of a tick, is after the tick: inside it keeps what the tick dealt, outside it puts back the two dealt elements, and the ring that is written from the frame 4 is whole for the tick 6" {
+  // The tick 4 has run (adds 3 4: 6 10 are dealt to the frames 4 and 5). Inside: the sum is 0 for the tick 6, which adds 5 6: 5 11, and the frames 4 and 5 keep 6 10. Outside: the frames 4 and 5 read the dealt array that is back to 0, and
+  // the tick 6 adds 5 6 (the frames 4 and 5 are written after the reset) to the sum that is back: 5 11.
+  let xs: [U32; 8] = [1, 2, 3, 4, 5, 6, 7, 8]
+  let r4: [U32; 8] = [0, 0, 0, 0, 1, 0, 0, 0]
+  var b: [U32; 8] = [9; 8]
+  var c: [U32; 8] = [9; 8]
+  var sb = bk_in.init(8.0)
+  var sc = bk_out.init(8.0)
+  bk_in.process(inout sb, bk_in.In { x: xs, r: r4 }, inout b)
+  bk_out.process(inout sc, bk_out.In { x: xs, r: r4 }, inout c)
+  assert b == [0, 0, 1, 3, 6, 10, 5, 11]
+  assert c == [0, 0, 1, 3, 0, 0, 5, 11]
+}
+
+// ---- when~ with the level of an event, inside the block (read when the run happens) and outside (read at each frame, the block stops as a whole)
+
+pub flow bw_in(x: U32 at sample, v: U32 at sample) -> U32 at sample {
+  let a = gen~(v)
+  cs~(x).when~(a != 0).up~(2).down~(2)
+}
+
+pub flow bw_out(x: U32 at sample, v: U32 at sample) -> U32 at sample {
+  let a = gen~(v)
+  cs~(x).up~(2).down~(2).when~(a != 0)
+}
+
+test "a when~ of an event inside the block reads the last event before the tick, at the run: all runs of a tick run or stop together" {
+  // x = 1 .. 8, v = 0 0 1 1 1 0 0 0. The level at the tick c is the last event before the frame c: false (no event) at 0, v1 = 0 at 2, v3 = 1 at 4, v5 = 0 at 6. The part runs at the tick 4 only and adds 3 4 (x2 x3): 3 7.
+  // Before the first run the output is T.default() (0 for the frames 0 .. 3), at the stopped tick 6 it keeps the last output of the run, 7, for both runs.
+  let xs: [U32; 8] = [1, 2, 3, 4, 5, 6, 7, 8]
+  let vs: [U32; 8] = [0, 0, 1, 1, 1, 0, 0, 0]
+  var a: [U32; 8] = [9; 8]
+  var sa = bw_in.init(8.0)
+  bw_in.process(inout sa, bw_in.In { x: xs, v: vs }, inout a)
+  assert a == [0, 0, 0, 0, 3, 7, 7, 7]
+}
+
+test "a when~ of an event outside the block reads the level at each frame and stops the block as a whole: its grid and its ring count the frames it runs" {
+  // The same inputs: the level at the frame p is the event of the frame (the producer is above): false false true true true false false false. The block runs at the frames 2 3 4, its frames 0 1 2, so its tick 0 is the frame 2 (gathers the default,
+  // gives 0 0 for the frames 2 3) and its next tick is the frame 4: it gathers its frames 0 and 1, the inputs x2 x3 of the frames 2 and 3 (3 4), and gives 3 7; the frame 4 reads the 3, the frames 5 .. 7 are stopped and keep it. The output is 0 before the first run.
+  let xs: [U32; 8] = [1, 2, 3, 4, 5, 6, 7, 8]
+  let vs: [U32; 8] = [0, 0, 1, 1, 1, 0, 0, 0]
+  var a: [U32; 8] = [9; 8]
+  var sa = bw_out.init(8.0)
+  bw_out.process(inout sa, bw_out.In { x: xs, v: vs }, inout a)
+  assert a == [0, 0, 0, 0, 3, 3, 3, 3]
+}

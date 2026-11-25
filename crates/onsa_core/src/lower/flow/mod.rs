@@ -313,9 +313,9 @@ pub(crate) struct StageCx {
     /// replica that gave the event, takes their variables and makes no loop of them.
     pinned: Vec<NodeId>,
     /// Of a function that gives the event of the output of the flow or none
-    /// and does not make it (`FlowInfo::gives`), the local of what the stage
+    /// and does not make it (`FlowInfo::gives`), where it puts what the stage
     /// it ticks gives it ([`chain`]).
-    gave: Option<Expr>,
+    gave: Option<Gave>,
     /// The time of the function (§11.4, S-1129 (1), S-1217): its parameters
     /// `t` and `t_hi` of a stage that takes them (`FlowInfo::time_words`),
     /// the count of the outermost `sample` from `process`, which a caller
@@ -323,6 +323,22 @@ pub(crate) struct StageCx {
     time: Vec<Expr>,
     /// Innermost scope last.
     scopes: Vec<Scope>,
+}
+
+/// The local `__out` of the event a function gives (an `Option`, `None` at
+/// its head), or of several (`FlowInfo::burst`: an array of them) with the
+/// local of the place of the `next`, up after each the stage it ticks gave.
+#[derive(Debug, Clone)]
+struct Gave {
+    out: Expr,
+    next: Option<Expr>,
+}
+
+impl Gave {
+    /// Where the next is put: past the array of no run, as it has one of each ([`FlowInfo::burst`]).
+    fn place(&self) -> R<Expr> {
+        self.next.as_ref().map_or(Ok(self.out.clone()), |n| index(self.out.clone(), n.clone()))
+    }
 }
 
 impl FlowLowerCx<'_> {

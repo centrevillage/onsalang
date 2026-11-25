@@ -255,25 +255,83 @@ fn the_condition_of_a_delay_at_an_event_is_read_at_it() {
     assert_eq!(top("sample_tick() > 3"), (no(), vec!["m".to_string()]));
 }
 
-/// S-1250: the flags of a delay that an event of another stage resets, and
-/// of no other.
+/// S-1250: the flags of a delay whose reset an event may tick between its
+/// place and its store: one given out in the function of its stage by a call
+/// after it in the text (after its whole chain, the conditions of it too), or
+/// ticked by such a one; not of an input, of a call before it, in its own
+/// conditions, or of another stage, nor of a periodic condition or its own.
 #[test]
-fn the_flags_of_a_delay_reset_by_an_event_of_another_stage() {
+fn the_flags_of_a_delay_a_late_event_resets() {
     let fields = |body: &str| {
         let (_, a, _) = analysis(&format!(
-            "pub flow top(x: U32 at sample, m: U32 at event, k: U32 at event, c: Bool at sample) -> U32 at sample {{\n  let _ = (x, m, c)\n  let _ = k\n  let y = {body}\n  y at sample\n}}\n"
+            "flow on(x: U32 at sample) -> U32 at event {{\n  if x > 1 {{ Some(x) }} else {{ None }}\n}}\n\
+             pub flow top(x: U32 at sample, x4: U32 at (sample / 4), m: U32 at event, k: U32 at event, c: Bool at sample) -> U32 at sample {{\n  let _ = (x, c)\n  let _ = x4\n  let _ = m\n  let _ = k\n{body}\n}}\n"
+        ));
+        let names = flow(&a, "top").fields.iter().map(|f| f.name.clone());
+        names.filter(|n| n.contains("._open") || n.contains("._back")).collect::<Vec<String>>()
+    };
+    // `y` on the event of a call `d` below it (or of `f`, which that ticks).
+    let below = |y: &str| fields(&format!("  let e = prev~(^d)\n  let y = {y}\n  let d: U32 = gen~(x)\n  y"));
+    assert_eq!(below("prev~(x).reset_if~(e > 3)"), ["y._open", "y._back_0"]);
+    let chain = "delay~(x, 2).reset_if~(e > 3).reset_if~(c).reset_if~(m > 3).when~(c).reset_if~(e > 5)";
+    assert_eq!(below(chain), ["y._open", "y._back_0", "y._back_4"]);
+    assert_eq!(below("prev~(prev~(x, 9).reset_if~(e > 3), 7)"), ["y.prev_0._open", "y.prev_0._back_0"]);
+    let par = "(par~ i in 0..<2 { prev~(x).reset_if~(e > i) })[1]";
+    assert_eq!(below(par), no::<String>(), "the fields of a replica are of its own struct");
+    let mid = "  let e = prev~(^f)\n  let y = prev~(x).reset_if~(e > 3)\n  let d = gen~(x)\n  let f = fwd~(d)\n  y";
+    assert_eq!(fields(mid), ["y._open", "y._back_0"]);
+    let of =
+        "  let e = prev~(^f)\n  let d = gen~(x)\n  let y = prev~(d).reset_if~(e > 3)\n  let f = fwd~(d)\n  y at sample";
+    assert_eq!(fields(of), ["y.prev_0._open", "y.prev_0._back_0"]);
+    let slow = "  let e = prev~(^d)\n  let y = prev~(x4).reset_if~(e > 3)\n  let d = gen4~(x4)\n  y at sample";
+    assert_eq!(fields(slow), ["y.prev_0._open", "y.prev_0._back_0"]);
+    // In the chain and in the head of the call that gives it out (read before its work).
+    for d in [
+        "gen~(x).reset_if~(prev~(x, 9).reset_if~(e >= 3) > 7)",
+        "gen~(x).when~(prev~(x, 9).reset_if~(e >= 3) > 7)",
+        "gen~(3).up~(2).when~(c).reset_if~(prev~(x, 9).reset_if~(e >= 3) > 7)",
+        "gen~(prev~(x, 9).reset_if~(e >= 3))",
+        "gen~(x + prev~(x, 9).reset_if~(e >= 3)).when~(c)",
+        "gen~(x).reset_if~(prev~(x > 3).reset_if~(e >= 3))",
+    ] {
+        let d = format!("  let e = prev~(^d)\n  let d: U32 = {d}\n  d at sample");
+        assert_eq!(fields(&d), ["d.prev_0._open", "d.prev_0._back_0"], "{d}");
+    }
+    // Before it, of an input (and what it ticks), of another stage, or in its own conditions.
+    for body in [
+        "  let d = gen~(x)\n  let y = prev~(x).reset_if~(d > 3)\n  y",
+        "  let d = gen~(x)\n  let f = fwd~(d)\n  let y = prev~(x).reset_if~(f > 3)\n  y",
+        "  prev~(x).reset_if~(gen~(x) > 3)",
+        "  prev~(x).reset_if~(c).reset_if~(gen~(x) > 3)",
+        "  let y = prev~(x).reset_if~(m > 3)\n  y",
+        "  let y = prev~(m).reset_if~(k > 3)\n  y at sample",
+        "  let e = prev~(^f)\n  let y = prev~(x).reset_if~(e > 3)\n  let f = fwd~(m)\n  y",
+        "  let e = prev~(^f)\n  let y = prev~(k).reset_if~(e > 3)\n  let f = fwd~(m)\n  y at sample",
+        "  let e = prev~(^d)\n  let y = prev~(x).reset_if~(e > 3)\n  let d = gen4~(x4)\n  y",
+        "  let e = prev~(^d)\n  let y = prev~(x4).reset_if~(e > 3)\n  let d = gen~(x)\n  y at sample",
+        "  let e = prev~(^d)\n  let y = prev~(e).reset_if~(e > 3)\n  let d = gen~(x)\n  y at sample",
+        "  let e = prev~(^d)\n  let d: U32 = gen~(3).reset_if~(prev~(x, 9).reset_if~(e >= 3) > 7).up~(2).down~(2)\n  d at sample",
+        "  let y = prev~(m).reset_if~(m > 3)\n  y at sample",
+        "  let y = prev~(x).reset_if~(c)\n  y",
+        "  let e = prev~(^d)\n  let y = cnt~(m).reset_if~(e > 3)\n  let d = gen~(x)\n  y",
+    ] {
+        assert_eq!(fields(body), no::<String>(), "{body}");
+    }
+    // In a replica, of the call after it there alone.
+    let of = |body: &str| {
+        let (_, a, _) = analysis(&format!(
+            "pub flow top(x: U32 at sample, m: U32 at event) -> U32 at sample {{\n  let _ = m\n{body}\n}}\n"
         ));
         let f = flow(&a, "top");
-        let names = f.fields.iter().map(|f| f.name.clone()).filter(|n| n.starts_with("y.") && n.contains("._"));
-        names.collect::<Vec<String>>()
+        f.nodes.iter().filter(|n| !n.late.is_empty()).map(|n| n.path.clone()).collect::<Vec<String>>()
     };
-    assert_eq!(fields("prev~(x).reset_if~(m > 3)"), ["y._open", "y._back_0"]);
-    let chain = fields("delay~(x, 2).reset_if~(m > 3).reset_if~(c).reset_if~(k > 3)");
-    assert_eq!(chain, ["y._open", "y._back_0", "y._back_2"]);
-    assert_eq!(fields("prev~(m).reset_if~(k > 3)"), ["y.prev_0._open", "y.prev_0._back_0"]);
-    assert_eq!(fields("prev~(m).reset_if~(m > 3)"), no::<String>());
-    assert_eq!(fields("prev~(x).reset_if~(c)"), no::<String>());
-    assert_eq!(fields("cnt~(m).reset_if~(k > 3)"), no::<String>());
+    let par = |y: &str| format!("  let y = par~ i in 0..<2 {{ {y} }}");
+    let below = format!("  let e = prev~(^d)\n{}\n  let d = gen~(x)\n  y[1]", par("prev~(x + i).reset_if~(e > 3)"));
+    assert_eq!(of(&below), ["y.prev_0"]);
+    let input = format!("{}\n  y[1]", par("prev~(x + i).reset_if~(m > 3)"));
+    assert_eq!(of(&input), no::<String>());
+    let own = format!("{}\n  y[1]", par("prev~(x + i).reset_if~(gen~(x + i) > 3)"));
+    assert_eq!(of(&own), no::<String>());
 }
 
 /// The time of the stage of an event (`sample_tick()` in it, §11.4) is of the
@@ -299,6 +357,104 @@ fn the_time_of_an_event_is_of_the_stages_that_tick_it() {
     assert_eq!(time("slow"), [("-1".into(), Two)]);
 }
 
+/// The most events a run of the stage that gives them out gives (§11.9,
+/// §11.11, `FlowInfo::burst`), and that stage, of the flow `top` whose output
+/// is the events `d`: of the event of an `.up~(N)`, the N runs of its maker
+/// at `sample`, N >> k of one at `sample / 2^k` (one once of a stage slower
+/// than the `sample` around); of those of a callee, of each run; one of the
+/// stage of an event, of a `.down~` and of a guard.
+#[test]
+fn the_most_events_of_a_run() {
+    let most = |d: &str| {
+        let (_, a, _) = analysis(&format!(
+            "flow tick2() -> U32 at event {{\n  Some(1) at (sample / 2)\n}}\n\
+             flow two() -> U32 at event {{\n  let d = gen~(3).up~(2)\n  Some(d)\n}}\n\
+             flow of(d: U32 at event) -> U32 at event {{\n  let a = fwd~(d)\n  Some(a)\n}}\n\
+             pub flow top(m: U32 at event, c: Bool at sample) -> U32 at event {{\n  let _ = (m, c)\n  let d = {d}\n  Some(d)\n}}\n"
+        ));
+        let f = flow(&a, "top");
+        (stage(f, f.emit.expect("a stage")), f.burst)
+    };
+    for (d, at, n) in [
+        ("gen~(3)", "0", 1),
+        ("gen~(3).up~(2)", "0", 2),
+        ("gen~(3).up~(4).up~(2)", "0", 8),
+        ("tick2~()", "-1", 1),
+        ("tick2~().up~(2)", "0", 1),
+        ("tick2~().up~(4)", "0", 2),
+        ("tick2~().up~(4).up~(2)", "0", 4),
+        ("tick2~().up~(2).up~(2)", "0", 2),
+        ("gen4~(3).up~(2)", "-1", 1),
+        ("gen4~(3).up~(8)", "0", 2),
+        ("gen~(3).up~(2).down~(2)", "-1", 2),
+        ("gen~(3).up~(2).down~(4)", "-2", 2),
+        ("gen~(3).up~(4).down~(2)", "-1", 4),
+        ("gen~(3).up~(2).down~(4).up~(2)", "-1", 2),
+        ("gen~(3).up~(2).down~(2).up~(4)", "0", 4),
+        ("tick2~().up~(4).down~(2)", "-1", 2),
+        ("gen~(3).down~(2)", "-1", 1),
+        ("gen~(3).when~(c)", "0", 1),
+        ("gen~(3).up~(2).when~(c)", "0", 2),
+        ("gen~(3).when~(c).up~(2)", "0", 2),
+        // Each run may be at its tick of the ticks it ran: two of the eight at most do.
+        ("tick2~().when~(m > 1).up~(8)", "0", 8),
+        ("two~()", "0", 2),
+        ("two~().up~(4)", "0", 8),
+        ("two~().down~(2)", "-1", 2),
+        ("two~().when~(c)", "0", 2),
+        ("fwd~(two~())", "0", 2),
+        ("of~(fwd~(two~().up~(2)))", "0", 4),
+        ("m", "m", 1),
+        ("fwd~(m).up~(4)", "m", 1),
+        ("of~(m).up~(4)", "m", 1),
+        ("of~(fwd~(m).up~(4)).when~(c)", "m", 1),
+    ] {
+        assert_eq!(most(d), (at.to_string(), n), "{d}");
+    }
+    // Another stage of the flow gives several, and is not on the way to its output.
+    let (_, a, _) =
+        analysis("pub flow top(m: U32 at event) -> U32 at event {\n  let _ = gen~(3).up~(2)\n  Some(m)\n}\n");
+    assert_eq!(flow(&a, "top").burst, 1);
+    // Past 2^24 (E0808, S-1089) the count stops at the maximum.
+    let up = "let d = gen~(3).up~(16777216)\n  Some(d)\n}\n";
+    let src = format!(
+        "{HEAD}flow one() -> U32 at event {{\n  {up}pub flow top() -> U32 at event {{\n  let d = one~().up~(16777216)\n  Some(d)\n}}\n"
+    );
+    let a = analyze(&pkg(&[("main", &src)]));
+    assert!(!a.diagnostics.is_empty() && a.diagnostics.iter().all(|d| d.code == onsa_diag::Code::E0808));
+    assert_eq!(flow(&a, "one").burst, 1 << 24);
+    assert_eq!(flow(&a, "top").burst, u32::MAX);
+}
+
+/// The stage that ticks the events of a maker under a guard and an `.up~`
+/// (its stage W, the `sample` of the caller), which gives them out in a named
+/// flow and takes the time of their stage (§11.4).
+#[test]
+fn the_events_of_a_chain_are_ticked_by_the_stage_of_its_runs() {
+    let of = |d: &str| {
+        let (_, a, _) = analysis(&format!(
+            "flow tke(e: U32 at event) -> U32 at event {{\n  Some(sample_tick() + e)\n}}\n\
+             pub flow top(c: Bool at sample) -> U32 at event {{\n  let _ = c\n  let d = {d}\n  let t = tke~(d)\n  Some(t)\n}}\n"
+        ));
+        let f = flow(&a, "top");
+        let time: Vec<String> = f.time.iter().map(|(&s, w)| format!("{} {w:?}", stage(f, s))).collect();
+        (events(f), time)
+    };
+    for (d, by) in [
+        ("gen~(3).when~(c)", "0"),
+        ("gen~(3).up~(2)", "0"),
+        ("gen~(3).up~(2).down~(4)", "-2"),
+        ("gen4~(3).up~(2)", "-1"),
+    ] {
+        let made = vec![format!("d.gen_0! < {by}"), "t.tke_0! < d.gen_0".to_string()];
+        let (found, time) = of(d);
+        let found = (found.0.into_iter().map(|s| s.replace("gen4_0", "gen_0")).collect::<Vec<_>>(), found.1);
+        assert_eq!(found, (made, Some(by.to_string())), "{d}");
+        assert_eq!(time.len(), 2, "{d}: {time:?}");
+        assert!(time.contains(&format!("{by} One")), "{d}: {time:?}");
+    }
+}
+
 /// The text of the form not run of the flow `top` of `src`, and whether it
 /// has its tables, with the E0200 of it alone.
 fn form(src: &str) -> Option<String> {
@@ -319,58 +475,43 @@ fn forms(body: &str) -> Option<String> {
     ))
 }
 
-/// The forms of a chain with a modifier but `.reset_if~`: of a call of a flow
-/// with an event port and of a condition at an event of a `.reset_if~`; not
-/// of a flow with events inside alone, of a condition with `at sample`, of
-/// `.reset_if~` alone, and of a `.when~` with no ratio in its chain (§11.10).
+/// A chain of any modifiers of a call of a flow with an event port, of a flow
+/// with none and of a delay runs, with a condition at an event in it
+/// (§11.10): a `.when~`, a ratio and a `.reset_if~` in any order.
 #[test]
-fn the_chains_not_run() {
-    assert_eq!(forms("  cnt~(m).reset_if~(c)"), None);
-    assert_eq!(forms("  let d = gen~(x).when~(c)\n  d at sample").as_deref(), Some("gen~(x)"));
-    assert_eq!(forms("  let q = m > 3\n  own~(x).reset_if~(q)"), None);
-    assert_eq!(forms("  own~(x).when~(m > 3)"), None);
-    assert_eq!(forms("  let d = prev~(m).reset_if~(m > 3)\n  d at sample"), None);
-    assert_eq!(forms("  cnt~(m).reset_if~(m > 3).reset_if~(c)"), None);
-    assert_eq!(forms("  own~(x).when~(c).reset_if~(m > 3)").as_deref(), Some("reset_if"));
-    assert_eq!(forms("  prev~(x).reset_if~(m > 3).when~(c)").as_deref(), Some("reset_if"));
-    assert_eq!(forms("  cnt~(m).reset_if~(m > 3).when~(c)").as_deref(), Some("cnt~(m)"));
-    assert_eq!(forms("  own~(x).when~(c) + own~(x).reset_if~(c)"), None);
-    assert_eq!(forms("  let q = m > 3\n  own~(x).when~(q at sample) + prev~(x).reset_if~(q at sample)"), None);
-    // The first in the order of the text.
-    assert_eq!(forms("  (own~(3).when~(m > 3).down~(2) at sample) + cnt~(m).when~(c)").as_deref(), Some("when"));
-}
-
-/// The level of an event in the condition of a `.when~` (§11.10): of a chain
-/// of `.when~` and periodic `.reset_if~`, of a flow with no event port or of
-/// a delay at a tick; not beside a ratio, inside it or outside it; with a
-/// `.reset_if~` at an event, the place is that of the `.reset_if~` on either side.
-#[test]
-fn the_levels_of_a_when_that_run() {
+fn the_chains_run() {
     for run in [
+        "  cnt~(m).reset_if~(c)",
+        "  let d = gen~(x).when~(c)\n  d at sample",
+        "  let q = m > 3\n  own~(x).reset_if~(q)",
+        "  let d = prev~(m).reset_if~(m > 3)\n  d at sample",
+        "  cnt~(m).reset_if~(m > 3).reset_if~(c)",
+        "  own~(x).when~(c).reset_if~(m > 3)",
+        "  own~(x).reset_if~(m > 3).when~(m > 4)",
+        "  prev~(x).reset_if~(m > 3).when~(c)",
+        "  cnt~(m).reset_if~(m > 3).when~(c)",
+        "  own~(x).when~(c) + own~(x).reset_if~(c)",
+        "  let q = m > 3\n  own~(x).when~(q at sample) + prev~(x).reset_if~(q at sample)",
+        "  (own~(3).when~(m > 3).down~(2) at sample) + cnt~(m).when~(c)",
+        "  cnt~(m).down~(2) at sample",
+        "  cnt~(m).up~(2).down~(2).reset_if~(m > 3).when~(m > 4)",
+        // The level of an event.
         "  own~(x).when~(m > 3).reset_if~(c).when~(m < 9)",
         "  own~(x).reset_if~(c).when~(m > 3)",
         "  prev~(x).when~(m > 3)",
         "  let q = m > 3\n  prev~(prev~(x).when~(q))",
         "  own~(gen~(x) at sample).when~(gen~(x) > 3 && c)",
+        "  own~(3).down~(2).when~(m > 3) at sample",
+        "  own~(x).when~(c).reset_if~(m > 3).when~(m > 4)",
+        "  cnt~(m).when~(m > 3)",
     ] {
         assert_eq!(forms(run), None, "{run}");
-    }
-    for (stop, at) in [
-        ("  own~(3).when~(m > 3).down~(2) at sample", "when"),
-        ("  own~(3).down~(2).when~(m > 3) at sample", "when"),
-        ("  own~(x).when~(c).reset_if~(m > 3).when~(m > 4)", "reset_if"),
-        ("  own~(x).reset_if~(m > 3).when~(m > 4)", "reset_if"),
-        ("  own~(x).when~(m > 4).reset_if~(m > 3)", "reset_if"),
-        ("  cnt~(m).when~(m > 3)", "cnt~(m)"),
-    ] {
-        assert_eq!(forms(stop).as_deref(), Some(at), "{stop}");
     }
 }
 
 /// The forms in a `par~`, a `par`, an `if~` and a `match~` (the conditions, the
 /// scrutinee and the guards too): a call of a flow with an event port, a
-/// delay at an event, a condition at one and a computed part of one run; a
-/// chain that does not run elsewhere does not there.
+/// delay at an event, a condition at one and a computed part of one run.
 #[test]
 fn the_replicas_and_the_arms() {
     for run in [
@@ -392,18 +533,16 @@ fn the_replicas_and_the_arms() {
     ] {
         assert_eq!(forms(run), None, "{run}");
     }
-    for (stop, at) in [
-        ("  let y = par~ i in 0..<2 { cnt~(m).when~(c) + i }\n  y[0]", "cnt~(m)"),
-        ("  let y = par~ i in 0..<2 { own~(x + i).when~(c).reset_if~(m > 3) }\n  y[0]", "reset_if"),
-        (
-            "  let y = par~ i in 0..<2 { par~ j in 0..<2 { cnt~(gen~(x)).down~(2) at sample } }\n  y[0][0]",
-            "cnt~(gen~(x))",
-        ),
-        ("  if~ c { own~(3).when~(m > 3).down~(2) at sample } else { prev~(x) }", "when"),
-        ("  if~ cnt~(m).when~(c) > 3 { prev~(x) } else { x }", "cnt~(m)"),
-        ("  match~ x { 0 => prev~(x).when~(c).reset_if~(m > 3), v => v }", "reset_if"),
+    // A chain in them too.
+    for run in [
+        "  let y = par~ i in 0..<2 { cnt~(m).when~(c) + i }\n  y[0]",
+        "  let y = par~ i in 0..<2 { own~(x + i).when~(c).reset_if~(m > 3) }\n  y[0]",
+        "  let y = par~ i in 0..<2 { par~ j in 0..<2 { cnt~(gen~(x)).down~(2) at sample } }\n  y[0][0]",
+        "  if~ c { own~(3).when~(m > 3).down~(2) at sample } else { prev~(x) }",
+        "  if~ cnt~(m).when~(c) > 3 { prev~(x) } else { x }",
+        "  match~ x { 0 => prev~(x).when~(c).reset_if~(m > 3), v => v }",
     ] {
-        assert_eq!(forms(stop).as_deref(), Some(at), "{stop}");
+        assert_eq!(forms(run), None, "{run}");
     }
 }
 
@@ -433,12 +572,12 @@ fn a_source_its_own_output_ticks_is_not_run() {
 #[test]
 fn a_caller_of_a_form_not_run_has_its_sources() {
     let (_, a, _) = analysis(
-        "flow bad(x: U32 at sample, m: U32 at event) -> U32 at event {\n  let y = cnt~(m).when~(x > 1)\n  if y > x { Some(y) } else { None }\n}\n\
+        "flow bad(x: U32 at sample, m: U32 at event) -> U32 at event {\n  let _ = (x, m)\n  let d = fwd~(prev~(^d))\n  Some(d)\n}\n\
          pub flow top(x: U32 at sample, m: U32 at event) -> U32 at sample {\n  let d = bad~(x, m)\n  let n = cnt~(d)\n  n + (prev~(d) at sample)\n}\n\
          pub flow on(x: U32 at sample, m: U32 at event) -> U32 at event {\n  let d = bad~(x, m)\n  Some(d)\n}\n\
          pub flow last(x: U32 at sample, m: U32 at event) -> U32 at sample {\n  cnt~(on~(x, m))\n}\n",
     );
-    assert!(!flow(&a, "bad").planned() && flow(&a, "bad").events.len() == 1);
+    assert!(!flow(&a, "bad").planned() && flow(&a, "bad").events.len() == 2);
     let f = flow(&a, "top");
     assert_eq!(events(f), (vec!["m < -".into(), "d.bad_0 < -".into()], None));
     assert_eq!(work(&a, f, "n", "cnt"), ["0: 0>value", "d.bad_0: e>-"]);
