@@ -10,15 +10,9 @@ use super::twin_tests::check;
 const PAIR: Family = ("back_pairs", make_pair);
 const CROSS: Family = ("back_cross", make_cross);
 
-/// The pair that the reference evaluator stops at (`Internal("a local with no value")`: a `match~` whose target is `^v` and whose arm holds a state, `prev~(match~ ^v { Some(b) => vdelay~(x, b + 1.0, 8), … })`; the interpreter
-/// gives the same values for the twins).
-const EVALUATOR_STOPS: [&str; 1] = ["binding_in_the_d"];
-
-/// The seeds of the pairs of the table (the seed is the number of the pair) that wait for the stage, or that do not (not those the evaluator stops at).
+/// The seeds of the pairs of the table (the seed is the number of the pair) that wait for the stage, or that do not.
 fn pairs(late: bool) -> Vec<u64> {
-    (0..PAIRS.len() as u64)
-        .filter(|s| PAIRS[*s as usize].1 == late && !EVALUATOR_STOPS.contains(&PAIRS[*s as usize].0))
-        .collect()
+    (0..PAIRS.len() as u64).filter(|s| PAIRS[*s as usize].1 == late).collect()
 }
 
 /// The crossed programs: every head that waits for the stage with every wrap, or every head that does not with every wrap.
@@ -30,15 +24,7 @@ fn crossed(late: bool) -> Vec<u64> {
 #[test]
 fn the_pairs_that_read_a_let_below_agree_on_the_evaluator_and_in_the_interpreter() {
     let seeds = pairs(false);
-    assert_eq!(seeds.len(), 6);
-    println!("{:?}", check(seeds, PAIR));
-}
-
-#[test]
-#[ignore = "W7-11 U2b: S-1245 (the evaluator: a match~ with a state in an arm whose target is a ^)"]
-fn the_pair_that_reads_a_binding_of_an_arm_whose_target_is_a_caret_agrees_on_the_evaluator_and_in_the_interpreter() {
-    let seeds: Vec<u64> = (0..PAIRS.len() as u64).filter(|s| EVALUATOR_STOPS.contains(&PAIRS[*s as usize].0)).collect();
-    assert_eq!(seeds.len(), EVALUATOR_STOPS.len());
+    assert_eq!(seeds.len(), 7);
     println!("{:?}", check(seeds, PAIR));
 }
 

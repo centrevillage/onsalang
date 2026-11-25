@@ -43,6 +43,14 @@ mod twin_back_tests;
 mod twin_chain;
 #[path = "flow_ref/twin_chain_tests.rs"]
 mod twin_chain_tests;
+#[path = "flow_ref/twin_event.rs"]
+mod twin_event;
+#[path = "flow_ref/twin_event_order.rs"]
+mod twin_event_order;
+#[path = "flow_ref/twin_event_order_tests.rs"]
+mod twin_event_order_tests;
+#[path = "flow_ref/twin_event_tests.rs"]
+mod twin_event_tests;
 #[path = "flow_ref/twin_match.rs"]
 mod twin_match;
 #[path = "flow_ref/twin_order.rs"]

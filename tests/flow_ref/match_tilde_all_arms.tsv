@@ -1,4 +1,4 @@
-# flow_ref 1 source=tests/spec/flow_semantics/match_tilde_all_arms.onsa tests=12 evaluated=8 unavailable=0 skipped=4 waiting=0
+# flow_ref 1 source=tests/spec/flow_semantics/match_tilde_all_arms.onsa tests=12 evaluated=12 unavailable=0 skipped=0 waiting=0
 @ a counter in every arm of a match~ runs on every sample
 render match_tilde_all_arms.an_integer_target sr=0x41000000 in k=[2 0 1 2]
 out=[0x42c80000 0x40000000 0x41f00000 0x43c80000]
@@ -17,10 +17,18 @@ out=[0x00000000 0x40800000 0x40c00000 0x00000000]
 @ an instance of a flow without state is an arm with state
 render match_tilde_all_arms.an_instance_of_a_flow_without_state sr=0x41000000 in k=[0 1]
 out=[0x40400000 0x00000000]
-- the arms of a tuple pattern are chosen from the top	skipped layout
-- a match~ in an arm of a match~ runs all three counters	skipped layout
-- an if~ in an arm of a match~ runs both of its branches	skipped layout
-- a match~ in a branch of an if~ runs when the branch is not taken	skipped layout
+@ the arms of a tuple pattern are chosen from the top
+render match_tilde_all_arms.tuple_patterns sr=0x41000000 in a=[0 0 3 3 0] b=[0 5 2 1 0]
+out=[0x3f800000 0x41a00000 0x43960000 0x457a0000 0x40a00000]
+@ a match~ in an arm of a match~ runs all three counters
+render match_tilde_all_arms.a_nested_match_tilde sr=0x41000000 in a=[0 0 1 0] b=[0 1 0 1]
+out=[0x3f800000 0x41a00000 0x43960000 0x42200000]
+@ an if~ in an arm of a match~ runs both of its branches
+render match_tilde_all_arms.an_if_tilde_in_an_arm sr=0x41000000 in k=[0 0 1 0] x=[0x3f800000 0x00000000 0x00000000 0x3f800000]
+out=[0x3f800000 0x41a00000 0x43960000 0x40800000]
+@ a match~ in a branch of an if~ runs when the branch is not taken
+render match_tilde_all_arms.a_match_tilde_in_an_if_tilde sr=0x41000000 in x=[0x3f800000 0x00000000 0x3f800000 0x00000000] k=[0 0 1 1]
+out=[0x3f800000 0x43480000 0x41f00000 0x43c80000]
 @ a match~ in a par~ has its own state and target in each replica
 render match_tilde_all_arms.a_match_tilde_in_a_par sr=0x41000000 in k=[0 1 2]
 out[0]=[0x3f800000 0x41a00000 0x43960000]

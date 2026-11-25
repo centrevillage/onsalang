@@ -5,6 +5,7 @@
 use super::event_table_tests::{Report, run_cases};
 
 const VALUES: &str = include_str!("event_values.md");
+const READS: &str = include_str!("event_reads_values.md");
 
 /// The sections of the table in the straight line (U2): a producer and a receiver, a chain of them, two inputs, the reads of an event, `sample_tick()`, and the flows that wrap them.
 fn straight(id: &str) -> bool {
@@ -34,4 +35,12 @@ fn the_other_cases_are_counted_and_whatever_passes_passes() {
     assert!(r.failed.is_empty(), "{:#?}", r.failed);
     assert_eq!(r.passed.len() + r.unavailable.len() + r.gap.len(), r.count, "{}", show(&r));
     println!("{}", show(&r));
+}
+
+#[test]
+fn what_a_condition_with_a_caret_chooses_reads_the_end_of_the_stage_and_the_rest_of_the_condition_where_it_is_written()
+{
+    let r = run_cases(READS, &|_| true);
+    assert!(r.failed.is_empty() && r.unavailable.is_empty(), "{:#?} {}", r.failed, show(&r));
+    assert_eq!(r.passed, ["r1", "r2", "r3", "r4", "r5", "r6"], "{}", show(&r));
 }

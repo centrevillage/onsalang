@@ -6,7 +6,8 @@
 //! `p = prev~(^e, 7)` is the event `e` of a call delayed by one event. An event that is not given yet reads `T.default()` = 0 (§11.11), so the first event turns p from 0 to the 7 of `init`.
 //! - `arg_before_producer`: `kk~(p at sample, det~(x))` divides by its first argument. It is read before the producer in the second argument gives the first event (at the sample 0), so it is 0, not the 7 that p has after
 //!   the event: the run stops in `kk`. (A run that reads p after the event does not stop at all.)
-//! - `later_value_only`: `kk` divides by `7 - a`. With `x = 0 7 3` the events are 7 at the sample 1 and 3 at the sample 2, and p after the second one is 7, but the argument of the sample 2 is read before it (0): no stop.
+//! - `later_value_only`: `kk` divides by `(a + 5) % 10`, 0 of the a 5. With `x = 3 5 9` there is an event at each sample, so p before the event of the sample (the one before it, the first 7 of `init`) is 0 7 3, which divides by 5 2 8:
+//!   no stop. (p after it is 7 3 5: a run that reads that one stops at the sample 2.)
 //! - `body_before_stored`: `let r = 100 / x` is in the body and `prev~(100 / (p at sample))` is stored at the end of the stage (§11.4), so with 0 in both at the sample 0 the body stops first.
 //! - `stored_only`: with `x = 1` the body is fine and the stored one is 0: p before the event of the sample is 0 (the 7 after it is not what is read, the place where it is written, §11.3).
 
@@ -48,7 +49,7 @@ fn a_division_that_an_event_decides_stops_at_the_place_where_the_event_is_read()
     // (name, source, the mark of the line where the run stops: none when it does not stop)
     let cases: Vec<(&str, String, Option<&str>)> = vec![
         ("arg_before_producer", kk_case("100 / a", &[3, 5]), Some("//K")),
-        ("later_value_only", kk_case("100 / (7 - a)", &[0, 7, 3]), None),
+        ("later_value_only", kk_case("100 / ((a + 5) % 10)", &[3, 5, 9]), None),
         ("body_before_stored", stored_case(&[0, 1]), Some("//B")),
         ("stored_only", stored_case(&[1, 1]), Some("//S")),
     ];

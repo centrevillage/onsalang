@@ -6,13 +6,13 @@
 use onsa_diag::Span;
 use onsa_sema::Target;
 use onsa_sema::def::FlowDef;
-use onsa_syntax::ast::{ExprId, ExprKind};
+use onsa_syntax::ast::{BinOp, ExprId, ExprKind};
 
 use super::expr::{Frame, Stop};
 use super::flow::{Clock, Known, Step, clock_of, enter, stage};
 use super::hoist::{feedback, kept, stage_of};
 use super::scalar::{Fault, Fault::Internal};
-use super::sema_view::{Called, Stage, input_clock, output_stage};
+use super::sema_view::{Body, Called, Stage, input_clock, output_stage};
 use super::state::{NodeKey, Role};
 use super::value::Value;
 
@@ -20,9 +20,6 @@ use super::value::Value;
 pub(super) fn call_src(e: ExprId) -> Clock {
     Clock::Event(0x8000_0000 | e.0)
 }
-
-/// The names and the kept parts of an event that a delay reads: where it saves them.
-type Reads<'r> = (&'r mut Vec<(onsa_sema::LocalId, Value)>, &'r mut Vec<(ExprId, Value)>);
 
 impl<'a> Frame<'a> {
     /// The output step gave `v`, an `Option` of the event: a `Some` is an event of this entry (the value of the output from now), `None` gives none.
@@ -163,42 +160,60 @@ impl<'a> Frame<'a> {
     pub(super) fn snapshot(&mut self, slot: usize, expr: ExprId) {
         let steps = self.run.as_ref().and_then(|r| r.steps.clone());
         let Some(known) = steps.and_then(|s| s.first().map(|s| s.known.clone())) else { return };
-        let (mut found, mut parts) = (Vec::new(), Vec::new());
-        self.reads_of_events(&known, expr, expr, &mut (&mut found, &mut parts));
+        let mut parts = Vec::new();
+        self.reads_of_events(&known, expr, expr, &mut parts);
         if let Some(save) = self.run.as_mut().and_then(|r| r.save_mut(slot)) {
-            save.snap = found;
             save.snap_parts = parts;
         }
     }
 
-    fn reads_of_events(&self, known: &Known, root: ExprId, e: ExprId, out: &mut Reads) {
+    fn reads_of_events(&self, known: &Known, root: ExprId, e: ExprId, out: &mut Vec<(ExprId, Value)>) {
         let body = self.body;
-        let kind = &body.ast.expr(e).kind;
-        let chosen_by_caret = match kind {
-            ExprKind::If { cond, .. } => feedback(&body, *cond),
-            ExprKind::Match { scrutinee, arms, .. } => {
-                feedback(&body, *scrutinee) || arms.iter().any(|a| a.guard.is_some_and(|g| feedback(&body, g)))
-            }
-            _ => false,
-        };
         let event = matches!(clock_of(&body, known, root, e), Ok(Clock::Event(_)));
-        if matches!(kind, ExprKind::Feedback(_)) || chosen_by_caret || (event && feedback(&body, e)) {
+        if matches!(body.ast.expr(e).kind, ExprKind::Feedback(_)) || (event && feedback(&body, e)) {
             return;
         }
-        // A part of an event clock that a stage kept is read as it is where the delay is written too.
+        // A part of an event clock that a stage kept is read as it is where the delay is written too, and so is a read that the delay around this one saved where it is written (`Clock::Const`: no part of a stage, `commit_from`).
         let replicas = self.run.as_ref().map(|r| r.replicas.clone()).unwrap_or_default();
-        if let Some(v) =
-            self.hoisted.get(&e).filter(|k| matches!(k.0, Clock::Event(_))).and_then(|k| k.1.get(&replicas))
+        if let Some(v) = self
+            .hoisted
+            .get(&e)
+            .filter(|k| matches!(k.0, Clock::Event(_) | Clock::Const))
+            .and_then(|k| k.1.get(&replicas))
         {
-            out.1.push((e, v.clone()));
+            out.push((e, v.clone()));
             return;
         }
         if let (true, Ok(Target::Local(l))) = (body.names(e), body.target(e)) {
             let read = known.get(l).and_then(|s| s.read);
             if let (Some(Clock::Event(_)), Some(v)) = (read, self.locals.get(l)) {
-                out.0.push((*l, v.clone()));
+                out.push((e, v.clone()));
             }
         }
-        body.ast.sub_exprs(e).into_iter().for_each(|x| self.reads_of_events(known, root, x, out));
+        let chosen = chosen_by_caret(&body, &body.ast.expr(e).kind);
+        for x in body.ast.sub_exprs(e).into_iter().filter(|x| !chosen.contains(x)) {
+            self.reads_of_events(known, root, x, out);
+        }
+    }
+}
+
+/// The parts of a conditional form that a condition with a `^name` chooses (§11.3: "その位置を選ぶ条件に `^名前` を書いたもの"): the branches of an `if` and `if~` whose condition has one, the guards and the arms of a `match`
+/// and `match~` after the scrutinee or a guard that has one (an arm is chosen by the guards up to its own, a guard by those before it), and the right side of `&&` and `||` whose left side has one. What a condition reads
+/// that has no `^name` of its own is read where it is written: it is not in the list.
+fn chosen_by_caret(body: &Body<'_>, kind: &ExprKind) -> Vec<ExprId> {
+    let caret = |x: ExprId| feedback(body, x);
+    match kind {
+        ExprKind::If { cond, then, else_, .. } if caret(*cond) => std::iter::once(*then).chain(*else_).collect(),
+        ExprKind::Match { scrutinee, arms, .. } => {
+            let (mut out, mut by) = (Vec::new(), caret(*scrutinee));
+            for a in arms {
+                out.extend(a.guard.filter(|_| by));
+                by |= a.guard.is_some_and(caret);
+                out.extend(by.then_some(a.body));
+            }
+            out
+        }
+        ExprKind::Binary { op: BinOp::And | BinOp::Or, lhs, rhs, .. } if caret(*lhs) => vec![*rhs],
+        _ => Vec::new(),
     }
 }

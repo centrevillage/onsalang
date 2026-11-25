@@ -1,4 +1,4 @@
-# flow_ref 1 source=tests/spec/flow_semantics/event_stage_values.onsa tests=17 evaluated=16 unavailable=0 skipped=1 waiting=1
+# flow_ref 1 source=tests/spec/flow_semantics/event_stage_values.onsa tests=17 evaluated=17 unavailable=0 skipped=0 waiting=1
 @ the events of a producer at sample are summed by a receiver and read at sample: the sum up to the frame
 render event_stage_values.basic sr=0x41000000 in x=[1 2 3 4]
 out=[1 3 6 10]
@@ -47,7 +47,9 @@ out=[0 1 0 1 1 2]
 @ delay~ of a value that is an event counts events, not frames
 render event_stage_values.delay_of_events sr=0x41000000 in x=[1 2 3 4 5 6 7]
 out=[0 0 0 0 1 1 3]
-- vdelay~ reads its length d as the last event, whose first value is 0 (saturated to 1)	skipped layout
+@ vdelay~ reads its length d as the last event, whose first value is 0 (saturated to 1)
+render event_stage_values.vdelay_by_an_event sr=0x41000000 in x=[0x41200000 0x41a00000 0x41f00000 0x42200000 0x42480000 0x42700000] t=[0x00000000 0x00000000 0x40000000 0x00000000 0x00000000 0x40800000]
+out=[0x00000000 0x41200000 0x41200000 0x41a00000 0x41f00000 0x41a00000]
 @ what a delay stores reads the event value where it is written, in the argument or in a let of its own
 render event_stage_values.stored_reads_n sr=0x41000000 in x=[3 1 2 5 4]
 out=[0 1 1 4 5]

@@ -496,8 +496,54 @@ fn walk(f: &mut Frame, known: &Known, root: ExprId, e: ExprId, here: Clock, guar
     if made == here && chain_of(&body, e).map_err(stop)?.is_some() {
         return f.work_of(e, here, Some((known, root)));
     }
-    descend(f, known, root, e, here, guard)?;
-    f.work_of(e, here, Some((known, root)))
+    let mut early = Vec::new();
+    let done =
+        descend(f, known, root, e, (here, guard), &mut early).and_then(|()| f.work_of(e, here, Some((known, root))));
+    forget_early(f, early);
+    done
+}
+
+/// `ops[i]`, an operand of a call or an operator, evaluated where it is written and kept until the work of the call is done (`forget_early`), when a call written after it has work of its own (S-1233, §11.3: "引数と修飾子の条件を字面の順に評価
+/// してから"): a value with no work, a division or the read of an event that the work of the call after it can change, is read before it, and a panic of it comes before one of that call.
+pub(super) fn keep_early(
+    f: &mut Frame,
+    call: ExprId,
+    ops: &[ExprId],
+    i: usize,
+    early: &mut Vec<ExprId>,
+) -> Result<(), Stop> {
+    let body = f.body;
+    let lit = matches!(body.ast.expr(ops[i]).kind, ExprKind::Lit(_));
+    let after = ops[i + 1..].iter().any(|y| has_state(&body, *y));
+    // A chain reads its arguments and conditions at the ticks of its own boundaries (`feed`), and a stage that is no tick has no `sample` value.
+    let ticking = matches!(f.run.as_ref().map(|r| r.stage), Some(Stage::Tick(_) | Stage::Event(_)));
+    let chain = !matches!(chain_of(&body, call), Ok(None));
+    if lit
+        || !after
+        || !ticking
+        || chain
+        || has_state(&body, ops[i])
+        || feedback(&body, ops[i])
+        || f.hoisted.contains_key(&ops[i])
+    {
+        return Ok(());
+    }
+    let replicas = f.run.as_ref().map(|r| r.replicas.clone()).unwrap_or_default();
+    let v = f.eval(ops[i])?;
+    f.hoisted.insert(ops[i], (Clock::Const, HashMap::from([(replicas, v)])));
+    early.push(ops[i]);
+    Ok(())
+}
+
+/// The values `keep_early` kept, taken away.
+pub(super) fn forget_early(f: &mut Frame, early: Vec<ExprId>) {
+    let replicas = f.run.as_ref().map(|r| r.replicas.clone()).unwrap_or_default();
+    for x in early {
+        let empty = f.hoisted.get_mut(&x).is_some_and(|k| k.1.remove(&replicas).is_some() && k.1.is_empty());
+        if empty {
+            f.hoisted.remove(&x);
+        }
+    }
 }
 
 /// The calls in `e`, a part that a stage before made (so nothing of it is made again): in the order they are written, each does what it has in the stage `here` (S-1233: "出力をその段で読むかによらず、呼び出しを書いた位置で行う"),
@@ -517,10 +563,26 @@ fn visit(f: &mut Frame, known: &Known, root: ExprId, e: ExprId, here: Clock, gua
         f.replicate(e, |_: &()| 0, |f| visit(f, &inside, root, *inner, here, guard))?;
         return Ok(());
     }
-    for (x, k, g) in kids(&body, known, root, e, guard).map_err(stop)? {
-        visit(f, &k, root, x, here, g)?;
-    }
-    f.work_of(e, here, Some((known, root)))
+    let (ops, mut early) = (operands(&body, e), Vec::new());
+    let mut each = |f: &mut Frame| -> Result<(), Stop> {
+        for (x, k, g) in kids(&body, known, root, e, guard).map_err(stop)? {
+            visit(f, &k, root, x, here, g)?;
+            if let Some(i) = ops.iter().position(|o| *o == x) {
+                if early_ok(&body, &k, root, x, (here, g)).map_err(stop)? {
+                    keep_early(f, e, &ops, i, &mut early)?;
+                }
+            }
+        }
+        f.work_of(e, here, Some((known, root)))
+    };
+    let done = each(f);
+    forget_early(f, early);
+    done
+}
+
+/// May `x`, an operand that a stage written before a call (`keep_early`), be evaluated by the stage `here`: it is of this stage or an earlier one, and reads only what is made.
+fn early_ok(body: &Body, known: &Known, root: ExprId, x: ExprId, (here, guard): (Clock, Clock)) -> Result<bool, Fault> {
+    Ok(stage_of(body, known, root, x)?.max(guard) <= here && !reads_unknown(body, known, x, x))
 }
 
 /// The calls in a part that a stage before made and a faster one reads (its value kept, `Frame::eval`): each does the work it has in the stage this one is in, in the order they are written (S-1233), the part not made again.
@@ -593,7 +655,14 @@ pub(super) fn gather_args(
 
 /// The parts inside `e`, which is not made by this stage as a whole: the conditions this stage decides are evaluated and the branch, arm or
 /// right side they take is walked under them.
-fn descend(f: &mut Frame, known: &Known, root: ExprId, e: ExprId, here: Clock, guard: Clock) -> Result<(), Stop> {
+fn descend(
+    f: &mut Frame,
+    known: &Known,
+    root: ExprId,
+    e: ExprId,
+    (here, guard): (Clock, Clock),
+    early: &mut Vec<ExprId>,
+) -> Result<(), Stop> {
     use ExprKind as K;
     let body = f.body;
     let span = body.ast.expr(e).span;
@@ -689,7 +758,8 @@ fn descend(f: &mut Frame, known: &Known, root: ExprId, e: ExprId, here: Clock, g
             walk(f, known, root, *scrutinee, here, guard)?;
             let sc = seen_of(&body, known, root, *scrutinee).map_err(stop)?;
             let mut acc = guard.max(cond_clock(&body, known, root, *scrutinee).map_err(stop)?);
-            let mut deciding = acc <= here;
+            // A `^name` in the object or a guard has no value yet where the walk is (S-1244): what it chooses is decided where the part is made, at the end of the stage.
+            let mut deciding = acc <= here && !feedback(&body, *scrutinee);
             let (v, ty) = (if deciding { Some(f.eval(*scrutinee)?) } else { None }, body.ty(*scrutinee).map_err(stop)?);
             let (mut bound, mut taken, mut plan) =
                 (clock_of(&body, known, root, *scrutinee).map_err(stop)?, None, Vec::new());
@@ -714,7 +784,7 @@ fn descend(f: &mut Frame, known: &Known, root: ExprId, e: ExprId, here: Clock, g
                 }
                 if let Some(c) = gc {
                     (acc, bound) = (acc.max(c), bound.max(c));
-                    deciding = deciding && acc <= here;
+                    deciding = deciding && acc <= here && !arm.guard.is_some_and(|g| feedback(&body, g));
                 }
                 let mut inner = known.clone();
                 inner.extend(locals.iter().map(|l| (*l, Seen::both(bound))));
@@ -754,8 +824,12 @@ fn descend(f: &mut Frame, known: &Known, root: ExprId, e: ExprId, here: Clock, g
             }
         }
         _ => {
-            for x in operands(&body, e) {
-                walk(f, known, root, x, here, guard)?;
+            let ops = operands(&body, e);
+            for (i, x) in ops.iter().enumerate() {
+                walk(f, known, root, *x, here, guard)?;
+                if early_ok(&body, known, root, *x, (here, guard)).map_err(stop)? {
+                    keep_early(f, e, &ops, i, early)?;
+                }
             }
             Ok(())
         }

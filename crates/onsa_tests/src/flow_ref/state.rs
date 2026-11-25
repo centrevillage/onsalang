@@ -121,9 +121,8 @@ pub(super) struct Save {
     keep: bool,
     /// A part that reads a `^name` (S-1244, `Frame::defer_part`): not stored in a cell but kept in its field (`Frame::hoisted`), as of the stage that made it.
     field: Option<Clock>,
-    /// The values the event names it reads had where the delay is written (S-1240, §11.3): read so at the end of the stage, not the last ones.
-    pub(super) snap: Vec<(LocalId, Value)>,
-    /// The same for the parts of an event clock that a stage kept (`hoisted`): by expression, with the value.
+    /// The values the reads of an event it holds had where they are written (S-1240, §11.3): a name of an event and a part of an event clock that a stage kept, by the expression that reads it (one name may be read at the end of the stage in
+    /// another place, where a `^name` in a condition chooses it), read so at the end of the stage, not the last ones.
     pub(super) snap_parts: Vec<(ExprId, Value)>,
 }
 
@@ -330,7 +329,6 @@ impl<'a> Frame<'a> {
             q: 0,
             keep: true,
             field: None,
-            snap: Vec::new(),
             snap_parts: Vec::new(),
         });
         Ok(run.saves.len() - 1)
@@ -353,7 +351,6 @@ impl<'a> Frame<'a> {
                 q: 0,
                 keep: true,
                 field: Some(here),
-                snap: Vec::new(),
                 snap_parts: Vec::new(),
             });
         }
@@ -458,18 +455,18 @@ impl<'a> Frame<'a> {
         for next in from.. {
             let Some(save) = self.run.as_ref().ok_or(here(Internal("no run")))?.saves.get(next) else { break };
             let (key, expr, scope, call, q) = (save.key.clone(), save.expr, save.scope.clone(), save.call, save.q);
-            let (keep, field, snap, parts_snap) = (save.keep, save.field, save.snap.clone(), save.snap_parts.clone());
+            let (keep, field, parts_snap) = (save.keep, save.field, save.snap_parts.clone());
             // The value the part had is stale: it is made again.
             if field.is_some() {
                 self.hoisted.get_mut(&expr).into_iter().for_each(|(_, kept)| drop(kept.remove(&key.replicas)));
             }
             let before = self.run.as_ref().map_or(0, |r| r.saves.len());
-            let was: Vec<_> = snap.iter().map(|(l, _)| (*l, self.locals.get(l).cloned())).collect();
-            self.locals.extend(snap);
             let was_parts: Vec<_> = parts_snap
                 .iter()
                 .map(|(e, _)| (*e, self.hoisted.get(e).and_then(|k| k.1.get(&key.replicas)).cloned()))
                 .collect();
+            let made: Vec<ExprId> =
+                parts_snap.iter().map(|(e, _)| *e).filter(|e| !self.hoisted.contains_key(e)).collect();
             for (e, v) in parts_snap {
                 self.hoisted.entry(e).or_insert((Clock::Const, HashMap::new())).1.insert(key.replicas.clone(), v);
             }
@@ -477,9 +474,7 @@ impl<'a> Frame<'a> {
                 Some(call) => f.eval_in_arms(call, expr),
                 None => f.eval(expr),
             });
-            for (l, v) in was {
-                v.into_iter().for_each(|v| drop(self.locals.insert(l, v)));
-            }
+            made.iter().for_each(|e| drop(self.hoisted.remove(e)));
             for (e, v) in was_parts {
                 if let (Some(v), Some(k)) = (v, self.hoisted.get_mut(&e)) {
                     k.1.insert(key.replicas.clone(), v);
@@ -970,7 +965,6 @@ impl<'a> Frame<'a> {
                     q,
                     keep: true,
                     field: None,
-                    snap: Vec::new(),
                     snap_parts: Vec::new(),
                 };
                 run.saves.push(save);

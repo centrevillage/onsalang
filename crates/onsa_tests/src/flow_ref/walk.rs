@@ -314,7 +314,19 @@ impl<'a> Walk<'_, 'a> {
             },
             _ => (None, rest),
         };
-        let columns = rest.iter().map(|a| self.column(body, a.expr)).collect::<Result<Vec<_>, _>>()?;
+        let given: Vec<ExprId> = match (sampled.len() > 1, rest) {
+            // The inputs of a flow of two `sample` inputs or more are the fields of `f.In { x: .., y: .. }` (§11.6), in the order of the declaration.
+            (true, [one]) => match &body.ast.expr(one.expr).kind {
+                ExprKind::Struct { fields, .. } => sampled
+                    .iter()
+                    .map(|i| fields.iter().find(|(n, _)| n.name == i.name).map(|f| f.1))
+                    .collect::<Option<_>>()
+                    .ok_or(Halt::Skip(Skip::Layout))?,
+                _ => return Err(Halt::Skip(Skip::Layout)),
+            },
+            _ => rest.iter().map(|a| a.expr).collect(),
+        };
+        let columns = given.iter().map(|e| self.column(body, *e)).collect::<Result<Vec<_>, _>>()?;
         let call = (&args.config, &args.params);
         let (outcome, mut event) = render_run(&mut *self.host, view, flow, call, (sample_rate, frames, &columns))?;
         if let Event::Render { written, .. } = &mut event {

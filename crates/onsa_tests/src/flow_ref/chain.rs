@@ -11,7 +11,7 @@ use onsa_syntax::ast::ExprId;
 
 use super::expr::{Eval, Frame, LOW_STACK, Stop};
 use super::flow::{Clock, Ctx, Inst, enter};
-use super::hoist::{gather_args, hoisted_calls, operands};
+use super::hoist::{forget_early, gather_args, hoisted_calls, keep_early, operands};
 use super::rate::{Guard, Level, counted, dealt, elements, n_of, on_tick, phase, port_exprs, slice, time_of};
 use super::scalar::{Fault, Fault::Internal};
 use super::sema_view::{Called, Stage, input_stage};
@@ -50,13 +50,22 @@ impl<'a> Frame<'a> {
     /// A call of a flow (§11.5), alone or the head of a chain (§11.9): the instance it makes runs the stages of its parts in the stages of this one (`work_of`), and the call reads its output where the last part makes it
     /// (`made`; its arguments are read there, so the call is always evaluated there), else the output of the stage that made it, held until the next one (a tick, the elements of an array that a `.down~` boundary deals).
     pub(super) fn read_call(&mut self, whole: ExprId, head: ExprId, at: Span) -> Eval {
+        let mut early = Vec::new();
+        let out = self.read_call_with(whole, head, at, &mut early);
+        forget_early(self, early);
+        out
+    }
+
+    fn read_call_with(&mut self, whole: ExprId, head: ExprId, at: Span, early: &mut Vec<ExprId>) -> Eval {
         let here = |fault| Stop { fault, at };
         let Called::Flow(_) = self.body.called(head).map_err(here)? else {
             return Err(here(Internal("a call of a delay read as an instance")));
         };
         // The calls in its arguments and conditions come first, the ones that this stage does not read too (S-1233), then the call.
-        for x in operands(&self.body, whole) {
-            hoisted_calls(self, x)?;
+        let ops = operands(&self.body, whole);
+        for (i, x) in ops.iter().enumerate() {
+            hoisted_calls(self, *x)?;
+            keep_early(self, whole, &ops, i, early)?;
         }
         let (key, caller) = (self.key(head, Role::Child), self.time(at)?);
         let levels = self.levels_of(&key, at)?;
