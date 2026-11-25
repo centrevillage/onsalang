@@ -76,7 +76,7 @@ impl LangItems {
     }
 
     /// The enum `Option`.
-    pub(crate) fn option(&self) -> Option<DefId> {
+    pub fn option(&self) -> Option<DefId> {
         self.enums[OPTION].map(|l| l.def)
     }
 

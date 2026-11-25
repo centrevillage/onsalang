@@ -73,8 +73,26 @@ pub(super) fn checked<'b>(
 /// replica (S-1140), in a loop over them, in the struct of the replica. A
 /// field of `s` is lowered, its parts with it; in a conditional position, one
 /// of no guard before the conditions ([`placed`]). Where it is written, all
-/// but the work of `FlowInfo::late`; at the end of the stage that alone.
+/// but the work of `FlowInfo::late`, of whose fields what they read of events
+/// (S-1249); at the end of the stage that alone.
 pub(super) fn work(
+    lw: &mut Lowerer,
+    cx: &mut FnCx,
+    info: &FlowInfo,
+    e: ExprId,
+    s: ClockStage,
+    state: &Expr,
+    out: &mut Vec<Stmt>,
+) -> R<()> {
+    work_of(lw, cx, info, e, s, state, out)?;
+    let late = info.late.contains(&e) && !cx.flow.as_ref().expect("flow context").now.saving;
+    match info.hoist_of(e).map(|h| info.hoist(h)).filter(|h| late && h.stage == s) {
+        Some(h) => super::nodes::saved_reads(lw, cx, out, &h.saved, (&h.path, h.owner)),
+        None => Ok(()),
+    }
+}
+
+fn work_of(
     lw: &mut Lowerer,
     cx: &mut FnCx,
     info: &FlowInfo,

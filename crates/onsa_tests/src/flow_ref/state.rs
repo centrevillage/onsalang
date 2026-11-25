@@ -21,7 +21,7 @@ use super::delay_mods::DelayMods;
 use super::expr::{Eval, Frame, LOW_STACK, Stop, evaluates};
 use super::flow::{Clock, Ctx, Inst, Known, Plans, enter};
 use super::hoist::gather_args;
-use super::hoist::{feedback, has_state};
+use super::hoist::{caret, has_state};
 use super::rate::{Bound, Level, args_of, chain_of, child_time, counted, levels, n_of, on_tick, port_exprs};
 use super::scalar::{Fault, Fault::Internal};
 use super::sema_view::{Called, Stage, input_stage};
@@ -338,21 +338,15 @@ impl<'a> Frame<'a> {
     /// (the place where it is written), and kept in its field like any part made by a stage before. Once for each replica in a stage.
     pub(super) fn defer_part(&mut self, e: ExprId, here: Clock) -> Result<(), Stop> {
         let (key, at) = (self.key(e, Role::Delay), self.body.ast.expr(e).span);
+        // The names of an event it reads are the values where they are written, a `^name` the end of the stage (S-1249).
+        let snap_parts = self.event_reads(e);
         let run = self
             .run
             .as_mut()
             .ok_or(Stop { fault: Internal("a part made at the end of a stage outside an instance"), at })?;
         if !run.saves.iter().any(|s| s.field.is_some() && s.key == key) {
-            run.saves.push(Save {
-                key,
-                expr: e,
-                scope: run.scope.clone(),
-                call: None,
-                q: 0,
-                keep: true,
-                field: Some(here),
-                snap_parts: Vec::new(),
-            });
+            let scope = run.scope.clone();
+            run.saves.push(Save { key, expr: e, scope, call: None, q: 0, keep: true, field: Some(here), snap_parts });
         }
         Ok(())
     }
@@ -412,7 +406,7 @@ impl<'a> Frame<'a> {
                     }
                     _ => None,
                 }
-                .filter(|d| feedback(&body, *d));
+                .filter(|d| caret(&body, *d));
                 if let Some(first) = late_d.and(args_of(&body, chain.head).get(Delay::SAVED).copied()) {
                     self.early_calls(first)?;
                     return chain.conds().try_for_each(|c| self.eval(c).map(drop));
@@ -430,13 +424,13 @@ impl<'a> Frame<'a> {
         let body = self.body;
         match &body.ast.expr(e).kind {
             ExprKind::If { cond, else_, .. } => {
-                feedback(&body, *cond)
+                caret(&body, *cond)
                     || else_.is_some_and(|r| {
                         matches!(body.ast.expr(r).kind, ExprKind::If { .. }) && self.selects_with_feedback(r)
                     })
             }
             ExprKind::Match { scrutinee, arms, .. } => {
-                feedback(&body, *scrutinee) || arms.iter().any(|a| a.guard.is_some_and(|g| feedback(&body, g)))
+                caret(&body, *scrutinee) || arms.iter().any(|a| a.guard.is_some_and(|g| caret(&body, g)))
             }
             _ => false,
         }
@@ -682,7 +676,7 @@ impl<'a> Frame<'a> {
         let here = |fault| Stop { fault, at };
         // An `init` argument that reads a `^name` has no value where the delay is written: the cell starts from `T.default()` and the argument is made at the end of `init` (S-1244, `Frame::finish_cells`).
         let arg = args.get(d.init_index()).map(|a| a.expr);
-        let late = arg.filter(|a| feedback(&self.body, *a));
+        let late = arg.filter(|a| caret(&self.body, *a));
         let given = match arg {
             Some(a) if late.is_none() => Some(self.eval_staged(e, a, Stage::Init)?),
             _ => None,

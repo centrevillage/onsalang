@@ -28,11 +28,12 @@ pub(super) struct Marked {
     pub(super) bound_at: HashMap<LocalId, BTreeSet<ClockStage>>,
     pub(super) sample_rate_at: Option<ClockStage>,
     /// `FlowInfo::eval_at`, `FlowInfo::time_at`, `FlowInfo::work` (of the
-    /// hoisted fields and the checks) and `FlowInfo::late`.
+    /// hoisted fields and the checks), `FlowInfo::late` and `FlowInfo::back`.
     pub(super) eval_at: BTreeSet<ClockStage>,
     pub(super) time_at: BTreeSet<ClockStage>,
     pub(super) work: HashSet<(u32, ClockStage)>,
     pub(super) late: HashSet<ExprId>,
+    pub(super) back: HashSet<ExprId>,
     /// The first call (in the order of the file) of a function that is not
     /// `rt` evaluated at a stage after `init` (R-17): E0815 in a
     /// conditional position a condition decided after `init` selects
@@ -168,6 +169,7 @@ pub(super) fn mark_all(
             time_at: BTreeSet::new(),
             work: HashSet::default(),
             late: HashSet::default(),
+            back: HashSet::default(),
             diag: None,
             hoisted: Vec::new(),
             checks: HashMap::default(),
@@ -345,9 +347,6 @@ impl Marker<'_> {
                     self.read_select(id, at);
                     let own = self.clocks.info.own_stage(id).filter(|s| s.stored_slower_than(at));
                     if let Some(s) = own.filter(|_| self.body.locals[id.0 as usize].kind != LocalKind::MatchBind) {
-                        if matches!(s, ClockStage::Event(_)) {
-                            self.mark_late(e);
-                        }
                         let name = expr.span.text_in(self.text);
                         self.no_default(e, s, SlowField::Name(name));
                     }
@@ -522,11 +521,13 @@ impl Marker<'_> {
         false
     }
 
-    /// The part `e` evaluated at its stage, or the read `e` of an event
-    /// (S-1240), of the end of it ([`FlowInfo::late`]) if it or a condition
-    /// on its path reads a `^name` or a binding one chooses.
+    /// The part `e` evaluated at its stage, of the end of it
+    /// ([`FlowInfo::late`]) if it ([`FlowInfo::back`]) or a condition on its
+    /// path reads a `^name` or a binding one chooses.
     fn mark_late(&mut self, e: ExprId) {
-        if self.conds.iter().map(|c| c.0).chain([e]).any(|x| self.back(x)) {
+        let back = self.back(e);
+        self.out.back.extend(back.then_some(e));
+        if back || self.conds.iter().any(|c| self.back(c.0)) {
             self.out.late.insert(e);
         }
     }

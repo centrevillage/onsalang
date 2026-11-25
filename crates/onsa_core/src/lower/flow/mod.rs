@@ -9,6 +9,7 @@
 //! | `ctl(inout s, p: Params)` | `Ctl`-rate `let`s in order (those read at `Sig` stored) and the `Ctl` hoisted fields, sub `ctl`s with the sub's `Params` |
 //! | `tick(inout s, [t], <Sig inputs>) -> out` | `Sig`-rate `let`s in order, the output, the stages of the callees run there ([`chain::entry`], [`phases::call_stage`]), then the stores of §11.4 in node order, the counter of a grid advanced last; the time `t` (and `t_hi`) of a stage that takes it (`FlowInfo::time_words`) |
 //! | `tick_<N>(inout s, [t], <its inputs>)` | of each tick `sample / N` of the body (`FlowInfo::stages`, those of its callees too): as `tick`, the output of an output at `sample / N` (§11.9) |
+//! | `ev_<k>(inout s, [t], <its event>) -> [Option]` | of each source of events of the body (`FlowInfo::events`, §11.11), an input at `event` or a call that gives one: as `tick`, run once for each event, by the caller or after the run of the call that gives it ([`chain`]); the event of the output or none, of those on the way to it (`FlowInfo::gives`) |
 //! | `process(inout s, p, [input], inout output)` | none of a port of a derived clock; `input` and `output` one `Span` (planar `[Span; N]`) or the `In` and `Out` of more (§11.6); length check, `ctl` once, per sample: the time `t = s._tick` (and `t_hi`), the slower ticks due ([`phases::drive`]), read all inputs, `tick`, the time advanced ([`phases::advance`]), write all outputs |
 //! | `process_inplace(inout s, p, inout output)` | `process` with the input made of the signals of `output` (they pair up) |
 //! | `render` | `init`, `Buf.zeroed` outputs, one `process`, `Rendered` (interpreter only, D-08) |
@@ -89,9 +90,9 @@ use onsa_syntax::ast::ExprId;
 use super::body::{FnCx, bind_irrefutable, lower_expr, of_type, span_of};
 use super::build::{
     after, assign, borrow, call, checked_binary, cmp, expr_stmt, field, float_lit, index, index_as, inout, lit,
-    local_expr, materialize, place_of, stmt, u32_lit,
+    local_expr, materialize, payload, place_of, stmt, u32_lit,
 };
-use super::{Lowerer, R, core_mode, internal, unsupported};
+use super::{GenericArg, Lowerer, R, core_mode, internal, unsupported};
 use crate::ir::*;
 use crate::layout::{FlowLayout, flow_layout_for};
 use crate::prim::Prim;
@@ -113,7 +114,7 @@ pub(crate) use generated::burst_ty;
 use generated::{Gen, init_value, replica_loop, replicas_place, ring_len, sfield, spread};
 pub(crate) use hoist::HoistUses;
 pub(crate) use nodes::lower_flow_expr;
-use phases::{StageRun, call_stage, drive, gen_ctl, gen_init, gen_reset, gen_tick};
+use phases::{StageRun, call_stage, drive, gen_ctl, gen_init, gen_reset, gen_stage};
 use state::state_fields;
 
 /// The Core items generated for one flow.
@@ -131,9 +132,12 @@ pub struct FlowFns {
     /// The function of each tick of the body slower than its `sample`
     /// (`FlowInfo::stages`), slowest first.
     pub stages: Vec<(ClockStage, FnId)>,
+    /// The function of the stage of each source of an event clock of the
+    /// body (§11.11, `FlowInfo::events`), in their order.
+    pub events: Vec<(ClockStage, FnId)>,
     /// `process`, `process_inplace` and `render`: none of a flow with a
     /// port of a derived clock (`FlowInfo::derived_port`), which runs as an
-    /// instance only (§11.9).
+    /// instance only (§11.9), or at `event` ([`FlowDef::awaits_events`]).
     pub process: Option<FnId>,
     pub process_inplace: Option<FnId>,
     pub render: Option<FnId>,
@@ -152,7 +156,7 @@ impl FlowFns {
             .chain(self.process)
             .chain(self.reset_kept)
             .chain(self.render)
-            .chain(self.stages.iter().map(|s| s.1))
+            .chain(self.stages.iter().chain(&self.events).map(|s| s.1))
             .chain(self.process_inplace)
             .chain(self.params_default)
     }
@@ -172,12 +176,12 @@ impl FlowFns {
     }
 
     /// The function of the stage `s`: `tick` of the `sample` of the body,
-    /// or that of a slower tick.
+    /// that of a slower tick, or that of a source of events.
     pub(crate) fn stage_fn(&self, s: ClockStage) -> Option<FnId> {
         if s == ClockStage::SAMPLE {
             return Some(self.tick);
         }
-        self.stages.iter().find(|x| x.0 == s).map(|x| x.1)
+        self.stages.iter().chain(&self.events).find(|x| x.0 == s).map(|x| x.1)
     }
 }
 
@@ -234,8 +238,8 @@ fn inputs(info: &FlowInfo, fd: &FlowDef, span: Span) -> R<Vec<Input>> {
 /// Every stage of the plan is of a function: those its locals are read at
 /// and those of what the state keeps, of the hoisted fields and of the time
 /// (the functions of the phases ask the plan of no other) are of `init`,
-/// `ctl`, `tick` or a slower tick of `FlowInfo::stages`. Another is an
-/// internal error.
+/// `ctl`, `tick`, a slower tick of `FlowInfo::stages` or a source of
+/// `FlowInfo::events`. Another is an internal error.
 fn check_stages(info: &FlowInfo, span: Span) -> R<()> {
     let kept = info.fields.iter().filter_map(|f| match f.of {
         FieldOf::Input(l) | FieldOf::Let(l) => Some(info.own_stage(l)),
@@ -247,7 +251,8 @@ fn check_stages(info: &FlowInfo, span: Span) -> R<()> {
         kept.chain(hoisted).chain(time).chain(info.read_stages().map(Some)).collect();
     for s in stages {
         let s = info.run_stage(s.ok_or_else(|| internal(span, "a stored local with no stage"))?);
-        if s.slow_tick() && !info.stages.contains(&s) {
+        let event = matches!(s, ClockStage::Event(src) if info.event(src).is_none());
+        if event || s.slow_tick() && !info.stages.contains(&s) {
             return Err(internal(span, format!("no function of the stage {s:?}")));
         }
     }
@@ -268,6 +273,8 @@ pub struct FlowLowerCx<'b> {
     sample_rate_calls: HashSet<ExprId>,
     /// The calls of `sample_tick()` (`FlowInfo::sample_tick_calls`).
     sample_tick_calls: HashSet<ExprId>,
+    /// The functions of the stages of its events ([`FlowFns::events`]).
+    events: Vec<(ClockStage, FnId)>,
     pub(crate) now: StageCx,
 }
 
@@ -299,6 +306,13 @@ pub(crate) struct StageCx {
     heads: Vec<Stmt>,
     /// `sample_rate()`: the parameter in `init`, the state field elsewhere.
     sample_rate: Expr,
+    /// The event of the function of the stage of a call, its parameter: the
+    /// value of that call there ([`nodes::instance`]).
+    source: Option<Expr>,
+    /// Of a function that gives the event of the output of the flow or none
+    /// and does not make it (`FlowInfo::gives`), the local of what the stage
+    /// it ticks gives it ([`chain`]).
+    gave: Option<Expr>,
     /// The time of the function (§11.4, S-1129 (1), S-1217): its parameters
     /// `t` and `t_hi` of a stage that takes them (`FlowInfo::time_words`),
     /// the count of the outermost `sample` from `process`, which a caller
@@ -323,7 +337,7 @@ struct FlowShape {
     state_ty: TypeId,
     params_ty: TypeId,
     out_ty: TypeId,
-    /// Core type of the flow's output value.
+    /// Core type of the value the body makes for the output: the `Option` of an event (§11.11).
     out_val: Ty,
     /// Boundary outputs: name, element type, planar count (§11.6).
     outputs: Vec<(String, Ty, Option<u32>)>,
@@ -445,11 +459,12 @@ fn lower_flow<'b>(lw: &mut Lowerer<'b>, flow: DefId, fd: FlowDef, span: Span) ->
     let params_ty = lw.flow_ty(flow, FlowTy::Params, span)?;
     let out_ty = lw.flow_ty(flow, FlowTy::Rendered, span)?;
     let out_def = generated_type(a, &fd, FlowTy::Rendered).ok_or_else(|| internal(span, "flow without `Rendered`"))?;
-    // The body makes an output at `sample * N` in an array of N (§11.9).
+    // The body makes an output at `sample * N` in an array of N (§11.9), one at `event` in an `Option` (§11.11).
     let out_val = lw.core_ty(fd.out, &[], span)?;
-    let out_val = match fd.out_len() {
-        Some(n) => Ty::Array(Box::new(out_val), n),
-        None => out_val,
+    let out_val = match (fd.out_len(), info.emit) {
+        (Some(n), _) => Ty::Array(Box::new(out_val), n),
+        (None, Some(_)) => Ty::Enum(lw.type_id(event_option(a, span)?.def, vec![GenericArg::Ty(out_val)], span)?),
+        (None, None) => out_val,
     };
 
     // Boundary outputs from the `Rendered` struct (`Buf[T]` / `[Buf[T]; N]` fields, §11.6).
@@ -502,10 +517,17 @@ fn lower_flow<'b>(lw: &mut Lowerer<'b>, flow: DefId, fd: FlowDef, span: Span) ->
         let n = n.ok_or_else(|| internal(span, format!("a slower tick of the stage {s:?}")))?;
         stages.push((s, push_fn(lw, format!("{base}.tick_{n}"), true, span)));
     }
+    let events = info.events.iter().enumerate();
+    let events = events.map(|(k, p)| (ClockStage::Event(p.src), push_fn(lw, format!("{base}.ev_{k}"), true, span)));
+    let events = events.collect();
     let init = lw.fn_id(need(FlowFn::Init)?, Vec::new(), span)?;
     let reset = lw.fn_id(need(FlowFn::Reset)?, Vec::new(), span)?;
-    // None of a flow with a port of a derived clock: their uses are an E0200 (E0810 from W10-01).
-    let made = |f: FlowFn| info.derived_port.is_none().then(|| need(f)).transpose();
+    // None of a flow with a port of a derived clock: their uses are an E0200 (E0810 from W10-01),
+    // nor with one at `event`, until W10-07.
+    let made = |f: FlowFn| {
+        let d = need(f)?;
+        Ok((info.derived_port.is_none() && !fd.awaits_events(a.def(d))).then_some(d))
+    };
     let mut id = |d: Option<DefId>| d.map(|d| lw.fn_id(d, Vec::new(), span)).transpose();
     let process = id(made(FlowFn::Process)?)?;
     let process_inplace = id(generated_fn(a, &fd, FlowFn::ProcessInplace).filter(|_| process.is_some()))?;
@@ -535,6 +557,7 @@ fn lower_flow<'b>(lw: &mut Lowerer<'b>, flow: DefId, fd: FlowDef, span: Span) ->
         ctl,
         tick,
         stages,
+        events,
         process,
         process_inplace,
         render,
@@ -546,8 +569,9 @@ fn lower_flow<'b>(lw: &mut Lowerer<'b>, flow: DefId, fd: FlowDef, span: Span) ->
         gen_init(lw, &shape, info, &fns)?;
         gen_reset(lw, &shape, info, &fns)?;
         gen_ctl(lw, &shape, info, &fns)?;
-        for s in [ClockStage::SAMPLE].into_iter().chain(info.stages.iter().copied()) {
-            gen_tick(lw, &shape, info, &fns, s)?;
+        let events = info.events.iter().map(|p| ClockStage::Event(p.src));
+        for s in [ClockStage::SAMPLE].into_iter().chain(info.stages.iter().copied()).chain(events) {
+            gen_stage(lw, &shape, info, &fns, s)?;
         }
         Ok(())
     })?;
@@ -577,6 +601,12 @@ fn lower_flow<'b>(lw: &mut Lowerer<'b>, flow: DefId, fd: FlowDef, span: Span) ->
         name_span: a.def(flow).name_span,
     });
     Ok(fns)
+}
+
+/// The `Option` of an event given out or none (§11.11).
+fn event_option(a: &onsa_sema::Analysis, span: Span) -> R<onsa_sema::lang::LangEnum> {
+    let l = &a.modules.lang;
+    l.option().and_then(|d| l.of(d)).ok_or_else(|| internal(span, "an event with no `Option`"))
 }
 
 fn push_fn(lw: &mut Lowerer, name: String, rt: bool, span: Span) -> FnId {

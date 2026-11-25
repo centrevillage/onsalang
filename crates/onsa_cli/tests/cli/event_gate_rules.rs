@@ -131,7 +131,6 @@ fn assert_each_stops(tag: &str, flows: &[&str], names: &[&str]) {
 
 /// The package of the flows that run: `check` has no diagnostic, `test` passes (the test of the package, 1 passed), `dump --core` goes on, and no E0200 is said.
 #[test]
-#[ignore = "W7-11 U2: S-564, S-1234"]
 fn a_package_of_flows_with_events_that_run_is_tested_and_lowered_u2() {
     let (d, _) = package("event_run", &RUNNING);
     assert_checks("event_run", &d);
@@ -148,7 +147,6 @@ fn a_package_of_flows_with_events_that_run_is_tested_and_lowered_u2() {
 
 /// Each flow that runs is drawn alone (`onsa graph <flow>`), and `let` of an event is a node `名前: 型 at event`, the input of an event `名前: 型 at event`, the output of an event `out: 型 at event` (`spec/tools.md` §1.1).
 #[test]
-#[ignore = "W7-11 U2: S-564"]
 fn graph_draws_the_flows_with_events_u2() {
     let (d, _) = package("event_graph", &RUNNING);
     for (flow, labels) in [
@@ -176,7 +174,6 @@ fn graph_draws_the_flows_with_events_u2() {
 
 /// §12.4: the size of the state of a flow with events is known (`size: not available` is what a flow that the lowering stops at has).
 #[test]
-#[ignore = "W7-11 U2: S-564"]
 fn interface_has_the_sizes_of_the_states_of_the_flows_that_run_u2() {
     let (d, _) = package("event_sizes", &RUNNING);
     let out = run(d.root(), &["interface"]);
@@ -196,7 +193,6 @@ fn a_delay_with_a_modifier_and_events_in_par_and_branches_are_one_e0200_for_each
 /// A modifier on a call whose callee has an event port, a modifier whose condition is an event, and a source that ticks by itself (on the path of the output, off it, in a loop of two): one E0200 for the flow that has
 /// the form. The flows that run in the same package (`acc`, `fwd`, `with_event_out`, `calls_acc`) are not stopped.
 #[test]
-#[ignore = "W7-11 U2: S-564"]
 fn a_modifier_on_an_event_port_an_event_condition_and_a_source_with_no_root_are_one_e0200_for_each_flow_u2() {
     let flows = [EVENT_OUT, ACC, FWD, LP, CALLS_ACC, MODDED, EVENT_COND, ROOTLESS_ON, ROOTLESS_OFF, ROOTLESS_LOOP];
     let names = ["modded", "event_cond", "rootless_on", "rootless_off", "rootless_loop"];
@@ -208,7 +204,6 @@ fn a_modifier_on_an_event_port_an_event_condition_and_a_source_with_no_root_are_
 
 /// The forms that run and the forms that stay E0200 in one package: the stop is the flows that stay, and the flows that run are in the same package (`graph` of one is drawn).
 #[test]
-#[ignore = "W7-11 U2: S-564"]
 fn flows_that_run_beside_a_flow_that_is_e0200_are_not_stopped_u2() {
     let flows = [EVENT_OUT, ACC, CALLS_ACC, DRAWN, MODDED];
     let (d, src) = package("event_beside", &flows);

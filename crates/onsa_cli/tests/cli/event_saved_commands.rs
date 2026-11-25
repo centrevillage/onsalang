@@ -44,7 +44,6 @@ fn stored_case(xs: &[u32]) -> String {
 }
 
 #[test]
-#[ignore = "W7-11 U2: S-1240"]
 fn a_division_that_an_event_decides_stops_at_the_place_where_the_event_is_read() {
     // (name, source, the mark of the line where the run stops: none when it does not stop)
     let cases: Vec<(&str, String, Option<&str>)> = vec![
@@ -84,7 +83,6 @@ fn a_division_that_an_event_decides_stops_at_the_place_where_the_event_is_read()
 /// The values of `tests/spec/flow_semantics/event_saved_values.onsa` for `saved_name`, in C: `x` is the frame + 1, the event is the `x` that is a multiple of 3 (the frames 2 5 8 11 14), p before the event of the
 /// frame is 0 0 0 0 0 0 3 3 3 6 6 6 9 9 9 12, the delay stores it + 1 (1 1 1 1 1 1 4 4 4 7 7 7 10 10 10 13) and gives it one frame later; a run that reads p after the event gives 4 at the frame 6.
 #[test]
-#[ignore = "W7-11 U2: S-1240"]
 fn an_event_read_in_a_stored_expression_is_the_value_before_the_event_in_c() {
     let src = "flow gen(x: F32 at sample) -> F32 at event {\n  if x % 3.0 == 0.0 { Some(x) } else { None }\n}\n\n@export\npub flow saved_c(x: F32 at sample) -> F32 at sample {\n  let p = prev~(^d)\n  let q = prev~((p at sample) + 1.0)\n  let d = gen~(x)\n  q\n}\n";
     let dir = build_flows("event_saved_c", src);

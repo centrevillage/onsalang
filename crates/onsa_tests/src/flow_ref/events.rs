@@ -1,18 +1,18 @@
 //! The event stages of a flow (§11.11, W7-11 U2, the straight line): a source (an input of `at event`, the event output of a call) has a stage of its own, `Clock::Event`, that runs once for each event it gives, in
 //! the middle of the stage that gave it. It is the same walk as a tick's (`flow::stage`, `hoist::walk`): the `let`s of the source's clock are made, a call that takes the source as an argument ticks the input
 //! (`tick_receivers`, in the order of the declaration, each with the events it gives done first, S-1236), and the call that gave the event has done its work of the stage first (`fire_emitted`, S-1234). A name of an event
-//! keeps its last value, `T.default()` before the first (`default_events`); what a delay saves reads the names of an event as they were where the delay is written (`snapshot`, S-1240).
+//! keeps its last value, `T.default()` before the first (`default_events`); what a delay saves reads the names of an event as they were where the read is written, a `^name` and a part with one excepted (`snapshot`, S-1240, S-1249).
 
 use onsa_diag::Span;
 use onsa_sema::Target;
 use onsa_sema::def::FlowDef;
-use onsa_syntax::ast::{BinOp, ExprId, ExprKind};
+use onsa_syntax::ast::{ExprId, ExprKind};
 
 use super::expr::{Frame, Stop};
 use super::flow::{Clock, Known, Step, clock_of, enter, stage};
-use super::hoist::{feedback, kept, stage_of};
+use super::hoist::{caret, kept, stage_of};
 use super::scalar::{Fault, Fault::Internal};
-use super::sema_view::{Body, Called, Stage, input_clock, output_stage};
+use super::sema_view::{Called, Stage, input_clock, output_stage};
 use super::state::{NodeKey, Role};
 use super::value::Value;
 
@@ -62,7 +62,11 @@ impl<'a> Frame<'a> {
         let (body, here) = (self.body, |fault| Stop { fault, at });
         let clock = stage_of(&body, known, root, e).map_err(here)?;
         // A part that reads a `^name` is made at the end of its stage (S-1244), with what the delays save, and is read fresh before.
-        if matches!(clock, Clock::Event(_)) && !feedback(&body, e) && kept(&body, known, e).map_err(here)? {
+        if matches!(clock, Clock::Event(_)) && kept(&body, known, e).map_err(here)? {
+            // A part that holds a `^name` is one read made whole at the end of the stage (S-1249): the parts in it are not parts of their own, and the value it has before its first stage is not read (it is made where it is read).
+            if caret(&body, e) {
+                return Ok(());
+            }
             let ty = body.ty(e).map_err(here)?;
             // A type with no default (an `Option`) has none to start from: such a part is made where it is read.
             if let Some(d) = self.shape(ty, at).ok().and_then(|s| s.default_value()) {
@@ -155,22 +159,29 @@ impl<'a> Frame<'a> {
         Ok(())
     }
 
-    /// What the delay saved at `slot` reads of the names of an event, as they are where the delay is written (S-1240, §11.3): the names read in the part that does not read a `^name` (a part of an event clock that does is read at
-    /// the end of the stage, and so is what a condition that reads one chooses). The first argument of a delay in it is the same: the place is the one of the outer.
+    /// What the delay saved at `slot` reads of the names of an event, as they are where the delay is written (S-1240, §11.3, S-1249): every read but a `^name` and a part of an event clock that has one (that is made at the end of the stage), wherever it is written
+    /// (a branch, a guard, the right side of `&&`, an arm, a part of a slower clock): the place of a read is where it is written, whatever the condition that chooses it reads. The first argument of a delay in it is the same: the place is the one of the outer.
     pub(super) fn snapshot(&mut self, slot: usize, expr: ExprId) {
-        let steps = self.run.as_ref().and_then(|r| r.steps.clone());
-        let Some(known) = steps.and_then(|s| s.first().map(|s| s.known.clone())) else { return };
-        let mut parts = Vec::new();
-        self.reads_of_events(&known, expr, expr, &mut parts);
+        let parts = self.event_reads(expr);
         if let Some(save) = self.run.as_mut().and_then(|r| r.save_mut(slot)) {
             save.snap_parts = parts;
         }
     }
 
+    /// The reads of the names of an event in `expr` and what they are now (S-1240): for a delay that saves `expr`, and for a part of a slower clock that reads a `^name` and is made at the end of its stage (S-1249: the `p` of `(p at (sample / 4)) * 2 + ^k`).
+    pub(super) fn event_reads(&self, expr: ExprId) -> Vec<(ExprId, Value)> {
+        let known = self.run.as_ref().and_then(|r| r.steps.clone()).and_then(|s| s.first().map(|s| s.known.clone()));
+        let mut parts = Vec::new();
+        if let Some(known) = known {
+            self.reads_of_events(&known, expr, expr, &mut parts);
+        }
+        parts
+    }
+
     fn reads_of_events(&self, known: &Known, root: ExprId, e: ExprId, out: &mut Vec<(ExprId, Value)>) {
         let body = self.body;
         let event = matches!(clock_of(&body, known, root, e), Ok(Clock::Event(_)));
-        if matches!(body.ast.expr(e).kind, ExprKind::Feedback(_)) || (event && feedback(&body, e)) {
+        if matches!(body.ast.expr(e).kind, ExprKind::Feedback(_)) || (event && caret(&body, e)) {
             return;
         }
         // A part of an event clock that a stage kept is read as it is where the delay is written too, and so is a read that the delay around this one saved where it is written (`Clock::Const`: no part of a stage, `commit_from`).
@@ -190,30 +201,8 @@ impl<'a> Frame<'a> {
                 out.push((e, v.clone()));
             }
         }
-        let chosen = chosen_by_caret(&body, &body.ast.expr(e).kind);
-        for x in body.ast.sub_exprs(e).into_iter().filter(|x| !chosen.contains(x)) {
+        for x in body.ast.sub_exprs(e) {
             self.reads_of_events(known, root, x, out);
         }
-    }
-}
-
-/// The parts of a conditional form that a condition with a `^name` chooses (§11.3: "その位置を選ぶ条件に `^名前` を書いたもの"): the branches of an `if` and `if~` whose condition has one, the guards and the arms of a `match`
-/// and `match~` after the scrutinee or a guard that has one (an arm is chosen by the guards up to its own, a guard by those before it), and the right side of `&&` and `||` whose left side has one. What a condition reads
-/// that has no `^name` of its own is read where it is written: it is not in the list.
-fn chosen_by_caret(body: &Body<'_>, kind: &ExprKind) -> Vec<ExprId> {
-    let caret = |x: ExprId| feedback(body, x);
-    match kind {
-        ExprKind::If { cond, then, else_, .. } if caret(*cond) => std::iter::once(*then).chain(*else_).collect(),
-        ExprKind::Match { scrutinee, arms, .. } => {
-            let (mut out, mut by) = (Vec::new(), caret(*scrutinee));
-            for a in arms {
-                out.extend(a.guard.filter(|_| by));
-                by |= a.guard.is_some_and(caret);
-                out.extend(by.then_some(a.body));
-            }
-            out
-        }
-        ExprKind::Binary { op: BinOp::And | BinOp::Or, lhs, rhs, .. } if caret(*lhs) => vec![*rhs],
-        _ => Vec::new(),
     }
 }

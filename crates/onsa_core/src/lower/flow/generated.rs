@@ -206,6 +206,7 @@ impl<'b> Gen<'b> {
             info,
             sample_rate_calls: info.sample_rate_calls.iter().copied().collect(),
             sample_tick_calls: info.sample_tick_calls.iter().copied().collect(),
+            events: Vec::new(),
             now: StageCx {
                 stage,
                 local_override: HashMap::new(),
@@ -215,6 +216,8 @@ impl<'b> Gen<'b> {
                 guards: None,
                 heads: Vec::new(),
                 sample_rate: lit(Ty::Float(FloatKind::F32), span, Lit::F32(0.0)),
+                source: None,
+                gave: None,
                 time: Vec::new(),
                 scopes: Vec::new(),
             },

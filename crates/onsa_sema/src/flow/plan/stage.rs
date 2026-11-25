@@ -17,8 +17,7 @@ impl FlowInfo {
     /// reads the plan of the flow stops at it before it reads one: the
     /// lowering, at a flow it comes to, and `onsa graph`.
     pub fn event_gate(&self) -> Option<Diagnostic> {
-        // Every flow with events until the Core lowers their stages: W7-11 U2 stage b reads `event_form` here.
-        let at = self.event_word.filter(|_| self.complete)?;
+        let at = self.event_form.filter(|_| self.complete)?;
         Some(onsa_diag::unsupported::Feature::EventClocks.diagnostic(onsa_diag::Stage::Flow, at, &[]))
     }
 

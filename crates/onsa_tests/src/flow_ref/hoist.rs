@@ -29,7 +29,7 @@ use std::collections::HashMap;
 
 use onsa_diag::Span;
 use onsa_sema::Target;
-use onsa_sema::flow_names::FlowBuiltin;
+use onsa_sema::flow_names::{Delay, FlowBuiltin};
 use onsa_syntax::ast::{BinOp, CallKind, ExprId, ExprKind, StmtKind};
 
 use super::expr::{Frame, LOW_STACK, Stop};
@@ -64,6 +64,20 @@ fn atom(body: &Body, e: ExprId) -> bool {
         ExprKind::Call { .. } => body.time_call(e),
         _ => false,
     }
+}
+
+/// Does `e` hold a `^name` that counts (§11.3, S-1249: "中の遅延の第 1 引数の中の `^名前` は、その遅延の出力なので数えない")? The `^name` in the first argument of a delay inside `e` is the output of that delay, not read by `e`:
+/// `prev~(^d)` is a delay of the clock of `d` and holds no `^name` that moves what it is in. (`feedback` is every `^name`, which the loops of the clocks follow.)
+pub(super) fn caret(body: &Body, e: ExprId) -> bool {
+    if matches!(body.ast.expr(e).kind, ExprKind::Feedback(_)) {
+        return true;
+    }
+    let head = chain_of(body, e).ok().flatten().map_or(e, |c| c.head);
+    let first = match (matches!(body.ast.expr(head).kind, ExprKind::Call { .. }), body.called(head)) {
+        (true, Ok(Called::Builtin(FlowBuiltin::Delay(_)))) => args_of(body, head).into_iter().nth(Delay::SAVED),
+        _ => None,
+    };
+    body.ast.sub_exprs(e).into_iter().any(|x| Some(x) != first && caret(body, x))
 }
 
 pub(super) fn feedback(body: &Body, e: ExprId) -> bool {
@@ -482,7 +496,7 @@ fn walk(f: &mut Frame, known: &Known, root: ExprId, e: ExprId, here: Clock, guar
     }
     if made == here && kept(&body, known, e).map_err(stop)? {
         // A part that reads a `^name` is made at the end of the stage, after the `let`s and the output, with what the delays save (S-1244).
-        if feedback(&body, e) && f.run.is_some() {
+        if caret(&body, e) && f.run.is_some() {
             return f.defer_part(e, here);
         }
         // The value of the call before is stale: made again by this stage (the parts it holds that a slower stage kept stay).
@@ -523,7 +537,7 @@ pub(super) fn keep_early(
         || !ticking
         || chain
         || has_state(&body, ops[i])
-        || feedback(&body, ops[i])
+        || caret(&body, ops[i])
         || f.hoisted.contains_key(&ops[i])
     {
         return Ok(());
@@ -759,7 +773,7 @@ fn descend(
             let sc = seen_of(&body, known, root, *scrutinee).map_err(stop)?;
             let mut acc = guard.max(cond_clock(&body, known, root, *scrutinee).map_err(stop)?);
             // A `^name` in the object or a guard has no value yet where the walk is (S-1244): what it chooses is decided where the part is made, at the end of the stage.
-            let mut deciding = acc <= here && !feedback(&body, *scrutinee);
+            let mut deciding = acc <= here && !caret(&body, *scrutinee);
             let (v, ty) = (if deciding { Some(f.eval(*scrutinee)?) } else { None }, body.ty(*scrutinee).map_err(stop)?);
             let (mut bound, mut taken, mut plan) =
                 (clock_of(&body, known, root, *scrutinee).map_err(stop)?, None, Vec::new());

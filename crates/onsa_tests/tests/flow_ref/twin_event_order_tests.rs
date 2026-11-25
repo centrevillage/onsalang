@@ -24,7 +24,6 @@ fn the_places_of_the_groups_are_each_the_first_of_a_run_and_no_place_is_named_tw
 }
 
 #[test]
-#[ignore = "W7-11 U2: S-564"]
 fn the_first_division_is_the_same_in_the_interpreter() {
     let (stopped, bad) = run(true);
     assert!(bad.is_empty() && stopped > 0, "{stopped} runs stopped\n{}", bad.join("\n\n"));

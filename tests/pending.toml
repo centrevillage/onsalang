@@ -915,38 +915,3 @@ target = "tests/spec/flow_clock/modifier_n_const_expressions_w9_03.onsa"
 reasons = ["S-1077"]
 until = "W9-03"
 note = "修飾子の N の算術は W9-03 まで E0200（FlowConstExprs）"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/flow_semantics/event_stage_values.onsa"
-reasons = ["S-564", "S-1234"]
-until = "W7-11"
-note = "イベントの段の値（U2）。今は降下の E0200（W7-11 U2 が開く）"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/flow_semantics/event_hoist_values.onsa"
-reasons = ["S-564", "S-1234"]
-until = "W7-11"
-note = "イベントの段の値（U2）。今は降下の E0200（W7-11 U2 が開く）"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/flow_semantics/event_part_values.onsa"
-reasons = ["S-564", "S-1234"]
-until = "W7-11"
-note = "イベントの段の値（U2）。今は降下の E0200（W7-11 U2 が開く）"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/flow_semantics/event_saved_values.onsa"
-reasons = ["S-1240", "S-1244"]
-until = "W7-11"
-note = "遅延が保存する式の中のイベントの値（U2）。今は降下の E0200（W7-11 U2 が開く。分岐の形は W7-17 の形を含みうる）"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/flow_semantics/event_saved_branch_values.onsa"
-reasons = ["S-1240", "S-1244"]
-until = "W7-11"
-note = "遅延が保存する式の中のイベントの値（U2）。今は降下の E0200（W7-11 U2 が開く。分岐の形は W7-17 の形を含みうる）"

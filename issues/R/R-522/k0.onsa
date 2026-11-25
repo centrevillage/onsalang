@@ -1,0 +1,22 @@
+// onsa.toml
+// [package]
+// name = "k0"
+// edition = "2026"
+//
+// [export]
+// prefix = "k0_"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [test]
+// spec = ["§11.11"]
+// conformance = true
+
+const K0: U32 = 0
+@export
+pub flow f(x: U32 at sample) -> U32 at sample { if K0 < K0 { x } else { x + 1 } }

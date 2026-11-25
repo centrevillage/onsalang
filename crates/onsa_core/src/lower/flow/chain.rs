@@ -313,6 +313,10 @@ fn ops(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, w: &mut Walk, list:
                 };
                 copy(cx, out, (dst, k), pos, src, x, span)?;
             }
+            Op::Run { body, out: Out::Event } => {
+                let v = run(lw, cx, w, body)?;
+                give(lw, cx, out, w, v)?;
+            }
             Op::Run { body, out: to } => {
                 let v = run(lw, cx, w, body)?;
                 value = put(lw, cx, out, w, to, v, |w| Ok((0, w.head_out()?)))?.or(value);
@@ -442,6 +446,35 @@ fn reset(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, w: &Walk, at: u32
     Ok(())
 }
 
+/// The stage of the events of the instance of the walk (§11.11) after its run
+/// that gave `v`, the event or none: of an event its function, the one place
+/// that calls it, at the time of this one, which gives the event of the
+/// output or none to this function that gives it (`FlowInfo::gives`).
+fn give(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, w: &Walk, v: Expr) -> R<()> {
+    let (span, none) = (w.span, || internal(w.span, "an event given out of no source"));
+    let Clock::Event(src) = w.n.clock else { return Err(none()) };
+    let f = cx.flow.as_ref().expect("flow context");
+    let x = ClockStage::Event(src);
+    let &(_, f_id) = f.events.iter().find(|e| e.0 == x).ok_or_else(none)?;
+    let state = f.now.scopes.first().ok_or_else(none)?.state.clone();
+    let (time, gave) = (f.now.time.clone(), f.now.gave.clone().filter(|_| f.info.gives(x)));
+    let mut arm = Vec::new();
+    let v = materialize(cx, v, out, "__event");
+    let some = super::event_option(lw.a, span)?.keep;
+    let event = payload(lw, v.clone(), some, 0)?;
+    let ret = gave.as_ref().map_or(Ty::Unit, |g| g.ty.clone());
+    let stage = StageRun { g: w.info, f: f_id, ret, x, state, time, lets: Vec::new(), inputs: vec![event] };
+    let call = call_stage(stage, span)?;
+    match gave {
+        Some(g) => assign(&mut arm, &g, call)?,
+        None => expr_stmt(&mut arm, call),
+    }
+    let arms = vec![(some, Block { stmts: arm, value: None })];
+    let default = Some(Block::default());
+    expr_stmt(out, Expr::new(Ty::Unit, span, ExprKind::Switch { scrutinee: Box::new(v), arms, default }));
+    Ok(())
+}
+
 /// The result `v` of an op to `to` (§11.9, §11.10): nowhere, the value
 /// (made in a loop or under a guard: its window of it), the array of a
 /// boundary or the held output of a guard, each a window of the 2^m
@@ -465,6 +498,7 @@ fn put(
         Out::Value => To::Value,
         Out::Deal(b) => To::Array(b),
         Out::Held(g) => To::Held(g),
+        // [`give`].
         Out::Event => return Err(internal(w.span, "an event given out as a value")),
     };
     let (from, m) = frame(w)?;
@@ -578,13 +612,17 @@ pub(super) fn inputs_of(
 
 /// `v` as a value read later (§3.5): a `let` in `out`, of a place with an
 /// index too, whose panic is here ([`materialize`] leaves it where the place
-/// is read); a literal and a place with no index as they are.
+/// is read); a literal and a place with no index as they are, but, in a flow
+/// with events, a field: the stage of an event may write it before the read
+/// (§11.11).
 pub(super) fn hold(cx: &mut FnCx, out: &mut Vec<Stmt>, v: Expr, name: &str) -> Expr {
     let mut place = &v;
     while let ExprKind::Field { base, .. } = &place.kind {
         place = base;
     }
-    if matches!(place.kind, ExprKind::Lit(_) | ExprKind::Local(_)) {
+    let events = cx.flow.as_ref().is_some_and(|f| !f.info.events.is_empty());
+    let field = matches!(v.kind, ExprKind::Field { .. });
+    if matches!(place.kind, ExprKind::Lit(_) | ExprKind::Local(_)) && !(events && field) {
         return v;
     }
     let (l, span) = (cx.temp(name, v.ty.clone()), v.span);

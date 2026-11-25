@@ -38,9 +38,8 @@ fn the_other_cases_are_counted_and_whatever_passes_passes() {
 }
 
 #[test]
-fn what_a_condition_with_a_caret_chooses_reads_the_end_of_the_stage_and_the_rest_of_the_condition_where_it_is_written()
-{
+fn an_event_read_without_a_caret_is_the_value_where_it_is_written_whatever_condition_with_a_caret_chooses_it() {
     let r = run_cases(READS, &|_| true);
     assert!(r.failed.is_empty() && r.unavailable.is_empty(), "{:#?} {}", r.failed, show(&r));
-    assert_eq!(r.passed, ["r1", "r2", "r3", "r4", "r5", "r6"], "{}", show(&r));
+    assert_eq!(r.passed, ["r1", "r2", "r3", "r4", "r5", "r6", "r7", "r8"], "{}", show(&r));
 }

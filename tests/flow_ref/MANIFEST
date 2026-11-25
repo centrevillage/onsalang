@@ -23,11 +23,12 @@ file down_gather_inline_args.tsv rows=46 tests=3 evaluated=3 unavailable=0 skipp
 file down_two_boundaries_values.tsv rows=315 tests=18 evaluated=17 unavailable=0 skipped=1 waiting=0
 file enum_construct.tsv rows=21 tests=6 evaluated=6 unavailable=0 skipped=0 waiting=0
 file enum_construct_match.tsv rows=9 tests=2 evaluated=2 unavailable=0 skipped=0 waiting=1
-file event_hoist_values.tsv rows=34 tests=7 evaluated=7 unavailable=0 skipped=0 waiting=1
-file event_part_values.tsv rows=45 tests=7 evaluated=7 unavailable=0 skipped=0 waiting=1
-file event_saved_branch_values.tsv rows=15 tests=2 evaluated=2 unavailable=0 skipped=0 waiting=1
-file event_saved_values.tsv rows=70 tests=9 evaluated=9 unavailable=0 skipped=0 waiting=1
-file event_stage_values.tsv rows=60 tests=17 evaluated=17 unavailable=0 skipped=0 waiting=1
+file event_hoist_values.tsv rows=34 tests=7 evaluated=7 unavailable=0 skipped=0 waiting=0
+file event_part_values.tsv rows=45 tests=7 evaluated=7 unavailable=0 skipped=0 waiting=0
+file event_saved_branch_values.tsv rows=15 tests=2 evaluated=2 unavailable=0 skipped=0 waiting=0
+file event_saved_deferred_values.tsv rows=66 tests=9 evaluated=9 unavailable=0 skipped=0 waiting=0
+file event_saved_values.tsv rows=74 tests=9 evaluated=9 unavailable=0 skipped=0 waiting=0
+file event_stage_values.tsv rows=60 tests=17 evaluated=17 unavailable=0 skipped=0 waiting=0
 file feedback.tsv rows=7 tests=2 evaluated=2 unavailable=0 skipped=0 waiting=0
 file feedback_annotated.tsv rows=10 tests=1 evaluated=1 unavailable=0 skipped=0 waiting=0
 file flow_const_alias_derived_init_calls.tsv rows=22 tests=7 evaluated=7 unavailable=0 skipped=0 waiting=0
@@ -176,4 +177,4 @@ file when_identity_regressions.tsv rows=78 tests=5 evaluated=5 unavailable=0 ski
 file when_slow_head_values.tsv rows=47 tests=5 evaluated=5 unavailable=0 skipped=0 waiting=0
 file when_slow_values.tsv rows=86 tests=9 evaluated=9 unavailable=0 skipped=0 waiting=0
 file when_values.tsv rows=77 tests=10 evaluated=10 unavailable=0 skipped=0 waiting=0
-total files=177 rows=7120 tests=1295 evaluated=1178 unavailable=1 skipped=116 waiting=11
+total files=178 rows=7190 tests=1304 evaluated=1187 unavailable=1 skipped=116 waiting=6

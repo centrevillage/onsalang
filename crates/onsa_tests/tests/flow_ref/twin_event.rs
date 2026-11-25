@@ -7,7 +7,7 @@
 //!   the receiver that takes one event to two inputs (S-1236: `wt~(e, e)` has the two inputs of `tw` ticked one after the other as `tw~(e, e)` has them), a producer with no input (`sample / 4`, `sample / 2`, a `block`
 //!   value), the call a modifier is on (`ev~(x).reset_if~(c)`: the modifier takes the instance of the flow it is written on, whatever its body is, §11.10);
 //! - `split`: an expression that a delay stores, which reads the value of an event where it is written (S-1240) or the end of the stage (`^name`, S-1244), moved into a `let` that is at the same place or (with `^t`) below the
-//!   producer: `prev~((p at sample) + 1.0)` and `let t = (p at sample) + 1.0` `let q = prev~(t)` (the nested delay, the part computed at the clock of the event, the target of a `match~`, a condition with `^`);
+//!   producer: `prev~((p at sample) + 1.0)` and `let t = (p at sample) + 1.0` `let q = prev~(t)` (the nested delay, the part computed at the clock of the event, the target of a `match~`, a branch, a guard, the right side of `&&`, an arm and a part of `sample / 4` that a `^` chooses or holds, S-1249: a read without `^` is the value where it is written whatever the condition or the part reads with `^`);
 //! - `whole`: all of the body in a flow that has the ports of `fa` (`block` and `init` carried), `fb` is its call.
 //!
 //! The forms (the tag of each) are the producer in a `let` or not, a receiver in the argument of a producer, a producer with an input and a state (a delay in the `let` of an event), a hoisted one (an argument of the kind
@@ -94,6 +94,7 @@ const SA: &str = "F32 at sample";
 const WG: Wrap = wrap(PRODUCER, "g~(x)", ("wg", X, EV), "wg~(x)");
 const WSU: Wrap = wrap(RECEIVER, "su~(e)", ("wsu", E, SA), "wsu~(e)");
 const WHO: Wrap = wrap(RECEIVER, "ho~(e)", ("who", E, SA), "who~(e)");
+const WQ4: Wrap = wrap("producer0", "q4~()", ("wq4", "", EV), "wq4~()");
 const WEV: Wrap = wrap("call", "ev~(x)", ("wev", X, SA), "wev~(x)");
 
 #[rustfmt::skip]
@@ -122,7 +123,7 @@ pub const FORMS: &[Form] = &[
         wraps: &[WG, wrap("producer0", "q2~()", ("wq2", "", EV), "wq2~()"),
             Wrap { kind: "receiver2", text: "tw~(a, b)", name: "wt3", inputs: "p: F32 at event, q: F32 at event", out: SA, call: "wt3~(a, b)", body: "tw~(p, q)" }] },
     Form { tag: "quarter", lets: &["let e = q4~()"], out: "su~(e) + x", split: None,
-        wraps: &[wrap("producer0", "q4~()", ("wq4", "", EV), "wq4~()"), WSU] },
+        wraps: &[WQ4, WSU] },
     Form { tag: "slow_read", lets: &["let e = g~(x)", "let q = e at (sample / 4)"], out: "(q at sample) + ho~(e)", split: None, wraps: &[WG, WHO] },
     Form { tag: "saved_name", lets: &["let p = prev~(^d)", "let q = prev~((p at sample) + 1.0)", "let d = g~(x)"], out: "q",
         split: Some((&["let p = prev~(^d)", "let t = (p at sample) + 1.0", "let q = prev~(t)", "let d = g~(x)"], "q")), wraps: &[WG] },
@@ -131,7 +132,19 @@ pub const FORMS: &[Form] = &[
     Form { tag: "saved_nested", lets: &["let p = prev~(^d)", "let q = prev~(prev~((p at sample) + 1.0))", "let d = g~(x)"], out: "q",
         split: Some((&["let p = prev~(^d)", "let t = (p at sample) + 1.0", "let q = prev~(prev~(t))", "let d = g~(x)"], "q")), wraps: &[WG] },
     Form { tag: "saved_caret", lets: &["let p = prev~(^d)", "let q = prev~(if ^c > 0.0 { p at sample } else { x })", "let c = x - 0.5", "let d = g~(x)"], out: "q",
-        split: Some((&["let p = prev~(^d)", "let q = prev~(^t)", "let c = x - 0.5", "let d = g~(x)", "let t = if c > 0.0 { p at sample } else { x }"], "q")), wraps: &[WG] },
+        split: Some((&["let p = prev~(^d)", "let t = p at sample", "let q = prev~(if ^c > 0.0 { t } else { x })", "let c = x - 0.5", "let d = g~(x)"], "q")), wraps: &[WG] },
+    Form { tag: "saved_cond_branch", lets: &["let p = prev~(^d)", "let q = prev~(if ^c > (p at sample) { p at sample } else { x })", "let c = x - 0.5", "let d = g~(x)"], out: "q",
+        split: Some((&["let p = prev~(^d)", "let t = p at sample", "let q = prev~(if ^c > t { t } else { x })", "let c = x - 0.5", "let d = g~(x)"], "q")), wraps: &[WG] },
+    Form { tag: "saved_guards", lets: &["let p = prev~(^d)", "let q = prev~(match~ x { v if ^c > 0.0 => v * 2.0 + prev~(x), _ if (p at sample) > 1.0 => p at sample, _ => x })", "let c = x - 0.5", "let d = g~(x)"], out: "q",
+        split: Some((&["let p = prev~(^d)", "let t = p at sample", "let q = prev~(match~ x { v if ^c > 0.0 => v * 2.0 + prev~(x), _ if t > 1.0 => t, _ => x })", "let c = x - 0.5", "let d = g~(x)"], "q")), wraps: &[WG] },
+    Form { tag: "saved_and", lets: &["let p = prev~(^d)", "let q = prev~(if (^c > 0.0) && ((p at sample) > 1.0) { 1.0 } else { x })", "let c = x - 0.5", "let d = g~(x)"], out: "q",
+        split: Some((&["let p = prev~(^d)", "let t = (p at sample) > 1.0", "let q = prev~(if (^c > 0.0) && t { 1.0 } else { x })", "let c = x - 0.5", "let d = g~(x)"], "q")), wraps: &[WG] },
+    Form { tag: "saved_if_tilde", lets: &["let p = prev~(^d)", "let q = prev~(if~ ^c > 0.0 { prev~(x) + (p at sample) } else { x })", "let c = x - 0.5", "let d = g~(x)"], out: "q",
+        split: Some((&["let p = prev~(^d)", "let t = p at sample", "let q = prev~(if~ ^c > 0.0 { prev~(x) + t } else { x })", "let c = x - 0.5", "let d = g~(x)"], "q")), wraps: &[WG] },
+    Form { tag: "saved_init_branch", lets: &["let p = prev~(^d)", "let q = prev~(if ^h { (p * 2.0) at sample } else { x })", "let h = n == 1", "let d = g~(x)"], out: "q",
+        split: Some((&["let p = prev~(^d)", "let t = (p * 2.0) at sample", "let q = prev~(if ^h { t } else { x })", "let h = n == 1", "let d = g~(x)"], "q")), wraps: &[WG] },
+    Form { tag: "saved_slow_part", lets: &["let p = prev~(^d)", "let q = prev~(((((p at (sample / 4)) * 2.0) + ^m)) at sample)", "let m = prev~(^m) + F32.round_from(k at (sample / 4))", "let d = q4~()"], out: "q",
+        split: Some((&["let p = prev~(^d)", "let t = p at (sample / 4)", "let q = prev~((((t * 2.0) + ^m)) at sample)", "let m = prev~(^m) + F32.round_from(k at (sample / 4))", "let d = q4~()"], "q")), wraps: &[WQ4] },
     Form { tag: "saved_match", lets: &["let p = prev~(^d)", "let q = prev~(match~ (p at sample) > 1.0 { true => prev~(x), false => x * 2.0 })", "let d = g~(x)"], out: "q",
         split: Some((&["let p = prev~(^d)", "let s = match~ (p at sample) > 1.0 { true => prev~(x), false => x * 2.0 }", "let q = prev~(s)", "let d = g~(x)"], "q")), wraps: &[WG] },
     Form { tag: "mod_reset", lets: &[], out: "ev~(x).reset_if~(x < 0.0)", split: None, wraps: &[WEV] },

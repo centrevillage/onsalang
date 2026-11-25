@@ -48,7 +48,13 @@ struct Mix<'w, 'a> {
 
 /// The E0815 of the first place in the order of the file (§18.1).
 pub(super) fn check(w: &mut Walk) {
-    if first_event(w.a, w.def, w.cx).is_none() {
+    // With an event clock by a port of its heading or the output of a flow it calls.
+    let gives = |c: &NodeCall| match c.kind {
+        NodeKind::Instance(g) => w.a.def(g).as_flow().is_some_and(FlowDef::gives_events),
+        NodeKind::Delay(..) => false,
+    };
+    let port = w.a.def(w.def).as_flow().is_some_and(|f| f.event_port().is_some());
+    if !port && !w.cx.calls.iter().any(gives) {
         return;
     }
     let mixed = Mix::new(w, None).mixed();

@@ -1,0 +1,66 @@
+# flow_ref 1 source=tests/spec/flow_semantics/event_saved_deferred_values.onsa tests=9 evaluated=9 unavailable=0 skipped=0 waiting=0
+@ the arm of a match~ that ^k chooses reads the event where it is written, and a ^t in it the end of the stage
+render event_saved_deferred_values.match_arm sr=0x41000000 in x=[1 2 3 4 5 6 7 8 9] y=[0 1 0 2 3 0 0 4 5]
+out=[0 0 1 2 3 5 5 6 9]
+render event_saved_deferred_values.match_arm_let sr=0x41000000 in x=[1 2 3 4 5 6 7 8 9] y=[0 1 0 2 3 0 0 4 5]
+out=[0 0 1 2 3 5 5 6 9]
+render event_saved_deferred_values.match_arm_end sr=0x41000000 in x=[1 2 3 4 5 6 7 8 9] y=[0 1 0 2 3 0 0 4 5]
+out=[0 0 2 2 4 7 5 6 11]
+@ the branch of an if~ that ^k chooses reads the event where it is written, and a ^t in it the end of the stage
+render event_saved_deferred_values.if_tilde_branch sr=0x41000000 in x=[1 2 3 4 5 6 7 8 9] y=[1 0 1 1 0 1 1 0 0]
+out=[0 0 2 3 4 5 9 10 8]
+render event_saved_deferred_values.if_tilde_branch_let sr=0x41000000 in x=[1 2 3 4 5 6 7 8 9] y=[1 0 1 1 0 1 1 0 0]
+out=[0 0 2 3 4 5 9 10 8]
+render event_saved_deferred_values.if_tilde_branch_end sr=0x41000000 in x=[1 2 3 4 5 6 7 8 9] y=[1 0 1 1 0 1 1 0 0]
+out=[0 0 2 3 5 5 9 11 8]
+@ the condition of an if with ^k and the branch both read the event where it is written
+render event_saved_deferred_values.branch_and_cond sr=0x41000000 in x=[1 2 3 4 5 6 7 8 9] y=[2 2 2 2 2 5 5 0 0]
+out=[0 0 0 1 1 5 4 4 8]
+render event_saved_deferred_values.branch_and_cond_let sr=0x41000000 in x=[1 2 3 4 5 6 7 8 9] y=[2 2 2 2 2 5 5 0 0]
+out=[0 0 0 1 1 5 4 4 8]
+render event_saved_deferred_values.branch_and_cond_end sr=0x41000000 in x=[1 2 3 4 5 6 7 8 9] y=[2 2 2 2 2 5 5 0 0]
+out=[0 0 1 1 2 5 4 5 8]
+@ the guard after a guard with ^k and its arm read the event where it is written
+render event_saved_deferred_values.guard_after_guard sr=0x41000000 in x=[1 2 3 4 5 6 7 8 9] y=[0 0 0 0 0 9 9 9 9]
+out=[0 1 2 3 4 5 100 4 8]
+render event_saved_deferred_values.guard_after_guard_let sr=0x41000000 in x=[1 2 3 4 5 6 7 8 9] y=[0 0 0 0 0 9 9 9 9]
+out=[0 1 2 3 4 5 100 4 8]
+render event_saved_deferred_values.guard_after_guard_end sr=0x41000000 in x=[1 2 3 4 5 6 7 8 9] y=[0 0 0 0 0 9 9 9 9]
+out=[0 1 2 3 2 5 100 5 8]
+@ the right side of && with ^k on the left reads the event where it is written, and a ^t there the end of the stage
+render event_saved_deferred_values.and_right sr=0x41000000 in x=[1 2 3 4 5 6 7 8 9] y=[1 0 1 1 0 1 1 0 0]
+out=[0 0 0 0 0 0 1 1 0]
+render event_saved_deferred_values.and_right_let sr=0x41000000 in x=[1 2 3 4 5 6 7 8 9] y=[1 0 1 1 0 1 1 0 0]
+out=[0 0 0 0 0 0 1 1 0]
+render event_saved_deferred_values.and_right_end sr=0x41000000 in x=[1 2 3 4 5 6 7 8 9] y=[1 0 1 1 0 1 1 0 0]
+out=[0 0 0 0 1 0 1 1 0]
+@ the later condition of an if~ chain, chosen by ^k in the first, reads the event where it is written
+render event_saved_deferred_values.chain_condition sr=0x41000000 in x=[1 2 3 4 5 6 7 8 9] y=[9 0 0 9 0 0 9 0 0]
+out=[0 0 7 7 3 7 60 6 80]
+render event_saved_deferred_values.chain_condition_let sr=0x41000000 in x=[1 2 3 4 5 6 7 8 9] y=[9 0 0 9 0 0 9 0 0]
+out=[0 0 7 7 3 7 60 6 80]
+render event_saved_deferred_values.chain_condition_end sr=0x41000000 in x=[1 2 3 4 5 6 7 8 9] y=[9 0 0 9 0 0 9 0 0]
+out=[0 0 7 7 3 50 60 6 80]
+@ a part computed at the clock of the event, in the branch that ^h of init chooses, is the value before the event of the sample
+render event_saved_deferred_values.init_branch sr=0x41000000 cfg n=1 in x=[1 2 3 4 5 6 7 8 9]
+out=[0 0 0 2 2 4 8 8 10]
+render event_saved_deferred_values.init_branch_let sr=0x41000000 cfg n=1 in x=[1 2 3 4 5 6 7 8 9]
+out=[0 0 0 2 2 4 8 8 10]
+render event_saved_deferred_values.init_branch_end sr=0x41000000 cfg n=1 in x=[1 2 3 4 5 6 7 8 9]
+out=[0 0 2 2 4 8 8 10 14]
+render event_saved_deferred_values.init_branch sr=0x41000000 cfg n=0 in x=[1 2 3 4 5 6 7 8 9]
+out=[0 1 2 3 4 5 6 7 8]
+@ a part of sample / 4 that reads ^m is made at the end of its tick and reads the event where it is written
+render event_saved_deferred_values.slow_part sr=0x41000000 params k=2 frames=16
+out=[0 2 2 2 2 4 4 4 4 10 10 10 10 16 16 16]
+render event_saved_deferred_values.slow_part_let sr=0x41000000 params k=2 frames=16
+out=[0 2 2 2 2 4 4 4 4 10 10 10 10 16 16 16]
+render event_saved_deferred_values.slow_part_end sr=0x41000000 params k=2 frames=16
+out=[0 2 2 2 2 8 8 8 8 14 14 14 14 20 20 20]
+@ a ^name written in the part counts, and a part with one is read whole
+render event_saved_deferred_values.outer_caret sr=0x41000000 in x=[1 2 3 4 5 6 7 8 9]
+out=[0 2 5 6 10 14 15 19 23]
+render event_saved_deferred_values.whole_part sr=0x41000000 in x=[1 2 3 4 5 6 7 8 9]
+out=[0 1 4 4 8 13 13 17 22]
+render event_saved_deferred_values.split_part sr=0x41000000 in x=[1 2 3 4 5 6 7 8 9]
+out=[0 1 2 4 6 9 13 15 18]

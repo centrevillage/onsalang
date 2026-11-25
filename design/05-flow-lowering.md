@@ -63,7 +63,7 @@ rt fn resonator.process(inout s, params, input: Span[F32], inout output: Span[F3
   追記（2026-11-23、W7-16）: 子の遅い刻みの段（`tick_<N>`）も、呼び出し側のその段（`Entry::caller`）の関数の中で呼ぶ。子の段の関数を呼ぶ口は `phases::call_stage` の一か所で、時間の語は段が取る数に切って渡す。
 - `par~` は `[sub.State; N]` と `ForRange` に落とし、`i` はループ変数（`init` のクロックの値）。状態を持つものの無い `par` は状態のフィールドを作らない（S-1177）。
 - 追記（2026-11-23、W7-16 U5a〜U7）: 遅い刻みの段・時間・連鎖の降下。
-  - 段は sema の `ClockStage`（`Init`・`Block`・`Tick(k)`。`Tick(0)` が本体の `sample`）。`sample / N` の段（`FlowInfo::stages`。呼び先の遅い段も含む）は段ごとの関数 `tick_<N>(inout s, [t], <その段の入力>)` に降ろし、`tick` は `sample` の段の関数である。一つの生成器 `phases::gen_tick` が段を引数に取る。
+  - 段は sema の `ClockStage`（`Init`・`Block`・`Tick(k)`。`Tick(0)` が本体の `sample`）。`sample / N` の段（`FlowInfo::stages`。呼び先の遅い段も含む）は段ごとの関数 `tick_<N>(inout s, [t], <その段の入力>)` に降ろし、`tick` は `sample` の段の関数である。一つの生成器 `phases::gen_stage` が段を引数に取る。
     段の中の順は、保存する入力、`let` を上から、出力、段の終わり（遅延の保存と、`FlowInfo::late` のもの。`phases::end`、`StageCx::saving`）（§11.3、S-1233）。
     `let` と出力の式の中のその段の仕事（巻き上げた欄、検査、呼び先の段、遅延の `init`）は、書いた位置で `hoist::work` の一つの歩きが行う（インスタンスは `nodes::instance`、遅延は `nodes::delay_work`。一つの呼び出しは一つの関数で一度、`StageCx::done`）。
     `process` は遅い段を、位相のカウンタが N の倍数のときに `phases::drive` で呼ぶ（最初の刻みで動き、ホストの区切りに依らない、§11.9）。
@@ -85,4 +85,20 @@ rt fn resonator.process(inout s, params, input: Span[F32], inout output: Span[F3
   - 境界の内に書いた条件は頭の入力と同じに集める（`Port::Cond`、`bounds::cond_ring`）。欄は `Part::On`・`Count`・`Held` と、`when~` で止まる遅延の `Part::Ran`（名前と並びは S-1220 の仮、`plan/names.rs`）。
   - 組込みの遅延の受け手は `Ports::delay`（P = W = 第 1 引数のクロック K）で、表は段 K 一つ。保存は `store_node` が `Part::Ran` で守り、止まっている間も保存する値と `vdelay~` の `d` は評価する。
   - 修飾子の門（`ModifierChain::gate`・`check::gated`・`Feature::InstanceModifiers`）は無い。修飾子で E0200 にするのは `Feature::ResetTicksPastU32`（S-1225）だけで、イベントのクロックの条件の枝は内部エラー（W7-11 が書き直す）。
+- 追記（2026-11-25、W7-11 U2）: イベントの段の降下（§11.11）。
+  - 源（イベントの入力と、イベントを出す呼び出し）ごとの段 `ClockStage::Event(src)` を、関数 `ev_<k>(inout s, [t], <イベント>)` に降ろす（`k` は `FlowInfo::events` の番号、`FlowFns::events`）。
+    生成器は `phases::gen_stage` の一つで、段の中の順も遅い刻みの段と同じである。呼び出しの源の関数だけの枝は `StageCx` の二つで、`source`（引数のイベント）と `gave`（出力のイベントの受け）。
+  - 計画の表（`plan/events.rs`、`plan/entries.rs` の `close`）: イベントの入力に結び付いた源ごとの `Entry`（同じ源の二つの入力は `Run` を二つ、宣言の順、S-1236）と、
+    `EventPlan { src, from, parent, gives }`。`parent` は、作り手の出す段（`Op::Run { out: Out::Event }`）を呼ぶこの flow の段で、源は `parent` の森になる。
+  - 呼ぶ所: `ev_<k>` を呼ぶのは、`chain::give`（作り手の `Run` の直後の `Switch` の `Some` の腕。式の途中のその場所、S-1234・S-1235）と、入力の源を刻む呼び出し側の `Run` だけである。
+    時間は呼ぶ段の引数から取る（表が `parent` の語の数まで閉じてある）。
+  - 作り手のノードは、自分のイベントの段では「引数と条件 → その段の ops → 値は `source`」（`nodes::instance`。周期の段で済んだ仕事は `done` が段の関数ごとなので混ざらない）。
+  - 出力が呼び出しのイベントの flow は、出す段から `FlowInfo::emit` までの関数（`FlowInfo::gives`）が `Option` を返し、途中の関数は頭の局所 `__out`（初めは `None`）で受けて、保存の後に返す。
+    見出しにイベントのある flow は `process`・`render` を作らない（`FlowDef::awaits_events`、W10-07）。
+  - 場所の持ち直し: 書いた位置の値を後の文で読むもの（`chain::hold`。引数、段の終わりに読む条件）は、イベントのある flow では状態の欄も `let` に写す。間にイベントの段が走って欄を書くためである。イベントの無い flow の C は変わらない。
+  - 段の終わりに評価する式の中のイベントの読み（S-1240・S-1249）: `^` を付けない読み（イベントの名前と、`^` を自分で読まないイベントの段の巻き上げ）は、書いた位置の値である。
+    sema が、周期の遅延ごと（`PlanNode::saved`）と、段の終わりに回る遅い刻みの巻き上げごと（`Hoist::saved`）に、読む式の列を一つの関数 `events::saved` で作る。「`^` を自分で読む」は `FlowInfo::back`、道の条件も数える「段の終わりに回る」は `FlowInfo::late`。
+    Core は、書いた位置の歩き（`lower_flow_expr`・`delay_work`・`hoist::work`）で第 1 引数か巻き上げの中の仕事の後に、`nodes::saved_reads` が列の値を局所に取り、`expr_override` に置く（条件によらず一度。欄の読みは panic しない）。
+    イベントの段の遅延と巻き上げには要らない（読むのはその段の値だけで、段の間に変わらない）。
+  - 動かない形（修飾子、`par~`・`if~`・`match~` の中、自分の出力だけで刻む源。W7-17）は `FlowInfo::event_form` が持ち、`lower_flow` と `graph` が E0200 を出す（`FlowInfo::event_gate`）。
 - （2026-10-06、点検 C-66: 例を S-27、S-30、S-33、S-44、S-86、S-102、R-13、R-92 に合わせた。名前と巻き上げの細部は点検の C-36。）

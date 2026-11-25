@@ -55,6 +55,7 @@ pub(crate) fn lower_flow_expr(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId) -> R<O
             // At the end of the stage, done where the delay is written.
             if !cx.flow.as_ref().expect("flow context").now.saving {
                 super::hoist::walk(lw, cx, arg, &mut stmts)?;
+                saved_reads(lw, cx, &mut stmts, &info.node(id).saved, (name, info.node(id).owner))?;
             }
             // Of a chain, read by the ops of its entry (§11.10).
             if n.chain.is_empty() {
@@ -128,8 +129,11 @@ pub(super) fn instance(
         ClockStage::Init | ClockStage::Block => super::phases::own_stage(lw, cx, out, id, &state).map(|()| None)?,
         ClockStage::Event(_) | ClockStage::Tick(_) => {
             let made = super::chain::entry(lw, cx, out, id, &state)?;
+            let source = cx.flow.as_ref().expect("flow context").now.source.clone();
             match n.read {
                 _ if info.node_stage(id) != Some(stage) => None,
+                // The event, whose stage alone reads the call that gives it (§11.11).
+                _ if source.is_some() => source,
                 Read::Array(b) => Some(super::chain::dealt(lw, cx, out, id, &state, b, span)?),
                 // Read where the stage of its callee that makes the output runs (S-1088).
                 Read::Run => {
@@ -139,7 +143,7 @@ pub(super) fn instance(
         }
     };
     let value = match value {
-        Some(v) if early => Some(keep(cx, out, id, v)?),
+        Some(v) if early => Some(keep(cx, out, (&n.path, n.owner), v)?),
         Some(v) if !matches!(v.kind, ExprKind::Local(_)) => {
             let tmp = cx.temp(&n.path, v.ty.clone());
             out.push(stmt(span, StmtKind::Let(tmp, v)));
@@ -162,6 +166,9 @@ pub(super) fn delay_work(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, i
     // Its store at the end of the stage does the rest of its first argument.
     if let Some(arg) = n.kind.stored().filter(|_| !saving) {
         super::hoist::walk(lw, cx, arg, out)?;
+        if info.node_stage(id) == Some(stage) {
+            saved_reads(lw, cx, out, &n.saved, (&n.path, n.owner))?;
+        }
     }
     if let PlanKind::Vdelay { d, .. } = n.kind {
         super::hoist::walk(lw, cx, d, out)?;
@@ -188,18 +195,40 @@ pub(super) fn delay_work(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, i
             continue;
         }
         let v = lower_expr(lw, cx, cond)?;
-        let v = keep(cx, out, id, v)?;
+        let v = keep(cx, out, (&n.path, n.owner), v)?;
         cx.flow.as_mut().unwrap().now.expr_override.insert(cond, v);
     }
     Ok(())
 }
 
-/// `v`, made in the scope of the node `id`, as a value the end of the stage
-/// reads: a `let` ([`super::chain::hold`]); in a `par~`, whose loop ends
+/// The reads `saved` of events in what the end of the stage evaluates, of the
+/// delay or the hoisted part `of` by its path and its owner (S-1240, S-1249,
+/// [`PlanNode::saved`]), as values of this place, after the work in it: each
+/// once, where it is first reached, under no condition (a read of a field).
+pub(super) fn saved_reads(
+    lw: &mut Lowerer,
+    cx: &mut FnCx,
+    out: &mut Vec<Stmt>,
+    saved: &[ExprId],
+    of: (&str, Owner),
+) -> R<()> {
+    for &e in saved {
+        if cx.flow.as_ref().expect("flow context").now.expr_override.contains_key(&e) {
+            continue;
+        }
+        let v = lower_expr(lw, cx, e)?;
+        let v = keep(cx, out, of, v)?;
+        cx.flow.as_mut().unwrap().now.expr_override.insert(e, v);
+    }
+    Ok(())
+}
+
+/// `v`, made in the scope of `owner` for `name`, as a value the end of the
+/// stage reads: a `let` ([`super::chain::hold`]); in a `par~`, whose loop ends
 /// before, the element of the replica of a local of the function.
-fn keep(cx: &mut FnCx, out: &mut Vec<Stmt>, id: NodeId, v: Expr) -> R<Expr> {
+fn keep(cx: &mut FnCx, out: &mut Vec<Stmt>, (name, mut owner): (&str, Owner), v: Expr) -> R<Expr> {
     let info = cx.flow.as_ref().expect("flow context").info;
-    let (name, mut pars, mut owner) = (&info.node(id).path, Vec::new(), info.node(id).owner);
+    let mut pars = Vec::new();
     while let Owner::Par(p) = owner {
         pars.insert(0, p);
         owner = info.node(p).owner;

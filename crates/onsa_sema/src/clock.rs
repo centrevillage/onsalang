@@ -287,7 +287,7 @@ impl Clock {
     pub const SAMPLE: Clock = Clock::Tick(Ratio(0));
 
     /// An event clock (§11.11).
-    pub(crate) fn is_event(self) -> bool {
+    pub fn is_event(self) -> bool {
         matches!(self, Clock::Event(_))
     }
 

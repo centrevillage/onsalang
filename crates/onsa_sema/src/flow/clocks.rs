@@ -69,7 +69,6 @@ pub(crate) fn finish_flow(
         modifiers: fcx.node_exprs().into_iter().filter_map(|(e, r)| Some((e, r?))).collect(),
         output: fcx.output,
         derived_port: a.def(id).as_flow().and_then(|f| f.derived_port(a.def(id).name_span)),
-        event_word: first_event(a, id, &fcx),
         complete: false,
         ..Default::default()
     };
@@ -107,7 +106,8 @@ pub(crate) fn finish_flow(
     let out = w.output;
     let mut m = super::reads::mark_all((a, id), (ast, text), &body, &fcx, &w, &info.lets, out);
     (info.read_at, info.bound_at, info.sample_rate_at) = (m.read_at, m.bound_at, m.sample_rate_at);
-    (info.eval_at, info.time_at, info.work, info.late) = (m.eval_at, m.time_at, m.work, m.late);
+    (info.eval_at, info.time_at, info.work) = (m.eval_at, m.time_at, m.work);
+    (info.late, info.back) = (m.late, m.back);
     info.complete = w.diag.is_none() && m.diag.is_none() && w.inout_call.is_none() && fcx.held.is_none() && !fcx.unread;
     #[cfg(test)]
     WALKED.with(|x| x.borrow_mut().push((id, w.clone(), info.complete)));
@@ -136,17 +136,6 @@ pub(crate) fn finish_flow(
         a.diagnostics.push(d);
     }
     a.flows.insert(id, info);
-}
-
-/// The word `event` a flow has an event clock by: the first of the heading of
-/// the flow `id`, else of that of a flow with an event output it calls; none
-/// of a flow with no event clock.
-fn first_event(a: &Analysis, id: DefId, cx: &FlowCx) -> Option<Span> {
-    let callee = |c: &NodeCall| match c.kind {
-        NodeKind::Instance(g) => a.def(g).as_flow().filter(|f| f.gives_events())?.event_port(),
-        NodeKind::Delay(..) => None,
-    };
-    a.def(id).as_flow()?.event_port().or_else(|| cx.calls.iter().find_map(callee))
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

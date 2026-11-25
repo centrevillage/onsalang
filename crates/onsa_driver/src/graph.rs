@@ -142,8 +142,8 @@ impl Graph<'_> {
     fn output(&mut self, flow: &FlowDef) -> Option<Item> {
         let o = self.info.output?;
         let (rate, at) = (self.rate_of(o), self.ast.expr(o).span);
-        // Of a derived clock (§11.9), as the declaration writes the port: not the body's view of it.
-        let (ty, rate) = if flow.out_clock.of_ratio() {
+        // Of a derived clock (§11.9) or an event (§11.11), as the declaration writes the port: not the body's view of it.
+        let (ty, rate) = if flow.out_clock.of_ratio() || flow.out_clock.is_event() {
             (self.a.display_type(flow.out), flow.out_clock)
         } else {
             (self.ty_of(o), rate)

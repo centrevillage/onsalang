@@ -1,4 +1,4 @@
-# flow_ref 1 source=tests/spec/flow_semantics/event_hoist_values.onsa tests=7 evaluated=7 unavailable=0 skipped=0 waiting=1
+# flow_ref 1 source=tests/spec/flow_semantics/event_hoist_values.onsa tests=7 evaluated=7 unavailable=0 skipped=0 waiting=0
 @ an event output read at sample in an expression of sample has the event of the frame itself
 render event_hoist_values.call_at_sample sr=0x41000000 in x=[1 2 3]
 out=[2 4 6]

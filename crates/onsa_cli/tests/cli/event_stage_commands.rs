@@ -141,7 +141,6 @@ fn cases() -> Vec<(String, String, String)> {
 /// 宣言の順に一つずつ刻む（一つの刻みで出たイベントは、次の入力の刻みの前に済ませる）"; "`^名前` を通して作り手より上に書いた受け手もその時に刻む" (S-1234, S-1235, S-1236). One launch reads the 14 modules of the five groups: each stops at the
 /// line of the first place that is not made safe.
 #[test]
-#[ignore = "W7-11 U2: S-1234, S-1235, S-1236"]
 fn the_panic_of_a_position_that_ticks_events_is_the_first_in_the_order_of_the_ticks_u2() {
     let d = Dir::pkg("event_stage_panics");
     let all = cases();
@@ -199,7 +198,6 @@ pub flow quarters(
 /// and cut in pieces (a piece of 0 frames too), and after a `reset` that follows frames of other values. `held` (x = 1 2 3 ...): the events are the values over 2.5, the last one is held, 0 before the first and after the `reset`
 /// (also after a run with the events of x = 101): 0 0 3 4 5 6 7 8 9 10. `quarters` (p = 10): an event at the frames 0 4 8 with p, summed: 10 10 10 10 20 20 20 20 30 30 (the counter of the ticks restarts with `reset`).
 #[test]
-#[ignore = "W7-11 U2: S-564"]
 fn a_flow_with_events_inside_gives_the_values_by_hand_in_c_u2() {
     let dir = build_flows("event_stage_c", C_FLOWS);
     let held = driver(&dir, "held", true);

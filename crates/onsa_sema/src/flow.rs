@@ -73,10 +73,11 @@
 //! - `sample_rate_at: Option<ClockStage>` — the latest stage at which
 //!   `sample_rate()` is read (`None`: never; `Init`: no state field needed;
 //!   `Block` / `Tick`: store it, S-05). `sample_rate_calls` lists the calls.
-//! - `eval_at`, `time_at`, `work`, `late` — of the same walk: the stages it
-//!   evaluates a part of the body at (the `stages` come of them), those of
-//!   `sample_tick()` (the `time` comes of them), and the `let`s that hold
-//!   work of a stage ([`FlowInfo::work_in`]; `late`, what is of its end).
+//! - `eval_at`, `time_at`, `work`, `late`, `back` — of the same walk: the
+//!   stages it evaluates a part of the body at (the `stages` come of them),
+//!   those of `sample_tick()` (the `time` comes of them), and the `let`s that
+//!   hold work of a stage ([`FlowInfo::work_in`]; `late`, what is of its end,
+//!   and `back`, by a `^name` of its own).
 //! - `events`, `emit` — the event clocks (§11.11, [`plan`]'s `events`): their
 //!   sources, the stage that ticks each and the one that gives the output out.
 //! - `read_at: HashMap<LocalId, BTreeSet<ClockStage>>` — the stages at which
@@ -321,9 +322,12 @@ pub struct FlowInfo {
     /// (§11.3, S-1244), with what the delays store, since it reads a `^name`
     /// of a `let` below or a binding one chooses: the hoisted fields and the
     /// checks, the `init` of a delay, and the `match~` of such bindings, of
-    /// which the choice alone is there (S-1245); and the names of an event a
-    /// faster stage reads so (S-1240).
+    /// which the choice alone is there (S-1245).
     pub late: HashSet<ExprId>,
+    /// Of the hoisted fields and the checks of `late`, those that read a
+    /// `^name` or a binding one chooses themselves, and not by the conditions
+    /// on their path alone.
+    pub(crate) back: HashSet<ExprId>,
     /// The ticks of the body slower than its `sample` (§11.9), slowest
     /// first: of its inputs, its output and those the marking evaluates at
     /// ([`FlowInfo::eval_at`]), and the slow stages its instances run the
@@ -363,10 +367,6 @@ pub struct FlowInfo {
     /// (§11.11, W7-17): of the body, or a source nothing outside it ticks
     /// (`plan`'s `events`).
     pub(crate) event_form: Option<Span>,
-    /// The word `event` of a heading the flow has an event clock by
-    /// (`clocks::first_event`): the place of [`FlowInfo::event_gate`] until
-    /// the Core lowers the stages of `events` (W7-11 U2, stage b).
-    pub(crate) event_word: Option<Span>,
     pub complete: bool,
 }
 

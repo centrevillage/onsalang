@@ -214,12 +214,12 @@ fn the_time_of_an_event_is_of_the_stages_that_tick_it() {
 }
 
 /// The text of the form not run of the flow `top` of `src`, and whether it
-/// has its tables; the E0200 of it is still of a word `event`.
+/// has its tables, with the E0200 of it alone.
 fn form(src: &str) -> Option<String> {
     let (_, a, text) = analysis(src);
     let f = flow(&a, "top");
     assert_eq!(f.event_form.is_none(), f.planned(), "{src}");
-    assert!(f.event_gate().is_some(), "{src}");
+    assert_eq!(f.event_gate().map(|d| d.span), f.event_form, "{src}");
     if f.event_form.is_some() {
         assert!(f.nodes.iter().all(|n| n.entries.is_empty()) && f.fields.is_empty() && f.emit.is_none(), "{src}");
     }
@@ -362,15 +362,47 @@ fn a_delay_reads_the_events_of_what_it_stores_where_it_is_written() {
     assert_eq!(stored("match x { v if (p at sample) > v => x, v => v + (m at sample) }"), ["p", "m"]);
     assert_eq!(stored("if~ (p at sample) > 3 { prev~(x) } else { m at sample }"), ["p", "m"]);
     assert_eq!(stored("if x > 3 && (p at sample) > 3 { x } else { 0 }"), ["p"]);
-    // Not under a condition that reads a `^name`, a binding one chooses, or
-    // what an outer one chooses; under one that reads a delay of a `^name`.
-    assert_eq!(stored("if ^k > 0 { p at sample } else { x }"), no::<String>());
-    assert_eq!(stored("(if ^k > 0 { p at sample } else { x }) + (p at sample)"), ["p"]);
-    assert_eq!(stored("match ^k { 0 => p at sample, v => v }"), no::<String>());
-    assert_eq!(stored("if ^k > 0 { if x > 1 { p at sample } else { x } } else { x }"), no::<String>());
-    assert_eq!(stored("if prev~(^k) > 0 { p at sample } else { x }"), ["p"]);
+    // Under a condition that reads a `^name` or a binding one chooses too
+    // (S-1249), a part of an event with no `^` of its own as well.
+    assert_eq!(stored("if ^k > 0 { p at sample } else { x }"), ["p"]);
+    assert_eq!(stored("if ^k > (p at sample) { p at sample } else { x }"), ["p", "p"]);
+    assert_eq!(stored("match ^k { 0 => p at sample, v => v }"), ["p"]);
+    let g4 = "  let p = prev~(^z)\n  let y = prev~(if ^h > 0 { (p * 2) at sample } else { x })\n  let h = U32.trunc_from(sample_rate())\n  let z = gen~(x)\n  y";
+    assert_eq!(saved(g4, "y"), ["p * 2"]);
+    assert_eq!(stored("match~ x { v if v > ^k => prev~(x), v if v > (p at sample) => v, _ => 0 }"), ["p"]);
+    assert_eq!(stored("if~ ^k > x { prev~(x) } else if (p at sample) > 3 { 1 } else { m at sample }"), ["p", "m"]);
+    assert_eq!(stored("if x > 3 || (^k > 3 && (p at sample) > 3) { x } else { 0 }"), ["p"]);
     // The arms of a `match~` are no conditional positions (§11.3).
     assert_eq!(stored("match~ ^k { 0 => prev~(x), v => v + (p at sample) }"), ["p"]);
+}
+
+/// S-1249: the parts of a slower tick of the end of the stage, which the
+/// delay does not read into, each with a list of its own by the same rule; no
+/// other part has one.
+#[test]
+fn a_part_of_the_end_of_a_slower_tick_reads_the_events_where_it_is_written() {
+    let parts = |arg: &str| {
+        let (p, a, text) = analysis(&format!(
+            "pub flow top(x: U32 at sample, x4: U32 at (sample / 4), b: U32 at block) -> U32 at sample {{\n  let p = prev~(^z)\n  let y = prev~({arg})\n  let k = x4 + 1\n  let z = gen4~(x4)\n  y + (k at sample) + b\n}}\n"
+        ));
+        let (f, ast) = (flow(&a, "top"), &p.modules[0].parsed.ast);
+        let text = |e| ast.expr(e).span.text_in(&text).to_string();
+        let y = f.nodes.iter().find(|n| n.path == "y").expect("the delay").saved.iter().map(|&e| text(e)).collect();
+        let parts = f.hoists.iter().map(|h| (text(h.expr), h.saved.iter().map(|&e| text(e)).collect()));
+        (y, parts.filter(|h: &(String, Vec<String>)| !h.1.is_empty()).collect())
+    };
+    let list =
+        |of: &str, saved: &[&str]| vec![(of.to_string(), saved.iter().map(|s| s.to_string()).collect::<Vec<_>>())];
+    let none = no::<String>();
+    let f1 = "((p at (sample / 4)) * 2 + ^k) at sample";
+    assert_eq!(parts(f1), (none.clone(), list("(p at (sample / 4)) * 2 + ^k", &["p"])));
+    let both = "(((p at (sample / 4)) * 2 + ^k) at sample) + (p at sample)";
+    assert_eq!(parts(both), (vec!["p".into()], list("(p at (sample / 4)) * 2 + ^k", &["p"])));
+    let part = "(((p * 2) at (sample / 4)) + ((^z + 1) at (sample / 4)) + ^k) at sample";
+    let of = "((p * 2) at (sample / 4)) + ((^z + 1) at (sample / 4)) + ^k";
+    assert_eq!(parts(part), (none.clone(), list(of, &["p * 2"])));
+    // Evaluated where it is written.
+    assert_eq!(parts("((p at (sample / 4)) * 2 + x4) at sample"), (none, Vec::new()));
 }
 
 /// Not in what another place makes: a part of a slower tick, a call and its

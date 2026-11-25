@@ -110,6 +110,9 @@ pub struct Hoist {
     /// its field in the `State`; in the replica of a `par~`, its `name`.
     pub path: String,
     pub span: Span,
+    /// Of a part of a tick of [`FlowInfo::late`], what it reads of events
+    /// where it is written (`plan`'s `events::saved`, S-1249).
+    pub saved: Vec<ExprId>,
 }
 
 /// Where the marking evaluates an expression.
@@ -335,7 +338,7 @@ pub(super) fn table(info: &mut FlowInfo, ast: &Ast, marked: Vec<(ExprId, ClockSt
             _ => scopes.get(r).map_or(OUTPUT_SCOPE, String::as_str),
         };
         let path = names::qualify(scope, &name);
-        hoists.push(Hoist { expr, stage, guarded, owner, name, path, span });
+        hoists.push(Hoist { expr, stage, guarded, owner, name, path, span, saved: Vec::new() });
     }
     info.hoisted = hoists.iter().enumerate().map(|(i, h)| (h.expr, HoistId(i as u32))).collect();
     info.hoists = hoists;

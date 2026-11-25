@@ -207,24 +207,6 @@ fn the_e0200_of_the_border_is_of_the_first_port_of_the_heading() {
     }
 }
 
-/// The E0200 of a flow that does not run in this version is at the first `event` of its heading, the inputs before the output.
-#[test]
-fn the_e0200_of_a_run_is_at_the_first_event_of_the_heading() {
-    let heads = [
-        "flow k(x: F32 at sample, m: F32 at event, n: F32 at event) -> F32 at sample {\n  x\n}\n",
-        "flow k(x: F32 at sample, m: F32 at event) -> F32 at event {\n  Some(m)\n}\n",
-        "flow k(x: F32 at sample) -> F32 at event {\n  Some(x)\n}\n",
-    ];
-    for head in heads {
-        let d = Dir::pkg("event_gate_first_port");
-        d.write("main.onsa", &format!("pub {head}"));
-        let out = run(d.root(), &["dump", "--core"]);
-        assert_eq!(out.code, 1, "{}{}", out.stdout, out.stderr);
-        let at = format!("main.onsa:1:{}: error[E0200]", "pub ".len() + head.find("event").expect("event") + 1);
-        assert!(out.stdout.contains(&at) || out.stderr.contains(&at), "no `{at}`:\n{}{}", out.stdout, out.stderr);
-    }
-}
-
 // ---------------------------------------------------------------- the note of the E0302 of `process_inplace`
 
 fn check_main(src: &str) -> Vec<Value> {

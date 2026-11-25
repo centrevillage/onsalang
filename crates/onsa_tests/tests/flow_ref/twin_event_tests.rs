@@ -7,8 +7,10 @@ use super::twin_event::{Ran, cover, covers, make, run};
 use super::twin_tests::heavy_seeds;
 
 /// The seeds of the gate: chosen again when a change of the generator moves what they make and `COVER` breaks.
-const GATE: [u64; 29] =
-    [0, 1, 2, 3, 4, 5, 6, 8, 9, 10, 12, 13, 14, 15, 17, 18, 20, 22, 23, 25, 27, 40, 51, 62, 65, 71, 73, 92, 115];
+const GATE: [u64; 37] = [
+    0, 1, 2, 4, 5, 8, 9, 10, 11, 12, 13, 17, 19, 20, 21, 22, 23, 24, 25, 26, 31, 33, 34, 36, 37, 38, 41, 47, 50, 52,
+    54, 66, 81, 133, 156, 196, 308,
+];
 
 /// The seeds are run, and each program is evaluated whole: every test is evaluated, an assert held, and no program is left out.
 fn check(seeds: &[u64]) -> Ran {
@@ -46,7 +48,6 @@ fn every_program_of_the_gate_has_a_twin_that_is_written_another_way() {
 }
 
 #[test]
-#[ignore = "W7-11 U2: S-564"]
 fn the_twins_of_the_gate_seeds_agree_in_the_interpreter() {
     let r = run(GATE.to_vec(), false, true);
     assert!(r.bad.is_empty(), "{}", r.bad.join("\n\n"));

@@ -219,3 +219,163 @@ pub flow f() -> F32 at sample {
     let slow = crate::dump::dump_item(&m, "t.f.tick_8");
     assert!(slow.contains("t.rate.tick(inout s.1)"), "{slow}");
 }
+
+/// The flows of the tests of events, and `body` the rest of the module.
+fn events(body: &str) -> String {
+    let flows = "flow gen(x: U32 at sample) -> U32 at event { if x % 3 != 0 { Some(x) } else { None } }
+flow fwd(m: U32 at event) -> U32 at event { Some(m) }
+flow part(x: U32 at sample, c: U32 at event) -> U32 at event { let _ = 100 / c\n  Some(x) }
+flow both(a: U32 at event, b: U32 at event) -> U32 at event { let _ = b\n  Some(a) }
+flow cnt(m: U32 at event) -> U32 at sample { let n = prev~(^n) + m\n  n }
+flow stamp(m: U32 at event) -> U32 at event { Some(m + sample_tick()) }
+";
+    format!("{flows}{body}")
+}
+
+/// The function `t.<name>` of [`events`] of `body`, as in the dump of the Core.
+fn event_fn(body: &str, name: &str) -> String {
+    crate::dump::dump_item(&crate::tests::core(&events(body)), &format!("t.{name}"))
+}
+
+/// That `text` holds each of `parts` once, in their order.
+fn in_order(text: &str, parts: &[&str]) {
+    let places: Vec<usize> = parts.iter().map(|p| at(text, p)).collect();
+    assert!(places.is_sorted(), "{parts:?} at {places:?} in:\n{text}");
+}
+
+/// §11.11, S-1234, S-1235: the stage of the events of a call is run once,
+/// where the call is written, after its run; a receiver above it has run by
+/// then, and its own tick is in that stage, as what the delay there stores.
+#[test]
+fn the_stage_of_an_event_runs_after_the_run_of_the_call_that_gives_it() {
+    let f = "pub flow f(x: U32 at sample) -> U32 at sample {
+  let h = cnt~(prev~(^d))
+  let d = gen~(x)
+  h + (d at sample)
+}";
+    let t = event_fn(f, "f.tick");
+    in_order(
+        &t,
+        &["t.cnt.tick(inout", "let __event", "t.gen.tick(inout", "Some =>", "t.f.ev_0(inout s, payload(", "let __out"],
+    );
+    let e = event_fn(f, "f.ev_0");
+    in_order(&e, &["ev: U32) -> ()", "t.cnt.ev_0(inout", "let d: U32 = ev\n", "= d\n}"]);
+    assert!(!e.contains("t.gen."), "{e}");
+}
+
+/// The call that gives an event and takes one of it (S-1235): at its event
+/// its arguments, its tick, then the event as its value.
+#[test]
+fn a_call_that_takes_its_own_event_ticks_before_it_is_read() {
+    let f = "pub flow f(x: U32 at sample) -> U32 at sample {
+  let d = part~(x, prev~(^d))
+  d at sample
+}";
+    let t = event_fn(f, "f.tick");
+    in_order(&t, &["t.part.tick(inout", "t.f.ev_0("]);
+    assert!(!t.contains("t.part.ev_0"), "{t}");
+    in_order(&event_fn(f, "f.ev_0"), &["t.part.ev_0(inout", "d.prev_0: U32 = s.", "    ev\n", "= d\n}"]);
+}
+
+/// S-1236: one event of two inputs is a tick of each, in their order, and
+/// what the first gives is done before the second.
+#[test]
+fn the_events_of_the_first_tick_are_before_the_second() {
+    let f = "pub flow f(x: U32 at sample) -> U32 at sample {
+  let m = gen~(x)
+  let e = both~(m, m)
+  e at sample
+}";
+    in_order(&event_fn(f, "f.ev_0"), &["t.both.ev_0(inout", "t.f.ev_1(inout s, payload(", "t.both.ev_1(inout"]);
+}
+
+/// An output that is the event of a call goes through the functions from the
+/// stage that makes it to the one the caller runs, after the stores of each.
+#[test]
+fn the_functions_on_the_way_give_the_event_of_the_output() {
+    let f = "pub flow line(x: U32 at sample) -> U32 at event {
+  let a = gen~(x)
+  let n = prev~(^n) + a
+  let b = fwd~(n)
+  Some(b)
+}
+pub flow f(x: U32 at sample) -> U32 at sample { cnt~(line~(x)) }";
+    let option = "std.core.Option__U32";
+    let (t, a, b) = (event_fn(f, "line.tick"), event_fn(f, "line.ev_0"), event_fn(f, "line.ev_1"));
+    in_order(
+        &t,
+        &[&format!("let __out: {option} = {option}.None"), "__out = t.line.ev_0(", "t.fwd.tick(", "  __out\n}"],
+    );
+    in_order(&a, &[&format!("let __out: {option} = {option}.None"), "__out = t.line.ev_1(", "= n\n", "  __out\n}"]);
+    in_order(&b, &[&format!("let __out: {option} = {option}.Some(b)"), "  __out\n}"]);
+    // No function of the boundary of a flow with an event (W10-07).
+    let m = crate::tests::core(&events(f));
+    let made =
+        |n: &str| m.flows.iter().find(|x| x.name == n).map(|x| (x.fns.process.is_some(), x.fns.render.is_some()));
+    assert_eq!([made("t.line"), made("t.f")], [Some((false, false)), Some((true, true))]);
+}
+
+/// §3.5, S-1241: a condition read where it is written is kept in a local
+/// before the call below that gives the event it reads.
+#[test]
+fn a_condition_of_an_event_is_kept_before_the_stage_of_the_event() {
+    let f = "pub flow f(x: U32 at sample) -> U32 at sample {
+  let q = prev~(^z) > 3
+  let y = prev~(prev~(x).reset_if~(q at sample))
+  let z = gen~(x)
+  y
+}";
+    in_order(&event_fn(f, "f.tick"), &["let y.prev_0@5: Bool = s.0\n", "t.gen.tick(", "t.f.ev_0(", "if y.prev_0@5 {"]);
+}
+
+/// S-1240, S-1249: what a delay stores reads an event with no `^` in a local
+/// made where it is written, after the work in it and whatever a condition
+/// with a `^` chooses; a `^name` at the end of the stage. A part of
+/// `sample / 4` of the end of its stage too, in the function of that tick.
+#[test]
+fn what_a_delay_stores_of_events_is_read_where_it_is_written() {
+    let f = "pub flow f(x: U32 at sample) -> U32 at sample {
+  let p = prev~(^d)
+  let q = prev~((gen~(x + 1) at sample) + (if ^k > 1 { p at sample } else { ^d at sample }))
+  let k = x + 1
+  let d = gen~(x)
+  q
+}";
+    let t = event_fn(f, "f.tick");
+    let (inner, outer) = (at(&t, "(x + 1:U32))"), at(&t, "let k: U32"));
+    let reads: Vec<usize> = t.match_indices("let q@").map(|x| x.0).collect();
+    assert_eq!(
+        reads.iter().filter(|&&r| inner < r && r < outer).count(),
+        3,
+        "two reads and the value of the delay:\n{t}"
+    );
+    let f = "pub flow f(x: U32 at (sample / 4)) -> U32 at sample {
+  let p = prev~(^d)
+  let q = prev~(((p at (sample / 4)) * 2 + ^k) at sample)
+  let k = x + 1
+  let d = gen4~(x)
+  q
+}
+flow gen4(x: U32 at (sample / 4)) -> U32 at event { Some(x) }";
+    let t = event_fn(f, "f.tick_4");
+    in_order(
+        &t,
+        &["let q._hoist_0: U32 = s.", "let k: U32", "t.gen4.tick_4(", "t.f.ev_0(", "((q._hoist_0 * 2:U32) + k)"],
+    );
+    assert!(!event_fn(f, "f.tick").contains("_hoist"), "{t}");
+}
+
+/// §11.4: the stage of an event takes the time of the stage that ticks it.
+#[test]
+fn the_stage_of_an_event_takes_the_time_of_its_position() {
+    let f = "pub flow f(x: U32 at sample) -> U32 at sample {
+  let a = gen~(x)
+  let b = stamp~(a)
+  b at sample
+}";
+    at(&event_fn(f, "f.tick"), "t.f.ev_0(inout s, t, payload(");
+    in_order(
+        &event_fn(f, "f.ev_0"),
+        &["(inout s: t.f.State, t: U32, ev: U32)", "t.stamp.ev_0(inout s.", "t.f.ev_1(inout s, payload("],
+    );
+}

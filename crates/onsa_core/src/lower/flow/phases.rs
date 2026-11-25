@@ -3,6 +3,7 @@
 //! driver of the slower ticks ([`drive`]).
 
 use super::*;
+use onsa_sema::flow::EventFrom;
 
 /// `init(cfg, sample_rate) -> State`.
 pub(super) fn gen_init<'b>(lw: &mut Lowerer<'b>, shape: &FlowShape, info: &'b FlowInfo, fns: &FlowFns) -> R<()> {
@@ -320,17 +321,19 @@ pub(super) fn gen_ctl<'b>(lw: &mut Lowerer<'b>, shape: &FlowShape, info: &'b Flo
     Ok(())
 }
 
-/// The function of the tick `stage` (§11.4, §11.9): `tick(inout s, [t],
+/// The function of the stage `stage` (§11.4, §11.9): `tick(inout s, [t],
 /// <Sig inputs>)` of the `sample` of the body, `tick_<N>(inout s, [t],
-/// <its inputs>)` of a slower one, which [`drive`] or a caller
+/// <its inputs>)` of a slower one, `ev_<k>(inout s, [t], <its event>)` of a
+/// source of events (§11.11), which [`drive`] or a caller
 /// ([`super::chain::entry`]) calls through [`call_stage`]; the words of the
 /// time `t`, `t_hi` of a stage that takes them (`FlowInfo::time_words`).
 /// In order (§11.3, S-1233): its inputs the state keeps stored, its `let`s
 /// and its work in the others ([`Gen::stage_lets`]), the output of the stage
 /// that makes it (`FlowInfo::out_stage`), the stores of its nodes ([`end`]),
 /// and last in `tick` the counter of the phase advanced when it is
-/// the grid of the slower stages (`FlowInfo::counter`).
-pub(super) fn gen_tick<'b>(
+/// the grid of the slower stages (`FlowInfo::counter`). Its value is the
+/// output, or what the stage it ticks gave of it (`FlowInfo::gives`).
+pub(super) fn gen_stage<'b>(
     lw: &mut Lowerer<'b>,
     shape: &FlowShape,
     info: &'b FlowInfo,
@@ -338,9 +341,10 @@ pub(super) fn gen_tick<'b>(
     stage: ClockStage,
 ) -> R<()> {
     let span = shape.span;
-    let fid = fns.stage_fn(stage).ok_or_else(|| internal(span, format!("no function of the tick {stage:?}")))?;
+    let fid = fns.stage_fn(stage).ok_or_else(|| internal(span, format!("no function of the stage {stage:?}")))?;
     let makes_out = info.out_stage == Some(stage);
-    let out_ty = if makes_out { shape.out_val.clone() } else { Ty::Unit };
+    let gives = info.gives(stage) && !makes_out;
+    let out_ty = if makes_out || gives { shape.out_val.clone() } else { Ty::Unit };
     let mut g = Gen::new(lw, shape, info, stage, out_ty.clone())?;
     let s = g.param("s", Mode::Inout, Ty::Struct(shape.state_ty));
     for name in ["t", "t_hi"].into_iter().take(info.time_words(stage)) {
@@ -351,6 +355,16 @@ pub(super) fn gen_tick<'b>(
     for i in &inputs {
         g.param_local(LocalId(i.local.0), Mode::Borrow);
     }
+    if let ClockStage::Event(src) = stage
+        && let Some(EventFrom::Call(id)) = info.event(src).map(|p| p.from)
+    {
+        let t = g.cx.info.expr_types.get(&info.node(id).expr).copied();
+        let t = t.ok_or_else(|| internal(span, "an event of no type"))?;
+        let t = lw.core_ty(t, &[], span)?;
+        let v = g.param("ev", Mode::Borrow, t);
+        g.flow().now.source = Some(v);
+    }
+    g.flow().events = fns.events.clone();
     g.flow().push_scope(s.clone());
     // S-1213: an input at `sample / N` is the argument of its tick,
     // kept until the next (an argument of a parameter kind too).
@@ -362,9 +376,16 @@ pub(super) fn gen_tick<'b>(
     }
     g.slots(info)?;
     g.state_overrides(lw, info, &s)?;
+    let mut out = None;
+    if gives {
+        let Ty::Enum(ty) = out_ty else { return Err(internal(span, "an event given out in no `Option`")) };
+        let none = ExprKind::Variant { ty, tag: super::event_option(lw.a, span)?.exit, fields: Vec::new() };
+        let gave = g.let_("__out", Expr::new(out_ty.clone(), span, none));
+        g.flow().now.gave = Some(gave.clone());
+        out = Some(gave);
+    }
     g.const_lets(lw, info)?;
     g.stage_lets(lw, info, &s)?;
-    let mut out = None;
     if makes_out {
         let output = info.output.ok_or_else(|| internal(span, "flow without an output expression"))?;
         let v = lower_expr(lw, &mut g.cx, output)?;

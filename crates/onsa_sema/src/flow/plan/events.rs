@@ -97,24 +97,27 @@ fn first(spans: Vec<Span>) -> Option<Span> {
     spans.into_iter().min_by_key(|s| (s.start, s.end))
 }
 
-/// What the rest of `arg`, which a delay at a tick stores, reads of events
-/// (§11.3, S-1240): each name of one and each part computed at one, but for
-/// those of [`FlowInfo::late`], in the order of the text. Its value is that
-/// of the place of the delay, though what it stores is made at the end of
-/// the stage. Not in what is of another place: a hoisted part, a call, the
-/// condition of a modifier, and of another delay but the `d` of a `vdelay~`.
-pub(super) fn saved(info: &FlowInfo, ast: &Ast, arg: ExprId) -> Vec<ExprId> {
-    let (mut saved, mut todo) = (Vec::new(), vec![arg]);
+/// What `of` reads of events (§11.3, S-1240, S-1249): the rest of what a
+/// delay at a tick stores, or a `part` of a tick of [`FlowInfo::late`]: each
+/// name of one and each part computed at one, but for a `^name` and those that
+/// read one themselves ([`FlowInfo::back`]), in the order of the text. Its
+/// value is that of its place, though what is made of it is made at the end
+/// of the stage. Not in what is of another place: another hoisted part, a
+/// call, the condition of a modifier, and of another delay but the `d` of a
+/// `vdelay~`.
+pub(super) fn saved(info: &FlowInfo, ast: &Ast, of: ExprId, part: bool) -> Vec<ExprId> {
+    let (mut saved, mut todo) = (Vec::new(), vec![of]);
     while let Some(e) = todo.pop() {
-        let read = match (info.hoist_of(e), info.body.targets.get(&e)) {
+        let read = match (info.hoist_of(e).filter(|_| !part || e != of), info.body.targets.get(&e)) {
             (Some(h), _) => Some(info.hoist(h).stage),
+            (None, _) if matches!(ast.expr(e).kind, ExprKind::Feedback(_)) => None,
             // A binding of an arm has the value of its place.
             (None, Some(&Target::Local(l))) if info.body.locals[l.0 as usize].kind != LocalKind::MatchBind => {
                 info.own_stage(l)
             }
             _ => None,
         };
-        if matches!(read, Some(ClockStage::Event(_))) && !info.late.contains(&e) {
+        if matches!(read, Some(ClockStage::Event(_))) && !info.back.contains(&e) {
             saved.push(e);
         }
         match (info.modifiers.get(&e), info.node_of.get(&e).map(|&id| &info.node(id).kind)) {

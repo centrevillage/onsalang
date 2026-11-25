@@ -636,10 +636,20 @@ pub(super) fn build(
     info.stages = stage::slow_stages(info);
     info.events = events::sources(info);
     info.event_form = events::form(a, info, ast);
-    for i in (0..info.nodes.len()).filter(|_| !info.events.is_empty()) {
-        let tick = matches!(info.node_stage(NodeId(i as u32)), Some(ClockStage::Tick(_)));
-        if let Some(arg) = info.nodes[i].kind.stored().filter(|_| tick) {
-            info.nodes[i].saved = events::saved(info, ast, arg);
+    if info.events.is_empty() {
+        return;
+    }
+    // Those of an event read none that changes before its end.
+    let tick = |s| matches!(s, Some(ClockStage::Tick(_)));
+    for i in 0..info.nodes.len() {
+        if let Some(arg) = info.nodes[i].kind.stored().filter(|_| tick(info.node_stage(NodeId(i as u32)))) {
+            info.nodes[i].saved = events::saved(info, ast, arg, false);
+        }
+    }
+    for i in 0..info.hoists.len() {
+        let (e, s) = (info.hoists[i].expr, info.hoists[i].stage);
+        if tick(Some(s)) && info.late.contains(&e) {
+            info.hoists[i].saved = events::saved(info, ast, e, true);
         }
     }
 }
