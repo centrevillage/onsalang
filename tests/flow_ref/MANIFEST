@@ -27,7 +27,7 @@ file event_arm_values.tsv rows=73 tests=14 evaluated=14 unavailable=0 skipped=0 
 file event_block_values.tsv rows=60 tests=8 evaluated=8 unavailable=0 skipped=0 waiting=0
 file event_chain_more_values.tsv rows=108 tests=16 evaluated=16 unavailable=0 skipped=0 waiting=0
 file event_condition_values.tsv rows=104 tests=21 evaluated=21 unavailable=0 skipped=0 waiting=0
-file event_given_out_values.tsv rows=16 tests=5 evaluated=5 unavailable=0 skipped=0 waiting=0
+file event_given_out_values.tsv rows=22 tests=7 evaluated=7 unavailable=0 skipped=0 waiting=0
 file event_hoist_values.tsv rows=34 tests=7 evaluated=7 unavailable=0 skipped=0 waiting=0
 file event_modifier_mix_values.tsv rows=40 tests=7 evaluated=7 unavailable=0 skipped=0 waiting=0
 file event_par_part_values.tsv rows=96 tests=21 evaluated=21 unavailable=0 skipped=0 waiting=0
@@ -198,4 +198,4 @@ file when_identity_regressions.tsv rows=78 tests=5 evaluated=5 unavailable=0 ski
 file when_slow_head_values.tsv rows=47 tests=5 evaluated=5 unavailable=0 skipped=0 waiting=0
 file when_slow_values.tsv rows=86 tests=9 evaluated=9 unavailable=0 skipped=0 waiting=0
 file when_values.tsv rows=77 tests=10 evaluated=10 unavailable=0 skipped=0 waiting=0
-total files=199 rows=9097 tests=1538 evaluated=1476 unavailable=1 skipped=61 waiting=6
+total files=199 rows=9103 tests=1540 evaluated=1478 unavailable=1 skipped=61 waiting=6

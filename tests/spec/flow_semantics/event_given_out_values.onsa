@@ -111,3 +111,52 @@ test "the same written out: the reset is after the run that gave the event, befo
     assert o.out[i] == w[i]
   }
 }
+
+// The example of §11.11.
+/// 刻みごとに、m のイベントの和に 1 を足した値を出す
+flow echo(m: U32 at event) -> U32 at event {
+  let n = prev~(^n) + m
+  Some((n at sample) + 1)
+}
+
+/// 刻み一つの中で echo を 2 回走らせ、出た 2 つを自分の出力にする
+flow pair(m: U32 at event) -> U32 at event {
+  Some(echo~(m).up~(2))
+}
+
+// 呼び出し側が pair に行わせるのは刻み一つ。最初の刻みの順:
+//   pair の刻みの全体: 走り 0 が 1 を出し、走り 1 が 1 を出す
+//   一つ目の a = 1 の刻み: pair の m に 10 が届き、n は 10
+//   二つ目の a = 1 の刻み: pair の m に 1 が届き、n は 11
+//   a at sample
+pub flow wrapped() -> U32 at sample {
+  let a: U32 = pair~(prev~(^a, 10))
+  a at sample // 1, 12, 25
+}
+
+// 呼び出し側が echo に行わせるのは走り一回ずつ。最初の刻みの順:
+//   走り 0 が 1 を出す
+//   一つ目の a = 1 の刻み: echo の m に 10 が届き、n は 10
+//   走り 1 が 11 を出す
+//   二つ目の a = 11 の刻み: echo の m に 1 が届き、n は 11
+//   a at sample
+pub flow direct() -> U32 at sample {
+  let a: U32 = echo~(prev~(^a, 10)).up~(2)
+  a at sample // 11, 23, 58
+}
+
+test "the example of the text: a flow around the runs gives its receivers the events after both" {
+  let o = wrapped.render(4, 8.0)
+  let w: [U32; 4] = [1, 12, 25, 62]
+  for i in 0 ..< 4 {
+    assert o.out[i] == w[i]
+  }
+}
+
+test "the example of the text: an `.up~` of the call gives them after each run" {
+  let o = direct.render(4, 8.0)
+  let w: [U32; 4] = [11, 23, 58, 151]
+  for i in 0 ..< 4 {
+    assert o.out[i] == w[i]
+  }
+}

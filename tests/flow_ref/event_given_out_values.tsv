@@ -1,4 +1,4 @@
-# flow_ref 1 source=tests/spec/flow_semantics/event_given_out_values.onsa tests=5 evaluated=5 unavailable=0 skipped=0 waiting=0
+# flow_ref 1 source=tests/spec/flow_semantics/event_given_out_values.onsa tests=7 evaluated=7 unavailable=0 skipped=0 waiting=0
 @ one event a tick, with work of its own below the part that gives it: the event comes back to the input of the flow after that work
 render event_given_out_values.f1 sr=0x41000000 frames=5
 out=[1 1 1 2 3]
@@ -14,3 +14,9 @@ out=[3 10 13 20 23]
 @ the same written out: the reset is after the run that gave the event, before the next run
 render event_given_out_values.f3d sr=0x41000000 frames=5
 out=[3 7 12 15 19]
+@ the example of the text: a flow around the runs gives its receivers the events after both
+render event_given_out_values.wrapped sr=0x41000000 frames=4
+out=[1 12 25 62]
+@ the example of the text: an `.up~` of the call gives them after each run
+render event_given_out_values.direct sr=0x41000000 frames=4
+out=[11 23 58 151]
