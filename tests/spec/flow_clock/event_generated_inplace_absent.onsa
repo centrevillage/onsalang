@@ -1,0 +1,191 @@
+// onsa.toml
+// [test]
+// spec = ["§11.6", "§11.11", "§15.1", "§18.1"]
+// fixes = 0
+
+// W7-11 U2h/t, S-564, S-1087 (spec §11.6: "`process_inplace` は ... `sample` の入力と出力の数と型が順に一致し、イベントを出さない flow にだけ生成される"、"イベントを出す flow には生成しない"; "`Out` は
+// `sample` の出力が struct のときだけ（イベントの出力には無い）"): a flow with an event output has no `process_inplace` and no `Out`, whatever its `sample` inputs are (none, one of the type of the
+// event, one of another type, two, an array) and whatever the type of its event is (a scalar, a struct, an array, an enum, a tuple). The path of a body, a call, and the `Out` in a type position
+// are E0302 at their line (the same place and the same code as a flow whose types do not agree, negative/generated_api_inplace_absent.onsa and negative/flow_gen_types_absent_signature.onsa).
+// The contrast is a flow with `sample` outputs, whose `process_inplace` and `Out` are there. The `use` lines are in event_generated_use_pkg. The text of the message is not read.
+
+pub struct Pair: Default {
+  l: F32,
+  r: F32,
+}
+
+pub enum Mode {
+  A,
+  B,
+}
+
+pub flow e_src(p: U32 at block) -> F32 at event {
+  Some(1.0)
+}
+
+pub flow e_same(x: F32 at sample) -> F32 at event {
+  Some(x)
+}
+
+pub flow e_diff(x: F32 at sample) -> U32 at event {
+  if x > 0.5 { Some(1) } else { None }
+}
+
+pub flow e_two(a: F32 at sample, b: F32 at sample) -> F32 at event {
+  Some(a + b)
+}
+
+pub flow e_two_pair(a: F32 at sample, b: F32 at sample) -> Pair at event {
+  Some(Pair { l: a, r: b })
+}
+
+pub flow e_pair(x: F32 at sample) -> Pair at event {
+  Some(Pair { l: x, r: x })
+}
+
+pub flow e_array(x: [F32; 2] at sample) -> [F32; 2] at event {
+  Some(x)
+}
+
+pub flow e_enum(x: F32 at sample) -> Mode at event {
+  if x > 0.5 { Some(Mode.A) } else { None }
+}
+
+pub flow e_tuple(x: F32 at sample) -> (F32, F32) at event {
+  Some((x, x))
+}
+
+pub flow e_relay(m: F32 at event) -> F32 at event {
+  Some(m)
+}
+
+pub flow e_relay_pair(m: Pair at event) -> Pair at event {
+  Some(m)
+}
+
+pub flow e_with_params(p: F32 at block, x: F32 at sample) -> F32 at event {
+  Some(x * p)
+}
+
+// ---------------------------------------------------------------- the contrast: a flow that has `sample` outputs
+
+pub flow s_same(x: F32 at sample) -> F32 at sample {
+  x
+}
+
+pub flow s_pair(a: F32 at sample, b: F32 at sample) -> Pair at sample {
+  Pair { l: a, r: b }
+}
+
+fn contrast_path() {
+  let _ = s_same.process_inplace
+}
+
+fn contrast_out(o: s_pair.Out) -> U32 {
+  0
+}
+
+// ---------------------------------------------------------------- the path in a body
+
+fn path_of_no_sample_input() {
+  let _ = e_src.process_inplace                                 //~ E0302
+}
+
+fn path_of_one_input_of_the_type_of_the_event() {
+  let _ = e_same.process_inplace                                //~ E0302
+}
+
+fn path_of_one_input_of_another_type() {
+  let _ = e_diff.process_inplace                                //~ E0302
+}
+
+fn path_of_two_inputs() {
+  let _ = e_two.process_inplace                                 //~ E0302
+}
+
+fn path_of_two_inputs_and_a_struct_event() {
+  let _ = e_two_pair.process_inplace                            //~ E0302
+}
+
+fn path_of_a_struct_event() {
+  let _ = e_pair.process_inplace                                //~ E0302
+}
+
+fn path_of_an_array() {
+  let _ = e_array.process_inplace                               //~ E0302
+}
+
+fn path_of_an_enum_event() {
+  let _ = e_enum.process_inplace                                //~ E0302
+}
+
+fn path_of_a_tuple_event() {
+  let _ = e_tuple.process_inplace                               //~ E0302
+}
+
+fn path_of_a_relay() {
+  let _ = e_relay.process_inplace                               //~ E0302
+}
+
+fn path_of_a_relay_of_a_struct() {
+  let _ = e_relay_pair.process_inplace                          //~ E0302
+}
+
+fn path_with_a_block_input() {
+  let _ = e_with_params.process_inplace                         //~ E0302
+}
+
+// ---------------------------------------------------------------- a call, a branch, a closure
+
+fn call_of_one_input(inout st: e_same.State, inout buf: Span[F32]) {
+  e_same.process_inplace(inout st, inout buf)                   //~ E0302
+}
+
+fn call_of_a_struct_event(inout st: e_pair.State, inout buf: Span[F32]) {
+  e_pair.process_inplace(inout st, inout buf)                   //~ E0302
+}
+
+fn in_a_branch(c: Bool) {
+  if c {
+    let _ = e_diff.process_inplace                              //~ E0302
+  }
+}
+
+fn in_a_closure() {
+  let h = fn() {
+    let _ = e_enum.process_inplace                              //~ E0302
+  }
+  h.()
+}
+
+// ---------------------------------------------------------------- `Out` in a type position
+
+fn out_of_a_struct_event(o: e_pair.Out) -> U32 {                //~ E0302
+  0
+}
+
+fn out_of_two_inputs_and_a_struct_event(inout o: e_two_pair.Out) -> U32 {   //~ E0302
+  0
+}
+
+fn out_of_a_relay_of_a_struct(o: e_relay_pair.Out) -> U32 {     //~ E0302
+  0
+}
+
+fn out_of_a_scalar_event(o: e_same.Out) -> U32 {                //~ E0302
+  0
+}
+
+fn out_returned() -> e_pair.Out {                               //~ E0302
+  panic("never")
+}
+
+pub struct HoldsOut {
+  o: e_pair.Out,                                                //~ E0302
+}
+
+type Slot = e_pair.Out                                          //~ E0302
+
+fn out_in_an_option(o: Option[e_pair.Out]) -> U32 {             //~ E0302
+  0
+}

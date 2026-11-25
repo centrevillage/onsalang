@@ -564,7 +564,7 @@ impl Builder<'_> {
         let layout = self.flow_layout(d);
         let mut members = Vec::new();
         for (name, m) in &f.members {
-            if !FlowDef::in_namespace(self.a.def(*m)) {
+            if !FlowDef::in_namespace(self.a.def(*m)) || f.awaits_events(self.a.def(*m)) {
                 continue;
             }
             let display = format!("{}.{}", def.name, name);

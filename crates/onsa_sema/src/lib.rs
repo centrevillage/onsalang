@@ -602,11 +602,9 @@ impl Analysis {
     /// of the heading, and none of a flow with a port in error (§18.1,
     /// [`def::FlowDef::ports_in_error`]). The one test of it (D-15).
     pub(crate) fn boundary_gate(&self, d: DefId, span: Span) -> Option<Diagnostic> {
-        use clock::Clock;
-        use def::FlowFn;
         use onsa_diag::unsupported::Feature;
         let (flow, what, stage) = match self.def(d).as_fn().and_then(|f| f.flow_fn) {
-            Some(FlowFn::Process | FlowFn::ProcessInplace | FlowFn::Render) => {
+            Some(f) if f.crosses_boundary() => {
                 let flow = self.def(d).owner?;
                 (flow, format!("the use of `{}.{}`", self.def(flow).name, self.def(d).name), onsa_diag::Stage::Types)
             }
@@ -614,11 +612,8 @@ impl Analysis {
             _ => return None,
         };
         let fd = self.def(flow).as_flow().filter(|fd| !fd.ports_in_error)?;
-        let mut ports = fd.inputs.iter().map(|i| i.clock).chain([fd.out_clock]);
-        let feature = ports.find_map(|c| match c {
-            Clock::Event(_) => Some(Feature::EventBoundary),
-            c => c.of_ratio().then_some(Feature::ConversionFlowBoundary),
-        })?;
+        let (clock, _) = fd.first_port(|c| c.is_event() || c.of_ratio())?;
+        let feature = if clock.is_event() { Feature::EventBoundary } else { Feature::ConversionFlowBoundary };
         Some(feature.diagnostic(stage, span, &[&what]))
     }
 

@@ -1,0 +1,12 @@
+use voice
+use voice.e_relay.process_inplace                            //~ E0302
+use voice.e_two_pair.{State, Out}                               //~ E0302
+
+pub fn silent_use(o: Out) -> U32 {
+  let _ = process_inplace
+  0
+}
+
+pub fn the_state_is_taken(inout s: State) {
+  voice.e_two_pair.reset(inout s)
+}

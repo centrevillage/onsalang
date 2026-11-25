@@ -1,0 +1,5 @@
+use voice.s_same.process_inplace
+
+pub fn the_contrast_is_taken() {
+  let _ = process_inplace
+}

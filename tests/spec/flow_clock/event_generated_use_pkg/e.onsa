@@ -1,0 +1,5 @@
+use voice.in_same.process_inplace
+
+pub fn the_use_of_the_event_input_is_the_border() {
+  let _ = process_inplace                                       //~ E0200
+}

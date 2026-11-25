@@ -1,0 +1,115 @@
+// onsa.toml
+// [test]
+// spec = ["§11.6", "§11.11", "§18.1"]
+// fixes = 0
+
+// W7-11 U2h/t, S-564 (spec §11.6: the namespace of a flow has `State`, `init` and `reset` for every flow, `In` when the `sample` inputs are two or more, `Out` when the output at `sample` is a struct, `Rendered`
+// always; §11.11: an event of the type of a user can be received by a flow): what a flow with an event in its head still has. A flow with an event input has `In`, `State`, `init` and `reset`, a flow
+// with an event input and a struct at `sample` has `Out`, a flow with a struct (or an enum) as the value of its event output has `State`, `init`, `reset` and `Rendered`, and a flow receives the struct event of another
+// (`let p = mk~(x)`). The `Rendered` of an event output holds the positions and the values in one `Buf` (§11.6: "イベントの出力は `o.out: Buf[(U32, E)]`"), whatever the type of the event is. The uses of `process`, `process_inplace` and `render` of these flows are not here (event_generated_border_e0200_until_w10_07.onsa, event_generated_inplace_absent.onsa). No diagnostic.
+
+pub struct Pair: Default {
+  l: F32,
+  r: F32,
+}
+
+pub enum Mode {
+  A,
+  B,
+}
+
+pub flow in_two(a: F32 at sample, b: F32 at sample, m: U32 at event) -> F32 at sample {
+  a + b
+}
+
+pub flow in_only(m: U32 at event) -> U32 at sample {
+  m
+}
+
+pub flow in_struct(x: F32 at sample, m: U32 at event) -> Pair at sample {
+  Pair { l: x, r: x }
+}
+
+pub flow mk(x: F32 at sample) -> Pair at event {
+  Some(Pair { l: x, r: x })
+}
+
+pub flow mk_mode(x: F32 at sample) -> Mode at event {
+  if x > 0.5 { Some(Mode.A) } else { None }
+}
+
+pub flow mk_scalar(x: F32 at sample) -> F32 at event {
+  Some(x)
+}
+
+pub flow mk_tuple(x: F32 at sample) -> (F32, F32) at event {
+  Some((x, x))
+}
+
+pub flow rx(x: F32 at sample) -> F32 at sample {
+  let p = mk~(x)
+  p.l + p.r
+}
+
+pub flow rx_whole(x: F32 at sample) -> Pair at sample {
+  let p = mk~(x)
+  p at sample
+}
+
+fn take_in(i: in_two.In) -> U32 {
+  0
+}
+
+fn take_out(inout o: in_struct.Out) -> U32 {
+  0
+}
+
+fn take_rendered(r: mk.Rendered, q: mk_mode.Rendered, s: in_only.Rendered) -> U32 {
+  0
+}
+
+// ---------------------------------------------------------------- the fields of the `Rendered` of an event output: a scalar, a struct, an enum, a tuple
+
+fn rendered_scalar(r: mk_scalar.Rendered) -> F32 {
+  let p: U32 = r.out[0].0
+  let v: F32 = r.out[0].1
+  v + F32.round_from(p)
+}
+
+fn rendered_struct(r: mk.Rendered) -> F32 {
+  let p: U32 = r.out[0].0
+  let v: Pair = r.out[0].1
+  v.l + v.r + r.out[0].1.l + F32.round_from(p)
+}
+
+fn rendered_enum(r: mk_mode.Rendered) -> U32 {
+  let p: U32 = r.out[0].0
+  match r.out[0].1 {
+    Mode.A => p,
+    Mode.B => r.out.len(),
+  }
+}
+
+fn rendered_tuple(r: mk_tuple.Rendered) -> F32 {
+  let p: U32 = r.out[0].0
+  let v: (F32, F32) = r.out[0].1
+  v.0 + r.out[0].1.1 + F32.round_from(p)
+}
+
+fn state_of_an_event_input() -> in_only.State {
+  in_only.init(8.0)
+}
+
+fn state_of_a_struct_event() -> mk.State {
+  mk.init(8.0)
+}
+
+fn state_of_an_enum_event() -> mk_mode.State {
+  mk_mode.init(8.0)
+}
+
+fn resets(inout a: in_two.State, inout b: mk.State, inout c: mk_mode.State) {
+  in_two.reset(inout a)
+  mk.reset(inout b)
+  mk_mode.reset(inout c)
+}

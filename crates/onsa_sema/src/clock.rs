@@ -286,6 +286,11 @@ impl Clock {
     /// The `sample` of the body.
     pub const SAMPLE: Clock = Clock::Tick(Ratio(0));
 
+    /// An event clock (§11.11).
+    pub(crate) fn is_event(self) -> bool {
+        matches!(self, Clock::Event(_))
+    }
+
     /// A periodic tick of a ratio (§11.3): `sample / N`, `sample * N`.
     pub fn of_ratio(self) -> bool {
         matches!(self, Clock::Tick(k) if k != Ratio(0))

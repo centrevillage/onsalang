@@ -205,6 +205,15 @@ pub enum FlowFn {
     Render,
 }
 
+impl FlowFn {
+    /// Whether it takes or gives the values of the ports, so that a port
+    /// that does not cross the boundary yet stops its uses
+    /// ([`crate::Analysis::boundary_gate`]).
+    pub(crate) fn crosses_boundary(self) -> bool {
+        matches!(self, FlowFn::Process | FlowFn::ProcessInplace | FlowFn::Render)
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FieldDef {
     pub name: String,
@@ -527,8 +536,8 @@ pub struct FlowDef {
     /// Generated namespace items (§11.6): `State`, `Config`, ..., `process`, ...
     pub members: Vec<(String, DefId)>,
     /// The items of the list its types decide it has not (`Out` of an output
-    /// that is no struct, S-1087): not in its namespace, but a path in a body
-    /// finds them, so that the types stage reports them
+    /// that is no struct or an event, S-1087): not in its namespace, but a
+    /// path in a body finds them, so that the types stage reports them
     /// ([`crate::Analysis::not_generated`]).
     pub absent: Vec<(String, DefId)>,
     /// Of a flow with no `process_inplace` (§11.6, R-480): the value types
@@ -554,20 +563,20 @@ impl FlowDef {
 
     /// Whether its output is at the event clock (§11.11).
     pub(crate) fn gives_events(&self) -> bool {
-        matches!(self.out_clock, Clock::Event(_))
+        self.out_clock.is_event()
     }
 
     /// The name `event` of its first port at the event clock.
     pub(crate) fn event_port(&self) -> Option<Span> {
-        let input = self.inputs.iter().find(|i| matches!(i.clock, Clock::Event(_)));
-        input.map(|i| i.clock_span).or_else(|| self.gives_events().then_some(self.out_clock_span)).flatten()
+        let (_, input) = self.first_port(Clock::is_event)?;
+        input.map_or(self.out_clock_span, |i| i.clock_span)
     }
 
     /// The first port of a derived clock (§11.9: `sample / N`, `sample *
     /// N`), of the clock read, by its ratio, as of the output: the span of an
     /// input, or `out` of the output.
     pub fn derived_port(&self, out: Span) -> Option<Span> {
-        self.port_where(out, Clock::of_ratio)
+        self.first_port(Clock::of_ratio).map(|(_, input)| input.map_or(out, |i| i.span))
     }
 
     /// The length of the array the body makes its output in (§11.9, of an
@@ -576,10 +585,21 @@ impl FlowDef {
         body_view(self.out_clock).1
     }
 
-    /// The first input whose clock is `of`, else `out` of an output of one.
-    fn port_where(&self, out: Span, of: impl Fn(Clock) -> bool) -> Option<Span> {
-        let input = self.inputs.iter().find(|i| of(i.clock));
-        input.map(|i| i.span).or_else(|| of(self.out_clock).then_some(out))
+    /// The first port of the heading whose clock is `of`, with that clock:
+    /// an input, or the output (`None`), which is after them. The one place
+    /// of the order of the ports (D-15).
+    pub(crate) fn first_port(&self, of: impl Fn(Clock) -> bool) -> Option<(Clock, Option<&FlowInput>)> {
+        let mut ports = self.inputs.iter().map(|i| (i.clock, Some(i))).chain([(self.out_clock, None)]);
+        ports.find(|&(c, _)| of(c))
+    }
+
+    /// Whether `onsa interface` leaves out its generated item `item` until
+    /// the events cross the boundary (§11.11, W10-07): of a heading with an
+    /// event, the functions whose uses the E0200 of the boundary stops
+    /// ([`crate::Analysis::boundary_gate`]).
+    pub fn awaits_events(&self, item: &Def) -> bool {
+        let crosses = item.as_fn().and_then(|f| f.flow_fn).is_some_and(FlowFn::crosses_boundary);
+        crosses && self.first_port(Clock::is_event).is_some()
     }
 
     /// Whether the generated item `item` of a flow (of its `members` or

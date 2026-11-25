@@ -1,0 +1,7 @@
+use voice.e_enum.process_inplace                                //~ E0302
+use voice.e_enum.Out                                            //~ E0302
+
+pub fn silent_use(o: Out) -> U32 {
+  let _ = process_inplace
+  0
+}

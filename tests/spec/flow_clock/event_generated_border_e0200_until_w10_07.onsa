@@ -1,0 +1,190 @@
+// onsa.toml
+// [test]
+// spec = ["§11.6", "§11.9", "§11.11", "§18.1"]
+// fixes = 0
+
+// W7-11 U2h/t, S-564, S-560 (spec §11.11: "flow の中と、Onsa のコードから呼ぶ生成する API（`process`・`render`）では、利用者の型も含めて自由"; §11.9: the error of the border is at the uses of `process`, `process_inplace`
+// and `render`): until the events cross the border (W10-07) the uses of `process` and `render` of a flow with an event output are E0200 at their line, whatever the type of the event is (an enum, a tuple, an
+// array, a struct, a scalar: a type that cannot be a channel of `sample` is not read as a type that is unknown and silent), and so is the `process_inplace` of a flow that has an event input and `sample` inputs and outputs of
+// one type (it is generated, event_generated_inplace_absent.onsa is the flows that have none). `Rendered` of a flow with an event can be written as a type. A flow whose heading is in error has that error alone and its uses are silent
+// (§18.1), and the error does not make the uses of the flows next to it silent. The text of the message is not read.
+
+pub struct Pair: Default {
+  l: F32,
+  r: F32,
+}
+
+pub enum Mode {
+  A,
+  B,
+}
+
+pub flow out_mode(x: F32 at sample) -> Mode at event {
+  if x > 0.5 { Some(Mode.A) } else { None }
+}
+
+pub flow out_tuple(x: F32 at sample) -> (F32, F32) at event {
+  Some((x, x))
+}
+
+pub flow out_array(x: F32 at sample) -> [F32; 2] at event {
+  Some([x, x])
+}
+
+pub flow out_pair(x: F32 at sample) -> Pair at event {
+  Some(Pair { l: x, r: x })
+}
+
+pub flow out_scalar(x: F32 at sample) -> F32 at event {
+  Some(x)
+}
+
+pub flow out_bool(x: F32 at sample) -> Bool at event {
+  Some(x > 0.5)
+}
+
+pub flow in_same(x: F32 at sample, m: U32 at event) -> F32 at sample {
+  x
+}
+
+pub flow in_two(l: F32 at sample, r: F32 at sample, m: U32 at event) -> Pair at sample {
+  Pair { l: l, r: r }
+}
+
+pub flow bad_output(x: F32 at sample) -> Nope at event {   //~ E0302
+  None
+}
+
+// ---------------------------------------------------------------- `process` and `render` of an event output whose type is not a channel
+
+fn process_of_an_enum() {
+  let _ = out_mode.process                                      //~ E0200
+}
+
+fn render_of_an_enum() {
+  let _ = out_mode.render                                       //~ E0200
+}
+
+fn process_of_a_tuple() {
+  let _ = out_tuple.process                                     //~ E0200
+}
+
+fn render_of_a_tuple() {
+  let _ = out_tuple.render                                      //~ E0200
+}
+
+fn process_of_an_array() {
+  let _ = out_array.process                                     //~ E0200
+}
+
+fn process_of_a_struct() {
+  let _ = out_pair.process                                      //~ E0200
+}
+
+fn render_of_a_struct() {
+  let _ = out_pair.render                                       //~ E0200
+}
+
+fn process_of_a_bool() {
+  let _ = out_bool.process                                      //~ E0200
+}
+
+fn render_of_a_bool() {
+  let _ = out_bool.render                                       //~ E0200
+}
+
+// ---------------------------------------------------------------- `process_inplace` of a flow with an event input that has it
+
+fn inplace_of_an_event_input() {
+  let _ = in_same.process_inplace                               //~ E0200
+}
+
+fn inplace_of_an_event_input_and_a_struct() {
+  let _ = in_two.process_inplace                                //~ E0200
+}
+
+// ---------------------------------------------------------------- the types that are written, not used
+
+fn rendered_of_an_event_output(r: out_pair.Rendered, q: out_mode.Rendered) -> U32 {
+  0
+}
+
+// the `Rendered` of an event output has the one field `out` of positions and values (§11.6: `o.out: Buf[(U32, E)]`), not the fields of the struct nor a buffer of the values (event_generated_present.onsa has what it is)
+fn rendered_has_no_field_of_the_struct(r: out_pair.Rendered) -> U32 {
+  r.l.len()                                                     //~ E0413
+}
+
+fn rendered_is_no_buffer_of_the_values(r: out_scalar.Rendered) -> F32 {
+  r.out[0]                                                      //~ E0401
+}
+
+fn out_of_an_event_input(inout o: in_two.Out) -> U32 {
+  0
+}
+
+// ---------------------------------------------------------------- a flow whose heading is in error: silent, and the flows beside it are not
+
+fn silent_use_of_the_bad_one() {
+  let _ = bad_output.process
+  let _ = bad_output.render
+  let _ = bad_output.process_inplace
+}
+
+// an event of a type no event has: second-class (E0710), not Copy or the state of a flow (E0810)
+
+pub flow plain_pair(x: F32 at sample) -> Pair at sample {
+  Pair { l: x, r: x }
+}
+
+struct Affine {
+  b: Buf[F32],
+}
+
+pub flow bad_views(x: F32 at sample) -> plain_pair.Out at event {   //~ E0710
+  None
+}
+
+pub flow bad_span(x: F32 at sample) -> Span[F32] at event {   //~ E0710
+  None
+}
+
+flow bad_affine(x: F32 at sample) -> Affine at event {        //~ E0810
+  None
+}
+
+pub flow bad_state(x: F32 at sample) -> plain_pair.State at event {   //~ E0810
+  None
+}
+
+fn silent_process() {
+  let _ = bad_views.process
+  let _ = bad_span.process
+  let _ = bad_affine.process
+  let _ = bad_state.process
+}
+
+fn silent_render() {
+  let _ = bad_views.render
+  let _ = bad_span.render
+  let _ = bad_affine.render
+  let _ = bad_state.render
+}
+
+fn silent_inplace() {
+  let _ = bad_views.process_inplace
+  let _ = bad_span.process_inplace
+  let _ = bad_affine.process_inplace
+  let _ = bad_state.process_inplace
+}
+
+fn silent_out(a: bad_views.Out, b: bad_span.Out, c: bad_affine.Out, d: bad_state.Out) -> U32 {
+  0
+}
+
+fn silent_call(inout s: bad_views.State, x: Span[F32], inout o: Span[F32]) {
+  bad_views.process(inout s, x, inout o)
+}
+
+fn not_silent_beside_the_bad_one() {
+  let _ = out_mode.process                                      //~ E0200
+}

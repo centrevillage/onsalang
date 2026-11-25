@@ -125,19 +125,27 @@ impl Analysis {
     }
 
     /// The E0302 `d` of the item `name` that `flow` does not generate, with
-    /// the notes of why (§11.6, R-480): of `process_inplace`, the types of
-    /// the `sample` inputs and of the outputs that do not pair up, and the
-    /// rule of `process` with separate buffers. The one place of these notes,
-    /// for every E0302 of the item: a `use`, a path of a body.
+    /// the notes of why (§11.6, R-480): of `process_inplace`, that the flow
+    /// gives events, or the types of the `sample` inputs and of the outputs
+    /// that do not pair up, and the rule of `process` with separate buffers.
+    /// The one place of these notes, for every E0302 of the item: a `use`, a
+    /// path of a body.
     pub(crate) fn with_ungenerated_notes(&self, d: Diagnostic, flow: DefId, name: &str) -> Diagnostic {
         let generated = GENERATED.iter().find(|&&(n, _)| n == name).map(|&(_, g)| g);
-        let unpaired = self.def(flow).as_flow().and_then(|f| f.unpaired.as_ref());
-        let (Some(Generated::Fn(FlowFn::ProcessInplace)), Some((ins, outs))) = (generated, unpaired) else { return d };
+        let (Some(Generated::Fn(FlowFn::ProcessInplace)), Some(f)) = (generated, self.def(flow).as_flow()) else {
+            return d;
+        };
+        let (k, process) = (&self.def(flow).name, name_of(Generated::Fn(FlowFn::Process)));
+        if f.gives_events() {
+            return d
+                .with_rule(format!("`{k}.{name}` is not generated, as the output of `{k}` is at `event` (§11.6)"))
+                .with_rule(format!("use `{k}.{process}` with a separate buffer for the events"));
+        }
+        let Some((ins, outs)) = &f.unpaired else { return d };
         let list = |ts: &[TyId]| match ts {
             [] => "none".to_string(),
             ts => ts.iter().map(|&t| format!("`{}`", self.display_type(t))).collect::<Vec<_>>().join(", "),
         };
-        let (k, process) = (&self.def(flow).name, name_of(Generated::Fn(FlowFn::Process)));
         d.with_rule(format!(
             "`{k}.{name}` is generated when the `sample` inputs and the outputs of `{k}` agree in number and in \
              types, in order (§11.6: a struct output by its fields, an array as one type); the `sample` inputs of \
@@ -215,17 +223,30 @@ impl<'p> Sema<'p> {
     /// input too (`process_inplace`; `Out` is of the output alone), has the
     /// error type in it (a type not found, a clock not read, a cut heading;
     /// also as an element, a field or a type argument), or is a `sample`
-    /// type that does not cross the boundary (its E0810). Such an item is
-    /// kept, as of a cut heading: its uses get no diagnostic.
+    /// type that does not cross the boundary (its E0810), or an event output
+    /// of an [`Self::unfit_event`]. Such an item is kept, as of a cut heading:
+    /// its uses get no diagnostic.
     fn members_unknown(&mut self, flow: DefId, inputs: bool) -> bool {
         let f = self.flow_def(flow);
+        let (out, events) = (f.out, f.gives_events());
         let ins =
             f.inputs.iter().filter(|_| inputs).map(|i| (i.ty, (i.host() == Some(ClockName::Sample)).then_some(true)));
-        let tys: Vec<(TyId, Option<bool>)> = std::iter::once((f.out, Some(false))).chain(ins).collect();
+        let tys: Vec<(TyId, Option<bool>)> = std::iter::once((out, (!events).then_some(false))).chain(ins).collect();
         let mut seen = HashSet::default();
-        tys.into_iter().any(|(t, edge)| {
-            self.has_error(t, &mut seen) || edge.is_some_and(|input| self.boundary_outputs(t, input).is_err())
-        })
+        self.unfit_event(flow)
+            || tys.into_iter().any(|(t, edge)| {
+                self.has_error(t, &mut seen) || edge.is_some_and(|input| self.boundary_outputs(t, input).is_err())
+            })
+    }
+
+    /// Whether `flow` has an event output of a type no event has: no signal's
+    /// (its E0810), or with a second-class part (its E0710). The one test of
+    /// the items of such a flow and of the error of its port.
+    fn unfit_event(&self, flow: DefId) -> bool {
+        let (f, span) = (self.flow_def(flow), self.a.def(flow).name_span);
+        let under = crate::bounds::Bounds { a: self.a, generics: &[] };
+        f.gives_events()
+            && (self.signal_type_error(f.out, span).is_some() || wellformed::no_kind_argument(&under, f.out, false))
     }
 
     /// The item `g` of `flow`, not known ([`Self::members_unknown`]): its
@@ -407,7 +428,7 @@ impl<'p> Sema<'p> {
                 let f = self.flow_def(h.flow);
                 // The forms of the boundary of an event are W10-07's (§11.11).
                 let place = if f.gives_events() { Boundary::Inside } else { Boundary::Output(f.out_clock) };
-                in_error |= self.check_rate_value_type(h.flow, out, span, place);
+                in_error |= self.check_rate_value_type(h.flow, out, span, place) || self.unfit_event(h.flow);
             }
             if let DefKind::Flow(fd) = &mut self.a.defs[h.flow.0 as usize].kind {
                 fd.ports_in_error = in_error;
@@ -549,21 +570,28 @@ impl<'p> Sema<'p> {
     /// The items the output of `flow` gives (§11.6): `Out`, `Rendered` and
     /// the functions, whose `cfg` and `params` are of a flow with `Config`
     /// and `Params` alone (S-112). `Out` is of an output that is a struct
-    /// (S-1087); of an output not known, it and `Rendered` are not known.
-    /// Whether `process_inplace` is generated (its inputs and outputs pair up).
+    /// and no event (S-1087); of an output not known, it and `Rendered` are
+    /// not known.
+    /// Whether `process_inplace` is generated (its inputs and outputs pair
+    /// up, and it gives no events).
     fn fill_by_output(&mut self, flow: DefId) -> bool {
-        let out = self.flow_def(flow).out;
+        let (out, events) = (self.flow_def(flow).out, self.flow_def(flow).gives_events());
         let name_span = self.a.def(flow).name_span;
         // The E0810 of an output that does not cross is of `check_generated`.
         let outputs = self.boundary_outputs(out, false).unwrap_or_default();
         let views = self.channel_fields(flow, BuiltinTy::Span, &outputs);
         self.fill_struct(flow, FlowTy::Out, views);
-        let bufs = self.channel_fields(flow, BuiltinTy::Buf, &outputs);
+        // Of an event output, its positions and values, of any type (§11.6).
+        let events_out = events.then(|| {
+            let pos = self.a.types.int(IntKind::U32);
+            vec![("out".to_string(), self.a.types.intern(Ty::Tuple(vec![pos, out])), None)]
+        });
+        let bufs = self.channel_fields(flow, BuiltinTy::Buf, events_out.as_ref().unwrap_or(&outputs));
         self.fill_struct(flow, FlowTy::Rendered, bufs);
         if self.members_unknown(flow, false) {
             self.unknown_member(flow, Generated::Type(FlowTy::Out));
             self.unknown_member(flow, Generated::Type(FlowTy::Rendered));
-        } else if !matches!(self.a.types.get(out), Ty::Named(..)) {
+        } else if events || !matches!(self.a.types.get(out), Ty::Named(..)) {
             self.absent_member(flow, Generated::Type(FlowTy::Out));
         }
 
@@ -612,7 +640,8 @@ impl<'p> Sema<'p> {
         let ps = head.iter().cloned().chain(input.clone()).chain([output.clone()]).collect();
         self.fill_fn(flow, ps, unit, true, false, FlowFn::Process);
         // `process_inplace` only when inputs and outputs pair up by type (§11.6).
-        let pairs = sig_inputs.len() == outputs.len()
+        let pairs = !events
+            && sig_inputs.len() == outputs.len()
             && !outputs.is_empty()
             && sig_inputs.iter().zip(&outputs).all(|(i, o)| i.1 == o.1 && i.2 == o.2);
         if pairs {
@@ -632,15 +661,16 @@ impl<'p> Sema<'p> {
     }
 
     /// The members of `flow`: the items its types give. `process_inplace`,
-    /// when its inputs and outputs do not pair up, is not in its namespace,
+    /// when it is not generated (`pairs`), is not in its namespace,
     /// and a `use` of it fails ([`Sema::fail_ungenerated`]); when that is not
     /// known, it is kept ([`Self::members_unknown`]), and it, `process` and
     /// `render`, whose parameters are not known, get no diagnostic at their
     /// calls (§18.1, R-471).
     fn trim_members(&mut self, flow: DefId, pairs: bool) {
         if self.members_unknown(flow, true) {
-            for f in [FlowFn::Process, FlowFn::ProcessInplace, FlowFn::Render] {
-                self.unknown_member(flow, Generated::Fn(f));
+            let crosses = |g: &Generated| matches!(g, Generated::Fn(f) if f.crosses_boundary());
+            for g in GENERATED.iter().map(|&(_, g)| g).filter(crosses) {
+                self.unknown_member(flow, g);
             }
             return;
         }

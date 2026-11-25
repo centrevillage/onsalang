@@ -1,0 +1,37 @@
+pub struct Pair: Default {
+  l: F32,
+  r: F32,
+}
+
+pub enum Mode {
+  A,
+  B,
+}
+
+pub flow e_same(x: F32 at sample) -> F32 at event {
+  Some(x)
+}
+
+pub flow e_pair(x: F32 at sample) -> Pair at event {
+  Some(Pair { l: x, r: x })
+}
+
+pub flow e_two_pair(a: F32 at sample, b: F32 at sample) -> Pair at event {
+  Some(Pair { l: a, r: b })
+}
+
+pub flow e_enum(x: F32 at sample) -> Mode at event {
+  if x > 0.5 { Some(Mode.A) } else { None }
+}
+
+pub flow e_relay(m: F32 at event) -> F32 at event {
+  Some(m)
+}
+
+pub flow in_same(x: F32 at sample, m: U32 at event) -> F32 at sample {
+  x
+}
+
+pub flow s_same(x: F32 at sample) -> F32 at sample {
+  x
+}

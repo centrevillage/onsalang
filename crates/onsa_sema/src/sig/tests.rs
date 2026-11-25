@@ -450,3 +450,19 @@ fn the_e0810_of_the_value_type_of_an_input_names_its_clock() {
     let flows = ["s", "d", "n", "u", "ok"];
     assert_eq!(flows.map(in_error), [true, true, true, true, false]);
 }
+
+/// A flow with an event output is one with a port in error (§18.1) of the
+/// E0810 of a type no signal has and of the E0710 of a second-class one, not
+/// of a type that does not cross the boundary as a `sample` output (§11.11).
+#[test]
+fn an_event_output_of_a_type_no_event_has_is_a_port_in_error() {
+    let a = check(
+        "pub struct A { b: Buf[F32] }\n\
+         pub enum M { X, Y }\n\
+         pub flow affine(x: F32 at sample) -> A at event { None }\n\
+         pub flow view(x: F32 at sample) -> Span[F32] at event { None }\n\
+         pub flow fits(x: F32 at sample) -> (M, F32) at event { None }\n",
+    );
+    let in_error = |name: &str| a.def(def(&a, name)).as_flow().unwrap().ports_in_error;
+    assert_eq!(["affine", "view", "fits"].map(in_error), [true, true, false]);
+}

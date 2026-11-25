@@ -1,0 +1,6 @@
+use voice.e_two_pair.process_inplace                            //~ E0302
+
+pub fn silent_use() -> U32 {
+  let _ = process_inplace
+  0
+}

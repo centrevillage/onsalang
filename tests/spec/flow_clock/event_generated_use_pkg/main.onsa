@@ -1,0 +1,25 @@
+// onsa.toml
+// [test]
+// spec = ["§11.6", "§15.1", "§18.1"]
+// fixes = 0
+
+// W7-11 U2h/t, S-564, S-1087 (spec §11.6: a flow with an event output has no `process_inplace` and no `Out`; §18.1: "型で有無が決まる flow の生成項目（`process_inplace` と `Out`）を取り込む `use` は ... 型の段で無いと
+// 分かれば、その `use` に E0302 を出し、以後その名前を失敗した名前として扱う"): the `use` of the two names of a flow with an event output (the flows are in voice.onsa) is E0302 at the line of the `use`, the other names of a
+// list are taken, and the places that use the failed name are silent. A name of the `process_inplace` is bound once in a module (a second one is the clash E0304), so the other flows are in the modules a.onsa, b.onsa and c.onsa,
+// and the contrast (a flow with `sample` outputs, whose `process_inplace` is taken) and the flow with an event input, whose `process_inplace` is there and whose use is E0200 until W10-07, are in d.onsa and e.onsa.
+use voice
+use voice.e_same.process_inplace                                //~ E0302
+use voice.e_pair.{State, Out}                                   //~ E0302
+
+pub fn silent_in_a_signature(o: Out) -> U32 {
+  0
+}
+
+pub fn silent_in_a_body() -> U32 {
+  let _ = process_inplace
+  0
+}
+
+pub fn the_state_is_taken(inout s: State) {
+  voice.e_pair.reset(inout s)
+}
