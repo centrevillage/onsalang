@@ -1,0 +1,58 @@
+# flow_ref 1 source=tests/spec/flow_semantics/event_when_values.onsa tests=8 evaluated=8 unavailable=0 skipped=0 waiting=0
+@ when~(v != 0) runs the counter where the last event is not 0: false before the first event, the output kept on the stopped frames
+render event_when_values.w_nonzero sr=0x41000000 in x=[2 2 1 2 0 2 2 1 0 2 2 2]
+out=[0 0 1 2 2 2 2 3 3 3 3 3]
+render event_when_values.w_zero_event sr=0x41000000 in x=[2 2 1 2 0 2 2 1 0 2 2 2]
+out=[0 0 0 0 1 2 3 3 4 5 6 7]
+render event_when_values.w_zero_sample sr=0x41000000 in x=[2 2 1 2 0 2 2 1 0 2 2 2]
+out=[1 2 2 2 3 4 5 5 6 7 8 9]
+@ a delay, a grid of sample / 2 and a part with a Default of its own under when~(v != 0) count the runs: the output is T.default() before the first run
+render event_when_values.w_delay sr=0x41000000 in x=[2 2 1 2 0 2 2 1 0 2 2 2]
+out=[0 0 0 3 3 3 3 4 4 4 4 4]
+render event_when_values.w_grid sr=0x41000000 in x=[2 2 1 2 0 2 2 1 0 2 2 2]
+out=[0 0 1 1 1 1 1 2 2 2 2 2]
+render event_when_values.w_stamp sr=0x41000000 in x=[2 2 1 2 0 2 2 1 0 2 2 2]
+out=[50 50 1 2 2 2 2 3 3 3 3 3]
+@ a condition made of the event before the last one is read where the call is written: after the maker it has the event of the frame, above it the one before
+render event_when_values.w_above sr=0x41000000 in x=[2 2 1 2 0 2 2 1 0 2 2 2]
+out=[0 0 0 0 0 1 2 3 3 4 5 6]
+render event_when_values.w_below sr=0x41000000 in x=[2 2 1 2 0 2 2 1 0 2 2 2]
+out=[0 0 0 0 1 2 3 3 4 5 6 7]
+@ a when~ in a flow of its own with the event passed in, a let of the level, with and without at sample, give the values of the direct form
+render event_when_values.w_wrapped sr=0x41000000 in x=[2 2 1 2 0 2 2 1 0 2 2 2]
+out=[0 0 1 2 2 2 2 3 3 3 3 3]
+render event_when_values.w_let_at sr=0x41000000 in x=[2 2 1 2 0 2 2 1 0 2 2 2]
+out=[0 0 1 2 2 2 2 3 3 3 3 3]
+render event_when_values.w_let_plain sr=0x41000000 in x=[2 2 1 2 0 2 2 1 0 2 2 2]
+out=[0 0 1 2 2 2 2 3 3 3 3 3]
+@ when~(v != 0).when~(g) runs where both hold, as does when~(v != 0 && g): the frames 2 and 7
+init 0 event_when_values.w_two sr=0x41000000
+init 1 event_when_values.w_and sr=0x41000000
+process 0 frames=12 in x=[2 2 1 2 0 2 2 1 0 2 2 2] g=[true true true false true true false true true true false true]
+out=[0 0 1 1 1 1 1 2 2 2 2 2]
+process 1 frames=12 in x=[2 2 1 2 0 2 2 1 0 2 2 2] g=[true true true false true true false true true true false true]
+out=[0 0 1 1 1 1 1 2 2 2 2 2]
+@ when~(c).reset_if~(r) resets also on the stopped frames and puts the kept output back; reset_if~(r).when~(c) resets only on the frames that run
+init 0 event_when_values.w_stops_then_resets sr=0x41000000
+init 1 event_when_values.w_resets_then_stops sr=0x41000000
+process 0 frames=12 in x=[2 2 1 2 0 2 2 1 0 2 2 2] r=[false false false true false true false false false false false false]
+out=[0 0 1 1 1 0 0 1 1 1 1 1]
+process 1 frames=12 in x=[2 2 1 2 0 2 2 1 0 2 2 2] r=[false false false true false true false false false false false false]
+out=[0 0 1 1 1 1 1 2 2 2 2 2]
+@ the calls of process cut the frames anywhere, a call of 0 frames too: the last event and the runs are in the state
+init 0 event_when_values.w_nonzero sr=0x41000000
+process 0 frames=3 in x=[2 2 1]
+out=[0 0 1]
+process 0 frames=0 in x=[]
+out=[]
+process 0 frames=5 in x=[2 0 2 2 1]
+out=[2 2 2 2 3]
+process 0 frames=4 in x=[0 2 2 2]
+out=[3 3 3 3]
+@ reset puts the last event (no event: the level is false), the runs and the kept output back
+init 0 event_when_values.w_nonzero sr=0x41000000
+process 0 frames=4 in x=[2 2 1 2]
+out=[0 0 1 2]
+reset 0
+process 0 frames=3 in x=[2 2 2]
+out=[0 0 0]

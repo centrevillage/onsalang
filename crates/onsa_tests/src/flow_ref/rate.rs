@@ -605,20 +605,22 @@ fn visit(
     for c in chain.iter().flat_map(Chain::conds).chain(chain.iter().filter(delay).map(|c| c.head)) {
         out.1.insert(c, clock(c).map_err(here)?);
     }
-    // A chain of `reset_if~` alone is the straight line of the events (W7-11 U2r); a `when~`, `.down~` or `.up~` with an event is W7-17.
-    let only_resets = bounds.iter().all(|b| matches!(b, Bound::ResetIf(_)));
-    if !only_resets {
-        let event = |x: ExprId| matches!(clock_of(body, known, root, x), Ok(Clock::Event(_)));
-        if chain.iter().flat_map(Chain::conds).any(event) || (delay_of(body, call) && event(call)) {
-            return Err(here(Fault::Unavailable("a modifier other than `reset_if~` with an event (W7-17)")));
-        }
+    // The straight line of the events (W7-11 U2r, U3): a chain of `reset_if~` of events alone, or of `when~`s (a signal or an event level) and `reset_if~`s of signals, on a call that gives or takes no events or on a periodic delay.
+    // A rate, a `when~` with a `reset_if~` of an event, and a `when~` on a call that gives or takes events are W7-17 (a `when~` on a delay of events is E0020).
+    let event = |x: ExprId| matches!(clock_of(body, known, root, x), Ok(Clock::Event(_)));
+    let (rate, when) =
+        (bounds.iter().any(|b| matches!(b, Bound::Rate(_))), bounds.iter().any(|b| matches!(b, Bound::When(_))));
+    let reset_event = bounds.iter().any(|b| matches!(b, Bound::ResetIf(c) if event(*c)));
+    let later = rate || (when && reset_event);
+    if later && (chain.iter().flat_map(Chain::conds).any(event) || (delay_of(body, call) && event(call))) {
+        return Err(here(Fault::Unavailable("a modifier other than `reset_if~` with an event (W7-17)")));
     }
     if let Ok(Called::Flow(def)) = body.called(call) {
         // A chain on a call that takes or gives events (W7-17).
         let decl = view.flow(def).map_err(here)?;
         let events = decl.inputs.iter().any(|i| matches!(input_stage(i), Ok(Stage::Event(_))))
             || matches!(output_stage(decl), Ok(Stage::Event(_)));
-        if events && !only_resets {
+        if events && (rate || when) {
             return Err(here(Fault::Unavailable("a chain of modifiers on a call that takes or gives events (W7-17)")));
         }
         let body_ticks = Inst::planned(view, def, plans)?.slow;

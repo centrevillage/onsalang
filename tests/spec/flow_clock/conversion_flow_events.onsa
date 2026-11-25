@@ -5,7 +5,7 @@
 // W7-09 U4a/t, S-1182 (a), S-1098 (b) (spec §11.9: "本体の `sample / N` とイベントのクロックの状態は、他の flow と同じに書ける（§11.4）"; "同じ比の値、パラメータの種類、イベントの値は読め"): the event
 // clock in a conversion flow. The body of a flow that has an input at `sample * N` writes the state of an event as any flow does (a delay of the value of an event counts the events, and the last value is read
 // at `sample`), and an output at `sample / N` reads the value of an event as it reads a parameter. The event clock of the inputs is W7-11 U1a's (the clock name `event` is found). No diagnostic (a flow with an event input
-// is lowered from W7-11 U2, so `build`, `test` and `graph` of it are E0200 until then, event_gate_rules.rs).
+// is lowered, so `build`, `test` and `graph` of it run; the forms that stay E0200 are in event_gate_rules.rs).
 
 pub flow a_state_of_an_event(m: Bool at event, x: F32 at (sample * 2)) -> F32 at sample {
   let on = prev~(m)

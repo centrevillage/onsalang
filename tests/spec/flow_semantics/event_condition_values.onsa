@@ -1,0 +1,493 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.3", "§11.11"]
+
+// The expressions of an event that stand in a position of a condition (W7-11 U3/t; S-1158, S-1197, S-563; spec §11.3: "条件の位置の中では、その位置を選ぶ条件が全て定数・`init`・その式と同じ刻みで決まるときだけ書け、その刻みで条件が成り立つときだけ
+// 評価する"; "条件が成り立たない段ではフィールドを書かず"; "名前と、そのフィールド・組の要素の連なりを取り出すだけの式は…書ける。フィールド・組の要素の読みは、条件によらず、守りを付けずに刻みごとに読む"; "値は `let` に分けても分けなくても同じ"，
+// but a `let` is evaluated whether or not a branch is taken; §11.11: the first value of the field of an expression of an event is `T.default()` of the type of the expression). The events are those of `msgs` (below) over x = 2 3 4 .. 13:
+// off (kind 2, vel 0) at the frames 1 5 9, on (kind 1, vel x) at the frames 3 (5), 7 (9), 11 (13). The expression that has no operand of a periodic clock (`vel(m)`, `is_on(m)`, `vel(m) == 0`, `!is_on(m) || ..`) is an expression of the event whose
+// field is `T.default()` of its own type before the first event (0 for a `U32`, false for a `Bool`), and an expression with `at sample` over the name is computed at sample from the last value of the name (`Msg.default()`: vel 100). Every value is worked out by hand.
+
+pub struct Msg: Default {
+  kind: U32,
+  vel: U32 = 100,
+}
+
+pub enum Note {
+  Off,
+  On(U32),
+}
+
+impl Default for Note {
+  rt fn default() -> Note {
+    Note.Off
+  }
+}
+
+rt fn vel(m: Msg) -> U32 {
+  m.vel
+}
+
+rt fn is_on(m: Msg) -> Bool {
+  m.kind == 1
+}
+
+const XS: [U32; 12] = [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]
+
+flow msgs(x: U32 at sample) -> Msg at event {
+  if x % 4 == 3 {
+    Some(Msg { kind: 2, vel: 0 })
+  } else if x % 4 == 1 {
+    Some(Msg { kind: 1, vel: x })
+  } else {
+    None
+  }
+}
+
+flow notes(x: U32 at sample) -> Note at event {
+  if x % 4 == 3 {
+    Some(Note.Off)
+  } else if x % 4 == 1 {
+    Some(Note.On(x))
+  } else {
+    None
+  }
+}
+
+// ---- the condition is an event, and the branch computes with the event: it is evaluated at the events where the condition holds, and a division in it does not stop at the others
+
+pub flow guard_if(x: U32 at sample) -> U32 at sample {
+  let m = msgs~(x)
+  if is_on(m) { vel(m) * 2 } else { x }
+}
+
+pub flow guard_if_let(x: U32 at sample) -> U32 at sample {
+  let m = msgs~(x)
+  let y = vel(m) * 2
+  if is_on(m) { y } else { x }
+}
+
+pub flow guard_div(x: U32 at sample) -> U32 at sample {
+  let m = msgs~(x)
+  if is_on(m) { 1000 / vel(m) } else { x }
+}
+
+pub flow nested_if(x: U32 at sample) -> U32 at sample {
+  let m = msgs~(x)
+  if is_on(m) {
+    if vel(m) > 6 { vel(m) * 10 } else { vel(m) }
+  } else {
+    x
+  }
+}
+
+pub flow match_arm(x: U32 at sample) -> U32 at sample {
+  let n = notes~(x)
+  match n {
+    Note.On(v) => v * 2,
+    Note.Off => x,
+  }
+}
+
+pub flow match_div(x: U32 at sample) -> U32 at sample {
+  let n = notes~(x)
+  match n {
+    Note.On(v) => 1000 / v,
+    Note.Off => x,
+  }
+}
+
+test "an if over an event reads the last event: the value of the branch on an on event, x otherwise; the same with the branch moved to a let" {
+  // before the first event the condition is false (x = 2). on: 10 (vel 5), 18 (9), 26 (13), kept to the next event; off: x.
+  let a = guard_if.render(XS, 8.0)
+  let b = guard_if_let.render(XS, 8.0)
+  let w_ab: [U32; 12] = [2, 3, 4, 10, 10, 7, 8, 18, 18, 11, 12, 26]
+  for i in 0 ..< 12 {
+    assert a.out[i] == w_ab[i]
+    assert b.out[i] == w_ab[i]
+  }
+}
+
+test "a division in a branch chosen by an event is evaluated only at the events where the condition holds: the off events (vel 0) do not stop it" {
+  // 1000 / 5 = 200 (frame 3), 1000 / 9 = 111 (7), 1000 / 13 = 76 (11).
+  let o = guard_div.render(XS, 8.0)
+  let w_o: [U32; 12] = [2, 3, 4, 200, 200, 7, 8, 111, 111, 11, 12, 76]
+  for i in 0 ..< 12 {
+    assert o.out[i] == w_o[i]
+  }
+}
+
+test "an if inside an if over events, and the arms of a match over an enum event with a binding, choose at the events: the binding of the arm that is not the last event is not computed" {
+  // nested: vel 5 is not over 6 (5), 9 and 13 are (90, 130). The match: before the first event the enum is Note.Off (its default, by hand), x; at an on event 2 v or 1000 / v (200, 111, 76), x at the off events (the arm On is not evaluated there).
+  let a = nested_if.render(XS, 8.0)
+  let b = match_arm.render(XS, 8.0)
+  let c = match_div.render(XS, 8.0)
+  let w_a: [U32; 12] = [2, 3, 4, 5, 5, 7, 8, 90, 90, 11, 12, 130]
+  let w_b: [U32; 12] = [2, 3, 4, 10, 10, 7, 8, 18, 18, 11, 12, 26]
+  let w_c: [U32; 12] = [2, 3, 4, 200, 200, 7, 8, 111, 111, 11, 12, 76]
+  for i in 0 ..< 12 {
+    assert a.out[i] == w_a[i]
+    assert b.out[i] == w_b[i]
+    assert c.out[i] == w_c[i]
+  }
+}
+
+// ---- the right side of && and ||: it is evaluated at the events where the left side lets it be
+
+pub flow and_right(x: U32 at sample) -> U32 at sample {
+  let m = msgs~(x)
+  if is_on(m) && 1000 / vel(m) > 150 { x } else { 0 }
+}
+
+pub flow or_right(x: U32 at sample) -> U32 at sample {
+  let m = msgs~(x)
+  if !is_on(m) || 1000 / vel(m) > 150 { x } else { 0 }
+}
+
+test "a right side of && and || with a division is evaluated only when the left side asks for it; the whole condition is false before the first event" {
+  // and: true at the frames 3 and 4 (vel 5: 200 > 150; 9 and 13: not). or: false before the first event (the field of the whole condition is false), true at the off events and for vel 5, false for 9 and 13: true at the frames 1 .. 6 and 9, 10.
+  let a = and_right.render(XS, 8.0)
+  let b = or_right.render(XS, 8.0)
+  let w_a: [U32; 12] = [0, 0, 0, 5, 6, 0, 0, 0, 0, 0, 0, 0]
+  let w_b: [U32; 12] = [0, 3, 4, 5, 6, 7, 8, 0, 0, 11, 12, 0]
+  for i in 0 ..< 12 {
+    assert a.out[i] == w_a[i]
+    assert b.out[i] == w_b[i]
+  }
+}
+
+// ---- the condition is a value of init
+
+pub flow init_cond(x: U32 at sample, c: Bool at init) -> U32 at sample {
+  let m = msgs~(x)
+  if c { vel(m) * 3 } else { x }
+}
+
+pub flow init_div(x: U32 at sample, c: Bool at init) -> U32 at sample {
+  let m = msgs~(x)
+  if c { 1000 / vel(m) } else { x }
+}
+
+test "a condition chosen at init: the branch is computed at every event when it holds, and not at all (a division by the vel 0 of an off event does not stop) when it does not" {
+  // c true: 3 vel over the last event: 0 before the first event and at the off events, 15, 27, 39. c false: x, whatever the divisor.
+  var a: [U32; 12] = [0; 12]
+  var b: [U32; 12] = [0; 12]
+  var c: [U32; 12] = [0; 12]
+  var sa = init_cond.init(init_cond.Config { c: true }, 8.0)
+  var sb = init_cond.init(init_cond.Config { c: false }, 8.0)
+  var sc = init_div.init(init_div.Config { c: false }, 8.0)
+  init_cond.process(inout sa, XS, inout a)
+  init_cond.process(inout sb, XS, inout b)
+  init_div.process(inout sc, XS, inout c)
+  assert a == [0, 0, 0, 15, 15, 0, 0, 27, 27, 0, 0, 39]
+  assert b == [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]
+  assert c == [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]
+}
+
+// ---- the condition is a value of sample: what is read is a name (or a field of it), the same value whether the condition holds or not (S-1197)
+
+pub flow name_under_sample(x: U32 at sample, g: Bool at sample) -> U32 at sample {
+  let m = msgs~(x)
+  let v = vel(m)
+  if g { v at sample } else { x }
+}
+
+pub flow field_under_sample(x: U32 at sample, g: Bool at sample) -> U32 at sample {
+  let m = msgs~(x)
+  if g { m.vel } else { x }
+}
+
+pub flow whole_under_sample(x: U32 at sample, g: Bool at sample) -> U32 at sample {
+  let m = msgs~(x)
+  if g { (m at sample).vel } else { x }
+}
+
+const GS: [Bool; 12] = [true, false, true, false, false, true, true, false, true, false, true, true]
+
+test "a name or the field of a name read under a condition of sample is written at each event, whether the condition holds at that frame or not" {
+  // The vel over the last event is 0 0 0 5 5 0 0 9 9 0 0 13; g holds at the frames 0 2 5 6 8 10 11, x elsewhere. At the frame 8 g holds and the event of the frame 7 (vel 9) came when g did not: 9. The read whole first is Msg.default() before the first
+  // event: the vel 100 at the frame 0.
+  var a: [U32; 12] = [0; 12]
+  var b: [U32; 12] = [0; 12]
+  var c: [U32; 12] = [0; 12]
+  var sa = name_under_sample.init(8.0)
+  var sb = field_under_sample.init(8.0)
+  var sc = whole_under_sample.init(8.0)
+  name_under_sample.process(inout sa, name_under_sample.In { x: XS, g: GS }, inout a)
+  field_under_sample.process(inout sb, field_under_sample.In { x: XS, g: GS }, inout b)
+  whole_under_sample.process(inout sc, whole_under_sample.In { x: XS, g: GS }, inout c)
+  assert a == [0, 3, 0, 5, 6, 0, 0, 9, 9, 11, 0, 13]
+  assert b == [0, 3, 0, 5, 6, 0, 0, 9, 9, 11, 0, 13]
+  assert c == [100, 3, 0, 5, 6, 0, 0, 9, 9, 11, 0, 13]
+}
+
+// ---- a comparison with 0: the expression of the event is false before the first event, the comparison at sample over the last value is true
+
+pub flow zero_of_event(x: U32 at sample) -> U32 at sample {
+  let m = msgs~(x)
+  if vel(m) == 0 { x } else { vel(m) }
+}
+
+pub flow zero_at_sample(x: U32 at sample) -> U32 at sample {
+  let m = msgs~(x)
+  let v = vel(m)
+  if (v at sample) == 0 { x } else { v }
+}
+
+test "if vel(m) == 0 is false before the first event (the field of a Bool), if (vel(m) at sample) == 0 is true there (0 == 0): only the frame 0 differs" {
+  // vel(m) == 0 is true at the off events and false at the on events; before the first event the else branch gives vel(m), 0 (the field), while the other has x = 2.
+  let a = zero_of_event.render(XS, 8.0)
+  let b = zero_at_sample.render(XS, 8.0)
+  let w_a: [U32; 12] = [0, 3, 4, 5, 5, 7, 8, 9, 9, 11, 12, 13]
+  let w_b: [U32; 12] = [2, 3, 4, 5, 5, 7, 8, 9, 9, 11, 12, 13]
+  for i in 0 ..< 12 {
+    assert a.out[i] == w_a[i]
+    assert b.out[i] == w_b[i]
+  }
+}
+
+// ---- a value of the parameter kinds in a branch under an event condition: it makes no field (§11.3: "パラメータの種類の値だけで決まる式は、刻みのクロックを付けてもこのフィールドを作らない"; the `init` and `block` expressions in a position of a
+// condition "巻き上げず、評価が届いたときに評価する" unless every condition is decided at `init` or `block`), so the branch has its value where it is reached, before the first event and after a reset too, and a `block` value is the one of the call that reaches it.
+
+pub flow else_const(x: U32 at sample) -> U32 at sample {
+  let m = msgs~(x)
+  if is_on(m) { x } else { 5 }
+}
+
+pub flow else_const_sum(x: U32 at sample) -> U32 at sample {
+  let m = msgs~(x)
+  if is_on(m) { x } else { 2 + 3 }
+}
+
+pub flow else_block(x: U32 at sample, k: U32 at block) -> U32 at sample {
+  let m = msgs~(x)
+  if is_on(m) { x } else { k * 2 }
+}
+
+pub flow else_init(x: U32 at sample, c: U32 at init) -> U32 at sample {
+  let m = msgs~(x)
+  if is_on(m) { x } else { c + 1 }
+}
+
+pub flow then_const(x: U32 at sample) -> U32 at sample {
+  let m = msgs~(x)
+  if !is_on(m) { 7 + 0 } else { x }
+}
+
+pub flow arm_block(x: U32 at sample, k: U32 at block) -> U32 at sample {
+  let n = notes~(x)
+  match n {
+    Note.On(v) => x + v,
+    Note.Off => k * 3,
+  }
+}
+
+pub flow or_block(x: U32 at sample, k: U32 at block) -> U32 at sample {
+  let m = msgs~(x)
+  if !is_on(m) || (x > (k + 1)) { 1 } else { 0 }
+}
+
+pub flow and_block(x: U32 at sample, k: U32 at block) -> U32 at sample {
+  let m = msgs~(x)
+  if is_on(m) && (x > (k + 1)) { x } else { 0 }
+}
+
+test "a constant in the branch of an event condition is the constant before the first event, and a sum of constants is too (frame 0: the condition is false, 5)" {
+  // The events: off at the frames 1 5 9, on at 3 7 11 (x = 5 9 13). The condition is false before the first event and after an off event, true after an on event: x at the frames 3 4 7 8 11, 5 elsewhere.
+  let a = else_const.render(XS, 8.0)
+  let b = else_const_sum.render(XS, 8.0)
+  let w: [U32; 12] = [5, 5, 5, 5, 6, 5, 5, 9, 10, 5, 5, 13]
+  for i in 0 ..< 12 {
+    assert a.out[i] == w[i]
+    assert b.out[i] == w[i]
+  }
+}
+
+test "the constant of the branch that the event condition takes in a then branch: 7 where it is not on" {
+  // !is_on(m) is false before the first event (the field of a Bool) so the first frame takes the else branch, x = 2; then 7 after an off event and x after an on event.
+  let a = then_const.render(XS, 8.0)
+  let w: [U32; 12] = [2, 7, 7, 5, 6, 7, 7, 9, 10, 7, 7, 13]
+  for i in 0 ..< 12 {
+    assert a.out[i] == w[i]
+  }
+}
+
+test "a block value in the branch of an event condition is the value of the call that reaches it: it is not kept from the event that chose the branch" {
+  // k = 4 for the frames 0 .. 5 and 5 for the frames 6 .. 11: the branch is 2 k where it is not on: 8 at the frames 0 1 2 5, 10 at the frames 6 9 10. The event of the frame 5 (off) came with k = 4, and the frame 6 reads k = 5 (10, not 8).
+  var out: [U32; 12] = [0; 12]
+  var st = else_block.init(8.0)
+  else_block.process(inout st, else_block.Params { k: 4 }, XS.slice(0, 6), inout out.slice(0, 6))
+  else_block.process(inout st, else_block.Params { k: 5 }, XS.slice(6, 12), inout out.slice(6, 12))
+  assert out == [8, 8, 8, 5, 6, 8, 10, 9, 10, 10, 10, 13]
+}
+
+test "an init value in the branch of an event condition: c + 1 from the frame 0" {
+  // c = 3: 4 where it is not on (the frames 0 1 2 5 6 9 10).
+  var out: [U32; 12] = [0; 12]
+  var st = else_init.init(else_init.Config { c: 3 }, 8.0)
+  else_init.process(inout st, XS, inout out)
+  assert out == [4, 4, 4, 5, 6, 4, 4, 9, 10, 4, 4, 13]
+}
+
+test "after a reset the condition is false again and the constant of the branch is there at once: no event, 5 5 5 5" {
+  let none: [U32; 4] = [2, 2, 2, 2]
+  var junk: [U32; 6] = [0; 6]
+  var out: [U32; 4] = [9; 4]
+  var st = else_const.init(8.0)
+  else_const.process(inout st, XS.slice(0, 6), inout junk)
+  assert junk == [5, 5, 5, 5, 6, 5]
+  else_const.reset(inout st)
+  else_const.process(inout st, none, inout out)
+  assert out == [5, 5, 5, 5]
+}
+
+test "a block value in an arm of a match over an event: Note.Off is the first value of the enum, so the arm of 3 k is taken at the frame 0, and x + v where it is on" {
+  // k = 4: 12 where it is Note.Off; on: x + v = 10 (frame 3, v 5), 11 (4), 18 (7, v 9), 19 (8), 26 (11, v 13).
+  let a = arm_block.render(arm_block.Params { k: 4 }, XS, 8.0)
+  let w: [U32; 12] = [12, 12, 12, 10, 11, 12, 12, 18, 19, 12, 12, 26]
+  for i in 0 ..< 12 {
+    assert a.out[i] == w[i]
+  }
+}
+
+test "the right side of || and && with a block value, under a left side that is an event: the right side reads k + 1 at once, before the first event too" {
+  // k = 4 so k + 1 = 5. The left side of || (!is_on(m)) is false before the first event (the field of a Bool): the right side is x > 5 with x = 2, false: 0. Then true at the off events (1 at the frames 1 2 5 6 9 10); on at the frames 3 4 7 8 11: x > 5
+  // (5 is not, 6 9 10 13 are): 0 1 1 1 1. && is false at once before the first event and where it is off, and x > 5 at the on frames: x for 6 9 10 13.
+  let a = or_block.render(or_block.Params { k: 4 }, XS, 8.0)
+  let b = and_block.render(and_block.Params { k: 4 }, XS, 8.0)
+  let w_a: [U32; 12] = [0, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1]
+  let w_b: [U32; 12] = [0, 0, 0, 0, 6, 0, 0, 9, 10, 0, 0, 13]
+  for i in 0 ..< 12 {
+    assert a.out[i] == w_a[i]
+    assert b.out[i] == w_b[i]
+  }
+}
+
+// ---- the whole `if` is a value of the event and constants: one computed part of the event, 0 (T.default()) before the first event
+
+pub flow whole_if(x: U32 at sample) -> U32 at sample {
+  let m = msgs~(x)
+  if vel(m) > 0 { 5 } else { 3 }
+}
+
+pub flow whole_if_at_sample(x: U32 at sample) -> U32 at sample {
+  let m = msgs~(x)
+  if (vel(m) > 0) at sample { 5 } else { 3 }
+}
+
+pub flow whole_if_in_a_branch(x: U32 at sample) -> U32 at sample {
+  let m = msgs~(x)
+  if is_on(m) { x } else { if vel(m) > 0 { 7 } else { 9 } }
+}
+
+test "an if over an event and constants only is one part of the event: 0 before the first event; with the condition at sample the constants are chosen at sample, 3" {
+  // vel(m) > 0 is true at an on event: 5 (the frames 3 4 7 8 11), 3 at an off event (the frames 1 2 5 6 9 10). The first frame: the whole `if` is the field of the event, U32.default() = 0; with `at sample` the condition is the field false and the branch 3.
+  let a = whole_if.render(XS, 8.0)
+  let b = whole_if_at_sample.render(XS, 8.0)
+  let w_a: [U32; 12] = [0, 3, 3, 5, 5, 3, 3, 5, 5, 3, 3, 5]
+  let w_b: [U32; 12] = [3, 3, 3, 5, 5, 3, 3, 5, 5, 3, 3, 5]
+  for i in 0 ..< 12 {
+    assert a.out[i] == w_a[i]
+    assert b.out[i] == w_b[i]
+  }
+}
+
+test "an if of the event and constants in the else branch of an event condition is a part of the event, whatever the outer condition: 0 at the frame 0 (the first value of that part), not the 9 of the branch" {
+  // The outer condition is false before the first event and the else branch is read: its field is not made yet, 0. Then 9 where it is off (vel 0), x where it is on.
+  let a = whole_if_in_a_branch.render(XS, 8.0)
+  let w: [U32; 12] = [0, 9, 9, 5, 6, 9, 9, 9, 10, 9, 9, 13]
+  for i in 0 ..< 12 {
+    assert a.out[i] == w[i]
+  }
+}
+
+// ---- the maker below (through a delay of the event, `prev~(^m)`): the condition and the branches read the event before the last
+
+pub flow below_cond(x: U32 at sample, k: U32 at block) -> U32 at sample {
+  let c = prev~(^m)
+  let r = if is_on(c) { x } else { k + 1 }
+  let m = msgs~(x)
+  r
+}
+
+pub flow below_branch(x: U32 at sample) -> U32 at sample {
+  let c = prev~(^m)
+  let r = if x > 6 { vel(c at sample) } else { 55 + 0 }
+  let m = msgs~(x)
+  r
+}
+
+pub flow below_saved(x: U32 at sample, k: U32 at block) -> U32 at sample {
+  let p = prev~(if (is_on(^m) at sample) { x } else { k + 1 })
+  let m = msgs~(x)
+  p
+}
+
+test "the event before the last, read through prev~(^m) written above the maker, is the condition: the branch of a block value is read where it is reached" {
+  // `r` is written above the call of `msgs~`, so it does not see the event of its own frame (the delay is the one of the event clock: after the event number j its value is the event number j - 1, and the first is Msg.default(), not on). Read at the frame i
+  // the events of the frames before i are done: c is on at the frames 6 7 (after the event 3, number 2 on) and 10 11 (after the event 5), off elsewhere. x there (8 9 12 13), k + 1 = 5 elsewhere.
+  let a = below_cond.render(below_cond.Params { k: 4 }, XS, 8.0)
+  let w: [U32; 12] = [5, 5, 5, 5, 5, 5, 8, 9, 5, 5, 12, 13]
+  for i in 0 ..< 12 {
+    assert a.out[i] == w[i]
+  }
+}
+
+test "the branch chosen by a sample condition reads the event before the last, and the other branch is a constant" {
+  // As above, the value of c at the frame i is the one after the events of the frames before i: vel(c) is 100 (Msg.default()) at the frames 0 .. 3, 0 at 4 5 (the off event of the frame 1), 5 at 6 7, 0 at 8 9, 9 at 10 11.
+  // x > 6 at the frames 5 .. 11 (x = 7 .. 13): vel(c) there; the constant 55 at the frames 0 .. 4.
+  let a = below_branch.render(XS, 8.0)
+  let w: [U32; 12] = [55, 55, 55, 55, 55, 0, 5, 5, 0, 0, 9, 9]
+  for i in 0 ..< 12 {
+    assert a.out[i] == w[i]
+  }
+}
+
+test "the saved expression of a delay with a ^name in the condition: the end of the stage decides, and the block branch is read there (§11.3)" {
+  // The condition is the last event at the end of the frame (is_on of it), at sample; the delay saves x or k + 1 and gives it a frame later. The end of the frame is on at the frames 3 4 7 8 11. Saved: 5 5 5 5 6 5 5 9 10 5 5 13; the output is the frame before, the first is 0.
+  let a = below_saved.render(below_saved.Params { k: 4 }, XS, 8.0)
+  let w: [U32; 12] = [0, 5, 5, 5, 5, 6, 5, 5, 9, 10, 5, 5]
+  for i in 0 ..< 12 {
+    assert a.out[i] == w[i]
+  }
+}
+
+// ---- sample_tick() in the branches and in the condition (the position of the event)
+
+pub flow tick_branch(x: U32 at sample) -> U32 at sample {
+  let m = msgs~(x)
+  if is_on(m) { x } else { sample_tick() + 5 }
+}
+
+pub flow tick_then(x: U32 at sample) -> U32 at sample {
+  let m = msgs~(x)
+  if is_on(m) { sample_tick() } else { 5 + 0 }
+}
+
+pub flow tick_in_cond(x: U32 at sample) -> U32 at sample {
+  let m = msgs~(x)
+  if is_on(m) && (sample_tick() > 4) { x } else { 5 + 0 }
+}
+
+test "sample_tick() in a branch of an event condition is the frame; an if with no operand of sample is a value of the event, and its sample_tick() is the position of the event" {
+  // tick_branch has x in the other branch, so it is computed at sample: not on at the frames 0 1 2 5 6 9 10: sample_tick() + 5 = 5 6 7 10 11 14 15; on at 3 4 7 8 11: x.
+  // tick_then has no operand of sample (§11.11: the expression of the event, computed at each event; §11.4: sample_tick() takes the clock of the place): 0 before the first event, 5 at an off event, the frame of the event (3, 7, 11) at an on event, each held.
+  let a = tick_branch.render(XS, 8.0)
+  let b = tick_then.render(XS, 8.0)
+  let w_a: [U32; 12] = [5, 6, 7, 5, 6, 10, 11, 9, 10, 14, 15, 13]
+  let w_b: [U32; 12] = [0, 5, 5, 3, 3, 5, 5, 7, 7, 5, 5, 11]
+  for i in 0 ..< 12 {
+    assert a.out[i] == w_a[i]
+    assert b.out[i] == w_b[i]
+  }
+}
+
+test "sample_tick() in the condition of an event is read at the event stage: the position of the event" {
+  // is_on(m) && position > 4 is true at the on events of the frames 7 and 11 (the one of the frame 3 is not over 4): x at the frames 7 8 11 (9 10 13), 5 elsewhere.
+  let a = tick_in_cond.render(XS, 8.0)
+  let w: [U32; 12] = [5, 5, 5, 5, 5, 5, 5, 9, 10, 5, 5, 13]
+  for i in 0 ..< 12 {
+    assert a.out[i] == w[i]
+  }
+}

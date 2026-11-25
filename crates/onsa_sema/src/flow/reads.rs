@@ -330,10 +330,9 @@ impl Marker<'_> {
             }
             Place::Here => at,
             Place::Refuse(s) => {
-                // Of an event, the first that refuses it: the join of two may be decided at neither's.
+                // The first that refuses it: the join of two may be decided at neither's.
                 let of = |&(c, _): &(ExprId, Cond)| self.choose.cond_stage(c, at);
-                let first = self.conds.iter().map(of).find(|c| !c.admits(s));
-                let c = first.filter(|_| matches!(s, ClockStage::Event(_))).unwrap_or(g);
+                let c = self.conds.iter().map(of).find(|c| !c.admits(s)).unwrap_or(g);
                 return self.refuse(e, s, Why::Cond(c.decided(at)));
             }
             Place::NotCopy(s) => return self.refuse(e, s, Why::NotCopy),

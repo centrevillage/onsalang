@@ -1,5 +1,5 @@
 //! The twins of the events of a flow (`twin_event.rs`, W7-11 U2-e2): for the programs of fixed seeds, `fa` and `fb` (a part in a named flow, a value moved into a `let`, the whole in a flow) give the same outputs on the
-//! evaluator, a twin that is made different is caught by its asserts, and a `reset` gives back the first run. The interpreter is compared with the evaluator by the tests that wait for U2 (E0200 of the lowering, S-564).
+//! evaluator, a twin that is made different is caught by its asserts, and a `reset` gives back the first run. The interpreter is compared with the evaluator by the tests that read the lowering of the events (S-564).
 
 use std::collections::BTreeSet;
 

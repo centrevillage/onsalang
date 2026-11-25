@@ -1,7 +1,7 @@
 //! The twins of the reference to what is below (`^名前`, W7-11 U2b/t2, S-1233, S-1241, S-1244, S-1245): a form `f` and the same flow with the part that reads the `let` below written as a reference `r`, which give the same values
 //! (the evaluator holds it, and the interpreter is compared with the evaluator). Three tables: `PAIRS` (12 pairs written by hand, a note of the text each rests on), `HEADS` and `WRAPS` (a seed crosses a head with a wrap), and
 //! the pairs whose reads of a `let` are moved where there is a division that panics (`panics`: the stage and the place of the first panic are the same in `f` and in `r`, and the interpreter panics where the evaluator does).
-//! The part that reads a name below at a slower stage than the delay it is in (`^名前` in a part that waits for the stage, S-1244 (1)) is `late`: the Core of `d439fac` stops there (R-520), so those twins are ignored until U2b.
+//! The part that reads a name below at a slower stage than the delay it is in (`^名前` in a part that waits for the stage, S-1244 (1)) is `late` (a tag of the table: the evaluator and the interpreter run both kinds, the interpreter compared with the evaluator).
 //! A form that reads a binding of an arm of a `match~` in the argument of a flow is not a twin (E0801, S-1245 (a), `tests/spec/flow_clock/e0801_match_binding_of_a_caret_*.onsa`).
 
 use std::collections::BTreeSet;

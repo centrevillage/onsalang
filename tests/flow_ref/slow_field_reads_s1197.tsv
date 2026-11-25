@@ -1,4 +1,4 @@
-# flow_ref 1 source=tests/spec/flow_semantics/slow_field_reads_s1197.onsa tests=13 evaluated=12 unavailable=0 skipped=1 waiting=0
+# flow_ref 1 source=tests/spec/flow_semantics/slow_field_reads_s1197.onsa tests=13 evaluated=13 unavailable=0 skipped=0 waiting=0
 @ a field of a tick under a sample condition is the value of the tick whether or not the condition held at the tick
 init 0 slow_field_reads_s1197.cond_field sr=0x41000000
 process 0 frames=12 in x=[0x00000000 0x3f800000 0x40000000 0x40400000 0x40800000 0x40a00000 0x40c00000 0x40e00000 0x41000000 0x41100000 0x41200000 0x41300000] g=[false false false false false true true false true false false true]
@@ -47,4 +47,8 @@ out=[0x41300000 0x41300000 0x41300000 0x41300000 0x41400000 0x3f800000 0x40c0000
 init 0 slow_field_reads_s1197.reset_cond_nested_part sr=0x41000000
 process 0 frames=12 in x=[0x00000000 0x3f800000 0x40000000 0x40400000 0x40800000 0x40a00000 0x40c00000 0x40e00000 0x41000000 0x41100000 0x41200000 0x41300000] g=[true true true true true true false true true true true true] r=[false false false false false true false false false false false false]
 out=[0x41300000 0x41300000 0x41300000 0x41300000 0x41400000 0x3f800000 0x40c00000 0x3f800000 0x41300000 0x41300000 0x41300000 0x41300000]
-- the copies of a par~ keep a field each	skipped layout
+@ the copies of a par~ keep a field each
+init 0 slow_field_reads_s1197.copies_of_the_field sr=0x41000000
+process 0 frames=12 in x=[0x00000000 0x3f800000 0x40000000 0x40400000 0x40800000 0x40a00000 0x40c00000 0x40e00000 0x41000000 0x41100000 0x41200000 0x41300000] g=[true true true true true true false true true true true true]
+out[0]=[0x41300000 0x41300000 0x41300000 0x41300000 0x41400000 0x41400000 0x40c00000 0x41400000 0x41500000 0x41500000 0x41500000 0x41500000]
+out[1]=[0x42de0000 0x42de0000 0x42de0000 0x42de0000 0x42e00000 0x42e00000 0x40c00000 0x42e00000 0x42e20000 0x42e20000 0x42e20000 0x42e20000]

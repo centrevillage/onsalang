@@ -320,15 +320,15 @@ fn forms(body: &str) -> Option<String> {
 }
 
 /// The forms of a chain with a modifier but `.reset_if~`: of a call of a flow
-/// with an event port and of a condition at an event; not of a flow with
-/// events inside alone, of a condition with `at sample`, and of `.reset_if~`
-/// alone (§11.10).
+/// with an event port and of a condition at an event of a `.reset_if~`; not
+/// of a flow with events inside alone, of a condition with `at sample`, of
+/// `.reset_if~` alone, and of a `.when~` with no ratio in its chain (§11.10).
 #[test]
 fn the_chains_not_run() {
     assert_eq!(forms("  cnt~(m).reset_if~(c)"), None);
     assert_eq!(forms("  let d = gen~(x).when~(c)\n  d at sample").as_deref(), Some("gen~(x)"));
     assert_eq!(forms("  let q = m > 3\n  own~(x).reset_if~(q)"), None);
-    assert_eq!(forms("  own~(x).when~(m > 3)").as_deref(), Some("when"));
+    assert_eq!(forms("  own~(x).when~(m > 3)"), None);
     assert_eq!(forms("  let d = prev~(m).reset_if~(m > 3)\n  d at sample"), None);
     assert_eq!(forms("  cnt~(m).reset_if~(m > 3).reset_if~(c)"), None);
     assert_eq!(forms("  own~(x).when~(c).reset_if~(m > 3)").as_deref(), Some("reset_if"));
@@ -337,7 +337,38 @@ fn the_chains_not_run() {
     assert_eq!(forms("  own~(x).when~(c) + own~(x).reset_if~(c)"), None);
     assert_eq!(forms("  let q = m > 3\n  own~(x).when~(q at sample) + prev~(x).reset_if~(q at sample)"), None);
     // The first in the order of the text.
-    assert_eq!(forms("  own~(x).when~(m > 3) + cnt~(m).when~(c)").as_deref(), Some("when"));
+    assert_eq!(forms("  (own~(3).when~(m > 3).down~(2) at sample) + cnt~(m).when~(c)").as_deref(), Some("when"));
+}
+
+/// The level of an event in the condition of a `.when~` (§11.10): of a chain
+/// of `.when~` and periodic `.reset_if~`, of a flow with no event port or of
+/// a delay at a tick; not beside a ratio, inside it or outside it, nor in a
+/// `par~` or an arm; with a `.reset_if~` at an event, the place is that of
+/// the `.reset_if~` on either side.
+#[test]
+fn the_levels_of_a_when_that_run() {
+    for run in [
+        "  own~(x).when~(m > 3).reset_if~(c).when~(m < 9)",
+        "  own~(x).reset_if~(c).when~(m > 3)",
+        "  prev~(x).when~(m > 3)",
+        "  let q = m > 3\n  prev~(prev~(x).when~(q))",
+        "  own~(gen~(x) at sample).when~(gen~(x) > 3 && c)",
+    ] {
+        assert_eq!(forms(run), None, "{run}");
+    }
+    for (stop, at) in [
+        ("  own~(3).when~(m > 3).down~(2) at sample", "when"),
+        ("  own~(3).down~(2).when~(m > 3) at sample", "when"),
+        ("  own~(x).when~(c).reset_if~(m > 3).when~(m > 4)", "reset_if"),
+        ("  own~(x).reset_if~(m > 3).when~(m > 4)", "reset_if"),
+        ("  own~(x).when~(m > 4).reset_if~(m > 3)", "reset_if"),
+        ("  cnt~(m).when~(m > 3)", "cnt~(m)"),
+        ("  let y = par~ i in 0..<2 { own~(x).when~(m > 3) + i }\n  y[0]", "when"),
+        ("  if~ c { own~(x).when~(m > 3) } else { x }", "when"),
+        ("  match~ x { 0 => prev~(x).when~(m > 3), v => v }", "when"),
+    ] {
+        assert_eq!(forms(stop).as_deref(), Some(at), "{stop}");
+    }
 }
 
 /// The forms in a `par~`, an `if~` and a `match~` (the conditions, the

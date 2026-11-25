@@ -226,6 +226,12 @@ fn after(guard: Clock, cc: Clock) -> Clock {
     guard.max(cc)
 }
 
+/// The stage that makes the part `e` of the clock `clock` under the guard `guard`: the later of the two. A value of the parameter kinds under a condition of a tick or an event is no part (§11.3: it makes no field of its
+/// own, and is evaluated where the branch is reached): `Clock::Const`, no stage. A `panic` is the exception, which the stage of its guard makes. `walk`, `makes` and `default_parts` read this one judgment.
+pub(super) fn made_at(body: &Body, e: ExprId, (clock, guard): (Clock, Clock)) -> Clock {
+    if clock <= Clock::Block && guard > Clock::Block && !is_panic(body, e) { Clock::Const } else { clock.max(guard) }
+}
+
 /// Does this stage decide the condition of `e` (an `if`, `&&` / `||` or `match`; the clock `cc`, the guard `g` counted in)? One that is not
 /// after the stage is decided here. A constant condition is decided before `init` (S-888 (c')), but this evaluator reads its value where a
 /// stage needs it: when a part that this stage makes is under it, in any branch, arm or right side (as the `has_writes` of the Core, which
@@ -259,7 +265,7 @@ fn makes(body: &Body, known: &Known, root: ExprId, e: ExprId, here: Clock, guard
     if clock == Clock::Const && guard == Clock::Const {
         return Ok(false);
     }
-    let made = clock.max(guard);
+    let made = made_at(body, e, (clock, guard));
     if made < here {
         return Ok(false);
     }
@@ -356,7 +362,7 @@ type Kid = (ExprId, Known, Clock);
 /// The children of `e` with the guard on the way to each and the clocks of the names that are in scope there (an arm binding has the
 /// clock of the object): the operands, and for a conditional form its branches, arms and right side under the conditions up to them.
 /// This is the walk of [`walk`] without the values, for the stage a place is in.
-fn kids(body: &Body, known: &Known, root: ExprId, e: ExprId, guard: Clock) -> Result<Vec<Kid>, Fault> {
+pub(super) fn kids(body: &Body, known: &Known, root: ExprId, e: ExprId, guard: Clock) -> Result<Vec<Kid>, Fault> {
     use ExprKind as K;
     let own = |xs: Vec<ExprId>| xs.into_iter().map(|x| (x, known.clone(), guard)).collect::<Vec<_>>();
     Ok(match &body.ast.expr(e).kind {
@@ -470,7 +476,7 @@ pub(super) fn pre(f: &mut Frame, known: &Known, root: ExprId, e: ExprId, at: Sta
 }
 
 /// The name that `e` takes a field or an element of (of a field of it, and so on), and nothing more, past parentheses (S-1197).
-fn field_of(body: &Body, e: ExprId) -> Option<ExprId> {
+pub(super) fn field_of(body: &Body, e: ExprId) -> Option<ExprId> {
     match &body.ast.expr(e).kind {
         ExprKind::Field { base, .. } | ExprKind::TupleIndex { base, .. } if !body.names(e) => {
             let base = body.ast.without_parens(*base);
@@ -485,7 +491,7 @@ fn field_of(body: &Body, e: ExprId) -> Option<ExprId> {
 fn free(f: &mut Frame, known: &Known, (root, top): (ExprId, ExprId), e: ExprId, here: Clock) -> Result<(), Stop> {
     let body = f.body;
     let stop = |fault| Stop { fault, at: body.ast.expr(e).span };
-    if !matches!(here, Clock::Tick(_)) || !reads_field(&body, e) {
+    if !matches!(here, Clock::Tick(_) | Clock::Event(_)) || !reads_field(&body, e) {
         return Ok(());
     }
     if f.low_stack() {
@@ -525,7 +531,7 @@ fn walk(f: &mut Frame, known: &Known, root: ExprId, e: ExprId, here: Clock, guar
         // A constant: where it is written (W9-03), and no part of it is of another stage.
         return Ok(());
     }
-    let made = clock.max(guard);
+    let made = made_at(&body, e, (clock, guard));
     if made < here {
         // Made by a stage before: not again, but the work the calls in it have in this stage is done where they are written (S-1233).
         return visit(f, known, root, e, here, guard);

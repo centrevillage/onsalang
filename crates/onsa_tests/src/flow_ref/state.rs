@@ -558,7 +558,7 @@ impl<'a> Frame<'a> {
         done
     }
 
-    /// The delay at `key` goes back to its `init` for a `reset_if~` of an event that comes now (S-1250 (B), §11.3: "値は、`^名前` の値の他は、書いた位置で評価して保存したのと同じである"): when it has been read in a stage that has
+    /// The delay at `key` goes back to its `init` for a `reset_if~` of an event that comes now (S-1250 (B), §11.3: "flow の値は、`^名前` の値だけを段の終わりのものとして、保存する値を書いた位置で評価して保存したのと同じである"): when it has been read in a stage that has
     /// not stored yet, what it gave was read before the reset and what it stores is the value of its place, so it goes back after the store (`Save::reset`, `commit_from`); else now, before the next read.
     pub(super) fn reset_delay(&mut self, key: &NodeKey, at: Span) -> Result<(), Stop> {
         let body = self.body;

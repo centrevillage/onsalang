@@ -5,7 +5,8 @@
 
 // W7-11 U1a/t, S-560, S-563, S-564, S-1232 (spec §11.2: "イベントの入力は `at event`、イベントの出力は `-> E at event` と書く"; §11.11: "イベントの値は `block` と同じく暗黙に読め"、"周期の刻みのクロックの被演算子の無い
 // イベントの値の式は、そのイベントのクロックの式で"、"パラメータの種類と `sample_tick()` は読める"、"同じクロックを二つの入力に渡してもよい"): the event clock in a head and in a body, in the forms that are accepted. `check` reads
-// the file with no diagnostic. A flow that has an event heading is lowered from W7-11 U2, so `build`, `test` and `graph` of it are E0200 until then (crates/onsa_cli/tests/cli/event_gate_rules.rs). The type of an event is
+// the file with no diagnostic. A flow that has an event heading is lowered, so `build`, `test` and `graph` of it run; only an event given to a part under a `.when~` (`fwd~(m).when~(c)`, `det~(x, 0.5).when~(true)`) is E0200, W7-17
+// (crates/onsa_cli/tests/cli/event_gate_rules.rs). The type of an event is
 // a Copy type: a struct, an enum with no `Default` (it is never read at `sample`, so it needs none, §11.3), an array, an option, an alias. The errors of the same forms are in e0815_event_mixes.onsa, e0815_event_calls.onsa,
 // e0815_event_arguments.onsa, e0815_event_at_forms.onsa, e0810_event_heading_forms.onsa and e0020_event_*.onsa.
 

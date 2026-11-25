@@ -23,9 +23,11 @@ file down_gather_inline_args.tsv rows=46 tests=3 evaluated=3 unavailable=0 skipp
 file down_two_boundaries_values.tsv rows=315 tests=18 evaluated=17 unavailable=0 skipped=1 waiting=0
 file enum_construct.tsv rows=21 tests=6 evaluated=6 unavailable=0 skipped=0 waiting=0
 file enum_construct_match.tsv rows=9 tests=2 evaluated=2 unavailable=0 skipped=0 waiting=1
+file event_condition_values.tsv rows=104 tests=21 evaluated=21 unavailable=0 skipped=0 waiting=0
 file event_hoist_values.tsv rows=34 tests=7 evaluated=7 unavailable=0 skipped=0 waiting=0
 file event_part_values.tsv rows=45 tests=7 evaluated=7 unavailable=0 skipped=0 waiting=0
-file event_reset_delay_values.tsv rows=110 tests=13 evaluated=13 unavailable=0 skipped=0 waiting=0
+file event_read_values.tsv rows=107 tests=16 evaluated=16 unavailable=0 skipped=0 waiting=0
+file event_reset_delay_values.tsv rows=115 tests=14 evaluated=14 unavailable=0 skipped=0 waiting=0
 file event_reset_more_values.tsv rows=100 tests=11 evaluated=11 unavailable=0 skipped=0 waiting=0
 file event_reset_values.tsv rows=186 tests=21 evaluated=21 unavailable=0 skipped=0 waiting=0
 file event_saved_branch_values.tsv rows=15 tests=2 evaluated=2 unavailable=0 skipped=0 waiting=0
@@ -35,6 +37,8 @@ file event_saved_match_values.tsv rows=20 tests=3 evaluated=3 unavailable=0 skip
 file event_saved_modified_values.tsv rows=42 tests=5 evaluated=5 unavailable=0 skipped=0 waiting=0
 file event_saved_values.tsv rows=74 tests=9 evaluated=9 unavailable=0 skipped=0 waiting=0
 file event_stage_values.tsv rows=60 tests=17 evaluated=17 unavailable=0 skipped=0 waiting=0
+file event_when_rate_values.tsv rows=2 tests=1 evaluated=0 unavailable=1 skipped=0 waiting=1
+file event_when_values.tsv rows=58 tests=8 evaluated=8 unavailable=0 skipped=0 waiting=0
 file feedback.tsv rows=7 tests=2 evaluated=2 unavailable=0 skipped=0 waiting=0
 file feedback_annotated.tsv rows=10 tests=1 evaluated=1 unavailable=0 skipped=0 waiting=0
 file flow_const_alias_derived_init_calls.tsv rows=22 tests=7 evaluated=7 unavailable=0 skipped=0 waiting=0
@@ -157,7 +161,7 @@ file slow_child_panics.tsv rows=38 tests=9 evaluated=9 unavailable=0 skipped=0 w
 file slow_child_values.tsv rows=59 tests=9 evaluated=8 unavailable=0 skipped=1 waiting=0
 file slow_field_reads_late_and_outer_s1197.tsv rows=35 tests=6 evaluated=6 unavailable=0 skipped=0 waiting=0
 file slow_field_reads_outside_conditions_values.tsv rows=21 tests=5 evaluated=5 unavailable=0 skipped=0 waiting=0
-file slow_field_reads_s1197.tsv rows=50 tests=13 evaluated=12 unavailable=0 skipped=1 waiting=0
+file slow_field_reads_s1197.tsv rows=54 tests=13 evaluated=13 unavailable=0 skipped=0 waiting=0
 file slow_field_reads_twins_s1197.tsv rows=95 tests=18 evaluated=18 unavailable=0 skipped=0 waiting=0
 file slow_out_stage_values.tsv rows=27 tests=6 evaluated=6 unavailable=0 skipped=0 waiting=0
 file slow_port_values.tsv rows=89 tests=12 evaluated=12 unavailable=0 skipped=0 waiting=0
@@ -183,4 +187,4 @@ file when_identity_regressions.tsv rows=78 tests=5 evaluated=5 unavailable=0 ski
 file when_slow_head_values.tsv rows=47 tests=5 evaluated=5 unavailable=0 skipped=0 waiting=0
 file when_slow_values.tsv rows=86 tests=9 evaluated=9 unavailable=0 skipped=0 waiting=0
 file when_values.tsv rows=77 tests=10 evaluated=10 unavailable=0 skipped=0 waiting=0
-total files=184 rows=8058 tests=1359 evaluated=1296 unavailable=1 skipped=62 waiting=6
+total files=188 rows=8338 tests=1406 evaluated=1343 unavailable=2 skipped=61 waiting=7

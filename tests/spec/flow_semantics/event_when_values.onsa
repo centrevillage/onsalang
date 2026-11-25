@@ -1,0 +1,240 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.10", "§11.11", "§11.3", "§11.4"]
+
+// `.when~(c)` where `c` is the value of an event, read as a level (W7-11 U3/t; S-563, S-1209, S-1239; spec §11.10: "`c` は…イベントの値（W の刻みで、その位置までの最後の値として読む水準）"; "`x.when~(c)`: 受け手…は、条件を読むクロック W の刻みで
+// `c` を読み、真なら次の W の刻みの前まで動き、偽なら止まる"; "止まっている間は最後の出力を保つ（一度も動いていなければ `T.default()`）"; "`x.when~(c).reset_if~(r)` は止まっている刻みにも初期化し（保持した出力も `T.default()` に戻る）、`x.reset_if~(r).when~(c)` は動く刻みにだけ
+// 初期化する"; "`x.when~(a).when~(b)` は `a && b` の刻みで動く"; §11.3: 周期の被演算子の無い式 (`v != 0`) はイベントのクロックの式で、W の刻みで読むのは隠れたフィールドの最後の値、最初のイベントの前は `Bool.default()` = false).
+// The values are worked out by hand from the text (a chain with a `.down~` is in event_when_rate_values.onsa). The levels `v` are the events of `lv`: the value of x, none for 2. With x = 2 2 1 2 0 2 2 1 0 2 2 2 the events are
+// 1 (frame 2), 0 (frame 4), 1 (frame 7), 0 (frame 8): the last value `v` is 0 0 1 1 0 0 0 1 0 0 0 0. `v != 0` is the expression of the event (false before the first event): true at the frames 2, 3 and 7. `v == 0` is false before the first event and then
+// true at the frames 4 5 6 8 .. 11, while `(v at sample) == 0` is an expression of sample over the last value (0 before the first event): true at the frames 0 1 4 5 6 8 .. 11. A part under `when~` runs on the frames where the condition holds and its output is
+// kept on the others (`T.default()` before its first run). The output of `count()` is the number of its runs.
+
+pub struct Stamp: Default {
+  n: U32 = 50,
+}
+
+const XS: [U32; 12] = [2, 2, 1, 2, 0, 2, 2, 1, 0, 2, 2, 2]
+const GS: [Bool; 12] = [true, true, true, false, true, true, false, true, true, true, false, true]
+const RS: [Bool; 12] = [false, false, false, true, false, true, false, false, false, false, false, false]
+
+flow lv(x: U32 at sample) -> U32 at event {
+  if x == 2 {
+    None
+  } else {
+    Some(x)
+  }
+}
+
+flow count() -> U32 at sample {
+  let n = prev~(^n) + 1
+  n
+}
+
+flow grid2() -> U32 at sample {
+  let k = prev~(^k at (sample / 2)) + 1
+  k at sample
+}
+
+flow stamp() -> Stamp at sample {
+  let n = prev~(^n) + 1
+  Stamp { n: n }
+}
+
+flow gated(c: Bool at sample) -> U32 at sample {
+  count~().when~(c)
+}
+
+// ---- the three readings of a comparison with 0, and the receivers: a counter, a delay, a grid of sample / 2, a part with a default of its own
+
+pub flow w_nonzero(x: U32 at sample) -> U32 at sample {
+  let v = lv~(x)
+  count~().when~(v != 0)
+}
+
+pub flow w_zero_event(x: U32 at sample) -> U32 at sample {
+  let v = lv~(x)
+  count~().when~(v == 0)
+}
+
+pub flow w_zero_sample(x: U32 at sample) -> U32 at sample {
+  let v = lv~(x)
+  count~().when~((v at sample) == 0)
+}
+
+pub flow w_delay(x: U32 at sample) -> U32 at sample {
+  let v = lv~(x)
+  prev~(sample_tick() + 1).when~(v != 0)
+}
+
+pub flow w_grid(x: U32 at sample) -> U32 at sample {
+  let v = lv~(x)
+  grid2~().when~(v != 0)
+}
+
+pub flow w_stamp(x: U32 at sample) -> U32 at sample {
+  let v = lv~(x)
+  let s = stamp~().when~(v != 0)
+  s.n
+}
+
+test "when~(v != 0) runs the counter where the last event is not 0: false before the first event, the output kept on the stopped frames" {
+  // The runs are the frames 2 3 7: 1 2 3, kept. v == 0 as an expression of the event is false before the first event: the runs are the frames 4 5 6 8 9 10 11 (7 runs), the first four frames stay 0.
+  // With (v at sample) == 0 the comparison is of sample over 0 before the first event, true: the runs are the frames 0 1 4 5 6 8 .. 11 (9 runs).
+  let a = w_nonzero.render(XS, 8.0)
+  let b = w_zero_event.render(XS, 8.0)
+  let c = w_zero_sample.render(XS, 8.0)
+  let w_a: [U32; 12] = [0, 0, 1, 2, 2, 2, 2, 3, 3, 3, 3, 3]
+  let w_b: [U32; 12] = [0, 0, 0, 0, 1, 2, 3, 3, 4, 5, 6, 7]
+  let w_c: [U32; 12] = [1, 2, 2, 2, 3, 4, 5, 5, 6, 7, 8, 9]
+  for i in 0 ..< 12 {
+    assert a.out[i] == w_a[i]
+    assert b.out[i] == w_b[i]
+    assert c.out[i] == w_c[i]
+  }
+}
+
+test "a delay, a grid of sample / 2 and a part with a Default of its own under when~(v != 0) count the runs: the output is T.default() before the first run" {
+  // The delay stores the frame + 1 at the runs 2 3 7: 0 (init), 3, 4 are its outputs. The grid ticks at the runs 0 and 2 (the frames 2 and 7): 1 1 2. The part gives Stamp.default() (n = 50) before its first run, then 1 2 3.
+  let a = w_delay.render(XS, 8.0)
+  let b = w_grid.render(XS, 8.0)
+  let c = w_stamp.render(XS, 8.0)
+  let w_a: [U32; 12] = [0, 0, 0, 3, 3, 3, 3, 4, 4, 4, 4, 4]
+  let w_b: [U32; 12] = [0, 0, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2]
+  let w_c: [U32; 12] = [50, 50, 1, 2, 2, 2, 2, 3, 3, 3, 3, 3]
+  for i in 0 ..< 12 {
+    assert a.out[i] == w_a[i]
+    assert b.out[i] == w_b[i]
+    assert c.out[i] == w_c[i]
+  }
+}
+
+// ---- the maker of the event above and below the call: the condition is read where the call is written
+
+pub flow w_above(x: U32 at sample) -> U32 at sample {
+  let p = prev~(^v)
+  let c = count~().when~(p != 0)
+  let v = lv~(x)
+  c
+}
+
+pub flow w_below(x: U32 at sample) -> U32 at sample {
+  let v = lv~(x)
+  let p = prev~(v)
+  count~().when~(p != 0)
+}
+
+test "a condition made of the event before the last one is read where the call is written: after the maker it has the event of the frame, above it the one before" {
+  // p is the event before the last: 0 at the first (frame 2), 1 (frame 4), 0 (7), 1 (8). p != 0 is false before the first event and then at the frames 2 3, true at 4 5 6, false at 7, true from 8. A call below the maker reads that: the runs are the frames 4 5 6 8 9 10 11.
+  // A call above the maker reads before the maker's event of the frame, the field of the frame before: the runs are the frames 5 6 7 9 10 11.
+  let a = w_above.render(XS, 8.0)
+  let b = w_below.render(XS, 8.0)
+  let w_a: [U32; 12] = [0, 0, 0, 0, 0, 1, 2, 3, 3, 4, 5, 6]
+  let w_b: [U32; 12] = [0, 0, 0, 0, 1, 2, 3, 3, 4, 5, 6, 7]
+  for i in 0 ..< 12 {
+    assert a.out[i] == w_a[i]
+    assert b.out[i] == w_b[i]
+  }
+}
+
+// ---- the same in a flow of its own, with a let, and in a chain
+
+pub flow w_wrapped(x: U32 at sample) -> U32 at sample {
+  let v = lv~(x)
+  gated~(v != 0)
+}
+
+pub flow w_let_at(x: U32 at sample) -> U32 at sample {
+  let v = lv~(x)
+  let on = v != 0
+  count~().when~(on at sample)
+}
+
+pub flow w_let_plain(x: U32 at sample) -> U32 at sample {
+  let v = lv~(x)
+  let on = v != 0
+  count~().when~(on)
+}
+
+pub flow w_two(x: U32 at sample, g: Bool at sample) -> U32 at sample {
+  let v = lv~(x)
+  count~().when~(v != 0).when~(g)
+}
+
+pub flow w_and(x: U32 at sample, g: Bool at sample) -> U32 at sample {
+  let v = lv~(x)
+  count~().when~(v != 0 && g)
+}
+
+test "a when~ in a flow of its own with the event passed in, a let of the level, with and without at sample, give the values of the direct form" {
+  let a = w_wrapped.render(XS, 8.0)
+  let b = w_let_at.render(XS, 8.0)
+  let c = w_let_plain.render(XS, 8.0)
+  let w_abc: [U32; 12] = [0, 0, 1, 2, 2, 2, 2, 3, 3, 3, 3, 3]
+  for i in 0 ..< 12 {
+    assert a.out[i] == w_abc[i]
+    assert b.out[i] == w_abc[i]
+    assert c.out[i] == w_abc[i]
+  }
+}
+
+test "when~(v != 0).when~(g) runs where both hold, as does when~(v != 0 && g): the frames 2 and 7" {
+  var a: [U32; 12] = [0; 12]
+  var b: [U32; 12] = [0; 12]
+  var sa = w_two.init(8.0)
+  var sb = w_and.init(8.0)
+  w_two.process(inout sa, w_two.In { x: XS, g: GS }, inout a)
+  w_and.process(inout sb, w_and.In { x: XS, g: GS }, inout b)
+  assert a == [0, 0, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2]
+  assert b == [0, 0, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2]
+}
+
+pub flow w_stops_then_resets(x: U32 at sample, r: Bool at sample) -> U32 at sample {
+  let v = lv~(x)
+  count~().when~(v != 0).reset_if~(r)
+}
+
+pub flow w_resets_then_stops(x: U32 at sample, r: Bool at sample) -> U32 at sample {
+  let v = lv~(x)
+  count~().reset_if~(r).when~(v != 0)
+}
+
+test "when~(c).reset_if~(r) resets also on the stopped frames and puts the kept output back; reset_if~(r).when~(c) resets only on the frames that run" {
+  // The runs are the frames 2 3 7; r is true at the frames 3 (a run) and 5 (stopped). Outside: 1 at the frame 2, the reset before the run of the frame 3 gives 1 again, the frame 4 keeps it, the reset of the frame 5 gives 0 (state and kept output),
+  // the run of the frame 7 gives 1. Inside: the reset of the frame 3 is before the run (1), that of the frame 5 does not take place, the run of the frame 7 gives 2.
+  var a: [U32; 12] = [0; 12]
+  var b: [U32; 12] = [0; 12]
+  var sa = w_stops_then_resets.init(8.0)
+  var sb = w_resets_then_stops.init(8.0)
+  w_stops_then_resets.process(inout sa, w_stops_then_resets.In { x: XS, r: RS }, inout a)
+  w_resets_then_stops.process(inout sb, w_resets_then_stops.In { x: XS, r: RS }, inout b)
+  assert a == [0, 0, 1, 1, 1, 0, 0, 1, 1, 1, 1, 1]
+  assert b == [0, 0, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2]
+}
+
+// ---- a run cut into several calls of process, and reset
+
+test "the calls of process cut the frames anywhere, a call of 0 frames too: the last event and the runs are in the state" {
+  var out: [U32; 12] = [0; 12]
+  var st = w_nonzero.init(8.0)
+  w_nonzero.process(inout st, XS.slice(0, 3), inout out.slice(0, 3))
+  w_nonzero.process(inout st, XS.slice(3, 3), inout out.slice(3, 3))
+  w_nonzero.process(inout st, XS.slice(3, 8), inout out.slice(3, 8))
+  w_nonzero.process(inout st, XS.slice(8, 12), inout out.slice(8, 12))
+  assert out == [0, 0, 1, 2, 2, 2, 2, 3, 3, 3, 3, 3]
+}
+
+test "reset puts the last event (no event: the level is false), the runs and the kept output back" {
+  // After 4 frames the last event is 1 and the counter is 2. After the reset three frames with no event give 0 0 0: the condition is false and the counter did not run (without it the level would still be true: 3 4 5).
+  let head: [U32; 4] = [2, 2, 1, 2]
+  let none: [U32; 3] = [2, 2, 2]
+  var junk: [U32; 4] = [0; 4]
+  var out: [U32; 3] = [9; 3]
+  var st = w_nonzero.init(8.0)
+  w_nonzero.process(inout st, head, inout junk)
+  assert junk == [0, 0, 1, 2]
+  w_nonzero.reset(inout st)
+  w_nonzero.process(inout st, none, inout out)
+  assert out == [0, 0, 0]
+}

@@ -8,7 +8,7 @@
 //!   state of each (§12.4).
 //! - From W7-11 U2r a chain of `reset_if~` only (one or more) runs when it has an event: a receiver whose condition is an event, a receiver that has an event port (a call of a flow with an event input, or an argument that is an
 //!   event), and a built-in delay of an event (its condition is the event of its own or a kind `block`). The forms that are E0200 after U2r (until W7-17): a call with `when~`, `.down~` or `.up~` whose callee has an event port, a
-//!   chain that has an event condition and a `when~`, `.down~` or `.up~`, an event in a `par~`, an `if~` or a `match~`, a source that ticks by itself (`let d = fwd~(prev~(^d))`, on the path of the output, off it, and in a loop
+//!   chain that has a `.reset_if~` at an event and a `when~`, `.down~` or `.up~`, or a `when~` at an event and a `.down~` or `.up~` (from U3 one with none of them runs), an event in a `par~`, an `if~` or a `match~`, a source that ticks by itself (`let d = fwd~(prev~(^d))`, on the path of the output, off it, and in a loop
 //!   of two). Each is one E0200 for the flow that has the form, at a place in that flow (the spec fixes the code and says that it is where the form is found, §18.1; so only the lines of the flow are asked), in `test`,
 //!   `dump --core` and `graph <that flow>`; the flows that run in the same package are not stopped (`graph` of one is drawn), and the tests do not run.
 //! - A package with a mistake of the clock in a flow with an event (E0815: the events of two inputs in one sum) has that diagnostic and no E0200, in every command: the check stops what goes on to the Core.
@@ -64,6 +64,14 @@ const DELAY_MODIFIER: &str =
 const PAR_EVENT: &str = "pub flow par_event(m: U32 at event) -> U32 at sample {\n  let ys = par~ i in 0 ..< 2 {\n    prev~(m)\n  }\n  ys[0] + ys[1]\n}\n";
 const IF_EVENT: &str = "pub flow if_event(m: U32 at event, c: Bool at sample) -> U32 at sample {\n  if~ c {\n    prev~(m)\n  } else {\n    0\n  }\n}\n";
 const MATCH_EVENT: &str = "pub flow match_event(m: U32 at event, k: U32 at sample) -> U32 at sample {\n  match~ k {\n    0 => prev~(m),\n    _ => 0,\n  }\n}\n";
+
+/// A condition of a `when~` at an event (a level, W7-11 U3): the chain of `when~` and periodic `reset_if~` runs; a `.down~` in the chain, a `reset_if~` at an event with it, a part with an event port and a `par~` stay E0200 (W7-17).
+const WHEN_LEVEL: &str = "pub flow when_level(x: F32 at sample, c: Bool at sample) -> F32 at sample {\n  let d = with_event_out~(x)\n  lp~(x).when~(d != 0).reset_if~(c).when~(d < 9)\n}\n";
+const WHEN_DELAY: &str = "pub flow when_delay(x: F32 at sample) -> F32 at sample {\n  let d = with_event_out~(x)\n  prev~(prev~(x).when~(d != 0))\n}\n";
+const WHEN_DOWN: &str = "pub flow when_down(x: F32 at sample) -> F32 at sample {\n  let d = with_event_out~(x)\n  lp~(0.5).when~(d != 0).down~(2) at sample\n}\n";
+const WHEN_MIXED: &str = "pub flow when_mixed(x: F32 at sample) -> F32 at sample {\n  let d = with_event_out~(x)\n  lp~(x).when~(d != 0).reset_if~(d > 1)\n}\n";
+const WHEN_PORT: &str = "pub flow when_port(x: F32 at sample) -> U32 at sample {\n  let d = with_event_out~(x)\n  acc~(d).when~(d != 0)\n}\n";
+const WHEN_PAR: &str = "pub flow when_par(x: F32 at sample) -> F32 at sample {\n  let on = with_event_out~(x) != 0\n  let ys = par~ i in 0 ..< 2 {\n    lp~(x).when~(on)\n  }\n  ys[0] + ys[1]\n}\n";
 
 /// The `(code, line)` of every diagnostic line of the text output of a command.
 fn errors(out: &Out) -> Vec<(String, u64)> {
@@ -284,6 +292,23 @@ fn reset_if_chains_that_run_beside_a_mixed_chain_are_not_stopped_u2r() {
         let out = run(d.root(), &["graph", flow]);
         assert_eq!(out.code, 0, "graph {flow}: {}{}", out.stdout, out.stderr);
     }
+}
+
+/// A level of an event in the condition of a `when~` (U3): the chains that run are tested and drawn beside a `.down~` in the chain, a `reset_if~` at an event, a part with an event port and a `par~`, one E0200 each.
+#[test]
+fn the_levels_of_an_event_in_a_when_run_and_the_other_chains_stop_u3() {
+    let runs = [EVENT_OUT, ACC, LP, WHEN_LEVEL, WHEN_DELAY];
+    let (d, _) = package("event_when_run", &runs);
+    assert_checks("event_when_run", &d);
+    let out = run(d.root(), &["test"]);
+    assert_eq!(out.code, 0, "test: {}{}", out.stdout, out.stderr);
+    assert!(errors(&out).is_empty() && out.stdout.contains("1 passed, 0 failed"), "test: {}{}", out.stdout, out.stderr);
+    for flow in ["when_level", "when_delay"] {
+        let out = run(d.root(), &["graph", flow]);
+        assert_eq!(out.code, 0, "graph {flow}: {}{}", out.stdout, out.stderr);
+    }
+    let stays = [EVENT_OUT, ACC, LP, WHEN_LEVEL, WHEN_DOWN, WHEN_MIXED, WHEN_PORT, WHEN_PAR];
+    assert_each_stops("event_when_stay", &stays, &["when_down", "when_mixed", "when_port", "when_par"]);
 }
 
 // ---------------------------------------------------------------- a flow with an event is in `onsa graph` only where it is drawn

@@ -1,0 +1,2 @@
+# flow_ref 1 source=tests/spec/flow_semantics/event_when_rate_values.onsa tests=1 evaluated=0 unavailable=1 skipped=0 waiting=1
+? under .down~(4) the condition is read at the ticks (the frames 0 4 8), before the events of the frame: it runs the part four frames from the tick	unavailable a modifier other than `reset_if~` with an event (W7-17)

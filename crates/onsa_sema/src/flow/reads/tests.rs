@@ -185,6 +185,15 @@ pub flow f(x: F32 at sample, p: F32 at block, n: I32 at block, g: Bool at sample
     let cases = [
         ("x * (if n > 0 { (a * 2.0) at sample } else { 0.0 })", Some((Code::E0815, "a * 2.0", "`block`"))),
         ("x * (if g { (a * 2.0) at sample } else { 0.0 })", Some((Code::E0815, "a * 2.0", "`sample`"))),
+        // Of two, the first that refuses it.
+        (
+            "x * (if n > 0 { if g { (a * 2.0) at sample } else { 1.0 } } else { 0.0 })",
+            Some((Code::E0815, "a * 2.0", "`block`")),
+        ),
+        (
+            "x * (if g { if n > 0 { (a * 2.0) at sample } else { 1.0 } } else { 0.0 })",
+            Some((Code::E0815, "a * 2.0", "`sample`")),
+        ),
         ("x * (if g { a at sample } else { 0.0 })", None),
         ("x * (m at sample).f", Some((Code::E0816, "m", "`m`"))),
         ("x * ((N { f: a }) at sample).f", Some((Code::E0816, "N { f: a }", "this value"))),

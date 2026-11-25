@@ -2,7 +2,7 @@
 // [test]
 // spec = ["§11.3", "§11.4", "§11.11", "§18.1"]
 
-// W7-11 U1b/t, S-563, S-1158, S-1186 (spec §11.11: "最初のイベントの前は `T.default()`（`T` が `Default` を満たさなければ E0816）"; §11.3: "速い段で読む式で E0816。速い段で読まない刻みの値には要らない"; §11.4: "`init` を省略すると…`T` が `Default` を満たさなければ
+// W7-11 U1b/t, S-563, S-1158, S-1186 (spec §11.11: "最初のイベントの前は `T.default()`（`T` が `Default` を満たさなければ E0816。…）"; §11.3: "速い段で読む式で E0816。速い段で読まない刻みの値には要らない"; §11.4: "`init` は省略できる。省略すると…`T` が `Default` を満たさなければ
 // E0816"): an event value read at a periodic clock by its name (`m`, a `let`, the output, a condition of `when~`) needs `Default` for the time before the first event; `Mode` and `Note` have none. A part computed from the event
 // alone is read in a field of its own type (event_implicit_read_accepted.onsa), and so is a field of it (`m.pitch`, S-1197: a field of the type of the read, so `Note` needs no `Default` for it: event_field_reads_s1197.onsa; the error of a field whose type has no
 // `Default` is in e0816_event_field_read_type_s1197.onsa). One error per flow (P-01). `x` is a `sample` input, `l4` is `sample / 4`.

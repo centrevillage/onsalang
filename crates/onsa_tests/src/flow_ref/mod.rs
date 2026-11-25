@@ -128,4 +128,6 @@ mod tests;
 #[cfg(test)]
 mod walk_tests;
 #[cfg(test)]
+mod when_event_tests;
+#[cfg(test)]
 mod when_tests;

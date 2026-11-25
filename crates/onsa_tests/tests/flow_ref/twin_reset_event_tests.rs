@@ -1,5 +1,5 @@
 //! The twins of a `reset_if~` of an event (`twin_reset_event.rs`, W7-11 U2r/e): for the programs of fixed seeds, `fa` and `fb` give the same outputs on the evaluator, a twin that is made different is caught by its
-//! asserts, and the interpreter is compared with the evaluator by the test that waits for U2r (E0200 of the lowering, S-562).
+//! asserts, and the interpreter is compared with the evaluator by the test that reads the lowering of the events (S-562).
 
 use std::collections::BTreeSet;
 

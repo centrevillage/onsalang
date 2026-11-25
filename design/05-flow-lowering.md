@@ -84,7 +84,7 @@ rt fn resonator.process(inout s, params, input: Span[F32], inout output: Span[F3
   - 条件の `sample_tick()` だけの式は、W の `at` を付けた式と同じに扱う（S-1230。`guard_cond` の `ArgRead::at` が W、`settle` が根を W に落とし、外の `when~` で読む段が速くなる所だけ `Choose::place` が W の段の隠れた欄に置く）。
   - 境界の内に書いた条件は頭の入力と同じに集める（`Port::Cond`、`bounds::cond_ring`）。欄は `Part::On`・`Count`・`Held` と、`when~` で止まる遅延の `Part::Ran`（名前と並びは S-1220 の仮、`plan/names.rs`）。
   - 組込みの遅延の受け手は `Ports::delay`（P = W = 第 1 引数のクロック K）で、表は段 K 一つ。保存は `store_node` が `Part::Ran` で守り、止まっている間も保存する値と `vdelay~` の `d` は評価する。
-  - 修飾子の門（`ModifierChain::gate`・`check::gated`・`Feature::InstanceModifiers`）は無い。修飾子で E0200 にするのは `Feature::ResetTicksPastU32`（S-1225）だけで、イベントのクロックの条件の `reset_if~` は下の U2r、他は E0200（W7-17）。
+  - 修飾子の門（`ModifierChain::gate`・`check::gated`・`Feature::InstanceModifiers`）は無い。修飾子で E0200 にするのは `Feature::ResetTicksPastU32`（S-1225）だけで、イベントのクロックの条件は、`reset_if~` が下の U2r、`when~` が下の U3、他は E0200（W7-17）。
 - 追記（2026-11-25、W7-11 U2）: イベントの段の降下（§11.11）。
   - 源（イベントの入力と、イベントを出す呼び出し）ごとの段 `ClockStage::Event(src)` を、関数 `ev_<k>(inout s, [t], <イベント>)` に降ろす（`k` は `FlowInfo::events` の番号、`FlowFns::events`）。
     生成器は `phases::gen_stage` の一つで、段の中の順も遅い刻みの段と同じである。呼び出しの源の関数だけの枝は `StageCx` の二つで、`source`（引数のイベント）と `gave`（出力のイベントの受け）。
@@ -106,5 +106,7 @@ rt fn resonator.process(inout s, params, input: Span[F32], inout output: Span[F3
     `Open` は書いた位置で立てる（`chain::opened`。読む所か、他の遅延の第 1 引数の中なら `delay_work` の終わり）。イベントの段の `Op::Reset` は、`Open` が立っていれば `Back(at)` を立てるだけにし、`store_node` が保存の後に `chain::stored` で両方を下ろして戻す。
     遅延の状態は書いた位置から保存まで変わらないので、段の終わりに読む入れ子と、`d` に `^名前` のある `vdelay~` も同じ規則で揃い、評価と panic の順は変わらない。遅延と同じ段の戻しは読みの前なので旗を見ない。
     `reset`（`Keep::Hard`）は旗も下ろす（間で panic した後）。`reset_if~`（`_reset_kept`）は、旗が下りている所でしか呼ばれないので触れない。旗は戻しの位置ごとなので、W7-17 で境界・守りと重ねても `reset_parts(at)` のまま使える。
-  - 動かない形（`.when~`・`.up~`・`.down~` を含む連鎖、`par~`・`if~`・`match~` の中、自分の出力だけで刻む源。W7-17）は `FlowInfo::event_form` が持ち、`lower_flow` と `graph` が E0200 を出す（`FlowInfo::event_gate`）。
+  - イベントの値の条件の `when~`（U3、水準）: 条件を読む口（`guard_cond`）は W の刻みで、`Op::When` は周期の条件と同じに、書いた位置で読んだ値（欄なら `hold` の `let`）を使う。イベントの段では条件の欄を書くだけで、受け手は動かない。Core と計画の表に専用の枝は無い。
+  - 段ごとの歩き: `let`（と出力）がその段の `let` でなくても段の仕事（呼び出しの仕事、遅延の保存）を持つかは `FlowInfo::work`（`work_in`）が持ち、段の関数はその `let` を書いた位置で歩く（S-1233）。
+  - 動かない形（`.when~`・`.up~`・`.down~` を含む連鎖の、イベントで動く受け手とイベントの `reset_if~`、`.up~`・`.down~` を含む連鎖のイベントの `when~`、`par~`・`if~`・`match~` の中、自分の出力だけで刻む源。W7-17）は `FlowInfo::event_form` が持ち、`lower_flow` と `graph` が E0200 を出す（`FlowInfo::event_gate`）。
 - （2026-10-06、点検 C-66: 例を S-27、S-30、S-33、S-44、S-86、S-102、R-13、R-92 に合わせた。名前と巻き上げの細部は点検の C-36。）

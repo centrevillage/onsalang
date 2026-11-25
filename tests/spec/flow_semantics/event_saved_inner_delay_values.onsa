@@ -3,17 +3,16 @@
 // mode = "test"
 // spec = ["§11.3", "§11.4", "§11.5", "§11.11"]
 
-// W7-11 U2/t3 (see the end of this note), S-1249, S-1240, S-1244, S-1245 (spec §11.3: "保存する値の残りと、段の終わりに評価する遅い段の部分式 … が読むイベントの値 … は、`^名前` を書いたものと、`^名前` で選ぶ `match~` の束縛 … を除いて、
-// 評価が段の終わりでも、その読みを書いた位置 … までの最後の値である。条件の位置の中でも、遅い刻みの部分式の中でも同じで、その位置を選ぶ条件や部分式の他の所に `^名前` があるかによらない
-// (読みに `^` を書いたかどうかだけで決まる)"): an event that a stored expression reads is the value where the read is written, whatever the condition that chooses the place or the part that holds it reads with a `^name`.
-// Where the part is evaluated (the end of the stage, S-1244) is the other thing. Each form has a twin that moves the read without `^` into a `let` above the delay (the same value, §11.3 "その遅延を含む `let` の前の … `let` に出した形と同じ値になる")
+// W7-11 U2/t3 (see the end of this note), S-1249, S-1240, S-1244, S-1245 (spec §11.3: "flow の値は、`^名前` の値だけを段の終わりのものとして、保存する値を書いた位置で評価して保存したのと同じである";
+// "イベントの値は、`^名前` を書いた読み（`^名前` と、`^名前` を書いたイベントの段の部分式）だけが、使う段の終わりの値である" (what decides is whether the read is written with a `^`)): an event that a stored expression reads is the value where the read is written, whatever the condition that chooses the place or the part that holds it reads with a `^name`.
+// Where the part is evaluated (the end of the stage, S-1244) is the other thing. Each form has a twin that moves the read without `^` into a `let` above the delay (the same value, S-1249, S-1250)
 // and a contrast that writes the read as a `^t` of a `let` below the producer, which is the value at the end of the stage.
 //
 // The input is `GS = 1 .. 9` and `gen~` gives the event `x` when `x % 3 != 0` (the samples 0 1 3 4 6 7, the values 1 2 4 5 7 8). The delay of the events `p = prev~(^d)` gives the event before (0 at the first), so p after
 // each sample is `PA` = 0 1 1 2 4 4 5 7 7, and p before the event of the sample (`PB`, what a read written above the producer sees) is 0 0 1 1 2 4 4 5 7. A delay gives the expression it stored at the sample before (0 at the first),
 // so its output is the stored expression shifted by one sample, and `prev~(x)` gives 0 1 2 .. 8 for the `x` of 1 .. 9. Every value is worked out by hand in the comments.
 
-// The forms of this file are those where a delay inside the part, or inside the first argument of the delay, has a `^name` that does not count (§11.3: "中の遅延の第 1 引数の中の `^名前` は、その遅延の出力なので数えない").
+// The forms of this file are those where a delay inside the part, or inside the first argument of the delay, has a `^name` that does not count (§11.3: "`^名前` には、… 中の遅延の第 1 引数の中のものを含まない").
 // A delay of a bare `^name` ticks at the clock of that name (§11.4: "第 1 引数のクロック"), also where it is written in an expression at `sample`: `prev~(^d)` is the same delay as `let p = prev~(^d)`.
 
 const GS: [U32; 9] = [1, 2, 3, 4, 5, 6, 7, 8, 9]

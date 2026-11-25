@@ -1,5 +1,5 @@
 //! The order of the work of the stages of events, by the divisions that panic (W7-11 U2-e2, S-1233, S-1234, S-1235, S-1236, S-1240): a flow with a division by 0 in each of two to four places that run at one position (the first
-//! frame), the evaluator stops at the first one the order says (§11.3, §11.11), and the interpreter stops at the same place (`compare_case`, which waits for U2 and stops at E0200 until then). The places are named by a letter
+//! frame), the evaluator stops at the first one the order says (§11.3, §11.11), and the interpreter stops at the same place (`compare_case`). The places are named by a letter
 //! (`@A` is the divisor of a division, `(v - v)` (0) or `(v + 1)`, written on a line with a comment `// A`), and a group is run with its places made safe from the first of its order on, so the line says which came first.
 //! The groups are those of `crates/onsa_cli/tests/cli/event_stage_commands.rs` and `event_saved_commands.rs`, which `onsa test` reads (the places are worked out by hand from the text there: the stage of the producer,
 //! the receiver that the event ticks right after the producer's work and before the lower expressions of the stage, a receiver above the producer fed through `^`, one event to two inputs in the order of the declaration, the

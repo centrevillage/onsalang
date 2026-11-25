@@ -1,0 +1,104 @@
+# flow_ref 1 source=tests/spec/flow_semantics/event_condition_values.onsa tests=21 evaluated=21 unavailable=0 skipped=0 waiting=0
+@ an if over an event reads the last event: the value of the branch on an on event, x otherwise; the same with the branch moved to a let
+render event_condition_values.guard_if sr=0x41000000 in x=[2 3 4 5 6 7 8 9 10 11 12 13]
+out=[2 3 4 10 10 7 8 18 18 11 12 26]
+render event_condition_values.guard_if_let sr=0x41000000 in x=[2 3 4 5 6 7 8 9 10 11 12 13]
+out=[2 3 4 10 10 7 8 18 18 11 12 26]
+@ a division in a branch chosen by an event is evaluated only at the events where the condition holds: the off events (vel 0) do not stop it
+render event_condition_values.guard_div sr=0x41000000 in x=[2 3 4 5 6 7 8 9 10 11 12 13]
+out=[2 3 4 200 200 7 8 111 111 11 12 76]
+@ an if inside an if over events, and the arms of a match over an enum event with a binding, choose at the events: the binding of the arm that is not the last event is not computed
+render event_condition_values.nested_if sr=0x41000000 in x=[2 3 4 5 6 7 8 9 10 11 12 13]
+out=[2 3 4 5 5 7 8 90 90 11 12 130]
+render event_condition_values.match_arm sr=0x41000000 in x=[2 3 4 5 6 7 8 9 10 11 12 13]
+out=[2 3 4 10 10 7 8 18 18 11 12 26]
+render event_condition_values.match_div sr=0x41000000 in x=[2 3 4 5 6 7 8 9 10 11 12 13]
+out=[2 3 4 200 200 7 8 111 111 11 12 76]
+@ a right side of && and || with a division is evaluated only when the left side asks for it; the whole condition is false before the first event
+render event_condition_values.and_right sr=0x41000000 in x=[2 3 4 5 6 7 8 9 10 11 12 13]
+out=[0 0 0 5 6 0 0 0 0 0 0 0]
+render event_condition_values.or_right sr=0x41000000 in x=[2 3 4 5 6 7 8 9 10 11 12 13]
+out=[0 3 4 5 6 7 8 0 0 11 12 0]
+@ a condition chosen at init: the branch is computed at every event when it holds, and not at all (a division by the vel 0 of an off event does not stop) when it does not
+init 0 event_condition_values.init_cond sr=0x41000000 cfg c=true
+init 1 event_condition_values.init_cond sr=0x41000000 cfg c=false
+init 2 event_condition_values.init_div sr=0x41000000 cfg c=false
+process 0 frames=12 in x=[2 3 4 5 6 7 8 9 10 11 12 13]
+out=[0 0 0 15 15 0 0 27 27 0 0 39]
+process 1 frames=12 in x=[2 3 4 5 6 7 8 9 10 11 12 13]
+out=[2 3 4 5 6 7 8 9 10 11 12 13]
+process 2 frames=12 in x=[2 3 4 5 6 7 8 9 10 11 12 13]
+out=[2 3 4 5 6 7 8 9 10 11 12 13]
+@ a name or the field of a name read under a condition of sample is written at each event, whether the condition holds at that frame or not
+init 0 event_condition_values.name_under_sample sr=0x41000000
+init 1 event_condition_values.field_under_sample sr=0x41000000
+init 2 event_condition_values.whole_under_sample sr=0x41000000
+process 0 frames=12 in x=[2 3 4 5 6 7 8 9 10 11 12 13] g=[true false true false false true true false true false true true]
+out=[0 3 0 5 6 0 0 9 9 11 0 13]
+process 1 frames=12 in x=[2 3 4 5 6 7 8 9 10 11 12 13] g=[true false true false false true true false true false true true]
+out=[0 3 0 5 6 0 0 9 9 11 0 13]
+process 2 frames=12 in x=[2 3 4 5 6 7 8 9 10 11 12 13] g=[true false true false false true true false true false true true]
+out=[100 3 0 5 6 0 0 9 9 11 0 13]
+@ if vel(m) == 0 is false before the first event (the field of a Bool), if (vel(m) at sample) == 0 is true there (0 == 0): only the frame 0 differs
+render event_condition_values.zero_of_event sr=0x41000000 in x=[2 3 4 5 6 7 8 9 10 11 12 13]
+out=[0 3 4 5 5 7 8 9 9 11 12 13]
+render event_condition_values.zero_at_sample sr=0x41000000 in x=[2 3 4 5 6 7 8 9 10 11 12 13]
+out=[2 3 4 5 5 7 8 9 9 11 12 13]
+@ a constant in the branch of an event condition is the constant before the first event, and a sum of constants is too (frame 0: the condition is false, 5)
+render event_condition_values.else_const sr=0x41000000 in x=[2 3 4 5 6 7 8 9 10 11 12 13]
+out=[5 5 5 5 6 5 5 9 10 5 5 13]
+render event_condition_values.else_const_sum sr=0x41000000 in x=[2 3 4 5 6 7 8 9 10 11 12 13]
+out=[5 5 5 5 6 5 5 9 10 5 5 13]
+@ the constant of the branch that the event condition takes in a then branch: 7 where it is not on
+render event_condition_values.then_const sr=0x41000000 in x=[2 3 4 5 6 7 8 9 10 11 12 13]
+out=[2 7 7 5 6 7 7 9 10 7 7 13]
+@ a block value in the branch of an event condition is the value of the call that reaches it: it is not kept from the event that chose the branch
+init 0 event_condition_values.else_block sr=0x41000000
+process 0 params k=4 frames=6 in x=[2 3 4 5 6 7]
+out=[8 8 8 5 6 8]
+process 0 params k=5 frames=6 in x=[8 9 10 11 12 13]
+out=[10 9 10 10 10 13]
+@ an init value in the branch of an event condition: c + 1 from the frame 0
+init 0 event_condition_values.else_init sr=0x41000000 cfg c=3
+process 0 frames=12 in x=[2 3 4 5 6 7 8 9 10 11 12 13]
+out=[4 4 4 5 6 4 4 9 10 4 4 13]
+@ after a reset the condition is false again and the constant of the branch is there at once: no event, 5 5 5 5
+init 0 event_condition_values.else_const sr=0x41000000
+process 0 frames=6 in x=[2 3 4 5 6 7]
+out=[5 5 5 5 6 5]
+reset 0
+process 0 frames=4 in x=[2 2 2 2]
+out=[5 5 5 5]
+@ a block value in an arm of a match over an event: Note.Off is the first value of the enum, so the arm of 3 k is taken at the frame 0, and x + v where it is on
+render event_condition_values.arm_block sr=0x41000000 params k=4 in x=[2 3 4 5 6 7 8 9 10 11 12 13]
+out=[12 12 12 10 11 12 12 18 19 12 12 26]
+@ the right side of || and && with a block value, under a left side that is an event: the right side reads k + 1 at once, before the first event too
+render event_condition_values.or_block sr=0x41000000 params k=4 in x=[2 3 4 5 6 7 8 9 10 11 12 13]
+out=[0 1 1 0 1 1 1 1 1 1 1 1]
+render event_condition_values.and_block sr=0x41000000 params k=4 in x=[2 3 4 5 6 7 8 9 10 11 12 13]
+out=[0 0 0 0 6 0 0 9 10 0 0 13]
+@ an if over an event and constants only is one part of the event: 0 before the first event; with the condition at sample the constants are chosen at sample, 3
+render event_condition_values.whole_if sr=0x41000000 in x=[2 3 4 5 6 7 8 9 10 11 12 13]
+out=[0 3 3 5 5 3 3 5 5 3 3 5]
+render event_condition_values.whole_if_at_sample sr=0x41000000 in x=[2 3 4 5 6 7 8 9 10 11 12 13]
+out=[3 3 3 5 5 3 3 5 5 3 3 5]
+@ an if of the event and constants in the else branch of an event condition is a part of the event, whatever the outer condition: 0 at the frame 0 (the first value of that part), not the 9 of the branch
+render event_condition_values.whole_if_in_a_branch sr=0x41000000 in x=[2 3 4 5 6 7 8 9 10 11 12 13]
+out=[0 9 9 5 6 9 9 9 10 9 9 13]
+@ the event before the last, read through prev~(^m) written above the maker, is the condition: the branch of a block value is read where it is reached
+render event_condition_values.below_cond sr=0x41000000 params k=4 in x=[2 3 4 5 6 7 8 9 10 11 12 13]
+out=[5 5 5 5 5 5 8 9 5 5 12 13]
+@ the branch chosen by a sample condition reads the event before the last, and the other branch is a constant
+render event_condition_values.below_branch sr=0x41000000 in x=[2 3 4 5 6 7 8 9 10 11 12 13]
+out=[55 55 55 55 55 0 5 5 0 0 9 9]
+@ the saved expression of a delay with a ^name in the condition: the end of the stage decides, and the block branch is read there (§11.3)
+render event_condition_values.below_saved sr=0x41000000 params k=4 in x=[2 3 4 5 6 7 8 9 10 11 12 13]
+out=[0 5 5 5 5 6 5 5 9 10 5 5]
+@ sample_tick() in a branch of an event condition is the frame; an if with no operand of sample is a value of the event, and its sample_tick() is the position of the event
+render event_condition_values.tick_branch sr=0x41000000 in x=[2 3 4 5 6 7 8 9 10 11 12 13]
+out=[5 6 7 5 6 10 11 9 10 14 15 13]
+render event_condition_values.tick_then sr=0x41000000 in x=[2 3 4 5 6 7 8 9 10 11 12 13]
+out=[0 5 5 3 3 5 5 7 7 5 5 11]
+@ sample_tick() in the condition of an event is read at the event stage: the position of the event
+render event_condition_values.tick_in_cond sr=0x41000000 in x=[2 3 4 5 6 7 8 9 10 11 12 13]
+out=[5 5 5 5 5 5 5 9 10 5 5 13]

@@ -59,11 +59,14 @@ pub(super) fn sources(info: &FlowInfo) -> Vec<EventPlan> {
 
 /// The first form of `info`, in the order of the text, of those with events
 /// this version does not run (W7-17), of the body: a chain with a modifier
-/// but `.reset_if~` of a call of a flow with an event port, of a delay at an
-/// event or with a condition at one; and in a `par~` (and a `par`, whose fields are of each replica as
-/// well), an `if~` or a `match~`, its conditions, scrutinee and guards too,
-/// a call of a flow with an event port, a delay at an event or a computed
-/// part of one, but not a name. Not those of a callee, which stop it.
+/// but `.reset_if~` of a call of a flow with an event port or of a delay at
+/// an event, the condition at an event of a `.reset_if~` of such a chain, and
+/// that of a `.when~` of a chain with a ratio (with none it is a level, read
+/// at the clock W of the modifier, §11.10); and in a `par~` (and a `par`,
+/// whose fields are of each replica as well), an `if~` or a `match~`, its
+/// conditions, scrutinee and guards too, a call of a flow with an event port,
+/// a delay at an event, any condition at one or a computed part of one, but
+/// not a name. Not those of a callee, which stop it.
 pub(super) fn form(a: &Analysis, info: &FlowInfo, ast: &Ast) -> Option<Span> {
     if info.events.is_empty() {
         return None;
@@ -78,9 +81,11 @@ pub(super) fn form(a: &Analysis, info: &FlowInfo, ast: &Ast) -> Option<Span> {
         info.lets.iter().map(|l| l.init).chain(info.output).map(|e| (e, false)).collect();
     while let Some((e, inside)) = todo.pop() {
         if let Some(n) = info.node_of.get(&e).map(|&id| info.node(id)) {
-            if inside || n.chain.iter().any(|m| m.modifier != Modifier::ResetIf) {
+            let stops = inside || n.chain.iter().any(|m| m.ratio.is_some());
+            if stops || n.chain.iter().any(|m| m.modifier == Modifier::When) {
                 found.extend(ticks(n).then_some(n.span));
-                found.extend(n.chain.iter().filter(|m| m.cond.as_ref().is_some_and(event)).map(|m| m.name));
+                let of = n.chain.iter().filter(|m| stops || m.modifier == Modifier::ResetIf);
+                found.extend(of.filter(|m| m.cond.as_ref().is_some_and(event)).map(|m| m.name));
             }
         }
         let part = info.hoist_of(e).map(|h| info.hoist(h)).filter(|h| matches!(h.stage, ClockStage::Event(_)));

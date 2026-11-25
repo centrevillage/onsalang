@@ -368,10 +368,19 @@ impl<'a> Walk<'_, 'a> {
         let columns = given.iter().map(|e| self.column(body, *e)).collect::<Result<Vec<_>, _>>()?;
         let (whole, part) = self.slice_of(body, out.expr)?;
         let Ok(Target::Local(buf)) = body.target(whole) else { return Err(Halt::Skip(Skip::Layout)) };
-        let Some(Value::Array(vs)) = self.locals.get(buf).filter(|v| !holds_arrays(v)) else {
-            return Err(Halt::Skip(Skip::Layout));
+        let Some(Value::Array(vs)) = self.locals.get(buf) else { return Err(Halt::Skip(Skip::Layout)) };
+        // A flow of several channels: the buffer is one array of scalars for each, all of the same length (planar, §5).
+        let planar = vs.first().is_some_and(|v| matches!(v, Value::Array(_)));
+        let (frames, at) = match (planar, &part) {
+            (false, _) => cut(vs, part)?,
+            (true, None) => {
+                match vs.iter().map(|v| if let Value::Array(c) = v { Some(c.len()) } else { None }).collect() {
+                    Some::<Vec<usize>>(ls) if ls.iter().all(|l| *l == ls[0]) => (ls[0], 0..ls[0]),
+                    _ => return Err(Halt::Skip(Skip::Layout)),
+                }
+            }
+            (true, Some(_)) => return Err(Halt::Skip(Skip::Layout)),
         };
-        let (frames, at) = cut(vs, part)?;
         let inputs = named_columns(&sampled, &columns);
         let (state, st) = Self::state(&mut self.states, body, args)?;
         let outcome = st.process_outcome(params, &inputs, frames, Some(&mut *self.host))?;
@@ -380,7 +389,23 @@ impl<'a> Walk<'_, 'a> {
         match outcome {
             Outcome::Ok(gave) => {
                 if let Some(Value::Array(vs)) = self.locals.get_mut(buf) {
-                    vs[at].clone_from_slice(&gave);
+                    match planar {
+                        false => vs[at].clone_from_slice(&gave),
+                        true => {
+                            for (c, ch) in vs.iter_mut().enumerate() {
+                                let (Value::Array(ch), true) =
+                                    (ch, gave.iter().all(|f| matches!(f, Value::Array(a) if a.len() > c)))
+                                else {
+                                    return Err(Halt::Skip(Skip::Layout));
+                                };
+                                for (slot, f) in ch.iter_mut().zip(&gave) {
+                                    if let Value::Array(a) = f {
+                                        slot.clone_from(&a[c]);
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
                 Ok(())
             }
@@ -450,11 +475,6 @@ impl<'a> Walk<'_, 'a> {
             _ => Err(Halt::Skip(Skip::Layout)),
         }
     }
-}
-
-/// Is `v` an array of arrays (the buffers of a flow of several channels: a layout of views)?
-fn holds_arrays(v: &Value) -> bool {
-    matches!(v, Value::Array(vs) if vs.iter().any(|x| matches!(x, Value::Array(_))))
 }
 
 /// The expressions of the columns of the `sample` inputs `sampled` that a call of `process` or `render` is given in `rest`: the inputs of a flow of two `sample` inputs or more are the fields of `f.In { x: .., y: .. }` (§11.6), in the order of

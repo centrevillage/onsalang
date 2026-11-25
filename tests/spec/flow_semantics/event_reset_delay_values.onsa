@@ -3,7 +3,7 @@
 // mode = "test"
 // spec = ["§11.10", "§11.3", "§11.4", "§11.11", "§11.9"]
 
-// W7-11 U2r/t2, S-1250 (§11.3: "値は、`^名前` の値の他は、書いた位置で評価して保存したのと同じである"; §11.10: "`r` が真の刻みで、その刻みに続く x の段の前に x の状態を初期値に戻す"; §11.11: "出したイベントの刻みは、作り手の呼び出しのその刻みの仕事（保存まで）が済んだ直後に"):
+// W7-11 U2r/t2, S-1250 (§11.3: "flow の値は、`^名前` の値だけを段の終わりのものとして、保存する値を書いた位置で評価して保存したのと同じである"; §11.10: "`r` が真の刻みで、その刻みに続く x の段の前に x の状態を初期値に戻す"; §11.11: "出したイベントの刻みは、作り手の呼び出しのその刻みの仕事（保存まで）が済んだ直後に"):
 // a built-in delay that a `reset_if~` resets by an event that ticks below it, after the place where the delay is written and before the end of its stage. The delay gives and stores at its place, and the reset comes after
 // that save, so its state is the init for the next stage: the value is that of the twin with the delay in a named flow, or with the event of a source of another stage. The common input is x = 1 6 2 7 3 4 1 1 and the event
 // `e = prev~(^d)` (the x before: 0 1 6 2 7 3 4 1), which holds at the frames 2 and 4 for `e >= 5`: the reset is after the stage of those two frames. Where a delay is read in the caller, the field of the caller is not reset.
@@ -422,6 +422,36 @@ test "a delay of an event reset by an event made in its stage, in another stage,
   let want2: [U32; 8] = [9, 9, 6, 9, 7, 3, 4, 1]
   for i in 0 ..< 8 {
     assert d.out[i] == want2[i]
+  }
+}
+
+// ---- a delay of the event stage that an event of another clock resets late: the reset event is the delayed output of a producer that the same event ticks below the delay (the condition is read at the tick of that producer)
+
+pub flow nested_producer(x: U32 at sample) -> U32 at sample {
+  let d0 = gen~(x)
+  let e1 = prev~(^d1)
+  let ea = prev~(d0, 9).reset_if~(e1 > 3)
+  let d1 = fwd~(d0)
+  ea at sample
+}
+
+pub flow nested_producer_named(x: U32 at sample) -> U32 at sample {
+  let d0 = gen~(x)
+  let e1 = prev~(^d1)
+  let ea = pve~(d0).reset_if~(e1 > 3)
+  let d1 = fwd~(d0)
+  ea at sample
+}
+
+test "a delay of an event reset by the event of a producer below it, which is another clock: after the save of the stage, as in a named flow" {
+  // d0 gives x at each frame; the delay ea reads and stores d0 at the tick of d0 (its own clock), and the event d1 = fwd~(d0) ticks right after, so e1 (the d1 before: 0 1 6 2 7 3 4 1) is read at the tick of d1, after the save of ea:
+  // e1 > 3 at the frames 2 (6), 4 (7) and 6 (4): the delay is back to the init 9 after the store of those frames, so the stored x of those frames is gone and the next frame gives 9.
+  // The frames: 9 (init) | 1 | 6 (stored at the frame 1; e1 = 1 does not reset) | 9 (e1 = 6 reset the frame 2 after its store of 2) | 7 (stored at the frame 3, e1 = 2) | 9 (e1 = 7 after the frame 4) | 4 (stored at the frame 5, e1 = 3) | 9 (e1 = 4 after the frame 6: the stored 1 is gone).
+  let a = nested_producer.render(XS, 8.0)
+  let b = nested_producer_named.render(XS, 8.0)
+  let want: [U32; 8] = [9, 1, 6, 9, 7, 9, 4, 9]
+  for i in 0 ..< 8 {
+    assert a.out[i] == want[i] && b.out[i] == want[i]
   }
 }
 

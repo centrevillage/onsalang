@@ -7,7 +7,7 @@
 // である。同じ比の値、パラメータの種類、イベントの値は読め、より遅い周期のクロックの式は `at` で昇格する（`l8 at (sample / 4)`）"): what the body of a conversion flow sees. An input at `sample * N` is an
 // array of N whose last element is the newest, and an output at `sample * N` is the array the body writes at its own `sample` (its elements are values of `sample` or of the parameter kinds, a slower value by
 // `at sample`). An input at `sample / N` is a slow value that a faster expression reads with `at sample`. An output at `sample / N` reads values of its own ratio, of the parameter kinds, and a
-// slower tick by `at` (S-1098 (b); the event values are in conversion_flow_events_until_w7_11.onsa). The state of the body counts the ticks of the body: a delay of an array counts the `sample` of the body, and the
+// slower tick by `at` (S-1098 (b); the event values are in conversion_flow_events.onsa). The state of the body counts the ticks of the body: a delay of an array counts the `sample` of the body, and the
 // state of a `sample / N` value is written as in any flow (S-1182 (a)). The ports are used in the places a flow of `sample` has them (a `par`, a branch, a function, a `let`). No diagnostic. The errors are in e0401_conversion_flow_body_types.onsa and
 // e0815_conversion_flow_body_clocks.onsa.
 

@@ -3,7 +3,7 @@
 // spec = ["§11.3", "§11.5", "§11.11"]
 // fixes = 0
 
-// W7-11 U1b/t, S-1158 (c), S-1210 (spec §11.3: "条件の位置の中では、その位置を選ぶ条件が全て定数・`init`・その式と同じ刻みで決まるときだけ書け"、"名前とそのフィールドを読むだけなら書ける"、"`if~` / `match~` の腕は含めない"): the part
+// W7-11 U1b/t, S-1158 (c), S-1210 (spec §11.3: "条件の位置の中では、その位置を選ぶ条件が全て定数・`init`・その式と同じ刻みで決まるときだけ書け"、"名前と、そのフィールド・組の要素の連なりを取り出すだけの式（括弧を通す）は、刻みで読んでも届いたときに読んでも同じ値で … 書ける"、"`if~` / `match~` の腕は含めない"): the part
 // computed from an event value where the condition is decided at the same event or at `init`, the read of a name and its field under any condition, the `at` on the name (`vel(m at sample)`), a part moved to a `let`, and the arms of `if~` and
 // `match~`. `check` reads the file with no diagnostic. The errors are in e0815_event_condition_positions.onsa. `m` is an event, `x` and `g` and `k` are `sample` inputs, `i` is `init`.
 

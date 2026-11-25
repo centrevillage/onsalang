@@ -3,9 +3,9 @@
 // mode = "test"
 // spec = ["§11.3", "§11.4", "§11.9", "§11.11"]
 
-// W7-11 U2/t2, S-1240, S-1241, S-1244, S-1249, S-1235, S-1234 (spec §11.3: "保存する値の残りが読むイベントの値 … は、`^名前` を書いたものと、`^名前` で選ぶ `match~` の束縛 … を除いて、評価が段の終わりでも、その読みを書いた位置 … までの最後の値である";
-// "条件の位置の中でも、遅い刻みの部分式の中でも同じで、その位置を選ぶ条件や部分式の他の所に `^名前` があるかによらない"; "`^名前` で読む値と、`^名前` を書いたイベントの段の部分式の値は、段の終わりの値である"; §11.4: "保存する値 `e` を全て評価してから、まとめて保存する"; §11.11: "作り手より上に書いた式 …
-// 読むのは、その式を評価した時点までに出たイベントまでの値"): the value of an event that a delay stores when the producer of the event is written below the delay. The producer `let d = gen~(x)` is below, so the
+// W7-11 U2/t2, S-1240, S-1241, S-1244, S-1249, S-1235, S-1234 (spec §11.3: "flow の値は、`^名前` の値だけを段の終わりのものとして、保存する値を書いた位置で評価して保存したのと同じである";
+// "イベントの値は、`^名前` を書いた読み（`^名前` と、`^名前` を書いたイベントの段の部分式）だけが、使う段の終わりの値である"; §11.4: "保存する値 `e` を全て評価してから、まとめて保存する"; §11.11: "上の式が読むのは、
+// その式を評価した時点までに出たイベントまでの値である"): the value of an event that a delay stores when the producer of the event is written below the delay. The producer `let d = gen~(x)` is below, so the
 // event of the sample is not yet given where the stored expression is written, but it is given at the end of the stage. The delay stores the value at the place where the read is written (the one before the event of
 // the sample), which is the value of the twin with a `let t = …` above the delay; a `^name` form reads the value at the end of the stage, the value of the twin with the `let` below the producer. Every value is
 // worked out by hand in the comments.

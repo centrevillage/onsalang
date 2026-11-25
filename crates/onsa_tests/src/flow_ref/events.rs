@@ -12,7 +12,7 @@ use onsa_syntax::ast::{ExprId, ExprKind};
 
 use super::expr::{Frame, Stop};
 use super::flow::{Clock, Known, Step, clock_of, enter, stage};
-use super::hoist::{caret, kept, stage_of};
+use super::hoist::{caret, field_of, kept, kids, made_at, stage_of};
 use super::rate::{Bound, chain_of};
 use super::scalar::{Fault, Fault::Internal};
 use super::sema_view::{Body, Called, Stage, input_clock, output_stage};
@@ -83,7 +83,7 @@ impl<'a> Frame<'a> {
         }
         // The parts of an event clock that a stage of a faster clock reads are `T.default()` until their stage has made them.
         for st in steps.iter().filter(|s| !matches!(s.clock, Clock::Event(_))) {
-            self.default_parts(&st.known, st.init, st.init, at)?;
+            self.default_parts(&st.known, st.init, (st.init, Clock::Const), at)?;
         }
         for st in steps.iter().filter(|s| matches!(s.clock, Clock::Event(_)) && !s.emits) {
             let ty = body.ty(st.init).map_err(here)?;
@@ -96,10 +96,20 @@ impl<'a> Frame<'a> {
         Ok(())
     }
 
-    /// The largest parts of `e` (a step of a faster clock) that an event stage makes and keeps (`hoist::walk`) start at `T.default()`; a step of the event clock itself is run whole in its stage and has no part.
-    fn default_parts(&mut self, known: &Known, root: ExprId, e: ExprId, at: Span) -> Result<(), Stop> {
+    /// The largest parts of `e` (a step of a faster clock) that an event stage makes and keeps (`hoist::walk`) start at `T.default()`; a step of the event clock itself is run whole in its stage and has no part. A part under a condition
+    /// of a later stage (`sample`) is not made by the event stage, as `walk` goes (`guard` is the clock of the conditions on the way to it), but a field read of a name is, whatever the conditions say (S-1197, `hoist::free`).
+    fn default_parts(
+        &mut self,
+        known: &Known,
+        root: ExprId,
+        (e, guard): (ExprId, Clock),
+        at: Span,
+    ) -> Result<(), Stop> {
         let (body, here) = (self.body, |fault| Stop { fault, at });
         let clock = stage_of(&body, known, root, e).map_err(here)?;
+        let free = field_of(&body, e)
+            .is_some_and(|n| !matches!(body.target(n), Ok(Target::Local(l)) if body.bound_within(*l, root)));
+        let clock = made_at(&body, e, (clock, if free { Clock::Const } else { guard }));
         // A part that reads a `^name` is made at the end of its stage (S-1244), with what the delays save, and is read fresh before.
         if matches!(clock, Clock::Event(_)) && kept(&body, known, e).map_err(here)? {
             // A part that holds a `^name` is one read made whole at the end of the stage (S-1249): the parts in it are not parts of their own, and it is `T.default()` before its first stage like any other (§11.3).
@@ -113,8 +123,8 @@ impl<'a> Frame<'a> {
             }
             return Ok(());
         }
-        for x in body.ast.sub_exprs(e) {
-            self.default_parts(known, root, x, at)?;
+        for (x, k, g) in kids(&body, known, root, e, guard).map_err(here)? {
+            self.default_parts(&k, root, (x, g), at)?;
         }
         Ok(())
     }

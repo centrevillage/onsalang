@@ -14,6 +14,8 @@
 //! comment `// X` is put at the end of the line of the place. Each group is run with its places made safe from the first one on, so a line says which came first. One launch of `onsa test` reads all the modules (a module
 //! for each case). The texts are written from the spec; none is taken from the output of the compiler.
 
+use std::process::Command;
+
 use crate::down_two_boundaries_c_commands::{build_flows, driver, frames_of};
 use crate::slow_stage_commands::line_of;
 use crate::test_support::{Dir, diagnostics, failure_of, record, span_of, test_json};
@@ -298,4 +300,70 @@ fn a_chain_with_an_event_gives_the_values_by_hand_in_c_u2r() {
             }
         }
     }
+}
+
+const PANIC_FLOWS: &str = "\
+flow gen(x: U32 at sample) -> U32 at event {
+  Some(x)
+}
+
+flow t(x: U32 at sample) -> U32 at sample {
+  let e = prev~(^d)
+  let q = prev~(100 / x, 9).reset_if~(e >= 5)
+  let d = gen~(x)
+  q
+}
+
+@export
+pub flow w(x: U32 at sample) -> U32 at sample {
+  t~(x)
+}
+";
+
+/// A C program that runs `process` on x = 1 6 0 (the stored `100 / 0` of the third frame panics: the instance is poisoned), once more on the poisoned one, calls `reset`, and runs x = 3 4 2 5. It prints the three return codes,
+/// the outputs of the first run and the outputs of the last.
+const PANIC_DRIVER: &str = r#"#include <stdio.h>
+#include <stdint.h>
+#include "dm_w.h"
+int main(void) {
+  static _Alignas(16) unsigned char mem[DM_W_SIZE];
+  dm_w* s = (dm_w*)mem;
+  if (dm_w_init(s, NULL, 8.0f) != 0) return 2;
+  dm_w_params prm;
+  dm_w_params_default(&prm);
+  uint32_t a[3] = {1, 6, 0}, oa[3] = {7, 7, 7}, b[4] = {3, 4, 2, 5}, ob[4] = {7, 7, 7, 7};
+  int r1 = dm_w_process(s, &prm, a, oa, 3);
+  int r2 = dm_w_process(s, &prm, a, oa, 3);
+  dm_w_reset(s);
+  int r3 = dm_w_process(s, &prm, b, ob, 4);
+  printf("%d %d %d | %u %u %u | %u %u %u %u\n", r1, r2, r3, oa[0], oa[1], oa[2], ob[0], ob[1], ob[2], ob[3]);
+  return 0;
+}
+"#;
+
+/// §9.2 "export された flow の `process`: その呼び出しを中断し、出力を全てゼロで埋め、インスタンスを poisoned にする。以後の `process` は無音を出力し、`reset` まで復帰しない", §11.6 "`reset` は状態を `init` 値に戻し、
+/// poisoned を解く", §14.2 (the return code 1), §11.3 (a delay stores at the end of its stage; it gives 9 first, then what it stored), §11.10 and S-1250 (the reset of a delay by an event that a producer below it ticks waits for the
+/// store of the delay). The frame 2 of the first run (x = 0) has `e` = 6 (the x before) >= 5, so a reset of the delay is waiting for its store, and the store of `100 / 0` panics first: the instance is poisoned in the middle of the
+/// frame, with that reset not done. The second call on the poisoned instance returns 1, and the outputs of both calls are all 0 (the frames of the call that panicked too). After `reset` the instance is a new one (§11.6): x = 3 4 2 5 gives 9 (the
+/// init), 33 (100 / 3), 25 (100 / 4), 50 (100 / 2), and no reset comes in the run (`e`, the x before, is 0 3 4 2, never 5 or more). A reset that was left waiting would put the init back after the first store: 9 9 25 50.
+#[test]
+fn a_reset_after_a_panic_gives_a_new_instance_with_the_state_of_an_event_delay_in_c_u3() {
+    let dir = build_flows("event_reset_panic_c", PANIC_FLOWS);
+    let src = dir.file("drv_panic.c", PANIC_DRIVER);
+    let exe = dir.path("drv_panic");
+    let host = dir.path("target/host");
+    let unit = dir.path("target/host/onsa_demo.c");
+    let cc = Command::new("clang")
+        .args(["-std=c11", "-O1", "-I", &host, &src, &unit, "-o", &exe])
+        .output()
+        .unwrap_or_else(|e| panic!("the C compiler `clang` is needed: {e}"));
+    assert!(
+        cc.status.success(),
+        "clang: {}{}",
+        String::from_utf8_lossy(&cc.stdout),
+        String::from_utf8_lossy(&cc.stderr)
+    );
+    let ran = Command::new(&exe).output().expect("run the driver");
+    assert_eq!(ran.status.code(), Some(0), "the driver: {ran:?}");
+    assert_eq!(String::from_utf8_lossy(&ran.stdout).trim(), "1 1 0 | 0 0 0 | 9 33 25 50");
 }

@@ -3,13 +3,12 @@
 // mode = "test"
 // spec = ["§11.3", "§11.4", "§11.10", "§11.11"]
 
-// W7-11 U2-e4, S-1249, S-1240, S-1244 (spec §11.3: "保存する値の残りが読むイベントの値 … は、`^名前` を読むものを除いて、評価が段の終わりでも、その読みを書いた位置 … までの最後の値である" and
+// W7-11 U2-e4, S-1249, S-1240, S-1244 (spec §11.3: "flow の値は、`^名前` の値だけを段の終わりのものとして、保存する値を書いた位置で評価して保存したのと同じである" and
 // "刻みで書いて速い段が読むフィールド … の初めの値 … は `T.default()` である"; §11.4: a delay has the clock of its first argument; §11.10: `reset_if~` puts the delay back to its `init` before the read, `when~`
 // stops it and keeps the last output): three things that a stored expression does with an event, each with a twin that writes the same value another way.
 //
 // 1. A delay with modifiers inside the first argument of another delay: the event it reads is the value where it is written, as for a delay with none. `r` below is the event `e` of the delay `prev~(^e)`, a name of an
-//    event clock that is read above the producer `let e`, so what a stored expression sees is `r` before the event of the sample. The twin moves the read into a `let t = r at sample` above (§11.3: "その遅延を含む
-//    `let` の前の … `let` に出した形と同じ値になる").
+//    event clock that is read above the producer `let e`, so what a stored expression sees is `r` before the event of the sample. The twin moves the read into a `let t = r at sample` above (the same value, S-1249, S-1250).
 // 2. A part of the event clock that holds a `^name`, `((^d * 2 + 1) at sample)`, is a hidden field that is `T.default()` (0) before the first event, not what its expression gives for the `d` of that time (1). The twin writes
 //    it as a `let tc: U32 = ((d * 2 + 1) at sample)` below the producer and reads it with a `^tc`, which is the value of the end of the stage.
 // 3. A delay of a bare `^name` written inside an expression, `prev~(^d)`, is the delay of the clock of `d` (§11.4), the same as `let p = prev~(^d)`: it ticks at the events of `d`, not at `sample`.

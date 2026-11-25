@@ -1,7 +1,7 @@
 # What a `reset_if~` of an event does, in the values (W7-11 U2r/e; §11.10, §11.11, §11.3, S-1236, S-1250 (B))
 
 - The values are worked out by hand from the text. The format is that of `event_values.md` (the table reader `event_table_tests.rs`).
-- A delay with a modifier is read where it is written and stored at the end of its stage (§11.3: "値は、`^名前` の値の他は、書いた位置で評価して保存したのと同じである"), so a `reset_if~` whose event comes after the read of the delay
+- A delay with a modifier is read where it is written and stored at the end of its stage (§11.3: "flow の値は、`^名前` の値だけを段の終わりのものとして、保存する値を書いた位置で評価して保存したのと同じである"), so a `reset_if~` whose event comes after the read of the delay
   and before its store (an event of a producer written below it) puts it back after the store (S-1250 (B)); one that comes before the read puts it back before the read.
 - `e = prev~(^d)` gives the `d` before; with `d = gen~(x)` below and x = 1 6 2 7 3 4 1 1, `e >= 5` holds at the positions 2 and 4 (the events 6 and 7 of the positions before).
 

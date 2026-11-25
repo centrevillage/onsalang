@@ -1,5 +1,5 @@
 //! The twins of the reference to what is below (`twin_back.rs`, W7-11 U2b/t2): the pairs of the table and the crossed programs of fixed seeds give the same outputs on the evaluator and in the interpreter, a pair that is
-//! made different is caught, and the divisions that panic are reported at the same stage and place on both sides. The forms that wait for the stage (`late`) are the ones the Core of `d439fac` stops at (R-520, S-1244).
+//! made different is caught, and the divisions that panic are reported at the same stage and place on both sides. The forms that wait for the stage (`late`, S-1244) are run in the interpreter as the others are.
 
 use std::collections::BTreeSet;
 

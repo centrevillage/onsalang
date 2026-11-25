@@ -75,6 +75,10 @@ mod twin_time;
 mod twin_time_tests;
 #[path = "flow_ref/twin_when.rs"]
 mod twin_when;
+#[path = "flow_ref/twin_when_event.rs"]
+mod twin_when_event;
+#[path = "flow_ref/twin_when_event_tests.rs"]
+mod twin_when_event_tests;
 #[path = "flow_ref/twin_when_tests.rs"]
 mod twin_when_tests;
 #[path = "flow_ref/twin_wrap.rs"]

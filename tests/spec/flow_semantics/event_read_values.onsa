@@ -1,0 +1,500 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.11", "§11.3", "§11.4", "§11.5"]
+
+// How the value of an event is read where an expression of a periodic clock uses it (W7-11 U3/t; S-563, S-1185, S-1197, S-1210, S-1232, S-1249; spec §11.11: "イベントの値は `block` と同じく暗黙に読め、使う所の周期の刻みのクロックの刻みで、
+// その位置までの最後の値になる。最初のイベントの前は `T.default()`"; "`v at sample`・`v at (sample / N)` と書いても同じ意味で、変換の場所を留める"; "周期の刻みのクロックの被演算子の無いイベントの値の式は、そのイベントのクロックの式で、
+// その刻みごとに評価する"; §11.3: 刻みで書いて速い段が読むフィールドの初めの値と `reset` の戻り先は `T.default()`、その型は読む式（連なりの全体）の型; §11.4: `sample_tick()` はイベントの段の式ではその位置の値).
+// The point worked out by hand again and again: an expression with no operand of a periodic clock (`d + 7`, `TBL[d % 4]`, `mix(d, 7)`, `vel(m)`, `m.vel`) is an expression of the event, written to a hidden field at each event,
+// and the field is `T.default()` of the type of the whole expression before the first event (0 for a `U32`, whatever the operands would give); `(d at sample) + 7` is an expression of `sample` over the last value of `d`
+// (`T.default()` of the type of `d`, then the expression). A tick of `sample / 4` of the frame p comes before the stage of `sample` of the frame p, so it reads the events up to the frame p - 1.
+// The events of `ev` are the odd values of `x`; with x = 2 3 4 6 5 8 10 7 9 12 14 11 they are 3 (frame 1), 5 (4), 7 (7), 9 (8), 11 (11): the last value, `D_NOW`, is 0 3 3 3 5 5 5 7 9 9 9 11, and read at the ticks of
+// the frames 0, 4, 8 and held, `HELD`, it is 0 0 0 0 3 3 3 3 7 7 7 7. Every value is worked out by hand.
+
+pub struct Msg: Default {
+  kind: U32,
+  vel: U32 = 100,
+}
+
+rt fn vel(m: Msg) -> U32 {
+  m.vel
+}
+
+rt fn mix(a: U32, b: U32) -> U32 {
+  a * 2 + b
+}
+
+const XS: [U32; 12] = [2, 3, 4, 6, 5, 8, 10, 7, 9, 12, 14, 11]
+const TBL: [U32; 4] = [100, 101, 102, 103]
+
+flow ev(x: U32 at sample) -> U32 at event {
+  if x % 2 == 1 {
+    Some(x)
+  } else {
+    None
+  }
+}
+
+flow gen(x: U32 at sample) -> U32 at event {
+  Some(x)
+}
+
+flow inc(m: U32 at event) -> U32 at event {
+  Some(m + 1)
+}
+
+flow acc(e: U32 at event) -> U32 at sample {
+  let n = prev~(^n) + e
+  n
+}
+
+// kind 2 and vel 0 for x % 4 == 3, kind 1 and vel x for x % 4 == 1: the frames 1 (off), 4 (on, 5), 7 (off), 8 (on, 9), 11 (off).
+flow msgs(x: U32 at sample) -> Msg at event {
+  if x % 4 == 3 {
+    Some(Msg { kind: 2, vel: 0 })
+  } else if x % 4 == 1 {
+    Some(Msg { kind: 1, vel: x })
+  } else {
+    None
+  }
+}
+
+flow pairs(x: U32 at sample) -> (U32, U32) at event {
+  if x % 2 == 1 {
+    Some((x, x * 10))
+  } else {
+    None
+  }
+}
+
+// ---- the last value, and the value kept at the ticks of sample / 4, in a let and inline (S-1210)
+
+pub flow now_implicit(x: U32 at sample) -> U32 at sample {
+  let d = ev~(x)
+  d
+}
+
+pub flow now_at(x: U32 at sample) -> U32 at sample {
+  let d = ev~(x)
+  d at sample
+}
+
+pub flow held_let(x: U32 at sample) -> U32 at sample {
+  let d = ev~(x)
+  let q = d at (sample / 4)
+  q at sample
+}
+
+pub flow held_inline(x: U32 at sample) -> U32 at sample {
+  let d = ev~(x)
+  (d at (sample / 4)) at sample
+}
+
+pub flow now_double(x: U32 at sample) -> U32 at sample {
+  let d = ev~(x)
+  (d * 2) at sample
+}
+
+pub flow held_double_let(x: U32 at sample) -> U32 at sample {
+  let d = ev~(x)
+  let e2 = d * 2
+  let q = e2 at (sample / 4)
+  q at sample
+}
+
+pub flow held_double_inline(x: U32 at sample) -> U32 at sample {
+  let d = ev~(x)
+  ((d * 2) at (sample / 4)) at sample
+}
+
+test "an event read at sample, or with no clock, is its last value up to the frame, 0 before the first event" {
+  let a = now_implicit.render(XS, 8.0)
+  let b = now_at.render(XS, 8.0)
+  let want: [U32; 12] = [0, 3, 3, 3, 5, 5, 5, 7, 9, 9, 9, 11]
+  for i in 0 ..< 12 {
+    assert a.out[i] == want[i]
+    assert b.out[i] == want[i]
+  }
+}
+
+test "an event read at sample / 4 is the value before the frame of each tick, kept four frames, in a let and inline: the event of a tick frame is seen at the next tick" {
+  let a = held_let.render(XS, 8.0)
+  let b = held_inline.render(XS, 8.0)
+  let want: [U32; 12] = [0, 0, 0, 0, 3, 3, 3, 3, 7, 7, 7, 7]
+  for i in 0 ..< 12 {
+    assert a.out[i] == want[i]
+    assert b.out[i] == want[i]
+  }
+}
+
+test "a computed expression of an event read at sample is the last value of the expression, and at sample / 4 the value it had at the tick, in a let and inline" {
+  let a = now_double.render(XS, 8.0)
+  let b = held_double_let.render(XS, 8.0)
+  let c = held_double_inline.render(XS, 8.0)
+  let held: [U32; 12] = [0, 0, 0, 0, 6, 6, 6, 6, 14, 14, 14, 14]
+  let w_a: [U32; 12] = [0, 6, 6, 6, 10, 10, 10, 14, 18, 18, 18, 22]
+  for i in 0 ..< 12 {
+    assert a.out[i] == w_a[i]
+    assert b.out[i] == held[i]
+    assert c.out[i] == held[i]
+  }
+}
+
+// ---- an expression of the event that reads a block value is computed at the event with the block value of that time
+
+pub flow stored_times_block(x: U32 at sample, r: U32 at block) -> U32 at sample {
+  let d = ev~(x)
+  d * r
+}
+
+pub flow now_times_block(x: U32 at sample, r: U32 at block) -> U32 at sample {
+  let d = ev~(x)
+  (d at sample) * r
+}
+
+test "d * r is computed at each event with the r of that call and kept; (d at sample) * r is computed at each frame with the r of the frame" {
+  // The events 3 5 7 are at the frames 1 4 7; r is 10 for the frames 0 .. 5 and 100 for the frames 6 and 7. The stored products are 30 (frame 1), 50 (frame 4) and 700 (frame 7), kept from the event on. The product at sample has
+  // d * r at each frame: the frame 6 is 5 * 100 = 500 and not the 50 stored at the frame 4.
+  let xs: [U32; 8] = [2, 3, 4, 6, 5, 8, 10, 7]
+  var a: [U32; 8] = [0; 8]
+  var b: [U32; 8] = [0; 8]
+  var sa = stored_times_block.init(8.0)
+  var sb = now_times_block.init(8.0)
+  stored_times_block.process(inout sa, stored_times_block.Params { r: 10 }, xs.slice(0, 6), inout a.slice(0, 6))
+  stored_times_block.process(inout sa, stored_times_block.Params { r: 100 }, xs.slice(6, 8), inout a.slice(6, 8))
+  now_times_block.process(inout sb, now_times_block.Params { r: 10 }, xs.slice(0, 6), inout b.slice(0, 6))
+  now_times_block.process(inout sb, now_times_block.Params { r: 100 }, xs.slice(6, 8), inout b.slice(6, 8))
+  assert a == [0, 30, 30, 30, 50, 50, 50, 700]
+  assert b == [0, 30, 30, 30, 50, 50, 500, 700]
+}
+
+// ---- the output of a delay and of a call that has no name, read at sample (S-1185)
+
+pub flow prev_of_event(x: U32 at sample) -> U32 at sample {
+  let d = ev~(x)
+  prev~(d) at sample
+}
+
+pub flow delay_of_event(x: U32 at sample) -> U32 at sample {
+  let d = ev~(x)
+  delay~(d, 2) at sample
+}
+
+pub flow prev_in_expr(x: U32 at sample) -> U32 at sample {
+  let d = ev~(x)
+  x * 100 + prev~(d)
+}
+
+pub flow call_in_expr(x: U32 at sample) -> U32 at sample {
+  let d = ev~(x)
+  x + inc~(d)
+}
+
+test "prev~ and delay~ of an event give the event one and two before, read at sample as the last output" {
+  // prev~(d) gives at the events 0 3 5 7 9 (the one before; 0 before the first) and delay~(d, 2) gives 0 0 3 5 7.
+  let a = prev_of_event.render(XS, 8.0)
+  let b = delay_of_event.render(XS, 8.0)
+  let w_a: [U32; 12] = [0, 0, 0, 0, 3, 3, 3, 5, 7, 7, 7, 9]
+  let w_b: [U32; 12] = [0, 0, 0, 0, 0, 0, 0, 3, 5, 5, 5, 7]
+  for i in 0 ..< 12 {
+    assert a.out[i] == w_a[i]
+    assert b.out[i] == w_b[i]
+  }
+}
+
+test "the output of prev~ and of a call with no name in an expression of sample is the last output of the event" {
+  // x * 100 + the previous event: 200 300 400 600 then 500 + 3, 800 + 3, 1000 + 3, 700 + 5, 900 + 7, 1200 + 7, 1400 + 7, 1100 + 9. inc gives the event + 1 (4 6 8 10 12 at the frames 1 4 7 8 11, 0 before the first): x + 0 4 4 4 6 6 6 8 10 10 10 12.
+  let a = prev_in_expr.render(XS, 8.0)
+  let b = call_in_expr.render(XS, 8.0)
+  let w_a: [U32; 12] = [200, 300, 400, 600, 503, 803, 1003, 705, 907, 1207, 1407, 1109]
+  let w_b: [U32; 12] = [2, 7, 8, 10, 11, 14, 16, 15, 19, 22, 24, 23]
+  for i in 0 ..< 12 {
+    assert a.out[i] == w_a[i]
+    assert b.out[i] == w_b[i]
+  }
+}
+
+// ---- a field of an event, and an element of a tuple, are read as a name (S-1197): the hidden field has the type of the read, so before the first event it is 0, and the whole read first starts as Msg.default()
+
+pub flow field_read(x: U32 at sample) -> U32 at sample {
+  let m = msgs~(x)
+  x + m.vel
+}
+
+pub flow field_through_let(x: U32 at sample) -> U32 at sample {
+  let m = msgs~(x)
+  let v = m.vel
+  x + v
+}
+
+pub flow field_of_whole(x: U32 at sample) -> U32 at sample {
+  let m = msgs~(x)
+  x + (m at sample).vel
+}
+
+pub flow call_on_field(x: U32 at sample) -> U32 at sample {
+  let m = msgs~(x)
+  x + vel(m)
+}
+
+pub flow call_on_whole(x: U32 at sample) -> U32 at sample {
+  let m = msgs~(x)
+  x + vel(m at sample)
+}
+
+pub flow tuple_element(x: U32 at sample) -> U32 at sample {
+  let t = pairs~(x)
+  x + t.1
+}
+
+test "m.vel and vel(m) are the vel of the last event, 0 before the first one; the whole read first has vel 100 (Msg.default()) before it" {
+  // vel of the events: 0 (frame 1, off), 5 (4), 0 (7), 9 (8), 0 (11): 0 0 0 0 5 5 5 0 9 9 9 0 over the last event; x + it. Before the first event `m.vel` and `vel(m)` are 0, `(m at sample).vel` and `vel(m at sample)` are 100: only the frame 0 differs.
+  let a = field_read.render(XS, 8.0)
+  let b = field_through_let.render(XS, 8.0)
+  let c = call_on_field.render(XS, 8.0)
+  let d = field_of_whole.render(XS, 8.0)
+  let e = call_on_whole.render(XS, 8.0)
+  let want: [U32; 12] = [2, 3, 4, 6, 10, 13, 15, 7, 18, 21, 23, 11]
+  let first_whole: [U32; 12] = [102, 3, 4, 6, 10, 13, 15, 7, 18, 21, 23, 11]
+  for i in 0 ..< 12 {
+    assert a.out[i] == want[i]
+    assert b.out[i] == want[i]
+    assert c.out[i] == want[i]
+    assert d.out[i] == first_whole[i]
+    assert e.out[i] == first_whole[i]
+  }
+}
+
+test "an element of a tuple that is an event is the element of the last event" {
+  // The second elements 30 50 70 90 110 at the frames 1 4 7 8 11, 0 before: x + 0 30 30 30 50 50 50 70 90 90 90 110.
+  let o = tuple_element.render(XS, 8.0)
+  let w_o: [U32; 12] = [2, 33, 34, 36, 55, 58, 60, 77, 99, 102, 104, 121]
+  for i in 0 ..< 12 {
+    assert o.out[i] == w_o[i]
+  }
+}
+
+// ---- sample_tick() with the value of an event (S-1232): the time of the position of the event
+
+flow ones(x: U32 at sample) -> U32 at event {
+  if x % 3 == 1 {
+    Some(1)
+  } else {
+    None
+  }
+}
+
+// 2 (off) at the frames 0 4 5 10 11 and 1 (on) at the frames 2 6 7 (x % 3 for x = 2 3 4 6 5 8 10 7 9 12 14 11, none for 0).
+flow sel(m: U32 at event) -> U32 at event {
+  if m % 3 == 0 {
+    None
+  } else {
+    Some(m % 3)
+  }
+}
+
+flow age_event(m: U32 at event) -> U32 at sample {
+  let pl = prev~(^last)
+  let last = if m == 1 { sample_tick() } else { pl }
+  sample_tick() -% last
+}
+
+flow age_elapsed(m: U32 at event) -> U32 at sample {
+  let pl = prev~(^last)
+  let last = if m == 1 { sample_tick() } else { pl }
+  sample_tick() -% (last at sample)
+}
+
+flow age_sum(m: U32 at event) -> U32 at sample {
+  let pl = prev~(^last)
+  let last = if m == 1 { sample_tick() } else { pl }
+  acc~(sample_tick() -% last)
+}
+
+// The head of a chain and the condition of its modifier hold the same expressions of the event: the condition never holds in 12 frames (the difference of the times is never over 100).
+flow age_sum_chain(m: U32 at event) -> U32 at sample {
+  let pl = prev~(^last)
+  let last = if m == 1 { sample_tick() } else { pl }
+  acc~(sample_tick() -% last).reset_if~(sample_tick() -% last > 100)
+}
+
+pub flow summed_age_chain(x: U32 at sample) -> U32 at sample {
+  age_sum_chain~(sel~(gen~(x)))
+}
+
+pub flow age_of_on_events(x: U32 at sample) -> U32 at sample {
+  age_event~(ones~(x))
+}
+
+pub flow age_of_events(x: U32 at sample) -> U32 at sample {
+  age_event~(sel~(gen~(x)))
+}
+
+pub flow elapsed_of_events(x: U32 at sample) -> U32 at sample {
+  age_elapsed~(sel~(gen~(x)))
+}
+
+pub flow summed_age_of_events(x: U32 at sample) -> U32 at sample {
+  age_sum~(sel~(gen~(x)))
+}
+
+test "sample_tick() -% last, with last the time kept at the on events, is 0 at an on event: the expression of the event is always 0 when every event is on" {
+  let o = age_of_on_events.render(XS, 8.0)
+  let w_o: [U32; 12] = [0; 12]
+  for i in 0 ..< 12 {
+    assert o.out[i] == w_o[i]
+  }
+}
+
+test "the difference to the time kept is a value of the event (computed at the events and kept); the elapsed time is with (last at sample)" {
+  // The events are at the frames 0 2 4 5 6 7 10 11 (on at 2 6 7); `last` is 0 0 2 2 2 2 6 7 7 7 7 7 over the frames (the event of the frame is seen). At the events sample_tick() -% last is 0 0 2 3 0 0 3 4; read at sample: 0 0 0 0 2 3 0 0 0 0 3 4.
+  // The elapsed time is the frame minus `last`: 0 1 0 1 2 3 0 0 1 2 3 4. The sum of the values at the events (acc~ of the expression): 0 0 0 0 2 5 5 5 5 5 8 12.
+  let a = age_of_events.render(XS, 8.0)
+  let b = elapsed_of_events.render(XS, 8.0)
+  let c = summed_age_of_events.render(XS, 8.0)
+  let k = summed_age_chain.render(XS, 8.0)
+  let w_a: [U32; 12] = [0, 0, 0, 0, 2, 3, 0, 0, 0, 0, 3, 4]
+  let w_b: [U32; 12] = [0, 1, 0, 1, 2, 3, 0, 0, 1, 2, 3, 4]
+  let w_c: [U32; 12] = [0, 0, 0, 0, 2, 5, 5, 5, 5, 5, 8, 12]
+  for i in 0 ..< 12 {
+    assert a.out[i] == w_a[i]
+    assert b.out[i] == w_b[i]
+    assert c.out[i] == w_c[i]
+    assert k.out[i] == w_c[i]
+  }
+}
+
+// ---- in a par, as the argument of a flow, as an index, as the argument of an rt fn
+
+flow pass(a: U32 at sample) -> U32 at sample {
+  a + 1
+}
+
+pub flow par_event(x: U32 at sample) -> [U32; 2] at sample {
+  let d = ev~(x)
+  par i in 0 ..< 2 {
+    x * i + d
+  }
+}
+
+pub flow into_flow_arg(x: U32 at sample) -> U32 at sample {
+  let d = ev~(x)
+  pass~(d)
+}
+
+pub flow index_event(x: U32 at sample) -> U32 at sample {
+  let d = ev~(x)
+  TBL[d % 4]
+}
+
+pub flow index_sample(x: U32 at sample) -> U32 at sample {
+  let d = ev~(x)
+  TBL[(d at sample) % 4]
+}
+
+pub flow rt_event(x: U32 at sample) -> U32 at sample {
+  let d = ev~(x)
+  mix(d, 7)
+}
+
+pub flow rt_sample(x: U32 at sample) -> U32 at sample {
+  let d = ev~(x)
+  mix(d, x)
+}
+
+test "an event read as a name in each copy of a par is the last value" {
+  // The copy 0 is the last value 0 3 3 3 5 5 5 7 9 9 9 11, the copy 1 adds x.
+  var outs: [[U32; 12]; 2] = [[0; 12]; 2]
+  var st = par_event.init(8.0)
+  par_event.process(inout st, XS, inout outs)
+  assert outs[0] == [0, 3, 3, 3, 5, 5, 5, 7, 9, 9, 9, 11]
+  assert outs[1] == [2, 6, 7, 9, 10, 13, 15, 14, 18, 21, 23, 22]
+}
+
+test "an event given to a flow input of sample is read as the last value" {
+  let o = into_flow_arg.render(XS, 8.0)
+  let w_o: [U32; 12] = [1, 4, 4, 4, 6, 6, 6, 8, 10, 10, 10, 12]
+  for i in 0 ..< 12 {
+    assert o.out[i] == w_o[i]
+  }
+}
+
+test "TBL[d % 4] and mix(d, 7) are expressions of the event: 0 before the first event, not the table or the function of 0; with (d at sample) or x the expression is computed at sample" {
+  // d % 4 over the last events is 0 3 3 3 1 1 1 3 1 1 1 3. The expression of the event is 0 at the frame 0 (T.default() of U32) and then TBL[..]; with the read at sample the frame 0 is TBL[0] = 100.
+  // mix(d, 7) = 2 d + 7 at the events 13 17 21 25 29, 0 before; mix(d, x) = 2 d + x at each frame.
+  let a = index_event.render(XS, 8.0)
+  let b = index_sample.render(XS, 8.0)
+  let c = rt_event.render(XS, 8.0)
+  let d = rt_sample.render(XS, 8.0)
+  let w_a: [U32; 12] = [0, 103, 103, 103, 101, 101, 101, 103, 101, 101, 101, 103]
+  let w_b: [U32; 12] = [100, 103, 103, 103, 101, 101, 101, 103, 101, 101, 101, 103]
+  let w_c: [U32; 12] = [0, 13, 13, 13, 17, 17, 17, 21, 25, 25, 25, 29]
+  let w_d: [U32; 12] = [2, 9, 10, 12, 15, 18, 20, 21, 27, 30, 32, 33]
+  for i in 0 ..< 12 {
+    assert a.out[i] == w_a[i]
+    assert b.out[i] == w_b[i]
+    assert c.out[i] == w_c[i]
+    assert d.out[i] == w_d[i]
+  }
+}
+
+// ---- the maker above and below (through ^): the same value, the end of the stage
+
+pub flow stored_above(x: U32 at sample) -> U32 at sample {
+  let d = ev~(x)
+  prev~(d at sample)
+}
+
+pub flow stored_below(x: U32 at sample) -> U32 at sample {
+  let p = prev~(^d at sample)
+  let d = ev~(x)
+  p
+}
+
+test "a delay of the event stored where it is written above the maker and through ^ below it give the last value of the frame, one frame later" {
+  // The value of the last event at the end of each frame is 0 3 3 3 5 5 5 7 9 9 9 11, and the delay gives it a frame later: 0 0 3 3 3 5 5 5 7 9 9 9.
+  let a = stored_above.render(XS, 8.0)
+  let b = stored_below.render(XS, 8.0)
+  let w_a: [U32; 12] = [0, 0, 3, 3, 3, 5, 5, 5, 7, 9, 9, 9]
+  let w_b: [U32; 12] = [0, 0, 3, 3, 3, 5, 5, 5, 7, 9, 9, 9]
+  for i in 0 ..< 12 {
+    assert a.out[i] == w_a[i]
+    assert b.out[i] == w_b[i]
+  }
+}
+
+// ---- a run cut into several calls of process, and reset
+
+pub flow split_flow(x: U32 at sample) -> U32 at sample {
+  let d = ev~(x)
+  let q = d at (sample / 4)
+  (q at sample) * 100 + d
+}
+
+test "a run cut in calls anywhere (in a grid, with a call of 0 frames) has the values of one call: the last event and the value kept at the tick are in the state" {
+  // held * 100 + the last value: 0, 3, 3, 3, 305, 305, 305, 307, 709, 709, 709, 711.
+  var out: [U32; 12] = [0; 12]
+  var st = split_flow.init(8.0)
+  split_flow.process(inout st, XS.slice(0, 2), inout out.slice(0, 2))
+  split_flow.process(inout st, XS.slice(2, 5), inout out.slice(2, 5))
+  split_flow.process(inout st, XS.slice(5, 5), inout out.slice(5, 5))
+  split_flow.process(inout st, XS.slice(5, 12), inout out.slice(5, 12))
+  assert out == [0, 3, 3, 3, 305, 305, 305, 307, 709, 709, 709, 711]
+}
+
+test "reset puts the last event and the value kept back: no event, the grid from its first tick, 0" {
+  // After 6 frames the last event is 5 and the value kept is 3. After the reset four frames with no event (x = 2) give 0 0 0 0. After another reset the whole run is again the one of a first start.
+  let none: [U32; 4] = [2, 2, 2, 2]
+  var junk: [U32; 6] = [0; 6]
+  var out: [U32; 4] = [9; 4]
+  var all: [U32; 12] = [0; 12]
+  var st = split_flow.init(8.0)
+  split_flow.process(inout st, XS.slice(0, 6), inout junk)
+  split_flow.reset(inout st)
+  split_flow.process(inout st, none, inout out)
+  assert out == [0, 0, 0, 0]
+  split_flow.reset(inout st)
+  split_flow.process(inout st, XS, inout all)
+  assert all == [0, 3, 3, 3, 305, 305, 305, 307, 709, 709, 709, 711]
+}

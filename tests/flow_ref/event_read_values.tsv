@@ -1,0 +1,107 @@
+# flow_ref 1 source=tests/spec/flow_semantics/event_read_values.onsa tests=16 evaluated=16 unavailable=0 skipped=0 waiting=0
+@ an event read at sample, or with no clock, is its last value up to the frame, 0 before the first event
+render event_read_values.now_implicit sr=0x41000000 in x=[2 3 4 6 5 8 10 7 9 12 14 11]
+out=[0 3 3 3 5 5 5 7 9 9 9 11]
+render event_read_values.now_at sr=0x41000000 in x=[2 3 4 6 5 8 10 7 9 12 14 11]
+out=[0 3 3 3 5 5 5 7 9 9 9 11]
+@ an event read at sample / 4 is the value before the frame of each tick, kept four frames, in a let and inline: the event of a tick frame is seen at the next tick
+render event_read_values.held_let sr=0x41000000 in x=[2 3 4 6 5 8 10 7 9 12 14 11]
+out=[0 0 0 0 3 3 3 3 7 7 7 7]
+render event_read_values.held_inline sr=0x41000000 in x=[2 3 4 6 5 8 10 7 9 12 14 11]
+out=[0 0 0 0 3 3 3 3 7 7 7 7]
+@ a computed expression of an event read at sample is the last value of the expression, and at sample / 4 the value it had at the tick, in a let and inline
+render event_read_values.now_double sr=0x41000000 in x=[2 3 4 6 5 8 10 7 9 12 14 11]
+out=[0 6 6 6 10 10 10 14 18 18 18 22]
+render event_read_values.held_double_let sr=0x41000000 in x=[2 3 4 6 5 8 10 7 9 12 14 11]
+out=[0 0 0 0 6 6 6 6 14 14 14 14]
+render event_read_values.held_double_inline sr=0x41000000 in x=[2 3 4 6 5 8 10 7 9 12 14 11]
+out=[0 0 0 0 6 6 6 6 14 14 14 14]
+@ d * r is computed at each event with the r of that call and kept; (d at sample) * r is computed at each frame with the r of the frame
+init 0 event_read_values.stored_times_block sr=0x41000000
+init 1 event_read_values.now_times_block sr=0x41000000
+process 0 params r=10 frames=6 in x=[2 3 4 6 5 8]
+out=[0 30 30 30 50 50]
+process 0 params r=100 frames=2 in x=[10 7]
+out=[50 700]
+process 1 params r=10 frames=6 in x=[2 3 4 6 5 8]
+out=[0 30 30 30 50 50]
+process 1 params r=100 frames=2 in x=[10 7]
+out=[500 700]
+@ prev~ and delay~ of an event give the event one and two before, read at sample as the last output
+render event_read_values.prev_of_event sr=0x41000000 in x=[2 3 4 6 5 8 10 7 9 12 14 11]
+out=[0 0 0 0 3 3 3 5 7 7 7 9]
+render event_read_values.delay_of_event sr=0x41000000 in x=[2 3 4 6 5 8 10 7 9 12 14 11]
+out=[0 0 0 0 0 0 0 3 5 5 5 7]
+@ the output of prev~ and of a call with no name in an expression of sample is the last output of the event
+render event_read_values.prev_in_expr sr=0x41000000 in x=[2 3 4 6 5 8 10 7 9 12 14 11]
+out=[200 300 400 600 503 803 1003 705 907 1207 1407 1109]
+render event_read_values.call_in_expr sr=0x41000000 in x=[2 3 4 6 5 8 10 7 9 12 14 11]
+out=[2 7 8 10 11 14 16 15 19 22 24 23]
+@ m.vel and vel(m) are the vel of the last event, 0 before the first one; the whole read first has vel 100 (Msg.default()) before it
+render event_read_values.field_read sr=0x41000000 in x=[2 3 4 6 5 8 10 7 9 12 14 11]
+out=[2 3 4 6 10 13 15 7 18 21 23 11]
+render event_read_values.field_through_let sr=0x41000000 in x=[2 3 4 6 5 8 10 7 9 12 14 11]
+out=[2 3 4 6 10 13 15 7 18 21 23 11]
+render event_read_values.call_on_field sr=0x41000000 in x=[2 3 4 6 5 8 10 7 9 12 14 11]
+out=[2 3 4 6 10 13 15 7 18 21 23 11]
+render event_read_values.field_of_whole sr=0x41000000 in x=[2 3 4 6 5 8 10 7 9 12 14 11]
+out=[102 3 4 6 10 13 15 7 18 21 23 11]
+render event_read_values.call_on_whole sr=0x41000000 in x=[2 3 4 6 5 8 10 7 9 12 14 11]
+out=[102 3 4 6 10 13 15 7 18 21 23 11]
+@ an element of a tuple that is an event is the element of the last event
+render event_read_values.tuple_element sr=0x41000000 in x=[2 3 4 6 5 8 10 7 9 12 14 11]
+out=[2 33 34 36 55 58 60 77 99 102 104 121]
+@ sample_tick() -% last, with last the time kept at the on events, is 0 at an on event: the expression of the event is always 0 when every event is on
+render event_read_values.age_of_on_events sr=0x41000000 in x=[2 3 4 6 5 8 10 7 9 12 14 11]
+out=[0 0 0 0 0 0 0 0 0 0 0 0]
+@ the difference to the time kept is a value of the event (computed at the events and kept); the elapsed time is with (last at sample)
+render event_read_values.age_of_events sr=0x41000000 in x=[2 3 4 6 5 8 10 7 9 12 14 11]
+out=[0 0 0 0 2 3 0 0 0 0 3 4]
+render event_read_values.elapsed_of_events sr=0x41000000 in x=[2 3 4 6 5 8 10 7 9 12 14 11]
+out=[0 1 0 1 2 3 0 0 1 2 3 4]
+render event_read_values.summed_age_of_events sr=0x41000000 in x=[2 3 4 6 5 8 10 7 9 12 14 11]
+out=[0 0 0 0 2 5 5 5 5 5 8 12]
+render event_read_values.summed_age_chain sr=0x41000000 in x=[2 3 4 6 5 8 10 7 9 12 14 11]
+out=[0 0 0 0 2 5 5 5 5 5 8 12]
+@ an event read as a name in each copy of a par is the last value
+init 0 event_read_values.par_event sr=0x41000000
+process 0 frames=12 in x=[2 3 4 6 5 8 10 7 9 12 14 11]
+out[0]=[0 3 3 3 5 5 5 7 9 9 9 11]
+out[1]=[2 6 7 9 10 13 15 14 18 21 23 22]
+@ an event given to a flow input of sample is read as the last value
+render event_read_values.into_flow_arg sr=0x41000000 in x=[2 3 4 6 5 8 10 7 9 12 14 11]
+out=[1 4 4 4 6 6 6 8 10 10 10 12]
+@ TBL[d % 4] and mix(d, 7) are expressions of the event: 0 before the first event, not the table or the function of 0; with (d at sample) or x the expression is computed at sample
+render event_read_values.index_event sr=0x41000000 in x=[2 3 4 6 5 8 10 7 9 12 14 11]
+out=[0 103 103 103 101 101 101 103 101 101 101 103]
+render event_read_values.index_sample sr=0x41000000 in x=[2 3 4 6 5 8 10 7 9 12 14 11]
+out=[100 103 103 103 101 101 101 103 101 101 101 103]
+render event_read_values.rt_event sr=0x41000000 in x=[2 3 4 6 5 8 10 7 9 12 14 11]
+out=[0 13 13 13 17 17 17 21 25 25 25 29]
+render event_read_values.rt_sample sr=0x41000000 in x=[2 3 4 6 5 8 10 7 9 12 14 11]
+out=[2 9 10 12 15 18 20 21 27 30 32 33]
+@ a delay of the event stored where it is written above the maker and through ^ below it give the last value of the frame, one frame later
+render event_read_values.stored_above sr=0x41000000 in x=[2 3 4 6 5 8 10 7 9 12 14 11]
+out=[0 0 3 3 3 5 5 5 7 9 9 9]
+render event_read_values.stored_below sr=0x41000000 in x=[2 3 4 6 5 8 10 7 9 12 14 11]
+out=[0 0 3 3 3 5 5 5 7 9 9 9]
+@ a run cut in calls anywhere (in a grid, with a call of 0 frames) has the values of one call: the last event and the value kept at the tick are in the state
+init 0 event_read_values.split_flow sr=0x41000000
+process 0 frames=2 in x=[2 3]
+out=[0 3]
+process 0 frames=3 in x=[4 6 5]
+out=[3 3 305]
+process 0 frames=0 in x=[]
+out=[]
+process 0 frames=7 in x=[8 10 7 9 12 14 11]
+out=[305 305 307 709 709 709 711]
+@ reset puts the last event and the value kept back: no event, the grid from its first tick, 0
+init 0 event_read_values.split_flow sr=0x41000000
+process 0 frames=6 in x=[2 3 4 6 5 8]
+out=[0 3 3 3 305 305]
+reset 0
+process 0 frames=4 in x=[2 2 2 2]
+out=[0 0 0 0]
+reset 0
+process 0 frames=12 in x=[2 3 4 6 5 8 10 7 9 12 14 11]
+out=[0 3 3 3 305 305 305 307 709 709 709 711]
