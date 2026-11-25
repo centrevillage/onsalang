@@ -69,7 +69,7 @@ pub(crate) fn finish_flow(
         modifiers: fcx.node_exprs().into_iter().filter_map(|(e, r)| Some((e, r?))).collect(),
         output: fcx.output,
         derived_port: a.def(id).as_flow().and_then(|f| f.derived_port(a.def(id).name_span)),
-        event_form: first_event(a, id, &fcx),
+        event_word: first_event(a, id, &fcx),
         complete: false,
         ..Default::default()
     };
@@ -125,7 +125,7 @@ pub(crate) fn finish_flow(
             _ => ClockStage::SAMPLE,
         };
         info.out_stage = Some(info.run_stage(out));
-        super::plan::build(&mut info, recorded, &w, ast, std::mem::take(&mut m.hoisted));
+        super::plan::build(a, &mut info, recorded, &w, ast, std::mem::take(&mut m.hoisted));
         (info.checks, info.const_conds) = (std::mem::take(&mut m.checks), std::mem::take(&mut m.const_conds));
         let unused = super::reads::unused(a, id, ast, &info, &fcx);
         a.diagnostics.extend(unused);
@@ -367,9 +367,9 @@ pub(super) fn walk(
         w.out.locals.insert(*l, input.body_clock());
     }
     w.solve();
-    // S-1139 (a): of the clocks of stage 1, before the nodes are named.
+    // S-1139 (a): of the clocks of stage 1 (a ratio or an event), before the nodes are named.
     for (p, c) in cx.pending.iter().zip(&w.lets) {
-        if c.is_some_and(Clock::of_ratio) {
+        if c.is_some_and(|c| c.of_ratio() || matches!(c, Clock::Event(_))) {
             w.recorder.apart(super::plan::names::value_call(ast, names, p.init));
         }
     }

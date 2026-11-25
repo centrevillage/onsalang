@@ -85,7 +85,7 @@ pub(crate) fn walk(pkg: &Package, a: &mut Analysis) {
 fn close(pkg: &Package, a: &mut Analysis, f: DefId, marks: &HashMap<DefId, Mark>, most: &HashMap<DefId, Most>) -> Most {
     let info = a.flows.get(&f)?;
     let mut time = own_time(info);
-    // The entries of a flow with events are W7-11 U2's; its gate (`FlowInfo::event_gate`) stops what reads them.
+    // The gate of a flow not planned (`FlowInfo::event_gate`) stops what reads its entries.
     if !info.planned() {
         if let Some(info) = a.flows.get_mut(&f) {
             info.time = time;
@@ -103,7 +103,7 @@ fn close(pkg: &Package, a: &mut Analysis, f: DefId, marks: &HashMap<DefId, Mark>
         let PlanKind::Instance { callee, .. } = n.kind else {
             // A delay with a chain runs at its one stage (§11.10), a stage of this flow.
             let stage = n.clock.stage().filter(|_| n.kind.delay().is_some() && !n.chain.is_empty());
-            tables.push(stage.map(|s| steps::table(n, &[s], Some(s))));
+            tables.push(stage.map(|s| steps::table(n, &[s], Some((s, Out::Value)))));
             continue;
         };
         let Some(g) = table(callee) else {
@@ -115,7 +115,8 @@ fn close(pkg: &Package, a: &mut Analysis, f: DefId, marks: &HashMap<DefId, Mark>
             continue;
         };
         let heads: Vec<ClockStage> = g.stages.iter().copied().chain([ClockStage::SAMPLE]).collect();
-        let (entries, read) = steps::table(n, &heads, g.out_stage);
+        let (mut entries, read) = steps::table(n, &heads, events::out(g));
+        entries.extend(events::entries(n, g));
         unmade_at.extend(unmade(n, g).map(|(at, k, over)| (id, at, k, over)));
         callee_time(&mut time, info, n, g, &entries);
         tables.push(Some((entries, read)));
@@ -138,12 +139,23 @@ fn close(pkg: &Package, a: &mut Analysis, f: DefId, marks: &HashMap<DefId, Mark>
             past_at = Some((at, total, id));
         }
     }
+    let gives = a.def(f).as_flow().is_some_and(FlowDef::gives_events);
+    let ticked = match events::table(info, gives, &tables, &mut time) {
+        Ok(ticked) => ticked,
+        Err(at) => {
+            // A form not run (`FlowInfo::event_form`), as those of the body.
+            let time = own_time(info);
+            a.flows.entry(f).and_modify(|info| (info.event_form, info.time) = (Some(at), time));
+            return None;
+        }
+    };
     let callers = tables.iter().flatten().flat_map(|t| &t.0).map(|e| e.caller);
     stages.extend(callers.filter(|s| s.slow_tick()));
     let Some(flow) = a.flows.get_mut(&f) else { onsa_diag::internal::bug(None, "a flow closed out of the table") };
     let set = |n: &mut PlanNode, (e, read)| (n.entries, n.read) = (e, read);
     flow.nodes.iter_mut().zip(tables).for_each(|(n, t)| t.into_iter().for_each(|t| set(n, t)));
     (flow.stages, flow.time) = (stages.into_iter().collect(), time);
+    (flow.events, flow.emit) = ticked;
     node_work(flow);
     fields::build(flow);
     // The E0808 of the path first, one of the flow, as before S-1216.

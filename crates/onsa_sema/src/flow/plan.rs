@@ -8,16 +8,18 @@
 use super::clocks::Walked;
 use super::nodes::Recorded;
 use super::*;
-use crate::clock::Ratio;
+use crate::clock::{EventSrc, Ratio};
 use crate::flow_names::Modifier;
 
 pub(super) mod bounds;
 pub(crate) mod entries;
+mod events;
 mod fields;
 pub(super) mod names;
 mod stage;
 mod steps;
 
+pub use events::{EventFrom, EventPlan};
 pub use fields::{Field, FieldOf, Part};
 
 /// The index of a node in [`FlowInfo::nodes`]: the one index of a node
@@ -171,13 +173,17 @@ pub struct PlanNode {
     /// `.when~` of `chain`, of the same walk as `bounds`.
     pub guards: Vec<PlanGuard>,
     /// Of an instance, its work in each stage of this flow (§11.9, S-1088,
-    /// S-1207), one entry of a stage, slowest first; of a delay with a chain,
+    /// S-1207), one entry of a stage, slowest first, then of each event an
+    /// input of it is bound to (§11.11, by its source); of a delay with a chain,
     /// the same of its one stage, whose [`Op::Run`] reads it (§11.10); none of
     /// another node, and of an instance whose callee has no table (in error,
     /// in a loop of calls). Made by the walk of the table ([`entries`], [`steps`]).
     pub entries: Vec<Entry>,
     /// How this flow reads its value (§11.9).
     pub read: Read,
+    /// Of a delay at a tick, what it stores reads of events where it is
+    /// written ([`events::saved`], §11.3, S-1240); none of another node.
+    pub saved: Vec<ExprId>,
 }
 
 /// The work of an instance in the function of the stage `caller` of this
@@ -202,7 +208,8 @@ pub enum Op {
     /// The slot of the ring of the port `port` of the boundary `bound`,
     /// at its phase, written from `from`.
     Ring { bound: u32, port: Port, from: Feed },
-    /// The stage `body` of the head run (its function called; of a delay,
+    /// The stage `body` of the head run (its function called; of an event
+    /// of a source, the tick of the input bound to it; of a delay,
     /// its value read, its store after it, §11.10); its result to `out`.
     Run { body: ClockStage, out: Out },
     /// The elements of the array of the boundary `from` written to `to`
@@ -274,6 +281,9 @@ pub enum Out {
     Deal(u32),
     /// The held output of the guard (§11.10, [`Op::Hold`]).
     Held(u32),
+    /// An event the instance gives out or none (§11.11): the stage of this
+    /// flow of the clock of the call runs after it for each ([`EventPlan`]).
+    Event,
 }
 
 /// Where an [`Op::Deal`] writes: the array of a boundary, or the value of
@@ -548,10 +558,11 @@ impl FlowInfo {
 /// The table of the nodes of `info` from the nodes the walk `w` recorded,
 /// in the order of their [`NodeId`]s, with the clocks the walk gave them;
 /// the table of the subexpressions the marking hoisted (`hoisted`, of the
-/// module of `ast`); and its own slow stages. The walk of the table
-/// ([`entries`]) adds those of its callees and makes the fields of the
-/// state after.
+/// module of `ast`); its own slow stages; and what of its events is of its
+/// body ([`events`]). The walk of the table ([`entries`]) adds those of its
+/// callees and makes the fields of the state after.
 pub(super) fn build(
+    a: &Analysis,
     info: &mut FlowInfo,
     recorded: Vec<Recorded>,
     w: &Walked,
@@ -615,6 +626,7 @@ pub(super) fn build(
             guards: r.guards,
             entries: Vec::new(),
             read: Read::Run,
+            saved: Vec::new(),
         }
     });
     info.nodes = nodes.collect();
@@ -622,6 +634,14 @@ pub(super) fn build(
     info.roots = roots;
     super::hoist::table(info, ast, hoisted);
     info.stages = stage::slow_stages(info);
+    info.events = events::sources(info);
+    info.event_form = events::form(a, info, ast);
+    for i in (0..info.nodes.len()).filter(|_| !info.events.is_empty()) {
+        let tick = matches!(info.node_stage(NodeId(i as u32)), Some(ClockStage::Tick(_)));
+        if let Some(arg) = info.nodes[i].kind.stored().filter(|_| tick) {
+            info.nodes[i].saved = events::saved(info, ast, arg);
+        }
+    }
 }
 
 #[cfg(test)]

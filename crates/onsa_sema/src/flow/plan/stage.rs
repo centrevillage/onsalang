@@ -17,8 +17,25 @@ impl FlowInfo {
     /// reads the plan of the flow stops at it before it reads one: the
     /// lowering, at a flow it comes to, and `onsa graph`.
     pub fn event_gate(&self) -> Option<Diagnostic> {
-        let at = self.event_form.filter(|_| self.complete)?;
+        // Every flow with events until the Core lowers their stages: W7-11 U2 stage b reads `event_form` here.
+        let at = self.event_word.filter(|_| self.complete)?;
         Some(onsa_diag::unsupported::Feature::EventClocks.diagnostic(onsa_diag::Stage::Flow, at, &[]))
+    }
+
+    /// The event clock of the source `src` (§11.11).
+    pub fn event(&self, src: EventSrc) -> Option<&EventPlan> {
+        Some(&self.events[events::find(&self.events, Some(ClockStage::Event(src)))?])
+    }
+
+    /// Whether the function of the stage `s` gives an event of the output of
+    /// the flow or none to the one that calls it (§11.11): that of the stage
+    /// [`FlowInfo::emit`], to the caller, and those it ticks on the way to
+    /// the one that makes the event.
+    pub fn gives(&self, s: ClockStage) -> bool {
+        match s {
+            ClockStage::Event(src) => self.event(src).is_some_and(|p| p.gives),
+            ClockStage::Init | ClockStage::Block | ClockStage::Tick(_) => self.emit == Some(s),
+        }
     }
 
     /// The stage of the local `l` (of an input its `body_clock`, of a `let`

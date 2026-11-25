@@ -345,6 +345,9 @@ impl Marker<'_> {
                     self.read_select(id, at);
                     let own = self.clocks.info.own_stage(id).filter(|s| s.stored_slower_than(at));
                     if let Some(s) = own.filter(|_| self.body.locals[id.0 as usize].kind != LocalKind::MatchBind) {
+                        if matches!(s, ClockStage::Event(_)) {
+                            self.mark_late(e);
+                        }
                         let name = expr.span.text_in(self.text);
                         self.no_default(e, s, SlowField::Name(name));
                     }
@@ -519,9 +522,9 @@ impl Marker<'_> {
         false
     }
 
-    /// The part `e` evaluated at its stage, of the end of it
-    /// ([`FlowInfo::late`]) if it or a condition on its path reads a `^name`
-    /// or a binding one chooses.
+    /// The part `e` evaluated at its stage, or the read `e` of an event
+    /// (S-1240), of the end of it ([`FlowInfo::late`]) if it or a condition
+    /// on its path reads a `^name` or a binding one chooses.
     fn mark_late(&mut self, e: ExprId) {
         if self.conds.iter().map(|c| c.0).chain([e]).any(|x| self.back(x)) {
             self.out.late.insert(e);

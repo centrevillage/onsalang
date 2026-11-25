@@ -931,6 +931,7 @@ fn drawn_ops(ops: &[super::Op]) -> String {
         Out::Value => "V".to_string(),
         Out::Deal(b) => format!("D({b})"),
         Out::Held(g) => format!("H({g})"),
+        Out::Event => "E".to_string(),
     };
     let op = |op: &Op| match op {
         Op::Run { body, out: o } => format!("R({},{})", st(*body), out(o)),

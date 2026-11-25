@@ -77,6 +77,8 @@
 //!   evaluates a part of the body at (the `stages` come of them), those of
 //!   `sample_tick()` (the `time` comes of them), and the `let`s that hold
 //!   work of a stage ([`FlowInfo::work_in`]; `late`, what is of its end).
+//! - `events`, `emit` — the event clocks (§11.11, [`plan`]'s `events`): their
+//!   sources, the stage that ticks each and the one that gives the output out.
 //! - `read_at: HashMap<LocalId, BTreeSet<ClockStage>>` — the stages at which
 //!   each local is read (inputs, `let`s, `par` variables, match bindings;
 //!   S-05): each argument of a node at the stage of its clock
@@ -134,8 +136,8 @@ mod tests;
 pub use branching::{Chain, Link, chain};
 pub use hoist::{Cond, Hoist, HoistId};
 pub use plan::{
-    CondRead, Edge, Entry, Feed, Field, FieldOf, Kept, NodeId, Op, Out, Owner, Part, PlanBound, PlanGuard, PlanKind,
-    PlanModifier, PlanNode, Port, Read, To, Vertex,
+    CondRead, Edge, Entry, EventFrom, EventPlan, Feed, Field, FieldOf, Kept, NodeId, Op, Out, Owner, Part, PlanBound,
+    PlanGuard, PlanKind, PlanModifier, PlanNode, Port, Read, To, Vertex,
 };
 pub use plan::{Counter, Words};
 
@@ -319,7 +321,8 @@ pub struct FlowInfo {
     /// (§11.3, S-1244), with what the delays store, since it reads a `^name`
     /// of a `let` below or a binding one chooses: the hoisted fields and the
     /// checks, the `init` of a delay, and the `match~` of such bindings, of
-    /// which the choice alone is there (S-1245).
+    /// which the choice alone is there (S-1245); and the names of an event a
+    /// faster stage reads so (S-1240).
     pub late: HashSet<ExprId>,
     /// The ticks of the body slower than its `sample` (§11.9), slowest
     /// first: of its inputs, its output and those the marking evaluates at
@@ -348,10 +351,22 @@ pub struct FlowInfo {
     /// around it.
     pub store_bindings: HashSet<LocalId>,
     pub output: Option<ExprId>,
+    /// The event clocks of the body and the stage of each (§11.11), in the
+    /// order of their sources ([`FlowInfo::event`]).
+    pub events: Vec<EventPlan>,
+    /// Of a flow with an event output, the stage of the body whose function
+    /// gives the events out to the caller (§11.11): a tick, or the clock of an
+    /// event input; none of another flow, and of events that come of a call
+    /// of a callee with no table.
+    pub emit: Option<ClockStage>,
     /// The form of the event clock this version checks and does not run
-    /// (§11.11), at a word `event` of a heading: every one until W7-11 U2
-    /// (`clocks::first_event`). [`FlowInfo::event_gate`] is its E0200.
+    /// (§11.11, W7-17): of the body, or a source nothing outside it ticks
+    /// (`plan`'s `events`).
     pub(crate) event_form: Option<Span>,
+    /// The word `event` of a heading the flow has an event clock by
+    /// (`clocks::first_event`): the place of [`FlowInfo::event_gate`] until
+    /// the Core lowers the stages of `events` (W7-11 U2, stage b).
+    pub(crate) event_word: Option<Span>,
     pub complete: bool,
 }
 

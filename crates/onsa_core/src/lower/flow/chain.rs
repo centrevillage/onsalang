@@ -465,6 +465,7 @@ fn put(
         Out::Value => To::Value,
         Out::Deal(b) => To::Array(b),
         Out::Held(g) => To::Held(g),
+        Out::Event => return Err(internal(w.span, "an event given out as a value")),
     };
     let (from, m) = frame(w)?;
     // Of the value of a tick of the caller made once in a loop, e ≤ 0 (the memo of U6b 2.5).

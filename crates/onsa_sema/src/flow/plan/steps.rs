@@ -18,12 +18,16 @@ type Level = BTreeMap<ClockStage, Vec<Op>>;
 
 /// The entries and the read of the node `n` whose head runs each stage of
 /// `heads` (of an instance, the stages of the body of its callee: its slow
-/// stages, then `sample`; of a delay, its one stage, §11.10), that of
-/// `out_stage` into the array of the innermost boundary that deals, else as
-/// the value; then the arm of each boundary.
-pub(super) fn table(n: &PlanNode, heads: &[ClockStage], out_stage: Option<ClockStage>) -> (Vec<Entry>, Read) {
+/// stages, then `sample`; of a delay, its one stage, §11.10), that of `to`
+/// where it says, its value into the array of the innermost boundary that
+/// deals if one does; then the arm of each boundary.
+pub(super) fn table(n: &PlanNode, heads: &[ClockStage], to: Option<(ClockStage, Out)>) -> (Vec<Entry>, Read) {
     let first = first_deal(n, 0);
-    let out = |x| if Some(x) == out_stage { first.map_or(Out::Value, Out::Deal) } else { Out::None };
+    let out = |x| match to {
+        Some((s, Out::Value)) if s == x => first.map_or(Out::Value, Out::Deal),
+        Some((s, out)) if s == x => out,
+        _ => Out::None,
+    };
     let mut level: Level = heads.iter().map(|&x| (x, vec![Op::Run { body: x, out: out(x) }])).collect();
     let mut dealt = None;
     let (mut b, mut g) = (0u32, 0u32);
