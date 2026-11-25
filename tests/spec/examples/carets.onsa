@@ -1,0 +1,43 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.3"]
+
+// The example of §11.3 (S-1249): what `^` defers in the first argument of a delay. `carets_split` is the same with each part in a `let`, as the comments of the example say. Worked out by hand for x = 4 5 7 5 8 6 and g = 1 (k = 2): p is
+// the event before (0 4 5 7 5 8 after the event of the frame, 0 0 4 5 7 5 where the delays are written), so a = 0 0 0 8 10 14, b = 0 0 8 10 14 10 and c = 0 16 20 28 20 32.
+
+flow det(x: U32 at sample) -> U32 at event { if x != 0 { Some(x) } else { None } }
+
+flow carets(x: U32 at sample, g: U32 at block) -> U32 at sample {
+  let p = prev~(^d)                 // d は下の作り手のイベント
+  let a = prev~((p at sample) * ^k) // p は書いた位置の値: `let t = p at sample` と `prev~(t * ^k)` に分けた形と同じ
+  let b = prev~((p * ^k) at sample) // p * ^k の値は `sample` の段の終わりのもの
+  let c = prev~(x * (^k * 2))       // ^k * 2 は `block` の段の終わりに評価する: k の下の `let u = k * 2` と `prev~(x * ^u)` に分けた形と同じ
+  let k: U32 = g + 1
+  let d: U32 = det~(x)
+  a * 10000 + b * 100 + c
+}
+
+flow carets_split(x: U32 at sample, g: U32 at block) -> U32 at sample {
+  let p = prev~(^d)
+  let t = p at sample
+  let a = prev~(t * ^k)
+  let b = prev~((p * ^k) at sample)
+  let c = prev~(x * ^u)
+  let k: U32 = g + 1
+  let u: U32 = k * 2
+  let d: U32 = det~(x)
+  a * 10000 + b * 100 + c
+}
+
+test "the parts with a ^name are of the end of the stage, the others are of their place" {
+  let xs: [U32; 6] = [4, 5, 7, 5, 8, 6]
+  var out: [U32; 6] = [0; 6]
+  var st = carets.init(8.0)
+  carets.process(inout st, carets.Params { g: 1 }, xs, inout out)
+  assert out == [0, 16, 820, 81028, 101420, 141032]
+  var split: [U32; 6] = [0; 6]
+  var ss = carets_split.init(8.0)
+  carets_split.process(inout ss, carets_split.Params { g: 1 }, xs, inout split)
+  assert out == split
+}
