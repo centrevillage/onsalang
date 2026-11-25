@@ -915,3 +915,10 @@ target = "tests/spec/flow_clock/modifier_n_const_expressions_w9_03.onsa"
 reasons = ["S-1077"]
 until = "W9-03"
 note = "修飾子の N の算術は W9-03 まで E0200（FlowConstExprs）"
+
+[[pending]]
+kind = "spec-example"
+target = "§11.11 f64d027c: flow fwd(m: U32 at event) -> U32 at event { Some(m) } // m のイベントごとに出す"
+reasons = ["S-1237"]
+until = "W7-17"
+note = "S-1237 の例（loops）。今の check は E0815 を出さず、test で E0200。W7-17 U6b で、E0815 の印を付けた写しを事例に入れて外す"
