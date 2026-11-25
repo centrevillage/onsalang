@@ -1,0 +1,213 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.3", "§11.9", "§11.10"]
+
+// W7-11 U2c/t, S-1197, worked out by hand from the text. §11.3: the field or the element of a name of a tick that stands where a condition of another clock selects it (`if g { s.vel at sample } else { x }`, `g` is `sample`) is read
+// "条件によらず、守りを付けずに刻みごとに読む" (the field is written at every tick, whether the condition holds or not), the field that keeps it is "その読み（連なりの全体）の型" (`F32` for `s.vel`), and "初めの値と `reset_if~` の後だけ" differ
+// between reading the field at the tick and reading it when it comes: "刻みで書いて速い段が読むフィールド…の戻り先は `T.default()`" (§11.3, §11.10), so after a reset it is `F32.default()` = 0.0 for `s.vel at sample`, and `M.default().vel` for the whole read
+// first (`(s at sample).vel`). `M` has a `Default` written by hand with `vel` 1.0, and `D` a declared default `vel: F32 = 1.0`, so the two are told apart.
+// The tick is `sample / 4` (the frames 0, 4, 8 of 12): `k = prev~(^k at (sample / 4)) + 1.0` is 1, 2, 3, so the field `vel = k + 10` is 11 (frames 0..3), 12 (4..7), 13 (8..11). A reset puts `k` back too (the delay is a state of the part), so
+// the tick of the frame 8 after a reset at the frame 5 gives k = 1 and 11 again. `x` is the frame number. The values with no condition are in slow_field_reads_outside_conditions_values.onsa.
+
+pub struct M {
+  vel: F32,
+  q: F32,
+}
+
+impl Default for M {
+  rt fn default() -> M {
+    M { vel: 1.0, q: 2.0 }
+  }
+}
+
+pub struct D: Default {
+  vel: F32 = 1.0,
+  q: F32,
+}
+
+pub struct Nest: Default {
+  a: D,
+  k: F32,
+}
+
+pub flow cond_field(x: F32 at sample, g: Bool at sample) -> F32 at sample {
+  let k = prev~(^k at (sample / 4)) + 1.0
+  let s = M { vel: k + 10.0, q: 2.0 }
+  if g { s.vel at sample } else { x }
+}
+
+pub flow let_field(x: F32 at sample, g: Bool at sample) -> F32 at sample {
+  let k = prev~(^k at (sample / 4)) + 1.0
+  let s = M { vel: k + 10.0, q: 2.0 }
+  let v = s.vel
+  if g { v at sample } else { x }
+}
+
+pub flow cond_whole(x: F32 at sample, g: Bool at sample) -> F32 at sample {
+  let k = prev~(^k at (sample / 4)) + 1.0
+  let s = M { vel: k + 10.0, q: 2.0 }
+  if g { (s at sample).vel } else { x }
+}
+
+pub flow cond_tuple(x: F32 at sample, g: Bool at sample) -> F32 at sample {
+  let k = prev~(^k at (sample / 4)) + 1.0
+  let t: (F32, F32) = (k + 10.0, 2.0)
+  if g { t.0 at sample } else { x }
+}
+
+pub flow cond_nested_field(x: F32 at sample, g: Bool at sample) -> F32 at sample {
+  let k = prev~(^k at (sample / 4)) + 1.0
+  let s = Nest { a: D { vel: k + 10.0, q: 2.0 }, k: 0.0 }
+  if g { s.a.vel at sample } else { x }
+}
+
+pub flow cond_nested_whole(x: F32 at sample, g: Bool at sample) -> F32 at sample {
+  let k = prev~(^k at (sample / 4)) + 1.0
+  let s = Nest { a: D { vel: k + 10.0, q: 2.0 }, k: 0.0 }
+  if g { (s at sample).a.vel } else { x }
+}
+
+pub flow cond_nested_part(x: F32 at sample, g: Bool at sample) -> F32 at sample {
+  let k = prev~(^k at (sample / 4)) + 1.0
+  let s = Nest { a: D { vel: k + 10.0, q: 2.0 }, k: 0.0 }
+  if g { (s.a at sample).vel } else { x }
+}
+
+pub flow reset_cond_field(x: F32 at sample, g: Bool at sample, r: Bool at sample) -> F32 at sample {
+  cond_field~(x, g).reset_if~(r)
+}
+
+pub flow reset_cond_whole(x: F32 at sample, g: Bool at sample, r: Bool at sample) -> F32 at sample {
+  cond_whole~(x, g).reset_if~(r)
+}
+
+pub flow reset_cond_tuple(x: F32 at sample, g: Bool at sample, r: Bool at sample) -> F32 at sample {
+  cond_tuple~(x, g).reset_if~(r)
+}
+
+pub flow reset_cond_nested_field(x: F32 at sample, g: Bool at sample, r: Bool at sample) -> F32 at sample {
+  cond_nested_field~(x, g).reset_if~(r)
+}
+
+pub flow reset_cond_nested_whole(x: F32 at sample, g: Bool at sample, r: Bool at sample) -> F32 at sample {
+  cond_nested_whole~(x, g).reset_if~(r)
+}
+
+pub flow reset_cond_nested_part(x: F32 at sample, g: Bool at sample, r: Bool at sample) -> F32 at sample {
+  cond_nested_part~(x, g).reset_if~(r)
+}
+
+pub flow field_in_a_copy(x: F32 at sample, g: Bool at sample, off: F32 at block) -> F32 at sample {
+  let k = prev~(^k at (sample / 4)) + 1.0
+  let s = M { vel: k + 10.0 + off, q: 2.0 }
+  if g { s.vel at sample } else { x }
+}
+
+pub flow copies_of_the_field(x: F32 at sample, g: Bool at sample) -> [F32; 2] at sample {
+  par~ i in 0 ..< 2 { field_in_a_copy~(x, g, F32.round_from(i) * 100.0) }
+}
+
+const XS: [F32; 12] = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0]
+
+// The condition holds at the frames 5, 6, 8 and 11 only: it is false at the tick of the frame 4, and at the frame 5 the value is that tick's, 12.
+const GA: [Bool; 12] = [false, false, false, false, false, true, true, false, true, false, false, true]
+
+// The condition holds except at the frame 6, with a reset at the frame 5.
+const GB: [Bool; 12] = [true, true, true, true, true, true, false, true, true, true, true, true]
+const RB: [Bool; 12] = [false, false, false, false, false, true, false, false, false, false, false, false]
+
+test "a field of a tick under a sample condition is the value of the tick whether or not the condition held at the tick" {
+  // The frame 4 is a tick with the condition false, and the frame 5 reads that tick: 12. The frames 5, 6 give 12, the frame 8 (a tick, true) 13, the frame 11 13.
+  var out: [F32; 12] = [0.0; 12]
+  var st = cond_field.init(8.0)
+  cond_field.process(inout st, cond_field.In { x: XS, g: GA }, inout out)
+  assert out == [0.0, 1.0, 2.0, 3.0, 4.0, 12.0, 12.0, 7.0, 13.0, 9.0, 10.0, 13.0]
+}
+
+test "the field read under a condition is the same value as the field moved to a let" {
+  var out: [F32; 12] = [0.0; 12]
+  var st = let_field.init(8.0)
+  let_field.process(inout st, let_field.In { x: XS, g: GA }, inout out)
+  assert out == [0.0, 1.0, 2.0, 3.0, 4.0, 12.0, 12.0, 7.0, 13.0, 9.0, 10.0, 13.0]
+}
+
+test "the whole read first and the field of it under a condition has the same values while no reset has come" {
+  var out: [F32; 12] = [0.0; 12]
+  var st = cond_whole.init(8.0)
+  cond_whole.process(inout st, cond_whole.In { x: XS, g: GA }, inout out)
+  assert out == [0.0, 1.0, 2.0, 3.0, 4.0, 12.0, 12.0, 7.0, 13.0, 9.0, 10.0, 13.0]
+}
+
+test "an element of a tuple under a condition is read at every tick" {
+  var out: [F32; 12] = [0.0; 12]
+  var st = cond_tuple.init(8.0)
+  cond_tuple.process(inout st, cond_tuple.In { x: XS, g: GA }, inout out)
+  assert out == [0.0, 1.0, 2.0, 3.0, 4.0, 12.0, 12.0, 7.0, 13.0, 9.0, 10.0, 13.0]
+}
+
+test "a nested field under a condition is read at every tick" {
+  var out: [F32; 12] = [0.0; 12]
+  var st = cond_nested_field.init(8.0)
+  cond_nested_field.process(inout st, cond_nested_field.In { x: XS, g: GA }, inout out)
+  assert out == [0.0, 1.0, 2.0, 3.0, 4.0, 12.0, 12.0, 7.0, 13.0, 9.0, 10.0, 13.0]
+}
+
+test "the inner struct read first under a condition has the same values while no reset has come" {
+  var out: [F32; 12] = [0.0; 12]
+  var st = cond_nested_part.init(8.0)
+  cond_nested_part.process(inout st, cond_nested_part.In { x: XS, g: GA }, inout out)
+  assert out == [0.0, 1.0, 2.0, 3.0, 4.0, 12.0, 12.0, 7.0, 13.0, 9.0, 10.0, 13.0]
+}
+
+test "after a reset the field of the type F32 is F32.default() until the next tick" {
+  // The reset at the frame 5 puts the field back to 0.0 (the frames 5 and 7; the frame 6 is the other branch, x = 6) and k back to 0, so the tick of the frame 8 gives k = 1: 11.
+  var out: [F32; 12] = [0.0; 12]
+  var st = reset_cond_field.init(8.0)
+  reset_cond_field.process(inout st, reset_cond_field.In { x: XS, g: GB, r: RB }, inout out)
+  assert out == [11.0, 11.0, 11.0, 11.0, 12.0, 0.0, 6.0, 0.0, 11.0, 11.0, 11.0, 11.0]
+}
+
+test "after a reset the whole read first is M.default() until the next tick, so its vel is 1.0" {
+  var out: [F32; 12] = [0.0; 12]
+  var st = reset_cond_whole.init(8.0)
+  reset_cond_whole.process(inout st, reset_cond_whole.In { x: XS, g: GB, r: RB }, inout out)
+  assert out == [11.0, 11.0, 11.0, 11.0, 12.0, 1.0, 6.0, 1.0, 11.0, 11.0, 11.0, 11.0]
+}
+
+test "after a reset the element of a tuple is F32.default() until the next tick" {
+  var out: [F32; 12] = [0.0; 12]
+  var st = reset_cond_tuple.init(8.0)
+  reset_cond_tuple.process(inout st, reset_cond_tuple.In { x: XS, g: GB, r: RB }, inout out)
+  assert out == [11.0, 11.0, 11.0, 11.0, 12.0, 0.0, 6.0, 0.0, 11.0, 11.0, 11.0, 11.0]
+}
+
+test "after a reset the nested field is F32.default() (0.0), not the declared default of the struct" {
+  var out: [F32; 12] = [0.0; 12]
+  var st = reset_cond_nested_field.init(8.0)
+  reset_cond_nested_field.process(inout st, reset_cond_nested_field.In { x: XS, g: GB, r: RB }, inout out)
+  assert out == [11.0, 11.0, 11.0, 11.0, 12.0, 0.0, 6.0, 0.0, 11.0, 11.0, 11.0, 11.0]
+}
+
+test "after a reset the whole nested value read first has the declared default vel 1.0" {
+  var out: [F32; 12] = [0.0; 12]
+  var st = reset_cond_nested_whole.init(8.0)
+  reset_cond_nested_whole.process(inout st, reset_cond_nested_whole.In { x: XS, g: GB, r: RB }, inout out)
+  assert out == [11.0, 11.0, 11.0, 11.0, 12.0, 1.0, 6.0, 1.0, 11.0, 11.0, 11.0, 11.0]
+}
+
+test "after a reset the inner struct read first has the declared default vel 1.0" {
+  var out: [F32; 12] = [0.0; 12]
+  var st = reset_cond_nested_part.init(8.0)
+  reset_cond_nested_part.process(inout st, reset_cond_nested_part.In { x: XS, g: GB, r: RB }, inout out)
+  assert out == [11.0, 11.0, 11.0, 11.0, 12.0, 1.0, 6.0, 1.0, 11.0, 11.0, 11.0, 11.0]
+}
+
+test "the copies of a par~ keep a field each" {
+  // The copy i adds 100 i to the field: 11 11 11 11 12 12 . 12 13 13 13 13 (the frame 6 is the other branch, x = 6) and the same plus 100 (6 at the frame 6).
+  var outs: [[F32; 12]; 2] = [[0.0; 12]; 2]
+  var st = copies_of_the_field.init(8.0)
+  copies_of_the_field.process(inout st, copies_of_the_field.In { x: XS, g: GB }, inout outs)
+  assert outs[0] == [11.0, 11.0, 11.0, 11.0, 12.0, 12.0, 6.0, 12.0, 13.0, 13.0, 13.0, 13.0]
+  assert outs[1] == [111.0, 111.0, 111.0, 111.0, 112.0, 112.0, 6.0, 112.0, 113.0, 113.0, 113.0, 113.0]
+}

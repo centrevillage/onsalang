@@ -1,0 +1,65 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§11.11", "§18.1"]
+
+// W7-11 U2c/t, S-1197 (spec §11.3: "隠れたフィールドの型はその読み（連なりの全体）の型である（…下の E0816 は読みの型で判定する）"; §11.11: "最初のイベントの前は `T.default()`（`T` が `Default` を満たさなければ E0816。`m.vel` のようにフィールドを取り出す読みの `T` は、その読みの型である、§11.3）"):
+// the event value `m` is a struct `P` that has a `Default` (written by hand), but the field that the flow reads out of it (`m.tag`, `m.a.tag`, under a condition or in an argument) is of the type `Tag`, which has none, so the field that keeps the read for the periodic clock has no default:
+// E0816 at the line of the read. The whole `P` having a `Default` does not help, and the whole read first (`(m at sample).tag`) is no error (event_field_reads_accepted.onsa). One error per flow (P-01). `x` and `g` are `sample` inputs.
+
+pub enum Tag {
+  Off,
+  On,
+}
+
+pub struct P {
+  tag: Tag,
+  vel: F32,
+}
+
+impl Default for P {
+  rt fn default() -> P {
+    P { tag: Tag.Off, vel: 0.0 }
+  }
+}
+
+pub struct Outer {
+  a: P,
+  k: F32,
+}
+
+impl Default for Outer {
+  rt fn default() -> Outer {
+    Outer { a: P { tag: Tag.Off, vel: 0.0 }, k: 0.0 }
+  }
+}
+
+pub rt fn pick(t: Tag, x: F32) -> F32 {
+  match t {
+    Tag.Off => 0.0,
+    Tag.On => x,
+  }
+}
+
+pub flow field_in_an_argument(m: P at event, x: F32 at sample) -> F32 at sample {
+  pick(m.tag, x)   //~ E0816
+}
+
+pub flow field_under_a_sample_condition(m: P at event, x: F32 at sample, g: Bool at sample) -> F32 at sample {
+  if g { pick(m.tag, x) } else { x }   //~ E0816
+}
+
+pub flow field_with_an_at(m: P at event, x: F32 at sample) -> F32 at sample {
+  pick(m.tag at sample, x)   //~ E0816
+}
+
+pub flow nested_field(m: Outer at event, x: F32 at sample) -> F32 at sample {
+  pick(m.a.tag, x)   //~ E0816
+}
+
+pub flow field_in_parentheses(m: P at event, x: F32 at sample) -> F32 at sample {
+  pick((m).tag, x)   //~ E0816
+}
+
+pub flow field_under_a_match_arm(m: P at event, x: F32 at sample, k: U32 at sample) -> F32 at sample {
+  match k { 0 => pick(m.tag, x), _ => x }   //~ E0816
+}

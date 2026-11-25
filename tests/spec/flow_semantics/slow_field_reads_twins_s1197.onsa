@@ -1,0 +1,623 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.3", "§11.5", "§11.9", "§11.10"]
+
+// W7-11 U2c/i, S-1197 (spec §11.3: "フィールド・組の要素の読みは、条件によらず、守りを付けずに刻みごとに読む"、"`x + m.vel` は `let v = m.vel` の `x + v` と同じ値"): a field or an element of a name of `sample / 4` in each kind of conditional position
+// (the branches of `if`, the later conditions of `if~`, the guards of `match~`, the right of `&&` and `||`, in a `par` in a branch, under a condition of constants, `init` and `block`, in the first argument of a delay with a `^name`, in an argument that a chain
+// gathers) gives the values of its twin, where a `let` before holds the read. Each is restarted at the frames 6 and 10 (`reset_if~`), where what is not read at the tick shows. The flow `_diff` sums the squares of the differences.
+
+pub struct D: Default {
+  vel: F32 = 1.0,
+  q: F32,
+  on: Bool = true,
+}
+
+pub struct N: Default {
+  a: D,
+  t: (F32, D),
+}
+
+pub enum V {
+  A,
+  B(D),
+}
+
+impl Default for V {
+  rt fn default() -> V {
+    V.A
+  }
+}
+
+flow lp(x: F32 at sample) -> F32 at sample {
+  x * 0.5 + prev~(x)
+}
+
+flow sum4(x: F32 at (sample * 4)) -> F32 at sample {
+  x[0] + x[1] * 2.0 + x[2] * 3.0 + x[3] * 4.0
+}
+
+flow cnt(x: F32 at sample) -> D at sample {
+  let k = prev~(^k) + x
+  D { vel: k + 10.0, q: k, on: k > 2.0 }
+}
+
+flow else_if(x: F32 at sample, g: Bool at sample, h: Bool at sample, p: I32 at block) -> F32 at sample {
+  let k = prev~(^k at (sample / 4)) + 1.0
+  let n = N { a: D { vel: k + 10.0, q: k, on: k > 1.5 }, t: (k * 3.0, D { vel: k, q: 0.0, on: k > 0.5 }) }
+  if g { n.a.vel at sample } else if h { (n.t).0 at sample } else if x > 3.0 || (n.t.1.on at sample) { n.t.1.vel at sample } else { x }
+}
+
+flow else_if_let(x: F32 at sample, g: Bool at sample, h: Bool at sample, p: I32 at block) -> F32 at sample {
+  let k = prev~(^k at (sample / 4)) + 1.0
+  let n = N { a: D { vel: k + 10.0, q: k, on: k > 1.5 }, t: (k * 3.0, D { vel: k, q: 0.0, on: k > 0.5 }) }
+  let l0 = n.a.vel
+  let l1 = (n.t).0
+  let l2 = n.t.1.on
+  let l3 = n.t.1.vel
+  if g { l0 at sample } else if h { l1 at sample } else if x > 3.0 || (l2 at sample) { l3 at sample } else { x }
+}
+
+pub flow else_if_read(x: F32 at sample, p: I32 at block) -> F32 at sample {
+  else_if~(x, x % 2.0 > 0.75, x % 3.0 > 1.25, p).reset_if~(x == 6.0 || x == 10.0)
+}
+
+pub flow else_if_diff(x: F32 at sample, p: I32 at block) -> F32 at sample {
+  let d = else_if_read~(x, p) - else_if_let~(x, x % 2.0 > 0.75, x % 3.0 > 1.25, p).reset_if~(x == 6.0 || x == 10.0)
+  let e = prev~(^e) + d * d
+  e
+}
+
+flow later_condition(x: F32 at sample, g: Bool at sample, h: Bool at sample, p: I32 at block) -> F32 at sample {
+  let k = prev~(^k at (sample / 4)) + 1.0
+  let s = D { vel: k + 10.0, q: k, on: k > 1.5 }
+  if~ g { lp~(x) } else if (s.on at sample) { lp~(x + 1.0) } else { lp~(x + 2.0) }
+}
+
+flow later_condition_let(x: F32 at sample, g: Bool at sample, h: Bool at sample, p: I32 at block) -> F32 at sample {
+  let k = prev~(^k at (sample / 4)) + 1.0
+  let s = D { vel: k + 10.0, q: k, on: k > 1.5 }
+  let l0 = s.on
+  if~ g { lp~(x) } else if (l0 at sample) { lp~(x + 1.0) } else { lp~(x + 2.0) }
+}
+
+pub flow later_condition_read(x: F32 at sample, p: I32 at block) -> F32 at sample {
+  later_condition~(x, x % 2.0 > 0.75, x % 3.0 > 1.25, p).reset_if~(x == 6.0 || x == 10.0)
+}
+
+pub flow later_condition_diff(x: F32 at sample, p: I32 at block) -> F32 at sample {
+  let d = later_condition_read~(x, p) - later_condition_let~(x, x % 2.0 > 0.75, x % 3.0 > 1.25, p).reset_if~(x == 6.0 || x == 10.0)
+  let e = prev~(^e) + d * d
+  e
+}
+
+flow condition_chain(x: F32 at sample, g: Bool at sample, h: Bool at sample, p: I32 at block) -> F32 at sample {
+  let k = prev~(^k at (sample / 4)) + 1.0
+  let s = D { vel: k + 10.0, q: k, on: k > 1.5 }
+  if~ g { lp~(x) } else if h && (s.on at sample) { lp~(x + 1.0) } else { lp~(if h { s.vel at sample } else { x }) }
+}
+
+flow condition_chain_let(x: F32 at sample, g: Bool at sample, h: Bool at sample, p: I32 at block) -> F32 at sample {
+  let k = prev~(^k at (sample / 4)) + 1.0
+  let s = D { vel: k + 10.0, q: k, on: k > 1.5 }
+  let l0 = s.on
+  let l1 = s.vel
+  if~ g { lp~(x) } else if h && (l0 at sample) { lp~(x + 1.0) } else { lp~(if h { l1 at sample } else { x }) }
+}
+
+pub flow condition_chain_read(x: F32 at sample, p: I32 at block) -> F32 at sample {
+  condition_chain~(x, x % 2.0 > 0.75, x % 3.0 > 1.25, p).reset_if~(x == 6.0 || x == 10.0)
+}
+
+pub flow condition_chain_diff(x: F32 at sample, p: I32 at block) -> F32 at sample {
+  let d = condition_chain_read~(x, p) - condition_chain_let~(x, x % 2.0 > 0.75, x % 3.0 > 1.25, p).reset_if~(x == 6.0 || x == 10.0)
+  let e = prev~(^e) + d * d
+  e
+}
+
+flow guards(x: F32 at sample, g: Bool at sample, h: Bool at sample, p: I32 at block) -> F32 at sample {
+  let k = prev~(^k at (sample / 4)) + 1.0
+  let s = D { vel: k + 10.0, q: k, on: k > 1.5 }
+  match~ g { true if (s.on at sample) => lp~(x), _ if h && (s.vel at sample) > 12.5 => lp~(x + 1.0), _ => lp~(if h { s.q at sample } else { x }) }
+}
+
+flow guards_let(x: F32 at sample, g: Bool at sample, h: Bool at sample, p: I32 at block) -> F32 at sample {
+  let k = prev~(^k at (sample / 4)) + 1.0
+  let s = D { vel: k + 10.0, q: k, on: k > 1.5 }
+  let l0 = s.on
+  let l1 = s.vel
+  let l2 = s.q
+  match~ g { true if (l0 at sample) => lp~(x), _ if h && (l1 at sample) > 12.5 => lp~(x + 1.0), _ => lp~(if h { l2 at sample } else { x }) }
+}
+
+pub flow guards_read(x: F32 at sample, p: I32 at block) -> F32 at sample {
+  guards~(x, x % 2.0 > 0.75, x % 3.0 > 1.25, p).reset_if~(x == 6.0 || x == 10.0)
+}
+
+pub flow guards_diff(x: F32 at sample, p: I32 at block) -> F32 at sample {
+  let d = guards_read~(x, p) - guards_let~(x, x % 2.0 > 0.75, x % 3.0 > 1.25, p).reset_if~(x == 6.0 || x == 10.0)
+  let e = prev~(^e) + d * d
+  e
+}
+
+flow in_par(x: F32 at sample, g: Bool at sample, h: Bool at sample, p: I32 at block) -> F32 at sample {
+  let k = prev~(^k at (sample / 4)) + 1.0
+  let s = D { vel: k + 10.0, q: k, on: k > 1.5 }
+  let y = if g { par i in 0 ..< 3 { if h { (s.vel at sample) * F32.round_from(i) } else { x } } } else { par i in 0 ..< 3 { s.q at sample } }
+  y[0] + y[1] * 3.0 + y[2] * 7.0
+}
+
+flow in_par_let(x: F32 at sample, g: Bool at sample, h: Bool at sample, p: I32 at block) -> F32 at sample {
+  let k = prev~(^k at (sample / 4)) + 1.0
+  let s = D { vel: k + 10.0, q: k, on: k > 1.5 }
+  let l0 = s.vel
+  let l1 = s.q
+  let y = if g { par i in 0 ..< 3 { if h { (l0 at sample) * F32.round_from(i) } else { x } } } else { par i in 0 ..< 3 { l1 at sample } }
+  y[0] + y[1] * 3.0 + y[2] * 7.0
+}
+
+pub flow in_par_read(x: F32 at sample, p: I32 at block) -> F32 at sample {
+  in_par~(x, x % 2.0 > 0.75, x % 3.0 > 1.25, p).reset_if~(x == 6.0 || x == 10.0)
+}
+
+pub flow in_par_diff(x: F32 at sample, p: I32 at block) -> F32 at sample {
+  let d = in_par_read~(x, p) - in_par_let~(x, x % 2.0 > 0.75, x % 3.0 > 1.25, p).reset_if~(x == 6.0 || x == 10.0)
+  let e = prev~(^e) + d * d
+  e
+}
+
+flow in_par_state(x: F32 at sample, g: Bool at sample, h: Bool at sample, p: I32 at block) -> F32 at sample {
+  let k = prev~(^k at (sample / 4)) + 1.0
+  let s = D { vel: k + 10.0, q: k, on: k > 1.5 }
+  let z = par~ j in 0 ..< 2 { lp~(if h { (s.vel at sample) + F32.round_from(j) } else { x }) }
+  z[0] + z[1] * 100.0
+}
+
+flow in_par_state_let(x: F32 at sample, g: Bool at sample, h: Bool at sample, p: I32 at block) -> F32 at sample {
+  let k = prev~(^k at (sample / 4)) + 1.0
+  let s = D { vel: k + 10.0, q: k, on: k > 1.5 }
+  let l0 = s.vel
+  let z = par~ j in 0 ..< 2 { lp~(if h { (l0 at sample) + F32.round_from(j) } else { x }) }
+  z[0] + z[1] * 100.0
+}
+
+pub flow in_par_state_read(x: F32 at sample, p: I32 at block) -> F32 at sample {
+  in_par_state~(x, x % 2.0 > 0.75, x % 3.0 > 1.25, p).reset_if~(x == 6.0 || x == 10.0)
+}
+
+pub flow in_par_state_diff(x: F32 at sample, p: I32 at block) -> F32 at sample {
+  let d = in_par_state_read~(x, p) - in_par_state_let~(x, x % 2.0 > 0.75, x % 3.0 > 1.25, p).reset_if~(x == 6.0 || x == 10.0)
+  let e = prev~(^e) + d * d
+  e
+}
+
+flow parameters(x: F32 at sample, g: Bool at sample, h: Bool at sample, p: I32 at block) -> F32 at sample {
+  let k = prev~(^k at (sample / 4)) + 1.0
+  let s = D { vel: k + 10.0, q: k, on: k > 1.5 }
+  let sr = sample_rate()
+  let a = if sr > 10.0 { if g { s.vel at sample } else { x } } else { s.q at sample }
+  let b = if true { s.q at sample } else { s.vel at sample }
+  a + b * 0.25 + (if h { (s.vel at sample) + (s.vel at sample) } else { 0.0 })
+}
+
+flow parameters_let(x: F32 at sample, g: Bool at sample, h: Bool at sample, p: I32 at block) -> F32 at sample {
+  let k = prev~(^k at (sample / 4)) + 1.0
+  let s = D { vel: k + 10.0, q: k, on: k > 1.5 }
+  let l0 = s.vel
+  let l1 = s.q
+  let sr = sample_rate()
+  let a = if sr > 10.0 { if g { l0 at sample } else { x } } else { l1 at sample }
+  let b = if true { l1 at sample } else { l0 at sample }
+  a + b * 0.25 + (if h { (l0 at sample) + (l0 at sample) } else { 0.0 })
+}
+
+pub flow parameters_read(x: F32 at sample, p: I32 at block) -> F32 at sample {
+  parameters~(x, x % 2.0 > 0.75, x % 3.0 > 1.25, p).reset_if~(x == 6.0 || x == 10.0)
+}
+
+pub flow parameters_diff(x: F32 at sample, p: I32 at block) -> F32 at sample {
+  let d = parameters_read~(x, p) - parameters_let~(x, x % 2.0 > 0.75, x % 3.0 > 1.25, p).reset_if~(x == 6.0 || x == 10.0)
+  let e = prev~(^e) + d * d
+  e
+}
+
+flow block_condition(x: F32 at sample, g: Bool at sample, h: Bool at sample, p: I32 at block) -> F32 at sample {
+  let k = prev~(^k at (sample / 4)) + 1.0
+  let s = D { vel: k + 10.0, q: k, on: k > 1.5 }
+  if p > 2 { if h { s.vel at sample } else { x } } else { if p > 1 { s.q at sample } else { x + 0.5 } }
+}
+
+flow block_condition_let(x: F32 at sample, g: Bool at sample, h: Bool at sample, p: I32 at block) -> F32 at sample {
+  let k = prev~(^k at (sample / 4)) + 1.0
+  let s = D { vel: k + 10.0, q: k, on: k > 1.5 }
+  let l0 = s.vel
+  let l1 = s.q
+  if p > 2 { if h { l0 at sample } else { x } } else { if p > 1 { l1 at sample } else { x + 0.5 } }
+}
+
+pub flow block_condition_read(x: F32 at sample, p: I32 at block) -> F32 at sample {
+  block_condition~(x, x % 2.0 > 0.75, x % 3.0 > 1.25, p).reset_if~(x == 6.0 || x == 10.0)
+}
+
+pub flow block_condition_diff(x: F32 at sample, p: I32 at block) -> F32 at sample {
+  let d = block_condition_read~(x, p) - block_condition_let~(x, x % 2.0 > 0.75, x % 3.0 > 1.25, p).reset_if~(x == 6.0 || x == 10.0)
+  let e = prev~(^e) + d * d
+  e
+}
+
+flow guarded_part_beside(x: F32 at sample, g: Bool at sample, h: Bool at sample, p: I32 at block) -> F32 at sample {
+  let k = prev~(^k at (sample / 4)) + 1.0
+  let s = D { vel: k + 10.0, q: k, on: k > 1.5 }
+  let sr = sample_rate()
+  if sr > 10.0 { (if h { s.vel at sample } else { x }) + ((s.q * 3.0) at sample) } else { x }
+}
+
+flow guarded_part_beside_let(x: F32 at sample, g: Bool at sample, h: Bool at sample, p: I32 at block) -> F32 at sample {
+  let k = prev~(^k at (sample / 4)) + 1.0
+  let s = D { vel: k + 10.0, q: k, on: k > 1.5 }
+  let l0 = s.vel
+  let sr = sample_rate()
+  if sr > 10.0 { (if h { l0 at sample } else { x }) + ((s.q * 3.0) at sample) } else { x }
+}
+
+pub flow guarded_part_beside_read(x: F32 at sample, p: I32 at block) -> F32 at sample {
+  guarded_part_beside~(x, x % 2.0 > 0.75, x % 3.0 > 1.25, p).reset_if~(x == 6.0 || x == 10.0)
+}
+
+pub flow guarded_part_beside_diff(x: F32 at sample, p: I32 at block) -> F32 at sample {
+  let d = guarded_part_beside_read~(x, p) - guarded_part_beside_let~(x, x % 2.0 > 0.75, x % 3.0 > 1.25, p).reset_if~(x == 6.0 || x == 10.0)
+  let e = prev~(^e) + d * d
+  e
+}
+
+flow delay_with_feedback(x: F32 at sample, g: Bool at sample, h: Bool at sample, p: I32 at block) -> F32 at sample {
+  let k = prev~(^k at (sample / 4)) + 1.0
+  let s = D { vel: k + 10.0, q: k, on: k > 1.5 }
+  let d = prev~(if h { (s.vel at sample) + ^w } else { x })
+  let w = d * 0.5 + x
+  w
+}
+
+flow delay_with_feedback_let(x: F32 at sample, g: Bool at sample, h: Bool at sample, p: I32 at block) -> F32 at sample {
+  let k = prev~(^k at (sample / 4)) + 1.0
+  let s = D { vel: k + 10.0, q: k, on: k > 1.5 }
+  let l0 = s.vel
+  let d = prev~(if h { (l0 at sample) + ^w } else { x })
+  let w = d * 0.5 + x
+  w
+}
+
+pub flow delay_with_feedback_read(x: F32 at sample, p: I32 at block) -> F32 at sample {
+  delay_with_feedback~(x, x % 2.0 > 0.75, x % 3.0 > 1.25, p).reset_if~(x == 6.0 || x == 10.0)
+}
+
+pub flow delay_with_feedback_diff(x: F32 at sample, p: I32 at block) -> F32 at sample {
+  let d = delay_with_feedback_read~(x, p) - delay_with_feedback_let~(x, x % 2.0 > 0.75, x % 3.0 > 1.25, p).reset_if~(x == 6.0 || x == 10.0)
+  let e = prev~(^e) + d * d
+  e
+}
+
+flow in_a_gathered_argument(x: F32 at sample, g: Bool at sample, h: Bool at sample, p: I32 at block) -> F32 at sample {
+  let k = prev~(^k at (sample / 4)) + 1.0
+  let s = D { vel: k + 10.0, q: k, on: k > 1.5 }
+  (sum4~(if h { s.vel at sample } else { x }).down~(4)) at sample
+}
+
+flow in_a_gathered_argument_let(x: F32 at sample, g: Bool at sample, h: Bool at sample, p: I32 at block) -> F32 at sample {
+  let k = prev~(^k at (sample / 4)) + 1.0
+  let s = D { vel: k + 10.0, q: k, on: k > 1.5 }
+  let l0 = s.vel
+  (sum4~(if h { l0 at sample } else { x }).down~(4)) at sample
+}
+
+pub flow in_a_gathered_argument_read(x: F32 at sample, p: I32 at block) -> F32 at sample {
+  in_a_gathered_argument~(x, x % 2.0 > 0.75, x % 3.0 > 1.25, p).reset_if~(x == 6.0 || x == 10.0)
+}
+
+pub flow in_a_gathered_argument_diff(x: F32 at sample, p: I32 at block) -> F32 at sample {
+  let d = in_a_gathered_argument_read~(x, p) - in_a_gathered_argument_let~(x, x % 2.0 > 0.75, x % 3.0 > 1.25, p).reset_if~(x == 6.0 || x == 10.0)
+  let e = prev~(^e) + d * d
+  e
+}
+
+flow in_a_gathered_argument_of_its_tick(x: F32 at sample, g: Bool at sample, h: Bool at sample, p: I32 at block) -> F32 at sample {
+  let k = prev~(^k at (sample / 4)) + 1.0
+  let s = D { vel: k + 10.0, q: k, on: k > 1.5 }
+  let y = sum4~(if h { s.vel at sample } else { x }).down~(4)
+  y at sample
+}
+
+flow in_a_gathered_argument_of_its_tick_let(x: F32 at sample, g: Bool at sample, h: Bool at sample, p: I32 at block) -> F32 at sample {
+  let k = prev~(^k at (sample / 4)) + 1.0
+  let s = D { vel: k + 10.0, q: k, on: k > 1.5 }
+  let l0 = s.vel
+  let y = sum4~(if h { l0 at sample } else { x }).down~(4)
+  y at sample
+}
+
+pub flow in_a_gathered_argument_of_its_tick_read(x: F32 at sample, p: I32 at block) -> F32 at sample {
+  in_a_gathered_argument_of_its_tick~(x, x % 2.0 > 0.75, x % 3.0 > 1.25, p).reset_if~(x == 6.0 || x == 10.0)
+}
+
+pub flow in_a_gathered_argument_of_its_tick_diff(x: F32 at sample, p: I32 at block) -> F32 at sample {
+  let d = in_a_gathered_argument_of_its_tick_read~(x, p) - in_a_gathered_argument_of_its_tick_let~(x, x % 2.0 > 0.75, x % 3.0 > 1.25, p).reset_if~(x == 6.0 || x == 10.0)
+  let e = prev~(^e) + d * d
+  e
+}
+
+flow of_a_binding_of_match_tilde(x: F32 at sample, g: Bool at sample, h: Bool at sample, p: I32 at block) -> F32 at sample {
+  let k = prev~(^k at (sample / 4)) + 1.0
+  let s = D { vel: k + 10.0, q: k, on: k > 1.5 }
+  let o = if k > 1.5 { V.B(s) } else { V.A }
+  let y = match~ o { V.B(n) => sum4~(if h { n.vel at sample } else { x }).down~(4), V.A => sum4~(x).down~(4) }
+  y at sample
+}
+
+flow of_a_binding_of_match_tilde_let(x: F32 at sample, g: Bool at sample, h: Bool at sample, p: I32 at block) -> F32 at sample {
+  let k = prev~(^k at (sample / 4)) + 1.0
+  let s = D { vel: k + 10.0, q: k, on: k > 1.5 }
+  let o = if k > 1.5 { V.B(s) } else { V.A }
+  let l0 = match o { V.B(n) => n.vel, V.A => 1.0 }
+  let y = match~ o { V.B(_) => sum4~(if h { l0 at sample } else { x }).down~(4), V.A => sum4~(x).down~(4) }
+  y at sample
+}
+
+pub flow of_a_binding_of_match_tilde_read(x: F32 at sample, p: I32 at block) -> F32 at sample {
+  of_a_binding_of_match_tilde~(x, x % 2.0 > 0.75, x % 3.0 > 1.25, p).reset_if~(x == 6.0 || x == 10.0)
+}
+
+pub flow of_a_binding_of_match_tilde_diff(x: F32 at sample, p: I32 at block) -> F32 at sample {
+  let d = of_a_binding_of_match_tilde_read~(x, p) - of_a_binding_of_match_tilde_let~(x, x % 2.0 > 0.75, x % 3.0 > 1.25, p).reset_if~(x == 6.0 || x == 10.0)
+  let e = prev~(^e) + d * d
+  e
+}
+
+flow gathered_under_a_fast_tick(x: F32 at sample, g: Bool at sample, h: Bool at sample, p: I32 at block) -> F32 at sample {
+  let k = prev~(^k at (sample / 8)) + 1.0
+  let s = D { vel: k + 10.0, q: k, on: k > 1.5 }
+  (sum4~(if h { s.vel at sample } else { x }).down~(4)) at sample
+}
+
+flow gathered_under_a_fast_tick_let(x: F32 at sample, g: Bool at sample, h: Bool at sample, p: I32 at block) -> F32 at sample {
+  let k = prev~(^k at (sample / 8)) + 1.0
+  let s = D { vel: k + 10.0, q: k, on: k > 1.5 }
+  let l0 = s.vel
+  (sum4~(if h { l0 at sample } else { x }).down~(4)) at sample
+}
+
+pub flow gathered_under_a_fast_tick_read(x: F32 at sample, p: I32 at block) -> F32 at sample {
+  gathered_under_a_fast_tick~(x, x % 2.0 > 0.75, x % 3.0 > 1.25, p).reset_if~(x == 6.0 || x == 10.0)
+}
+
+pub flow gathered_under_a_fast_tick_diff(x: F32 at sample, p: I32 at block) -> F32 at sample {
+  let d = gathered_under_a_fast_tick_read~(x, p) - gathered_under_a_fast_tick_let~(x, x % 2.0 > 0.75, x % 3.0 > 1.25, p).reset_if~(x == 6.0 || x == 10.0)
+  let e = prev~(^e) + d * d
+  e
+}
+
+flow of_a_call(x: F32 at sample, g: Bool at sample, h: Bool at sample, p: I32 at block) -> F32 at sample {
+  let s = cnt~(1.0).down~(4)
+  if h { s.vel at sample } else { x }
+}
+
+flow of_a_call_let(x: F32 at sample, g: Bool at sample, h: Bool at sample, p: I32 at block) -> F32 at sample {
+  let s = cnt~(1.0).down~(4)
+  let l0 = s.vel
+  if h { l0 at sample } else { x }
+}
+
+pub flow of_a_call_read(x: F32 at sample, p: I32 at block) -> F32 at sample {
+  of_a_call~(x, x % 2.0 > 0.75, x % 3.0 > 1.25, p).reset_if~(x == 6.0 || x == 10.0)
+}
+
+pub flow of_a_call_diff(x: F32 at sample, p: I32 at block) -> F32 at sample {
+  let d = of_a_call_read~(x, p) - of_a_call_let~(x, x % 2.0 > 0.75, x % 3.0 > 1.25, p).reset_if~(x == 6.0 || x == 10.0)
+  let e = prev~(^e) + d * d
+  e
+}
+
+flow of_a_delay(x: F32 at sample, g: Bool at sample, h: Bool at sample, p: I32 at block) -> F32 at sample {
+  let k = prev~(^k at (sample / 4)) + 1.0
+  let s = prev~(D { vel: k + 10.0, q: k, on: k > 1.5 })
+  if h { s.vel at sample } else if (s.on at sample) { x } else { x + 1.0 }
+}
+
+flow of_a_delay_let(x: F32 at sample, g: Bool at sample, h: Bool at sample, p: I32 at block) -> F32 at sample {
+  let k = prev~(^k at (sample / 4)) + 1.0
+  let s = prev~(D { vel: k + 10.0, q: k, on: k > 1.5 })
+  let l0 = s.vel
+  let l1 = s.on
+  if h { l0 at sample } else if (l1 at sample) { x } else { x + 1.0 }
+}
+
+pub flow of_a_delay_read(x: F32 at sample, p: I32 at block) -> F32 at sample {
+  of_a_delay~(x, x % 2.0 > 0.75, x % 3.0 > 1.25, p).reset_if~(x == 6.0 || x == 10.0)
+}
+
+pub flow of_a_delay_diff(x: F32 at sample, p: I32 at block) -> F32 at sample {
+  let d = of_a_delay_read~(x, p) - of_a_delay_let~(x, x % 2.0 > 0.75, x % 3.0 > 1.25, p).reset_if~(x == 6.0 || x == 10.0)
+  let e = prev~(^e) + d * d
+  e
+}
+
+flow right_of_and_nested(x: F32 at sample, g: Bool at sample, h: Bool at sample, p: I32 at block) -> F32 at sample {
+  let k = prev~(^k at (sample / 4)) + 1.0
+  let s = D { vel: k + 10.0, q: k, on: k > 1.5 }
+  if g && (h || ((s.on at sample) && (s.vel at sample) > 12.5)) { x } else { x * 2.0 }
+}
+
+flow right_of_and_nested_let(x: F32 at sample, g: Bool at sample, h: Bool at sample, p: I32 at block) -> F32 at sample {
+  let k = prev~(^k at (sample / 4)) + 1.0
+  let s = D { vel: k + 10.0, q: k, on: k > 1.5 }
+  let l0 = s.on
+  let l1 = s.vel
+  if g && (h || ((l0 at sample) && (l1 at sample) > 12.5)) { x } else { x * 2.0 }
+}
+
+pub flow right_of_and_nested_read(x: F32 at sample, p: I32 at block) -> F32 at sample {
+  right_of_and_nested~(x, x % 2.0 > 0.75, x % 3.0 > 1.25, p).reset_if~(x == 6.0 || x == 10.0)
+}
+
+pub flow right_of_and_nested_diff(x: F32 at sample, p: I32 at block) -> F32 at sample {
+  let d = right_of_and_nested_read~(x, p) - right_of_and_nested_let~(x, x % 2.0 > 0.75, x % 3.0 > 1.25, p).reset_if~(x == 6.0 || x == 10.0)
+  let e = prev~(^e) + d * d
+  e
+}
+
+flow match_arms_of_an_enum(x: F32 at sample, g: Bool at sample, h: Bool at sample, p: I32 at block) -> F32 at sample {
+  let k = prev~(^k at (sample / 4)) + 1.0
+  let s = D { vel: k + 10.0, q: k, on: k > 1.5 }
+  let o = if g { Some(x) } else { None }
+  match o { Some(v) => v + (s.vel at sample), None => if h { s.q at sample } else { x } }
+}
+
+flow match_arms_of_an_enum_let(x: F32 at sample, g: Bool at sample, h: Bool at sample, p: I32 at block) -> F32 at sample {
+  let k = prev~(^k at (sample / 4)) + 1.0
+  let s = D { vel: k + 10.0, q: k, on: k > 1.5 }
+  let l0 = s.vel
+  let l1 = s.q
+  let o = if g { Some(x) } else { None }
+  match o { Some(v) => v + (l0 at sample), None => if h { l1 at sample } else { x } }
+}
+
+pub flow match_arms_of_an_enum_read(x: F32 at sample, p: I32 at block) -> F32 at sample {
+  match_arms_of_an_enum~(x, x % 2.0 > 0.75, x % 3.0 > 1.25, p).reset_if~(x == 6.0 || x == 10.0)
+}
+
+pub flow match_arms_of_an_enum_diff(x: F32 at sample, p: I32 at block) -> F32 at sample {
+  let d = match_arms_of_an_enum_read~(x, p) - match_arms_of_an_enum_let~(x, x % 2.0 > 0.75, x % 3.0 > 1.25, p).reset_if~(x == 6.0 || x == 10.0)
+  let e = prev~(^e) + d * d
+  e
+}
+
+const XS: [F32; 16] = [0.25, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0]
+
+test "else_if: the same values as a `let` of the read" {
+  let a = else_if_read.render(else_if_read.Params { p: 3 }, XS, 48.0)
+  let b = else_if_diff.render(else_if_diff.Params { p: 3 }, XS, 48.0)
+  assert a.out[4] != 0.0
+  assert b.out[15] == 0.0
+}
+
+test "later_condition: the same values as a `let` of the read" {
+  let a = later_condition_read.render(later_condition_read.Params { p: 3 }, XS, 48.0)
+  let b = later_condition_diff.render(later_condition_diff.Params { p: 3 }, XS, 48.0)
+  assert a.out[4] != 0.0
+  assert b.out[15] == 0.0
+}
+
+test "condition_chain: the same values as a `let` of the read" {
+  let a = condition_chain_read.render(condition_chain_read.Params { p: 3 }, XS, 48.0)
+  let b = condition_chain_diff.render(condition_chain_diff.Params { p: 3 }, XS, 48.0)
+  assert a.out[4] != 0.0
+  assert b.out[15] == 0.0
+}
+
+test "guards: the same values as a `let` of the read" {
+  let a = guards_read.render(guards_read.Params { p: 3 }, XS, 48.0)
+  let b = guards_diff.render(guards_diff.Params { p: 3 }, XS, 48.0)
+  assert a.out[4] != 0.0
+  assert b.out[15] == 0.0
+}
+
+test "in_par: the same values as a `let` of the read" {
+  let a = in_par_read.render(in_par_read.Params { p: 3 }, XS, 48.0)
+  let b = in_par_diff.render(in_par_diff.Params { p: 3 }, XS, 48.0)
+  assert a.out[4] != 0.0
+  assert b.out[15] == 0.0
+}
+
+test "in_par_state: the same values as a `let` of the read" {
+  let a = in_par_state_read.render(in_par_state_read.Params { p: 3 }, XS, 48.0)
+  let b = in_par_state_diff.render(in_par_state_diff.Params { p: 3 }, XS, 48.0)
+  assert a.out[4] != 0.0
+  assert b.out[15] == 0.0
+}
+
+test "parameters: the same values as a `let` of the read" {
+  let a = parameters_read.render(parameters_read.Params { p: 3 }, XS, 48.0)
+  let b = parameters_diff.render(parameters_diff.Params { p: 3 }, XS, 48.0)
+  assert a.out[4] != 0.0
+  assert b.out[15] == 0.0
+}
+
+test "block_condition: the same values as a `let` of the read" {
+  let a = block_condition_read.render(block_condition_read.Params { p: 3 }, XS, 48.0)
+  let b = block_condition_diff.render(block_condition_diff.Params { p: 3 }, XS, 48.0)
+  assert a.out[4] != 0.0
+  assert b.out[15] == 0.0
+  let c = block_condition_read.render(block_condition_read.Params { p: 2 }, XS, 48.0)
+  let d = block_condition_diff.render(block_condition_diff.Params { p: 2 }, XS, 48.0)
+  assert c.out[4] != 0.0
+  assert d.out[15] == 0.0
+}
+
+test "guarded_part_beside: the same values as a `let` of the read" {
+  let a = guarded_part_beside_read.render(guarded_part_beside_read.Params { p: 3 }, XS, 48.0)
+  let b = guarded_part_beside_diff.render(guarded_part_beside_diff.Params { p: 3 }, XS, 48.0)
+  assert a.out[4] != 0.0
+  assert b.out[15] == 0.0
+}
+
+test "delay_with_feedback: the same values as a `let` of the read" {
+  let a = delay_with_feedback_read.render(delay_with_feedback_read.Params { p: 3 }, XS, 48.0)
+  let b = delay_with_feedback_diff.render(delay_with_feedback_diff.Params { p: 3 }, XS, 48.0)
+  assert a.out[4] != 0.0
+  assert b.out[15] == 0.0
+}
+
+test "in_a_gathered_argument: the same values as a `let` of the read" {
+  let a = in_a_gathered_argument_read.render(in_a_gathered_argument_read.Params { p: 3 }, XS, 48.0)
+  let b = in_a_gathered_argument_diff.render(in_a_gathered_argument_diff.Params { p: 3 }, XS, 48.0)
+  assert a.out[4] != 0.0
+  assert b.out[15] == 0.0
+}
+
+test "in_a_gathered_argument_of_its_tick: the same values as a `let` of the read" {
+  let a = in_a_gathered_argument_of_its_tick_read.render(in_a_gathered_argument_of_its_tick_read.Params { p: 3 }, XS, 48.0)
+  let b = in_a_gathered_argument_of_its_tick_diff.render(in_a_gathered_argument_of_its_tick_diff.Params { p: 3 }, XS, 48.0)
+  assert a.out[4] != 0.0
+  assert b.out[15] == 0.0
+}
+
+test "of_a_binding_of_match_tilde: the same values as a `let` of the read" {
+  let a = of_a_binding_of_match_tilde_read.render(of_a_binding_of_match_tilde_read.Params { p: 3 }, XS, 48.0)
+  let b = of_a_binding_of_match_tilde_diff.render(of_a_binding_of_match_tilde_diff.Params { p: 3 }, XS, 48.0)
+  assert a.out[4] != 0.0
+  assert b.out[15] == 0.0
+}
+
+test "gathered_under_a_fast_tick: the same values as a `let` of the read" {
+  let a = gathered_under_a_fast_tick_read.render(gathered_under_a_fast_tick_read.Params { p: 3 }, XS, 48.0)
+  let b = gathered_under_a_fast_tick_diff.render(gathered_under_a_fast_tick_diff.Params { p: 3 }, XS, 48.0)
+  assert a.out[4] != 0.0
+  assert b.out[15] == 0.0
+}
+
+test "of_a_call: the same values as a `let` of the read" {
+  let a = of_a_call_read.render(of_a_call_read.Params { p: 3 }, XS, 48.0)
+  let b = of_a_call_diff.render(of_a_call_diff.Params { p: 3 }, XS, 48.0)
+  assert a.out[4] != 0.0
+  assert b.out[15] == 0.0
+}
+
+test "of_a_delay: the same values as a `let` of the read" {
+  let a = of_a_delay_read.render(of_a_delay_read.Params { p: 3 }, XS, 48.0)
+  let b = of_a_delay_diff.render(of_a_delay_diff.Params { p: 3 }, XS, 48.0)
+  assert a.out[4] != 0.0
+  assert b.out[15] == 0.0
+}
+
+test "right_of_and_nested: the same values as a `let` of the read" {
+  let a = right_of_and_nested_read.render(right_of_and_nested_read.Params { p: 3 }, XS, 48.0)
+  let b = right_of_and_nested_diff.render(right_of_and_nested_diff.Params { p: 3 }, XS, 48.0)
+  assert a.out[4] != 0.0
+  assert b.out[15] == 0.0
+}
+
+test "match_arms_of_an_enum: the same values as a `let` of the read" {
+  let a = match_arms_of_an_enum_read.render(match_arms_of_an_enum_read.Params { p: 3 }, XS, 48.0)
+  let b = match_arms_of_an_enum_diff.render(match_arms_of_an_enum_diff.Params { p: 3 }, XS, 48.0)
+  assert a.out[4] != 0.0
+  assert b.out[15] == 0.0
+}

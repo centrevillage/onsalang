@@ -7,7 +7,7 @@ use onsa_sema::flow::chain;
 use onsa_syntax::ast::{ExprKind as AK, MatchArm, PatId};
 
 use super::super::body::{arm_test, drop_value, lower_block_expr, pat_bind, push_expr_stmt};
-use super::hoist::{cond_value, work};
+use super::hoist::{cond_value, placed, work};
 use super::*;
 
 /// The `if~` chain `e` of the type `ty`, in one block: the conditions from
@@ -191,7 +191,7 @@ fn test_arm(
         bind_read(lw, cx, arm.pat, place, &mut then)?;
     }
     if let (true, Some(g)) = (pick.write, arm.guard) {
-        work(lw, cx, info, g, s, state, &mut then)?;
+        placed(lw, cx, true, [g], (s, state), &mut then)?;
     }
     if i < pick.eval {
         let set = vec![stmt(span, StmtKind::Assign(place_of(taken)?, u32_lit(span, i as u32)))];

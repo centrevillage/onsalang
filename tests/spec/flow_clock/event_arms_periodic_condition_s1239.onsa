@@ -1,0 +1,72 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§11.5", "§11.11"]
+
+// W7-11 U2c/t, S-1239 (spec §11.3: "`if`・`match`・`if~`・`match~` の被演算子は、条件・対象・ガードと枝・腕である。`else if` より後ろの連なりは、一つの部分式として確かめる"; §11.11: "要素か腕に周期の刻みの値を並べるか、条件・対象・ガードが
+// 周期の刻みのクロックの値（`at` で付けたクロックを含む）なら、§11.3 のとおり周期のクロックの式で、要素と腕はその位置までの最後の値"): the arms of `if~` and `match~` are the events of calls, each of a clock of its own, and the
+// condition, the scrutinee or a guard is a value of a periodic clock (`sample`, `sample / 4`, a `block` value with `at sample`), so the greatest clock of the expression is that periodic clock and the arms are read at it (the last
+// value of each). `check` reads the file with no diagnostic. The same arms under a condition of a parameter kind, a constant, `sample_tick()` alone or an event are the error: e0815_event_arms_without_a_periodic_clock.onsa. The forms that
+// are accepted today and stay so (a periodic arm, an array, a plain `if`) are in event_arms_with_a_periodic_value_accepted.onsa. `x` is the `sample` input, `a` and `b` are `block` values, `c` and `c2` are `sample` values,
+// `c4` is `sample / 4`.
+
+pub flow det(x: F32 at sample, limit: F32 at block) -> F32 at event {
+  if x > limit { Some(x) } else { None }
+}
+
+// ---------------------------------------------------------------- the condition is of a periodic clock
+
+pub flow sample_condition(x: F32 at sample, a: F32 at block, b: F32 at block, c: Bool at sample) -> F32 at sample {
+  if~ c { det~(x, a) } else { det~(x, b) }
+}
+
+pub flow sample_condition_that_is_a_comparison(x: F32 at sample, a: F32 at block, b: F32 at block) -> F32 at sample {
+  if~ x > 0.5 { det~(x, a) } else { det~(x, b) }
+}
+
+pub flow block_condition_with_an_at(x: F32 at sample, a: F32 at block, b: F32 at block, kb: Bool at block) -> F32 at sample {
+  if~ (kb at sample) { det~(x, a) } else { det~(x, b) }
+}
+
+pub flow block_condition_through_a_let(x: F32 at sample, a: F32 at block, b: F32 at block, kb: Bool at block) -> F32 at sample {
+  let g = kb at sample
+  if~ g { det~(x, a) } else { det~(x, b) }
+}
+
+pub flow slow_condition(x: F32 at sample, a: F32 at block, b: F32 at block, c4: Bool at (sample / 4)) -> F32 at sample {
+  let y = if~ c4 { det~(x, a) } else { det~(x, b) }
+  y at sample
+}
+
+// ---------------------------------------------------------------- three arms, a chain of `else if`
+
+pub flow three_arms_of_if(x: F32 at sample, a: F32 at block, b: F32 at block, c: Bool at sample, c2: Bool at sample) -> F32 at sample {
+  if~ c { det~(x, a) } else if c2 { det~(x, b) } else { det~(x, 0.3) }
+}
+
+pub flow nested_in_the_else(x: F32 at sample, a: F32 at block, b: F32 at block, c: Bool at sample, c2: Bool at sample) -> F32 at sample {
+  if~ c { det~(x, a) } else { if~ c2 { det~(x, b) } else { det~(x, 0.3) } }
+}
+
+// ---------------------------------------------------------------- `match~`: the scrutinee, a guard
+
+pub flow three_arms_of_match(x: F32 at sample, a: F32 at block, b: F32 at block, k: U32 at sample) -> F32 at sample {
+  match~ k { 0 => det~(x, a), 1 => det~(x, b), _ => det~(x, 0.3) }
+}
+
+pub flow only_the_guard_is_periodic(x: F32 at sample, a: F32 at block, b: F32 at block, k: U32 at block, g: Bool at sample) -> F32 at sample {
+  match~ k { 0 if g => det~(x, a), _ => det~(x, b) }
+}
+
+pub flow scrutinee_with_an_at(x: F32 at sample, a: F32 at block, b: F32 at block, k: U32 at block) -> F32 at sample {
+  match~ (k at sample) { 0 => det~(x, a), _ => det~(x, b) }
+}
+
+// ---------------------------------------------------------------- with a copy and an instance
+
+pub flow in_a_par(x: F32 at sample, a: F32 at block, b: F32 at block, c: Bool at sample) -> [F32; 2] at sample {
+  par~ i in 0 ..< 2 { if~ c { det~(x, a) } else { det~(x, b) } }
+}
+
+pub flow in_an_instance(x: F32 at sample, a: F32 at block, b: F32 at block, c: Bool at sample) -> F32 at sample {
+  sample_condition~(x, a, b, c) + sample_condition~(x, b, a, c)
+}

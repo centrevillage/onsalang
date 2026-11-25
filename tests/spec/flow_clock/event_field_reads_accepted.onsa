@@ -1,0 +1,62 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§11.11"]
+
+// W7-11 U2c/t, S-1197 (spec §11.3: "`x + m.vel` は `let v = m.vel` の `x + v` と同じ値で、`M` に `Default` は要らない"; "全体を速い段で読んでから取り出す `(m at sample).vel` は…"): the field of an event value moved to a `let` before it is read at a periodic clock is a value of the type of the field, so the struct `M`
+// that has no `Default` is read with no error, now and after S-1197 (the read in the sum without a `let` needs S-1197: event_field_reads_s1197.onsa). `check` reads the file with no diagnostic. `x` and `g` are `sample` inputs.
+
+pub struct M {
+  vel: F32,
+  q: F32,
+}
+
+pub enum Tag {
+  Off,
+  On,
+}
+
+pub struct P {
+  tag: Tag,
+  vel: F32,
+}
+
+impl Default for P {
+  rt fn default() -> P {
+    P { tag: Tag.Off, vel: 0.0 }
+  }
+}
+
+pub rt fn pick(t: Tag, x: F32) -> F32 {
+  match t {
+    Tag.Off => 0.0,
+    Tag.On => x,
+  }
+}
+
+pub flow field_through_a_let(m: M at event, x: F32 at sample) -> F32 at sample {
+  let v = m.vel
+  x + v
+}
+
+pub flow field_through_a_let_under_a_condition(m: M at event, x: F32 at sample, g: Bool at sample) -> F32 at sample {
+  let v = m.vel
+  if g { v } else { x }
+}
+
+pub flow field_through_a_let_with_an_at(m: M at event, x: F32 at sample) -> F32 at sample {
+  let v = m.vel
+  x + (v at sample)
+}
+
+// The whole `P` has a `Default` (written by hand), so the whole read first and the field of it need nothing else; the field `tag` read out of the event is E0816 (e0816_event_field_read_type_s1197.onsa).
+pub flow whole_read_first_of_a_type_with_default(m: P at event, x: F32 at sample) -> F32 at sample {
+  pick((m at sample).tag, x)
+}
+
+pub flow whole_read_first_under_a_condition(m: P at event, x: F32 at sample, g: Bool at sample) -> F32 at sample {
+  if g { pick((m at sample).tag, x) } else { x }
+}
+
+pub flow another_field_of_the_same_type(m: P at event, x: F32 at sample) -> F32 at sample {
+  x + (m.vel at sample)
+}

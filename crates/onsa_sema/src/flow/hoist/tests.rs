@@ -405,9 +405,10 @@ fn a_part_of_an_event_is_in_a_field_of_its_stage_and_its_names_are_not() {
     assert_eq!(of("if v > 1.0 { half(v) } else { x }"), [one(&h(0), v, "v > 1.0"), one(&h(1), v, "half(v)")]);
     // A part of `block` is not hoisted under a condition of an event (S-1184).
     assert_eq!(of("if v > 1.0 { half(p) * x } else { x }"), [one(&h(0), v, "v > 1.0")]);
-    // A name, its fields, and `at` of the stage that reads it.
-    assert_eq!(of("v * x + m.note + (v at sample)"), []);
-    assert_eq!(of("if g { m.note } else { v }"), []);
+    // A name, and `at` of the stage that reads it; a field of it is a part (S-1197).
+    let m = ClockStage::Event(EventSrc::input(1));
+    assert_eq!(of("v * x + m.note + (v at sample)"), [one(&h(0), m, "m.note")]);
+    assert_eq!(of("if g { m.note } else { v }"), [one(&h(0), m, "m.note")]);
     // S-1210's: an `at` of a slower tick is kept at the tick, of what is kept at the event.
     assert_eq!(of("(v at (sample / 4)) at sample"), [one(&h(0), s4, "v at (sample / 4)")]);
     let two = [one(&h(0), s4, "half(v) at (sample / 4)"), one(&h(1), v, "half(v)")];
@@ -435,4 +436,40 @@ fn a_part_of_an_event_is_refused_at_the_condition_of_another_stage() {
         assert_eq!((d.code, d.span.text_in(&src)), (onsa_diag::Code::E0815, "half(v)"), "{body}");
         assert!(d.message.contains(&format!("a condition decided at `{stage}`")), "{body}: {}", d.message);
     }
+}
+
+/// S-1197: a field read of a name of a tick under any condition, in a field
+/// of its type written under no guard, the largest chain; of a binding that
+/// its arm alone has, guarded as a part is, or of no field under a condition
+/// decided at another stage.
+#[test]
+fn a_field_read_of_a_name_under_a_condition_is_in_a_field_of_no_guard() {
+    use crate::clock::EventSrc;
+    let m = ClockStage::Event(EventSrc::input(0));
+    let of = |body: &str| {
+        guarded(&format!(
+            "pub struct P: Default {{ a: F32, on: Bool }}
+pub struct M: Default {{ p: P, q: F32 }}
+flow lp(x: F32 at sample) -> F32 at sample {{ x + prev~(x) }}
+pub flow f(m: M at event, x: F32 at sample, g: Bool at sample, k: I32 at init) -> F32 at sample {{
+  {body}
+}}"
+        ))
+    };
+    let free = |n: usize, text: &str| g(&format!("_out._hoist_{n}"), m, false, text);
+    assert_eq!(of("if g { m.p.a } else { (m).q }"), [free(0, "m.p.a"), free(1, "(m).q")]);
+    assert_eq!(of("if g && m.p.on { x } else { 0.0 }"), [free(0, "m.p.on")]);
+    let init = g("_out._hoist_0", I, false, "k > 0");
+    assert_eq!(of("if k > 0 { m.q } else { x }"), [init.clone(), free(1, "m.q")]);
+    // In a guarded part of the same tick it is read where it is.
+    assert_eq!(of("if k > 0 { m.q * 2.0 } else { x }"), [init, g("_out._hoist_1", m, true, "m.q * 2.0")]);
+    // A binding of a `match~` has a place, in the body of its arm.
+    assert_eq!(of("match~ m { n => lp~(if g { n.q } else { x }) }"), [free(0, "n.q")]);
+    // One of a `match` has none, nor one of a `match~` in a guard.
+    let held = [g("_out._hoist_0", m, true, "n.q")];
+    assert_eq!(of("match m { n => x + n.q }"), held);
+    assert_eq!(of("match~ m { n if x > 0.0 && n.q > x => lp~(x), _ => lp~(x) }"), []);
+    assert_eq!(of("match~ m { n if n.q > x => lp~(x), _ => lp~(x) }"), held);
+    assert_eq!(of("if g { match m { n => x + n.q } } else { x }"), []);
+    assert_eq!(of("match m { n if g => x + n.q, n => n.p.a + x }"), []);
 }

@@ -720,19 +720,7 @@ impl Walk<'_> {
             self.out.exprs.insert(l.at, c.unwrap_or(Clock::Const));
         }
         ops.extend(last);
-        let arms: Vec<Op> = ops.iter().skip(1).step_by(2).copied().chain(last).collect();
-        self.join_arms(e, tilde.is_some(), &arms, &ops)
-    }
-
-    /// The join of the operands `ops` of the branching `e` (`tilde`: an `if~`
-    /// or a `match~`), whose branches are `arms`.
-    // SPEC-GAP(S-1239): the branches of an `if~` or a `match~` at the clocks of
-    // two events are E0815 (§11.11) also where a condition or the scrutinee
-    // is at a tick, the largest operand of §11.3 (provisional).
-    fn join_arms(&mut self, e: ExprId, tilde: bool, arms: &[Op], ops: &[Op]) -> Option<Clock> {
-        let event = |(_, c): (usize, Clock)| matches!(c, Clock::Event(_));
-        let apart = || clock::join_by(arms, |o| o.1).is_err_and(|x| event(x.first) && event(x.second));
-        self.join(e, if tilde && apart() { arms } else { ops })
+        self.join(e, &ops)
     }
 
     /// `match` / `match~` (§11.3, §11.5), `tilde` its `~`: the scrutinee, the
@@ -750,7 +738,6 @@ impl Walk<'_> {
         }
         let s = self.expr(scrutinee);
         let (mut ops, mut chosen, mut bound) = (vec![(Some(scrutinee), s)], s, Vec::new());
-        let mut bodies: Vec<Op> = Vec::with_capacity(arms.len());
         for arm in arms {
             self.bind_pat(arm.pat, s);
             if let Some(g) = arm.guard {
@@ -767,12 +754,11 @@ impl Walk<'_> {
                 }
             };
             ops.push((Some(arm.body), body));
-            bodies.push((Some(arm.body), body));
         }
         if record {
             self.tilde.insert(e, TildeMatch { arms: bound, pars: self.recorder.pars() });
         }
-        self.join_arms(e, tilde.is_some(), &bodies, &ops)
+        self.join(e, &ops)
     }
 
     /// `par` / `par~` (§11.5), `tilde` its `~`: the `~` its body asks for

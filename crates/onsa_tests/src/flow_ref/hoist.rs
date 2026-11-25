@@ -16,7 +16,7 @@
 //! evaluated here, and only the branch, the arm (its bindings made) or the right side that it takes is walked, so a part that the condition
 //! does not take is not made (a constant condition is decided at a stage only when a part that the stage makes is under it, as the Core
 //! does; else it is evaluated where it is reached); a condition of a later stage (`sample`, or a value that is not Copy, which the reader evaluates) stops the walk:
-//! what is under it is evaluated where it is reached. An arm binding has the clock of the object of its `match`. The walk goes into the
+//! what is under it is evaluated where it is reached, but a field read of a name at a tick, which is made at each tick whatever the conditions say (S-1197, `free`). An arm binding has the clock of the object of its `match`. The walk goes into the
 //! operands, the arguments, the elements and the fields, the branches and the block expressions (a part that reads a name the block binds
 //! is left where it is), and into the body of a `par~` once for each replica, with its index bound and clocked `init` (§11.5: the index is a
 //! value of `init`; S-1140, provisional: each replica has a value of its own for each part of the body, kept by the replicas it is in).
@@ -408,7 +408,52 @@ pub(super) fn part_clock(body: &Body, known: &Known, root: ExprId, at: Span) -> 
 /// The parts of `e` (a `let` of the body, `root` its value; `known` the clocks of the locals before it) that the stage `at` makes, in the
 /// order they are written: each is evaluated and kept in `f.hoisted`, and a panic of one is the panic of the stage.
 pub(super) fn pre(f: &mut Frame, known: &Known, root: ExprId, e: ExprId, at: Stage) -> Result<(), Stop> {
+    free(f, known, (root, e), e, Clock::from(at))?;
     walk(f, known, root, e, Clock::from(at), Clock::Const)
+}
+
+/// The name that `e` takes a field or an element of (of a field of it, and so on), and nothing more, past parentheses (S-1197).
+fn field_of(body: &Body, e: ExprId) -> Option<ExprId> {
+    match &body.ast.expr(e).kind {
+        ExprKind::Field { base, .. } | ExprKind::TupleIndex { base, .. } if !body.names(e) => {
+            let base = body.ast.without_parens(*base);
+            if body.names(base) { Some(base) } else { field_of(body, base) }
+        }
+        _ => None,
+    }
+}
+
+/// The field reads of a name in `e` that the tick `here` makes (§11.3, S-1197: "条件によらず、守りを付けずに刻みごとに読む"): each is read and kept, whatever the conditions on the way to it say; `walk` goes into the conditions that this stage decides only.
+/// The name of an arm inside `top` (an expression of `root`) has its value where the arm is taken: `walk` reads it there.
+fn free(f: &mut Frame, known: &Known, (root, top): (ExprId, ExprId), e: ExprId, here: Clock) -> Result<(), Stop> {
+    let body = f.body;
+    let stop = |fault| Stop { fault, at: body.ast.expr(e).span };
+    if !matches!(here, Clock::Tick(_)) || !reads_field(&body, e) {
+        return Ok(());
+    }
+    if f.low_stack() {
+        return Err(stop(LOW_STACK));
+    }
+    if let Some(name) = field_of(&body, e) {
+        let within = matches!(body.target(name), Ok(Target::Local(l)) if body.bound_within(*l, top));
+        if within || stage_of(&body, known, root, e).map_err(stop)? != here {
+            return Ok(());
+        }
+        return walk(f, known, root, e, here, Clock::Const);
+    }
+    if let ExprKind::Par { var, body: inner, .. } = &body.ast.expr(e).kind {
+        let inside = with_index(&body, known, var.span).map_err(stop)?;
+        return f.replicate(e, |_: &()| 0, |f| free(f, &inside, (root, top), *inner, here)).map(drop);
+    }
+    for (x, k, _) in kids(&body, known, root, e, Clock::Const).map_err(stop)? {
+        free(f, &k, (root, top), x, here)?;
+    }
+    Ok(())
+}
+
+/// Does `e` hold a field read of a name?
+fn reads_field(body: &Body, e: ExprId) -> bool {
+    field_of(body, e).is_some() || body.ast.sub_exprs(e).into_iter().any(|x| reads_field(body, x))
 }
 
 fn walk(f: &mut Frame, known: &Known, root: ExprId, e: ExprId, here: Clock, guard: Clock) -> Result<(), Stop> {
@@ -529,6 +574,7 @@ pub(super) fn gather_args(
     f.with_bindings(replicas, scope, |f| {
         gathers.iter().try_for_each(|n| {
             let arg = args.get(*n).ok_or(stop(Fault::Internal("a gathered input with no argument")))?;
+            free(f, known, (root, *arg), *arg, here)?;
             walk(f, known, root, *arg, here, Clock::Const)
         })
     })

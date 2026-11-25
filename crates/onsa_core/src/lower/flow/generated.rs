@@ -212,6 +212,7 @@ impl<'b> Gen<'b> {
                 expr_override: HashMap::new(),
                 done: HashMap::new(),
                 saving: false,
+                guards: None,
                 heads: Vec::new(),
                 sample_rate: lit(Ty::Float(FloatKind::F32), span, Lit::F32(0.0)),
                 time: Vec::new(),

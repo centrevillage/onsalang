@@ -1,0 +1,118 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.3", "§11.9", "§11.10"]
+
+// W7-11 U2c/t, S-1197, worked out by hand from the text. §11.3: "フィールド・組の要素の読みも計算した部分式で、隠れたフィールドの型はその読み（連なりの全体）の型である（`x + m.vel` は `let v = m.vel` の `x + v` と同じ値…）。全体を速い段で読んでから取り出す
+// `(m at sample).vel` は、`M` に `Default` が要り、`M.default().vel` で始まる（`reset_if~` の後も）"; "刻みで書いて速い段が読むフィールド…の戻り先は `T.default()`" (§11.3, §11.10). The reads are outside a condition, so they stand today (the same reads under a condition of another clock are in
+// slow_field_reads_s1197.onsa): after a reset the field of the type of the read, `F32`, is 0.0 until the next tick, and the whole read first is `M.default()` with the `vel` that the type declares (1.0). The tick is `sample / 4` (the frames 0, 4, 8): `k` is 1, 2, 3 and `vel = k + 10`
+// is 11 (frames 0..3), 12 (4..7), 13 (8..11); the reset at the frame 5 puts `k` back too, so the tick of the frame 8 gives 11 again. `x` is 0.0 in every frame, so the output is the value read.
+
+pub struct M {
+  vel: F32,
+  q: F32,
+}
+
+impl Default for M {
+  rt fn default() -> M {
+    M { vel: 1.0, q: 2.0 }
+  }
+}
+
+pub struct D: Default {
+  vel: F32 = 1.0,
+  q: F32,
+}
+
+pub struct Nest: Default {
+  a: D,
+  k: F32,
+}
+
+pub flow sum_field(x: F32 at sample) -> F32 at sample {
+  let k = prev~(^k at (sample / 4)) + 1.0
+  let s = M { vel: k + 10.0, q: 2.0 }
+  x + (s.vel at sample)
+}
+
+pub flow sum_whole(x: F32 at sample) -> F32 at sample {
+  let k = prev~(^k at (sample / 4)) + 1.0
+  let s = M { vel: k + 10.0, q: 2.0 }
+  x + (s at sample).vel
+}
+
+pub flow sum_tuple(x: F32 at sample) -> F32 at sample {
+  let k = prev~(^k at (sample / 4)) + 1.0
+  let t: (F32, F32) = (k + 10.0, 2.0)
+  x + (t.0 at sample)
+}
+
+pub flow sum_nested_field(x: F32 at sample) -> F32 at sample {
+  let k = prev~(^k at (sample / 4)) + 1.0
+  let s = Nest { a: D { vel: k + 10.0, q: 2.0 }, k: 0.0 }
+  x + (s.a.vel at sample)
+}
+
+pub flow sum_nested_whole(x: F32 at sample) -> F32 at sample {
+  let k = prev~(^k at (sample / 4)) + 1.0
+  let s = Nest { a: D { vel: k + 10.0, q: 2.0 }, k: 0.0 }
+  x + (s at sample).a.vel
+}
+
+pub flow reset_sum_field(x: F32 at sample, r: Bool at sample) -> F32 at sample {
+  sum_field~(x).reset_if~(r)
+}
+
+pub flow reset_sum_whole(x: F32 at sample, r: Bool at sample) -> F32 at sample {
+  sum_whole~(x).reset_if~(r)
+}
+
+pub flow reset_sum_tuple(x: F32 at sample, r: Bool at sample) -> F32 at sample {
+  sum_tuple~(x).reset_if~(r)
+}
+
+pub flow reset_sum_nested_field(x: F32 at sample, r: Bool at sample) -> F32 at sample {
+  sum_nested_field~(x).reset_if~(r)
+}
+
+pub flow reset_sum_nested_whole(x: F32 at sample, r: Bool at sample) -> F32 at sample {
+  sum_nested_whole~(x).reset_if~(r)
+}
+
+const ZS: [F32; 12] = [0.0; 12]
+const RS: [Bool; 12] = [false, false, false, false, false, true, false, false, false, false, false, false]
+
+test "after a reset the field of the type F32 is 0.0 until the next tick" {
+  var out: [F32; 12] = [0.0; 12]
+  var st = reset_sum_field.init(8.0)
+  reset_sum_field.process(inout st, reset_sum_field.In { x: ZS, r: RS }, inout out)
+  assert out == [11.0, 11.0, 11.0, 11.0, 12.0, 0.0, 0.0, 0.0, 11.0, 11.0, 11.0, 11.0]
+}
+
+test "after a reset the whole read first is M.default(), whose vel is 1.0" {
+  var out: [F32; 12] = [0.0; 12]
+  var st = reset_sum_whole.init(8.0)
+  reset_sum_whole.process(inout st, reset_sum_whole.In { x: ZS, r: RS }, inout out)
+  assert out == [11.0, 11.0, 11.0, 11.0, 12.0, 1.0, 1.0, 1.0, 11.0, 11.0, 11.0, 11.0]
+}
+
+test "after a reset the element of a tuple is 0.0 until the next tick" {
+  var out: [F32; 12] = [0.0; 12]
+  var st = reset_sum_tuple.init(8.0)
+  reset_sum_tuple.process(inout st, reset_sum_tuple.In { x: ZS, r: RS }, inout out)
+  assert out == [11.0, 11.0, 11.0, 11.0, 12.0, 0.0, 0.0, 0.0, 11.0, 11.0, 11.0, 11.0]
+}
+
+test "after a reset the nested field is 0.0, not the vel that the struct declares" {
+  var out: [F32; 12] = [0.0; 12]
+  var st = reset_sum_nested_field.init(8.0)
+  reset_sum_nested_field.process(inout st, reset_sum_nested_field.In { x: ZS, r: RS }, inout out)
+  assert out == [11.0, 11.0, 11.0, 11.0, 12.0, 0.0, 0.0, 0.0, 11.0, 11.0, 11.0, 11.0]
+}
+
+test "after a reset the whole nested value read first has the vel that the struct declares" {
+  var out: [F32; 12] = [0.0; 12]
+  var st = reset_sum_nested_whole.init(8.0)
+  reset_sum_nested_whole.process(inout st, reset_sum_nested_whole.In { x: ZS, r: RS }, inout out)
+  assert out == [11.0, 11.0, 11.0, 11.0, 12.0, 1.0, 1.0, 1.0, 11.0, 11.0, 11.0, 11.0]
+}

@@ -92,3 +92,9 @@ pub flow arm_of_match_tilde(m: Note at event, x: F32 at sample, k: U32 at sample
     _ => lp~(x),
   }
 }
+
+// ---------------------------------------------------------------- a field of the binding of an arm of `match~` under a condition (S-1197, W7-11 U2c/t)
+
+pub flow field_of_a_match_tilde_binding(m: Note at event, x: F32 at sample, g: Bool at sample) -> F32 at sample {
+  match~ m { n => lp~(if g { n.vel } else { x }) }
+}

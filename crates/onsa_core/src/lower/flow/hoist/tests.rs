@@ -185,3 +185,43 @@ flow g4(a: U32 at (sample * 4)) -> U32 at sample { a[0] + a[1] + a[2] + a[3] }
         assert!(write < call, "{body}: the field written after the call:\n{slow}");
     }
 }
+
+/// S-1197: a field read of a name of a tick is written at each tick, before
+/// the conditions on its path and once, in a loop over the replicas of the
+/// `par` that holds it; what is computed beside it, under them.
+#[test]
+fn a_field_read_of_a_name_is_written_under_no_condition() {
+    let src = "pub struct D: Default { vel: F32, on: Bool }
+flow lp(x: F32 at sample) -> F32 at sample { x + prev~(x) }
+pub flow f(x: F32 at sample, g: Bool at sample, i: I32 at init) -> F32 at sample {
+  let k = prev~(^k at (sample / 4)) + 1.0
+  let s = D { vel: k, on: k > 1.0 }
+  let a = if i > 0 { (if g { s.vel at sample } else { x }) + ((s.vel * 3.0) at sample) } else { x }
+  let b = if g { par j in 0 ..< 3 { (s.vel at sample) * x } } else { par j in 0 ..< 3 { x } }
+  let c = if~ g { lp~(x) } else if x > 0.0 && (s.on at sample) { lp~(x) } else { x }
+  let d = match~ g { true if (s.on at sample) => lp~(x), _ => x }
+  a + b[0] + c + d
+}";
+    let slow = phase(src, "tick_4");
+    let free = "  s@11.7 = s@4.0\n";
+    let held = "  if s@11.6 {\n    s@11.8 = (s@4.0 * 3.0:F32)\n  }\n";
+    let each = "  for j@9 in 0:U32..3:U32 {\n    s@11.2[j@9].0 = s@4.0\n  }\n";
+    at(&slow, &format!("{free}{held}{each}  s@11.9 = s@4.1\n  s@11.10 = s@4.1\n  s@11.1 = k\n"));
+    assert_eq!(slow.matches("if ").count(), 1, "{slow}");
+}
+
+/// S-1197: the field read of a name in a guard of a `match~`, beside a part
+/// computed there, is written once, before the guarded one.
+#[test]
+fn a_field_read_beside_a_guarded_part_of_a_guard_is_written_once() {
+    let src = "pub struct D: Default { vel: F32, q: F32 }
+flow lp(x: F32 at sample) -> F32 at sample { x + prev~(x) }
+pub flow f(x: F32 at sample) -> F32 at sample {
+  let k = prev~(^k at (sample / 4)) + 1.0
+  let s = D { vel: k + 10.0, q: k }
+  let r = sample_rate()
+  match~ r > 2.0 { true if ((s.q * 2.0) at sample) > 3.0 && (s.vel at sample) > 12.0 => lp~(x), _ => lp~(x + 1.0) }
+}";
+    let slow = phase(src, "tick_4");
+    assert_eq!((slow.matches(" = s@2.0\n").count(), slow.matches("* 2.0:F32)\n").count()), (1, 1), "{slow}");
+}

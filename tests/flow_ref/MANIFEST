@@ -143,6 +143,10 @@ file slow_child_host_blocks.tsv rows=12 tests=8 evaluated=1 unavailable=0 skippe
 file slow_child_module.tsv rows=25 tests=4 evaluated=4 unavailable=0 skipped=0 waiting=0
 file slow_child_panics.tsv rows=38 tests=9 evaluated=9 unavailable=0 skipped=0 waiting=0
 file slow_child_values.tsv rows=59 tests=9 evaluated=8 unavailable=0 skipped=1 waiting=0
+file slow_field_reads_late_and_outer_s1197.tsv rows=35 tests=6 evaluated=6 unavailable=0 skipped=0 waiting=0
+file slow_field_reads_outside_conditions_values.tsv rows=6 tests=5 evaluated=0 unavailable=0 skipped=5 waiting=0
+file slow_field_reads_s1197.tsv rows=14 tests=13 evaluated=0 unavailable=0 skipped=13 waiting=0
+file slow_field_reads_twins_s1197.tsv rows=95 tests=18 evaluated=18 unavailable=0 skipped=0 waiting=0
 file slow_out_stage_values.tsv rows=27 tests=6 evaluated=6 unavailable=0 skipped=0 waiting=0
 file slow_port_values.tsv rows=89 tests=12 evaluated=12 unavailable=0 skipped=0 waiting=0
 file slow_tick_branches.tsv rows=28 tests=4 evaluated=4 unavailable=0 skipped=0 waiting=0
@@ -167,4 +171,4 @@ file when_identity_regressions.tsv rows=78 tests=5 evaluated=5 unavailable=0 ski
 file when_slow_head_values.tsv rows=47 tests=5 evaluated=5 unavailable=0 skipped=0 waiting=0
 file when_slow_values.tsv rows=86 tests=9 evaluated=9 unavailable=0 skipped=0 waiting=0
 file when_values.tsv rows=77 tests=10 evaluated=10 unavailable=0 skipped=0 waiting=0
-total files=168 rows=5800 tests=1211 evaluated=1086 unavailable=1 skipped=124 waiting=6
+total files=172 rows=5950 tests=1253 evaluated=1110 unavailable=1 skipped=142 waiting=6

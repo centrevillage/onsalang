@@ -98,7 +98,8 @@ pub struct Hoist {
     /// every stage that reads it.
     pub stage: ClockStage,
     /// Written only when the conditions on its path hold (S-1157): under
-    /// a conditional position. W8-07 makes of it what `init` sets (V-17).
+    /// a conditional position, but of [`Place::Field`]. W8-07 makes of it
+    /// what `init` sets (V-17).
     pub guarded: bool,
     pub owner: Owner,
     /// `_hoist_<n>`, numbered in its owner from 0 in the order of the
@@ -116,6 +117,9 @@ pub struct Hoist {
 pub(super) enum Place {
     /// In a field written at this stage.
     Hoist(ClockStage),
+    /// In a field written at each tick of this stage whatever the conditions
+    /// on its path: a field read of a name ([`Choose::of_name`], S-1197).
+    Field(ClockStage),
     /// A computed constant expression in a conditional position whose
     /// conditions are decided at this stage, before the stage that reads
     /// it: evaluated there too when they hold, for its panic (S-888 (c′)),
@@ -159,7 +163,8 @@ impl Choose<'_> {
     /// in `level * make(a)`). A computed part or a node of a tick slower
     /// than `at` ([`Choose::tick_field`]) is in a field written at the tick,
     /// guarded under conditions of constants, `init` and that tick; under one
-    /// decided at another stage it is refused (S-1158 (c)).
+    /// decided at another stage it is refused (S-1158 (c)), but for a field
+    /// read of a name, which does not panic (S-1197).
     pub(super) fn place(&self, e: ExprId, at: ClockStage, g: Cond) -> Place {
         let d = match self.clocks.stage(e) {
             Some(Clock::Init) => ClockStage::Init,
@@ -168,12 +173,13 @@ impl Choose<'_> {
                 return g.stage().filter(|&s| s < at).map_or(Place::Const, Place::Check);
             }
             Some(c @ (Clock::Tick(_) | Clock::Event(_))) => {
-                let slow = c.stage().filter(|&d| d.stored_slower_than(at) && self.tick_field(e, d));
+                let slow = c.stage().filter(|&d| d.stored_slower_than(at) && self.tick_field(e));
                 let Some(d) = slow else { return Place::Here };
                 // SPEC-GAP(S-1195): of a type that is not Copy, E0200
                 // (provisional).
                 return match g.admits(d) {
                     _ if !self.nodes.contains_key(&e) && !self.copy(e) => Place::NotCopy(d),
+                    _ if self.of_name(e).is_some() => Place::Field(d),
                     true => Place::Hoist(d),
                     false => Place::Refuse(d),
                 };
@@ -215,33 +221,30 @@ impl Choose<'_> {
         self.part(e) && self.copy(e)
     }
 
-    /// Whether `e`, of the tick `s` slower than the stage that reads it, has a
+    /// Whether `e`, of a tick slower than the stage that reads it, has a
     /// field written at the tick: a [`Choose::part`], a node, or
     /// `sample_tick()` under the `at` of the tick or an event value with it,
     /// which keeps the value at the tick as a `let` of it would (S-1210,
-    /// §11.11), whose value is kept there with no name (§11.3, §11.6). The
-    /// field of a struct (or a tuple) read of a name of an event is a read of
-    /// the name (§11.3, §11.11).
+    /// §11.11), whose value is kept there with no name (§11.3, §11.6).
     // SPEC-GAP(S-1231): an event value with the `at` of a slower tick stands
     // in a conditional position as `sample_tick()` with it does (provisional).
-    // SPEC-GAP(S-1197): the fields of a name are read with it, of an event.
-    fn tick_field(&self, e: ExprId, s: ClockStage) -> bool {
+    fn tick_field(&self, e: ExprId) -> bool {
         let event = |x: ExprId| matches!(self.clocks.stage(x), Some(Clock::Event(_)));
-        match (&self.ast.expr(e).kind, s) {
-            (ExprKind::At { expr, .. }, _) => event(*expr),
-            (ExprKind::Field { .. } | ExprKind::TupleIndex { .. }, ClockStage::Event(_)) if self.of_name(e) => false,
+        match &self.ast.expr(e).kind {
+            ExprKind::At { expr, .. } => event(*expr),
             _ => self.part(e) || self.nodes.contains_key(&e) || self.sample_tick.contains(&e),
         }
     }
 
-    /// A field of a name, past parentheses.
-    fn of_name(&self, e: ExprId) -> bool {
+    /// The name `e` is or reads a field or an element of (of a field of it,
+    /// and so on), past parentheses.
+    pub(super) fn of_name(&self, e: ExprId) -> Option<ExprId> {
         match &self.ast.expr(e).kind {
             ExprKind::Field { base: x, .. } | ExprKind::TupleIndex { base: x, .. } if !self.local(e) => {
                 self.of_name(*x)
             }
             ExprKind::Paren(x) => self.of_name(*x),
-            _ => self.local(e),
+            _ => self.local(e).then_some(e),
         }
     }
 
@@ -256,8 +259,6 @@ impl Choose<'_> {
     /// same value (§11.3: `at` changes no value), nor a
     /// block of a value only, whose value the lowering makes of its tail in
     /// place: the operand or the tail is chosen instead.
-    // SPEC-GAP(S-1197): the field of a struct read of a name (`s.f`) is a
-    // computed part (provisional).
     fn part(&self, e: ExprId) -> bool {
         let kind = &self.ast.expr(e).kind;
         !(self.local(e)

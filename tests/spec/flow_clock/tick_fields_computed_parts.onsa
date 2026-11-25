@@ -8,7 +8,8 @@
 // and a part that is not Copy is S-1195 (tick_field_not_copy_s1195.onsa).
 // Where the part is under a condition (§11.3: "条件の位置の中では、その位置を選ぶ条件が全て定数・`init`・その式と同じ刻みで決まるときだけ書け"): a condition that is a constant or `init` selects a
 // guarded field (written at the tick when the condition holds). The condition of an `if`, the target of a `match`, the left of `&&` and the arms of `if~` are not positions of a condition.
-// What the spec leaves open (S-1197): whether `s.f at sample` is a part that is computed or a name read; here the position has no condition, so either reading accepts it.
+// S-1197 (decided): `s.f at sample` is a computed part too (the field that keeps it is of the type of the read, `F32`), and under a condition of another clock it is a read of a name with a field and is accepted (slow_field_reads_in_conditions_s1197.onsa);
+// here the position has no condition, so it is accepted in either reading.
 
 pub struct Pair {
   f: F32,

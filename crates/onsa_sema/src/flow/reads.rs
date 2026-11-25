@@ -288,9 +288,9 @@ impl Marker<'_> {
     /// there too. A computed constant in a conditional position is
     /// recorded, and its parts read where it is evaluated.
     fn mark(&mut self, e: ExprId, at: ClockStage, g: Cond) {
-        let place = if self.konst { Place::Here } else { self.choose.place(e, at, g) };
+        let place = if self.konst { Place::Here } else { self.place(e, at, g) };
         let at = match place {
-            Place::Hoist(s) => {
+            Place::Hoist(s) | Place::Field(s) => {
                 // A part of a condition read again (`read_conds`) is in the
                 // table once.
                 if !self.seen.insert(e) {
@@ -301,10 +301,11 @@ impl Marker<'_> {
                     (None, k) if k < self.lets => Owner::Let(k as u32),
                     (None, _) => Owner::Output,
                 };
-                self.out.hoisted.push((e, s, owner, g != Cond::None));
+                let guarded = g != Cond::None && matches!(place, Place::Hoist(_));
+                self.out.hoisted.push((e, s, owner, guarded));
                 self.out.work.insert((self.consumer as u32, s));
                 self.mark_late(e);
-                if g != Cond::None {
+                if guarded {
                     self.read_conds(s);
                 }
                 if s.stored_slower_than(at) {
@@ -470,6 +471,34 @@ impl Marker<'_> {
                 }
             }
         }
+    }
+
+    /// [`Choose::place`], but a field read of a binding with a value only
+    /// where its arm is taken (of a `match`, or of a `match~` in a guard) is
+    /// under the conditions on the path.
+    // SPEC-GAP(S-1247): under one decided at another stage it is read where it is
+    // reached, its type judged as of its field (provisional).
+    fn place(&mut self, e: ExprId, at: ClockStage, g: Cond) -> Place {
+        let place = self.choose.place(e, at, g);
+        let Place::Field(s) = place else { return place };
+        match self.choose.of_name(e).is_some_and(|x| self.in_arm(x)) {
+            false => place,
+            true if g.admits(s) => Place::Hoist(s),
+            true => {
+                self.no_default(e, s, SlowField::Part);
+                Place::Here
+            }
+        }
+    }
+
+    /// Whether the name `x` is a binding that no place holds where it is read.
+    fn in_arm(&self, x: ExprId) -> bool {
+        let Some(&Target::Local(b)) = self.body.targets.get(&x) else { return false };
+        let body = |b: &Bound| match &self.ast.expr(b.m).kind {
+            ExprKind::Match { arms, .. } => self.ast.expr(arms[b.arm].body).span.contains(self.ast.expr(x).span.start),
+            _ => false,
+        };
+        self.body.locals[b.0 as usize].kind == LocalKind::MatchBind && !self.binding_of.get(&b).is_some_and(body)
     }
 
     /// Whether `e` reads a `^name`, or a binding one chooses, where it is

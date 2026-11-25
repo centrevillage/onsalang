@@ -1,0 +1,79 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§11.9"]
+
+// W7-11 U2c/t, S-1197 (spec §11.3: "フィールド・組の要素の読みも計算した部分式で、隠れたフィールドの型はその読み（連なりの全体）の型である（`x + m.vel` は `let v = m.vel` の `x + v` と同じ値で、`M` に `Default` は要らない"、"全体を速い段で読んでから取り出す
+// `(m at sample).vel` は、`M` に `Default` が要り"): the field or the element of a value of the tick `sample / 4` read at `sample` outside a condition (`x + (s.vel at sample)`, `x + (r.vel at sample)` with `r` the result of a call, `n.a.vel`, `t.0`) is a field
+// of the type of the read, so `M` (no `Default`) needs none; the whole read first and the field of it (`(h at sample).vel`) is of the type of `H`, which has a `Default`. These are accepted now and stay so (a read under an `init` or a constant condition is accepted too; the same reads under the other conditions are in
+// slow_field_reads_in_conditions_s1197.onsa, the type that has no `Default` in e0816_slow_field_read_type_s1197.onsa). `check` reads the file with no diagnostic. `a` is a value of `sample / 4`, `x` is a `sample` input.
+
+pub struct M {
+  vel: F32,
+  q: F32,
+  on: Bool,
+}
+
+pub struct Nest {
+  a: M,
+  k: F32,
+}
+
+pub struct H: Default {
+  vel: F32,
+  q: F32,
+}
+
+pub flow mk(x: F32 at (sample * 4)) -> M at sample {
+  M { vel: x[3], q: x[0], on: x[0] > 0.0 }
+}
+
+pub flow slow(x: F32 at sample) -> M at (sample / 4) {
+  mk~(x).down~(4)
+}
+
+pub flow field_in_a_sum(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  let a = prev~(p at (sample / 4))
+  let s = M { vel: a, q: 2.0, on: a > 0.5 }
+  x + (s.vel at sample)
+}
+
+pub flow element_of_a_tuple_in_a_sum(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  let a = prev~(p at (sample / 4))
+  let t: (F32, F32) = (a, 2.0)
+  x + (t.0 at sample)
+}
+
+pub flow nested_field_in_a_sum(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  let a = prev~(p at (sample / 4))
+  let n = Nest { a: M { vel: a, q: 2.0, on: a > 0.5 }, k: 0.0 }
+  x + (n.a.vel at sample)
+}
+
+pub flow field_of_the_result_of_a_call(x: F32 at sample) -> F32 at sample {
+  let r = slow~(x)
+  x + (r.vel at sample)
+}
+
+pub flow whole_read_with_a_default(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  let a = prev~(p at (sample / 4))
+  let h = H { vel: a, q: 2.0 }
+  x + (h at sample).vel
+}
+
+pub flow field_read_first_of_a_type_with_a_default(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  let a = prev~(p at (sample / 4))
+  let h = H { vel: a, q: 2.0 }
+  x + (h.vel at sample)
+}
+
+pub flow field_under_an_init_condition(p: F32 at block, x: F32 at sample, i: I32 at init) -> F32 at sample {
+  let a = prev~(p at (sample / 4))
+  let s = M { vel: a, q: 2.0, on: a > 0.5 }
+  if i > 0 { s.vel at sample } else { x }
+}
+
+pub flow field_under_a_constant_condition(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  let a = prev~(p at (sample / 4))
+  let s = M { vel: a, q: 2.0, on: a > 0.5 }
+  if true { s.vel at sample } else { x }
+}

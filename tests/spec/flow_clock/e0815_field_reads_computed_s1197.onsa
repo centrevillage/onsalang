@@ -1,0 +1,131 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§11.4", "§11.9", "§11.11", "§18.1"]
+
+// W7-11 U2c/t, S-1197 (spec §11.3: "条件の位置の中では、その位置を選ぶ条件が全て定数・`init`・その式と同じ刻みで決まるときだけ書け…条件のどれかが他の段（`block`、別の刻み、`sample`）で決まる位置には書けない（E0815…）。名前と、そのフィールド・組の要素の連なりを
+// 取り出すだけの式（括弧を通す）は…書ける…。配列の添字の読み（`m[0]`）と、添字を挟む連なり（`ps[0].vel`）は計算した部分式で、ここには書けない（上の E0815）"): a part that is computed from an event value or from a value of a slower tick, and that is not a name with
+// a chain of fields and elements, cannot stand where a condition of another clock selects it: an index (`m[0]`, `m.xs[1]`, `m[0].vel`, `ps[0].vel`), an arithmetic on the field (`m.vel * 2.0`), a comparison on the right of `&&`, a call that takes the field out (`vel_of(m)`),
+// a `match` written in the branch, and the time of a tick (`(sample_tick() at (sample / 4)) at sample`, S-1210). E0815 at the part. No candidate is promised, so none is checked. The reads of a name and of its fields that are accepted are in
+// event_field_reads_s1197.onsa and slow_field_reads_in_conditions_s1197.onsa. One error per flow (P-01), on one line. `Note` has a `Default` (so no E0816 is in the way); `a` is a value of `sample / 4`, `x` and `g` are `sample` inputs.
+
+pub struct Note: Default {
+  pitch: F32,
+  vel: F32,
+  q: F32,
+}
+
+pub struct Voices: Default {
+  xs: [F32; 2],
+  k: F32,
+}
+
+pub struct M {
+  vel: F32,
+  q: F32,
+  on: Bool,
+}
+
+pub flow lp(x: F32 at sample) -> F32 at sample {
+  x * 0.5
+}
+
+pub rt fn vel_of(n: Note) -> F32 {
+  n.vel
+}
+
+pub rt fn vel_of_m(n: M) -> F32 {
+  n.vel
+}
+
+pub flow mk(x: F32 at (sample * 4)) -> M at sample {
+  M { vel: x[3], q: x[0], on: x[0] > 0.0 }
+}
+
+pub flow slow(x: F32 at sample) -> M at (sample / 4) {
+  mk~(x).down~(4)
+}
+
+// ---------------------------------------------------------------- an event value
+
+pub flow index_of_an_array(m: [F32; 2] at event, x: F32 at sample, g: Bool at sample) -> F32 at sample {
+  if g { m[0] } else { x }   //~ E0815
+}
+
+pub flow index_then_a_field(m: [Note; 2] at event, x: F32 at sample, g: Bool at sample) -> F32 at sample {
+  if g { m[0].vel } else { x }   //~ E0815
+}
+
+pub flow field_that_is_an_array_then_an_index(m: Voices at event, x: F32 at sample, g: Bool at sample) -> F32 at sample {
+  if g { m.xs[1] } else { x }   //~ E0815
+}
+
+pub flow arithmetic_on_a_field(m: Note at event, x: F32 at sample, g: Bool at sample) -> F32 at sample {
+  if g { m.vel * 2.0 } else { x }   //~ E0815
+}
+
+pub flow comparison_on_the_right_of_an_and(m: Note at event, x: F32 at sample, g: Bool at sample) -> F32 at sample {
+  if g && m.q > 0.0 { x } else { 0.0 }   //~ E0815
+}
+
+pub flow call_that_takes_the_field_out(m: Note at event, x: F32 at sample, g: Bool at sample) -> F32 at sample {
+  if g { vel_of(m) } else { x }   //~ E0815
+}
+
+pub flow match_written_in_the_branch(m: Note at event, x: F32 at sample, g: Bool at sample) -> F32 at sample {
+  if g { match m { Note { pitch: _, vel: v, q: _ } => v } } else { x }   //~ E0815
+}
+
+pub flow arm_of_a_match_on_an_index(m: [F32; 2] at event, x: F32 at sample, k: U32 at sample) -> F32 at sample {
+  match k { 0 => m[1], _ => x }   //~ E0815
+}
+
+pub flow guard_of_a_match_on_a_comparison(m: Note at event, x: F32 at sample, k: U32 at sample) -> F32 at sample {
+  match k { 0 if m.vel > 0.5 => x, _ => 0.0 }   //~ E0815
+}
+
+pub flow index_in_the_body_of_a_par(m: [F32; 2] at event, x: F32 at sample, g: Bool at sample) -> [F32; 2] at sample {
+  par~ i in 0 ..< 2 { lp~(if g { m[0] } else { x }) }   //~ E0815
+}
+
+// ---------------------------------------------------------------- a value of the tick `sample / 4`
+
+pub flow slow_index_of_an_array(p: F32 at block, x: F32 at sample, g: Bool at sample) -> F32 at sample {
+  let a = prev~(p at (sample / 4))
+  let arr = [a, a * 2.0]
+  if g { arr[0] at sample } else { x }   //~ E0815
+}
+
+pub flow slow_index_of_the_results_of_copies(x: F32 at sample, g: Bool at sample) -> F32 at sample {
+  let ps = par~ i in 0 ..< 2 { slow~(x) }
+  if g { ps[0].vel at sample } else { x }   //~ E0815
+}
+
+pub flow slow_arithmetic_on_a_field(p: F32 at block, x: F32 at sample, g: Bool at sample) -> F32 at sample {
+  let a = prev~(p at (sample / 4))
+  let s = M { vel: a, q: 2.0, on: a > 0.5 }
+  if g { (s.vel * 2.0) at sample } else { x }   //~ E0815
+}
+
+pub flow slow_comparison_on_the_right_of_an_and(p: F32 at block, x: F32 at sample, g: Bool at sample) -> F32 at sample {
+  let a = prev~(p at (sample / 4))
+  let s = M { vel: a, q: 2.0, on: a > 0.5 }
+  if g && ((s.vel > 0.5) at sample) { x } else { 0.0 }   //~ E0815
+}
+
+pub flow slow_call_that_takes_the_field_out(p: F32 at block, x: F32 at sample, g: Bool at sample) -> F32 at sample {
+  let a = prev~(p at (sample / 4))
+  let s = M { vel: a, q: 2.0, on: a > 0.5 }
+  if g { vel_of_m(s) at sample } else { x }   //~ E0815
+}
+
+pub flow slow_arm_of_a_match_on_an_index(p: F32 at block, x: F32 at sample, k: U32 at sample) -> F32 at sample {
+  let a = prev~(p at (sample / 4))
+  let arr = [a, a * 2.0]
+  match k { 0 => arr[1] at sample, _ => x }   //~ E0815
+}
+
+// ---------------------------------------------------------------- the time of a tick (S-1210)
+
+pub flow time_of_a_slower_tick(x: F32 at sample, g: Bool at sample) -> U32 at sample {
+  if g { (sample_tick() at (sample / 4)) at sample } else { 0 }   //~ E0815
+}

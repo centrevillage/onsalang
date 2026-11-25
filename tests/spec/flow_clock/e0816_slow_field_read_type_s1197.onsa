@@ -1,0 +1,76 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§11.9", "§18.1"]
+
+// W7-11 U2c/t, S-1197 (spec §11.3: "隠れたフィールドの型はその読み（連なりの全体）の型である…全体を速い段で読んでから取り出す `(m at sample).vel` は、`M` に `Default` が要り"、"`T` が `Default` を満たさなければ、速い段で読む式で E0816"): the same reads as the events of
+// e0816_event_field_read_type_s1197.onsa, of a value of the tick `sample / 4`. The field of the type `Tag`, which has no `Default`, that is read at `sample` (`s.tag at sample`, `t.1 at sample`) is E0816 at the line of the read, though the struct `P` has a `Default`;
+// the whole read first (`(s at sample).tag`) is of the type `P`, which has one, and is no error; the whole `M`, which has none, read first is E0816 (`(s at sample).vel` and the same under a condition). These are errors now and after S-1197, and the accepted ones are
+// accepted. One error per flow (P-01). `a` is a value of `sample / 4`, `x` and `g` are `sample` inputs.
+
+pub enum Tag {
+  Off,
+  On,
+}
+
+pub struct P {
+  tag: Tag,
+  vel: F32,
+}
+
+impl Default for P {
+  rt fn default() -> P {
+    P { tag: Tag.Off, vel: 0.0 }
+  }
+}
+
+pub struct M {
+  vel: F32,
+  q: F32,
+}
+
+pub rt fn pick(t: Tag, x: F32) -> F32 {
+  match t {
+    Tag.Off => 0.0,
+    Tag.On => x,
+  }
+}
+
+// ---------------------------------------------------------------- the type of the read has no `Default`
+
+pub flow field_of_a_type_without_default(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  let a = prev~(p at (sample / 4))
+  let s = P { tag: Tag.On, vel: a }
+  pick(s.tag at sample, x)   //~ E0816
+}
+
+pub flow element_of_a_tuple(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  let a = prev~(p at (sample / 4))
+  let t: (F32, Tag) = (a, Tag.On)
+  pick(t.1 at sample, x)   //~ E0816
+}
+
+pub flow whole_read_of_a_type_without_default(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  let a = prev~(p at (sample / 4))
+  let s = M { vel: a, q: 2.0 }
+  x + (s at sample).vel   //~ E0816
+}
+
+pub flow whole_read_of_a_type_without_default_under_a_condition(p: F32 at block, x: F32 at sample, g: Bool at sample) -> F32 at sample {
+  let a = prev~(p at (sample / 4))
+  let s = M { vel: a, q: 2.0 }
+  if g { (s at sample).vel } else { x }   //~ E0816
+}
+
+// ---------------------------------------------------------------- accepted: the whole `P` has a `Default`, and the field `vel` is an `F32`
+
+pub flow whole_read_of_a_type_with_default(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  let a = prev~(p at (sample / 4))
+  let s = P { tag: Tag.On, vel: a }
+  pick((s at sample).tag, x)
+}
+
+pub flow another_field_of_the_same_type(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  let a = prev~(p at (sample / 4))
+  let s = P { tag: Tag.On, vel: a }
+  x + (s.vel at sample)
+}

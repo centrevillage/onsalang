@@ -1,0 +1,154 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.3", "§11.4", "§11.10"]
+
+// W7-11 U2c/b, S-1197 (spec §11.3: "フィールド・組の要素の読みは、条件によらず、守りを付けずに刻みごとに読む"; "`^名前` を読む…遅い段の部分式は、その部分式の段の終わりに"): the forms of slow_field_reads_twins_s1197.onsa that the break side found missing: a field read of a
+// `^name` in the first argument of a delay (evaluated at the end of its stage, S-1244), and a field read under a condition of `init` or `block` together with one of `sample`. Each gives the values of its twin, where a `let` holds the read; each is
+// restarted at the frames 6 and 10.
+
+pub struct D: Default {
+  vel: F32 = 1.0,
+  q: F32,
+  on: Bool = true,
+}
+
+flow hat(x: F32 at sample, g: Bool at sample, h: Bool at sample, p: I32 at block) -> F32 at sample {
+  let d = prev~(if h { ((^s).vel) at sample } else { x })
+  let k = prev~(^k at (sample / 4)) + 1.0
+  let s: D = D { vel: k + 10.0, q: k, on: k > 1.5 }
+  d * 0.5 + x
+}
+
+flow hat_let(x: F32 at sample, g: Bool at sample, h: Bool at sample, p: I32 at block) -> F32 at sample {
+  let d = prev~(if h { (^lv) at sample } else { x })
+  let k = prev~(^k at (sample / 4)) + 1.0
+  let s: D = D { vel: k + 10.0, q: k, on: k > 1.5 }
+  let lv: F32 = s.vel
+  d * 0.5 + x
+}
+
+flow hat2(x: F32 at sample, g: Bool at sample, h: Bool at sample, p: I32 at block) -> F32 at sample {
+  let d = prev~(if h { (^s).vel at sample } else if g { (^s).q at sample } else { x })
+  let k = prev~(^k at (sample / 4)) + 1.0
+  let s: D = D { vel: k + 10.0, q: k, on: k > 1.5 }
+  d * 0.5 + x
+}
+
+flow hat2_let(x: F32 at sample, g: Bool at sample, h: Bool at sample, p: I32 at block) -> F32 at sample {
+  let d = prev~(if h { (^lv) at sample } else if g { (^lq) at sample } else { x })
+  let k = prev~(^k at (sample / 4)) + 1.0
+  let s: D = D { vel: k + 10.0, q: k, on: k > 1.5 }
+  let lv: F32 = s.vel
+  let lq: F32 = s.q
+  d * 0.5 + x
+}
+
+pub flow hat_read(x: F32 at sample, p: I32 at block) -> F32 at sample { hat~(x, x % 2.0 > 0.75, x % 3.0 > 1.25, p).reset_if~(x == 6.0 || x == 10.0) }
+pub flow hat_twin(x: F32 at sample, p: I32 at block) -> F32 at sample { hat_let~(x, x % 2.0 > 0.75, x % 3.0 > 1.25, p).reset_if~(x == 6.0 || x == 10.0) }
+pub flow hat2_read(x: F32 at sample, p: I32 at block) -> F32 at sample { hat2~(x, x % 2.0 > 0.75, x % 3.0 > 1.25, p).reset_if~(x == 6.0 || x == 10.0) }
+pub flow hat2_twin(x: F32 at sample, p: I32 at block) -> F32 at sample { hat2_let~(x, x % 2.0 > 0.75, x % 3.0 > 1.25, p).reset_if~(x == 6.0 || x == 10.0) }
+pub flow hat_diff(x: F32 at sample, p: I32 at block) -> F32 at sample {
+  let d = hat_read~(x, p) - hat_twin~(x, p)
+  let e = prev~(^e) + d * d
+  e
+}
+pub flow hat2_diff(x: F32 at sample, p: I32 at block) -> F32 at sample {
+  let d = hat2_read~(x, p) - hat2_twin~(x, p)
+  let e = prev~(^e) + d * d
+  e
+}
+const XS: [F32; 16] = [0.25, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0]
+test "a field read of a `^name` in the first argument of a delay, under a condition: the same values as a `^` of a `let` of the read" {
+  let a = hat_read.render(hat_read.Params { p: 3 }, XS, 48.0)
+  let b = hat_diff.render(hat_diff.Params { p: 3 }, XS, 48.0)
+  assert a.out[15] != 0.0
+  assert b.out[15] == 0.0
+}
+test "two field reads of a `^name` under two conditions: the same values as a `^` of the `let`s of the reads" {
+  let a = hat2_read.render(hat2_read.Params { p: 3 }, XS, 48.0)
+  let b = hat2_diff.render(hat2_diff.Params { p: 3 }, XS, 48.0)
+  assert a.out[15] != 0.0
+  assert b.out[15] == 0.0
+}
+
+flow fi(x: F32 at sample, g: Bool at sample, p: I32 at block, n: I32 at init) -> F32 at sample {
+  let k = prev~(^k at (sample / 4)) + 1.0
+  let s = D { vel: k + 10.0, q: k, on: k > 1.5 }
+  if n > 1 { if g { s.vel at sample } else { x } } else { if g { s.q at sample } else { x + 0.5 } }
+}
+
+flow fi_let(x: F32 at sample, g: Bool at sample, p: I32 at block, n: I32 at init) -> F32 at sample {
+  let k = prev~(^k at (sample / 4)) + 1.0
+  let s = D { vel: k + 10.0, q: k, on: k > 1.5 }
+  let a = s.vel
+  let b = s.q
+  if n > 1 { if g { a at sample } else { x } } else { if g { b at sample } else { x + 0.5 } }
+}
+
+flow fb(x: F32 at sample, g: Bool at sample, p: I32 at block) -> F32 at sample {
+  let k = prev~(^k at (sample / 4)) + 1.0
+  let s = D { vel: k + 10.0, q: k, on: k > 1.5 }
+  let d = F32.round_from(p) * 0.5
+  if (d > 1.0) at sample { if g { s.vel at sample } else { x } } else { s.q at sample }
+}
+
+flow fb_let(x: F32 at sample, g: Bool at sample, p: I32 at block) -> F32 at sample {
+  let k = prev~(^k at (sample / 4)) + 1.0
+  let s = D { vel: k + 10.0, q: k, on: k > 1.5 }
+  let a = s.vel
+  let b = s.q
+  let d = F32.round_from(p) * 0.5
+  if (d > 1.0) at sample { if g { a at sample } else { x } } else { b at sample }
+}
+
+pub flow init_read(x: F32 at sample, p: I32 at block, n: I32 at init) -> F32 at sample { fi~(x, x % 2.0 > 0.75, p, n).reset_if~(x == 6.0 || x == 10.0) }
+pub flow init_twin(x: F32 at sample, p: I32 at block, n: I32 at init) -> F32 at sample { fi_let~(x, x % 2.0 > 0.75, p, n).reset_if~(x == 6.0 || x == 10.0) }
+pub flow block_read(x: F32 at sample, p: I32 at block) -> F32 at sample { fb~(x, x % 2.0 > 0.75, p).reset_if~(x == 6.0 || x == 10.0) }
+pub flow block_twin(x: F32 at sample, p: I32 at block) -> F32 at sample { fb_let~(x, x % 2.0 > 0.75, p).reset_if~(x == 6.0 || x == 10.0) }
+
+const XE: [F32; 0] = []
+
+test "a field read under a condition of `init` and one of `sample`: the same values as a `let` of the read" {
+  let a = init_read.render(init_read.Config { n: 2 }, init_read.Params { p: 3 }, XS, 48.0)
+  let b = init_twin.render(init_twin.Config { n: 2 }, init_twin.Params { p: 3 }, XS, 48.0)
+  assert a.out[15] != 0.0
+  assert a.out[0] == b.out[0]
+  assert a.out[1] == b.out[1]
+  assert a.out[3] == b.out[3]
+  assert a.out[5] == b.out[5]
+  assert a.out[7] == b.out[7]
+  assert a.out[9] == b.out[9]
+  assert a.out[11] == b.out[11]
+  assert a.out[15] == b.out[15]
+}
+test "the other branch of the condition of `init`" {
+  let a = init_read.render(init_read.Config { n: 0 }, init_read.Params { p: 3 }, XS, 48.0)
+  let b = init_twin.render(init_twin.Config { n: 0 }, init_twin.Params { p: 3 }, XS, 48.0)
+  assert a.out[1] == b.out[1]
+  assert a.out[3] == b.out[3]
+  assert a.out[5] == b.out[5]
+  assert a.out[7] == b.out[7]
+  assert a.out[11] == b.out[11]
+}
+test "a field read under a condition of `block` and one of `sample`: the same values as a `let` of the read" {
+  let a = block_read.render(block_read.Params { p: 3 }, XS, 48.0)
+  let b = block_twin.render(block_twin.Params { p: 3 }, XS, 48.0)
+  assert a.out[1] == b.out[1]
+  assert a.out[3] == b.out[3]
+  assert a.out[5] == b.out[5]
+  assert a.out[7] == b.out[7]
+  assert a.out[11] == b.out[11]
+  let c = block_read.render(block_read.Params { p: 1 }, XS, 48.0)
+  let d = block_twin.render(block_twin.Params { p: 1 }, XS, 48.0)
+  assert c.out[1] == d.out[1]
+  assert c.out[5] == d.out[5]
+  assert c.out[9] == d.out[9]
+  assert c.out[11] == d.out[11]
+}
+test "no frame: no value" {
+  let a = init_read.render(init_read.Config { n: 2 }, init_read.Params { p: 3 }, XE, 48.0)
+  let b = block_read.render(block_read.Params { p: 3 }, XE, 48.0)
+  assert a.out.len() == 0
+  assert b.out.len() == 0
+}

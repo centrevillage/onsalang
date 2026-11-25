@@ -1,0 +1,61 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§11.5", "§11.11"]
+
+// W7-11 U2c/t, S-1239 (spec §11.11: "要素か腕に周期の刻みの値を並べる…と、…周期のクロックの式で、要素と腕はその位置までの最後の値"; §11.3: "周期の刻みのクロックの被演算子は揃っていること、パラメータの種類とイベントの値は自由に混ざること"): the forms
+// that have a periodic operand among the events of calls, or whose arms are not the events of calls, and so were accepted before S-1239 and stay so: an arm of a periodic clock, an array of calls with a periodic value in it, a call
+// in the arms with a sum of a periodic value, a plain `if` / `match` on the events of two inputs, the calls moved to a `let` before a plain `if`, a condition that is an event while another arm is periodic. `check` reads the file with no
+// diagnostic. The forms of the arms that S-1239 opens are in event_arms_periodic_condition_s1239.onsa, and the errors in e0815_event_arms_without_a_periodic_clock.onsa. `x` is `sample`, `a` and `b` are `block`, `m` and `n` are
+// events of inputs.
+
+pub flow det(x: F32 at sample, limit: F32 at block) -> F32 at event {
+  if x > limit { Some(x) } else { None }
+}
+
+// ---------------------------------------------------------------- a periodic value among the operands
+
+pub flow a_periodic_arm(x: F32 at sample, a: F32 at block, kb: Bool at block) -> F32 at sample {
+  if~ kb { det~(x, a) } else { x }
+}
+
+pub flow a_periodic_arm_after_an_else_if(x: F32 at sample, a: F32 at block, b: F32 at block, kb: Bool at block, k2: Bool at block) -> F32 at sample {
+  if~ kb { det~(x, a) } else if k2 { x } else { det~(x, b) }
+}
+
+pub flow a_periodic_arm_of_a_match(x: F32 at sample, a: F32 at block, b: F32 at block, k: U32 at block) -> F32 at sample {
+  match~ k { 0 => det~(x, a), 1 => x, _ => det~(x, b) }
+}
+
+pub flow a_sum_in_each_arm(x: F32 at sample, a: F32 at block, b: F32 at block, kb: Bool at block) -> F32 at sample {
+  if~ kb { det~(x, a) + x } else { det~(x, b) + x }
+}
+
+pub flow an_event_condition_with_a_periodic_arm(x: F32 at sample, a: F32 at block, m: F32 at event) -> F32 at sample {
+  if~ m > 0.5 { det~(x, a) } else { x }
+}
+
+pub flow an_array_with_a_periodic_value(x: F32 at sample, a: F32 at block, b: F32 at block) -> [F32; 3] at sample {
+  [det~(x, a), x, det~(x, b)]
+}
+
+// ---------------------------------------------------------------- arms that are not calls
+
+pub flow plain_if_on_two_events(m: F32 at event, n: F32 at event, c: Bool at sample) -> F32 at sample {
+  if c { m } else { n }
+}
+
+pub flow plain_match_on_two_events(m: F32 at event, n: F32 at event, k: U32 at sample) -> F32 at sample {
+  match k { 0 => m, _ => n }
+}
+
+pub flow calls_moved_to_lets(x: F32 at sample, a: F32 at block, b: F32 at block, c: Bool at sample) -> F32 at sample {
+  let d1 = det~(x, a)
+  let d2 = det~(x, b)
+  if c { d1 } else { d2 }
+}
+
+pub flow calls_moved_to_lets_under_a_match(x: F32 at sample, a: F32 at block, b: F32 at block, k: U32 at sample) -> F32 at sample {
+  let d1 = det~(x, a)
+  let d2 = det~(x, b)
+  match k { 0 => d1, _ => d2 }
+}

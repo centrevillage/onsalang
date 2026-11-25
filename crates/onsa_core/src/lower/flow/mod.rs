@@ -293,6 +293,8 @@ pub(crate) struct StageCx {
     /// instance runs at the end: its arguments and conditions read no `^name`
     /// and no binding one chooses (E0801, S-1245), so it is in `done`.
     saving: bool,
+    /// The work of a conditional position ([`hoist::placed`]).
+    guards: Option<bool>,
     /// The locals at the head of the function ([`nodes::keep`]).
     heads: Vec<Stmt>,
     /// `sample_rate()`: the parameter in `init`, the state field elsewhere.

@@ -1,0 +1,117 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§11.5", "§11.11"]
+
+// W7-11 U2c/t, S-1197 (spec §11.3: "名前と、そのフィールド・組の要素の連なりを取り出すだけの式（括弧を通す）は…書ける（`lf at sample`、`m.vel`、`m.a.vel`、`s.0 at sample`）。フィールド・組の要素の読みは、条件によらず、守りを付けずに刻みごとに読む"、
+// "フィールド・組の要素の読みも計算した部分式で、隠れたフィールドの型はその読み（連なりの全体）の型である（`x + m.vel` は `let v = m.vel` の `x + v` と同じ値で、`M` に `Default` は要らない。下の E0816 は読みの型で判定する）"; §11.11: "`m.vel` のように
+// フィールドを取り出す読みの `T` は、その読みの型である"): the event value `m` of a struct, a tuple or a nested struct, whose type `M` has no `Default`, and the read of a field or an element of it (`m.vel`, `m.a.vel`, `m.0`, `(m).vel`, `m.vel at sample`)
+// stands in a position that a condition of another clock selects (a branch of an `if` on a `sample` condition, the right of `&&`, an arm and a guard of a `match`, an `init` or `block` condition, a branch in the body of a `par~`), and outside a condition
+// (`x + m.vel`, through a `let`, through the event of a call). The field that holds the value is of the type of the read (`F32`, `Bool`), so `M` needs no `Default` and `check` reads the file with no diagnostic. The reads that are not accepted are in
+// e0815_field_reads_computed_s1197.onsa and e0816_event_field_read_type_s1197.onsa; the reads at a slower tick are in slow_field_reads_in_conditions_s1197.onsa. `M`, `Nest` and the tuple (it holds a `Tag`) have no `Default`; `x` and `g` and `k` are `sample` inputs,
+// `i` is `init`, `b` is `block`.
+
+pub struct M {
+  vel: F32,
+  q: F32,
+  on: Bool,
+}
+
+pub struct Nest {
+  a: M,
+  k: F32,
+}
+
+pub enum Tag {
+  Off,
+  On,
+}
+
+pub flow gs(x: F32 at sample) -> M at event {
+  if x > 0.5 { Some(M { vel: x, q: 1.0, on: true }) } else { None }
+}
+
+pub flow lp(x: F32 at sample) -> F32 at sample {
+  x * 0.5
+}
+
+// ---------------------------------------------------------------- a field or an element under a condition of another clock
+
+pub flow field_under_a_sample_condition(m: M at event, x: F32 at sample, g: Bool at sample) -> F32 at sample {
+  if g { m.vel } else { x }
+}
+
+pub flow field_in_the_other_branch(m: M at event, x: F32 at sample, g: Bool at sample) -> F32 at sample {
+  if g { x } else { m.vel }
+}
+
+pub flow nested_field(m: Nest at event, x: F32 at sample, g: Bool at sample) -> F32 at sample {
+  if g { m.a.vel } else { x }
+}
+
+pub flow element_of_a_tuple(m: (F32, Tag) at event, x: F32 at sample, g: Bool at sample) -> F32 at sample {
+  if g { m.0 } else { x }
+}
+
+pub flow field_in_parentheses(m: M at event, x: F32 at sample, g: Bool at sample) -> F32 at sample {
+  if g { (m).vel } else { x }
+}
+
+pub flow field_with_an_at(m: M at event, x: F32 at sample, g: Bool at sample) -> F32 at sample {
+  if g { m.vel at sample } else { x }
+}
+
+pub flow right_of_an_and(m: M at event, x: F32 at sample, g: Bool at sample) -> F32 at sample {
+  if g && m.on { x } else { 0.0 }
+}
+
+pub flow arm_of_a_match(m: M at event, x: F32 at sample, k: U32 at sample) -> F32 at sample {
+  match k { 0 => m.vel, _ => x }
+}
+
+pub flow guard_of_a_match(m: M at event, x: F32 at sample, k: U32 at sample) -> F32 at sample {
+  match k { 0 if m.on => x, _ => 0.0 }
+}
+
+pub flow under_an_init_condition(m: M at event, x: F32 at sample, i: I32 at init) -> F32 at sample {
+  if i > 0 { m.vel } else { x }
+}
+
+pub flow under_a_block_condition(m: M at event, x: F32 at sample, b: I32 at block) -> F32 at sample {
+  if b > 0 { m.vel } else { x }
+}
+
+pub flow in_the_body_of_a_par(m: M at event, x: F32 at sample, g: Bool at sample) -> [F32; 2] at sample {
+  par~ i in 0 ..< 2 { lp~(if g { m.vel } else { x }) }
+}
+
+// ---------------------------------------------------------------- outside a condition: no `Default` for `M` (the field is of the type of the read)
+
+pub flow field_in_a_sum(m: M at event, x: F32 at sample) -> F32 at sample {
+  x + m.vel
+}
+
+pub flow field_in_a_sum_in_parentheses(m: M at event, x: F32 at sample) -> F32 at sample {
+  x + (m.vel)
+}
+
+pub flow field_as_the_output(m: M at event) -> F32 at sample {
+  m.vel
+}
+
+pub flow element_of_a_tuple_in_a_sum(m: (F32, Tag) at event, x: F32 at sample) -> F32 at sample {
+  x + m.0
+}
+
+pub flow nested_field_in_a_sum(m: Nest at event, x: F32 at sample) -> F32 at sample {
+  x + m.a.vel
+}
+
+pub flow field_of_the_event_of_a_call(x: F32 at sample) -> F32 at sample {
+  let r = gs~(x)
+  x + r.vel
+}
+
+pub flow field_of_the_event_of_a_call_under_a_condition(x: F32 at sample, g: Bool at sample) -> F32 at sample {
+  let r = gs~(x)
+  if g { r.vel } else { x }
+}
