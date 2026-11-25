@@ -27,6 +27,13 @@ pub(super) struct Scopes {
     closures: Vec<(ExprId, u32, HashSet<BindingId>)>,
 }
 
+impl Scopes {
+    /// The binding `name` names here, not read ([`Walker::lookup`] reads it).
+    pub(super) fn visible(&self, name: &str) -> Option<BindingId> {
+        self.visible.get(name).copied()
+    }
+}
+
 impl Walker<'_> {
     pub(super) fn open_scope(&mut self) {
         let parent = self.scopes.open.last().map(|(s, _)| *s);

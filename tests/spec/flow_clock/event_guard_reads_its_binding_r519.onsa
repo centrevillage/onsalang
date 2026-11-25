@@ -57,6 +57,12 @@ pub flow a_reset_condition(m: F32 at event, x: F32 at sample) -> F32 at sample {
   acc~(x).reset_if~(match o { Some(v) if v > 3.0 => true, _ => false }) + m
 }
 
+// The guards to the arm only: an event in the guard of a later arm is not in the value of the binding (the binding has the clock of the scrutinee and the guards to its arm, §11.5).
+pub flow an_event_in_the_guard_of_a_later_arm(m: F32 at event, x: F32 at sample) -> F32 at sample {
+  let o: Option[F32] = if x > 2.0 { Some(x) } else { None }
+  match~ o { Some(a) if a > 9.0 => prev~(a + x), Some(b) if b > m => 1.0, _ => 0.0 }
+}
+
 // The guard reads the event value beside its binding: it is mixed with the clock of the condition.
 
 pub flow a_reset_condition_with_the_event(m: F32 at event, x: F32 at sample) -> F32 at sample {

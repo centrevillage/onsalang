@@ -11,6 +11,7 @@
 use std::collections::HashMap;
 use std::ops::Range;
 
+use onsa_diag::Span;
 use onsa_diag::unsupported::is_unsupported;
 use onsa_driver::{Loaded, PackageInput, analyze_loaded, lower_core};
 use onsa_sema::def::{FlowDef, FlowFn, FlowInput, FlowTy};
@@ -85,13 +86,14 @@ pub fn run_case_with(input: PackageInput, wrappers: &Wrappers, expect: Expect) -
 pub(super) enum Halt {
     Skip(Skip),
     Fault(Fault),
-    Panic(Panic),
+    /// The panic of the test, and the place in the body of the flow the evaluator stopped at (`Stop::at`; none for a panic of a plain expression of the test).
+    Panic(Panic, Option<Span>),
     Failed(String),
 }
 
 impl From<Fault> for Halt {
     fn from(f: Fault) -> Halt {
-        if matches!(f, Fault::Panic(_)) { Halt::Panic(Panic::Eval) } else { Halt::Fault(f) }
+        if matches!(f, Fault::Panic(_)) { Halt::Panic(Panic::Eval, None) } else { Halt::Fault(f) }
     }
 }
 
@@ -139,9 +141,13 @@ pub(super) struct Walk<'h, 'a> {
 impl<'a> Walk<'_, 'a> {
     fn finish(self, (name, file): (String, String), r: Result<(), Halt>, marked: Option<bool>) -> TestRun {
         let (asserts, generated, events) = (self.asserts, self.generated, self.events);
+        let mut panic_span = None;
         let (panic, verdict) = match r {
             Ok(()) => (None, Verdict::Ok),
-            Err(Halt::Panic(p)) => (Some(p), Verdict::Ok),
+            Err(Halt::Panic(p, span)) => {
+                panic_span = span;
+                (Some(p), Verdict::Ok)
+            }
             Err(Halt::Skip(s)) => (None, Verdict::Skipped(s)),
             Err(Halt::Fault(Fault::Unavailable(w))) => (None, Verdict::Unavailable(w)),
             Err(Halt::Fault(f)) => (None, Verdict::Failed(format!("{f:?}"))),
@@ -156,7 +162,7 @@ impl<'a> Walk<'_, 'a> {
             Verdict::Ok if generated == 0 => Verdict::Skipped(Skip::NoCall),
             v => v,
         };
-        TestRun { name, file, asserts, panic, verdict, events }
+        TestRun { name, file, asserts, panic, panic_span, verdict, events }
     }
 
     /// `e` evaluated in the frame of the test, whose locals are kept between the calls.
@@ -173,7 +179,7 @@ impl<'a> Walk<'_, 'a> {
         self.locals = std::mem::take(&mut frame.locals);
         match (got, door.panic) {
             (Err(Stop { fault: Fault::Unavailable(GENERATED), .. }), _) => Err(Halt::Skip(Skip::NoCall)),
-            (Err(_), Some(at)) => Err(Halt::Panic(Panic::Call(at))),
+            (Err(_), Some((at, span))) => Err(Halt::Panic(Panic::Call(at), Some(span))),
             (got, _) => Ok(got?),
         }
     }
@@ -306,7 +312,7 @@ impl<'a> Walk<'_, 'a> {
                 let channels = io(view, decl, &sampled).0.into_iter().map(|(_, n)| n).collect();
                 Ok(Rendered { outs, fields, channels })
             }
-            Outcome::Panic { at, .. } => Err(Halt::Panic(Panic::Call(at))),
+            Outcome::Panic { at, stop } => Err(Halt::Panic(Panic::Call(at), Some(stop.at))),
         }
     }
 
@@ -333,7 +339,7 @@ impl<'a> Walk<'_, 'a> {
                 }
                 Ok(())
             }
-            Outcome::Panic { at, .. } => Err(Halt::Panic(Panic::Call(at))),
+            Outcome::Panic { at, stop } => Err(Halt::Panic(Panic::Call(at), Some(stop.at))),
         }
     }
 
@@ -445,8 +451,8 @@ struct Door<'d> {
     host: &'d mut dyn FnHost,
     events: &'d mut Vec<Event>,
     generated: &'d mut usize,
-    /// The stage of the `render` that panicked.
-    panic: Option<PanicAt>,
+    /// The stage of the `render` that panicked, and where the evaluator stopped.
+    panic: Option<(PanicAt, Span)>,
 }
 
 impl FnHost for Door<'_> {
@@ -474,8 +480,8 @@ impl FnHost for Door<'_> {
         *self.generated += 1;
         match outcome {
             Outcome::Ok(outs) => rendered_value(view, call.ret, &outs),
-            Outcome::Panic { at, .. } => {
-                self.panic = Some(at);
+            Outcome::Panic { at, stop } => {
+                self.panic = Some((at, stop.at));
                 Err(Fault::Panic(PanicKind::Host))
             }
         }
@@ -557,7 +563,7 @@ fn cut(vs: &[Value], part: Option<Range<usize>>) -> Result<(usize, Range<usize>)
 
 /// A stop of the call at `at`: a panic is the test's, at that stage; the others are the faults they are.
 fn stopped(stop: Stop, at: PanicAt) -> Halt {
-    if matches!(stop.fault, Fault::Panic(_)) { Halt::Panic(Panic::Call(at)) } else { stop.into() }
+    if matches!(stop.fault, Fault::Panic(_)) { Halt::Panic(Panic::Call(at), Some(stop.at)) } else { stop.into() }
 }
 
 fn by_name(v: &[(String, Value)]) -> Vec<(&str, Value)> {

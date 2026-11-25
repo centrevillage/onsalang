@@ -5,7 +5,7 @@
 //! a flow calls are the `children` of the tree: each is a whole [`Inst`], run in a frame of its own (`in_child`) at the
 //! time of its caller (§11.5), and counted in the limit of the tree.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::rc::Rc;
 
 use onsa_diag::Span;
@@ -19,8 +19,10 @@ use super::call::parts;
 use super::chain::Gate;
 use super::delay_mods::DelayMods;
 use super::expr::{Eval, Frame, LOW_STACK, Stop, evaluates};
-use super::flow::{Clock, Ctx, Inst, Plans, enter};
-use super::rate::{Bound, Level, chain_of, child_time, counted, levels, n_of, on_tick, port_exprs};
+use super::flow::{Clock, Ctx, Inst, Known, Plans, enter};
+use super::hoist::gather_args;
+use super::hoist::{feedback, has_state};
+use super::rate::{Bound, Level, args_of, chain_of, child_time, counted, levels, n_of, on_tick, port_exprs};
 use super::scalar::{Fault, Fault::Internal};
 use super::sema_view::{Called, Stage, input_stage};
 use super::value::{IntKind, Scalar, Shape, Value};
@@ -117,7 +119,12 @@ struct Save {
     q: i32,
     /// Is it stored? Not where a `when~` stops the delay: the value is evaluated all the same (§11.10, `delay_mods.rs`).
     keep: bool,
+    /// A part that reads a `^name` (S-1244, `Frame::defer_part`): not stored in a cell but kept in its field (`Frame::hoisted`), as of the stage that made it.
+    field: Option<Clock>,
 }
+
+/// A delay whose `init` argument reads a `^name`: its node, the argument and the bindings it is read under.
+type LateCell = (NodeKey, ExprId, Vec<(LocalId, Value)>);
 
 /// What an evaluation of a flow body holds besides its locals: the state, what the delays save this tick, the time it is
 /// at (an instance reads its caller's, one that a chain runs the time of its rate, `rate::time_of`), the places of the tree made so far and
@@ -133,11 +140,29 @@ pub struct Run {
     pub(super) scope: Vec<(LocalId, Value)>,
     /// The stage of this instance that the evaluation is in (`enter` sets it): a call reads in it (`Frame::call`).
     pub(super) stage: Stage,
+    /// The calls whose gathered arguments this stage has made (`hoist::gather_args`).
+    pub(super) gathered: BTreeSet<NodeKey>,
+    /// The `let` (or the output) of the stage that is being made, with the clocks of the locals before it and its value: where a call that an expression of it reads is written (`read_call` makes the arguments it gathers there, S-1233).
+    pub(super) step: Option<(Rc<Known>, ExprId)>,
+    /// The delays whose `init` argument reads a `^name`, with the bindings it is read under: made at the end of `init` (`Frame::finish_cells`).
+    late_cells: Vec<LateCell>,
 }
 
 impl Run {
     pub(super) fn new(state: InstState, ctx: Ctx, used: usize, plans: Plans) -> Run {
-        Run { state, saves: Vec::new(), ctx, used, plans, replicas: Vec::new(), scope: Vec::new(), stage: Stage::Init }
+        Run {
+            state,
+            saves: Vec::new(),
+            ctx,
+            used,
+            plans,
+            replicas: Vec::new(),
+            scope: Vec::new(),
+            stage: Stage::Init,
+            gathered: BTreeSet::new(),
+            step: None,
+            late_cells: Vec::new(),
+        }
     }
 }
 
@@ -204,7 +229,7 @@ impl<'a> Frame<'a> {
         if let Some(chain) = chain_of(&self.body, e).map_err(here)? {
             return match self.body.called(chain.head).map_err(here)? {
                 Called::Builtin(FlowBuiltin::Delay(d)) => self.delay_chain(chain.head, d, at),
-                _ => self.read_call(chain.head, at),
+                _ => self.read_call(e, chain.head, at),
             };
         }
         match &self.body.ast.expr(e).kind {
@@ -214,7 +239,7 @@ impl<'a> Frame<'a> {
                 Called::Builtin(FlowBuiltin::SampleRate) => Ok(Value::F32(self.time(at)?.sample_rate)),
                 // S-1127 (1), §11.4: the first tick after `init` or `reset` reads 0, and each tick adds 1.
                 Called::Builtin(FlowBuiltin::SampleTick) => Ok(Value::int(IntKind::U32, self.time(at)?.tick.into())),
-                Called::Flow(_) => self.read_call(e, at),
+                Called::Flow(_) => self.read_call(e, e, at),
             },
             _ => Err(here(Internal("not a stateful form"))),
         }
@@ -259,39 +284,161 @@ impl<'a> Frame<'a> {
     fn delay(&mut self, e: ExprId, d: Delay, args: &[Arg], at: Span) -> Eval {
         let here = |fault| Stop { fault, at };
         let arg = |i: usize| args.get(i).map(|a| a.expr).ok_or(here(Internal("a delay with too few arguments")));
+        // The place of what it saves is held first (S-1154: in the order the delays are written, a delay inside the argument of another after it), then the calls in the first argument come (S-1241), then `d`.
+        let key = self.key(e, Role::Delay);
+        self.reserve_save(key.clone(), arg(Delay::SAVED)?, at)?;
+        self.early_calls(arg(Delay::SAVED)?)?;
         let dc = match d.d_index() {
             Some(k) => Some(self.eval(arg(k)?)?),
             None => None,
         };
-        let key = self.key(e, Role::Delay);
         let run = self.run.as_mut().ok_or(here(Fault::Unavailable("a delay outside an instance of a flow")))?;
         let cell = run.state.cells.get(&key).ok_or(here(Internal("a delay with no state")))?;
-        let out = read_store(&cell.current, dc.as_ref()).map_err(here)?;
-        self.save_delay(key, arg(Delay::SAVED)?, true, at)?;
-        Ok(out)
+        read_store(&cell.current, dc.as_ref()).map_err(here)
     }
 
-    /// The delay at `key` saves the value of `expr` for the second phase, which stores it if it is to `keep` it.
-    pub(super) fn save_delay(&mut self, key: NodeKey, expr: ExprId, keep: bool, at: Span) -> Result<(), Stop> {
-        let run = self.run.as_mut().ok_or(Stop { fault: Internal("no run"), at })?;
-        run.saves.push(Save { key, expr, scope: run.scope.clone(), call: None, q: 0, keep });
+    /// The delay at `key` saves the value of `expr` for the second phase, which stores it if it is to `keep` it: the place in the order of the saves, which is the one of the second phase, is taken now (`set_keep` says if it is kept).
+    pub(super) fn reserve_save(&mut self, key: NodeKey, expr: ExprId, at: Span) -> Result<usize, Stop> {
+        let run =
+            self.run.as_mut().ok_or(Stop { fault: Fault::Unavailable("a delay outside an instance of a flow"), at })?;
+        run.saves.push(Save { key, expr, scope: run.scope.clone(), call: None, q: 0, keep: true, field: None });
+        Ok(run.saves.len() - 1)
+    }
+
+    /// A part that the stage `here` makes and that reads a `^name` (S-1244, §11.2, §11.3): the name is a `let` of this stage or below it, so the part is made at the end of the stage, after the `let`s and the output, in the order of the saves of the delays
+    /// (the place where it is written), and kept in its field like any part made by a stage before. Once for each replica in a stage.
+    pub(super) fn defer_part(&mut self, e: ExprId, here: Clock) -> Result<(), Stop> {
+        let (key, at) = (self.key(e, Role::Delay), self.body.ast.expr(e).span);
+        let run = self
+            .run
+            .as_mut()
+            .ok_or(Stop { fault: Internal("a part made at the end of a stage outside an instance"), at })?;
+        if !run.saves.iter().any(|s| s.field.is_some() && s.key == key) {
+            run.saves.push(Save {
+                key,
+                expr: e,
+                scope: run.scope.clone(),
+                call: None,
+                q: 0,
+                keep: true,
+                field: Some(here),
+            });
+        }
         Ok(())
     }
 
+    pub(super) fn set_keep(&mut self, slot: usize, keep: bool) {
+        if let Some(save) = self.run.as_mut().and_then(|r| r.saves.get_mut(slot)) {
+            save.keep = keep;
+        }
+    }
+
+    /// What of the first argument of a delay is done where the delay is written (S-1241, §11.3): the calls of instances in it, in the order written, and the conditions and the resets of the delays with modifiers in it, at any depth (the
+    /// ones in the first argument of a delay in it too); the rest of it (the operators, the names, a delay with none) is evaluated where it is saved. In an `if~` or a `match~` the side that selects goes first and then each branch or arm (an
+    /// arm not taken with `T.default()` for its bindings), in a `par~` each replica, and a block holds one expression (E0806), which the rest of the walk goes into (S-1233).
+    pub(super) fn early_calls(&mut self, e: ExprId) -> Result<(), Stop> {
+        let body = self.body;
+        if !has_state(&body, e) {
+            return Ok(());
+        }
+        let (at, here) = (body.ast.expr(e).span, |fault| Stop { fault, at: body.ast.expr(e).span });
+        match &body.ast.expr(e).kind {
+            // A branch or an arm of an `if` or a `match` is no place of an instance (E0811): only what chooses.
+            ExprKind::If { cond, tilde: None, .. } => return self.early_calls(*cond),
+            ExprKind::Match { scrutinee, tilde: None, .. } => return self.early_calls(*scrutinee),
+            // A condition that reads a `^name` has no value yet where the call is written: the branches are all evaluated whatever it is, so their calls go in the order written without it.
+            ExprKind::If { .. } if self.selects_with_feedback(e) => {
+                let mut link = e;
+                while let ExprKind::If { then, else_, .. } = &body.ast.expr(link).kind {
+                    self.early_calls(*then)?;
+                    match else_ {
+                        Some(rest) if matches!(body.ast.expr(*rest).kind, ExprKind::If { .. }) => link = *rest,
+                        Some(rest) => return self.early_calls(*rest),
+                        None => break,
+                    }
+                }
+                return Ok(());
+            }
+            ExprKind::If { .. } => return self.through_branches(e, at, |f, x| f.early_calls(x)).map(drop),
+            // S-1245: a `^name` in the object or a guard of a `match~` has no value here, and no call of an arm reads a binding of it (E0801). The calls of the arms are left to where the delay saves until the evaluator of W7-11 U2 (§11.3: where they are written).
+            ExprKind::Match { .. } if self.selects_with_feedback(e) => return Ok(()),
+            ExprKind::Match { .. } => return self.through_arms(e, at, |f, x| f.early_calls(x)).map(drop),
+            ExprKind::Par { body: inner, .. } => {
+                return self.replicate(e, |_: &()| 0, |f| f.early_calls(*inner)).map(drop);
+            }
+            ExprKind::Call { kind: CallKind::Flow, args, .. } if chain_of(&body, e).map_err(here)?.is_none() => {
+                if let Called::Builtin(FlowBuiltin::Delay(_)) = body.called(e).map_err(here)? {
+                    return args.get(Delay::SAVED).map_or(Ok(()), |a| self.early_calls(a.expr));
+                }
+                self.eval(e)?;
+                return Ok(());
+            }
+            _ if chain_of(&body, e).map_err(here)?.is_some() => {
+                // A `d` of a `vdelay~` that reads a `^name` has no value where the delay is written: only the calls in the first argument and the conditions are done here, `d` and the read where it is saved.
+                let chain = chain_of(&body, e).map_err(here)?.ok_or(here(Internal("a chain")))?;
+                let late_d = match body.called(chain.head).map_err(here)? {
+                    Called::Builtin(FlowBuiltin::Delay(d)) => {
+                        d.d_index().and_then(|i| args_of(&body, chain.head).get(i).copied())
+                    }
+                    _ => None,
+                }
+                .filter(|d| feedback(&body, *d));
+                if let Some(first) = late_d.and(args_of(&body, chain.head).get(Delay::SAVED).copied()) {
+                    self.early_calls(first)?;
+                    return chain.conds().try_for_each(|c| self.eval(c).map(drop));
+                }
+                self.eval(e)?;
+                return Ok(());
+            }
+            _ => {}
+        }
+        body.ast.sub_exprs(e).into_iter().try_for_each(|x| self.early_calls(x))
+    }
+
+    /// Does what selects in the `if~` or `match~` `e` (the conditions of the chain, the object and the guards) read a `^name`?
+    fn selects_with_feedback(&self, e: ExprId) -> bool {
+        let body = self.body;
+        match &body.ast.expr(e).kind {
+            ExprKind::If { cond, else_, .. } => {
+                feedback(&body, *cond)
+                    || else_.is_some_and(|r| {
+                        matches!(body.ast.expr(r).kind, ExprKind::If { .. }) && self.selects_with_feedback(r)
+                    })
+            }
+            ExprKind::Match { scrutinee, arms, .. } => {
+                feedback(&body, *scrutinee) || arms.iter().any(|a| a.guard.is_some_and(|g| feedback(&body, g)))
+            }
+            _ => false,
+        }
+    }
+
     /// The second phase of a tick: what the delays saved (and the delays inside them), then every one stored.
-    // SPEC-GAP(S-1126): a panic of what a delay saves (`prev~(10 / x)`, x = 0) is raised here, in the second phase, so a panic of
-    // a `let` written after the delay (`5 / x`) comes first; the other reading evaluates the saved value where it is written.
+    // S-1126, S-1154: a panic of what a delay saves (`prev~(10 / x)`, x = 0) is raised here, in the second phase, after the `let`s of the stage, and the saves are in the order the delays are written, a delay in what another saves after it.
     pub(super) fn commit(&mut self, at: Span) -> Result<(), Stop> {
         let here = |fault| Stop { fault, at };
         let (mut stores, mut once) = (Vec::new(), BTreeSet::new());
         for next in 0.. {
             let Some(save) = self.run.as_ref().ok_or(here(Internal("no run")))?.saves.get(next) else { break };
             let (key, expr, scope, call, q) = (save.key.clone(), save.expr, save.scope.clone(), save.call, save.q);
-            let keep = save.keep;
+            let (keep, field) = (save.keep, save.field);
+            // The value the part had is stale: it is made again.
+            if field.is_some() {
+                self.hoisted.get_mut(&expr).into_iter().for_each(|(_, kept)| drop(kept.remove(&key.replicas)));
+            }
+            let before = self.run.as_ref().map_or(0, |r| r.saves.len());
             let value = self.with_bindings(&key.replicas, scope, |f| match call {
                 Some(call) => f.eval_in_arms(call, expr),
                 None => f.eval(expr),
             })?;
+            if let Some(clock) = field {
+                self.hoisted.entry(expr).or_insert((clock, HashMap::new())).1.insert(key.replicas.clone(), value);
+                continue;
+            }
+            // The delays in what it saved come right after it (S-1154: a delay inside the argument of another is after it, before the ones written later).
+            if let Some(run) = self.run.as_mut().filter(|r| r.saves.len() > before) {
+                let added = run.saves.split_off(before);
+                run.saves.splice(next + 1..next + 1, added);
+            }
             // A delay is stored once for a frame: a delay in the object of an arm that `eval_in_arms` evaluates again here saved its value in the frame already, the same one.
             if !keep || !once.insert(key.clone()) {
                 continue;
@@ -336,6 +483,28 @@ impl<'a> Frame<'a> {
                 return Err(here(Internal("a chain with no head call")));
             };
             args.iter().map(|a| a.expr).chain(chain.conds()).try_for_each(|x| self.nodes(x, out))?;
+            return self.sites_of(e, out);
+        }
+        if let ExprKind::Par { body, .. } = &ast.expr(e).kind {
+            let mut inner = Vec::new();
+            self.nodes(*body, &mut inner)?;
+            if !inner.is_empty() {
+                out.push(Site::Par(e, inner));
+            }
+            return Ok(());
+        }
+        parts(&self.body, e).into_iter().try_for_each(|x| self.nodes(x, out))?;
+        self.sites_of(e, out)
+    }
+
+    /// The nodes of the call `e` itself (a chain of modifiers, a delay, an instance), not those of its arguments: what `init` makes where the call is written (S-1233, S-1242).
+    fn sites_of(&self, e: ExprId, out: &mut Vec<Site<'a>>) -> Result<(), Stop> {
+        let (ast, at) = (self.body.ast, self.body.ast.expr(e).span);
+        let here = |fault| Stop { fault, at };
+        if let Some(chain) = chain_of(&self.body, e).map_err(here)? {
+            let ExprKind::Call { args, .. } = &ast.expr(chain.head).kind else {
+                return Err(here(Internal("a chain with no head call")));
+            };
             let def = match self.body.called(chain.head).map_err(here)? {
                 Called::Flow(def) => def,
                 Called::Builtin(FlowBuiltin::Delay(d)) => {
@@ -362,36 +531,54 @@ impl<'a> Frame<'a> {
             out.push(Site::Node(chain.head, Node::Instance(def, parts), args.as_slice()));
             return Ok(());
         }
-        let node = match &ast.expr(e).kind {
-            ExprKind::Par { body, .. } => {
-                let mut inner = Vec::new();
-                self.nodes(*body, &mut inner)?;
-                if !inner.is_empty() {
-                    out.push(Site::Par(e, inner));
-                }
-                return Ok(());
-            }
-            ExprKind::Call { args, kind: CallKind::Flow, .. } => match self.body.called(e).map_err(here)? {
-                Called::Builtin(FlowBuiltin::Delay(d)) => Some(Site::Node(e, Node::Delay(d), args.as_slice())),
-                Called::Builtin(_) => None,
+        if let ExprKind::Call { args, kind: CallKind::Flow, .. } = &ast.expr(e).kind {
+            match self.body.called(e).map_err(here)? {
+                Called::Builtin(FlowBuiltin::Delay(d)) => out.push(Site::Node(e, Node::Delay(d), args.as_slice())),
+                Called::Builtin(_) => {}
                 Called::Flow(def) => {
-                    Some(Site::Node(e, Node::Instance(def, self.parts_of(def, &[], at)?), args.as_slice()))
+                    out.push(Site::Node(e, Node::Instance(def, self.parts_of(def, &[], at)?), args.as_slice()))
                 }
-            },
-            _ => None,
-        };
-        parts(&self.body, e).into_iter().try_for_each(|x| self.nodes(x, out))?;
-        out.extend(node);
+            }
+        }
         Ok(())
     }
 
-    /// The nodes of the delays and instances in the expressions `roots`, made as they start (§11.3: `init` is evaluated
-    /// once): a delay with its value or `T.default()` (§6.4) and its ring `N` long (`MAX + 1` for `vdelay~`), an instance
-    /// with its own `init`.
-    pub(super) fn make_cells(&mut self, roots: &[ExprId]) -> Result<(), Stop> {
-        let mut found = Vec::new();
-        roots.iter().try_for_each(|e| self.nodes(*e, &mut found))?;
-        self.build(&found)
+    /// Is every form in `roots` one the evaluator evaluates (`Unavailable` where one is not, at `init`)?
+    pub(super) fn check_forms(&self, roots: &[ExprId]) -> Result<(), Stop> {
+        roots.iter().try_for_each(|e| self.nodes(*e, &mut Vec::new()))
+    }
+
+    /// The work the call `e` has in the stage `here` (a stage of the walk of `hoist::walk`), at the place it is written (S-1233): at `init` the nodes it makes (its arguments are made before: the init of a delay, the
+    /// config of an instance, S-1242), in any other stage the stage of the instance it calls (its arguments and conditions read first, `run_unit`). A call does its work in a stage once (`Inst::done`).
+    pub(super) fn work_of(&mut self, e: ExprId, here: Clock, parts: Option<(&Known, ExprId)>) -> Result<(), Stop> {
+        let at = self.body.ast.expr(e).span;
+        let stop = |fault| Stop { fault, at };
+        let head = chain_of(&self.body, e).map_err(stop)?.map_or(e, |c| c.head);
+        if !matches!(&self.body.ast.expr(head).kind, ExprKind::Call { kind: CallKind::Flow, .. }) {
+            return Ok(());
+        }
+        let stage = match here {
+            Clock::Init => {
+                let mut found = Vec::new();
+                self.sites_of(e, &mut found)?;
+                return self.build(&found);
+            }
+            Clock::Block => Stage::Block,
+            Clock::Tick(r) => Stage::Tick(r),
+            Clock::Const => return Ok(()),
+        };
+        if !matches!(self.body.called(head).map_err(stop)?, Called::Flow(_)) {
+            return Ok(());
+        }
+        let key = self.key(head, Role::Child);
+        if let Some((known, root)) = parts {
+            gather_args(self, &key, &[], known, root, here)?;
+        }
+        let scope = self.run.as_ref().and_then(|r| r.state.children.get(&key)).map(|c| c.scope.clone());
+        match scope {
+            Some(scope) => self.with_bindings(&[], scope, |f| f.run_unit(&key, stage)),
+            None => Err(stop(Internal("an instance with no state"))),
+        }
     }
 
     /// The nodes of `sites`: those of a `par~` once for each replica, with its index bound.
@@ -441,7 +628,13 @@ impl<'a> Frame<'a> {
     fn make_cell(&mut self, e: ExprId, d: Delay, args: &[Arg]) -> Result<(), Stop> {
         let at = self.body.ast.expr(e).span;
         let here = |fault| Stop { fault, at };
-        let given = args.get(d.init_index()).map(|a| self.eval_staged(e, a.expr, Stage::Init)).transpose()?;
+        // An `init` argument that reads a `^name` has no value where the delay is written: the cell starts from `T.default()` and the argument is made at the end of `init` (S-1244, `Frame::finish_cells`).
+        let arg = args.get(d.init_index()).map(|a| a.expr);
+        let late = arg.filter(|a| feedback(&self.body, *a));
+        let given = match arg {
+            Some(a) if late.is_none() => Some(self.eval_staged(e, a, Stage::Init)?),
+            _ => None,
+        };
         let shape = match given {
             Some(_) => None,
             None => Some(self.shape(self.body.ty(e).map_err(here)?, at)?),
@@ -458,7 +651,28 @@ impl<'a> Frame<'a> {
         let store = if d == Delay::Prev { Store::Last(init) } else { Store::Ring { buf: vec![init; n], w: 0 } };
         let key = self.key(e, Role::Delay);
         let run = self.run.as_mut().ok_or(here(Fault::Unavailable("a delay outside an instance of a flow")))?;
-        run.state.cells.insert(key, Cell { initial: store.clone(), current: store });
+        run.state.cells.insert(key.clone(), Cell { initial: store.clone(), current: store });
+        if let Some(a) = late {
+            run.late_cells.push((key, a, run.scope.clone()));
+        }
+        Ok(())
+    }
+
+    /// The cells whose `init` argument reads a `^name` (S-1244): made at the end of `init`, after the `let`s, the value for each place the cell holds.
+    pub(super) fn finish_cells(&mut self) -> Result<(), Stop> {
+        let late = self.run.as_mut().map(|r| std::mem::take(&mut r.late_cells)).unwrap_or_default();
+        for (key, arg, scope) in late {
+            let v = self.with_bindings(&key.replicas, scope, |f| f.eval(arg))?;
+            let cell = self.run.as_mut().and_then(|r| r.state.cells.get_mut(&key));
+            let at = self.body.ast.expr(arg).span;
+            let cell = cell.ok_or(Stop { fault: Internal("a delay with no state"), at })?;
+            for store in [&mut cell.initial, &mut cell.current] {
+                match store {
+                    Store::Last(last) => *last = v.clone(),
+                    Store::Ring { buf, .. } => buf.iter_mut().for_each(|x| *x = v.clone()),
+                }
+            }
+        }
         Ok(())
     }
 
@@ -670,7 +884,7 @@ impl<'a> Frame<'a> {
 
     /// The argument that an input of `sample * N` of the last `.down~` boundary of a chain gathers is stored at the end of each `sample` frame of this one, the `2^q` elements of its stream at the clock `q = k + r` (§11.9: the frame
     /// after a tick reads it, the position's own value is not in); a stream slower than `sample` gives one element at each tick of its own, `sample / 2^-q`. The rings of the boundaries inside are written by the frames of the chain (`run_level`).
-    /// The value is what the second phase (`commit`) evaluates the argument to, which for a part that is kept is the value `hoist::gathered` made at its stage (the delays in it are read before they are saved, at their own clocks).
+    /// The value is what the second phase (`commit`) evaluates the argument to, which for a part that is kept is the value that its stage made (the delays in it are read before they are saved, at their own clocks).
     pub(super) fn save_gathers(&mut self, whole: Span) -> Result<(), Stop> {
         let run = self.run.as_ref().ok_or(Stop { fault: Internal("a sample stage with no run"), at: whole })?;
         let (ctx, calls): (_, Vec<_>) = (
@@ -696,30 +910,10 @@ impl<'a> Frame<'a> {
                     call: Some(key.call),
                     q,
                     keep: true,
+                    field: None,
                 };
                 run.saves.push(save);
             }
-        }
-        Ok(())
-    }
-
-    /// The stage `s` of this one (`enter`) runs the stages of the instances it calls that are in it (`run_unit`), after its own `let`s, in the order of the places of the calls (a panic is the one thing whose order
-    /// shows). An output at `sample` is not run here: it is made where its call is read, after the `let`s or in the second phase, with the bindings that read has. All of them have a `block` stage (§11.3, a call of 0 frames too).
-    // SPEC-GAP(S-1128): the `block` stages of the instances a flow calls run after its own `block` `let`s, in the order of
-    // their places; the spec does not say the order, which only the place of a panic shows.
-    pub(super) fn run_children(&mut self, s: Stage, whole: Span) -> Result<(), Stop> {
-        let run = self.run.as_ref().ok_or(Stop { fault: Internal("a stage with no run"), at: whole })?;
-        let calls: Vec<_> = run
-            .state
-            .children
-            .iter()
-            .map(|(k, c)| (k.clone(), c.levels[c.levels.len() - 1].made, c.scope.clone()))
-            .collect();
-        for (key, made, scope) in calls {
-            if s == Stage::Sample && s == Stage::Tick(made) {
-                continue;
-            }
-            self.with_bindings(&key.replicas, scope, |f| f.run_unit(&key, s))?;
         }
         Ok(())
     }

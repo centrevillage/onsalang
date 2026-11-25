@@ -1,0 +1,182 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.10", "§11.4", "§11.3", "§11.5", "§11.9"]
+
+// A built-in delay that has a `.reset_if~(c4)` of a condition of `sample / 4`, as the first argument of another delay, as the argument of a flow, in a `par~`, as a `delay~` and a `vdelay~`, and with a `.when~` (W7-11 U2b/t2; S-1233,
+// S-1241, the regression guard of the values of `d439fac` when a delay of an argument is done where it is written). Worked out by hand from §11.4 and §11.10; `x` is 1 2 3 ... 16 and the frames are 0 .. 15.
+// - `c4` is true in the one tick of `sample / 4` where the counter `tk` of the grid reads 3, the tick of the frame 8 (the ticks are the frames 0, 4, 8, 12): "条件の刻みは、条件の式のクロックで決まり…`sample / N` の条件はその刻み" and "真の刻みは全て初期化する"
+//   (§11.10), so the reset is at the frame 8 only, not at the frames 9 .. 11 where `c4` is held true, and "その刻みに続く x の段の前に x の状態を初期値に戻す": the delay gives its `init` at the frame 8 (a delay of `prev~` gives `x[f - 1]` and `0` there,
+//   then gives `x[8] = 9` at the frame 9).
+// - A delay as the first argument of another one gives its output before it stores ("遅延の `e` の中の遅延は、保存の前の出力を読む", §11.4; "`reset_if~` はそこで初期化した後の値", §11.3), so the outer delay gives the inner one's value of the frame before
+//   (0 at the frame 0): the reset shows one frame later, at the frame 9. `delay~(x, 2)` and `vdelay~(x, 2.0, 4)` (`d` is an integer, `f = 0`: the value `x[n - 2]`) give `x[f - 2]` and a reset puts the whole line back: the frames 8 and 9 read the line
+//   that is empty, 0, and the frame 10 reads the `x[8]` written at the frame 8 (9).
+// - `g` gives `x + prev~(x)`: the sum of the value of the frame and the one before it (the delay of `g` is its own).
+// - `cnt` counts 1 2 3 ...: `n` is the frame + 1. The `.when~(c)` stops the frames where `c` is false.
+//   `x.when~(c).reset_if~(r)` resets also at a frame that is stopped (the held output goes back to `T.default()`, §11.10), here the frame 8 of the tick, which `c` stops (the frames 7 .. 9): the frame 7 holds 6, the frame 8 resets the delay and the held
+//   output (0), the frames 8 and 9 hold 0, and the frame 10 that runs again reads the delay that was reset (0), and stores 11. With the stop at the frames 9 and 10 the tick of the frame 8 runs and resets there (0) and the frame 11 reads what the frame 8 stored (9).
+//   `x.reset_if~(r).when~(c)`: the reset of the inside counts the grid of `sample / 4` in the frames that run (§11.10: "`when~` の内（左）の `reset_if~` の条件の刻みも、`sample / N` の格子なら同じで、動いた刻みで数え、条件は呼び出し側の値をその時点で読む"):
+//   with the frames 7 .. 9 stopped the frames that run are 0 .. 6 and 10 .. 15, the ticks of the grid are at the 1st, 5th, 9th and 13th of them (the frames 0, 4, 11 and 15), and the condition is the value of `c4` the caller holds then (false at the frame 0 and 4,
+//   true at the frame 11, which holds the tick of the frame 8, false at the frame 15): the frames 7 .. 9 hold 6, the frame 10 reads the delay as the frame 6 stored it (7), the frame 11 resets and reads 0.
+
+flow tk() -> U32 at sample {
+  let n: U32 = prev~(^n) + 1
+  n
+}
+
+flow cnt() -> F32 at sample {
+  let n = prev~(^n) + 1.0
+  n
+}
+
+flow g(x: F32 at sample) -> F32 at sample {
+  x + prev~(x)
+}
+
+pub flow direct(x: F32 at sample) -> F32 at sample {
+  let c4 = tk~().down~(4) == 3
+  prev~(x).reset_if~(c4)
+}
+
+pub flow in_a_delay(x: F32 at sample) -> F32 at sample {
+  let c4 = tk~().down~(4) == 3
+  prev~(prev~(x).reset_if~(c4))
+}
+
+pub flow in_a_flow_argument(x: F32 at sample) -> F32 at sample {
+  let c4 = tk~().down~(4) == 3
+  g~(prev~(x).reset_if~(c4))
+}
+
+pub flow in_a_par(x: F32 at sample) -> F32 at sample {
+  let c4 = tk~().down~(4) == 3
+  let ys = par~ i in 0 ..< 2 { prev~(x * F32.round_from(i + 1)).reset_if~(c4 && i == 0) }
+  ys[0] + ys[1] * 100.0
+}
+
+pub flow in_a_par_in_a_delay(x: F32 at sample) -> F32 at sample {
+  let c4 = tk~().down~(4) == 3
+  let ys = par~ i in 0 ..< 2 { prev~(prev~(x * F32.round_from(i + 1)).reset_if~(c4 && i == 0)) }
+  ys[0] + ys[1] * 100.0
+}
+
+pub flow delay2_direct(x: F32 at sample) -> F32 at sample {
+  let c4 = tk~().down~(4) == 3
+  delay~(x, 2).reset_if~(c4)
+}
+
+pub flow vdelay_direct(x: F32 at sample) -> F32 at sample {
+  let c4 = tk~().down~(4) == 3
+  vdelay~(x, 2.0, 4).reset_if~(c4)
+}
+
+pub flow delay2_in_a_delay(x: F32 at sample) -> F32 at sample {
+  let c4 = tk~().down~(4) == 3
+  prev~(delay~(x, 2).reset_if~(c4))
+}
+
+pub flow vdelay_in_a_delay(x: F32 at sample) -> F32 at sample {
+  let c4 = tk~().down~(4) == 3
+  prev~(vdelay~(x, 2.0, 4).reset_if~(c4))
+}
+
+pub flow when_then_reset(x: F32 at sample) -> F32 at sample {
+  let c4 = tk~().down~(4) == 3
+  let n = cnt~()
+  prev~(x).when~(n < 8.0 || n > 10.0).reset_if~(c4)
+}
+
+pub flow when_then_reset_that_runs(x: F32 at sample) -> F32 at sample {
+  let c4 = tk~().down~(4) == 3
+  let n = cnt~()
+  prev~(x).when~(n < 10.0 || n > 11.0).reset_if~(c4)
+}
+
+pub flow reset_then_when(x: F32 at sample) -> F32 at sample {
+  let c4 = tk~().down~(4) == 3
+  let n = cnt~()
+  prev~(x).reset_if~(c4).when~(n < 8.0 || n > 10.0)
+}
+
+pub flow reset_then_when_in_a_delay(x: F32 at sample) -> F32 at sample {
+  let c4 = tk~().down~(4) == 3
+  let n = cnt~()
+  prev~(prev~(x).reset_if~(c4).when~(n < 8.0 || n > 10.0))
+}
+
+fn xs() -> [F32; 16] {
+  [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0]
+}
+
+test "a reset of a condition of sample / 4 is at its tick only: the frame 8 gives the init, the frame 9 the value stored at the frame 8" {
+  var a: [F32; 16] = [9.0; 16]
+  var b: [F32; 16] = [9.0; 16]
+  var sa = direct.init(8.0)
+  var sb = in_a_delay.init(8.0)
+  direct.process(inout sa, xs(), inout a)
+  in_a_delay.process(inout sb, xs(), inout b)
+  assert a == [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 0.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0]
+  assert b == [0.0, 0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 0.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0]
+}
+
+test "the delay with the reset as the argument of a flow gives the value of the frame and the one before it" {
+  // The argument is 0 1 2 3 4 5 6 7 0 9 10 ... 15, `g` adds the one before it: 0 1 3 5 7 9 11 13 | 0 + 7 | 9 + 0 | 19 21 23 25 27 29.
+  var a: [F32; 16] = [9.0; 16]
+  var s = in_a_flow_argument.init(8.0)
+  in_a_flow_argument.process(inout s, xs(), inout a)
+  assert a == [0.0, 1.0, 3.0, 5.0, 7.0, 9.0, 11.0, 13.0, 7.0, 9.0, 19.0, 21.0, 23.0, 25.0, 27.0, 29.0]
+}
+
+test "each copy of a par~ has its own delay and its own condition: the second copy is not reset" {
+  // The first copy gives 0 1 2 .. 7 0 9 .. 15 (reset at the frame 8), the second one 2 x[f - 1] = 0 2 4 .. 30; the output is the first + 100 times the second.
+  // With a delay in front the first copy is 0 0 1 .. 7 0 9 .. 14 and the second 0 0 2 4 .. 28.
+  var a: [F32; 16] = [9.0; 16]
+  var b: [F32; 16] = [9.0; 16]
+  var sa = in_a_par.init(8.0)
+  var sb = in_a_par_in_a_delay.init(8.0)
+  in_a_par.process(inout sa, xs(), inout a)
+  in_a_par_in_a_delay.process(inout sb, xs(), inout b)
+  assert a == [0.0, 201.0, 402.0, 603.0, 804.0, 1005.0, 1206.0, 1407.0, 1600.0, 1809.0, 2010.0, 2211.0, 2412.0, 2613.0, 2814.0, 3015.0]
+  assert b == [0.0, 0.0, 201.0, 402.0, 603.0, 804.0, 1005.0, 1206.0, 1407.0, 1600.0, 1809.0, 2010.0, 2211.0, 2412.0, 2613.0, 2814.0]
+}
+
+test "delay~ and vdelay~ with the reset: the line is put back, the frames 8 and 9 read it empty and the frame 10 reads what the frame 8 wrote" {
+  var a: [F32; 16] = [9.0; 16]
+  var b: [F32; 16] = [9.0; 16]
+  var c: [F32; 16] = [9.0; 16]
+  var d: [F32; 16] = [9.0; 16]
+  var sa = delay2_direct.init(8.0)
+  var sb = vdelay_direct.init(8.0)
+  var sc = delay2_in_a_delay.init(8.0)
+  var sd = vdelay_in_a_delay.init(8.0)
+  delay2_direct.process(inout sa, xs(), inout a)
+  vdelay_direct.process(inout sb, xs(), inout b)
+  delay2_in_a_delay.process(inout sc, xs(), inout c)
+  vdelay_in_a_delay.process(inout sd, xs(), inout d)
+  assert a == [0.0, 0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 0.0, 0.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0]
+  assert b == a
+  assert c == [0.0, 0.0, 0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 0.0, 0.0, 9.0, 10.0, 11.0, 12.0, 13.0]
+  assert d == c
+}
+
+test "a when~ in front of the reset: a tick that is stopped resets the delay and the held output, a tick that runs resets and the frames after it hold" {
+  var a: [F32; 16] = [9.0; 16]
+  var b: [F32; 16] = [9.0; 16]
+  var sa = when_then_reset.init(8.0)
+  var sb = when_then_reset_that_runs.init(8.0)
+  when_then_reset.process(inout sa, xs(), inout a)
+  when_then_reset_that_runs.process(inout sb, xs(), inout b)
+  assert a == [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 6.0, 0.0, 0.0, 0.0, 11.0, 12.0, 13.0, 14.0, 15.0]
+  assert b == [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 0.0, 0.0, 0.0, 9.0, 12.0, 13.0, 14.0, 15.0]
+}
+
+test "a when~ after the reset counts the grid of the condition in the frames that run, and reads the value the caller holds" {
+  var a: [F32; 16] = [9.0; 16]
+  var b: [F32; 16] = [9.0; 16]
+  var sa = reset_then_when.init(8.0)
+  var sb = reset_then_when_in_a_delay.init(8.0)
+  reset_then_when.process(inout sa, xs(), inout a)
+  reset_then_when_in_a_delay.process(inout sb, xs(), inout b)
+  assert a == [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 6.0, 6.0, 6.0, 7.0, 0.0, 12.0, 13.0, 14.0, 15.0]
+  assert b == [0.0, 0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 6.0, 6.0, 6.0, 7.0, 0.0, 12.0, 13.0, 14.0]
+}

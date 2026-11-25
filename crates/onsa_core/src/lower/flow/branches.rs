@@ -7,7 +7,7 @@ use onsa_sema::flow::chain;
 use onsa_syntax::ast::{ExprKind as AK, MatchArm, PatId};
 
 use super::super::body::{arm_test, drop_value, lower_block_expr, pat_bind, push_expr_stmt};
-use super::hoist::{cond_value, writes};
+use super::hoist::{cond_value, work};
 use super::*;
 
 /// The `if~` chain `e` of the type `ty`, in one block: the conditions from
@@ -51,9 +51,9 @@ fn value(v: Expr) -> Block {
 }
 
 /// The stage of the function lowered and the state of its innermost scope.
-fn here(cx: &FnCx, span: Span) -> R<(ClockStage, Expr)> {
-    let f = cx.flow.as_ref().ok_or_else(|| internal(span, "a branching outside a flow"))?;
-    let scope = f.now.scopes.last().ok_or_else(|| internal(span, "a branching outside the state"))?;
+pub(super) fn here(cx: &FnCx, span: Span) -> R<(ClockStage, Expr)> {
+    let f = cx.flow.as_ref().ok_or_else(|| internal(span, "a flow form outside a flow"))?;
+    let scope = f.now.scopes.last().ok_or_else(|| internal(span, "a flow form outside the state"))?;
     Ok((f.now.stage, scope.state.clone()))
 }
 
@@ -105,10 +105,10 @@ pub(super) struct Pick {
 /// from the first to the one taken); its number in a local, that of the
 /// arms for none. With `pick.write` the fields of `s` of the scrutinee and
 /// of each guard are written before them, a guard's under the arms before
-/// not taken and its pattern (§11.3, [`writes`]). Then the place of each
+/// not taken and its pattern (§11.3, [`work`]). Then the place of each
 /// binding of an arm before `pick.eval` that has one in the function: the
 /// value of its pattern of the arm taken, else the default of its type
-/// (§11.5); those arms are chosen in the scope.
+/// (§11.5).
 pub(super) fn choose(
     lw: &mut Lowerer,
     cx: &mut FnCx,
@@ -124,7 +124,7 @@ pub(super) fn choose(
         return Err(internal(span, "a `match~` the plan did not record"));
     };
     if pick.write {
-        writes(lw, cx, info, *scrutinee, s, state, out)?;
+        work(lw, cx, info, *scrutinee, s, state, out)?;
     }
     let v = cond_value(lw, cx, info, *scrutinee, s, state)?;
     let place = materialize(cx, v, out, "__match");
@@ -167,9 +167,6 @@ pub(super) fn choose(
         let is = cmp(CmpOp::Eq, taken.clone(), u32_lit(span, i as u32));
         out.push(stmt(span, StmtKind::If(is, Block { stmts: then, value: None }, Block { stmts: else_, value: None })));
     }
-    if let Some(scope) = cx.flow.as_mut().unwrap().now.scopes.last_mut() {
-        scope.chosen.extend((0..pick.eval).map(|i| (m, i)));
-    }
     Ok(taken)
 }
 
@@ -194,7 +191,7 @@ fn test_arm(
         bind_read(lw, cx, arm.pat, place, &mut then)?;
     }
     if let (true, Some(g)) = (pick.write, arm.guard) {
-        writes(lw, cx, info, g, s, state, &mut then)?;
+        work(lw, cx, info, g, s, state, &mut then)?;
     }
     if i < pick.eval {
         let set = vec![stmt(span, StmtKind::Assign(place_of(taken)?, u32_lit(span, i as u32)))];
@@ -219,32 +216,5 @@ fn bind_read(lw: &mut Lowerer, cx: &mut FnCx, pat: PatId, place: &Expr, out: &mu
         .filter_map(|s| if let StmtKind::Let(l, _) = s.kind { Some((l, s.span)) } else { None })
         .collect();
     out.extend(bound.into_iter().map(|(l, at)| stmt(at, StmtKind::Expr(local_expr(cx, l, at)))));
-    Ok(())
-}
-
-/// The arms `arms` of the `match~`s around a node (outer first), chosen at
-/// the stage `s` in the scope of `state` before its arguments of `s` are
-/// lowered ([`choose`]): each that has a binding with a place in the
-/// function and was not chosen in the scope or one around it (S-1131).
-pub(super) fn choose_arms(
-    lw: &mut Lowerer,
-    cx: &mut FnCx,
-    arms: &[(ExprId, u32)],
-    s: ClockStage,
-    state: &Expr,
-    out: &mut Vec<Stmt>,
-) -> R<()> {
-    for &(m, a) in arms {
-        let flow = cx.flow.as_ref().unwrap();
-        let Some(t) = flow.info.tilde_matches.get(&m) else {
-            return Err(internal(cx.ast.expr(m).span, "a `match~` the plan did not record"));
-        };
-        let a = a as usize;
-        let chosen = flow.now.scopes.last().is_some_and(|x| x.chosen.contains(&(m, a)));
-        if chosen || !t.arms[a].iter().any(|b| flow.now.local_override.contains_key(&b.0)) {
-            continue;
-        }
-        choose(lw, cx, m, Pick { upto: a + 1, eval: a + 1, write: false }, s, state, out)?;
-    }
     Ok(())
 }

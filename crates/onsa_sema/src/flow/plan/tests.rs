@@ -177,11 +177,10 @@ pub flow f(x: F32 at sample) -> F32 at sample {
 }
 
 /// S-1131, §11.4: the record of each `match~` (the bindings of its arms in
-/// order, the `par~`s around it, the outermost first), the arms around each
-/// node, and the bindings read in the first argument of a delay, which the
+/// order, the `par~`s around it, the outermost first), and the bindings read in the first argument of a delay, which the
 /// end of `tick` reads (of each replica); not one read elsewhere.
 #[test]
-fn the_plan_records_the_match_tildes_the_arms_of_the_nodes_and_the_bindings_stored() {
+fn the_plan_records_the_match_tildes_and_the_bindings_stored() {
     let src = "pub flow acc(x: F32 at sample) -> F32 at sample {
   x + prev~(x)
 }
@@ -195,15 +194,7 @@ pub flow f(x: F32 at sample, k: U32 at sample) -> F32 at sample {
     let a = check(src);
     assert!(a.diagnostics.is_empty(), "{:?}", a.diagnostics);
     let f = flow(&a, "f");
-    let arms = |path: &str| f.node(named(f, path)).arms.clone();
-    let (outer, inner) = (arms("a.acc_0")[0].0, arms("s.par_0.prev_0")[0].0);
-    assert_eq!(arms("a.acc_0"), [(outer, 0)]);
-    assert_eq!(arms("a.acc_1"), [(outer, 1)]);
-    assert_eq!(arms("s.par_0"), []);
-    assert_eq!(arms("s.par_0.prev_0"), [(inner, 0)]);
-    assert_eq!(arms("s.par_0.prev_1"), [(inner, 1)]);
-    assert_eq!(f.tilde_matches.keys().copied().collect::<Vec<_>>(), [outer, inner]);
-    let (o, i) = (&f.tilde_matches[&outer], &f.tilde_matches[&inner]);
+    let [o, i] = f.tilde_matches.values().collect::<Vec<_>>()[..] else { panic!("{:?}", f.tilde_matches) };
     assert_eq!((o.arms.iter().map(Vec::len).collect::<Vec<_>>(), o.pars.as_slice()), (vec![1, 0], &[][..]));
     assert_eq!(
         (i.arms.iter().map(Vec::len).collect::<Vec<_>>(), i.pars.as_slice()),
@@ -1142,8 +1133,8 @@ fn the_marking_records_the_stages_it_evaluates_at() {
     let hoists: Vec<_> = gat.hoists.iter().map(|h| (h.stage, h.owner)).collect();
     assert_eq!(hoists, [(tick(-1), Owner::Let(1)); 2], "`h + 1` and the output of the chain, read at `sample`");
     assert_eq!(gat.stages, [tick(-1)]);
-    assert!(gat.writes_in(1, tick(-1)) && !gat.writes_in(0, tick(-1)) && !gat.writes_in(1, tick(0)));
-    assert!(!gat.writes_in(2, tick(-1)), "the output holds no write");
+    assert!(gat.work_in(1, tick(-1)) && !gat.work_in(0, tick(-1)) && !gat.work_in(1, tick(0)));
+    assert!(!gat.work_in(2, tick(-1)), "the output holds no write");
 }
 
 /// The slower ticks of one flow and `sample_tick()` (W7-16 U5a): a flow

@@ -1,0 +1,93 @@
+// onsa.toml
+// [test]
+// spec = ["§11.2", "§11.3", "§11.5", "§11.10", "§18.1"]
+
+// W7-11 U2b/t2, S-1245 (a): the forms next to those of e0801_match_binding_of_a_caret_in_a_call.onsa and e0801_match_binding_of_a_caret_positions.onsa that stay valid (no diagnostic). A binding of an arm of a `match~` whose target
+// or guard reads `^名前` is not written in the argument of a call of a flow or in the condition of a modifier (E0801); everywhere else it is read as any binding is, and `^名前` itself is read where §11.2 lets it be: in the
+// first argument of a built-in delay, outside the arguments of a flow and the conditions of a modifier. So: the binding in the rest of the arm (an operation next to a call that does not read it), in a part that does not wait
+// for the stage (the `block` input of the target), in the `d` and the `init` of a delay inside the arm, an arm that does not read the binding at all, an `if~` that reads `^名前` in its condition (not in an argument), and a target that
+// is the output of a delay whose first argument reads `^名前` (`prev~(match~ prev~(^v) { b => g~(b) })`: the target is the output of a delay, not `^v`, so its binding is not one of `^v`).
+
+pub enum V {
+  A(F32),
+  B,
+}
+
+impl Default for V {
+  rt fn default() -> Self {
+    V.B
+  }
+}
+
+pub flow g(x: F32 at sample) -> F32 at sample {
+  x + prev~(x)
+}
+
+pub flow binding_in_the_rest(x: F32 at sample) -> F32 at sample {
+  let y = prev~(match~ ^v { V.A(b) => g~(x) + b, V.B => g~(x * 2.0) })
+  let v: V = if x > 0.0 { V.A(x) } else { V.B }
+  y + x
+}
+
+pub flow binding_in_a_hoisted_part(x: F32 at sample, n: F32 at block) -> F32 at sample {
+  let y = prev~(match~ ^v { V.A(b) => g~(x) * (b * 2.0), V.B => 0.0 })
+  let v: V = if n > 0.0 { V.A(n) } else { V.B }
+  y + x
+}
+
+pub flow binding_in_the_d_of_a_delay(x: F32 at sample) -> F32 at sample {
+  let y = prev~(match~ ^v { V.A(b) => vdelay~(x, b, 8), V.B => 0.0 })
+  let v: V = if x > 0.0 { V.A(x + 1.0) } else { V.B }
+  y + x
+}
+
+pub flow binding_in_the_init_of_a_delay(x: F32 at sample, n: F32 at init) -> F32 at sample {
+  let y = prev~(match~ ^v { V.A(b) => prev~(x, b), V.B => 0.0 })
+  let v: V = if n > 0.0 { V.A(n) } else { V.B }
+  y + x
+}
+
+pub flow binding_in_the_first_argument_of_a_delay(x: F32 at sample) -> F32 at sample {
+  let y = prev~(match~ ^v { V.A(b) => prev~(x * b), V.B => 0.0 })
+  let v: V = if x > 0.0 { V.A(x) } else { V.B }
+  y + x
+}
+
+pub flow arm_that_reads_no_binding(x: F32 at sample) -> F32 at sample {
+  let y = prev~(match~ ^v { V.A(_) => g~(x), V.B => g~(x * 2.0) })
+  let v: V = if x > 0.0 { V.A(x) } else { V.B }
+  y + x
+}
+
+pub flow if_tilde_condition_reads_a_caret(x: F32 at sample, n: F32 at block) -> F32 at sample {
+  let y = prev~(if~ ^k > 1.0 { g~(x) } else { g~(x * 2.0) })
+  let k = n + 1.0
+  y + x
+}
+
+pub flow target_is_the_output_of_a_delay(x: F32 at sample) -> F32 at sample {
+  let y = prev~(match~ prev~(^v) { b => g~(b) })
+  let v: F32 = x * 0.5
+  y + x
+}
+
+pub flow target_is_the_output_of_a_delay_with_a_modifier(x: F32 at sample) -> F32 at sample {
+  let y = prev~(match~ prev~(^v) { b => g~(x).when~(b > 2.0) })
+  let v: F32 = x * 0.5
+  y + x
+}
+
+pub flow binding_from_a_target_that_is_above(x: F32 at sample) -> F32 at sample {
+  let v: V = if x > 0.0 { V.A(x) } else { V.B }
+  let y = prev~(match~ v { V.A(b) => g~(b), V.B => 0.0 })
+  y + x
+}
+
+pub flow binding_of_a_guard_that_is_above(x: F32 at sample) -> F32 at sample {
+  let w = x * x - 10.0
+  let y = prev~(match~ x {
+    n if w > 0.0 => g~(n),
+    _ => g~(0.5),
+  })
+  y + x
+}

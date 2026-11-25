@@ -362,14 +362,14 @@ pub struct Scene {
 }
 
 impl Scene {
-    fn name(&self) -> String {
+    pub fn name(&self) -> String {
         match self.frames {
             None => format!("n{}_init", self.n),
             Some(f) => format!("n{}_k{}_ki{}_f{f}", self.n, self.k, self.ki),
         }
     }
 
-    fn text(&self, xs: &str) -> String {
+    pub fn text(&self, xs: &str) -> String {
         let init = format!("fa.init(fa.Config {{ n: {} }}, 8.0)", self.n);
         let Some(f) = self.frames else { return format!("test \"{}\" {{\n  let _ = {init}\n}}\n", self.name()) };
         let params = format!("fa.Params {{ k: {}, ki: {} }}", self.k, self.ki);

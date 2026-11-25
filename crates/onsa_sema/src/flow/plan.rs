@@ -103,6 +103,14 @@ pub enum PlanKind {
 }
 
 impl PlanKind {
+    /// The first argument of a built-in delay, what it stores (§11.4).
+    pub fn stored(&self) -> Option<ExprId> {
+        match *self {
+            PlanKind::Prev { arg, .. } | PlanKind::Delay { arg, .. } | PlanKind::Vdelay { arg, .. } => Some(arg),
+            PlanKind::Instance { .. } | PlanKind::Par { .. } => None,
+        }
+    }
+
     /// The built-in delay of the node, if it is one.
     pub fn delay(&self) -> Option<Delay> {
         match self {
@@ -142,8 +150,6 @@ pub struct PlanNode {
     /// The place of its first field in the struct that holds it
     /// ([`FlowInfo::fields_of`]); none of a `par~` with no state.
     pub field: Option<u32>,
-    /// The arms of the `match~`s around it, the outermost first (S-1131).
-    pub arms: Vec<(ExprId, u32)>,
     /// The ratio of the ports of its callee as this flow reads them over
     /// the `sample` of the body (§11.9): of the head of a chain, the sum of
     /// the ratios of the chain, else 0: the frame the walk read the clocks
@@ -179,9 +185,8 @@ pub struct PlanNode {
 /// slow ticks, then the ticks of `sample`), which the Core lowers as they
 /// are. `read`: this flow reads the instance in that function and they
 /// write what it reads (a [`Op::Run`] of [`Out::Value`], a [`Op::Deal`] to
-/// [`To::Value`], or one of either into the array of its [`Read::Array`]),
-/// so they are lowered where the call is read, before it is; else in the
-/// walk of the runs of that function (the review of U6b, its high 1).
+/// [`To::Value`], or one of either into the array of its [`Read::Array`]).
+/// Read or not, they are where the call is written, before its value.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Entry {
     pub caller: ClockStage,
@@ -501,6 +506,25 @@ impl FlowInfo {
         }
     }
 
+    /// The `let` (the output by `lets.len()`) that holds each node, through
+    /// the `par~`s around it.
+    pub(super) fn outer(&self) -> Vec<usize> {
+        let out = self.lets.len();
+        let mut outer: Vec<usize> = Vec::with_capacity(self.nodes.len());
+        for n in &self.nodes {
+            let k = match n.owner {
+                Owner::Let(k) => k as usize,
+                Owner::Output => out,
+                Owner::Par(p) => outer.get(p.0 as usize).copied().unwrap_or(usize::MAX),
+            };
+            if k > out {
+                onsa_diag::internal::bug(Some(n.span), "a node of no `let` and not of the output");
+            }
+            outer.push(k);
+        }
+        outer
+    }
+
     /// The node that is the whole value of the `let` k and has its name
     /// (S-148, §11.6): of a `let` of a single name, through parentheses.
     pub fn whole(&self, k: u32) -> Option<NodeId> {
@@ -584,7 +608,6 @@ pub(super) fn build(
             whole: r.whole,
             span: r.span,
             field: None,
-            arms: r.arms,
             frame: r.frame,
             chain: r.chain,
             size: r.size,

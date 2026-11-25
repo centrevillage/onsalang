@@ -7,9 +7,9 @@
 // (spec §11.4: "保存する値 e を全て評価してから、まとめて保存する"), so a panic in it happens at
 // the sample that stores it, not when the output first shows it. The cases are about *that* a
 // panic happens (a division by zero in the value an inner delay stores, and in a value whose
-// delay output is multiplied away). Which of two panics of one sample comes first is S-1126 (the
-// order of the panics of a store and of the body) and is not asserted here: a case sees only the
-// call of `render` that panicked.
+// delay output is multiplied away). Which of two panics of one sample comes first (S-1126, S-1233: the
+// stores are after the `let`s and the output expression) is not asserted here: a case sees only the
+// call of `render` that panicked; the CLI test `stage_order_commands.rs` reads the line.
 //
 // Every expected sequence is worked out by hand.
 

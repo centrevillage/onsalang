@@ -73,10 +73,10 @@
 //! - `sample_rate_at: Option<ClockStage>` — the latest stage at which
 //!   `sample_rate()` is read (`None`: never; `Init`: no state field needed;
 //!   `Block` / `Tick`: store it, S-05). `sample_rate_calls` lists the calls.
-//! - `eval_at`, `time_at`, `writes` — of the same walk: the stages it
+//! - `eval_at`, `time_at`, `work`, `late` — of the same walk: the stages it
 //!   evaluates a part of the body at (the `stages` come of them), those of
-//!   `sample_tick()` (the `time` comes of them), and the `let`s that hold a
-//!   hoisted field or a check of a stage ([`FlowInfo::writes_in`]).
+//!   `sample_tick()` (the `time` comes of them), and the `let`s that hold
+//!   work of a stage ([`FlowInfo::work_in`]; `late`, what is of its end).
 //! - `read_at: HashMap<LocalId, BTreeSet<ClockStage>>` — the stages at which
 //!   each local is read (inputs, `let`s, `par` variables, match bindings;
 //!   S-05): each argument of a node at the stage of its clock
@@ -312,8 +312,15 @@ pub struct FlowInfo {
     /// whose functions read the time ([`FlowInfo::time`]).
     pub time_at: BTreeSet<ClockStage>,
     /// The `let`s (by index, the output by `lets.len()`) that hold a hoisted
-    /// field or a check of a stage, with that stage ([`FlowInfo::writes_in`]).
-    pub(crate) writes: HashSet<(u32, ClockStage)>,
+    /// field or a check of a stage, or a node with work of it (`plan`'s
+    /// `entries`), with that stage ([`FlowInfo::work_in`]).
+    pub(crate) work: HashSet<(u32, ClockStage)>,
+    /// What is evaluated at the end of its stage and not where it is written
+    /// (§11.3, S-1244), with what the delays store, since it reads a `^name`
+    /// of a `let` below or a binding one chooses: the hoisted fields and the
+    /// checks, the `init` of a delay, and the `match~` of such bindings, of
+    /// which the choice alone is there (S-1245).
+    pub late: HashSet<ExprId>,
     /// The ticks of the body slower than its `sample` (§11.9), slowest
     /// first: of its inputs, its output and those the marking evaluates at
     /// ([`FlowInfo::eval_at`]), and the slow stages its instances run the

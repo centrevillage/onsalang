@@ -12,8 +12,8 @@ use onsa_sema::flow::{CondRead, PlanGuard};
 
 /// The walk of the ops of an entry of the instance `id` (`n`) in the scope
 /// of `state` (§11.9): the run j of each `.up~` around the ops lowered, by
-/// its boundary ([`counter`]); the arguments its loops read, lowered before
-/// them ([`prelower`], [`arg_value`]); the value the ops make in a loop, a
+/// its boundary ([`counter`]); the arguments and the conditions its ops
+/// read, lowered before them ([`ports`]); the value the ops make in a loop, a
 /// local made at the head of the entry.
 struct Walk<'a> {
     info: &'a FlowInfo,
@@ -22,17 +22,14 @@ struct Walk<'a> {
     state: &'a Expr,
     span: Span,
     js: Vec<(usize, Expr)>,
-    args: Vec<(u32, Expr, Option<Ratio>)>,
-    /// The conditions of the guards and the `.reset_if~`s read in the ops,
-    /// lowered before them, by the place of their modifier in the chain.
-    conds: Vec<(u32, Expr)>,
+    /// Each with the exponent of its port, of a burst, in the frame of the call.
+    ports: Vec<(Port, Expr, Option<Ratio>)>,
     value: Option<Expr>,
 }
 
 impl<'a> Walk<'a> {
     fn new(info: &'a FlowInfo, id: NodeId, state: &'a Expr, span: Span) -> Self {
-        let (js, args, conds) = (Vec::new(), Vec::new(), Vec::new());
-        Walk { info, id, n: info.node(id), state, span, js, args, conds, value: None }
+        Walk { info, id, n: info.node(id), state, span, js: Vec::new(), ports: Vec::new(), value: None }
     }
 
     fn field(&self, lw: &Lowerer, part: Part) -> R<Expr> {
@@ -59,9 +56,9 @@ impl<'a> Walk<'a> {
     /// it (§11.10): the slot of the ring that gathers it in the frame of the
     /// modifier ([`Walk::ring`]; one element, its port being no faster than
     /// W) in a local, which a reset of the ring after does not change; else
-    /// its expression ([`Walk::cond_expr`]).
+    /// its value ([`Walk::port`]).
     fn cond(&self, lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, place: u32) -> R<Expr> {
-        let Some(o) = self.ring(place) else { return self.cond_expr(lw, cx, place) };
+        let Some(o) = self.ring(place) else { return Ok(self.port(Port::Cond(place))?.0) };
         let (part, f, span) = (Part::Gather { bound: o, port: Port::Cond(place) }, self.frame(place), self.span);
         let x = self.n.chain.get(place as usize).and_then(|m| m.port);
         let (x, e) = (x.ok_or_else(|| internal(span, "a ring of a condition of no port"))?, exp(self.n, part, span)?);
@@ -71,14 +68,10 @@ impl<'a> Walk<'a> {
         Ok(local_expr(cx, l, span))
     }
 
-    /// The expression of the condition of the modifier at `place`, lowered
-    /// before the ops ([`prelower`]) or here.
-    fn cond_expr(&self, lw: &mut Lowerer, cx: &mut FnCx, place: u32) -> R<Expr> {
-        if let Some(v) = self.conds.iter().find(|x| x.0 == place) {
-            return Ok(v.1.clone());
-        }
-        let cond = self.n.chain.get(place as usize).and_then(|m| m.cond);
-        lower_expr(lw, cx, cond.ok_or_else(|| internal(self.span, "a modifier of no condition"))?)
+    /// The argument or the condition of `port`, lowered before the ops ([`ports`]).
+    fn port(&self, port: Port) -> R<(Expr, Option<Ratio>)> {
+        let found = self.ports.iter().find(|x| x.0 == port);
+        found.map(|x| (x.1.clone(), x.2)).ok_or_else(|| internal(self.span, format!("{port:?} not lowered")))
     }
 
     /// The frame of the modifier at `place`: the count of the boundaries
@@ -241,29 +234,20 @@ pub(super) fn len(n: &PlanNode, part: Part, span: Span) -> R<u32> {
     len.ok_or_else(|| internal(span, format!("a ring or an array {part:?}, past `U32`")))
 }
 
-/// The ops of the entry `e` of the instance `id` in the function of its
-/// stage, in their order (§11.9, [`Entry`]), in the scope of `state` (the
+/// The entry of the instance `id` (or the delay of a chain) in the function
+/// of the stage: its arguments and its conditions ([`ports`]), then its ops,
+/// if it has one, in their order (§11.9, [`Entry`]), in the scope of `state` (the
 /// rings, the runs, the copies and the loops of [`ops`]), and the value
 /// they make: of a run out of a loop the value of the run, else, made in
 /// the loop of an `.up~`, a local made at the head, `Zeroed` (every element
 /// written, the memo of U6b 2.5).
-// SPEC-GAP(S-1206): an argument is evaluated in the walk of the runs of the
-// stages, at the place of its node before its runs; the reference
-// evaluator evaluates that of the outermost boundary after them, which
-// differs in the order of the panics alone.
-pub(super) fn entry(
-    lw: &mut Lowerer,
-    cx: &mut FnCx,
-    out: &mut Vec<Stmt>,
-    id: NodeId,
-    state: &Expr,
-    e: &Entry,
-) -> R<Option<Expr>> {
-    let info = cx.flow.as_ref().expect("flow context").info;
+pub(super) fn entry(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, id: NodeId, state: &Expr) -> R<Option<Expr>> {
+    let (f, n) = (cx.flow.as_ref().expect("flow context"), cx.flow.as_ref().expect("flow context").info.node(id));
+    let (info, list) = (f.info, n.entry(f.now.stage).map_or(&[][..], |e| &e.ops));
     let mut w = Walk::new(info, id, state, cx.ast.expr(info.node(id).expr).span);
     // The value made in a loop or under a guard (of a burst, the review of the memo of W7-10, its middle 1).
     let mut looped = false;
-    for op in e.ops.iter().filter(|op| matches!(op, Op::Each { .. } | Op::When { .. })) {
+    for op in list.iter().filter(|op| matches!(op, Op::Each { .. } | Op::When { .. })) {
         Op::walk(std::slice::from_ref(op), &mut |op| looped |= op.makes_value());
     }
     if looped {
@@ -273,11 +257,23 @@ pub(super) fn entry(
     }
     // A delay that a guard stops has not run until its run says so (§11.10, its store).
     let mut runs = false;
-    Op::walk(&e.ops, &mut |op| runs |= matches!(op, Op::Run { .. }));
+    Op::walk(list, &mut |op| runs |= matches!(op, Op::Run { .. }));
     if runs {
         w.ran(lw, out, false)?;
     }
-    let made = ops(lw, cx, out, &mut w, &e.ops)?;
+    // The `d` of a `vdelay~` a run reads, read while it stops (§11.10), once.
+    if let PlanKind::Vdelay { d, .. } = w.n.kind
+        && runs
+    {
+        let v = lower_expr(lw, cx, d)?;
+        let v = hold(cx, out, v, "__d");
+        cx.flow.as_mut().expect("flow context").now.expr_override.insert(d, v);
+    }
+    let reads = reads(lw, &w, list)?;
+    // The one op that reads a port reads it where it is (of a run, as any call does).
+    let all = !matches!(list, [Op::Ring { .. } | Op::Run { .. } | Op::Reset { .. }]);
+    ports(lw, cx, out, &mut w, &reads, all)?;
+    let made = ops(lw, cx, out, &mut w, list)?;
     Ok(made.or(w.value))
 }
 
@@ -288,7 +284,7 @@ pub(super) fn entry(
 /// one outside it or into the value, each by [`copy`], and the N runs of an
 /// `.up~` ([`Op::Each`]): of its `once`, the run j = 0 alone; else a loop of
 /// j, each run the ops of each stage of the part when j is at its tick
-/// ([`drive`]), the arguments they read lowered before the outermost.
+/// ([`drive`]).
 fn ops(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, w: &mut Walk, list: &[Op]) -> R<Option<Expr>> {
     let (n, span, mut value) = (w.n, w.span, None);
     // The condition of each guard read in this list, as it read it.
@@ -301,13 +297,15 @@ fn ops(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, w: &mut Walk, list:
                 let (x, f) = (w.bound(b)?.outside(k), b as usize + 1);
                 let (dst, pos) = (w.field(lw, part)?, at(lw, cx, w, (f, b as usize), x, k)?);
                 let caller = n.bounds.len();
-                let src = match (from, port) {
-                    (Feed::Arg, Port::Input(input)) => match arg_value(lw, cx, out, w, input)? {
-                        (v, Some(q)) => Src::At(v, at(lw, cx, w, (f, caller), x, q)?, q),
+                let src = match from {
+                    Feed::Arg => match w.port(port)? {
+                        (v, Some(q)) => {
+                            let v = materialize(cx, v, out, "__arg");
+                            Src::At(v, at(lw, cx, w, (f, caller), x, q)?, q)
+                        }
                         (v, None) => Src::Value(v),
                     },
-                    (Feed::Arg, Port::Cond(place)) => Src::Value(w.cond_expr(lw, cx, place)?),
-                    (Feed::Ring(o), _) => {
+                    Feed::Ring(o) => {
                         let part = Part::Gather { bound: o, port };
                         let q = exp(n, part, span)?;
                         Src::At(w.field(lw, part)?, at(lw, cx, w, (f, o as usize), x, q)?, q)
@@ -346,9 +344,6 @@ fn ops(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, w: &mut Walk, list:
                 out.push(stmt(span, StmtKind::If(on, ran, not)));
             }
             Op::When { guard: g, cond, due, ops: ref inner, advance } => {
-                if w.js.is_empty() {
-                    prelower(lw, cx, out, w, std::slice::from_ref(op))?;
-                }
                 let on = match cond {
                     CondRead::Read => {
                         let v = w.cond(lw, cx, out, w.guard(g)?.at)?;
@@ -404,9 +399,6 @@ fn ops(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, w: &mut Walk, list:
                 copy(cx, out, (dst, e), pos, src, x, span)?;
             }
             Op::Each { bound: u, once, ref groups } => {
-                if w.js.is_empty() {
-                    prelower(lw, cx, out, w, std::slice::from_ref(op))?;
-                }
                 let l = (!once).then(|| cx.temp("__j", Ty::u32()));
                 let j = l.map_or_else(|| u32_lit(span, 0), |l| local_expr(cx, l, span));
                 w.js.push((u as usize, j.clone()));
@@ -495,78 +487,112 @@ fn target(lw: &Lowerer, w: &Walk, to: To) -> R<(Expr, Ratio, usize)> {
     }
 }
 
-/// The arguments the ops `list` read in the loops of their `.up~` (of a
-/// ring written from one, of an input a run reads of no ring), lowered
-/// once before them in the order of the inputs, each in a `let` (the review
-/// of U6b0, its low 5): read in a loop, the places of the nodes in them
-/// would be in it, which the reads after it do not see.
-fn prelower(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, w: &mut Walk, list: &[Op]) -> R<()> {
-    let (mut read, mut bodies, mut conds) = (BTreeSet::new(), Vec::new(), Vec::new());
-    // A condition by the place of its modifier in the chain: of a guard, by its index first;
-    // that of a ring written from it, and of an op that does not read it from a ring.
+/// The ports the ops `list` of an entry read of no ring: the inputs of the
+/// runs, the conditions, what a ring is written from.
+fn reads(lw: &Lowerer, w: &Walk, list: &[Op]) -> R<BTreeSet<Port>> {
+    let (mut ports, mut bodies, mut whens) = (BTreeSet::new(), Vec::new(), Vec::new());
     Op::walk(list, &mut |op| match *op {
-        Op::Ring { port: Port::Input(input), from: Feed::Arg, .. } => {
-            read.insert(input);
-        }
-        Op::Ring { port: Port::Cond(at), from: Feed::Arg, .. } => conds.push((Ok(at), true)),
+        Op::Ring { port, from: Feed::Arg, .. } => drop(ports.insert(port)),
         Op::Run { body, .. } => bodies.push(body),
-        Op::When { guard, cond: CondRead::Read, .. } => conds.push((Err(guard), false)),
-        Op::Reset { at } => conds.push((Ok(at), false)),
+        Op::When { guard, cond: CondRead::Read, .. } => whens.push(guard),
+        Op::Reset { at } if w.ring(at).is_none() => drop(ports.insert(Port::Cond(at))),
         _ => {}
     });
-    let conds = conds.into_iter().map(|(c, ring)| Ok((c.or_else(|g| Ok(w.guard(g)?.at))?, ring)));
-    let conds: Vec<(u32, bool)> = conds.collect::<R<_>>()?;
-    let mut conds: Vec<u32> =
-        conds.into_iter().filter(|&(at, ring)| ring || w.ring(at).is_none()).map(|c| c.0).collect();
-    // The `d` of a `vdelay~` a run reads, read while it stops (§11.10), once.
-    if let PlanKind::Vdelay { d, .. } = w.n.kind
-        && !bodies.is_empty()
-        && !cx.flow.as_ref().expect("flow context").now.expr_override.contains_key(&d)
-    {
-        let v = lower_expr(lw, cx, d)?;
-        let v = materialize(cx, v, out, "__d");
-        cx.flow.as_mut().expect("flow context").now.expr_override.insert(d, v);
+    for guard in whens {
+        let at = w.guard(guard)?.at;
+        ports.extend(Some(Port::Cond(at)).filter(|_| w.ring(at).is_none()));
     }
     for body in bodies {
-        read.extend(head_inputs(lw, w, body)?.into_iter().filter(|&i| w.n.ring_of(0, Port::Input(i)).is_none()));
+        let read = head_inputs(lw, w, body)?.into_iter().map(Port::Input);
+        ports.extend(read.filter(|&p| w.n.ring_of(0, p).is_none()));
     }
-    // Lowered once: those of an op before (a guard and a loop, §11.10: read while it stops).
-    read.retain(|i| w.args.iter().all(|x| x.0 != *i));
-    conds.retain(|at| w.conds.iter().all(|x| x.0 != *at));
-    // SPEC-GAP(S-1221): the condition of a guard or a `.reset_if~` inside one that stops
-    // it is read too, as the arguments of the head are (provisional).
-    for at in conds {
-        let v = w.cond_expr(lw, cx, at)?;
-        w.conds.push((at, materialize(cx, v, out, "__cond")));
-    }
-    for input in read {
-        let (v, q) = arg_value(lw, cx, out, w, input)?;
-        w.args.push((input, materialize(cx, v, out, "__arg"), q));
+    Ok(ports)
+}
+
+/// The ports the entry of the stage of the node `id` reads ([`reads`]).
+pub(super) fn ports_read(lw: &Lowerer, cx: &FnCx, id: NodeId) -> R<BTreeSet<Port>> {
+    let f = cx.flow.as_ref().expect("flow context");
+    let span = cx.ast.expr(f.info.node(id).expr).span;
+    let state = super::branches::here(cx, span)?.1;
+    let list = f.info.node(id).entry(f.now.stage).map_or(&[][..], |e| &e.ops);
+    reads(lw, &Walk::new(f.info, id, &state, span), list)
+}
+
+/// The arguments and then the conditions of the node of the walk in the
+/// order of the text (§11.3, S-1233): those of `reads` lowered for its ops,
+/// as values ([`hold`], of `all`: read in a loop, the places of the nodes in
+/// them would be in it, which the reads after it do not see, the review of
+/// U6b0, its low 5); of the others the work of the stage in them
+/// ([`super::hoist::work`]), after the values before them.
+fn ports(
+    lw: &mut Lowerer,
+    cx: &mut FnCx,
+    out: &mut Vec<Stmt>,
+    w: &mut Walk,
+    reads: &BTreeSet<Port>,
+    all: bool,
+) -> R<()> {
+    let args: &[ExprId] = if let PlanKind::Instance { args, .. } = &w.n.kind { args } else { &[] };
+    let args = (0u32..).zip(args).map(|(i, &e)| (Port::Input(i), e));
+    // SPEC-GAP(S-1221): the condition of a guard or a `.reset_if~` inside one that
+    // stops it is read too, as the arguments of the head are (provisional).
+    let conds = (0u32..).zip(&w.n.chain).filter_map(|(at, m)| Some((Port::Cond(at), m.cond?)));
+    for (port, e) in args.chain(conds).collect::<Vec<_>>() {
+        if !reads.contains(&port) {
+            let mut work = Vec::new();
+            super::hoist::walk(lw, cx, e, &mut work)?;
+            if !work.is_empty() {
+                w.ports.iter_mut().for_each(|p| p.1 = hold(cx, out, p.1.clone(), "__arg"));
+                out.append(&mut work);
+            }
+            continue;
+        }
+        let v = lower_expr(lw, cx, e)?;
+        let (v, q) = match (port, w.n.args.iter().find(|a| a.expr == e).map(|a| a.at)) {
+            (Port::Input(_), Some(p @ Clock::Tick(q))) if p.burst() => (spread(cx, e, p, v), Some(q)),
+            (_, Some(_)) => (v, None),
+            (_, None) => return Err(internal(w.span, "an argument read at no clock")),
+        };
+        let name = if let Port::Cond(_) = port { "__cond" } else { "__arg" };
+        w.ports.push((port, if all { hold(cx, out, v, name) } else { v }, q));
     }
     Ok(())
 }
 
-/// The argument of the input `input` of the walk, in the frame of the
-/// call, with the exponent q of its port there if it is a burst (§11.9):
-/// that lowered before the loops ([`prelower`]), else lowered here, of a
-/// burst its 2^q elements in a `let` ([`spread`]).
-fn arg_value(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, w: &Walk, input: u32) -> R<(Expr, Option<Ratio>)> {
-    if let Some((_, v, q)) = w.args.iter().find(|x| x.0 == input) {
-        return Ok((v.clone(), *q));
+/// The inputs of the stage of the function of the instance `id`, `init` or
+/// `block`, in their order, after the work of the stage in the others ([`ports`]).
+pub(super) fn inputs_of(
+    lw: &mut Lowerer,
+    cx: &mut FnCx,
+    out: &mut Vec<Stmt>,
+    id: NodeId,
+    state: &Expr,
+) -> R<Vec<Expr>> {
+    let f = cx.flow.as_ref().expect("flow context");
+    let (s, mut w) = (f.now.stage, Walk::new(f.info, id, state, cx.ast.expr(f.info.node(id).expr).span));
+    let reads = head_inputs(lw, &w, s)?.into_iter().map(Port::Input).collect();
+    ports(lw, cx, out, &mut w, &reads, false)?;
+    Ok(w.ports.into_iter().map(|p| p.1).collect())
+}
+
+/// `v` as a value read later (§3.5): a `let` in `out`, of a place with an
+/// index too, whose panic is here ([`materialize`] leaves it where the place
+/// is read); a literal and a place with no index as they are.
+pub(super) fn hold(cx: &mut FnCx, out: &mut Vec<Stmt>, v: Expr, name: &str) -> Expr {
+    let mut place = &v;
+    while let ExprKind::Field { base, .. } = &place.kind {
+        place = base;
     }
-    let PlanKind::Instance { args, .. } = &w.n.kind else { return Err(internal(w.span, "an argument of no instance")) };
-    let arg = *args.get(input as usize).ok_or_else(|| internal(w.span, "no argument of an input"))?;
-    let port = w.n.args.iter().find(|a| a.expr == arg).map(|a| a.at);
-    let port = port.ok_or_else(|| internal(w.span, "an argument read at no clock"))?;
-    let v = lower_expr(lw, cx, arg)?;
-    Ok(match port {
-        Clock::Tick(q) if port.burst() => (materialize(cx, spread(cx, arg, port, v), out, "__arg"), Some(q)),
-        _ => (v, None),
-    })
+    if matches!(place.kind, ExprKind::Lit(_) | ExprKind::Local(_)) {
+        return v;
+    }
+    let (l, span) = (cx.temp(name, v.ty.clone()), v.span);
+    out.push(stmt(span, StmtKind::Let(l, v)));
+    local_expr(cx, l, span)
 }
 
 /// The inputs of the head of the walk a run of its stage `body` reads, by
-/// index ([`instance_args`]); none of a delay, which reads its state.
+/// index; none of a delay, which reads its state.
 fn head_inputs(lw: &Lowerer, w: &Walk, body: ClockStage) -> R<Vec<u32>> {
     let (a, PlanKind::Instance { callee, .. }) = (lw.a, &w.n.kind) else {
         return if w.n.kind.delay().is_some() { Ok(Vec::new()) } else { Err(internal(w.span, "a run of no instance")) };
@@ -667,8 +693,8 @@ fn window(
 /// The call of the function of the stage `body` of the head of the walk
 /// (§11.9, S-1088, [`call_stage`]): its state, the time of a stage that
 /// takes it ([`child_time`], of the words of the callee) and its inputs of
-/// that stage, lowered here, those its chain gathers of their rings
-/// ([`PlanNode::ring_of`]) and those lowered before the loops, each the
+/// that stage, those its chain gathers of their rings
+/// ([`PlanNode::ring_of`]), the others lowered before the ops, each the
 /// window of the frame of the head ([`window`], the memo of U6b 2.4).
 fn run(lw: &mut Lowerer, cx: &mut FnCx, w: &Walk, body: ClockStage) -> R<Expr> {
     let (a, n, span) = (lw.a, w.n, w.span);
@@ -679,7 +705,7 @@ fn run(lw: &mut Lowerer, cx: &mut FnCx, w: &Walk, body: ClockStage) -> R<Expr> {
         w.ran(lw, &mut lets, true)?;
         return Ok(after(lets, v));
     }
-    let &PlanKind::Instance { callee, ref args, .. } = &n.kind else {
+    let PlanKind::Instance { callee, .. } = n.kind else {
         return Err(internal(span, format!("a run of {body:?} of no instance")));
     };
     let sub = lw.ensure_flow(callee)?;
@@ -688,23 +714,24 @@ fn run(lw: &mut Lowerer, cx: &mut FnCx, w: &Walk, body: ClockStage) -> R<Expr> {
     let own = w.field(lw, Part::Own)?;
     let (words, mut lets) = (g.time_words(body), Vec::new());
     let time = if words > 0 { child_time(cx, &mut lets, w, words)? } else { Vec::new() };
-    let mut given = Vec::new();
+    let mut inputs = Vec::new();
     for input in head_inputs(lw, w, body)? {
-        let (src, e, owner) = match (n.ring_of(0, Port::Input(input)), w.args.iter().find(|x| x.0 == input)) {
-            (Some(bound), _) => {
+        let (src, e, owner) = match n.ring_of(0, Port::Input(input)) {
+            Some(bound) => {
                 let part = Part::Gather { bound, port: Port::Input(input) };
                 (w.field(lw, part)?, exp(n, part, span)?, bound as usize)
             }
-            (None, Some((_, v, q))) => (v.clone(), q.unwrap_or(Ratio(0)), n.bounds.len()),
-            (None, None) => continue,
+            None => {
+                let (v, q) = w.port(Port::Input(input))?;
+                (v, q.unwrap_or(Ratio(0)), n.bounds.len())
+            }
         };
         let v = match n.bounds.first().and_then(|b| *b.ins.get(input as usize)?) {
             Some(k) => window(cx, &mut lets, src, (k, e), |cx| at(lw, cx, w, (0, owner), k, e), "__in", span)?,
             None => src,
         };
-        given.push((input, v));
+        inputs.push(v);
     }
-    let inputs = instance_args(lw, cx, (callee, args), body, &given, span)?;
     let ret = lw.m.fn_(f).ret.clone();
     call_stage(StageRun { g, f, ret, x: body, state: own, time, lets, inputs }, span)
 }

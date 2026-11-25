@@ -38,7 +38,7 @@ fn run(shape: &[(&str, Option<usize>)], leaves: &[&str], inputs: &[(&str, &str, 
 }
 
 fn test(events: Vec<Event>, panic: Option<Panic>) -> TestRun {
-    TestRun { name: "t".into(), file: String::new(), asserts: 0, panic, verdict: Verdict::Ok, events }
+    TestRun { name: "t".into(), file: String::new(), asserts: 0, panic, panic_span: None, verdict: Verdict::Ok, events }
 }
 
 fn printed(events: Vec<Event>, panic: Option<Panic>) -> Printed {

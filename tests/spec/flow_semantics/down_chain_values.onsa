@@ -401,8 +401,8 @@ test "a let of the parent and a part under down 4 that both divide at the frame 
   assert o.out[3] == 300
 }
 
-test "S-1206 S-1159 provisional: a let of the parent and a part under down 4 that divide by 0 at one tick stop the run at the frame 4" {
-  // Which of the two is reported is the order of S-1206 and S-1159 (open; the provisional order, the `let`s of the parent first, is read from the failure of `onsa test` in a CLI test).
-  let o = both_panic.render(both_panic.Params { p: 0 }, 5, 8.0) //~ PANIC "S-1206 S-1159 provisional: a let of the parent and a part under down 4 that divide by 0 at one tick stop the run at the frame 4"
+test "S-1233: a let of the parent above the call and a part under down 4 that divide by 0 at one tick stop the run at the frame 4" {
+  // Which of the two is reported is the order of the text (§11.3, S-1233, S-1206, S-1159: the work of the call is where the call is written, so the `let r` above it is first); it is read from the failure of `onsa test` in a CLI test.
+  let o = both_panic.render(both_panic.Params { p: 0 }, 5, 8.0) //~ PANIC "S-1233: a let of the parent above the call and a part under down 4 that divide by 0 at one tick stop the run at the frame 4"
   assert o.out[0] == 0
 }

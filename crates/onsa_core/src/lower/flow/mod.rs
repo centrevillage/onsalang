@@ -52,8 +52,8 @@
 //! inputs from `cfg` in `init`. `Const`-rate `let`s are recomputed in every
 //! phase that reads them. A subexpression the plan hoisted
 //! (`FlowInfo::hoist_of`, §11.3) is written to its field by the phase of
-//! its stage ([`hoist::writes`]: at the place of the faster `let` that holds
-//! it, those of the output last; S-1159), and read from the field by the
+//! its stage ([`hoist::work`]: at its place in the faster `let` or the output
+//! that holds it, S-1159; one with a `^name` at the end, S-1244), and read from the field by the
 //! later phases ([`lower_flow_expr`]); one under a condition decided at
 //! `init` or `block` is written under it (S-1157); one in the body of a
 //! `par~` in each replica (S-1140). A stateful node is lowered on demand
@@ -81,7 +81,7 @@ use onsa_sema::clock::{Clock, ClockStage, Ratio};
 use onsa_sema::def::{DefKind, Fields, FlowDef, FlowFn, FlowInput, FlowTy, ParamInfo, ParamKey, ParamNumber};
 use onsa_sema::flow::Counter;
 use onsa_sema::flow::{
-    Entry, Feed, Field, FieldOf, FlowInfo, InitArg, Kept, NodeId, Op, Out, Part, PlanKind, PlanNode, Port, Read, To,
+    Feed, Field, FieldOf, FlowInfo, InitArg, Kept, NodeId, Op, Out, Owner, Part, PlanKind, PlanNode, Port, Read, To,
 };
 use onsa_sema::ty::{BuiltinTy, Len, Ty as STy};
 use onsa_syntax::ast::ExprId;
@@ -110,7 +110,7 @@ mod tests;
 use boundary::{gen_params_default, gen_process, gen_process_inplace, gen_render};
 pub(crate) use branches::{tilde_if, tilde_match};
 pub(crate) use generated::burst_ty;
-use generated::{Gen, init_value, instance_args, replica_loop, ring_len, sfield, spread};
+use generated::{Gen, init_value, replica_loop, replicas_place, ring_len, sfield, spread};
 pub(crate) use hoist::HoistUses;
 pub(crate) use nodes::lower_flow_expr;
 use phases::{StageRun, call_stage, drive, gen_ctl, gen_init, gen_reset, gen_tick};
@@ -254,13 +254,10 @@ fn check_stages(info: &FlowInfo, span: Span) -> R<()> {
     Ok(())
 }
 
-/// A replica scope: the state place the nodes of this scope live in, and
-/// the arms of `match~` chosen in it or in one around it, whose bindings
-/// are in their places ([`branches::choose`]).
+/// A replica scope: the state place the nodes of this scope live in.
 #[derive(Debug, Clone)]
 struct Scope {
     state: Expr,
-    chosen: HashSet<(ExprId, usize)>,
 }
 
 /// Flow-mode state of a [`FnCx`] (one per generated function).
@@ -283,6 +280,21 @@ pub(crate) struct StageCx {
     pub(crate) local_override: HashMap<u32, Expr>,
     /// Node expression → its value once computed (a temporary).
     expr_override: HashMap<ExprId, Expr>,
+    /// The instances whose work in the function is lowered (§11.3, S-1233),
+    /// each once, with its value (of one read in it, [`nodes::instance`]).
+    done: HashMap<NodeId, Option<Expr>>,
+    /// The end of the stage is lowered (§11.3): what the delays store and
+    /// the work of `FlowInfo::late` alone. Its readers ([`hoist::work`],
+    /// [`nodes::delay_work`], [`phases::init_delay`], [`lower_flow_expr`]) rest
+    /// on three things. What is late is in the first argument of a delay (a
+    /// `^name` is nowhere else, E0801), which [`phases::end`] comes to with
+    /// each node. The walk of the end does not go down into the first
+    /// argument of a delay inside: that delay is a node of its own. No
+    /// instance runs at the end: its arguments and conditions read no `^name`
+    /// and no binding one chooses (E0801, S-1245), so it is in `done`.
+    saving: bool,
+    /// The locals at the head of the function ([`nodes::keep`]).
+    heads: Vec<Stmt>,
     /// `sample_rate()`: the parameter in `init`, the state field elsewhere.
     sample_rate: Expr,
     /// The time of the function (§11.4, S-1129 (1), S-1217): its parameters
@@ -290,15 +302,13 @@ pub(crate) struct StageCx {
     /// the count of the outermost `sample` from `process`, which a caller
     /// passes to its callees ([`chain::child_time`]); empty elsewhere.
     time: Vec<Expr>,
-    /// Innermost scope last, the arms chosen at the stage.
+    /// Innermost scope last.
     scopes: Vec<Scope>,
 }
 
 impl FlowLowerCx<'_> {
-    /// A scope of `state` in the innermost, whose arms chosen it has.
     fn push_scope(&mut self, state: Expr) {
-        let chosen = self.now.scopes.last().map(|s| s.chosen.clone()).unwrap_or_default();
-        self.now.scopes.push(Scope { state, chosen });
+        self.now.scopes.push(Scope { state });
     }
 }
 

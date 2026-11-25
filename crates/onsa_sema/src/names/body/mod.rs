@@ -155,6 +155,13 @@ pub(crate) struct BodyNames {
     /// R-472, S-1078): the one lookup that the types stage reads, which
     /// evaluates the N of a derived clock for the clocks.
     pub clocks: HashMap<ExprId, crate::clock::ClockRef>,
+    /// The bindings of the arms of a `match~` that reads a `^name` to choose
+    /// (§11.2, S-1245), by a scrutinee or a guard, through such a binding
+    /// too: the one judgment (`flow_order.rs`, D-15), of the E0801 and of
+    /// what is evaluated at the end of its stage (`FlowInfo::late`).
+    pub past: HashSet<BindingId>,
+    /// The `match`es whose `~` would leave that E0801 (§11.5, no candidate).
+    pub no_tilde: HashSet<ExprId>,
     /// What diverges (§7), which [`crate::body::BodyInfo::diverging`] takes.
     pub diverging: crate::tails::Diverging,
     /// `false` when the walk stopped before the end of the body: at an error

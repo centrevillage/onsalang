@@ -19,12 +19,15 @@ pub(crate) fn lower_flow_expr(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId) -> R<O
         // A hoisted subexpression of an earlier stage: its field (§11.3), of
         // the scope it is lowered in: the `State` (a `let` or the output
         // holds it), or the replica of the `par~` whose body does (S-1140);
-        // `sample_tick()` of a slower tick too (S-1210).
+        // `sample_tick()` of a slower tick too (S-1210). Before it, the work
+        // of this stage in it ([`super::hoist::work`]).
         if let Some(h) = f.info.hoist_of(e).filter(|&h| f.info.hoist(h).stage < f.now.stage) {
             let scope = f.now.scopes.last().ok_or_else(|| internal(span, "a hoisted field outside the state"))?;
             let v = sfield(lw, f.info, &scope.state, FieldOf::Hoist(h), span)?;
             super::hoist::record(lw, h, span, false)?;
-            return Ok(Some(v));
+            let mut stmts = Vec::new();
+            super::hoist::walk(lw, cx, e, &mut stmts)?;
+            return Ok(Some(after(stmts, v)));
         }
         // The time of the root its caller passes to the function (§11.4,
         // S-1129 (1)), at every stage.
@@ -43,42 +46,28 @@ pub(crate) fn lower_flow_expr(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId) -> R<O
     let (name, at) = (&info.node(id).path, |p| FieldOf::Node(id, p));
     // A node is read in the function of the stage the plan gives it, a
     // `par~` where its body is.
-    let here = match info.node(id).kind {
-        PlanKind::Par { .. } => true,
-        _ => info.node_stage(id) == Some(stage),
-    };
-    if !here {
-        return Err(internal(span, format!("`{name}` evaluated outside the function of its tick")));
-    }
+    let outside = || internal(span, format!("`{name}` evaluated outside the function of its tick"));
     let mut stmts = Vec::new();
     let value = match &info.node(id).kind {
-        // Of a chain, read by the ops of its entry (§11.10).
         PlanKind::Prev { .. } | PlanKind::Delay { .. } | PlanKind::Vdelay { .. } => {
-            match info.node(id).entry(stage, true) {
-                Some(e) => {
-                    let v = super::chain::entry(lw, cx, &mut stmts, id, &state, e)?;
-                    v.ok_or_else(|| internal(span, format!("`{name}` read of an entry of no value")))?
-                }
-                None => delay_value(lw, cx, &mut stmts, &state, id)?,
+            let n = info.node(id);
+            let arg = n.kind.stored().filter(|_| info.node_stage(id) == Some(stage)).ok_or_else(outside)?;
+            // At the end of the stage, done where the delay is written.
+            if !cx.flow.as_ref().expect("flow context").now.saving {
+                super::hoist::walk(lw, cx, arg, &mut stmts)?;
             }
-        }
-        PlanKind::Instance { .. } => match info.node(id).read {
-            // Of a chain that deals, the array of its outermost boundary that deals (§11.9),
-            // after the ops of this stage that write it (the review of U6b, its high 1).
-            Read::Array(b) => {
-                if let Some(e) = info.node(id).entry(stage, true) {
-                    super::chain::entry(lw, cx, &mut stmts, id, &state, e)?;
-                }
-                super::chain::dealt(lw, cx, &mut stmts, id, &state, b, span)?
-            }
-            // Read where the stage of its callee that makes the output runs (S-1088): its entry read.
-            Read::Run => {
-                let e = info.node(id).entry(stage, true);
-                let e = e.ok_or_else(|| internal(span, format!("`{name}` read where its output is not made")))?;
-                let v = super::chain::entry(lw, cx, &mut stmts, id, &state, e)?;
+            // Of a chain, read by the ops of its entry (§11.10).
+            if n.chain.is_empty() {
+                delay_value(lw, cx, &mut stmts, &state, id)?
+            } else {
+                let v = super::chain::entry(lw, cx, &mut stmts, id, &state)?;
                 v.ok_or_else(|| internal(span, format!("`{name}` read of an entry of no value")))?
             }
-        },
+        }
+        PlanKind::Instance { .. } => {
+            let v = instance(lw, cx, &mut stmts, id, false)?.ok_or_else(outside)?;
+            return Ok(Some(after(stmts, v)));
+        }
         PlanKind::Par { body, .. } => {
             let r = replica_loop(cx, &info.node(id).kind, span)?;
             let ty = lw.core_ty(cx.info.expr_types[&e], &[], span)?;
@@ -112,6 +101,117 @@ pub(crate) fn lower_flow_expr(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId) -> R<O
     cx.flow.as_mut().unwrap().now.expr_override.insert(e, result.clone());
     let ty = result.ty.clone();
     Ok(Some(Expr::new(ty, span, ExprKind::Block(Block { stmts, value: Some(Box::new(result)) }))))
+}
+
+/// The work of the instance `id` in the function of the stage (§11.3,
+/// S-1233), lowered where it is first reached, once: its arguments and its
+/// conditions, then its `init`, its `ctl` or the ops of its entry
+/// ([`super::chain::entry`]); then its value, of one read in the function
+/// (of a chain that deals, the array of its outermost boundary that deals,
+/// §11.9). `early`: in the first argument of a delay, whose store reads the
+/// value at the end of the stage.
+pub(super) fn instance(
+    lw: &mut Lowerer,
+    cx: &mut FnCx,
+    out: &mut Vec<Stmt>,
+    id: NodeId,
+    early: bool,
+) -> R<Option<Expr>> {
+    let now = &cx.flow.as_ref().expect("flow context").now;
+    if let Some(v) = now.done.get(&id) {
+        return Ok(v.clone());
+    }
+    let info = cx.flow.as_ref().expect("flow context").info;
+    let (n, span) = (info.node(id), cx.ast.expr(info.node(id).expr).span);
+    let (stage, state) = super::branches::here(cx, span)?;
+    let value = match stage {
+        ClockStage::Init | ClockStage::Block => super::phases::own_stage(lw, cx, out, id, &state).map(|()| None)?,
+        ClockStage::Event(_) | ClockStage::Tick(_) => {
+            let made = super::chain::entry(lw, cx, out, id, &state)?;
+            match n.read {
+                _ if info.node_stage(id) != Some(stage) => None,
+                Read::Array(b) => Some(super::chain::dealt(lw, cx, out, id, &state, b, span)?),
+                // Read where the stage of its callee that makes the output runs (S-1088).
+                Read::Run => {
+                    Some(made.ok_or_else(|| internal(span, format!("`{}` read of an entry of no value", n.path)))?)
+                }
+            }
+        }
+    };
+    let value = match value {
+        Some(v) if early => Some(keep(cx, out, id, v)?),
+        Some(v) if !matches!(v.kind, ExprKind::Local(_)) => {
+            let tmp = cx.temp(&n.path, v.ty.clone());
+            out.push(stmt(span, StmtKind::Let(tmp, v)));
+            Some(local_expr(cx, tmp, span))
+        }
+        v => v,
+    };
+    cx.flow.as_mut().unwrap().now.done.insert(id, value.clone());
+    Ok(value)
+}
+
+/// The work of the stage where the delay `id` is written and not read (§11.3,
+/// S-1233): that in its first argument, its `d` and, in `init`, its `init`
+/// (S-1242); of one in the first argument of a delay, read by the store of
+/// that at the end of the stage, the conditions of its chain (S-1241).
+pub(super) fn delay_work(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, id: NodeId) -> R<()> {
+    let now = &cx.flow.as_ref().expect("flow context").now;
+    let (info, stage, saving) = (cx.flow.as_ref().expect("flow context").info, now.stage, now.saving);
+    let n = info.node(id);
+    // Its store at the end of the stage does the rest of its first argument.
+    if let Some(arg) = n.kind.stored().filter(|_| !saving) {
+        super::hoist::walk(lw, cx, arg, out)?;
+    }
+    if let PlanKind::Vdelay { d, .. } = n.kind {
+        super::hoist::walk(lw, cx, d, out)?;
+    }
+    if stage == ClockStage::Init {
+        super::phases::init_delay(lw, cx, out, id)?;
+    }
+    if saving || n.chain.is_empty() {
+        return Ok(());
+    }
+    // Its entry of a stage of a condition slower than it, or the conditions alone.
+    if info.node_stage(id) != Some(stage) {
+        if cx.flow.as_mut().unwrap().now.done.insert(id, None).is_none() {
+            let state = super::branches::here(cx, cx.ast.expr(n.expr).span)?.1;
+            super::chain::entry(lw, cx, out, id, &state)?;
+        }
+        return Ok(());
+    }
+    let read = super::chain::ports_read(lw, cx, id)?;
+    for (at, cond) in (0u32..).zip(&n.chain).filter_map(|(at, m)| Some((at, m.cond?))) {
+        // One its entry of another stage reads.
+        if !read.contains(&Port::Cond(at)) {
+            super::hoist::walk(lw, cx, cond, out)?;
+            continue;
+        }
+        let v = lower_expr(lw, cx, cond)?;
+        let v = keep(cx, out, id, v)?;
+        cx.flow.as_mut().unwrap().now.expr_override.insert(cond, v);
+    }
+    Ok(())
+}
+
+/// `v`, made in the scope of the node `id`, as a value the end of the stage
+/// reads: a `let` ([`super::chain::hold`]); in a `par~`, whose loop ends
+/// before, the element of the replica of a local of the function.
+fn keep(cx: &mut FnCx, out: &mut Vec<Stmt>, id: NodeId, v: Expr) -> R<Expr> {
+    let info = cx.flow.as_ref().expect("flow context").info;
+    let (name, mut pars, mut owner) = (&info.node(id).path, Vec::new(), info.node(id).owner);
+    while let Owner::Par(p) = owner {
+        pars.insert(0, p);
+        owner = info.node(p).owner;
+    }
+    if pars.is_empty() {
+        return Ok(super::chain::hold(cx, out, v, name));
+    }
+    let mut head = Vec::new();
+    let place = replicas_place(cx, &mut head, &format!("__early.{name}"), v.ty.clone(), &pars, v.span)?;
+    cx.flow.as_mut().unwrap().now.heads.append(&mut head);
+    assign(out, &place, v)?;
+    Ok(place)
 }
 
 /// The value of the delay `id` in the scope of the state `s` (§11.4): the field of

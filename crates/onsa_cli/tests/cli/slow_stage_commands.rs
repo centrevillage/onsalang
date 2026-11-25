@@ -7,7 +7,7 @@
 //!   modifier (§11.9), are lowered the same way (U5b2).
 //! - A chain with an `.up~(N)` in it is lowered beside the flows with ticks (U6b3); what stays E0200 is the border of the outermost flow (W10-01); a modifier on a built-in delay is open since W7-10 U3b, a modifier inside a block since U3a and `reset_if~` of an instance since U2b.
 //! - Of two ticks at one position that both panic, the slower one is the one that is reported (§11.9: "遅い方から並ぶ", S-1079), whether the two are of one flow or of the parent and a child (S-1088).
-//!   The order of a `let` of the parent and of a child at one stage, and of two children, is the one of S-1206 and S-1159 (open: the provisional order of the reference evaluator).
+//!   The order of a `let` of the parent and of a child at one stage, and of two children, is the order of the text: the work of a call is where the call is written (§11.3, S-1233, S-1206, S-1159).
 //! - `onsa interface` shows the phase counter of a flow that has a stage of `sample / N`, whose child has one or reads `sample_tick()`, after `_sample_rate` and before the fields of
 //!   the `let`s (§12.4, S-1179 (2)), as a field that the compiler puts (its name starts with `_`, §11.6, S-1137); a flow with neither has none; the field of a child has the `State` of the child.
 //!
@@ -214,33 +214,42 @@ const KID: &str = "flow kid(p: I32 at block) -> I32 at sample {\n  let d = prev~
 
 /// A child that stops alone stops at its own division; the rest of the cases of the group have the parent's own division and that of the child at the same frame. A stage of the child is a
 /// stage of the parent (S-1088), so what decides which of the two is reported is the order of §11.9: the slower tick first (S-1079, "比の違う遅い刻みどうしは遅い方から"), and for the same ratio the order
-/// of S-1206 and S-1159 (open; the provisional order of the reference evaluator: the `let`s of the stage of the parent in the order of the text, then the stages of the children in the order of the
-/// calls; the cases say so).
+/// of S-1233 (S-1206, S-1159: the work of a call is where the call is written, so the `let`s and the calls of the stage of the parent are in the order of the text; the cases say so).
 #[test]
 fn the_panic_of_a_stage_of_a_child_is_reported_at_the_division_of_the_child_when_it_is_alone() {
     let src = stops_src(&format!("{KID}pub flow f(p: I32 at block) -> I32 at sample {{\n  kid~(p)\n}}\n"), "f");
     assert_eq!(stop_line("slow_child_panic_alone", &src), line_of(&src, "100 / d"), "{src}");
 }
 
-/// S-1206 and S-1159 (provisional): at one stage a `let` of the parent is evaluated before the stage of a child of the same ratio, whichever is written first in the text. Both divide by the 0 at the frame 4;
-/// the one that stops the run is the division of the parent (`200 / e`).
+/// S-1233 (S-1206, S-1159): at one stage the stage of a child is run where the call is written, so a `let` of the parent above the call is before it (both divide by the 0 at the frame 4; the one that stops
+/// the run is the division of the parent, `200 / e`).
 #[test]
-fn at_one_stage_the_let_of_the_parent_is_before_the_stage_of_a_child_s1206_s1159_provisional() {
-    let let_first = format!(
+fn at_one_stage_a_let_above_the_call_of_a_child_is_before_the_stage_of_the_child_s1233() {
+    let flows = format!(
         "{KID}pub flow f(p: I32 at block) -> I32 at sample {{\n  let e = prev~(p at (sample / 4), 1)\n  let r = 200 / e\n  (r at sample) + kid~(p)\n}}\n"
     );
-    let child_first = format!(
-        "{KID}pub flow f(p: I32 at block) -> I32 at sample {{\n  let k = kid~(p)\n  let e = prev~(p at (sample / 4), 1)\n  let r = 200 / e\n  (r at sample) + k\n}}\n"
-    );
-    for (tag, flows) in [("slow_child_panic_let_first", &let_first), ("slow_child_panic_child_first", &child_first)] {
-        let src = stops_src(flows, "f");
-        assert_eq!(stop_line(tag, &src), line_of(&src, "200 / e"), "the let of the parent: {src}");
-    }
+    let src = stops_src(&flows, "f");
+    assert_eq!(stop_line("slow_child_panic_let_first", &src), line_of(&src, "200 / e"), "the let of the parent: {src}");
 }
 
-/// S-1206 (provisional): the stages of two children at one stage are in the order of their calls in the parent, not in the order of their declarations (the first declared is called second).
+/// S-1233 (S-1206, S-1159; table of the group 119, "上の `let k = kid~(p)`（中に `sample / 4` の段）と下の `sample / 4` の `let`"): the call of the child is written above the `let`s of the parent, so its stage is
+/// run first: the division of the child (`100 / d`) stops the run, not `200 / e` (the `let`s went first before the work, whichever was written first).
 #[test]
-fn two_children_that_panic_at_one_stage_are_reported_in_the_order_of_the_calls_s1206_provisional() {
+fn at_one_stage_the_stage_of_a_child_called_above_a_let_is_run_before_it_s1233_u2b_b() {
+    let flows = format!(
+        "{KID}pub flow f(p: I32 at block) -> I32 at sample {{\n  let k = kid~(p)\n  let e = prev~(p at (sample / 4), 1)\n  let r = 200 / e\n  (r at sample) + k\n}}\n"
+    );
+    let src = stops_src(&flows, "f");
+    assert_eq!(
+        stop_line("slow_child_panic_child_first", &src),
+        line_of(&src, "100 / d"),
+        "the call of the child: {src}"
+    );
+}
+
+/// S-1233 (S-1206): the stages of two children at one stage are in the order of their calls in the parent, not in the order of their declarations (the first declared is called second).
+#[test]
+fn two_children_that_panic_at_one_stage_are_reported_in_the_order_of_the_calls_s1206() {
     let flows = "flow kid_a(p: I32 at block) -> I32 at sample {\n  let d = prev~(p at (sample / 4), 1)\n  let q = 100 / d\n  q at sample\n}\n\nflow kid_b(p: I32 at block) -> I32 at sample {\n  let d = prev~(p at (sample / 4), 1)\n  let q = 300 / d\n  q at sample\n}\n\npub flow f(p: I32 at block) -> I32 at sample {\n  let b = kid_b~(p)\n  let a = kid_a~(p)\n  a + b\n}\n";
     let src = stops_src(flows, "f");
     assert_eq!(

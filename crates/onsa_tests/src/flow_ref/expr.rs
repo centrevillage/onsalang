@@ -201,8 +201,9 @@ impl<'a> Frame<'a> {
     pub fn eval(&mut self, e: ExprId) -> Eval {
         if let Some(kept) = self.hoisted.get(&e) {
             let replicas = self.run.as_ref().map_or(&[][..], |r| &r.replicas[..]);
-            if let Some(v) = kept.1.get(replicas) {
-                return Ok(v.clone());
+            if let Some(v) = kept.1.get(replicas).cloned() {
+                super::hoist::hoisted_calls(self, e)?;
+                return Ok(v);
             }
         }
         let at = self.body.ast.expr(e).span;

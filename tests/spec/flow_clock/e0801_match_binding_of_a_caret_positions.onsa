@@ -1,0 +1,159 @@
+// onsa.toml
+// [test]
+// spec = ["§11.2", "§11.5", "§11.10", "§18.1"]
+// fixes = 0
+
+// W7-11 U2b/t2, S-1245 (a) (the text is in e0801_match_binding_of_a_caret_in_a_call.onsa: a binding of an arm of a `match~` whose target or guard reads `^名前` is the same as `^名前` in the argument of a flow and the condition of a modifier,
+// E0801, no candidate). The places the binding comes from or is read in, other than the target and the plain argument: a guard that reads `^名前` (the bindings of that arm), a `match~` inside an arm whose target reads a binding of the outer
+// one (a binding of the inner one is such a binding too, also when the outer binding is read in the middle of an expression, and two arms deep), a `par~` around the `match~` or in the delay that holds it, a built-in delay of the
+// first argument that is slower than `sample` (`.down~(4)` on the call, whose argument the binding is), and a flow that is called with the binding and then called again. The primary position is the line that reads the name of the binding
+// (for the guard, of the binding the guard's arm gives). One error per flow (P-01).
+
+pub enum V {
+  A(F32),
+  B,
+}
+
+impl Default for V {
+  rt fn default() -> Self {
+    V.B
+  }
+}
+
+pub flow g(x: F32 at sample) -> F32 at sample {
+  x + prev~(x)
+}
+
+pub flow gp(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  x * p + prev~(x)
+}
+
+pub flow guard_reads_a_caret(x: F32 at sample) -> F32 at sample {
+  let y = prev~(match~ x {
+    n if ^w > 0.0 => g~(n),                                                //~ E0801
+    _ => g~(0.5),
+  })
+  let w = x * x - 10.0
+  y + x
+}
+
+pub flow guard_reads_a_caret_binding_in_a_condition(x: F32 at sample) -> F32 at sample {
+  let y = prev~(match~ x {
+    n if ^w > 0.0 => g~(x).when~(n > 0.5),                                 //~ E0801
+    _ => g~(0.5),
+  })
+  let w = x * x - 10.0
+  y + x
+}
+
+pub flow guard_of_the_second_arm(x: F32 at sample) -> F32 at sample {
+  let y = prev~(match~ ^v {
+    V.A(b) if b > 100.0 => 1.0,
+    V.A(b) if ^w > 0.0 => g~(b),                                           //~ E0801
+    _ => 0.0,
+  })
+  let v: V = if x > 0.0 { V.A(x) } else { V.B }
+  let w = x * x - 10.0
+  y + x
+}
+
+pub flow nested_match(x: F32 at sample) -> F32 at sample {
+  let y = prev~(match~ ^v {
+    V.A(b) => match~ (if b > 2.0 { Some(b) } else { None }) {
+      Some(c) => g~(c),                                                    //~ E0801
+      None => g~(1.0),
+    },
+    V.B => 0.0,
+  })
+  let v: V = if x > 0.0 { V.A(x) } else { V.B }
+  y + x
+}
+
+pub flow nested_match_read_in_the_middle(x: F32 at sample) -> F32 at sample {
+  let y = prev~(match~ ^v {
+    V.A(b) => match~ (if b > 2.0 { Some(b) } else { None }) {
+      Some(c) => g~(x) + g~(c * 2.0),                                      //~ E0801
+      None => g~(1.0),
+    },
+    V.B => 0.0,
+  })
+  let v: V = if x > 0.0 { V.A(x) } else { V.B }
+  y + x
+}
+
+pub flow nested_in_a_call_of_a_call(x: F32 at sample) -> F32 at sample {
+  let y = prev~(match~ ^v { V.A(b) => g~(g~(b)), V.B => 0.0 })             //~ E0801
+  let v: V = if x > 0.0 { V.A(x) } else { V.B }
+  y + x
+}
+
+pub flow nested_condition(x: F32 at sample) -> F32 at sample {
+  let y = prev~(match~ ^v {
+    V.A(b) => match~ (if b > 2.0 { Some(b) } else { None }) {
+      Some(c) => g~(x).reset_if~(c > 3.0),                                 //~ E0801
+      None => g~(1.0),
+    },
+    V.B => 0.0,
+  })
+  let v: V = if x > 0.0 { V.A(x) } else { V.B }
+  y + x
+}
+
+pub flow par_around_the_match(x: F32 at sample) -> F32 at sample {
+  let y = prev~(par~ i in 0 ..< 2 {
+    match~ ^v {
+      V.A(b) => g~(b * F32.round_from(i + 1)),                             //~ E0801
+      V.B => 0.0,
+    }
+  })
+  let v: V = if x > 0.0 { V.A(x) } else { V.B }
+  y[0] + y[1] * 10.0
+}
+
+pub flow par_in_the_delay(x: F32 at sample) -> F32 at sample {
+  let ys = par~ i in 0 ..< 2 {
+    prev~(match~ ^v { V.A(b) => g~(b * F32.round_from(i + 1)), V.B => 0.0 }) //~ E0801
+  }
+  let v: V = if x > 0.0 { V.A(x) } else { V.B }
+  ys[0] + ys[1] * 10.0
+}
+
+pub flow par_with_a_condition(x: F32 at sample) -> F32 at sample {
+  let ys = par~ i in 0 ..< 2 {
+    prev~(match~ ^v { V.A(b) => g~(x).when~(b > F32.round_from(i)), V.B => 0.0 }) //~ E0801
+  }
+  let v: V = if x > 0.0 { V.A(x) } else { V.B }
+  ys[0] + ys[1] * 10.0
+}
+
+pub flow down_chain_head_argument(n: F32 at block) -> F32 at sample {
+  let d4 = prev~(n at (sample / 4), 1.0)
+  let y4 = prev~(match~ ^v4 { V.A(b) => g~(b).down~(4), V.B => 0.0 })      //~ E0801
+  let v4: V = if d4 > 1.5 { V.A(d4) } else { V.B }
+  y4 at sample
+}
+
+pub flow slow_target_read_at_sample(n: F32 at block) -> F32 at sample {
+  let d4 = prev~(n at (sample / 4), 1.0)
+  let y = prev~(match~ (^v4 at sample) { V.A(b) => g~(b), V.B => 0.0 })      //~ E0801
+  let v4: V = if d4 > 1.5 { V.A(d4) } else { V.B }
+  y
+}
+
+pub flow block_input_in_a_sum(x: F32 at sample, n: F32 at block) -> F32 at sample {
+  let y = prev~(g~(x) + (match~ ^v { V.A(b) => gp~(x, b), V.B => 0.0 }))   //~ E0801
+  let v: V = if n > 0.0 { V.A(n) } else { V.B }
+  y
+}
+
+pub flow in_the_delay_of_a_delay(x: F32 at sample) -> F32 at sample {
+  let y = prev~(prev~(match~ ^v { V.A(b) => g~(b), V.B => 0.0 }))          //~ E0801
+  let v: V = if x > 0.0 { V.A(x) } else { V.B }
+  y + x
+}
+
+pub flow delay_of_a_delay_with_a_sibling_call(x: F32 at sample) -> F32 at sample {
+  let y = prev~(g~(x) + prev~(match~ ^v { V.A(b) => g~(b), V.B => 0.0 }))  //~ E0801
+  let v: V = if x > 0.0 { V.A(x) } else { V.B }
+  y + x
+}

@@ -130,6 +130,10 @@ fn heavy_match_twins() {
 /// The seeds of the gate for the panics: chosen again when a change of the generator moves what they make and `PAN_COVER` or
 /// `PAN_TWICE` break.
 const PAN_GATE: [u64; 12] = [151, 209, 472, 486, 575, 626, 1229, 1255, 1328, 1350, 1397, 1429];
+/// The seeds of the gate and of the heavy range whose program has two divisions by zero in an order that S-1233 changes: the evaluator reports the division of the call of a flow where it is written (a division in an
+/// argument of `block` of `scale~(x, F32.round_from(100 / ki))`), and the interpreter (the Core of `562ab2e1`) the division of a part that the stage hoists, written after it, first. They are run apart (the next test),
+/// which holds the order of the Core from W7-11 U2b on.
+const PAN_ORDER: [u64; 14] = [151, 209, 1429, 9, 15, 17, 32, 36, 40, 51, 54, 75, 100, 102];
 /// The forms the seeds hold: chains and `match~`es, nested, on each kind of scrutinee; the divisions (by an input of each clock
 /// and by a binding), in a body, in an argument of `block`, in a condition after the first and in a guard after another (a guard
 /// of `sample` before it too), a guarded chain, a short circuit (`&&`, `||`) whose right side divides, by the clock of its left
@@ -178,7 +182,12 @@ fn the_panics_of_the_forms_written_by_hand_are_where_the_spec_derives_them() {
 
 #[test]
 fn the_panics_of_the_gate_seeds_are_by_their_plans_and_the_same_in_the_interpreter() {
-    println!("{:?}", pan_check(pan_progs(PAN_GATE.to_vec())));
+    println!("{:?}", pan_check(pan_progs(PAN_GATE.into_iter().filter(|s| !PAN_ORDER.contains(s)).collect())));
+}
+
+#[test]
+fn the_panics_of_the_seeds_that_the_order_of_s1233_changes_are_the_same_place_in_the_interpreter() {
+    println!("{:?}", pan_check(pan_progs(PAN_ORDER.to_vec())));
 }
 
 #[test]
@@ -194,7 +203,7 @@ fn the_panic_seeds_of_the_gate_hold_every_form_of_the_table_of_what_is_covered()
 #[test]
 #[ignore = "heavy: the gate item `heavy` runs it"]
 fn heavy_panic_stages() {
-    println!("{:?}", pan_check(pan_progs(heavy_seeds(150))));
+    println!("{:?}", pan_check(pan_progs(heavy_seeds(150).into_iter().filter(|s| !PAN_ORDER.contains(s)).collect())));
 }
 
 #[test]

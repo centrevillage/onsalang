@@ -1,0 +1,36 @@
+// onsa.toml
+// [test]
+// spec = ["§11.2", "§11.5", "§18.1"]
+// fixes = 2
+
+// S-1245 (a): the `^` of a forward reference in the scrutinee and in a guard (E0801) and the `~` of a `match` (E0811) keep their candidate where no binding of the arms is read in the argument of a flow or the condition of a
+// modifier (it is read by an operation), as before. The forms with no candidate are e0801_match_binding_of_a_caret_no_candidate.onsa.
+
+pub enum V {
+  A(F32),
+  B,
+}
+
+flow lp(x: F32 at sample) -> F32 at sample {
+  let y = x + 0.5 * prev~(^y)
+  y
+}
+
+pub flow the_tilde_of_a_match(x: F32 at sample) -> F32 at sample {
+  let q = prev~(match~ ^v { V.A(b) => lp~(x) + b, V.B => 0.0 })   //~ E0811
+  let v: V = if x > 0.0 { V.A(x) } else { V.B }
+  q
+}
+
+pub flow the_caret_of_the_scrutinee(x: F32 at sample) -> F32 at sample {
+  let q = prev~(match~ ^v { V.A(b) => lp~(x) + b, V.B => 0.0 })   //~ E0801
+  let v: V = if x > 0.0 { V.A(x) } else { V.B }
+  q
+}
+
+pub flow the_caret_of_a_guard(x: F32 at sample) -> F32 at sample {
+  let k: V = if x > 1.0 { V.A(x) } else { V.B }
+  let q = prev~(match~ k { V.A(a) if a > ^w => lp~(x) + a, _ => 0.0 })   //~ E0801
+  let w = x + 1.0
+  q
+}

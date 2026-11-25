@@ -422,7 +422,10 @@ impl Walk<'_> {
         };
         let msg = format!("a flow instance, a delay or a `par~` cannot be {place} (§11.5)");
         let mut d = Diagnostic::new(Stage::Flow, code, span, msg).with_found(self.src(span));
-        if let Site::Branch { head } = site {
+        // A `~` that leaves the E0801 of a binding is no candidate (§11.5, S-1245).
+        if let Site::Branch { head } = site
+            && !self.names.no_tilde.contains(&head)
+        {
             let at = self.ast.expr(head).span;
             let word = if matches!(self.ast.expr(head).kind, ExprKind::If { .. }) { "if" } else { "match" };
             let title = format!("write `{word}~`, which evaluates every branch");

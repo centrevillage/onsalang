@@ -144,6 +144,7 @@ fn close(pkg: &Package, a: &mut Analysis, f: DefId, marks: &HashMap<DefId, Mark>
     let set = |n: &mut PlanNode, (e, read)| (n.entries, n.read) = (e, read);
     flow.nodes.iter_mut().zip(tables).for_each(|(n, t)| t.into_iter().for_each(|t| set(n, t)));
     (flow.stages, flow.time) = (stages.into_iter().collect(), time);
+    node_work(flow);
     fields::build(flow);
     // The E0808 of the path first, one of the flow, as before S-1216.
     if let Some(p) = past_at {
@@ -153,6 +154,24 @@ fn close(pkg: &Package, a: &mut Analysis, f: DefId, marks: &HashMap<DefId, Mark>
         a.diagnostics.extend(found);
     }
     counted.then_some(count)
+}
+
+/// Adds the work of the nodes of `flow` to [`FlowInfo::work`]: of each
+/// instance its stages (`init`, `block`, its entries), of a delay `init`, at
+/// the `let` or the output that holds it, which a function of another stage
+/// walks (that of its own stage evaluates it).
+fn node_work(flow: &mut FlowInfo) {
+    let own: Vec<_> = flow.lets.iter().map(|l| l.stage.stage()).chain([flow.out_stage]).collect();
+    let own: Vec<_> = own.into_iter().map(|s| s.map(|s| flow.run_stage(s))).collect();
+    for (n, k) in flow.nodes.iter().zip(flow.outer()) {
+        let made: &[ClockStage] = match n.kind {
+            PlanKind::Instance { .. } => &[ClockStage::Init, ClockStage::Block],
+            PlanKind::Prev { .. } | PlanKind::Delay { .. } | PlanKind::Vdelay { .. } => &[ClockStage::Init],
+            PlanKind::Par { .. } => &[],
+        };
+        let stages = made.iter().copied().chain(n.entries.iter().map(|e| e.caller));
+        flow.work.extend(stages.filter(|&s| own[k] != Some(s)).map(|s| (k as u32, s)));
+    }
 }
 
 /// What a chain composes past `U32` ([`unmade`]): of an input of the callee

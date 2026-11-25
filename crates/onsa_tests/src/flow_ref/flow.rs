@@ -24,7 +24,7 @@ use onsa_syntax::ast::{CallKind, ExprId, ExprKind, PatId, StmtKind};
 
 use super::chain::Gate;
 use super::expr::{Frame, Hoisted, Stop};
-use super::hoist::{gathered, pre, seen_of, stage_of};
+use super::hoist::{has_state, pre, seen_of, stage_of};
 use super::host::FnHost;
 use super::rate::{Conds, Level, chain_of, components, derived, levels, on_tick, ring_clock, slow_ticks};
 use super::scalar::{Fault, PanicKind};
@@ -204,8 +204,10 @@ pub(super) struct Step {
     pub(super) pat: Option<PatId>,
     pub(super) init: ExprId,
     pub(super) clock: Clock,
-    /// The clocks of the locals before this step (`hoist::pre` reads the clocks of the parts of `init` by them).
+    /// The clocks of the locals of the body (`hoist::pre` reads the clocks of the parts of `init` by them; a `^name` reads one below the step).
     pub(super) known: Rc<Known>,
+    /// Does `init` hold a call of an instance or a delay: the work they have in a stage that is not the step's is done where they are written (S-1233).
+    pub(super) calls: bool,
 }
 
 /// What is the same at each call of a flow: its steps, the ticks slower than `sample` its stages are of, and the clock of the condition of each `reset_if~` (`rate::slow_ticks`).
@@ -364,26 +366,30 @@ fn give<V: std::borrow::Borrow<Value>>(
 
 /// The steps the clocks of `at` run, in the order they are written (the output is a step too, the last). A step of a faster clock
 /// is not run, but the parts of it that this stage makes are (`hoist::pre`, in the order of the steps: a `let` of `block` that the
-/// part reads is made before it).
+/// part reads is made before it), and so is a step of a slower clock that holds a call (S-1233, S-1206, S-1159, S-1128: the work a call has in this stage is done where
+/// the call is written, whether its output is read here or not, so there is one walk of the body for a stage and the stage is its argument).
 // S-1093 (1): a `let` and the output expression of a stage are evaluated whether or not a value is read from them (so one that
 // panics does, in a branch not taken too, and the output of `block` or `init` in a call of 0 frames too).
 fn stage(f: &mut Frame, steps: &[Step], out: &mut Value, at: Stage) -> Result<(), Stop> {
     for s in steps {
+        // Where a call that an expression of the step reads is written (`read_call` makes the arguments the call gathers there).
+        f.run.iter_mut().for_each(|run| run.step = Some((s.known.clone(), s.init)));
         if s.clock.runs_at(at) {
             match s.pat {
                 Some(pat) => f.bind(pat, s.init)?,
                 None => *out = f.eval(s.init)?,
             }
-        } else if s.clock > Clock::from(at) {
+        } else if s.clock > Clock::from(at) || s.calls {
             pre(f, &s.known, s.init, s.init, at)?;
         }
     }
+    f.run.iter_mut().for_each(|run| run.step = None);
     Ok(())
 }
 
 /// One entry of `inst` in its frame `f` (the time is `f.run.ctx`): the inputs of the stage `at` (`given`, by name), its
 /// `let`s, then what the stage has besides: at `init` the nodes (the delays, the instances it calls), for any other stage the stage of the instances it calls that runs in it
-/// (`run_children`, §11.9, S-1088, at `block` also the `block` stage of those, a call of 0 frames too), and for a tick the second phase of the delays (§11.4), whose saves are stored at once.
+/// (in the walk, §11.9, S-1088, at `block` also the `block` stage of those, a call of 0 frames too), and for a tick the second phase of the delays (§11.4), whose saves are stored at once.
 pub(super) fn enter<V: std::borrow::Borrow<Value>>(
     f: &mut Frame,
     inst: &mut Inst,
@@ -392,18 +398,25 @@ pub(super) fn enter<V: std::borrow::Borrow<Value>>(
     given: &[(&str, V)],
 ) -> Result<(), Stop> {
     give(f, decl, at, given)?;
-    f.run.as_mut().iter_mut().for_each(|run| run.stage = at);
+    f.run.as_mut().iter_mut().for_each(|run| {
+        run.stage = at;
+        run.gathered.clear();
+    });
     stage(f, &inst.steps, &mut inst.out, at)?;
     let whole = f.body.ast.expr(decl.body).span;
     match at {
-        Stage::Init => f.make_cells(&inst.steps.iter().map(|s| s.init).collect::<Vec<_>>()),
-        Stage::Block => f.run_children(at, whole),
+        // The nodes of `init` and the stages of the instances are made and run by the walk (`Frame::work_of`); what is left is the forms the evaluator has not.
+        Stage::Init => {
+            f.check_forms(&inst.steps.iter().map(|s| s.init).collect::<Vec<_>>())?;
+            f.finish_cells()?;
+            f.commit(whole)
+        }
+        // The parts that read a `^name` and that this stage makes are made at its end (S-1244).
+        Stage::Block => f.commit(whole),
         _ => {
-            gathered(f, &inst.steps, at)?;
             if at == Stage::Sample {
                 f.save_gathers(whole)?;
             }
-            f.run_children(at, whole)?;
             f.commit(whole)
         }
     }
@@ -411,7 +424,7 @@ pub(super) fn enter<V: std::borrow::Borrow<Value>>(
 
 /// A frame of the outermost instance `inst` at the time of its frame `f` (§11.9): the stages of the slower ticks that the time is on, the larger N first (S-578, S-1079), then
 /// `sample` with its inputs (`given`, by name). A tick of ratio `2^-k` is on when the counter of the instance is a multiple of `2^k`, the first
-/// frame included, whatever the calls of `process` are (§11.9, §13.4). The instances it calls run theirs in the stages of this one (`Frame::run_children`).
+/// frame included, whatever the calls of `process` are (§11.9, §13.4). The instances it calls run theirs in the stages of this one (`Frame::work_of`).
 pub(super) fn run_frame<V: std::borrow::Borrow<Value>>(
     f: &mut Frame,
     inst: &mut Inst,
@@ -514,9 +527,14 @@ impl Inst {
         let (mut known, mut steps) = (inputs, Vec::new());
         for ((pat, init), clock) in lets.iter().zip(seen) {
             let clock = clock.ok_or(wrong(*init, "a `let` with no clock"))?;
-            let before = Rc::new(known.clone());
             known.extend(body.pat_locals(*pat).map_err(at(*init))?.into_iter().map(|l| (l, clock)));
-            steps.push(Step { pat: Some(*pat), init: *init, clock: clock.stage, known: before });
+            steps.push(Step {
+                pat: Some(*pat),
+                init: *init,
+                clock: clock.stage,
+                known: Rc::default(),
+                calls: has_state(body, *init),
+            });
         }
         let out = seen_of(body, &known, tail, tail).map_err(at(tail))?;
         let ambient = stage_of(body, &known, tail, tail).map_err(at(tail))? == Clock::AMBIENT;
@@ -525,7 +543,10 @@ impl Inst {
             Stage::Tick(m) if ambient && m < 0 => Clock::Tick(m),
             _ => out.stage,
         };
-        steps.push(Step { pat: None, init: tail, clock, known: Rc::new(known) });
+        // Every step has the clocks of all the locals: a `^name` in the first argument of a delay reads one below it (S-1244); a name is read of the ones before it alone (the check sees to it).
+        let every = Rc::new(known);
+        steps.iter_mut().for_each(|s| s.known = every.clone());
+        steps.push(Step { pat: None, init: tail, clock, known: every, calls: has_state(body, tail) });
         Ok(steps.into())
     }
 

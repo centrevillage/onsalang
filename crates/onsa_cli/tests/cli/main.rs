@@ -6,6 +6,7 @@ mod test_support;
 
 mod alias_sameness;
 mod at_stage_fields;
+mod back_c_commands;
 mod binding_clock_notes;
 mod block_operands;
 mod body_paths;
@@ -124,6 +125,7 @@ mod reset_if_c_commands;
 mod sample_tick_commands;
 mod slow_stage_commands;
 mod slow_written_forms;
+mod stage_order_commands;
 mod std_privilege;
 mod syntax_units;
 mod test_failure_positions;

@@ -751,10 +751,11 @@ fn par_replicates_state_and_loops() {
         d.contains("type t.uni.State = struct { saws: [t.uni.saws.State; 4], _poisoned: Bool, _initialized: Bool }"),
         "{d}"
     );
-    // The part at `init` of the argument is hoisted in each replica (S-1140).
+    // The part at `init` of the argument is hoisted in each replica (S-1140),
+    // in the one loop of the body, before the `init` of the call (S-1233).
     assert!(d.contains("type t.uni.saws.State = struct { saw_0: t.saw.State, _hoist_0: F32 }"), "{d}");
-    assert!(d.contains("for i in 0:U32..4:U32 {\n    s.0[i].1 = (1.0:F32 + (round.U32.F32(i) * 0.01:F32))"), "{d}");
-    assert!(d.contains("for i in 0:U32..4:U32 {\n    s.0[i].0 = t.saw.init(t.saw.Config {}, sample_rate)"), "{d}");
+    let field = "for i in 0:U32..4:U32 {\n    s.0[i].1 = (1.0:F32 + (round.U32.F32(i) * 0.01:F32))\n";
+    assert!(d.contains(&format!("{field}    s.0[i].0 = t.saw.init(t.saw.Config {{}}, sample_rate)")), "{d}");
     assert!(d.contains("t.saw.ctl(inout s.0[i].0, t.saw.Params { f0: (p.0 * s.0[i].1) })"), "{d}");
     assert!(d.contains("= t.saw.tick(inout s.0[i].0)"), "{d}");
     assert!(d.contains("t.saw.reset(inout s.0[i].0)"), "{d}");

@@ -1,0 +1,50 @@
+// onsa.toml
+// [test]
+// spec = ["§11.2", "§11.5", "§18.1"]
+// fixes = 0
+
+// S-1245 (a) (spec §18.1: a candidate leaves no error of its stage or of one before; §11.5: no `~` candidate that leaves an error): the candidates that would come to the E0801 of a binding of an arm chosen by a `^` in the
+// argument of a flow or in the condition of a modifier are not shown: the `~` of a `match` (E0811), the `^` of a forward reference in the scrutinee and in a guard (E0801). The same forms with a binding that is
+// read in no call keep their candidates (e0801_match_binding_of_a_caret_candidates.onsa).
+
+pub enum V {
+  A(F32),
+  B,
+}
+
+flow lp(x: F32 at sample) -> F32 at sample {
+  let y = x + 0.5 * prev~(^y)
+  y
+}
+
+pub flow the_tilde_of_a_match(x: F32 at sample) -> F32 at sample {
+  let q = prev~(match ^v { V.A(b) => lp~(b), V.B => 0.0 })   //~ E0811
+  let v: V = if x > 0.0 { V.A(x) } else { V.B }
+  q
+}
+
+pub flow the_caret_of_the_scrutinee(x: F32 at sample) -> F32 at sample {
+  let q = prev~(match~ v { V.A(b) => lp~(b), V.B => 0.0 })   //~ E0801
+  let v: V = if x > 0.0 { V.A(x) } else { V.B }
+  q
+}
+
+pub flow the_caret_of_a_guard(x: F32 at sample) -> F32 at sample {
+  let k: V = if x > 1.0 { V.A(x) } else { V.B }
+  let q = prev~(match~ k { V.A(a) if a > w => lp~(a), _ => 0.0 })   //~ E0801
+  let w = x + 1.0
+  q
+}
+
+pub flow the_caret_of_a_guard_of_a_later_arm(x: F32 at sample) -> F32 at sample {
+  let k: V = if x > 1.0 { V.A(x) } else { V.B }
+  let q = prev~(match~ k { V.A(a) => lp~(a), V.B if w > 0.0 => 1.0, _ => 0.0 })   //~ E0801
+  let w = x + 1.0
+  q
+}
+
+pub flow the_caret_in_a_condition_of_a_modifier(x: F32 at sample) -> F32 at sample {
+  let q = prev~(match~ v { V.A(b) => lp~(x).when~(b > 1.0), V.B => 0.0 })   //~ E0801
+  let v: V = if x > 0.0 { V.A(x) } else { V.B }
+  q
+}

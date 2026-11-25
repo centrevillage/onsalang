@@ -147,11 +147,11 @@ impl FlowInfo {
         }
     }
 
-    /// Whether the `let` k (the output by `lets.len()`) holds a hoisted
-    /// field or a check of the stage `s` (`FlowInfo::writes`): the
-    /// function of `s` walks it for them (§11.3).
-    pub fn writes_in(&self, k: usize, s: ClockStage) -> bool {
-        u32::try_from(k).is_ok_and(|k| self.writes.contains(&(k, s)))
+    /// Whether the `let` k (the output by `lets.len()`), not of the stage
+    /// `s`, holds work of it (`FlowInfo::work`): the function of `s` walks
+    /// it at its place (§11.3, S-1233).
+    pub fn work_in(&self, k: usize, s: ClockStage) -> bool {
+        u32::try_from(k).is_ok_and(|k| self.work.contains(&(k, s)))
     }
 
     /// The `let`s of the stage `stage`, in their order (§11.4).
@@ -170,10 +170,10 @@ impl FlowInfo {
 }
 
 impl PlanNode {
-    /// Its entry of the stage `s` of this flow whose `read` is `read`
-    /// (§11.9, [`Entry`]): the one question the Core asks of its work.
-    pub fn entry(&self, s: ClockStage, read: bool) -> Option<&Entry> {
-        self.entries.iter().find(|e| e.caller == s && e.read == read)
+    /// Its entry of the stage `s` of this flow (§11.9, [`Entry`]): the one
+    /// question the Core asks of its work.
+    pub fn entry(&self, s: ClockStage) -> Option<&Entry> {
+        self.entries.iter().find(|e| e.caller == s)
     }
 
     /// The innermost boundary from the boundary `from` out that gathers the

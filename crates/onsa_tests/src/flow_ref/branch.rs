@@ -67,6 +67,16 @@ impl<'a> Frame<'a> {
     // the whole chain, and the parts with no state of every branch are all evaluated too (§11.5).
     #[inline(never)]
     pub(super) fn all_branches(&mut self, e: ExprId, at: Span) -> Eval {
+        self.through_branches(e, at, |f, x| f.eval(x))
+    }
+
+    /// `go` on each branch of the `if~` `e` in the order written, after the side that selects: the result of the one that is taken (`all_branches`; `early_calls`).
+    pub(super) fn through_branches<R>(
+        &mut self,
+        e: ExprId,
+        at: Span,
+        mut go: impl FnMut(&mut Self, ExprId) -> Result<R, Stop>,
+    ) -> Result<R, Stop> {
         let (ast, mut chain, mut links) = (self.body.ast, e, Vec::new());
         let last = loop {
             let ExprKind::If { cond, then, else_, .. } = &ast.expr(chain).kind else {
@@ -88,12 +98,12 @@ impl<'a> Frame<'a> {
         }
         let mut taken = None;
         for (n, (_, then)) in links.iter().enumerate() {
-            let value = self.eval(*then)?;
+            let value = go(self, *then)?;
             if n == chosen {
                 taken = Some(value);
             }
         }
-        let rest = self.eval(last)?;
+        let rest = go(self, last)?;
         Ok(taken.unwrap_or(rest))
     }
 
@@ -103,6 +113,16 @@ impl<'a> Frame<'a> {
     // at the first arm that matches); the bodies of all the arms come after it.
     #[inline(never)]
     pub(super) fn select_all(&mut self, e: ExprId, at: Span) -> Eval {
+        self.through_arms(e, at, |f, x| f.eval(x))
+    }
+
+    /// `go` on the body of each arm of the `match~` `e` in the order written, with the bindings of its pattern: the result of the one taken (`select_all`; `early_calls`).
+    pub(super) fn through_arms<R>(
+        &mut self,
+        e: ExprId,
+        at: Span,
+        mut go: impl FnMut(&mut Self, ExprId) -> Result<R, Stop>,
+    ) -> Result<R, Stop> {
         let (ast, here) = (self.body.ast, |fault| Stop { fault, at });
         let ExprKind::Match { scrutinee, arms, .. } = &ast.expr(e).kind else {
             return Err(here(Internal("not a match~")));
@@ -117,7 +137,7 @@ impl<'a> Frame<'a> {
         let mut value = None;
         for (n, arm) in arms.iter().enumerate() {
             let bound = if Some(n) == taken { self.pat_values(arm.pat)? } else { self.default_values(arm.pat, at)? };
-            let result = self.with_bindings(&[], bound, |f| f.eval(arm.body))?;
+            let result = self.with_bindings(&[], bound, |f| go(f, arm.body))?;
             if Some(n) == taken {
                 value = Some(result);
             }

@@ -97,7 +97,7 @@ impl Walker<'_> {
                 self.exprs(ast.sub_exprs(e))
             }
             ExprKind::Block(b) => self.block(b),
-            ExprKind::Match { scrutinee, arms, .. } => self.match_arms(*scrutinee, arms),
+            ExprKind::Match { scrutinee, arms, tilde } => self.match_arms(e, *scrutinee, arms, tilde.is_some()),
             ExprKind::Closure { params, ret, ret_clock, body, effects } => {
                 self.closure(e, params, (*ret, ret_clock.as_ref()), effects.is_some(), *body)
             }
@@ -282,13 +282,23 @@ impl Walker<'_> {
         Ok(())
     }
 
-    fn match_arms(&mut self, scrutinee: ExprId, arms: &[MatchArm]) -> W {
-        self.expr(scrutinee)?;
+    fn match_arms(&mut self, e: ExprId, scrutinee: ExprId, arms: &[MatchArm], tilde: bool) -> W {
+        // The past values that choose, of the guards of all the arms too (§11.2, `flow_order.rs`).
+        let fed = self.feeds_args(arms);
+        self.chooser(scrutinee, fed && tilde)?;
+        let past = arms.iter().filter_map(|a| a.guard).chain([scrutinee]).any(|x| self.reads_past(x));
+        if past && fed && !tilde {
+            self.out.no_tilde.insert(e);
+        }
         for (k, arm) in arms.iter().enumerate() {
             self.open_scope();
+            let first = self.out.bindings.len() as u32;
             self.pattern(arm.pat, BindingKind::MatchBind, Origin::Arm { scrutinee, arm: k as u32 })?;
+            if past && tilde {
+                self.out.past.extend((first..self.out.bindings.len() as u32).map(BindingId));
+            }
             if let Some(g) = arm.guard {
-                self.expr(g)?;
+                self.chooser(g, fed && tilde)?;
             }
             self.expr(arm.body)?;
             self.close_scope();
@@ -490,7 +500,7 @@ pub(super) fn expr_heads<'a>(ast: &'a Ast, e: ExprId, out: &mut Vec<&'a Ident>) 
 /// The names the pattern `p` binds, in the order of the text; a choice in
 /// it binds the names of its first branch (its other branches bind the
 /// same, or are its E0314).
-fn binds(ast: &Ast, p: PatId) -> Vec<&Ident> {
+pub(super) fn binds(ast: &Ast, p: PatId) -> Vec<&Ident> {
     match &ast.pat(p).kind {
         PatKind::Bind(name) => vec![name],
         PatKind::Tuple(ps) | PatKind::TupleStruct { elems: ps, .. } => ps.iter().flat_map(|&q| binds(ast, q)).collect(),

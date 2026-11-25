@@ -63,13 +63,15 @@ rt fn resonator.process(inout s, params, input: Span[F32], inout output: Span[F3
 - `par~` は `[sub.State; N]` と `ForRange` に落とし、`i` はループ変数（`init` のクロックの値）。状態を持つものの無い `par` は状態のフィールドを作らない（S-1177）。
 - 追記（2026-11-23、W7-16 U5a〜U7）: 遅い刻みの段・時間・連鎖の降下。
   - 段は sema の `ClockStage`（`Init`・`Block`・`Tick(k)`。`Tick(0)` が本体の `sample`）。`sample / N` の段（`FlowInfo::stages`。呼び先の遅い段も含む）は段ごとの関数 `tick_<N>(inout s, [t], <その段の入力>)` に降ろし、`tick` は `sample` の段の関数である。一つの生成器 `phases::gen_tick` が段を引数に取る。
-    段の中の順は、保存する入力、`let` と巻き上げた欄、出力、呼び先の段、保存（`SPEC-GAP(S-1206)`）。`process` は遅い段を、位相のカウンタが N の倍数のときに `phases::drive` で呼ぶ（最初の刻みで動き、ホストの区切りに依らない、§11.9）。
+    段の中の順は、保存する入力、`let` を上から、出力、段の終わり（遅延の保存と、`FlowInfo::late` のもの。`phases::end`、`StageCx::saving`）（§11.3、S-1233）。
+    `let` と出力の式の中のその段の仕事（巻き上げた欄、検査、呼び先の段、遅延の `init`）は、書いた位置で `hoist::work` の一つの歩きが行う（インスタンスは `nodes::instance`、遅延は `nodes::delay_work`。一つの呼び出しは一つの関数で一度、`StageCx::done`）。
+    `process` は遅い段を、位相のカウンタが N の倍数のときに `phases::drive` で呼ぶ（最初の刻みで動き、ホストの区切りに依らない、§11.9）。
   - `sample_tick()` は一番外の `process` のカウンタ `_tick`（`.down~` の先で読む flow だけが上の桁の欄 `_tick_hi` も持つ、S-1217・S-1211）から、段の関数の引数 `t`（と `t_hi`）で渡す。引数を取るのは時間を読む段の関数だけ（`FlowInfo::time_words`）で、時間を読まない flow に時間の欄・引数・演算は無い。
     カウンタを進める所は `FlowInfo::counter()`（遅い段を持つ flow は `tick` の末尾、時間だけの flow は `process` の `phases::advance`）。子へ渡す時間は連鎖の境界ごとに畳む（`chain::fold`、`child_time`）。子の `sample_rate()` も境界ごとに割る・掛ける（`child_rate`）。
   - 連鎖の降下は sema の手順の表を読む。`PlanNode::entries`（呼び出し側の段ごとの `Entry { caller, read, ops }`）の `Op`（`Ring`・`Run`・`Deal`・`Each`・`When`・`Reset`・`Hold`）と `Read`（`plan/steps.rs`: 内の修飾子から外へ一つの歩きで、境界・`when~`・`reset_if~` ごとに一つの腕）、`PlanBound`（`at`・`ratio`・`ins`・`out`・`conds`・`gathers`・`deals`）と `PlanGuard`（`at`・`cond`・`w`・`out`）が入出力と条件を読むクロックを持ち（どちらも `plan/bounds.rs` の一度の歩き）、Core は比から数え直さない。
     表の歩き（`plan/entries.rs`: 呼び先から先に、明示のスタックと `Open`・`Done` の印で循環を守る）が S-1089 の積（E0808）と段ごとの時間の語も決め、Core は表を読むだけにする（R-91 (1)）。
   - Core の `chain::entry` が一つの `Entry` の `ops` を歩く（`Walk`。`.up~` の走り j は `Walk::js`）。位置の算術は `counter`（位相の畳み込み）と `at`（窓の中の位置）に一つ、輪と配る配列への書き読みは `copy`（全体・要素一つ・`ForRange`）、頭の入力の切り出しは `window`。
-    `Each` の腕は `for j` の本体に組ごとの `drive`、引数は繰り返しの前に一度（`prelower`・`arg_value`）。集める輪と配る配列の欄の名前は S-1208（`<ノードの名前>._gather_<境界>_<入力>`・`._deal_<境界>`）。
+    `Each` の腕は `for j` の本体に組ごとの `drive`、引数と条件は ops の前に字面の順に一度（`chain::ports`。読まないものは中のその段の仕事だけ）。集める輪と配る配列の欄の名前は S-1208（`<ノードの名前>._gather_<境界>_<入力>`・`._deal_<境界>`）。
   - 呼び出し側の `sample * N` の値と引数（束）は `[T; N]` で、型は `burst_ty` の一か所、束でない引数の N 個の複製は `spread` の一か所（頭の入力と輪の両方）。
   - 段の入口の表ができたので、Core の門（`multirate_at`・`lowered_chain`、`Feature::MultirateFlows`）は無い。
     Core が作れない形は `check` の段で止まる: `sample_tick()` を呼び出し側の `sample * N` になる引数に置く形は E0815（S-1218、`clocks/checks.rs` の `check_arg`）、連鎖と合成したクロックの N が `U32` を超える形は E0808（S-1216、`plan/entries.rs` の表の歩き。判定は `Ratio::made_n` の一か所を Core の `chain::len`・`Clock::burst_len`・`phases::drive` も読む）。

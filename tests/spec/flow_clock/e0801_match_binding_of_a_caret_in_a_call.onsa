@@ -1,0 +1,113 @@
+// onsa.toml
+// [test]
+// spec = ["§11.2", "§11.5", "§11.10", "§18.1"]
+// fixes = 0
+
+// W7-11 U2b/t2, S-1245 (a) (spec §11.2: "`^名前` を書けるのは、遅延の組込みの第 1 引数の式の中だけで、その中の利用者の flow の引数と修飾子の引数（`when~`・`reset_if~` の条件）には書けない（E0801）"; the reason it gives is that the place of a
+// delay, where a cycle is cut, is written by the writer ("遅延の位置を、閉路を切る場所に書き手が明示するため") and that nearly the same feedback is not to be written two ways (P2)): a binding of an arm of a `match~` whose target reads `^名前` is
+// the same as `^名前` there (`prev~(match~ ^v { b => g~(b) })` is the same as `prev~(g~(^v))`, which is E0801), so a binding of such an arm is not written in the argument of a call of a flow or in the condition of a modifier either.
+// This file: the binding is read in the argument of a flow of the user (`g~(b)`, in an expression of the argument too, in the `block` and the `init` input of a flow) and in the condition of a `when~` or a `reset_if~` (the receiver a flow of the
+// user, or a built-in delay, and a chain of two modifiers). The primary position is the line of the arm that reads the name of the binding; no candidate is offered (the form that is written instead, `let t = match~ v { … }` and `prev~(^t)`,
+// is in the note, not a candidate). One error per flow (P-01): each flow holds one read. `v` is the value of `x` (sample), of `n` (`block`) or of `n` (`init`), as the input of the flow the binding is given to needs.
+// The forms that stay valid are in e0801_match_binding_of_a_caret_forms_accepted.onsa; the guard, the nested `match~`, `par~`, `.down~` are in e0801_match_binding_of_a_caret_positions.onsa.
+
+pub enum V {
+  A(F32),
+  B,
+}
+
+impl Default for V {
+  rt fn default() -> Self {
+    V.B
+  }
+}
+
+pub flow g(x: F32 at sample) -> F32 at sample {
+  x + prev~(x)
+}
+
+pub flow gp(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  x * p + prev~(x)
+}
+
+pub flow gi(x: F32 at sample, c: F32 at init) -> F32 at sample {
+  x + prev~(x, c)
+}
+
+pub flow argument(x: F32 at sample) -> F32 at sample {
+  let y = prev~(match~ ^v { V.A(b) => g~(b), V.B => 0.0 })                 //~ E0801
+  let v: V = if x > 0.0 { V.A(x) } else { V.B }
+  y + x
+}
+
+pub flow argument_in_an_expression(x: F32 at sample) -> F32 at sample {
+  let y = prev~(match~ ^v { V.A(b) => g~(x * 2.0 + b), V.B => 0.0 })       //~ E0801
+  let v: V = if x > 0.0 { V.A(x) } else { V.B }
+  y + x
+}
+
+pub flow binding_pattern(x: F32 at sample) -> F32 at sample {
+  let y = prev~(match~ ^w { b => g~(b) })                                  //~ E0801
+  let w: F32 = x * 0.5
+  y + x
+}
+
+pub flow call_in_the_second_arm(x: F32 at sample) -> F32 at sample {
+  let y = prev~(match~ ^v { V.B => 0.0, V.A(b) => g~(b) })                 //~ E0801
+  let v: V = if x > 0.0 { V.A(x) } else { V.B }
+  y + x
+}
+
+pub flow block_input(x: F32 at sample, n: F32 at block) -> F32 at sample {
+  let y = prev~(match~ ^v { V.A(b) => gp~(x, b), V.B => 0.0 })             //~ E0801
+  let v: V = if n > 0.0 { V.A(n) } else { V.B }
+  y + x
+}
+
+pub flow init_input(x: F32 at sample, n: F32 at init) -> F32 at sample {
+  let y = prev~(match~ ^v { V.A(b) => gi~(x, b), V.B => 0.0 })             //~ E0801
+  let v: V = if n > 0.0 { V.A(n) } else { V.B }
+  y + x
+}
+
+pub flow when_of_a_flow(x: F32 at sample) -> F32 at sample {
+  let y = prev~(match~ ^v { V.A(b) => g~(x).when~(b > 2.0), V.B => 0.0 })  //~ E0801
+  let v: V = if x > 0.0 { V.A(x) } else { V.B }
+  y + x
+}
+
+pub flow reset_of_a_flow(x: F32 at sample) -> F32 at sample {
+  let y = prev~(match~ ^v { V.A(b) => g~(x).reset_if~(b > 2.0), V.B => 0.0 }) //~ E0801
+  let v: V = if x > 0.0 { V.A(x) } else { V.B }
+  y + x
+}
+
+pub flow when_of_a_delay(x: F32 at sample) -> F32 at sample {
+  let y = prev~(match~ ^v { V.A(b) => prev~(x).when~(b > 2.0), V.B => 0.0 }) //~ E0801
+  let v: V = if x > 0.0 { V.A(x) } else { V.B }
+  y + x
+}
+
+pub flow reset_of_a_delay(x: F32 at sample) -> F32 at sample {
+  let y = prev~(match~ ^v { V.A(b) => prev~(x).reset_if~(b > 2.0), V.B => 0.0 }) //~ E0801
+  let v: V = if x > 0.0 { V.A(x) } else { V.B }
+  y + x
+}
+
+pub flow second_modifier_of_a_chain(x: F32 at sample) -> F32 at sample {
+  let y = prev~(match~ ^v { V.A(b) => g~(x).when~(x > -4.0).reset_if~(b > 2.0), V.B => 0.0 }) //~ E0801
+  let v: V = if x > 0.0 { V.A(x) } else { V.B }
+  y + x
+}
+
+pub flow first_modifier_of_a_chain(x: F32 at sample) -> F32 at sample {
+  let y = prev~(match~ ^v { V.A(b) => g~(x).when~(b > 2.0).reset_if~(x > 6.5), V.B => 0.0 }) //~ E0801
+  let v: V = if x > 0.0 { V.A(x) } else { V.B }
+  y + x
+}
+
+pub flow vdelay_receiver(x: F32 at sample) -> F32 at sample {
+  let y = prev~(match~ ^v { V.A(b) => vdelay~(x, 2.0, 8).reset_if~(b > 2.0), V.B => 0.0 }) //~ E0801
+  let v: V = if x > 0.0 { V.A(x) } else { V.B }
+  y + x
+}

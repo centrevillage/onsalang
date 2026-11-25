@@ -1,10 +1,10 @@
 //! A chain of `.down~(N)` that gathers and deals nothing, over a part that reads no `sample_tick()`, in the commands of `onsa` (W7-16 U6a1/t; spec §11.9, §12.4, §11.6, §9.2; S-1079, S-1088, S-1179 (2),
-//! S-1206, S-1159, S-1207, Q-09): what the case `tests/spec/flow_semantics/down_chain_values.onsa` cannot pin.
+//! S-1206, S-1159, S-1233, S-1207, Q-09): what the case `tests/spec/flow_semantics/down_chain_values.onsa` cannot pin.
 //!
 //! - `onsa interface` of the parent of such a chain has the state of the child and the counter of the phase (`_tick`) after `_sample_rate` and before the fields of the `let`s (§12.4, S-1179 (2)). That the
 //!   parent has the field is the choice of the implementation (§11.9 "誰が欄を持つかは実装の選択"); where it is, is the spec's. A parent of a part that reads no `sample_tick()` has no `_tick_hi` (§12.4: the field of the upper word of the time is only of a flow with a `.down~` before a read of `sample_tick()`, S-1211, S-1217; the flows that have it are in `down_chain_time_commands.rs`).
-//! - Which of two panics at one position is reported (`onsa test`, the `failure` of the test): the slower tick first (§11.9, S-1079), and at one stage a `let` of the parent before the stage of the part under the
-//!   chain (S-1206 and S-1159, open: the provisional order of the reference evaluator, so that test has `provisional` in its name).
+//! - Which of two panics at one position is reported (`onsa test`, the `failure` of the test): the slower tick first (§11.9, S-1079), and at one stage the order of the text: the work of the part under the chain
+//!   is where the call is written, so a `let` above the call is before it and a `let` below it after (§11.3, S-1206, S-1159, S-1233; the order of the whole stage is in `stage_order_commands.rs`).
 //!
 //! The texts are written from the spec; none is taken from the output of the compiler.
 
@@ -97,12 +97,11 @@ fn of_a_stage_of_the_parent_and_a_part_under_a_down_chain_at_one_position_the_sl
     assert_eq!(stop_line("down_chain_panic_slower", &src), line_of(&src, "100 / d"), "the stage of sample / 8: {src}");
 }
 
-/// S-1206 and S-1159 (provisional): at one stage (the part under `.down~(4)` runs at the stage `sample / 4` of the parent)
-/// the part runs after the `let`s of that stage when the value of the chain is read at a faster stage (`… at sample` in the
-/// output), and where it is read when it is read at that stage (`let k = kid~(p).down~(4)`, an output at the tick read by a
-/// reader at its stage). Both divide by the 0 at the frame 4; the one reported is the first of them in that order.
+/// S-1233 (S-1206, S-1159; §11.3 "インスタンスの呼び出し … がその段に持つ仕事は、出力をその段で読むかによらず、呼び出しを書いた位置で行う"): at one stage (the part under `.down~(4)` runs at the stage
+/// `sample / 4` of the parent) the part runs where the call is written: after the `let`s above it (the call is in the output, `… at sample`) and before the ones below it (`let k = kid~(p).down~(4)` over the
+/// `let`s). Both divide by the 0 at the frame 4; the one reported is the first of them in the order of the text.
 #[test]
-fn at_one_stage_the_part_under_a_down_chain_runs_after_the_lets_or_where_its_tick_reads_it_s1206_s1159_provisional() {
+fn at_one_stage_the_part_under_a_down_chain_runs_where_the_call_is_written_s1233() {
     let let_first = format!(
         "{KID}pub flow f(p: I32 at block) -> I32 at sample {{\n  let e = prev~(p at (sample / 4), 1)\n  let r = 200 / e\n  (r at sample) + (kid~(p).down~(4) at sample)\n}}\n"
     );
@@ -114,15 +113,15 @@ fn at_one_stage_the_part_under_a_down_chain_runs_after_the_lets_or_where_its_tic
         ("down_chain_panic_child_first", &child_first, "100 / d"),
     ] {
         let src = stops(flows, 5);
-        assert_eq!(stop_line(tag, &src), line_of(&src, first), "the first in the order of S-1206: {src}");
+        assert_eq!(stop_line(tag, &src), line_of(&src, first), "the first in the order of S-1233: {src}");
     }
 }
 
-/// S-1206 and S-1159 (provisional; W7-16 U6b3): the runs of a chain with an `.up~(N)` give the output of the call at the `sample` stage of the caller, so they run where the call is read, in the order of the text: a `let`
+/// S-1233 (S-1206, S-1159; W7-16 U6b3): the runs of a chain with an `.up~(N)` give the output of the call at the `sample` stage of the caller, so they run where the call is written, in the order of the text: a `let`
 /// written before the call runs before the up (its division is reported), a `let` written after it runs after (the division of the part under the up is reported). Both divide by a value of `sample` (a `prev~`, so not at
 /// `block`, §11.3) that is 0 at the frame 1: the caller by `p` of the frame before, the part by `p` of two of its frames before, at its frame 2, the run j = 0 of the frame 1.
 #[test]
-fn at_one_stage_the_runs_of_an_up_chain_run_where_the_call_is_read_s1206_s1159_provisional() {
+fn at_one_stage_the_runs_of_an_up_chain_run_where_the_call_is_written_s1233() {
     let part = "flow kidu(p: I32 at block) -> I32 at sample {\n  let d = prev~(prev~(p at sample, 1), 1)\n  100 / d\n}\n\nflow two(x: I32 at (sample * 2)) -> I32 at sample {\n  x[0] + x[1]\n}\n\n";
     let let_first = format!(
         "{part}pub flow f(p: I32 at block) -> I32 at sample {{\n  let e = prev~(p at sample, 1)\n  let r = 200 / e\n  r + two~(kidu~(p).up~(2))\n}}\n"
@@ -134,6 +133,6 @@ fn at_one_stage_the_runs_of_an_up_chain_run_where_the_call_is_read_s1206_s1159_p
         [("up_chain_panic_let_first", &let_first, "200 / e"), ("up_chain_panic_up_first", &up_first, "100 / d")]
     {
         let src = stops(flows, 2);
-        assert_eq!(stop_line(tag, &src), line_of(&src, first), "the first in the order of S-1206: {src}");
+        assert_eq!(stop_line(tag, &src), line_of(&src, first), "the first in the order of S-1233: {src}");
     }
 }

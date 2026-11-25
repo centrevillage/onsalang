@@ -29,7 +29,7 @@ fn run(inputs: Vec<(String, Vec<Value>)>, outs: Option<Vec<Value>>) -> Run {
 }
 
 fn test(name: &str, verdict: Verdict, panic: Option<Panic>, events: Vec<Event>) -> TestRun {
-    TestRun { name: name.into(), file: String::new(), asserts: 0, panic, verdict, events }
+    TestRun { name: name.into(), file: String::new(), asserts: 0, panic, panic_span: None, verdict, events }
 }
 
 fn case(tests: Vec<TestRun>) -> CaseRun {

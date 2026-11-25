@@ -35,12 +35,20 @@ mod twin;
 mod twin_arm;
 #[path = "flow_ref/twin_arm_tests.rs"]
 mod twin_arm_tests;
+#[path = "flow_ref/twin_back.rs"]
+mod twin_back;
+#[path = "flow_ref/twin_back_tests.rs"]
+mod twin_back_tests;
 #[path = "flow_ref/twin_chain.rs"]
 mod twin_chain;
 #[path = "flow_ref/twin_chain_tests.rs"]
 mod twin_chain_tests;
 #[path = "flow_ref/twin_match.rs"]
 mod twin_match;
+#[path = "flow_ref/twin_order.rs"]
+mod twin_order;
+#[path = "flow_ref/twin_order_tests.rs"]
+mod twin_order_tests;
 #[path = "flow_ref/twin_pan.rs"]
 mod twin_pan;
 #[path = "flow_ref/twin_reset.rs"]

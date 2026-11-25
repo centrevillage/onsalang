@@ -1,7 +1,7 @@
 //! The run of an instance that a chain of modifiers makes (§11.9, S-1207): each `.down~(N)` and `.up~(N)` wraps the whole part on its left and runs it in the stages of its own caller, so the chain is a list of boundaries
 //! (`rate::Level`), the head inside. `run_level` runs the stage `s` of the part `b` in a frame of it at the time `ctx`, one boundary at a time: a `.down~(N)` runs the part inside in the frames that are multiples of N (with the
 //! elements of the ring of an input it gathers, and the array of an output it deals), a `.up~(N)` runs it N times (the run `j` takes its part of the burst of the frame), and `level_out` reads what the part gives, the
-//! same way. The stages of a frame are run slowest first by what calls `run_unit` (`Frame::run_children`, `read_call`).
+//! same way. The stages of a frame are run slowest first by what calls `run_unit` (`Frame::work_of`, `read_call`).
 
 use std::rc::Rc;
 
@@ -10,7 +10,8 @@ use onsa_sema::def::FlowDef;
 use onsa_syntax::ast::ExprId;
 
 use super::expr::{Eval, Frame, LOW_STACK, Stop};
-use super::flow::{Ctx, Inst, enter};
+use super::flow::{Clock, Ctx, Inst, enter};
+use super::hoist::{gather_args, hoisted_calls, operands};
 use super::rate::{Guard, Level, counted, dealt, elements, n_of, on_tick, phase, port_exprs, slice, time_of};
 use super::scalar::{Fault, Fault::Internal};
 use super::sema_view::{Called, Stage, input_stage};
@@ -46,18 +47,27 @@ impl Gate {
 }
 
 impl<'a> Frame<'a> {
-    /// A call of a flow (§11.5), alone or the head of a chain (§11.9): the instance it makes runs the stages of its parts in the stages of this one (`run_children`), and the call reads its output where the last part makes it
+    /// A call of a flow (§11.5), alone or the head of a chain (§11.9): the instance it makes runs the stages of its parts in the stages of this one (`work_of`), and the call reads its output where the last part makes it
     /// (`made`; its arguments are read there, so the call is always evaluated there), else the output of the stage that made it, held until the next one (a tick, the elements of an array that a `.down~` boundary deals).
-    pub(super) fn read_call(&mut self, head: ExprId, at: Span) -> Eval {
+    pub(super) fn read_call(&mut self, whole: ExprId, head: ExprId, at: Span) -> Eval {
         let here = |fault| Stop { fault, at };
         let Called::Flow(_) = self.body.called(head).map_err(here)? else {
             return Err(here(Internal("a call of a delay read as an instance")));
         };
+        // The calls in its arguments and conditions come first, the ones that this stage does not read too (S-1233), then the call.
+        for x in operands(&self.body, whole) {
+            hoisted_calls(self, x)?;
+        }
         let (key, caller) = (self.key(head, Role::Child), self.time(at)?);
         let levels = self.levels_of(&key, at)?;
-        let made = Stage::Tick(levels[levels.len() - 1].made);
-        if self.run.as_ref().is_some_and(|run| run.stage == made) {
-            self.run_unit(&key, made)?;
+        // The work the instance has in the stage this one is in is done here, where the call is written (S-1233), whether its output is made in it or not; once (`Inst::done`).
+        let stage = self.run.as_ref().map(|run| run.stage);
+        if let Some(stage @ Stage::Tick(_)) = stage {
+            // The arguments it gathers are made where it is written too, before its work (S-1233).
+            if let Some((known, root)) = self.run.as_ref().and_then(|run| run.step.clone()) {
+                gather_args(self, &key, &[], &known, root, Clock::from(stage))?;
+            }
+            self.run_unit(&key, stage)?;
         }
         self.level_out(&key, &levels, levels.len() - 1, caller, at)
     }
@@ -74,9 +84,8 @@ impl<'a> Frame<'a> {
 
     /// The stages of the instance at `key` that are in the stage `s` of this one, for this frame of it, once (`Inst::done`): the stage `y` of a part is in the stage the boundaries put it in (`rate::levels`, §11.9, S-1088). The
     /// arguments are read here in the frame of the call (`feed`), the time the head runs in is that of the boundaries (`time_of`), and `run_level` runs the parts.
-    // SPEC-GAP(S-1206): the stage of this one that an instance runs a stage of its body in is the one the boundaries say, and its output at `sample` is made where the call is read; the spec does not say the
-    // order of the stages of the parts of a call (only a panic shows it). The argument of a gathered input is made at the stage of its own clock, in the walk of the instances of that stage before they run (`hoist::gathered`), when it is
-    // a part that is kept (Copy, not a name); any other is made in the second phase, after them (`Frame::save_gathers`): where in the stage the spec does not say either, and again only a panic shows it.
+    // S-1233 (S-1206, S-1159): the work of a call in a stage is done where the call is written (`Frame::work_of`, and `read_call` for a call that an expression of the stage reads), after its arguments and conditions. The argument of a
+    // gathered input is made at the stage of its own clock before the call's work where the walk reaches the call (`hoist::gather_args`, from the walk and from `read_call`), and the ring it fills is written in the second phase (`Frame::save_gathers`).
     pub(super) fn run_unit(&mut self, key: &NodeKey, s: Stage) -> Result<(), Stop> {
         let at = self.body.ast.expr(key.call).span;
         let here = |fault| Stop { fault, at };
@@ -226,12 +235,12 @@ impl<'a> Frame<'a> {
     }
 
     /// The condition of each `when~` and `reset_if~` of the chain at `key` that is read in the stage `sx` of this one (`Guard::at`, §11.10: at its clock, where the arguments of the head of that clock are read, or at its W), but one that
-    /// a boundary gathers, which its part reads from its port (`cond_of`). Those of one stage are read outermost first.
+    /// a boundary gathers, which its part reads from its port (`cond_of`). Those of one stage are read in the order written, the leftmost first (S-1233, S-1221).
     // SPEC-GAP(S-1221): the condition of a `when~` or `reset_if~` inside a `when~` is read at its W or tick whether or not the outer one runs the part (provisional, as the arguments of the head are; only a panic shows it), and
     // the conditions of a stage outermost first (the order the spec does not say either).
     fn read_conds(&mut self, key: &NodeKey, levels: &[Level], sx: i32) -> Result<(), Stop> {
         let at = self.body.ast.expr(key.call).span;
-        for (b, when) in levels.iter().enumerate().rev().filter_map(|(b, lv)| lv.guard.map(|w| (b, w))) {
+        for (b, when) in levels.iter().enumerate().filter_map(|(b, lv)| lv.guard.map(|w| (b, w))) {
             if when.at == sx && when.port.is_none() {
                 let v = self.eval_staged(key.call, when.cond, Stage::Tick(sx))?;
                 self.gate(key, b, at)?.cond = v;

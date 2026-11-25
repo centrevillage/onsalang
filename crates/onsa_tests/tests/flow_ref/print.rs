@@ -29,6 +29,8 @@ pub struct Printed {
     pub panic_call: Option<String>,
     /// The stage the evaluator panicked at in it (`Sample(n)` of a frame the interpreter does not tell).
     pub panic_at: Option<PanicAt>,
+    /// Where the evaluator stopped in it (`TestRun::panic_span`), which the place of the interpreter's failure is compared with when it is in the body of a flow.
+    pub panic_span: Option<onsa_diag::Span>,
 }
 
 /// The prefix of the names of the printed tests: the filter that selects them from the tests of the original.
@@ -91,7 +93,7 @@ pub fn print_test(index: usize, t: &TestRun) -> Result<Printed, String> {
     w.line("}".into(), "", None);
     let panic_at = if let Some(Panic::Call(at)) = t.panic { Some(at) } else { None };
     let panic_call = t.events.last().filter(|_| panic_at.is_some()).map(|ev| label(t.events.len() - 1, ev));
-    Ok(Printed { name, text: w.text, lines: w.lines, panic_call, panic_at })
+    Ok(Printed { name, text: w.text, lines: w.lines, panic_call, panic_at, panic_span: t.panic_span })
 }
 
 /// The call of an event as the report names it: its place in the test and what it is.

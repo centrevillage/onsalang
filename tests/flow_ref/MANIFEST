@@ -1,4 +1,5 @@
 # flow_ref MANIFEST, format 1 (made by UPDATE_GOLDEN=1, not by hand)
+file back_name_in_a_slower_part_s1244.tsv rows=28 tests=9 evaluated=8 unavailable=0 skipped=1 waiting=0
 file branches_plain.tsv rows=16 tests=5 evaluated=5 unavailable=0 skipped=0 waiting=0
 file branches_plain_match.tsv rows=4 tests=1 evaluated=1 unavailable=0 skipped=0 waiting=1
 file branches_tilde.tsv rows=34 tests=11 evaluated=11 unavailable=0 skipped=0 waiting=0
@@ -121,6 +122,7 @@ file r242_const_let_three_stages.tsv rows=4 tests=1 evaluated=1 unavailable=0 sk
 file reset_boundary.tsv rows=30 tests=3 evaluated=3 unavailable=0 skipped=0 waiting=0
 file reset_if_block_values.tsv rows=40 tests=8 evaluated=4 unavailable=0 skipped=4 waiting=0
 file reset_if_regressions.tsv rows=66 tests=5 evaluated=5 unavailable=0 skipped=0 waiting=0
+file reset_if_slow_condition_delay_values.tsv rows=46 tests=6 evaluated=6 unavailable=0 skipped=0 waiting=0
 file reset_if_slow_values.tsv rows=130 tests=8 evaluated=7 unavailable=0 skipped=1 waiting=0
 file reset_if_tick_fields_values.tsv rows=20 tests=4 evaluated=4 unavailable=0 skipped=0 waiting=0
 file reset_if_values.tsv rows=99 tests=12 evaluated=11 unavailable=0 skipped=1 waiting=0
@@ -149,6 +151,7 @@ file slow_tick_module.tsv rows=10 tests=2 evaluated=2 unavailable=0 skipped=0 wa
 file slow_tick_node_values.tsv rows=45 tests=9 evaluated=9 unavailable=0 skipped=0 waiting=0
 file slow_tick_panics.tsv rows=28 tests=6 evaluated=6 unavailable=0 skipped=0 waiting=0
 file slow_tick_same_position.tsv rows=13 tests=4 evaluated=4 unavailable=0 skipped=0 waiting=0
+file stage_order_values.tsv rows=32 tests=9 evaluated=9 unavailable=0 skipped=0 waiting=0
 file struct_pattern_rest_let.tsv rows=7 tests=2 evaluated=2 unavailable=0 skipped=0 waiting=0
 file struct_pattern_rest_match.tsv rows=4 tests=1 evaluated=1 unavailable=0 skipped=0 waiting=0
 file up_chain_values.tsv rows=100 tests=16 evaluated=13 unavailable=0 skipped=3 waiting=0
@@ -164,4 +167,4 @@ file when_identity_regressions.tsv rows=78 tests=5 evaluated=5 unavailable=0 ski
 file when_slow_head_values.tsv rows=47 tests=5 evaluated=5 unavailable=0 skipped=0 waiting=0
 file when_slow_values.tsv rows=86 tests=9 evaluated=9 unavailable=0 skipped=0 waiting=0
 file when_values.tsv rows=77 tests=10 evaluated=10 unavailable=0 skipped=0 waiting=0
-total files=165 rows=5694 tests=1187 evaluated=1063 unavailable=1 skipped=123 waiting=6
+total files=168 rows=5800 tests=1211 evaluated=1086 unavailable=1 skipped=124 waiting=6

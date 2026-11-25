@@ -117,14 +117,15 @@ fn judge(path: &str, input: PackageInput, placed: &HashMap<String, Placed>, out:
                 // The stage is that of the first place of the failure (the panic, then the calls outwards) that a flow has;
                 // none is the start of a `process`. Which frame, and the kind of the panic, the record does not tell.
                 let places = std::iter::once(f.span).chain(f.calls.iter().copied());
-                let stage = places.into_iter().find_map(|s| stage_at(view, s));
+                let places: Vec<_> = places.collect();
+                let stage = places.iter().find_map(|s| stage_at(view, *s));
                 match p.printed.panic_at.map(|at| at.stage()) {
                     Some(want) if want != stage => {
                         Some(format!("it panicked at {stage:?}, the evaluator at {want:?}, at {call}"))
                     }
                     _ => {
                         out.panicked += 1;
-                        None
+                        same_place(&loaded, view, p, &places).map(|w| format!("{w}, at {call}"))
                     }
                 }
             }
@@ -142,5 +143,21 @@ fn judge(path: &str, input: PackageInput, placed: &HashMap<String, Placed>, out:
     let missing = placed.len().saturating_sub(report.tests.len());
     if missing > 0 {
         out.failures.push(format!("{path}: {missing} printed tests did not run"));
+    }
+}
+
+/// The place of the panic, compared where the evaluator stopped inside the body of a flow (the one innermost, S-1233: the order of the work of a stage is what the place shows): the first place of the interpreter's
+/// failure (the panic, then the calls outwards) that is in a flow is the one to be the same. A stop of the evaluator inside an `rt fn` (its span is in the function, not in a flow) is not compared: the evaluator does not say
+/// the call of the function in the body, and the places of the interpreter hold the calls outwards, so the two are not the same kind of thing there. An interpreter that has no place in a flow where the evaluator has one is a difference.
+fn same_place(loaded: &Loaded, view: View, p: &Placed, places: &[onsa_diag::Span]) -> Option<String> {
+    let want = p.printed.panic_span.filter(|s| stage_at(view, *s).is_some())?;
+    let at = |s: onsa_diag::Span| {
+        let l = loaded.sources.file(s.file).line_col(s.start);
+        format!("{}:{}:{}", loaded.sources.file(s.file).name(), l.line, l.col)
+    };
+    match places.iter().find(|s| stage_at(view, **s).is_some()) {
+        Some(g) if g.file == want.file && g.start == want.start && g.end == want.end => None,
+        Some(g) => Some(format!("it panicked at {}, the evaluator at {}", at(*g), at(want))),
+        None => Some(format!("it panicked at no place of a flow, the evaluator at {}", at(want))),
     }
 }

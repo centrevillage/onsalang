@@ -105,9 +105,9 @@ pub(crate) fn finish_flow(
     });
     info.lets = lets.collect();
     let out = w.output;
-    let mut m = super::reads::mark_all(a, (ast, text), &body, &fcx, &w, &info.lets, out);
+    let mut m = super::reads::mark_all((a, id), (ast, text), &body, &fcx, &w, &info.lets, out);
     (info.read_at, info.bound_at, info.sample_rate_at) = (m.read_at, m.bound_at, m.sample_rate_at);
-    (info.eval_at, info.time_at, info.writes) = (m.eval_at, m.time_at, m.writes);
+    (info.eval_at, info.time_at, info.work, info.late) = (m.eval_at, m.time_at, m.work, m.late);
     info.complete = w.diag.is_none() && m.diag.is_none() && w.inout_call.is_none() && fcx.held.is_none() && !fcx.unread;
     #[cfg(test)]
     WALKED.with(|x| x.borrow_mut().push((id, w.clone(), info.complete)));
@@ -742,7 +742,7 @@ impl Walk<'_> {
     /// the clock of the scrutinee in the guard; in the body of a `match~`, the
     /// join of it and the guards of the arms to this one (S-1131), the
     /// default of their type on a sample that does not take it (E0816).
-    /// At `Check`, the record of a `match~` and of the arms around its nodes.
+    /// At `Check`, the record of a `match~`.
     fn match_arms(&mut self, e: ExprId, scrutinee: ExprId, arms: &[MatchArm], tilde: Option<Span>) -> Option<Clock> {
         let record = tilde.is_some() && self.checking();
         if let Some(t) = tilde.filter(|_| self.checking()) {
@@ -751,7 +751,7 @@ impl Walk<'_> {
         let s = self.expr(scrutinee);
         let (mut ops, mut chosen, mut bound) = (vec![(Some(scrutinee), s)], s, Vec::new());
         let mut bodies: Vec<Op> = Vec::with_capacity(arms.len());
-        for (k, arm) in arms.iter().enumerate() {
+        for arm in arms {
             self.bind_pat(arm.pat, s);
             if let Some(g) = arm.guard {
                 let c = self.at(Site::Choose, |w| w.expr(g));
@@ -763,14 +763,7 @@ impl Walk<'_> {
                 Some(_) => {
                     self.bind_pat(arm.pat, chosen);
                     bound.push(self.check_arm_bindings(arm.pat));
-                    if record {
-                        self.recorder.enter_arm(e, k as u32);
-                    }
-                    let c = self.expr(arm.body);
-                    if record {
-                        self.recorder.leave_arm();
-                    }
-                    c
+                    self.expr(arm.body)
                 }
             };
             ops.push((Some(arm.body), body));

@@ -99,6 +99,8 @@ mod limits_tests;
 #[cfg(test)]
 mod multirate_tests;
 #[cfg(test)]
+mod order_tests;
+#[cfg(test)]
 mod pattern_tests;
 #[cfg(test)]
 mod port_table_tests;

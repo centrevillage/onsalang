@@ -27,10 +27,12 @@ pub(super) struct Marked {
     /// `FlowInfo::bound_at`.
     pub(super) bound_at: HashMap<LocalId, BTreeSet<ClockStage>>,
     pub(super) sample_rate_at: Option<ClockStage>,
-    /// `FlowInfo::eval_at`, `FlowInfo::time_at` and `FlowInfo::writes`.
+    /// `FlowInfo::eval_at`, `FlowInfo::time_at`, `FlowInfo::work` (of the
+    /// hoisted fields and the checks) and `FlowInfo::late`.
     pub(super) eval_at: BTreeSet<ClockStage>,
     pub(super) time_at: BTreeSet<ClockStage>,
-    pub(super) writes: HashSet<(u32, ClockStage)>,
+    pub(super) work: HashSet<(u32, ClockStage)>,
+    pub(super) late: HashSet<ExprId>,
     /// The first call (in the order of the file) of a function that is not
     /// `rt` evaluated at a stage after `init` (R-17): E0815 in a
     /// conditional position a condition decided after `init` selects
@@ -74,6 +76,10 @@ struct Marker<'a> {
     /// hold the expression marked now, the innermost last: its owner.
     par_of: HashMap<ExprId, NodeId>,
     pars: Vec<NodeId>,
+    /// The first arguments of the delays, and the bindings a `^name`
+    /// chooses (`BodyNames::past`), of [`Marker::back`].
+    firsts: HashSet<ExprId>,
+    past: HashSet<LocalId>,
     /// The bindings of the arms of the `match~`s marked, the `match~`s whose
     /// arms are chosen at a stage ([`Marker::read_select`]), and the one
     /// whose guards are marked now.
@@ -116,7 +122,7 @@ fn read_stage(c: Clock) -> Option<ClockStage> {
 /// one with a diagnostic, of the output the body writes at `out` (§11.9: the
 /// tick of an output at `sample / N`). A `let` in error is not marked.
 pub(super) fn mark_all(
-    a: &Analysis,
+    (a, id): (&Analysis, DefId),
     (ast, text): (&Ast, &str),
     body: &BodyInfo,
     cx: &FlowCx,
@@ -132,6 +138,7 @@ pub(super) fn mark_all(
     let recorded = walked.recorded.iter().enumerate();
     let par_of = recorded.filter(|(_, r)| matches!(r.kind, PlanKind::Par { .. }));
     let par_of = par_of.map(|(i, r)| (r.expr, NodeId(i as u32))).collect();
+    let firsts = walked.recorded.iter().filter_map(|r| r.kind.stored()).collect();
     let mut m = Marker {
         ast,
         text,
@@ -148,6 +155,8 @@ pub(super) fn mark_all(
         konst: false,
         par_of,
         pars: Vec::new(),
+        firsts,
+        past: a.names.get(&id).into_iter().flat_map(|n| n.past.iter().map(|b| LocalId(b.0))).collect(),
         binding_of: HashMap::default(),
         selected: HashSet::default(),
         guard: None,
@@ -157,7 +166,8 @@ pub(super) fn mark_all(
             sample_rate_at: None,
             eval_at: BTreeSet::new(),
             time_at: BTreeSet::new(),
-            writes: HashSet::default(),
+            work: HashSet::default(),
+            late: HashSet::default(),
             diag: None,
             hoisted: Vec::new(),
             checks: HashMap::default(),
@@ -199,19 +209,7 @@ pub(super) fn mark_all(
 /// output that holds it. One pass of the nodes (a `par~` comes before the
 /// nodes of its body) and one of the edges.
 pub(super) fn deps(info: &FlowInfo, let_of_local: &HashMap<LocalId, usize>) -> Vec<HashSet<LocalId>> {
-    let out = info.lets.len();
-    let mut outer: Vec<usize> = Vec::with_capacity(info.nodes.len());
-    for n in &info.nodes {
-        let k = match n.owner {
-            Owner::Let(k) => k as usize,
-            Owner::Output => out,
-            Owner::Par(p) => outer.get(p.0 as usize).copied().unwrap_or(usize::MAX),
-        };
-        if k > out {
-            onsa_diag::internal::bug(Some(n.span), "a node of no `let` and not of the output");
-        }
-        outer.push(k);
-    }
+    let (out, outer) = (info.lets.len(), info.outer());
     let mut deps = vec![HashSet::default(); out + 1];
     for e in &info.edges {
         let Vertex::Local(v) = e.from else { continue };
@@ -304,7 +302,8 @@ impl Marker<'_> {
                     (None, _) => Owner::Output,
                 };
                 self.out.hoisted.push((e, s, owner, g != Cond::None));
-                self.out.writes.insert((self.consumer as u32, s));
+                self.out.work.insert((self.consumer as u32, s));
+                self.mark_late(e);
                 if g != Cond::None {
                     self.read_conds(s);
                 }
@@ -317,7 +316,8 @@ impl Marker<'_> {
                 self.out.const_conds.insert(e, g);
                 if let Place::Check(s) = place {
                     self.out.checks.insert(e, s);
-                    self.out.writes.insert((self.consumer as u32, s));
+                    self.out.work.insert((self.consumer as u32, s));
+                    self.mark_late(e);
                     self.read_conds(s);
                     self.konst_parts(e, s, g);
                 }
@@ -369,6 +369,10 @@ impl Marker<'_> {
                     // A node is in no branch (K-08): its arguments are roots
                     // of their own, under the body of a `par~` around it.
                     for r in &clocks.nodes[k].args {
+                        // The `init` of a delay in the first argument of another.
+                        if r.at == Clock::Init && self.back(r.expr) {
+                            self.out.late.insert(r.expr);
+                        }
                         if let Some(s) = r.stage.or_else(|| read_stage(r.at)) {
                             self.mark(r.expr, s, g);
                         }
@@ -431,6 +435,9 @@ impl Marker<'_> {
             ExprKind::Match { scrutinee, arms, tilde } => {
                 let depth = self.conds.len();
                 let arms_of = self.clocks.tilde.get(&e).filter(|_| tilde.is_some());
+                if arms_of.is_some_and(|t| t.arms.iter().flatten().any(|b| self.past.contains(b))) {
+                    self.out.late.insert(e);
+                }
                 for (arm, bound) in arms_of.into_iter().flat_map(|t| t.arms.iter().enumerate()) {
                     let b = Bound { m: e, arm, at, g, depth };
                     self.binding_of.extend(bound.iter().map(|&l| (l, b)));
@@ -462,6 +469,33 @@ impl Marker<'_> {
                     self.mark(child, at, g);
                 }
             }
+        }
+    }
+
+    /// Whether `e` reads a `^name`, or a binding one chooses, where it is
+    /// evaluated (§11.2): not in the first argument of a delay in it, read
+    /// at the end of its stage.
+    fn back(&self, e: ExprId) -> bool {
+        let mut todo = vec![e];
+        while let Some(x) = todo.pop() {
+            let local = match self.body.targets.get(&x) {
+                Some(Target::Local(id)) => self.past.contains(id),
+                _ => false,
+            };
+            if local || matches!(self.ast.expr(x).kind, ExprKind::Feedback(_)) {
+                return true;
+            }
+            todo.extend(self.ast.sub_exprs(x).into_iter().filter(|y| !self.firsts.contains(y)));
+        }
+        false
+    }
+
+    /// The part `e` evaluated at its stage, of the end of it
+    /// ([`FlowInfo::late`]) if it or a condition on its path reads a `^name`
+    /// or a binding one chooses.
+    fn mark_late(&mut self, e: ExprId) {
+        if self.conds.iter().map(|c| c.0).chain([e]).any(|x| self.back(x)) {
+            self.out.late.insert(e);
         }
     }
 

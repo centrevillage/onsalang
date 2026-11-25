@@ -153,13 +153,33 @@ pub flow f(x: F32 at sample, o: Option[F32] at block, n: I32 at block) -> F32 at
     let (v, w, first) =
         (at(&ctl, "let __bind.v: F32 = zeroed"), at(&ctl, "let __bind.w: F32 = zeroed"), at(&ctl, "s.0 = p.0"));
     assert!(v < first && w < first, "{ctl}");
-    // The writes of the field of the guard (which choose no arm), the arm 0
-    // and the arm 1 once, which writes `v` too.
-    assert_eq!(ctl.matches(": U32 = 3:U32").count(), 3, "{ctl}");
-    assert_eq!(ctl.matches("__bind.v = v").count(), 2, "{ctl}");
+    // One choice of all the arms, with the field of the guard (S-1233: the
+    // walk of the `match~` at its place chooses before the work of its arms).
+    assert_eq!(ctl.matches(": U32 = 3:U32").count(), 1, "{ctl}");
+    assert_eq!(ctl.matches("__bind.v = v").count(), 1, "{ctl}");
     assert_eq!(ctl.matches("__bind.w = w").count(), 1, "{ctl}");
     let (w_set, lp1) = (at(&ctl, "__bind.w = w"), at(&ctl, "Params { g: __bind.w }"));
     assert!(w_set < lp1, "{ctl}");
+}
+
+/// S-1244, S-1245: a `match~` that a `^name` chooses is chosen at the end of
+/// the stage alone: the calls in its arms are where the delay is written, and
+/// its binding has its value at the stage of a slower delay in an arm too.
+#[test]
+fn a_match_tilde_a_past_value_chooses_is_chosen_at_the_end_and_its_calls_are_where_they_are_written() {
+    let src = "pub flow acc(x: F32 at sample) -> F32 at sample { x + prev~(x) }
+pub flow f(x: F32 at sample, o: Option[F32] at block) -> F32 at sample {
+  let y = prev~(match~ ^v { Some(b) => acc~(x) + ((prev~(b at (sample / 4))) at sample), None => acc~(x * 2.0) })
+  let v: Option[F32] = o
+  y + x
+}";
+    let t = tick(src, "f");
+    let (call0, call1, read, choice) =
+        (at(&t, "acc.tick(inout s.2"), at(&t, "acc.tick(inout s.4"), at(&t, "= s.1\n"), at(&t, "let __arm: U32"));
+    assert!(call0 < call1 && call1 < read && read < choice, "{t}");
+    let slow = crate::dump::dump_item(&crate::tests::core(src), "t.f.tick_4");
+    let (bound, store) = (at(&slow, "__bind.b = b\n"), at(&slow, "= __bind.b\n"));
+    assert!(bound < store, "{slow}");
 }
 
 /// §11.4, S-1131: a binding read in the first argument of a delay in a

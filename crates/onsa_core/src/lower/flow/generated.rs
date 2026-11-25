@@ -47,41 +47,6 @@ pub(super) fn init_value(
     }
 }
 
-/// Arguments of an instance call for the callee inputs of the stage
-/// `stage`, in their places, lowered in the current function: of the input
-/// value types, which are no views (§11.3), so with no conversion, of a
-/// burst its array ([`burst_ty`], [`spread`]); of an input among `given`
-/// (by its index), the value given (of a chain, the window of a ring or of
-/// an argument lowered before, `chain::run`).
-pub(super) fn instance_args(
-    lw: &mut Lowerer,
-    cx: &mut FnCx,
-    (callee, args): (DefId, &[ExprId]),
-    stage: ClockStage,
-    given: &[(u32, Expr)],
-    span: Span,
-) -> R<Vec<Expr>> {
-    let a = lw.a;
-    let (Some(info), Some(fd)) = (a.flows.get(&callee), a.def(callee).as_flow()) else {
-        return Err(internal(span, "an instance of no checked flow"));
-    };
-    let mut out = Vec::new();
-    for (i, (arg, input)) in (0u32..).zip(args.iter().zip(inputs(info, fd, span)?)) {
-        if input.stage != stage {
-            continue;
-        }
-        if let Some((_, v)) = given.iter().find(|r| r.0 == i) {
-            out.push(v.clone());
-            continue;
-        }
-        let port = input.decl.caller_clock();
-        let want = burst_ty(Some(port), lw.core_ty(input.decl.ty, &[], input.decl.span)?);
-        let e = lower_expr(lw, cx, *arg)?;
-        out.push(of_type(spread(cx, *arg, port, e), &want)?);
-    }
-    Ok(out)
-}
-
 /// The Core type of a value of the clock `c` and the value type `ty` in a
 /// flow body: `[ty; N]` of a burst of the caller (§11.9,
 /// [`Clock::burst_len`]), else `ty`. The one place of it: the locals, the
@@ -141,6 +106,35 @@ pub(super) fn replica_loop(cx: &mut FnCx, kind: &PlanKind, span: Span) -> R<Repl
     };
     let k = from.checked_add(count).is_none().then(|| cx.temp("k", Ty::u32()));
     Ok(Replicas { var, from, count, k })
+}
+
+/// The place of a replica in a local `name` at the head of the function,
+/// `Zeroed` in `out`, of an element `ty` for each of the replicas of `pars`
+/// (the outermost first).
+pub(super) fn replicas_place(
+    cx: &mut FnCx,
+    out: &mut Vec<Stmt>,
+    name: &str,
+    ty: Ty,
+    pars: &[NodeId],
+    span: Span,
+) -> R<Expr> {
+    let info = cx.flow.as_ref().expect("flow context").info;
+    let mut each = Vec::with_capacity(pars.len());
+    for &p in pars {
+        let PlanKind::Par { var, from, count, .. } = info.node(p).kind else {
+            return Err(internal(span, "a place of replicas in no `par~`"));
+        };
+        each.push((var, from, count));
+    }
+    let ty = each.iter().rev().fold(ty, |t, &(_, _, n)| Ty::Array(Box::new(t), n));
+    let l = cx.temp(name, ty.clone());
+    out.push(stmt(span, StmtKind::Let(l, Expr::new(ty, span, ExprKind::Zeroed))));
+    let mut place = local_expr(cx, l, span);
+    for (var, from, _) in each {
+        place = index(place, var_index(cx, var, from, span))?;
+    }
+    Ok(place)
 }
 
 /// The index of the replica of the variable `var` of a `par~` from `from`
@@ -216,6 +210,9 @@ impl<'b> Gen<'b> {
                 stage,
                 local_override: HashMap::new(),
                 expr_override: HashMap::new(),
+                done: HashMap::new(),
+                saving: false,
+                heads: Vec::new(),
                 sample_rate: lit(Ty::Float(FloatKind::F32), span, Lit::F32(0.0)),
                 time: Vec::new(),
                 scopes: Vec::new(),
@@ -313,20 +310,9 @@ impl<'b> Gen<'b> {
             };
             for &b in t.arms.iter().flatten().filter(here) {
                 let pars = if info.store_bindings.contains(&b) { &t.pars[..] } else { &[] };
-                let mut each = Vec::with_capacity(pars.len());
-                for &p in pars {
-                    let PlanKind::Par { var, from, count, .. } = info.node(p).kind else {
-                        return Err(internal(span, "a `match~` in no `par~`"));
-                    };
-                    each.push((var, from, count));
-                }
                 let local = &self.cx.locals[b.0 as usize];
-                let name = format!("__bind.{}", local.name);
-                let ty = each.iter().rev().fold(local.ty.clone(), |t, &(_, _, n)| Ty::Array(Box::new(t), n));
-                let mut place = self.let_(&name, Expr::new(ty, span, ExprKind::Zeroed));
-                for (var, from, _) in each {
-                    place = index(place, var_index(&self.cx, var, from, span))?;
-                }
+                let (name, ty) = (format!("__bind.{}", local.name), local.ty.clone());
+                let place = replicas_place(&mut self.cx, &mut self.stmts, &name, ty, pars, span)?;
                 self.flow().now.local_override.insert(b.0, place);
             }
         }
@@ -344,22 +330,17 @@ impl<'b> Gen<'b> {
     }
 
     /// The `let`s of the stage of this phase in order, those the state
-    /// keeps also stored, and the fields of this stage hoisted in the
-    /// `let`s at their places, before a `let` of this stage, and in the
-    /// output last (§11.3, §12.4; [`super::hoist::writes`]): of each `let`
-    /// that holds one or a check of this stage (`FlowInfo::writes_in`),
-    /// in the arguments its chains gather too (§11.9).
-    // SPEC-GAP(S-1159): in the order of the text, a field at the place of
-    // the `let` that holds it.
+    /// keeps also stored, and the work of this stage in the others and in
+    /// the output last, at their places (§11.3, S-1233; [`super::hoist::work`]):
+    /// in each that holds some (`FlowInfo::work_in`).
     pub(super) fn stage_lets(&mut self, lw: &mut Lowerer, info: &FlowInfo, state: &Expr) -> R<()> {
         let stage = self.flow().now.stage;
         for (k, l) in info.lets.iter().enumerate() {
             let Some(at) = l.stage.stage() else { continue };
-            let run = info.run_stage(at);
-            if info.writes_in(k, stage) {
-                super::hoist::writes(lw, &mut self.cx, info, l.init, stage, state, &mut self.stmts)?;
-            }
-            if run != stage {
+            if info.run_stage(at) != stage {
+                if info.work_in(k, stage) {
+                    super::hoist::work(lw, &mut self.cx, info, l.init, stage, state, &mut self.stmts)?;
+                }
                 continue;
             }
             let v = lower_expr(lw, &mut self.cx, l.init)?;
@@ -372,8 +353,8 @@ impl<'b> Gen<'b> {
                 }
             }
         }
-        if let Some(out) = info.output {
-            super::hoist::writes(lw, &mut self.cx, info, out, stage, state, &mut self.stmts)?;
+        if let Some(out) = info.output.filter(|_| info.work_in(info.lets.len(), stage)) {
+            super::hoist::work(lw, &mut self.cx, info, out, stage, state, &mut self.stmts)?;
         }
         Ok(())
     }

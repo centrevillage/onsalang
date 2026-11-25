@@ -51,6 +51,8 @@ pub struct TestRun {
     pub file: String,
     pub asserts: usize,
     pub panic: Option<Panic>,
+    /// Where the evaluator stopped, the expression in the body of the flow that panicked (`Stop::at`), of a panic of a call (a panic inside an `rt fn` is at the call of it in the body, which the host says); `None` where none is known.
+    pub panic_span: Option<onsa_diag::Span>,
     pub verdict: Verdict,
     /// The calls of generated functions the test made before it stopped, in order (the data of `tests/flow_ref/`).
     pub events: Vec<Event>,

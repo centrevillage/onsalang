@@ -24,7 +24,6 @@ pub(super) struct Recorded {
     pub(super) name: String,
     pub(super) path: String,
     pub(super) whole: bool,
-    pub(super) arms: Vec<(ExprId, u32)>,
     pub(super) frame: Ratio,
     pub(super) chain: Vec<PlanModifier>,
     pub(super) size: u32,
@@ -43,8 +42,6 @@ pub(super) struct Recorded {
 ///   [`NodeBuilder::leave_par`] after it, even when the body stopped;
 /// - [`NodeBuilder::read`] at each read of a local, and
 ///   [`NodeBuilder::lookback`] around the first argument of a delay;
-/// - [`NodeBuilder::enter_arm`] before the body of an arm of `match~` and
-///   [`NodeBuilder::leave_arm`] after it;
 /// - [`NodeBuilder::finish`] at the end, for the plan.
 ///
 /// So the nodes come in the order the names of their calls come in the
@@ -61,15 +58,13 @@ pub(super) struct NodeBuilder {
     readers: Vec<(Vertex, bool)>,
     edges: Vec<Edge>,
     seen: HashSet<Edge>,
-    /// The arms of the `match~`s around the place walked now.
-    arms: Vec<(ExprId, u32)>,
 }
 
 impl NodeBuilder {
     pub(super) fn new(pending: &[PendingLet], ast: &Ast, body: &BodyInfo, of: &BodyNames) -> NodeBuilder {
         let namer = names::Namer::new(pending, ast, body, of);
         let (readers, edges, seen) = (Vec::new(), Vec::new(), HashSet::default());
-        NodeBuilder { nodes: Vec::new(), owners: Vec::new(), namer, readers, edges, seen, arms: Vec::new() }
+        NodeBuilder { nodes: Vec::new(), owners: Vec::new(), namer, readers, edges, seen }
     }
 
     /// [`names::Namer::apart`].
@@ -80,16 +75,6 @@ impl NodeBuilder {
     /// The `par~`s around the place walked now, the outermost first.
     pub(super) fn pars(&self) -> Vec<NodeId> {
         self.owners.iter().filter_map(|o| if let Owner::Par(p) = o { Some(*p) } else { None }).collect()
-    }
-
-    /// The nodes recorded next are in the arm `arm` of the `match~` `m`,
-    /// until [`NodeBuilder::leave_arm`].
-    pub(super) fn enter_arm(&mut self, m: ExprId, arm: u32) {
-        self.arms.push((m, arm));
-    }
-
-    pub(super) fn leave_arm(&mut self) {
-        self.arms.pop();
     }
 
     /// The nodes of the body, in the order of their [`NodeId`]s, and the
@@ -160,9 +145,8 @@ impl NodeBuilder {
         };
         let id = NodeId(self.nodes.len() as u32);
         let whole = self.namer.whole(e);
-        let arms = self.arms.clone();
         let (frame, chain, size, bounds, guards) = (Ratio(0), Vec::new(), 0, Vec::new(), Vec::new());
-        let r = Recorded { expr: e, span, kind, owner, name, path, whole, arms, frame, chain, size, bounds, guards };
+        let r = Recorded { expr: e, span, kind, owner, name, path, whole, frame, chain, size, bounds, guards };
         self.nodes.push(r);
         self.enter(id, whole, span);
         id

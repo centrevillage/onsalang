@@ -1,0 +1,172 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.2", "§11.3", "§11.4", "§11.9", "§11.10"]
+
+// S-1244, R-520 (spec §11.2: `^name` is in the first argument of a built-in delay only and reads the value of this step; §11.3: a part of a slower stage is evaluated at its stage and kept in a field): a part of a
+// slower stage with a `^name` in the first argument of a delay (`prev~(x * (^k * 2.0))`, `k` a `let` of `block` below) is evaluated at the end of its stage, after the `let`s and the output, with what the delays
+// store: the value is that of `let t = k * 2.0` below `k` and `prev~(x * ^t)`. Every value is worked out by hand.
+
+pub flow at_block(x: F32 at sample, b: F32 at block) -> F32 at sample {
+  let q = prev~(x * (^k * 2.0))
+  let k = b + 1.0
+  q + k
+}
+
+pub flow at_block_let(x: F32 at sample, b: F32 at block) -> F32 at sample {
+  let q = prev~(x * ^t)
+  let k = b + 1.0
+  let t = k * 2.0
+  q + k
+}
+
+pub flow at_init(x: F32 at sample, c: F32 at init) -> F32 at sample {
+  let q = prev~(x * (^k * 2.0))
+  let k = c + 1.0
+  q + k
+}
+
+pub flow with_another_part(x: F32 at sample, b: F32 at block, g: F32 at block) -> F32 at sample {
+  let q = delay~(x * (^k * g + g), 2)
+  let k = b + 1.0
+  q
+}
+
+pub flow under_a_condition(x: F32 at sample, n: I32 at block) -> F32 at sample {
+  let q = prev~(if n != 0 { x * F32.round_from(100 / (n + ^m)) } else { x })
+  let m = n - n
+  q
+}
+
+pub flow in_replicas(x: F32 at sample, b: F32 at block) -> F32 at sample {
+  let qs = par~ i in 0 ..< 2 { prev~(x * (^k * F32.round_from(i))) }
+  let k = b + 1.0
+  qs[0] + qs[1]
+}
+
+test "a part of block with a name below: x * 6 a sample late, and k = 3" {
+  // b = 2: k = 3, the part is 6.  x * 6: 6 12 18 24, a sample late: 0 6 12 18.  With k: 3 9 15 21.
+  let xs: [F32; 4] = [1.0, 2.0, 3.0, 4.0]
+  let o = at_block.render(at_block.Params { b: 2.0 }, xs, 8.0)
+  assert o.out[0] == 3.0
+  assert o.out[1] == 9.0
+  assert o.out[2] == 15.0
+  assert o.out[3] == 21.0
+}
+
+test "the same with the part in a let below the name" {
+  let xs: [F32; 4] = [1.0, 2.0, 3.0, 4.0]
+  let o = at_block_let.render(at_block_let.Params { b: 2.0 }, xs, 8.0)
+  assert o.out[0] == 3.0
+  assert o.out[1] == 9.0
+  assert o.out[2] == 15.0
+  assert o.out[3] == 21.0
+}
+
+test "a part of init with a name below" {
+  // c = 2: as the part of block.
+  let xs: [F32; 4] = [1.0, 2.0, 3.0, 4.0]
+  let o = at_init.render(at_init.Config { c: 2.0 }, xs, 8.0)
+  assert o.out[0] == 3.0
+  assert o.out[1] == 9.0
+  assert o.out[2] == 15.0
+  assert o.out[3] == 21.0
+}
+
+test "a part with a name below and another input of block, two samples late" {
+  // b = 2, g = 10: the part is 3 * 10 + 10 = 40.  x * 40: 40 80 120 160, two samples late: 0 0 40 80.
+  let xs: [F32; 4] = [1.0, 2.0, 3.0, 4.0]
+  let o = with_another_part.render(with_another_part.Params { b: 2.0, g: 10.0 }, xs, 8.0)
+  assert o.out[0] == 0.0
+  assert o.out[1] == 0.0
+  assert o.out[2] == 40.0
+  assert o.out[3] == 80.0
+}
+
+test "under a condition of block the part is evaluated where the condition holds" {
+  // n = 5: m = 0, the part is 100 / 5 = 20.  x * 20 a sample late: 0 20 40.
+  let xs: [F32; 3] = [1.0, 2.0, 3.0]
+  let o = under_a_condition.render(under_a_condition.Params { n: 5 }, xs, 8.0)
+  assert o.out[0] == 0.0
+  assert o.out[1] == 20.0
+  assert o.out[2] == 40.0
+  // n = 0: the condition does not hold, so 100 / 0 is not evaluated.  x a sample late: 0 1 2.
+  let z = under_a_condition.render(under_a_condition.Params { n: 0 }, xs, 8.0)
+  assert z.out[0] == 0.0
+  assert z.out[1] == 1.0
+  assert z.out[2] == 2.0
+}
+
+test "in the replicas of a par~, each with the part of its own" {
+  // b = 2: k = 3, the parts are 0 and 3.  x * 0 + x * 3 a sample late: 0 3 6 9.
+  let xs: [F32; 4] = [1.0, 2.0, 3.0, 4.0]
+  let o = in_replicas.render(in_replicas.Params { b: 2.0 }, xs, 8.0)
+  assert o.out[0] == 0.0
+  assert o.out[1] == 3.0
+  assert o.out[2] == 6.0
+  assert o.out[3] == 9.0
+}
+
+// ---- a part of sample / 4
+
+pub flow at_a_tick(x: F32 at sample) -> F32 at sample {
+  let q = prev~((^k * 2.0) at sample)
+  let k = prev~(^k at (sample / 4)) + 1.0
+  q + x
+}
+
+pub flow at_a_tick_let(x: F32 at sample) -> F32 at sample {
+  let q = prev~(^t)
+  let k = prev~(^k at (sample / 4)) + 1.0
+  let t = (k * 2.0) at sample
+  q + x
+}
+
+flow counted(x: F32 at sample) -> F32 at sample {
+  let q = prev~((^k + 1.0) at sample)
+  let k = prev~(^k at (sample / 4)) + 1.0
+  q + x
+}
+
+pub flow reset_at(x: F32 at sample, r: Bool at sample) -> F32 at sample {
+  counted~(x).reset_if~(r)
+}
+
+test "a part of sample / 4 with a name below is held for the tick and a sample late" {
+  // k is 1 2 3 at the frames 0 4 8, the part 2 4 6.  A sample late: 0 2 2 2 2 4 4 4 4 6.
+  let xs: [F32; 10] = [0.0; 10]
+  let o = at_a_tick.render(xs, 8.0)
+  assert o.out[0] == 0.0
+  assert o.out[1] == 2.0
+  assert o.out[4] == 2.0
+  assert o.out[5] == 4.0
+  assert o.out[8] == 4.0
+  assert o.out[9] == 6.0
+}
+
+test "the same with the part in a let below the name, of sample / 4" {
+  let xs: [F32; 10] = [0.0; 10]
+  let o = at_a_tick_let.render(xs, 8.0)
+  assert o.out[0] == 0.0
+  assert o.out[1] == 2.0
+  assert o.out[4] == 2.0
+  assert o.out[5] == 4.0
+  assert o.out[8] == 4.0
+  assert o.out[9] == 6.0
+}
+
+test "reset_if~ sets the field of the part back to the default until the next tick" {
+  // k is 1 2 at the frames 0 4, the part k + 1 is 2 3.  q: 0 2 2 2 2, then the reset at the frame 5 (the delay, k and the part go back: 0 0 0): q is 0 at 5, and 0 at 6 7 8 (the part is 0.0 until the
+  // tick at 8, not 0 + 1).  At the frame 8 k is 1 again and the part 2: q is 2 at 9.
+  let xs: [F32; 10] = [0.0; 10]
+  let rs: [Bool; 10] = [false, false, false, false, false, true, false, false, false, false]
+  let o = reset_at.render(reset_at.In { x: xs, r: rs }, 8.0)
+  assert o.out[0] == 0.0
+  assert o.out[1] == 2.0
+  assert o.out[4] == 2.0
+  assert o.out[5] == 0.0
+  assert o.out[6] == 0.0
+  assert o.out[7] == 0.0
+  assert o.out[8] == 0.0
+  assert o.out[9] == 2.0
+}

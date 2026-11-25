@@ -102,24 +102,27 @@ impl<'a> Frame<'a> {
         if let Some((_, v)) = last.filter(|(t, _)| *t == now.total()) {
             return Ok(v);
         }
+        let saved = arg(Delay::SAVED)?;
+        let slot = self.reserve_save(key.clone(), saved, at)?;
+        self.early_calls(saved)?;
         let dc = match d.d_index() {
             Some(i) => Some(self.eval(arg(i)?)?),
             None => None,
         };
-        // SPEC-GAP(S-1221): the `d` of a `vdelay~` is evaluated before the conditions, and a condition inside a `when~` is read whether or not it runs the part, the conditions outermost first
+        // SPEC-GAP(S-1221): the `d` of a `vdelay~` is evaluated before the conditions, and a condition inside a `when~` is read whether or not it runs the part, the conditions leftmost first
         // (provisional, as `Frame::read_conds` reads those of an instance after the arguments of its head; only a panic shows it).
         // A `reset_if~` outside every `when~` is read at its R alone, and is due where it holds; one inside is due at the R of the grid of the part (below).
-        let (mut read, mut inside) = (vec![false; mods.len()], false);
-        for (b, m) in mods.iter().enumerate().rev() {
+        // The conditions are read in the order written, the leftmost first (S-1233); one is inside a `when~` when a `when~` is outside it, to its right.
+        let mut read = vec![false; mods.len()];
+        for (b, m) in mods.iter().enumerate() {
+            let inside = mods[b + 1..].iter().any(|o| o.reset.is_none());
             if inside || m.reset.is_none_or(|r| on_r(now, r, k)) {
                 let Value::Bool(v) = self.eval(m.cond)? else {
                     return Err(here(Internal("a condition that is no `Bool`")));
                 };
                 read[b] = v;
             }
-            inside |= m.reset.is_none();
         }
-        let saved = arg(Delay::SAVED)?;
         let run = self.run.as_mut().ok_or(here(Internal("no run")))?;
         let (cells, all) = (&mut run.state.cells, &mut run.state.mods);
         let (cell, state) = (cells.get_mut(&key), all.get_mut(&key));
@@ -151,7 +154,7 @@ impl<'a> Frame<'a> {
             g.runs = g.runs.wrapping_add(n_of(k));
         }
         state.last = Some((now.total(), out.clone()));
-        self.save_delay(key, saved, stop.is_none(), at)?;
+        self.set_keep(slot, stop.is_none());
         Ok(out)
     }
 

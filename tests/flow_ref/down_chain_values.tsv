@@ -110,6 +110,6 @@ panic sample 0
 @ a let of the parent and a part under down 4 that both divide at the frame 4: 4 frames run, 5 stop
 render down_chain_values.both_panic sr=0x41000000 params p=0 frames=4
 out=[300 300 300 300]
-@ S-1206 S-1159 provisional: a let of the parent and a part under down 4 that divide by 0 at one tick stop the run at the frame 4
+@ S-1233: a let of the parent above the call and a part under down 4 that divide by 0 at one tick stop the run at the frame 4
 render down_chain_values.both_panic sr=0x41000000 params p=0 frames=5
 panic sample 4

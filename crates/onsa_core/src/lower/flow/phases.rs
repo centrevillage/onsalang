@@ -33,11 +33,7 @@ pub(super) fn gen_init<'b>(lw: &mut Lowerer<'b>, shape: &FlowShape, info: &'b Fl
     g.state_overrides(lw, info, &s)?;
     g.const_lets(lw, info)?;
     g.stage_lets(lw, info, &s)?;
-    let nodes: Vec<NodeId> = info.top().collect();
-    let walk = Walk { arms: Some(ClockStage::Init), loops: held };
-    each_node(lw, &mut g.cx, &mut g.stmts, &nodes, &s, walk, &mut |lw, cx, out, id, s| {
-        init_node(lw, cx, out, id, s, &sr)
-    })?;
+    end(lw, &mut g, info, &s)?;
     let poisoned = sfield(lw, info, &s, FieldOf::Poisoned, span)?;
     assign(&mut g.stmts, &poisoned, lit(Ty::Bool, span, Lit::Bool(false)))?;
     // S-27: the last store of `init`; a panic before it leaves the instance uninitialized.
@@ -56,71 +52,53 @@ fn plan<'b>(cx: &FnCx<'b>) -> &'b FlowInfo {
 /// given ([`each_node`]).
 type NodeWork<'f> = dyn FnMut(&mut Lowerer, &mut FnCx, &mut Vec<Stmt>, NodeId, &Expr) -> R<()> + 'f;
 
-/// How a phase function walks the nodes ([`each_node`]).
-#[derive(Clone, Copy)]
-struct Walk {
-    /// The stage the arms of the `match~`s around a node are chosen at
-    /// before its work ([`super::branches::choose_arms`]), if the function
-    /// chooses them.
-    arms: Option<ClockStage>,
-    /// Whether a `par~` of the children given, which holds state when the
-    /// flag is set, has a loop of its replicas in the function of the stage.
-    loops: fn(&FlowInfo, &[NodeId], bool, ClockStage) -> bool,
-}
-
-/// A `par~` that holds state has a loop of its replicas, of no work too
-/// (one of delays only in `ctl`).
-fn held(_: &FlowInfo, _: &[NodeId], holds: bool, _: ClockStage) -> bool {
-    holds
-}
-
 /// The stage of the function `cx` lowers.
 fn stage(cx: &FnCx) -> ClockStage {
     cx.flow.as_ref().expect("flow context").now.stage
 }
 
 /// The work `f` of each of the nodes `ids` in the order of the table, in
-/// the scope of `state`: the arms around a node chosen first; after the
-/// work of a `par~`, its children in a loop of its replicas, each in the
-/// scope of its element of the state.
+/// the scope of `state`; after the work of a `par~` that holds state, its
+/// children in a loop of its replicas, each in the scope of its element of
+/// the state, if they have any.
 fn each_node(
     lw: &mut Lowerer,
     cx: &mut FnCx,
     out: &mut Vec<Stmt>,
     ids: &[NodeId],
     state: &Expr,
-    walk: Walk,
     f: &mut NodeWork,
 ) -> R<()> {
     let info = plan(cx);
     for &id in ids {
         let n = info.node(id);
         let span = cx.ast.expr(n.expr).span;
-        if let Some(s) = walk.arms {
-            super::branches::choose_arms(lw, cx, &n.arms, s, state, out)?;
-        }
         f(lw, cx, out, id, state)?;
-        let PlanKind::Par { children, state: holds, .. } = &n.kind else { continue };
-        if !(walk.loops)(info, children, *holds, stage(cx)) {
-            continue;
-        }
+        let PlanKind::Par { children, state: true, .. } = &n.kind else { continue };
         let r = replica_loop(cx, &n.kind, span)?;
         let elem = index(sfield(lw, info, state, FieldOf::Node(id, Part::Own), span)?, r.index(cx, span))?;
         let mut body = Vec::new();
         cx.flow.as_mut().unwrap().push_scope(elem.clone());
-        each_node(lw, cx, &mut body, children, &elem, walk, f)?;
+        each_node(lw, cx, &mut body, children, &elem, f)?;
         cx.flow.as_mut().unwrap().now.scopes.pop();
-        out.push(r.each(cx, span, body));
+        if !body.is_empty() {
+            out.push(r.each(cx, span, body));
+        }
     }
     Ok(())
 }
 
-/// Node initialisation (§11.4): stores, buffers, sub `init`s.
-fn init_node(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, id: NodeId, state: &Expr, sr: &Expr) -> R<()> {
+/// The initialisation of the delay `id` (§11.4) where it is written, or at
+/// the end of `init` of one of `FlowInfo::late`.
+pub(super) fn init_delay(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, id: NodeId) -> R<()> {
     let info = plan(cx);
     let n = info.node(id);
     let (span, name, at) = (cx.ast.expr(n.expr).span, &n.path, |p| FieldOf::Node(id, p));
+    let state = &super::branches::here(cx, span)?.1;
+    let late = |i: &InitArg| matches!(i, InitArg::Init(e) if info.late.contains(e));
     match &n.kind {
+        PlanKind::Prev { init, .. } | PlanKind::Delay { init, .. } | PlanKind::Vdelay { init, .. }
+            if late(init) != cx.flow.as_ref().expect("flow context").now.saving => {}
         PlanKind::Prev { init, ty, .. } => {
             let t = lw.core_ty(*ty, &[], span)?;
             let v = init_value(lw, init, &t, span, |lw, e| lower_expr(lw, cx, e))?;
@@ -143,21 +121,33 @@ fn init_node(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, id: NodeId, s
             assign(out, &buf, fill)?;
             assign(out, &sfield(lw, info, state, at(Part::W), span)?, u32_lit(span, 0))?;
         }
-        PlanKind::Instance { callee, args, .. } => {
-            // W7-21 U1: a chain of a callee with no table (in error) has no entries.
-            if !n.chain.is_empty() && n.entries.is_empty() {
-                return Err(internal(span, "a chain of an instance with no entries"));
-            }
-            let sub = lw.ensure_flow(*callee)?;
-            let fields = instance_args(lw, cx, (*callee, args), ClockStage::Init, &[], span)?;
-            let cfg = Expr::new(Ty::Struct(sub.config), span, ExprKind::Struct { ty: sub.config, fields });
-            let sr = super::child_rate(sr, n, span)?;
-            let c = call(sub.init, Ty::Struct(sub.state), span, vec![borrow(cfg), borrow(sr)]);
-            assign(out, &sfield(lw, info, state, at(Part::Own), span)?, c)?;
-        }
-        PlanKind::Par { .. } => {}
+        PlanKind::Instance { .. } | PlanKind::Par { .. } => return Err(internal(span, "the `init` of no delay")),
     }
     Ok(())
+}
+
+/// The `init` or the `ctl` of the instance `id` in the function of that
+/// stage (§11.4), with the `Config` or the `Params` of its arguments.
+pub(super) fn own_stage(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, id: NodeId, state: &Expr) -> R<()> {
+    let info = plan(cx);
+    let n = info.node(id);
+    let span = cx.ast.expr(n.expr).span;
+    let PlanKind::Instance { callee, .. } = n.kind else { return Err(internal(span, "a stage of no instance")) };
+    // W7-21 U1: a chain of a callee with no table (in error) has no entries.
+    if !n.chain.is_empty() && n.entries.is_empty() {
+        return Err(internal(span, "a chain of an instance with no entries"));
+    }
+    let sub = lw.ensure_flow(callee)?;
+    let fields = super::chain::inputs_of(lw, cx, out, id, state)?;
+    let st = sfield(lw, info, state, FieldOf::Node(id, Part::Own), span)?;
+    let arg = |ty| Expr::new(Ty::Struct(ty), span, ExprKind::Struct { ty, fields });
+    if stage(cx) == ClockStage::Block {
+        expr_stmt(out, call(sub.ctl, Ty::Unit, span, vec![inout(st), borrow(arg(sub.params))]));
+        return Ok(());
+    }
+    let sr = super::child_rate(&cx.flow.as_ref().expect("flow context").now.sample_rate, n, span)?;
+    let c = call(sub.init, Ty::Struct(sub.state), span, vec![borrow(arg(sub.config)), borrow(sr)]);
+    assign(out, &st, c)
 }
 
 /// The time of `init` and `reset` in the state `s` (§11.6, §11.9): the
@@ -223,11 +213,10 @@ pub(super) fn gen_reset<'b>(lw: &mut Lowerer<'b>, shape: &FlowShape, info: &'b F
     g.flow().push_scope(s.clone());
     restart(lw, &mut g.cx, &mut g.stmts, &s)?;
     let nodes: Vec<NodeId> = info.top().collect();
-    let walk = Walk { arms: None, loops: held };
     let work = &mut |lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, id, s: &Expr| {
         reset_node(lw, cx, out, id, s, Keep::Hard)
     };
-    each_node(lw, &mut g.cx, &mut g.stmts, &nodes, &s, walk, work)?;
+    each_node(lw, &mut g.cx, &mut g.stmts, &nodes, &s, work)?;
     let poisoned = sfield(lw, info, &s, FieldOf::Poisoned, span)?;
     assign(&mut g.stmts, &poisoned, lit(Ty::Bool, span, Lit::Bool(false)))?;
     g.finish(lw, fns.reset, Ty::Unit, true, None);
@@ -264,11 +253,10 @@ pub(super) fn ensure_reset_kept(lw: &mut Lowerer, flow: DefId, span: Span) -> R<
     g.flow().push_scope(s.clone());
     defaults(lw, &mut g.cx, &mut g.stmts, &info.fields, &s)?;
     let nodes: Vec<NodeId> = info.top().collect();
-    let walk = Walk { arms: None, loops: held };
     let work = &mut |lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, id, s: &Expr| {
         reset_node(lw, cx, out, id, s, Keep::Kept)
     };
-    each_node(lw, &mut g.cx, &mut g.stmts, &nodes, &s, walk, work)?;
+    each_node(lw, &mut g.cx, &mut g.stmts, &nodes, &s, work)?;
     g.finish(lw, f, Ty::Unit, true, None);
     Ok(f)
 }
@@ -327,28 +315,8 @@ pub(super) fn gen_ctl<'b>(lw: &mut Lowerer<'b>, shape: &FlowShape, info: &'b Flo
     g.state_overrides(lw, info, &s)?;
     g.const_lets(lw, info)?;
     g.stage_lets(lw, info, &s)?;
-    let nodes: Vec<NodeId> = info.top().collect();
-    let walk = Walk { arms: Some(ClockStage::Block), loops: held };
-    each_node(lw, &mut g.cx, &mut g.stmts, &nodes, &s, walk, &mut ctl_node)?;
+    end(lw, &mut g, info, &s)?;
     g.finish(lw, fns.ctl, Ty::Unit, true, None);
-    Ok(())
-}
-
-/// Sub `ctl`s with the sub's `Params` built from the `Ctl`-input arguments.
-fn ctl_node(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, id: NodeId, state: &Expr) -> R<()> {
-    let info = plan(cx);
-    let n = info.node(id);
-    let span = cx.ast.expr(n.expr).span;
-    match &n.kind {
-        PlanKind::Instance { callee, args, .. } => {
-            let sub = lw.ensure_flow(*callee)?;
-            let fields = instance_args(lw, cx, (*callee, args), ClockStage::Block, &[], span)?;
-            let params = Expr::new(Ty::Struct(sub.params), span, ExprKind::Struct { ty: sub.params, fields });
-            let st = sfield(lw, info, state, FieldOf::Node(id, Part::Own), span)?;
-            expr_stmt(out, call(sub.ctl, Ty::Unit, span, vec![inout(st), borrow(params)]));
-        }
-        PlanKind::Prev { .. } | PlanKind::Delay { .. } | PlanKind::Vdelay { .. } | PlanKind::Par { .. } => {}
-    }
     Ok(())
 }
 
@@ -357,15 +325,11 @@ fn ctl_node(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, id: NodeId, st
 /// <its inputs>)` of a slower one, which [`drive`] or a caller
 /// ([`super::chain::entry`]) calls through [`call_stage`]; the words of the
 /// time `t`, `t_hi` of a stage that takes them (`FlowInfo::time_words`).
-/// In order: its inputs the state keeps stored,
-/// its `let`s and the fields hoisted to it ([`Gen::stage_lets`]), the
-/// output of the stage that makes it (`FlowInfo::out_stage`), the stages
-/// of the callees that run in it ([`child_runs`]), the stores of its
-/// nodes, and last in `tick` the counter of the phase advanced when it is
+/// In order (§11.3, S-1233): its inputs the state keeps stored, its `let`s
+/// and its work in the others ([`Gen::stage_lets`]), the output of the stage
+/// that makes it (`FlowInfo::out_stage`), the stores of its nodes ([`end`]),
+/// and last in `tick` the counter of the phase advanced when it is
 /// the grid of the slower stages (`FlowInfo::counter`).
-// SPEC-GAP(S-1206): the order in a stage is that of the reference
-// evaluator (S-1159 provisional): its `let`s, then the stages of the
-// callees, then the stores.
 pub(super) fn gen_tick<'b>(
     lw: &mut Lowerer<'b>,
     shape: &FlowShape,
@@ -408,11 +372,7 @@ pub(super) fn gen_tick<'b>(
         // Materialised before the stores so a `prev` inside the output reads first (§11.4).
         out = Some(g.let_("__out", v));
     }
-    let nodes: Vec<NodeId> = info.top().collect();
-    let walk = Walk { arms: None, loops: |info, children, _, s| runs_in(info, children, s) };
-    each_node(lw, &mut g.cx, &mut g.stmts, &nodes, &s, walk, &mut child_runs)?;
-    let walk = Walk { arms: None, loops: |info, children, _, s| stores(info, children, s) };
-    each_node(lw, &mut g.cx, &mut g.stmts, &nodes, &s, walk, &mut store_node)?;
+    end(lw, &mut g, info, &s)?;
     if stage == ClockStage::SAMPLE && info.counter() == Counter::Tick {
         let t = sfield(lw, info, &s, FieldOf::Tick, span)?;
         assign(&mut g.stmts, &t, wrap_add(t.clone(), span))?;
@@ -421,28 +381,15 @@ pub(super) fn gen_tick<'b>(
     Ok(())
 }
 
-/// The work of the instance `id` in the function of the stage lowered
-/// that does not make its value where it is read (§11.9, S-1088: that
-/// does, [`super::nodes`]): its entry not read ([`super::chain::entry`]),
-/// the arms around it chosen first for the arguments that read their
-/// bindings.
-fn child_runs(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, id: NodeId, state: &Expr) -> R<()> {
-    let (info, stage) = (plan(cx), stage(cx));
-    let n = info.node(id);
-    let Some(e) = n.entry(stage, false) else { return Ok(()) };
-    super::branches::choose_arms(lw, cx, &n.arms, stage, state, out)?;
-    // An entry not read makes no value.
-    super::chain::entry(lw, cx, out, id, state, e)?;
+/// The end of the stage (§11.3, §11.4): the stores and what of the stage is
+/// evaluated with them ([`store_node`]); then the head of the function.
+fn end<'b>(lw: &mut Lowerer<'b>, g: &mut Gen<'b>, info: &'b FlowInfo, s: &Expr) -> R<()> {
+    g.flow().now.saving = true;
+    let nodes: Vec<NodeId> = info.top().collect();
+    each_node(lw, &mut g.cx, &mut g.stmts, &nodes, s, &mut store_node)?;
+    let heads = std::mem::take(&mut g.flow().now.heads);
+    g.stmts.splice(0..0, heads);
     Ok(())
-}
-
-/// Whether one of the nodes `ids` has work in the function of the stage
-/// `s` ([`child_runs`]), in a `par~` of them too.
-fn runs_in(info: &FlowInfo, ids: &[NodeId], s: ClockStage) -> bool {
-    ids.iter().any(|&id| match &info.node(id).kind {
-        PlanKind::Par { children, .. } => runs_in(info, children, s),
-        _ => info.node(id).entry(s, false).is_some(),
-    })
 }
 
 /// A run of the stage `x` of a flow whose plan is `g` (§11.9, S-1088):
@@ -519,10 +466,12 @@ pub(super) fn wrap_add(x: Expr, span: Span) -> Expr {
     Expr::new(Ty::u32(), span, ExprKind::Binary { op: BinOp::Add, overflow: Overflow::Wrap, lhs, rhs })
 }
 
-/// The end-of-tick store of a node (§11.4) in node order: `prev` saves its
-/// argument, `delay` / `vdelay` write the argument at `w` and advance; a
-/// `par~` that stores ([`stores`]) stores its replicas in a loop of its own
-/// at its place in the order ([`each_node`]).
+/// The end-of-tick store of a node (§11.4) in node order (S-1126, S-1154):
+/// `prev` saves its argument, `delay` / `vdelay` write the argument at `w`
+/// and advance; a `par~` that stores stores its replicas in a loop of its
+/// own at its place in the order ([`each_node`]). Of a delay of another
+/// stage, the work of this one in its first argument that reads a `^name`
+/// (`FlowInfo::late`, S-1244).
 ///
 /// They are the second phase of §11.4 (read all, then store all) with no
 /// temporaries of their own: each node is read once where it is lowered
@@ -532,12 +481,13 @@ pub(super) fn wrap_add(x: Expr, span: Span) -> Expr {
 /// puts before the node's own store. So no read sees a store of this tick.
 /// A change of the order of the stores (W7-06, W7-09) keeps that: the read
 /// of a node first lowered here comes before its store.
-// SPEC-GAP(S-1154): the stores (and their panics) are in the preorder of
-// the table; S-1126 (1): after every `let` and the output of the body.
 fn store_node(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, id: NodeId, state: &Expr) -> R<()> {
     let info = plan(cx);
     let n = info.node(id);
-    let Some(arg) = stored_arg(info, id, stage(cx)) else { return Ok(()) };
+    let Some(arg) = n.kind.stored() else { return Ok(()) };
+    if info.node_stage(id) != Some(stage(cx)) {
+        return if info.late.is_empty() { Ok(()) } else { super::hoist::walk(lw, cx, arg, out) };
+    }
     let (span, at) = (cx.ast.expr(n.expr).span, |p| FieldOf::Node(id, p));
     let ring = match n.kind {
         PlanKind::Prev { .. } => None,
@@ -564,29 +514,4 @@ fn store_node(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, id: NodeId, 
         None => out.extend(store),
     }
     Ok(())
-}
-
-/// The argument the node `id` stores at the end of the function of the
-/// stage `s` ([`store_node`]), the one list of the nodes that store: a
-/// `prev` into its field, a `delay` / `vdelay` into its ring, in the
-/// function of its tick; an instance stores in its own `tick`, a `par~` in
-/// the loop of its replicas.
-fn stored_arg(info: &FlowInfo, id: NodeId, s: ClockStage) -> Option<ExprId> {
-    let n = info.node(id);
-    let arg = match &n.kind {
-        PlanKind::Prev { arg, .. } | PlanKind::Delay { arg, .. } | PlanKind::Vdelay { arg, .. } => *arg,
-        PlanKind::Instance { .. } | PlanKind::Par { .. } => return None,
-    };
-    (info.node_stage(id) == Some(s)).then_some(arg)
-}
-
-/// Whether the nodes `ids` store in the function of the stage `s`
-/// ([`stored_arg`]), in a `par~` of them too.
-fn stores(info: &FlowInfo, ids: &[NodeId], s: ClockStage) -> bool {
-    ids.iter().any(|&id| match &info.node(id).kind {
-        PlanKind::Par { children, .. } => stores(info, children, s),
-        PlanKind::Prev { .. } | PlanKind::Delay { .. } | PlanKind::Vdelay { .. } | PlanKind::Instance { .. } => {
-            stored_arg(info, id, s).is_some()
-        }
-    })
 }

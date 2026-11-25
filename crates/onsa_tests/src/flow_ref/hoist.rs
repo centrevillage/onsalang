@@ -22,7 +22,7 @@
 //! value of `init`; S-1140, provisional: each replica has a value of its own for each part of the body, kept by the replicas it is in).
 //! The body is walked as the rest is, by the same guard and stages, and only when it has a part for the stage (a `par~` of a million replicas
 //! that reads `x` only is not walked at `init`); a `par~` that is a part of the stage as a whole is made as a whole and not walked. A part that
-//! reads a `^name` is left where it is (a feedback has the clock of the reader, §11.3). The order inside a stage is the order the parts are written (S-1159, provisional): `flow::stage` walks the `let`s in order and
+//! reads a `^name` is of the stage its name is made at (S-1244, `stage_of`) and is made at the end of that stage with what the delays save (`Frame::defer_part`), the name being below; one that holds a call is read where it is written. The order inside a stage is the order the parts are written (S-1233, S-1159): `flow::stage` walks the `let`s in order and
 //! each `let` from the left.
 
 use std::collections::HashMap;
@@ -33,10 +33,11 @@ use onsa_sema::flow_names::FlowBuiltin;
 use onsa_syntax::ast::{BinOp, CallKind, ExprId, ExprKind, StmtKind};
 
 use super::expr::{Frame, LOW_STACK, Stop};
-use super::flow::{Clock, Known, Seen, Step, clock_of};
+use super::flow::{Clock, Known, Seen, clock_of};
 use super::rate::{args_of, chain_of, port_exprs};
 use super::scalar::Fault;
 use super::sema_view::{Body, Called, Stage};
+use super::state::NodeKey;
 
 /// `sample_tick()` alone, under parentheses and `at`s (S-1210).
 fn tick_alone(body: &Body, e: ExprId) -> bool {
@@ -112,6 +113,11 @@ pub(super) fn stage_of(body: &Body, known: &Known, root: ExprId, e: ExprId) -> R
                 None if body.bound_within(*l, root) => Ok(Clock::Const),
                 None => Err(Fault::Internal("a local with no clock")),
             },
+            _ => Ok(Clock::Const),
+        },
+        // S-1244 (§11.2, §11.3): `^name` is of the stage its name is made at (the clock it is read at stays that of the reader, `clock_of`), so a part of it in the first argument of a delay is made by that stage.
+        K::Feedback(_) => match body.target(e) {
+            Ok(Target::Local(l)) => Ok(known.get(l).map_or(Clock::Const, |seen| seen.stage)),
             _ => Ok(Clock::Const),
         },
         _ => {
@@ -220,7 +226,7 @@ fn makes(body: &Body, known: &Known, root: ExprId, e: ExprId, here: Clock, guard
 
 /// The operands that are in a position that is not a condition: the parts `walk` goes on into (the conditional forms and the block
 /// expression are walked by themselves; `if`, `if~`, `match` and `match~` are not here).
-fn operands(body: &Body, e: ExprId) -> Vec<ExprId> {
+pub(super) fn operands(body: &Body, e: ExprId) -> Vec<ExprId> {
     use ExprKind as K;
     let ast = body.ast;
     match &ast.expr(e).kind {
@@ -254,10 +260,12 @@ fn operands(body: &Body, e: ExprId) -> Vec<ExprId> {
     }
 }
 
-/// Whether a part that a stage makes is kept: Copy (or a `panic`), and none of an atom, a feedback and a part that reads what is not made.
+/// Whether a part that a stage makes is kept: Copy (or a `panic`), and none of an atom, a part that reads what is not made, and a part that reads a `^name` and holds a call (it is read where it is written). A part that reads a `^name` is kept too, but made at the end of
+/// its stage (S-1244, `Frame::defer_part`): the name is below.
 fn kept(body: &Body, known: &Known, e: ExprId) -> Result<bool, Fault> {
     let copy = body.view.is_copy(body.ty_id(e)?) || is_panic(body, e);
-    Ok(copy && !atom(body, e) && !feedback(body, e) && !reads_unknown(body, known, e, e))
+    let read_in_place = feedback(body, e) && has_state(body, e);
+    Ok(copy && !atom(body, e) && !read_in_place && !reads_unknown(body, known, e, e))
 }
 
 /// The clocks of the names in scope in the body of a `par~` whose variable is written at `at`: the index is of `init` (§11.5).
@@ -417,10 +425,14 @@ fn walk(f: &mut Frame, known: &Known, root: ExprId, e: ExprId, here: Clock, guar
     }
     let made = clock.max(guard);
     if made < here {
-        // Made by a stage before: not again.
-        return Ok(());
+        // Made by a stage before: not again, but the work the calls in it have in this stage is done where they are written (S-1233).
+        return visit(f, known, root, e, here, guard);
     }
     if made == here && kept(&body, known, e).map_err(stop)? {
+        // A part that reads a `^name` is made at the end of the stage, after the `let`s and the output, with what the delays save (S-1244).
+        if feedback(&body, e) && f.run.is_some() {
+            return f.defer_part(e, here);
+        }
         // The value of the call before is stale: made again by this stage (the parts it holds that a slower stage kept stay).
         let replicas = f.run.as_ref().map(|r| r.replicas.clone()).unwrap_or_default();
         f.hoisted.entry(e).or_insert((here, HashMap::new())).1.remove(&replicas);
@@ -428,44 +440,98 @@ fn walk(f: &mut Frame, known: &Known, root: ExprId, e: ExprId, here: Clock, guar
         f.hoisted.entry(e).or_insert((here, HashMap::new())).1.insert(replicas, v);
         return Ok(());
     }
-    // A chain that this stage makes (not a part that is kept): the call reads its arguments itself, and what it gathers is made by `gathered` at each stage from its own.
+    // A chain that this stage makes (not a part that is kept): the call reads its arguments itself, and what it gathers is made by `gather_args` where the call is written.
     if made == here && chain_of(&body, e).map_err(stop)?.is_some() {
-        return Ok(());
+        return f.work_of(e, here, Some((known, root)));
     }
-    descend(f, known, root, e, here, guard)
+    descend(f, known, root, e, here, guard)?;
+    f.work_of(e, here, Some((known, root)))
 }
 
-/// The parts of the arguments that the chains the stage `at` has gather (§11.9), in the order of the places of the calls, that the stage makes: the call is made as a whole at the stage its output is of, and the argument is read by the ring at a later one
-/// (its own, `Frame::save_gathers`), so a part of it that a stage between the two makes (a delay of the slower clock under an `at`) is made by that stage as it is in any other expression (§11.3), else it would be of the stage that reads
-/// the argument. `steps` are the steps of the body whose `let` or output holds the call, for the clocks of the names it reads.
-pub(super) fn gathered(f: &mut Frame, steps: &[Step], at: Stage) -> Result<(), Stop> {
-    let Some(run) = f.run.as_ref() else { return Ok(()) };
-    let here = Clock::from(at);
-    let calls: Vec<_> = run
-        .state
-        .children
-        .iter()
-        .filter_map(|(k, c)| c.levels.last().map(|top| (k.clone(), top.gathers.clone(), top.made, c.scope.clone())))
-        .filter(|(_, gathers, made, _)| !gathers.is_empty() && Clock::Tick(*made) <= here)
-        .collect();
-    for (key, gathers, _, scope) in calls {
-        let (body, span) = (f.body, f.body.ast.expr(key.call).span);
-        let stop = |fault| Stop { fault, at: span };
-        let holds = |s: &Step| {
-            let x = body.ast.expr(s.init).span;
-            x.file == span.file && x.start <= span.start && span.end <= x.end
-        };
-        let step = steps.iter().find(|s| holds(s)).ok_or(stop(Fault::Internal("a chain that no step holds")))?;
-        let levels = f.run.as_ref().and_then(|r| r.state.children.get(&key)).map(|c| c.levels.clone());
-        let args = port_exprs(args_of(&body, key.call), &levels.ok_or(stop(Fault::Internal("no instance")))?);
-        f.with_bindings(&key.replicas, scope, |f| {
-            gathers.iter().try_for_each(|n| {
-                let arg = args.get(*n).ok_or(stop(Fault::Internal("a gathered input with no argument")))?;
-                walk(f, &step.known, step.init, *arg, here, Clock::Const)
-            })
-        })?;
+/// The calls in `e`, a part that a stage before made (so nothing of it is made again): in the order they are written, each does what it has in the stage `here` (S-1233: "出力をその段で読むかによらず、呼び出しを書いた位置で行う"),
+/// after the calls in its arguments. It makes no value (what a call gathers is `gather_args`'s), so it takes no condition: a call is where it is evaluated whatever the branch (§11.5: E0811 keeps one out of a branch that is not taken).
+fn visit(f: &mut Frame, known: &Known, root: ExprId, e: ExprId, here: Clock, guard: Clock) -> Result<(), Stop> {
+    let body = f.body;
+    let stop = |fault| Stop { fault, at: body.ast.expr(e).span };
+    if !has_state(&body, e) {
+        return Ok(());
     }
-    Ok(())
+    if f.low_stack() {
+        return Err(stop(LOW_STACK));
+    }
+    if matches!(body.ast.expr(e).kind, ExprKind::Par { .. }) {
+        let ExprKind::Par { var, body: inner, .. } = &body.ast.expr(e).kind else { return Ok(()) };
+        let inside = with_index(&body, known, var.span).map_err(stop)?;
+        f.replicate(e, |_: &()| 0, |f| visit(f, &inside, root, *inner, here, guard))?;
+        return Ok(());
+    }
+    for (x, k, g) in kids(&body, known, root, e, guard).map_err(stop)? {
+        visit(f, &k, root, x, here, g)?;
+    }
+    f.work_of(e, here, Some((known, root)))
+}
+
+/// The calls in a part that a stage before made and a faster one reads (its value kept, `Frame::eval`): each does the work it has in the stage this one is in, in the order they are written (S-1233), the part not made again.
+pub(super) fn hoisted_calls(f: &mut Frame, e: ExprId) -> Result<(), Stop> {
+    let body = f.body;
+    if !has_state(&body, e) {
+        return Ok(());
+    }
+    if f.low_stack() {
+        return Err(Stop { fault: LOW_STACK, at: body.ast.expr(e).span });
+    }
+    match &body.ast.expr(e).kind {
+        ExprKind::Par { body: inner, .. } => return f.replicate(e, |_: &()| 0, |f| hoisted_calls(f, *inner)).map(drop),
+        // The bindings of an arm and of a block are made where the expression is evaluated: what is in them is reached there.
+        ExprKind::Match { .. } | ExprKind::Block(_) => return Ok(()),
+        _ => {}
+    }
+    let called = matches!(body.ast.expr(e).kind, ExprKind::Call { .. });
+    let kids = if called { operands(&body, e) } else { body.ast.sub_exprs(e) };
+    kids.into_iter().try_for_each(|x| hoisted_calls(f, x))?;
+    match f.run.as_ref().map(|r| r.stage) {
+        Some(Stage::Tick(r)) => {
+            let step = f.run.as_ref().and_then(|run| run.step.clone());
+            f.work_of(e, Clock::Tick(r), step.as_ref().map(|(known, root)| (&**known, *root)))
+        }
+        _ => Ok(()),
+    }
+}
+
+/// Does `e` hold a call of an instance or a delay (what has state, §11.5)?
+pub(super) fn has_state(body: &Body, e: ExprId) -> bool {
+    matches!(body.ast.expr(e).kind, ExprKind::Call { kind: CallKind::Flow, .. })
+        || body.ast.sub_exprs(e).into_iter().any(|x| has_state(body, x))
+}
+
+/// The parts of the arguments that the chain at `key` gathers that `here` makes, once in a stage (`Run::gathered`): where the call is written, before its work in the stage (S-1233), and `read_call` does it for a call that an expression reads.
+pub(super) fn gather_args(
+    f: &mut Frame,
+    key: &NodeKey,
+    replicas: &[u32],
+    known: &Known,
+    root: ExprId,
+    here: Clock,
+) -> Result<(), Stop> {
+    let span = f.body.ast.expr(key.call).span;
+    let stop = |fault| Stop { fault, at: span };
+    let Some(run) = f.run.as_mut() else { return Ok(()) };
+    let Some(child) = run.state.children.get(key) else { return Ok(()) };
+    let Some(top) = child.levels.last().filter(|t| !t.gathers.is_empty() && Clock::Tick(t.made) <= here) else {
+        return Ok(());
+    };
+    let (gathers, scope, levels) = (top.gathers.clone(), child.scope.clone(), child.levels.clone());
+    if !run.gathered.insert(key.clone()) {
+        return Ok(());
+    }
+    let body = f.body;
+    let args = port_exprs(args_of(&body, key.call), &levels);
+    f.with_bindings(replicas, scope, |f| {
+        gathers.iter().try_for_each(|n| {
+            let arg = args.get(*n).ok_or(stop(Fault::Internal("a gathered input with no argument")))?;
+            walk(f, known, root, *arg, here, Clock::Const)
+        })
+    })
 }
 
 /// The parts inside `e`, which is not made by this stage as a whole: the conditions this stage decides are evaluated and the branch, arm or
@@ -614,7 +680,7 @@ fn descend(f: &mut Frame, known: &Known, root: ExprId, e: ExprId, here: Clock, g
             // The replicas in the order of the index, each with its index bound (as the evaluation of the `par~` does).
             // A body that has no part for this stage is not walked (a `par~` of a million replicas that only reads `x`).
             let inside = with_index(&body, known, var.span).map_err(stop)?;
-            if makes(&body, &inside, root, *inner, here, guard).map_err(stop)? {
+            if makes(&body, &inside, root, *inner, here, guard).map_err(stop)? || has_state(&body, *inner) {
                 f.replicate(e, |_: &()| 0, |f| walk(f, &inside, root, *inner, here, guard))?;
             }
             Ok(())

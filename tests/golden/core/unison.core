@@ -81,8 +81,6 @@ fn unison.unison.init(cfg: unison.unison.Config, sample_rate: F32) -> unison.uni
   let s: unison.unison.State = zeroed:unison.unison.State
   for i in 0:U32..4:U32 {
     s.0[i].1 = unison.spread(i, const unison.UNISON)
-  }
-  for i in 0:U32..4:U32 {
     s.0[i].0 = unison.saw.init(unison.saw.Config {}, sample_rate)
   }
   s.1 = false

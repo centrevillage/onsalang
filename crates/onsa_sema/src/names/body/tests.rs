@@ -829,3 +829,53 @@ fn the_notes_of_a_later_let_read_in_a_flow_body() {
         assert!(d.fixes.is_empty() && d.notes.iter().any(|n| n.message.contains(note)), "{value}: {d:?}");
     }
 }
+
+/// §11.2, S-1245: a binding of a `match~` that a `^name` chooses, by its
+/// scrutinee or a guard of any arm, read in an argument of a flow or the
+/// condition of a modifier in the delay, is the E0801 at its name with no
+/// candidate and a note of the `let`; elsewhere in the delay it is read, and
+/// one a delay in the scrutinee chooses everywhere.
+#[test]
+fn a_binding_that_a_past_value_chooses_is_not_read_in_an_argument_of_a_flow_or_a_condition() {
+    let pre = "pub flow lp(x: F32 at sample) -> F32 at sample {\n  x + prev~(x)\n}\n";
+    let of = |value: &str| {
+        let lets = format!("  let a = prev~({value})\n  let v: F32 = x * 0.5\n  let w = x > 0.0\n");
+        analysis(&format!(
+            "{pre}pub flow u(x: F32 at sample) -> F32 at sample {{\n{lets}  if w {{ a }} else {{ v }}\n}}\n"
+        ))
+        .0
+    };
+    let bad = [
+        "match~ ^v { b => lp~(b) }",
+        "match~ ^v { b => lp~(x + b * 2.0) }",
+        "match~ ^v * 2.0 { b => lp~(prev~(x, b)) }",
+        "match~ x { b if ^w => lp~(x), b => lp~(b) }",
+        "match~ x { b if b > 1.0 => lp~(b), b if ^w => lp~(x) + b, b => b }",
+        "match~ ^v { b => match~ b + 1.0 { c => lp~(c) } }",
+        "match~ ^v { b => prev~(lp~(b)) }",
+        "match~ ^v { b => lp~(x).when~(b > 0.0) }",
+        "match~ ^v { b => prev~(x).reset_if~(b > 0.0) }",
+        "(par~ i in 0 ..< 2 { match~ ^v { b => lp~(b) } })[0]",
+    ];
+    for value in bad {
+        let a = of(value);
+        assert_eq!(stages(&a), [(onsa_diag::Code::E0801, onsa_diag::Stage::Names)], "{value}: {:?}", a.diagnostics);
+        let d = &a.diagnostics[0];
+        let note = "`let t = match~ v { … }`, then `prev~(^t)`";
+        assert!(d.fixes.is_empty() && d.notes.iter().any(|n| n.message.contains(note)), "{value}: {d:?}");
+        assert!(matches!(d.found.as_deref(), Some("b" | "c")), "{value}: {d:?}");
+    }
+    let good = [
+        "match~ ^v { b => lp~(x) + b }",
+        "match~ ^v { b => lp~(prev~(b)) }",
+        "match~ ^v { b => vdelay~(x, b, 4) + prev~(x, b) }",
+        "match~ prev~(^v) { b => lp~(b) }",
+        "match~ ^v { b => match~ prev~(b) { c => lp~(c) } }",
+        "if~ ^w { lp~(x) } else { x }",
+    ];
+    for value in good {
+        let a = of(value);
+        let codes: Vec<_> = stages(&a).into_iter().filter(|s| s.1 == onsa_diag::Stage::Names).collect();
+        assert!(codes.is_empty(), "{value}: {:?}", a.diagnostics);
+    }
+}
