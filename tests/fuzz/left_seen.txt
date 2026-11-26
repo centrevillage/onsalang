@@ -12,6 +12,7 @@ fix|E0002|remove the line break|E0001	`…` (U+#) cannot be written outside comm
 fix|E0002|remove the line break|E0002	expected `…` or `…`, found `…`
 fix|E0002|remove the line break|E0002	expected an expression, found `…`
 fix|E0002|remove the line break|E0002	expected newline or `…`, found identifier
+fix|E0002|remove the line break|E0002	expected variant name, found `…`
 fix|E0002|remove the line break|E0002	this `…` is never closed
 fix|E0002|remove the line break|E0020	there is no prefix `…`
 fix|E0002|write the `…` between the elements|E0002	expected imported name, found `…`
@@ -65,6 +66,7 @@ fix|E0020|add the `…` after the point|E0002	`…` needs a range `…` or `…`
 fix|E0020|add the `…` before the point|E0020	a callee that is no path of names is a function value; it is called with `…`
 fix|E0020|call the function value with `…`|E0002	`…` needs a range `…` or `…`
 fix|E0020|call the function value with `…`|E0020	a tuple index does not start with #
+fix|E0020|call the function value with `…`|E0020	an escape of other languages; Onsa writes a character by its value as `…`
 fix|E0020|compare in a guard, with the end (`…`)|E0002	literals have no type suffix; the type comes from the context
 fix|E0020|compare in a guard, with the end (`…`)|E0020	literals have no type suffix; the type comes from the context
 fix|E0020|compare in a guard, without the end (`…`)|E0002	literals have no type suffix; the type comes from the context
