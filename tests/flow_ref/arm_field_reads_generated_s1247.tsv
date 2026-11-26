@@ -1,0 +1,22 @@
+# flow_ref 1 source=tests/spec/flow_semantics/arm_field_reads_generated_s1247.onsa tests=7 evaluated=7 unavailable=0 skipped=0 waiting=0
+@ f2000
+render arm_field_reads_generated_s1247.t2000 sr=0x41000000 in y=[0 0 0 0 1 0 7 101] g=[false true true true true false false true] h=[true false true true true false false false] c=[2000 1 1 0 1 0 2000 1] r=[false false false false false false false false]
+out=[1000 1000 1000 1000 1 1000 1000 2004]
+@ f2001
+render arm_field_reads_generated_s1247.t2001 sr=0x41000000 in y=[0 0 0 0 3 6 2 1] g=[true true true false true true false true] h=[false true false true true false false true] c=[1500 0 0 2000 1500 1 1500 2000] r=[false false false false false false false false]
+out=[1500 1000 0 1000 1004 1 1500 1002]
+@ f2008
+render arm_field_reads_generated_s1247.t2008 sr=0x41000000 in y=[0 7 1 0 0 101 7 0] g=[false true true false false false true true] h=[false true false false true true true true] c=[1500 0 1500 2000 2000 1 0 0] r=[false false false false false false false false]
+out=[1000 7 1 1 1 1 7 7]
+@ f2016
+render arm_field_reads_generated_s1247.t2016 sr=0x41000000 in y=[0 0 0 0 1 0 1 0] g=[true true true true false false true true] h=[true true true true true true true false] c=[1 1500 2000 0 0 0 0 0] r=[false false false false false false false false]
+out=[1000 1000 1000 1000 1000 1000 6 1000]
+@ f2025
+render arm_field_reads_generated_s1247.t2025 sr=0x41000000 in y=[0 0 0 0 2 7 2 2] g=[true false false true false true true false] h=[true true false true false false true true] c=[1 1 2000 1 0 0 1 1500] r=[false false false false false false false false]
+out=[0 1000 1000 0 1000 1000 4 1000]
+@ f2026
+render arm_field_reads_generated_s1247.t2026 sr=0x41000000 in y=[0 0 0 0 3 7 101 6] g=[false true true false true true true true] h=[true true false false true false true true] c=[1 0 2000 2000 1500 2000 1500 2000] r=[false false false false false false false false]
+out=[1000 5 6000 1000 4504 6008 5500 6007]
+@ f2029
+render arm_field_reads_generated_s1247.t2029 sr=0x41000000 in y=[0 0 101 0 3 1 1 7] g=[false true true true true true false false] h=[false true true true true true false false] c=[1500 2000 2000 0 0 1 0 1500] r=[false true false false false false false false]
+out=[1500 0 1000 1000 5 3 0 1500]

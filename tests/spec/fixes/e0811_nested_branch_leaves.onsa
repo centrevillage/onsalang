@@ -3,33 +3,35 @@
 // spec = ["§2.6", "§11.5", "§18.1"]
 //
 // [[test.fix]]
-// at = "42:23"
+// at = "44:23"
 // code = "E0811"
 // candidate = 1
-// leaves = ["42:24 E0811"]
+// leaves = ["44:24 E0811"]
 //
 // [[test.fix]]
-// at = "46:31"
+// at = "48:31"
 // code = "E0811"
 // candidate = 1
-// leaves = ["46:32 E0811"]
+// leaves = ["48:32 E0811"]
 //
 // [[test.fix]]
-// at = "50:31"
+// at = "52:31"
 // code = "E0811"
 // candidate = 1
-// leaves = ["50:32 E0811"]
+// leaves = ["52:32 E0811"]
 
 // W7-06 U1/t, S-1172, S-1183 (§11.5: "枝と … には、状態を持つもの … を書けない（E0811。修正候補は `if~` / `match~` にすることと、
-// 状態を持つものを前の `let` に出すこと …）"; S-1183, the provisional reading (1)): a thing with state in a branch of a plain
+// 状態を持つものを前の `let` に出すこと …）"; S-1183 1, 3): a thing with state in a branch of a plain
 // `if` or `match` that is itself in a branch of another plain `if` or `match`. The error is one (the innermost branch is
 // the place), and it has two candidates. The first, the `~` of the innermost `if` / `match`, makes it evaluate every
 // branch of its own, but the thing is still in a branch of the outer one, so the E0811 stays after it (`leaves`, at the
 // position in the text after the candidate: the thing moves one column right of the inserted `~`). The candidate is
-// shown although it leaves the error: the provisional reading (1) of S-1183 (an open detail); applied again to what
-// is left, the candidates stop (the loop of the test `candidates_applied_again_stop` of crates/onsa_cli/tests/cli/lift_candidates.rs). The second, the lift
+// shown although it leaves the error (S-1183 1); applied again to what is left, the candidates stop (the loop of the
+// test `candidates_applied_again_stop` of crates/onsa_cli/tests/cli/lift_candidates.rs). The second, the lift
 // into a `let` (§11.5), takes the thing out of both and leaves nothing (the runner's default for a candidate with no
-// entry). The `if~` and `match~` of the first candidate are read after W7-06 U2 and U3a. One error per flow (P-01); the
+// entry). After the first, the E0811 of the outer branch has no lift into a `let`, which would leave the inner `if~` /
+// `match~` with no state (S-1183 3), so the fix loop goes round no cycle. The `if~` and `match~` of the first candidate
+// are read after W7-06 U2 and U3a. One error per flow (P-01); the
 // marker is on the line of the offending construct, and the position in the entries is the start of the thing with
 // state (S-392, provisional).
 

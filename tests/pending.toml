@@ -889,13 +889,6 @@ until = "W9-03"
 note = "遅延の長さの定数式（TWO - 1、TWO + 1）の値が W9-03 まで E0200（FlowConstExprs）。`flow_delay_one.onsa` から W7-06 U2/t で分けた"
 
 [[pending]]
-kind = "gate"
-target = "fix-loop/tests/spec/fixes/e0811_nested_branch_leaves.onsa"
-reasons = ["S-1183"]
-until = "W7-17"
-note = "内の `if` に `~` を足す候補の後に、外の E0811 の前の `let` の候補が状態を外へ出すと、内の `if~` が E0812 になり、その候補が足した `~` を消す（cycle (undoes step N)。当て続けると止まる。S-1183 の仮 (1)。W7-06 U2 で `if~` を読むようになって見えた）"
-
-[[pending]]
 kind = "test-case"
 target = "tests/spec/flow_clock/derived_clock_const_expressions_w9_03.onsa"
 reasons = ["S-1077"]

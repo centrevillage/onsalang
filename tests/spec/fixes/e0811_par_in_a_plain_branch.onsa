@@ -36,7 +36,7 @@
 // and the lift into a `let`, are not asked for here). What stays after the candidate is in
 // e0811_par_in_a_plain_branch_leaves.onsa. After the candidate the `par~` holds state in the branch, which this
 // version reports as the E0811 of a thing with state in a branch (`leaves` in the header, at the start of the
-// `par~`; S-1183 (1), the provisional reading: the candidate is shown although the branch stays an error). Which
+// `par~`; S-1183 1: the candidate is shown although the branch stays an error). Which
 // candidates the one error has when the `par` and the branch are both E0811 at the same place is a gap (W7-06 U1/t).
 // A `par` without state in a branch is no error: it is a thing
 // without state that is taken only when the branch is (par_in_plain_branches.onsa).

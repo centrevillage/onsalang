@@ -207,8 +207,10 @@ fn test_arm(
 }
 
 /// The bindings of `pat` against `place` into `out`, each then read for
-/// nothing (a use, as of S-288): a guard or the places read some only.
-fn bind_read(lw: &mut Lowerer, cx: &mut FnCx, pat: PatId, place: &Expr, out: &mut Vec<Stmt>) -> R<()> {
+/// nothing (a use, as of S-288): a guard or the places read some only, and
+/// so does a block of the work of a stage ([`super::hoist`], S-1247), which
+/// binds again a local another block reads (the C judges a local, not a block).
+pub(super) fn bind_read(lw: &mut Lowerer, cx: &mut FnCx, pat: PatId, place: &Expr, out: &mut Vec<Stmt>) -> R<()> {
     let from = out.len();
     pat_bind(lw, cx, pat, place, out)?;
     let bound: Vec<_> = out[from..]

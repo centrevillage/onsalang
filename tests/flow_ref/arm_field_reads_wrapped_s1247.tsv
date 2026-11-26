@@ -1,0 +1,33 @@
+# flow_ref 1 source=tests/spec/flow_semantics/arm_field_reads_wrapped_s1247.onsa tests=10 evaluated=10 unavailable=0 skipped=0 waiting=0
+@ wrapped in a condition at sample, the same values
+render arm_field_reads_wrapped_s1247.t_wrapped sr=0x41000000 in y=[0 0 3 0] g=[true true true true]
+out=[1000 1000 1003 1003]
+@ a condition at sample in the arm, the same values
+render arm_field_reads_wrapped_s1247.t_inside sr=0x41000000 in y=[0 0 3 0] g=[true true true true]
+out=[1000 1000 1003 1003]
+@ a match on a read of a binding of an arm: before the first event the inner read is `W.default()`
+render arm_field_reads_wrapped_s1247.t_nested sr=0x41000000 in y=[0 0 3 0] g=[true true true true]
+out=[1000 1000 1006 1006]
+@ a read of a binding in a guard of match~: before the first event it is `Bool.default()`
+render arm_field_reads_wrapped_s1247.t_tilde_guard sr=0x41000000 in y=[0 0 3 0] g=[true true true true]
+out=[1000 1000 1001 1001]
+@ after a reset_if~ the field is the default of its type again, wrapped or not
+render arm_field_reads_wrapped_s1247.t_bare_reset sr=0x41000000 in y=[0 0 3 0 0] r=[false false false true false]
+out=[1000 1000 1003 1000 1000]
+render arm_field_reads_wrapped_s1247.t_wrapped_reset sr=0x41000000 in y=[0 0 3 0 0] g=[true true true true true] r=[false false false true false]
+out=[1000 1000 1003 1000 1000]
+@ the inner match goes on from the pattern of the outer: the inner read follows the event
+render arm_field_reads_wrapped_s1247.t_nested_k sr=0x41000000 in y=[0 2 0 3 0] g=[true true true true true]
+out=[1000 1004 1004 1000 1000]
+@ an element of a tuple is read as a field is: written at the event where the condition is false, `U32.default()` before
+render arm_field_reads_wrapped_s1247.t_tuple sr=0x41000000 in y=[0 0 3 0] g=[true true false true]
+out=[1000 1000 1000 1009]
+@ a guard of a match~ after an arm that is taken is written at the event as well
+render arm_field_reads_wrapped_s1247.t_tilde_prev sr=0x41000000 in y=[0 0 3 0] g=[false false true false]
+out=[1000 1000 1100 1010]
+@ a read in a guard of a match~ is `Bool.default()` again after a reset_if~
+render arm_field_reads_wrapped_s1247.t_tilde_reset sr=0x41000000 in y=[0 0 3 0 0] g=[true true true true true] r=[false false false true false]
+out=[1000 1000 1001 1000 1000]
+@ the guard of the first arm of a match~: `Bool.default()` before the first event, the event's after
+render arm_field_reads_wrapped_s1247.t_tilde_first sr=0x41000000 in y=[0 0 3 0]
+out=[1000 1000 1001 1001]

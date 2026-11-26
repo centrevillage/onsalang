@@ -8,6 +8,7 @@ use onsa_diag::hash::HashSet;
 use onsa_diag::{Edit, Fix};
 use onsa_syntax::ast::{Ast, ExprId, ExprKind, Ident};
 
+use super::nodes::{holds_state, holds_state_but};
 use crate::names::body::{BindingKind, BodyNames, PathRes};
 use crate::{Analysis, DefId};
 
@@ -39,14 +40,20 @@ pub(in crate::flow) struct Stmt {
 /// computed on (§11.9; none of a delay, of the tick of its first argument).
 /// None when the thing is
 /// in the body of a replication or reads a binding of an arm (§11.5: the
-/// `let` would be outside them), or any binding the statement does not see.
-/// Linear in the statement and the names of the body.
+/// `let` would be outside them), or any binding the statement does not see,
+/// and when an `if~` / `match~` around it would hold no state without it
+/// (§11.5, S-1183 3: the E0812 of the predicate of its check). Linear in the
+/// statement and the names of the body, and in the bodies of each `if~` /
+/// `match~` around it.
 // S-1190: of two things with state side by side, the one at the place of
 // the diagnostic only is moved; the other stays, the error of the next
 // round.
 pub(in crate::flow) fn lift(b: &Body, thing: ExprId, kind: &str, stmt: Stmt, per: Option<&str>) -> Option<Fix> {
     let (ast, span) = (b.ast, b.ast.expr(thing).span);
-    if under_par(ast, stmt.root, thing)? || !reads_seen(b, thing) {
+    let around = around(ast, stmt.root, thing);
+    if around.iter().any(|&x| matches!(ast.expr(x).kind, ExprKind::Par { .. }) || emptied(ast, x, thing))
+        || !reads_seen(b, thing)
+    {
         return None;
     }
     let name = free_name(b, kind, span);
@@ -63,18 +70,34 @@ pub(in crate::flow) fn lift(b: &Body, thing: ExprId, kind: &str, stmt: Stmt, per
     Some(Fix::new(format!("compute it{on} in a new `let {name}` before this statement"), edits))
 }
 
-/// Whether `thing` is in the body of a `par` / `par~` under `root` (its
-/// range too); None when it is not under `root`, which no walk gives.
-fn under_par(ast: &Ast, root: ExprId, thing: ExprId) -> Option<bool> {
-    let mut todo = vec![(root, false)];
-    while let Some((x, par)) = todo.pop() {
+/// The expressions under `root` that hold `thing`, the outermost first
+/// (`root` too, not `thing`). One walk of `root`.
+fn around(ast: &Ast, root: ExprId, thing: ExprId) -> Vec<ExprId> {
+    let mut todo = vec![(root, 0)];
+    let mut path = Vec::new();
+    while let Some((x, depth)) = todo.pop() {
+        path.truncate(depth);
         if x == thing {
-            return Some(par);
+            return path;
         }
-        let par = par || matches!(ast.expr(x).kind, ExprKind::Par { .. });
-        todo.extend(ast.sub_exprs(x).into_iter().map(|y| (y, par)));
+        path.push(x);
+        todo.extend(ast.sub_exprs(x).into_iter().map(|y| (y, depth + 1)));
     }
     onsa_diag::internal::bug(Some(ast.expr(thing).span), "a thing with state outside its statement")
+}
+
+/// Whether `x` is an `if~` / `match~` whose branches or arm bodies hold
+/// state, and none without `thing` ([`holds_state_but`]).
+fn emptied(ast: &Ast, x: ExprId, thing: ExprId) -> bool {
+    let bodies: Vec<ExprId> = match &ast.expr(x).kind {
+        ExprKind::If { tilde: Some(_), .. } => {
+            let chain = super::branching::chain(ast, x);
+            chain.links.iter().map(|l| l.then).chain(chain.last).collect()
+        }
+        ExprKind::Match { arms, tilde: Some(_), .. } => arms.iter().map(|a| a.body).collect(),
+        _ => return false,
+    };
+    bodies.iter().any(|&y| holds_state(ast, y)) && !bodies.iter().any(|&y| holds_state_but(ast, y, Some(thing)))
 }
 
 /// Whether every binding `thing` reads is an input or a `let` of the body,

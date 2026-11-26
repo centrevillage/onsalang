@@ -1,0 +1,26 @@
+// onsa.toml
+// [test]
+// spec = ["§2.6", "§11.5", "§18.1"]
+// fixes = 0
+
+// W7-17 L5/i, S-1183 3, S-394 (§11.5: "前の `let` に出す … 式が腕の束縛を読むときと、`par~` の本体の中にあるときと、移すと囲む `if~`・`match~` の
+// 本体が状態を持たなくなる（E0812）ときは、この候補を作らない"): a thing with state in a guard or a later condition of a plain `match` / `if` chain,
+// which is the only state of the branch or the arm body of an `if~` / `match~` around it. The `~` candidate is not made in a guard or a later
+// condition (S-394), and the lift into a `let` would leave the `if~` / `match~` with no state (its E0812), against the `~` written there, so the
+// error has no candidate (`fixes = 0`). The error is still E0811 and is reported. One error per flow (P-01); the marker is on the line of the
+// offending construct, and the spec does not fix its column.
+
+pub flow guard_in_an_if_tilde(x: F32 at sample, k: U32 at sample, c: Bool at sample) -> F32 at sample {
+  if~ c { match k { 0 if prev~(x) > 0.0 => 1.0, _ => 0.0 } } else { 0.0 } //~ E0811
+}
+
+pub flow later_condition_in_an_if_tilde(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  if~ c { if x > 0.0 { 1.0 } else if prev~(x) > 0.0 { 2.0 } else { 0.0 } } else { 0.0 } //~ E0811
+}
+
+pub flow guard_in_a_match_tilde(x: F32 at sample, k: U32 at sample, j: U32 at sample) -> F32 at sample {
+  match~ k {
+    0 => match j { 0 if prev~(x) > 0.0 => 1.0, _ => 0.0 }, //~ E0811
+    _ => 0.0,
+  }
+}

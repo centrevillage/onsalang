@@ -361,8 +361,8 @@ impl Walk<'_> {
     /// `par` that holds it, with the candidate that adds the `~`; E0812 of a
     /// `par~` that holds none, with the one that takes it off (a space
     /// between `par` and its index, which it touches).
-    // SPEC-GAP(S-1183): in a branch too, where the E0811 of the branch is
-    // left (provisional): the `par`'s, at the same place, comes first.
+    /// In a branch too, where the E0811 of the branch is left (S-1183 1):
+    /// the `par`'s, at the same place, comes first.
     pub(super) fn par_mark(&mut self, e: ExprId, tilde: Option<Span>, holds: bool) {
         let span = self.ast.expr(e).span;
         let head = crate::names::body::par_head(span, tilde);
@@ -391,10 +391,10 @@ impl Walk<'_> {
     /// Else, at `Check`, the E0811 of a branch, a guard or a later condition
     /// of a chain, or the E0806 of the right of `&&` / `||`, of the innermost
     /// place, at `e` (S-392), with the candidates that can be made (§2.6,
-    /// S-394): the `~` of a branch, which leaves the outer places in error
-    /// (S-1183), then the lift into a `let`.
-    // SPEC-GAP(S-1183): the `~` of the innermost branch, of a place in others
-    // (provisional).
+    /// S-394): the `~` of the innermost branch when every place around it is
+    /// a branch, which leaves the outer branches in error (S-1183 1, 2; none
+    /// in or under a guard, a later condition or the right of `&&` / `||`),
+    /// then the lift into a `let`.
     // S-1173: the E0806 at the flow check stage.
     // S-392: the main place of the E0811 / E0806 is the whole thing with
     // state, `lp~(x)`.
@@ -420,6 +420,7 @@ impl Walk<'_> {
         // A `~` that leaves the E0801 of a binding is no candidate (§11.5, S-1245).
         if let Site::Branch { head } = site
             && !self.names.no_tilde.contains(&head)
+            && self.sites.iter().all(|s| matches!(s, Site::Branch { .. }))
         {
             let at = self.ast.expr(head).span;
             let word = if matches!(self.ast.expr(head).kind, ExprKind::If { .. }) { "if" } else { "match" };

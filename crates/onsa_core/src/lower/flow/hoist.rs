@@ -8,8 +8,8 @@
 use onsa_sema::flow::{Hoist, HoistId};
 use onsa_syntax::ast::{Ast, BinOp, ExprKind as AK};
 
-use super::super::body::{lower_match_with, push_expr_stmt};
-use super::branches::{Pick, choose};
+use super::super::body::{arm_test, lower_match_with, push_expr_stmt};
+use super::branches::{Pick, bind_read, choose};
 use super::*;
 
 #[cfg(test)]
@@ -104,7 +104,7 @@ fn work_of(
     let flow = &cx.flow.as_ref().expect("flow context").now;
     let (saving, guards) = (flow.saving, flow.guards);
     let now = info.late.contains(&e) == saving;
-    let mine = |h: &Hoist| h.stage == s && guards.is_none_or(|g| g == h.guarded);
+    let mine = |h: &Hoist| h.stage == s && guards.is_none_or(|g| g == h.guarded) && h.arms.is_empty();
     if let Some(h) = info.hoist_of(e).filter(|&h| now && mine(info.hoist(h))) {
         let v = lower_expr(lw, cx, e)?;
         let f = sfield(lw, info, state, FieldOf::Hoist(h), info.hoist(h).span)?;
@@ -134,7 +134,8 @@ fn work_of(
     let span = ast.expr(e).span;
     match &ast.expr(e).kind {
         k if guards == Some(false) && !matches!(k, AK::Par { .. }) => {
-            return ast.sub_exprs(e).into_iter().try_for_each(|x| work(lw, cx, info, x, s, state, out));
+            ast.sub_exprs(e).into_iter().try_for_each(|x| work(lw, cx, info, x, s, state, out))?;
+            return if matches!(k, AK::Match { .. }) { arm_writes(lw, cx, info, e, at, out) } else { Ok(()) };
         }
         AK::If { cond, then, else_, tilde: None } => {
             placed(lw, cx, false, [*then].into_iter().chain(*else_), at, out)?;
@@ -165,6 +166,7 @@ fn work_of(
             let mut places = arms.iter().flat_map(|a| a.guard.into_iter().chain([a.body]));
             placed(lw, cx, false, places.clone(), at, out)?;
             work(lw, cx, info, *scrutinee, s, state, out)?;
+            arm_writes(lw, cx, info, e, at, out)?;
             if !places.any(|x| has_writes(info, ast, x, s, saving)) {
                 return Ok(());
             }
@@ -174,7 +176,9 @@ fn work_of(
                 return Err(unsupported(span, Feature::ValueMatch, &[]));
             }
             let v = cond_value(lw, cx, info, *scrutinee, s, state)?;
-            let m = lower_match_with(lw, cx, e, v, arms, Ty::Unit, &mut |lw, cx, i| under(lw, cx, arms[i].body))?;
+            let m = lower_match_with(lw, cx, e, v, arms, Ty::Unit, bind_read, &mut |lw, cx, i| {
+                under(lw, cx, arms[i].body)
+            })?;
             push_expr_stmt(m, out);
         }
         AK::If { tilde: Some(_), .. } => tilde_if_work(lw, cx, info, e, s, state, out)?,
@@ -302,14 +306,89 @@ fn tilde_match_work(
         let pick = Pick { upto: guards.max(bound), eval: guards.saturating_sub(1).max(bound), write: true };
         choose(lw, cx, e, pick, s, state, out)?;
     }
+    arm_writes(lw, cx, info, e, (s, state), out)?;
     out.append(&mut bodies);
     Ok(())
 }
 
+/// The fields of `s` of the reads of bindings of arms whose first `match` /
+/// `match~` is `m` (`Hoist::arms`, S-1247), of the work of the walk now (its
+/// guards, `FlowInfo::late`): each written when the patterns of its arms
+/// match their scrutinees, under no other condition. In a guard of `match~`
+/// a binding is the value of the pattern, not its place.
+fn arm_writes(
+    lw: &mut Lowerer,
+    cx: &mut FnCx,
+    info: &FlowInfo,
+    m: ExprId,
+    at: (ClockStage, &Expr),
+    out: &mut Vec<Stmt>,
+) -> R<()> {
+    let flow = &cx.flow.as_ref().expect("flow context").now;
+    let (saving, guards) = (flow.saving, flow.guards);
+    let ours = |h: &&Hoist| {
+        h.arms.first().is_some_and(|a| a.0 == m)
+            && h.stage == at.0
+            && guards.is_none_or(|g| g == h.guarded)
+            && info.late.contains(&h.expr) == saving
+    };
+    for (i, h) in info.hoists.iter().enumerate().filter(|(_, h)| ours(h)) {
+        let bound = h.arms.iter().filter_map(|&(m, k)| info.tilde_matches.get(&m).map(|t| &t.arms[k as usize]));
+        let overrides = &mut cx.flow.as_mut().expect("flow context").now.local_override;
+        let held: Vec<_> = bound.flatten().filter_map(|b| overrides.remove_entry(&b.0)).collect();
+        let written = arm_write(lw, cx, info, (HoistId(i as u32), h), at);
+        cx.flow.as_mut().expect("flow context").now.local_override.extend(held);
+        out.extend(written?);
+    }
+    Ok(())
+}
+
+/// The write of the field `h` of [`arm_writes`]: the scrutinee of each of its
+/// arms (of the first, its value at `s`, [`cond_value`]), tested by the
+/// pattern, its bindings bound, the next in it.
+fn arm_write(
+    lw: &mut Lowerer,
+    cx: &mut FnCx,
+    info: &FlowInfo,
+    (id, h): (HoistId, &Hoist),
+    (s, state): (ClockStage, &Expr),
+) -> R<Vec<Stmt>> {
+    let mut levels = Vec::with_capacity(h.arms.len());
+    for (k, &(m, arm)) in h.arms.iter().enumerate() {
+        let AK::Match { scrutinee, arms, .. } = &cx.ast.expr(m).kind else {
+            return Err(internal(h.span, "the arm of a read of a binding of no `match`"));
+        };
+        let (pat, span) = (arms[arm as usize].pat, cx.ast.expr(*scrutinee).span);
+        let v = if k == 0 { cond_value(lw, cx, info, *scrutinee, s, state)? } else { lower_expr(lw, cx, *scrutinee)? };
+        let mut before = Vec::new();
+        let place = materialize(cx, v, &mut before, "__arm");
+        let (test, binds) = arm_test(lw, cx, pat, &place)?;
+        let mut inner = Vec::new();
+        if binds {
+            bind_read(lw, cx, pat, &place, &mut inner)?;
+        }
+        levels.push((span, before, test, inner));
+    }
+    let f = sfield(lw, info, state, FieldOf::Hoist(id), h.span)?;
+    record(lw, id, f.span, true)?;
+    let mut body = Vec::new();
+    assign(&mut body, &f, lower_expr(lw, cx, h.expr)?)?;
+    for (span, mut before, test, mut inner) in levels.into_iter().rev() {
+        inner.append(&mut body);
+        match test {
+            Some(t) => before.push(stmt(span, StmtKind::If(t, Block { stmts: inner, value: None }, Block::default()))),
+            None => before.append(&mut inner),
+        }
+        body = before;
+    }
+    Ok(body)
+}
+
 /// Whether `e` holds a guarded field or a check of the stage `s`, of the
-/// work of `FlowInfo::late` or not.
+/// work of `FlowInfo::late` or not (a field of [`arm_writes`] is written at
+/// its `match`).
 fn has_writes(info: &FlowInfo, ast: &Ast, e: ExprId, s: ClockStage, late: bool) -> bool {
-    let guarded = info.hoist_of(e).map(|h| info.hoist(h)).filter(|h| h.guarded);
+    let guarded = info.hoist_of(e).map(|h| info.hoist(h)).filter(|h| h.guarded && h.arms.is_empty());
     let here = guarded.map(|h| h.stage).or(info.check_of(e));
     (here == Some(s) && info.late.contains(&e) == late)
         || ast.sub_exprs(e).into_iter().any(|x| has_writes(info, ast, x, s, late))

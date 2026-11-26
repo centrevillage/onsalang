@@ -99,8 +99,14 @@ pub struct Hoist {
     pub stage: ClockStage,
     /// Written only when the conditions on its path hold (S-1157): under
     /// a conditional position, but of [`Place::Field`]. W8-07 makes of it
-    /// what `init` sets (V-17).
+    /// what `init` sets (V-17). Of one of `arms`, whether the scrutinee of its
+    /// first `match` is a guarded field of its stage, whose writes it follows.
     pub guarded: bool,
+    /// Of a read of a binding of an arm ([`Place::Arm`]), the `match`es /
+    /// `match~`s and the arms its root is bound by, the outermost first (`r.w`
+    /// of `match v { V.B(q) => match q.k { W.S(r) => … } }`): written when
+    /// their patterns match its scrutinees, under no other condition.
+    pub arms: Vec<(ExprId, u32)>,
     pub owner: Owner,
     /// `_hoist_<n>`, numbered in its owner from 0 in the order of the
     /// starts of the subexpressions (§11.6).
@@ -123,6 +129,10 @@ pub(super) enum Place {
     /// In a field written at each tick of this stage whatever the conditions
     /// on its path: a field read of a name ([`Choose::of_name`], S-1197).
     Field(ClockStage),
+    /// Such a field read of a binding of an arm (of a `match`, or of a
+    /// `match~` in a guard), written at the ticks the patterns that bind it
+    /// match, whatever the other conditions on its path (S-1247).
+    Arm(ClockStage),
     /// A computed constant expression in a conditional position whose
     /// conditions are decided at this stage, before the stage that reads
     /// it: evaluated there too when they hold, for its panic (S-888 (c′)),
@@ -303,8 +313,12 @@ fn value_of(kind: &ExprKind) -> Option<ExprId> {
     }
 }
 
+/// A subexpression the marking hoisted: its stage, its owner, whether it is
+/// guarded, and the arms of [`Hoist::arms`].
+pub(super) type Marked = (ExprId, ClockStage, Owner, bool, Vec<(ExprId, u32)>);
+
 /// The table of the hoisted subexpressions of `info` the marking chose
-/// (`marked`: each with its stage, its owner and whether it is guarded),
+/// (`marked`, [`Marked`]),
 /// made with the plan:
 /// numbered per owner from 0 in the order of the starts of the
 /// subexpressions, named `_hoist_<n>` after the scope of the owner (§11.6),
@@ -315,18 +329,19 @@ fn value_of(kind: &ExprKind) -> Option<ExprId> {
 // `init`) are numbered the outer first, in the order of the walk.
 // S-1140: those of the body of a `par~` are of each replica, numbered in
 // that body by themselves, after the scope of the `par~` (`saws._hoist_0`).
-pub(super) fn table(info: &mut FlowInfo, ast: &Ast, marked: Vec<(ExprId, ClockStage, Owner, bool)>) {
+pub(super) fn table(info: &mut FlowInfo, ast: &Ast, marked: Vec<Marked>) {
     let scopes = info.let_scopes();
     let rank = |o: Owner| match o {
         Owner::Let(k) => k as usize,
         Owner::Output => scopes.len(),
         Owner::Par(p) => scopes.len() + 1 + p.0 as usize,
     };
-    let mut marked: Vec<_> = marked.into_iter().map(|(e, s, o, g)| (rank(o), ast.expr(e).span, e, s, o, g)).collect();
+    let mut marked: Vec<_> =
+        marked.into_iter().map(|(e, s, o, g, a)| (rank(o), ast.expr(e).span, e, s, o, g, a)).collect();
     marked.sort_by_key(|&(r, span, ..)| (r, span.start));
     let mut hoists: Vec<Hoist> = Vec::with_capacity(marked.len());
     let mut n = 0;
-    for (r, span, expr, stage, owner, guarded) in marked {
+    for (r, span, expr, stage, owner, guarded, arms) in marked {
         // Sorted by owner: the count goes on until the owner changes.
         n = if hoists.last().is_some_and(|h: &Hoist| h.owner == owner) { n + 1 } else { 0 };
         let name = names::local(HOIST, n);
@@ -335,9 +350,15 @@ pub(super) fn table(info: &mut FlowInfo, ast: &Ast, marked: Vec<(ExprId, ClockSt
             _ => scopes.get(r).map_or(OUTPUT_SCOPE, String::as_str),
         };
         let path = names::qualify(scope, &name);
-        hoists.push(Hoist { expr, stage, guarded, owner, name, path, span, saved: Vec::new() });
+        hoists.push(Hoist { expr, stage, guarded, owner, name, path, span, saved: Vec::new(), arms });
     }
     info.hoisted = hoists.iter().enumerate().map(|(i, h)| (h.expr, HoistId(i as u32))).collect();
+    for i in 0..hoists.len() {
+        let Some(&(m, _)) = hoists[i].arms.first() else { continue };
+        let ExprKind::Match { scrutinee, .. } = &ast.expr(m).kind else { continue };
+        let first = info.hoisted.get(&ast.without_parens(*scrutinee)).map(|h| &hoists[h.0 as usize]);
+        hoists[i].guarded = first.is_some_and(|f| f.stage == hoists[i].stage && f.guarded);
+    }
     info.hoists = hoists;
 }
 

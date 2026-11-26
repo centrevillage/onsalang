@@ -1,0 +1,291 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.3", "§11.5", "§11.10", "§11.11"]
+
+// W7-17 L5/i, S-1247 (1), S-1197 (spec §11.3: "フィールド・組の要素の読みは、条件によらず、守りを付けずに刻みごとに読む（腕の束縛（`match~` のガードの中の束縛も）を根に
+// する読みは、外の条件によらず、その腕のパターンが合う刻みに読む）"; "隠れたフィールドの型はその読み（連なりの全体）の型で、初めの値はその型の既定である"; "全体を速い段で読んでから
+// 取り出す `(m at sample).vel` は、`M` に `Default` が要り、`M.default().vel` で始まる"; §11.10: "刻みで書いて速い段が読むフィールド … は `T.default()` に戻る"): a field read
+// at `sample` of a binding of an arm of a `match` on an event value, or of a guard of a `match~`, is kept in a field of the type of the read, written at the
+// events at which the pattern of its arm matches (whatever wraps the `match`: a condition at `sample` does not guard it), and read where it is reached. Before the
+// first event (and after a `reset_if~`) the field is the default of the type of the read (`U32.default()`, `Bool.default()`, `W.default()`), not the field of
+// `V.default()` (`vel: 50`). The input `y` makes one event, `V.B(Pd { vel: 3, on: true, k: W.S(Pd2 { w: 6 }) })` at the frame 2 (`[0, 0, 3, 0]`), and `x`
+// is 1000. Every value is worked out by hand from the text. The forms of tests/spec/flow_semantics/arm_field_reads_s1247.onsa that a condition at `sample` or a `reset_if~` shows (the same values
+// as when the `match` is not wrapped), and the nested, the tuple element, the guard of a `match~` after another and after a `reset_if~`.
+
+struct Pd2 {
+  w: U32,
+}
+
+enum W {
+  N,
+  S(Pd2),
+}
+
+impl Default for W {
+  rt fn default() -> W {
+    W.N
+  }
+}
+
+struct Pd {
+  vel: U32,
+  on: Bool,
+  k: W,
+}
+
+impl Default for Pd {
+  rt fn default() -> Pd {
+    Pd { vel: 9, on: true, k: W.N }
+  }
+}
+
+enum V {
+  A,
+  B(Pd),
+}
+
+impl Default for V {
+  rt fn default() -> V {
+    V.B(Pd { vel: 50, on: true, k: W.S(Pd2 { w: 7 }) })
+  }
+}
+
+enum Tp {
+  N,
+  P((U32, U32)),
+}
+
+impl Default for Tp {
+  rt fn default() -> Tp {
+    Tp.P((70, 80))
+  }
+}
+
+flow src(y: U32 at sample) -> V at event {
+  if y > 100 {
+    Some(V.A)
+  } else if y > 0 {
+    Some(V.B(Pd { vel: y, on: true, k: W.S(Pd2 { w: y * 2 }) }))
+  } else {
+    None
+  }
+}
+
+flow src_k(y: U32 at sample) -> V at event {
+  if y > 0 {
+    Some(V.B(Pd { vel: y, on: true, k: if y % 2 == 0 { W.S(Pd2 { w: y * 2 }) } else { W.N } }))
+  } else {
+    None
+  }
+}
+
+flow src_t(y: U32 at sample) -> Tp at event {
+  if y > 0 {
+    Some(Tp.P((y, y * 2)))
+  } else {
+    None
+  }
+}
+
+flow bare(v: V at event, x: U32 at sample) -> U32 at sample {
+  match v {
+    V.B(q) => x + q.vel,
+    V.A => x,
+  }
+}
+
+flow wrapped(v: V at event, x: U32 at sample, g: Bool at sample) -> U32 at sample {
+  if g {
+    match v {
+      V.B(q) => x + q.vel,
+      V.A => x,
+    }
+  } else {
+    x
+  }
+}
+
+flow inside(v: V at event, x: U32 at sample, g: Bool at sample) -> U32 at sample {
+  match v {
+    V.B(q) => if g { x + q.vel } else { x },
+    V.A => x,
+  }
+}
+
+flow nested(v: V at event, x: U32 at sample, g: Bool at sample) -> U32 at sample {
+  if g {
+    match v {
+      V.B(q) => match q.k {
+        W.S(r) => x + r.w,
+        W.N => x,
+      },
+      V.A => x,
+    }
+  } else {
+    x
+  }
+}
+
+flow tilde_guard(v: V at event, x: U32 at sample, g: Bool at sample) -> U32 at sample {
+  match~ v {
+    V.A if g => x,
+    V.B(q) if q.on => prev~(x) + 1,
+    _ => x,
+  }
+}
+
+flow tuple_read(v: Tp at event, x: U32 at sample, g: Bool at sample) -> U32 at sample {
+  if g {
+    match v {
+      Tp.P(t) => x + t.0 + t.1,
+      Tp.N => x,
+    }
+  } else {
+    x
+  }
+}
+
+flow tilde_prev(v: V at event, x: U32 at sample, g: Bool at sample) -> U32 at sample {
+  match~ v {
+    V.B(p) if p.on && g => x + 100,
+    V.B(q) if q.on => x + 10,
+    _ => prev~(x, 1000),
+  }
+}
+
+flow tilde_first(v: V at event, x: U32 at sample) -> U32 at sample {
+  match~ v {
+    V.B(q) if q.on => prev~(x) + 1,
+    _ => x,
+  }
+}
+
+pub flow t_wrapped(y: U32 at sample, g: Bool at sample) -> U32 at sample {
+  wrapped~(src~(y), 1000, g)
+}
+
+pub flow t_inside(y: U32 at sample, g: Bool at sample) -> U32 at sample {
+  inside~(src~(y), 1000, g)
+}
+
+pub flow t_nested(y: U32 at sample, g: Bool at sample) -> U32 at sample {
+  nested~(src~(y), 1000, g)
+}
+
+pub flow t_tilde_guard(y: U32 at sample, g: Bool at sample) -> U32 at sample {
+  tilde_guard~(src~(y), 1000, g)
+}
+
+pub flow t_nested_k(y: U32 at sample, g: Bool at sample) -> U32 at sample {
+  nested~(src_k~(y), 1000, g)
+}
+
+pub flow t_tuple(y: U32 at sample, g: Bool at sample) -> U32 at sample {
+  tuple_read~(src_t~(y), 1000, g)
+}
+
+pub flow t_tilde_prev(y: U32 at sample, g: Bool at sample) -> U32 at sample {
+  tilde_prev~(src~(y), 1000, g)
+}
+
+pub flow t_tilde_first(y: U32 at sample) -> U32 at sample {
+  tilde_first~(src~(y), 1000)
+}
+
+pub flow t_tilde_reset(y: U32 at sample, g: Bool at sample, r: Bool at sample) -> U32 at sample {
+  tilde_guard~(src~(y), 1000, g).reset_if~(r)
+}
+
+pub flow t_bare_reset(y: U32 at sample, r: Bool at sample) -> U32 at sample {
+  bare~(src~(y), 1000).reset_if~(r)
+}
+
+pub flow t_wrapped_reset(y: U32 at sample, g: Bool at sample, r: Bool at sample) -> U32 at sample {
+  wrapped~(src~(y), 1000, g).reset_if~(r)
+}
+
+test "wrapped in a condition at sample, the same values" {
+  let a = t_wrapped.render(t_wrapped.In { y: [0, 0, 3, 0], g: [true; 4] }, 8.0)
+  let want: [U32; 4] = [1000, 1000, 1003, 1003]
+  for i in 0 ..< 4 {
+    assert a.out[i] == want[i]
+  }
+}
+
+test "a condition at sample in the arm, the same values" {
+  let a = t_inside.render(t_inside.In { y: [0, 0, 3, 0], g: [true; 4] }, 8.0)
+  let want: [U32; 4] = [1000, 1000, 1003, 1003]
+  for i in 0 ..< 4 {
+    assert a.out[i] == want[i]
+  }
+}
+
+test "a match on a read of a binding of an arm: before the first event the inner read is `W.default()`" {
+  let a = t_nested.render(t_nested.In { y: [0, 0, 3, 0], g: [true; 4] }, 8.0)
+  let want: [U32; 4] = [1000, 1000, 1006, 1006]
+  for i in 0 ..< 4 {
+    assert a.out[i] == want[i]
+  }
+}
+
+test "a read of a binding in a guard of match~: before the first event it is `Bool.default()`" {
+  let a = t_tilde_guard.render(t_tilde_guard.In { y: [0, 0, 3, 0], g: [true; 4] }, 8.0)
+  let want: [U32; 4] = [1000, 1000, 1001, 1001]
+  for i in 0 ..< 4 {
+    assert a.out[i] == want[i]
+  }
+}
+
+test "after a reset_if~ the field is the default of its type again, wrapped or not" {
+  let a = t_bare_reset.render(t_bare_reset.In { y: [0, 0, 3, 0, 0], r: [false, false, false, true, false] }, 8.0)
+  let b = t_wrapped_reset.render(t_wrapped_reset.In { y: [0, 0, 3, 0, 0], g: [true; 5], r: [false, false, false, true, false] }, 8.0)
+  let want: [U32; 5] = [1000, 1000, 1003, 1000, 1000]
+  for i in 0 ..< 5 {
+    assert a.out[i] == want[i]
+  }
+  let want_b: [U32; 5] = [1000, 1000, 1003, 1000, 1000]
+  for i in 0 ..< 5 {
+    assert b.out[i] == want_b[i]
+  }
+}
+
+test "the inner match goes on from the pattern of the outer: the inner read follows the event" {
+  let a = t_nested_k.render(t_nested_k.In { y: [0, 2, 0, 3, 0], g: [true; 5] }, 8.0)
+  let want: [U32; 5] = [1000, 1004, 1004, 1000, 1000]
+  for i in 0 ..< 5 {
+    assert a.out[i] == want[i]
+  }
+}
+
+test "an element of a tuple is read as a field is: written at the event where the condition is false, `U32.default()` before" {
+  let a = t_tuple.render(t_tuple.In { y: [0, 0, 3, 0], g: [true, true, false, true] }, 8.0)
+  let want: [U32; 4] = [1000, 1000, 1000, 1009]
+  for i in 0 ..< 4 {
+    assert a.out[i] == want[i]
+  }
+}
+
+test "a guard of a match~ after an arm that is taken is written at the event as well" {
+  let a = t_tilde_prev.render(t_tilde_prev.In { y: [0, 0, 3, 0], g: [false, false, true, false] }, 8.0)
+  let want: [U32; 4] = [1000, 1000, 1100, 1010]
+  for i in 0 ..< 4 {
+    assert a.out[i] == want[i]
+  }
+}
+
+test "a read in a guard of a match~ is `Bool.default()` again after a reset_if~" {
+  let a = t_tilde_reset.render(t_tilde_reset.In { y: [0, 0, 3, 0, 0], g: [true; 5], r: [false, false, false, true, false] }, 8.0)
+  let want: [U32; 5] = [1000, 1000, 1001, 1000, 1000]
+  for i in 0 ..< 5 {
+    assert a.out[i] == want[i]
+  }
+}
+
+test "the guard of the first arm of a match~: `Bool.default()` before the first event, the event's after" {
+  let a = t_tilde_first.render([0, 0, 3, 0], 8.0)
+  let want: [U32; 4] = [1000, 1000, 1001, 1001]
+  for i in 0 ..< 4 {
+    assert a.out[i] == want[i]
+  }
+}

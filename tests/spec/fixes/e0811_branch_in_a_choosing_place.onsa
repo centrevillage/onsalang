@@ -1,0 +1,36 @@
+// onsa.toml
+// [test]
+// spec = ["§2.6", "§11.5", "§18.1"]
+// fixes = 1
+
+// W7-17 L5/i, S-1183 2, S-394 (§11.5: "ガードと `if` / `if~` の連鎖の二つ目からの条件と `&&` / `||` の右辺の中の状態を持つものには、当てても誤りが
+// 残る `~` の候補を出さない"): a thing with state in a branch of a plain `if` that is itself in a guard of a `match`, a later condition of a plain
+// `if` chain or of an `if~` chain, or the right of `&&` / `||`. The error is the E0811 of the innermost place, the branch (S-1188), but a `~` on its
+// `if` would leave the outer place in error, which no `~` makes evaluated every sample, so that candidate is not made. The one candidate is the
+// lift into a `let` before the statement, which leaves nothing (`fixes = 1`: no error of this file has a second). One error per flow (P-01); the
+// marker is on the line of the offending construct, and the spec does not fix its column.
+
+pub flow acc(x: F32 at sample) -> F32 at sample {
+  let y = x + prev~(^y)
+  y
+}
+
+pub flow branch_in_a_guard(x: F32 at sample, k: U32 at sample, d: Bool at sample) -> F32 at sample {
+  match k { 0 if (if d { prev~(x) > 0.0 } else { false }) => 1.0, _ => 0.0 } //~ E0811
+}
+
+pub flow branch_on_the_right_of_and(x: F32 at sample, c: Bool at sample, d: Bool at sample) -> F32 at sample {
+  if c && (if d { prev~(x) > 0.0 } else { false }) { 1.0 } else { 0.0 } //~ E0811
+}
+
+pub flow branch_on_the_right_of_or(x: F32 at sample, c: Bool at sample, d: Bool at sample) -> F32 at sample {
+  if c || (if d { acc~(x) > 0.0 } else { false }) { 1.0 } else { 0.0 } //~ E0811
+}
+
+pub flow branch_in_a_later_condition(x: F32 at sample, c: Bool at sample, d: Bool at sample) -> F32 at sample {
+  if c { 1.0 } else if (if d { prev~(x) > 0.0 } else { false }) { 2.0 } else { 0.0 } //~ E0811
+}
+
+pub flow branch_in_a_later_condition_of_if_tilde(x: F32 at sample, c: Bool at sample, d: Bool at sample) -> F32 at sample {
+  if~ c { acc~(x) } else if (if d { prev~(x) > 0.0 } else { false }) { 2.0 } else { 0.0 } //~ E0811
+}

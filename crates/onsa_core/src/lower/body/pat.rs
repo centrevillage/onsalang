@@ -254,7 +254,7 @@ pub(super) fn lower_match(
         _ => scrutinee,
     };
     let s = lower_expr(lw, cx, scrut_ast)?;
-    lower_match_with(lw, cx, e, s, arms, ty, &mut |lw, cx, i| lower_block_expr(lw, cx, arms[i].body))
+    lower_match_with(lw, cx, e, s, arms, ty, pat_bind, &mut |lw, cx, i| lower_block_expr(lw, cx, arms[i].body))
 }
 
 /// The test of the arm pattern `pat` against `place` (none: always), and
@@ -279,8 +279,9 @@ pub(crate) fn arm_test(lw: &mut Lowerer, cx: &mut FnCx, pat: PatId, place: &Expr
 }
 
 /// The `match` `e` of the lowered scrutinee `s`, whose arm `i` has the body
-/// `body(i)`, lowered after the bindings of its pattern: of the flow body
-/// too, whose hoisted fields its arms write (§11.3).
+/// `body(i)`, lowered after the bindings of its pattern by `bind`: of the
+/// flow body too, whose hoisted fields its arms write (§11.3).
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn lower_match_with(
     lw: &mut Lowerer,
     cx: &mut FnCx,
@@ -288,6 +289,7 @@ pub(crate) fn lower_match_with(
     s: Expr,
     arms: &[ast::MatchArm],
     ty: Ty,
+    bind: fn(&mut Lowerer, &mut FnCx, PatId, &Expr, &mut Vec<Stmt>) -> R<()>,
     body: &mut dyn FnMut(&mut Lowerer, &mut FnCx, usize) -> R<Block>,
 ) -> R<Expr> {
     let span = cx.expr(e).span;
@@ -311,14 +313,14 @@ pub(crate) fn lower_match_with(
             let mut b = Vec::new();
             match &cx.ast.pat(arm.pat).kind {
                 PatKind::Wild | PatKind::Bind(_) => {
-                    pat_bind(lw, cx, arm.pat, &place, &mut b)?;
+                    bind(lw, cx, arm.pat, &place, &mut b)?;
                     let body = body(lw, cx, i)?;
                     b.extend(body.stmts);
                     default = Some(Block { stmts: b, value: if want { body.value } else { None } });
                 }
                 _ => {
                     let (tag, _) = ctor_of(lw, cx, arm.pat, &place.ty)?;
-                    pat_bind(lw, cx, arm.pat, &place, &mut b)?;
+                    bind(lw, cx, arm.pat, &place, &mut b)?;
                     let body = body(lw, cx, i)?;
                     b.extend(body.stmts);
                     let blk = Block { stmts: b, value: if want { body.value } else { None } };
@@ -354,7 +356,7 @@ pub(crate) fn lower_match_with(
         };
         let mut inner = Vec::new();
         if binds {
-            pat_bind(lw, cx, arm.pat, &place, &mut inner)?;
+            bind(lw, cx, arm.pat, &place, &mut inner)?;
         }
         let mut body_stmts = vec![stmt(span, StmtKind::Assign(Place::Local(done), bool_lit(span, true)))];
         let body = body(lw, cx, i)?;

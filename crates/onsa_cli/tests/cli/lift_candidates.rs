@@ -345,7 +345,7 @@ fn the_lift_applied_to_a_nested_branch_stops_in_one_round() {
     }
 }
 
-/// S-1183, the provisional reading (1): the `~` candidate of the innermost branch is shown although the outer branch stays an error; the
+/// S-1183 1: the `~` candidate of the innermost branch is shown although the outer branch stays an error; the
 /// first candidate applied again and again ends, with one error each round and no more rounds than the branches are deep. The `if~` of the
 /// candidate is read after the check of `if~` (W7-06 U2), the `match~` of the next test after that of `match~` (W7-06 U3a).
 const NESTED_IF: [(&str, &str); 1] = [(

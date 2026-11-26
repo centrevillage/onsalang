@@ -578,7 +578,7 @@ pub(super) fn build(
     recorded: Vec<Recorded>,
     w: &Walked,
     ast: &onsa_syntax::ast::Ast,
-    hoisted: Vec<(ExprId, ClockStage, Owner, bool)>,
+    hoisted: Vec<super::hoist::Marked>,
 ) {
     let mut roots = Roots { lets: vec![Vec::new(); info.lets.len()], output: Vec::new() };
     let mut children = vec![Vec::new(); recorded.len()];

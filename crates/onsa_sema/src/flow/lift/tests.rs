@@ -178,12 +178,17 @@ fn under_a_replication_are_its_body_and_its_range() {
         ids.nth(nth).unwrap_or_else(|| panic!("no {src} {nth}"))
     };
     let root = find(&text[text.find("wrap(").unwrap()..text.find(" })\n").unwrap() + 3], 0);
-    assert_eq!(super::under_par(ast, root, find("prev~(x)", 0)), Some(false));
-    assert_eq!(super::under_par(ast, root, find("acc~(x)", 0)), Some(true), "the range of a `par`");
-    assert_eq!(super::under_par(ast, root, find("acc~(x)", 1)), Some(true), "the body of a `par`");
-    assert_eq!(super::under_par(ast, root, find("lp~(x)", 0)), Some(true), "the body of a `par~`");
+    let under_par = |thing| {
+        let around = super::around(ast, root, thing);
+        assert_eq!(around.first(), Some(&root), "the walk starts at the root");
+        around.iter().any(|&x| matches!(ast.expr(x).kind, onsa_syntax::ast::ExprKind::Par { .. }))
+    };
+    assert!(!under_par(find("prev~(x)", 0)));
+    assert!(under_par(find("acc~(x)", 0)), "the range of a `par`");
+    assert!(under_par(find("acc~(x)", 1)), "the body of a `par`");
+    assert!(under_par(find("lp~(x)", 0)), "the body of a `par~`");
     let par = find(&text[text.find("par~ j").unwrap()..text.find(" })\n").unwrap() + 2], 0);
-    assert_eq!(super::under_par(ast, root, par), Some(false), "a `par~` itself is not under it");
+    assert!(!under_par(par), "a `par~` itself is not under it");
 }
 
 #[test]

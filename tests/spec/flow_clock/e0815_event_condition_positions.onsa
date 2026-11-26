@@ -19,6 +19,10 @@ pub rt fn is_on(n: Note) -> Bool {
   n.vel > 0.0
 }
 
+pub rt fn some(n: Note) -> Option[Note] {
+  Some(n)
+}
+
 pub flow lp(x: F32 at sample) -> F32 at sample {
   x * 0.5
 }
@@ -68,6 +72,19 @@ pub flow guard_of_a_match_on_a_sample(m: Note at event, x: F32 at sample, k: U32
   match k {
     0 if vel(m) > 1.0 => x,                                   //~ E0815
     _ => 0.0,
+  }
+}
+
+// W7-17 L5/b, S-1247: a computed scrutinee is a part of the tick under the condition as any other, though the reads rooted at the bindings of its arms are
+// read under no condition (the field of the arm, at the events where the pattern matches).
+pub flow scrutinee_of_a_match_on_a_sample_condition(m: Note at event, x: F32 at sample, g: Bool at sample) -> F32 at sample {
+  if g {
+    match some(m) {                                           //~ E0815
+      Some(n) => x + n.vel,
+      None => x,
+    }
+  } else {
+    x
   }
 }
 

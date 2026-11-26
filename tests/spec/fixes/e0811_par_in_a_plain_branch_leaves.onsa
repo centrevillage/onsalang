@@ -3,30 +3,29 @@
 // spec = ["§2.6", "§11.5", "§18.1"]
 //
 // [[test.fix]]
-// at = "39:5"
+// at = "38:5"
 // code = "E0811"
 // candidate = 1
-// leaves = ["39:5 E0811"]
+// leaves = ["38:5 E0811"]
 //
 // [[test.fix]]
-// at = "49:5"
+// at = "48:5"
 // code = "E0811"
 // candidate = 1
-// leaves = ["49:5 E0811"]
+// leaves = ["48:5 E0811"]
 //
 // [[test.fix]]
-// at = "55:10"
+// at = "54:10"
 // code = "E0811"
 // candidate = 1
-// leaves = ["55:10 E0811"]
+// leaves = ["54:10 E0811"]
 
 // W4-20 U1/t, S-745; W7-06 U0/t, S-1177, S-1183: the second error of e0811_par_in_a_plain_branch.onsa. After the
 // candidate (the `~` inserted after `par`) the `par~` holds state and is a thing with state in a branch of a
 // plain `if` or `match`, which a branch cannot hold (§11.5; §18.1: flow check stage). So the candidate does not
 // leave a clean file (no `clean`), and the entries of the header name the error that stays (`leaves`: the
 // position in the text after the candidate, the start of the `par~`). The candidate is shown although it leaves
-// the E0811 of the branch: the provisional reading (1) of S-1183 (the open detail), which this file follows
-// until it is decided. The candidates of the error of the branch (`if~` / `match~`, lifting the state out into
+// the E0811 of the branch (S-1183 1). The candidates of the error of the branch (`if~` / `match~`, lifting the state out into
 // a `let`) are not asked for here. The branch is the E0811 of §11.5 (W7-06 U1), which the three entries of the header
 // name; the first file does not name what is left.
 

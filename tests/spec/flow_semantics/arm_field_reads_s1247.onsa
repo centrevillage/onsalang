@@ -1,0 +1,160 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.3", "§11.5", "§11.10", "§11.11"]
+
+// W7-17 L5/i, S-1247 (1), S-1197 (spec §11.3: "フィールド・組の要素の読みは、条件によらず、守りを付けずに刻みごとに読む（腕の束縛（`match~` のガードの中の束縛も）を根に
+// する読みは、外の条件によらず、その腕のパターンが合う刻みに読む）"; "隠れたフィールドの型はその読み（連なりの全体）の型で、初めの値はその型の既定である"; "全体を速い段で読んでから
+// 取り出す `(m at sample).vel` は、`M` に `Default` が要り、`M.default().vel` で始まる"; §11.10: "刻みで書いて速い段が読むフィールド … は `T.default()` に戻る"): a field read
+// at `sample` of a binding of an arm of a `match` on an event value, or of a guard of a `match~`, is kept in a field of the type of the read, written at the
+// events at which the pattern of its arm matches (whatever wraps the `match`: a condition at `sample` does not guard it), and read where it is reached. Before the
+// first event (and after a `reset_if~`) the field is the default of the type of the read (`U32.default()`, `Bool.default()`, `W.default()`), not the field of
+// `V.default()` (`vel: 50`). The input `y` makes one event, `V.B(Pd { vel: 3, on: true, k: W.S(Pd2 { w: 6 }) })` at the frame 2 (`[0, 0, 3, 0]`), and `x`
+// is 1000. Every value is worked out by hand from the text. The forms of a `match` wrapped in a condition at `sample` and of a `reset_if~` are in arm_field_reads_wrapped_s1247.onsa.
+
+struct Pd2 {
+  w: U32,
+}
+
+enum W {
+  N,
+  S(Pd2),
+}
+
+impl Default for W {
+  rt fn default() -> W {
+    W.N
+  }
+}
+
+struct Pd {
+  vel: U32,
+  on: Bool,
+  k: W,
+}
+
+impl Default for Pd {
+  rt fn default() -> Pd {
+    Pd { vel: 9, on: true, k: W.N }
+  }
+}
+
+enum V {
+  A,
+  B(Pd),
+}
+
+impl Default for V {
+  rt fn default() -> V {
+    V.B(Pd { vel: 50, on: true, k: W.S(Pd2 { w: 7 }) })
+  }
+}
+
+flow src(y: U32 at sample) -> V at event {
+  if y > 100 {
+    Some(V.A)
+  } else if y > 0 {
+    Some(V.B(Pd { vel: y, on: true, k: W.S(Pd2 { w: y * 2 }) }))
+  } else {
+    None
+  }
+}
+
+rt fn is_on(v: V) -> Bool {
+  match v {
+    V.B(p) => p.on,
+    V.A => false,
+  }
+}
+
+rt fn ident(v: V) -> V {
+  v
+}
+
+flow bare(v: V at event, x: U32 at sample) -> U32 at sample {
+  match v {
+    V.B(q) => x + q.vel,
+    V.A => x,
+  }
+}
+
+flow wrapped(v: V at event, x: U32 at sample, g: Bool at sample) -> U32 at sample {
+  if g {
+    match v {
+      V.B(q) => x + q.vel,
+      V.A => x,
+    }
+  } else {
+    x
+  }
+}
+
+flow guarded_first(v: V at event, x: U32 at sample, g: Bool at sample) -> U32 at sample {
+  if is_on(v) {
+    match ident(v) {
+      V.B(q) => if g { x + q.vel } else { x },
+      V.A => x,
+    }
+  } else {
+    x
+  }
+}
+
+flow whole(v: V at event, x: U32 at sample, g: Bool at sample) -> U32 at sample {
+  if g {
+    match (v at sample) {
+      V.B(q) => x + q.vel,
+      V.A => x,
+    }
+  } else {
+    x
+  }
+}
+
+pub flow t_bare(y: U32 at sample) -> U32 at sample {
+  bare~(src~(y), 1000)
+}
+
+pub flow t_wrapped(y: U32 at sample, g: Bool at sample) -> U32 at sample {
+  wrapped~(src~(y), 1000, g)
+}
+
+pub flow t_guarded_first(y: U32 at sample, g: Bool at sample) -> U32 at sample {
+  guarded_first~(src~(y), 1000, g)
+}
+
+pub flow t_whole(y: U32 at sample, g: Bool at sample) -> U32 at sample {
+  whole~(src~(y), 1000, g)
+}
+
+test "a read of the binding of an arm not wrapped starts at the default of its type" {
+  let a = t_bare.render([0, 0, 3, 0], 8.0)
+  let want: [U32; 4] = [1000, 1000, 1003, 1003]
+  for i in 0 ..< 4 {
+    assert a.out[i] == want[i]
+  }
+}
+
+test "the condition at sample does not guard the field: written at the event where it is false" {
+  let a = t_wrapped.render(t_wrapped.In { y: [0, 0, 3, 0], g: [false, false, false, true] }, 8.0)
+  let want: [U32; 4] = [1000, 1000, 1000, 1003]
+  for i in 0 ..< 4 {
+    assert a.out[i] == want[i]
+  }
+}
+
+test "the scrutinee a guarded part of the event: written with it, not under the condition at sample" {
+  let a = t_guarded_first.render(t_guarded_first.In { y: [0, 3, 0, 0], g: [true, false, true, true] }, 8.0)
+  let want: [U32; 4] = [1000, 1000, 1003, 1003]
+  for i in 0 ..< 4 {
+    assert a.out[i] == want[i]
+  }
+}
+
+test "the whole read at sample starts at `V.default()`" {
+  let a = t_whole.render(t_whole.In { y: [0, 0, 3, 0], g: [true; 4] }, 8.0)
+  let want: [U32; 4] = [1050, 1050, 1003, 1003]
+  for i in 0 ..< 4 {
+    assert a.out[i] == want[i]
+  }
+}

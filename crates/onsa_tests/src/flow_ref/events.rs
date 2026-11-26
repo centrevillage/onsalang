@@ -10,6 +10,7 @@ use onsa_sema::def::FlowDef;
 use onsa_sema::{LocalId, Target};
 use onsa_syntax::ast::{ExprId, ExprKind};
 
+use super::arm_reads::arm_rooted;
 use super::expr::{Frame, Stop};
 use super::flow::{Clock, Known, Step, clock_of, enter, stage};
 use super::hoist::{caret, field_of, kept, kids, made_at, source_clock, stage_of};
@@ -66,8 +67,10 @@ pub(super) fn call_src(e: ExprId) -> Clock {
 /// The clock `e` is a part of that an event stage makes and keeps: of an event clock, under the guard (a field read of a name is free of it, S-1197), and kept (`hoist::kept`). It is the one judgment of `default_parts`.
 fn event_part(body: &Body, known: &Known, root: ExprId, (e, guard): (ExprId, Clock)) -> Result<Option<Clock>, Fault> {
     let clock = stage_of(body, known, root, e)?;
-    let free = field_of(body, e)
-        .is_some_and(|n| !matches!(body.target(n), Ok(Target::Local(l)) if body.bound_within(*l, root)));
+    let free = field_of(body, e).is_some_and(|n| match body.target(n) {
+        Ok(Target::Local(l)) => !body.bound_within(*l, root) || arm_rooted(body, root, e, *l),
+        _ => true,
+    });
     let clock = made_at(body, e, (clock, if free { Clock::Const } else { guard }));
     Ok((matches!(clock, Clock::Event(_)) && kept(body, known, e)?).then_some(clock))
 }

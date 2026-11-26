@@ -10,7 +10,7 @@
 // those may hold state; the forms that put an `if~` in this file are in flow_state_branches_if_tilde.onsa
 // (they are read after the `if~` check, W7-06 U2), so this file is read by the check of this unit alone.
 // One error per flow; the marker is on the line of the offending construct. The spec does not fix the
-// column of the primary position, so the markers carry no column. The `~` candidate of the E0811 in a branch that is in a branch of another plain `if` / `match` leaves the E0811 of the outer branch (the `fix` entries in the head, S-1183 (1)).
+// column of the primary position, so the markers carry no column. The `~` candidate of the E0811 in a branch that is in a branch of another plain `if` / `match` leaves the E0811 of the outer branch (the `fix` entries in the head, S-1183 1).
 
 pub flow acc(x: F32 at sample) -> F32 at sample {
   let y = x + prev~(^y)

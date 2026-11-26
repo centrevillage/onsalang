@@ -45,6 +45,7 @@
 //! - [`sema_view`]: the tables of the checker the evaluator reads, in one file.
 
 pub mod aggregate;
+mod arm_reads;
 pub mod boundary;
 pub mod branch;
 pub mod call;
@@ -69,6 +70,8 @@ pub mod walk_model;
 
 #[cfg(test)]
 mod aggregate_tests;
+#[cfg(test)]
+mod arm_reads_tests;
 #[cfg(test)]
 mod block_tests;
 #[cfg(test)]

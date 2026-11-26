@@ -85,7 +85,7 @@ fn run(common: &str, case: &Case) -> Result<Vec<i128>, String> {
 }
 
 /// The cases that agree, those the evaluator does not run (with why), and those that differ.
-fn report(table: &str, take: &dyn Fn(&str) -> bool) -> (Vec<String>, Vec<(String, String)>, Vec<String>) {
+pub(super) fn report(table: &str, take: &dyn Fn(&str) -> bool) -> (Vec<String>, Vec<(String, String)>, Vec<String>) {
     let (common, all) = cases(table);
     let (mut passed, mut stopped, mut failed) = (Vec::new(), Vec::new(), Vec::new());
     for case in all.iter().filter(|c| take(&c.id)) {

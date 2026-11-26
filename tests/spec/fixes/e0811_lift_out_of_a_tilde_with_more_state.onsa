@@ -1,0 +1,31 @@
+// onsa.toml
+// [test]
+// spec = ["§2.6", "§11.5", "§18.1"]
+// fixes = 2
+//
+// [[test.fix]]
+// at = "26:18"
+// code = "E0811"
+// candidate = 2
+// leaves = ["27:27 E0811"]
+//
+// [[test.fix]]
+// at = "30:26"
+// code = "E0811"
+// candidate = 2
+// leaves = ["31:35 E0811"]
+
+// W7-17 L5/i, S-1183 1, 3 (§11.5: "前の `let` に出す … 移すと囲む `if~`・`match~` の本体が状態を持たなくなる（E0812）ときは、この候補を作らない"): an
+// `if~` / `match~` in a branch of a plain `if` holds two things with state, and the first is the E0811 of the outer branch. Its lift into a `let`
+// leaves the other in the `if~` / `match~`, which still holds state, so the lift is made: what is not made is only the lift that would leave it
+// with none (e0811_lift_empties_a_tilde.onsa). The first candidate is the `~` of the outer `if`, the second the lift (`fixes = 2`), after which the
+// other thing is the E0811 of the outer branch (`leaves`, a line down: the new `let` is a line). One error per flow (P-01); the marker is on the
+// line of the offending construct, and the spec does not fix its column.
+
+pub flow two_in_an_if_tilde(x: F32 at sample, c: Bool at sample, d: Bool at sample) -> F32 at sample {
+  if c { if~ d { prev~(x) + prev~(x * 2.0) } else { x } } else { x } //~ E0811
+}
+
+pub flow two_in_a_match_tilde(x: F32 at sample, c: Bool at sample, k: U32 at sample) -> F32 at sample {
+  if c { match~ k { 0 => prev~(x) + prev~(x * 2.0), _ => x } } else { x } //~ E0811
+}

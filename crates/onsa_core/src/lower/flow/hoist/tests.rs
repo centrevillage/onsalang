@@ -63,7 +63,8 @@ pub flow f(x: F32 at sample, level: F32 at block) -> F32 at sample {
 
 /// S-1157: `ctl` writes a guarded field under its condition read at `block`
 /// (its field, written first): an `if`, the left of `&&` and of `||` (its
-/// negation), and the arm of a `match` that binds what it reads; a checked
+/// negation), and the arm of a `match` that binds what it reads (and reads
+/// it for nothing, as each block of the work, S-1247); a checked
 /// constant (S-888 (c′)) is evaluated there for its panic. `tick` reads.
 #[test]
 fn a_guarded_field_is_written_under_its_condition() {
@@ -81,7 +82,7 @@ fn a_guarded_field_is_written_under_its_condition() {
         "  s.1 = (p@11.0 != 0:I32)\n  if s.1 {\n    s.2 = round.I32.F32((100:I32 / p@11.0))\n  }\n",
         "  s.3 = (p@11.0 > 2:I32)\n  if s.3 {\n    s.4 = round.I32.F32((10:I32 / p@11.0))\n  }\n",
         "  s.5 = (p@11.0 < 2:I32)\n  if (!s.5) {\n    s.6 = round.I32.F32((20:I32 / p@11.0))\n  }\n",
-        "  switch p@11.1 {\n    Some => {\n      let v: F32 = payload(p@11.1, Some, 0)\n      s.7 = (v * p@11.2)\n    }\n",
+        "  switch p@11.1 {\n    Some => {\n      let v: F32 = payload(p@11.1, Some, 0)\n      v\n      s.7 = (v * p@11.2)\n    }\n",
         "  s.8 = (p@11.0 == 0:I32)\n  if s.8 {\n    panic(\"bad n\")\n  }\n",
     ];
     for w in want {

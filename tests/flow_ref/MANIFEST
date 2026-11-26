@@ -1,4 +1,7 @@
 # flow_ref MANIFEST, format 1 (made by UPDATE_GOLDEN=1, not by hand)
+file arm_field_reads_generated_s1247.tsv rows=22 tests=7 evaluated=7 unavailable=0 skipped=0 waiting=0
+file arm_field_reads_s1247.tsv rows=13 tests=4 evaluated=4 unavailable=0 skipped=0 waiting=0
+file arm_field_reads_wrapped_s1247.tsv rows=33 tests=10 evaluated=10 unavailable=0 skipped=0 waiting=0
 file back_name_in_a_slower_part_s1244.tsv rows=30 tests=9 evaluated=9 unavailable=0 skipped=0 waiting=0
 file branches_plain.tsv rows=16 tests=5 evaluated=5 unavailable=0 skipped=0 waiting=0
 file branches_plain_match.tsv rows=4 tests=1 evaluated=1 unavailable=0 skipped=0 waiting=1
@@ -214,4 +217,4 @@ file when_identity_regressions.tsv rows=78 tests=5 evaluated=5 unavailable=0 ski
 file when_slow_head_values.tsv rows=47 tests=5 evaluated=5 unavailable=0 skipped=0 waiting=0
 file when_slow_values.tsv rows=86 tests=9 evaluated=9 unavailable=0 skipped=0 waiting=0
 file when_values.tsv rows=77 tests=10 evaluated=10 unavailable=0 skipped=0 waiting=0
-total files=215 rows=9421 tests=1605 evaluated=1543 unavailable=1 skipped=61 waiting=6
+total files=218 rows=9489 tests=1626 evaluated=1564 unavailable=1 skipped=61 waiting=6

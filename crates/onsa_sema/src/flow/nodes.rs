@@ -235,12 +235,19 @@ impl NodeBuilder {
 /// replication is a `par~` or a `par`, and of its name ([`names::Namer`]).
 /// Linear in `e`.
 pub(in crate::flow) fn holds_state(ast: &Ast, e: ExprId) -> bool {
+    holds_state_but(ast, e, None)
+}
+
+/// [`holds_state`] of `e` with the subexpression `but` taken out (of a lift
+/// out of an `if~` / `match~`, S-1183 3).
+pub(in crate::flow) fn holds_state_but(ast: &Ast, e: ExprId, but: Option<ExprId>) -> bool {
     let mut todo = vec![e];
     while let Some(x) = todo.pop() {
-        if let ExprKind::Call { kind: CallKind::Flow, .. } = ast.expr(x).kind {
-            return true;
+        match ast.expr(x).kind {
+            _ if Some(x) == but => {}
+            ExprKind::Call { kind: CallKind::Flow, .. } => return true,
+            _ => todo.extend(ast.sub_exprs(x)),
         }
-        todo.extend(ast.sub_exprs(x));
     }
     false
 }

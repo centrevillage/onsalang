@@ -41,9 +41,9 @@ pub(super) struct Marked {
     /// constants only (W9-03).
     pub(super) diag: Option<Diagnostic>,
     /// The hoisted subexpressions in the order of the walk, with their
-    /// stages, owners and whether they are guarded, of which the plan makes
-    /// its table.
-    pub(super) hoisted: Vec<(ExprId, ClockStage, Owner, bool)>,
+    /// stages, owners, whether they are guarded and their arms, of which the
+    /// plan makes its table.
+    pub(super) hoisted: Vec<super::hoist::Marked>,
     /// `FlowInfo::checks` and `FlowInfo::const_conds`.
     pub(super) checks: HashMap<ExprId, ClockStage>,
     pub(super) const_conds: HashMap<ExprId, Cond>,
@@ -88,6 +88,9 @@ struct Marker<'a> {
     binding_of: HashMap<LocalId, Bound>,
     selected: HashSet<(ExprId, usize, ClockStage)>,
     guard: Option<ExprId>,
+    /// The `match` / `match~` and the arm that bind each binding of an arm
+    /// marked ([`Marker::chain`]).
+    arm_of: HashMap<LocalId, (ExprId, u32)>,
     out: Marked,
 }
 
@@ -162,6 +165,7 @@ pub(super) fn mark_all(
         binding_of: HashMap::default(),
         selected: HashSet::default(),
         guard: None,
+        arm_of: HashMap::default(),
         out: Marked {
             read_at: HashMap::default(),
             bound_at: HashMap::default(),
@@ -293,7 +297,7 @@ impl Marker<'_> {
     fn mark(&mut self, e: ExprId, at: ClockStage, g: Cond) {
         let place = if self.konst { Place::Here } else { self.place(e, at, g) };
         let at = match place {
-            Place::Hoist(s) | Place::Field(s) => {
+            Place::Hoist(s) | Place::Field(s) | Place::Arm(s) => {
                 // A part of a condition read again (`read_conds`) is in the
                 // table once.
                 if !self.seen.insert(e) {
@@ -305,7 +309,8 @@ impl Marker<'_> {
                     (None, _) => Owner::Output,
                 };
                 let guarded = g != Cond::None && matches!(place, Place::Hoist(_));
-                self.out.hoisted.push((e, s, owner, guarded));
+                let arms = if matches!(place, Place::Arm(_)) { self.chain(e, s) } else { Vec::new() };
+                self.out.hoisted.push((e, s, owner, guarded, arms));
                 self.out.work.insert((self.consumer as u32, s));
                 self.mark_late(e);
                 if guarded {
@@ -450,6 +455,11 @@ impl Marker<'_> {
                     let b = Bound { m: e, arm, at, g, depth };
                     self.binding_of.extend(bound.iter().map(|&l| (l, b)));
                 }
+                for (i, a) in arms.iter().enumerate() {
+                    let (body, arm_of) = (self.body, &mut self.arm_of);
+                    let mut bind = |q, _: &_| arm_of.extend(body.pat_locals.get(&q).map(|&l| (l, (e, i as u32))));
+                    crate::pat::each_bind(ast, a.pat, true, &mut bind);
+                }
                 self.mark(*scrutinee, at, g);
                 let mut inner = self.enter(*scrutinee, at, g);
                 for arm in arms {
@@ -482,20 +492,33 @@ impl Marker<'_> {
 
     /// [`Choose::place`], but a field read of a binding with a value only
     /// where its arm is taken (of a `match`, or of a `match~` in a guard) is
-    /// under the conditions on the path.
-    // SPEC-GAP(S-1247): under one decided at another stage it is read where it is
-    // reached, its type judged as of its field (provisional).
+    /// [`Place::Arm`], whatever the conditions on the path (§11.3, S-1247).
     fn place(&mut self, e: ExprId, at: ClockStage, g: Cond) -> Place {
-        let place = self.choose.place(e, at, g);
-        let Place::Field(s) = place else { return place };
-        match self.choose.of_name(e).is_some_and(|x| self.in_arm(x)) {
-            false => place,
-            true if g.admits(s) => Place::Hoist(s),
-            true => {
-                self.no_default(e, s, SlowField::Part);
-                Place::Here
-            }
+        match self.choose.place(e, at, g) {
+            Place::Field(s) if self.choose.of_name(e).is_some_and(|x| self.in_arm(x)) => Place::Arm(s),
+            place => place,
         }
+    }
+
+    /// The arms of the field read `e` of a binding of an arm (`Hoist::arms`),
+    /// from its root up the scrutinees while they are such reads, the
+    /// outermost first; each scrutinee read at `s`, the stage of its field,
+    /// under no condition (its patterns alone guard it).
+    fn chain(&mut self, e: ExprId, s: ClockStage) -> Vec<(ExprId, u32)> {
+        let (mut arms, mut root) = (Vec::new(), self.choose.of_name(e));
+        while let Some(x) = root.filter(|&x| self.in_arm(x))
+            && let Some(Target::Local(b)) = self.body.targets.get(&x)
+            && let Some(&(m, i)) = self.arm_of.get(b)
+            && let ExprKind::Match { scrutinee, .. } = &self.ast.expr(m).kind
+        {
+            arms.push((m, i));
+            let conds = std::mem::take(&mut self.conds);
+            self.mark(*scrutinee, s, Cond::None);
+            self.conds = conds;
+            root = self.choose.of_name(*scrutinee);
+        }
+        arms.reverse();
+        arms
     }
 
     /// Whether the name `x` is a binding that no place holds where it is read.

@@ -1,0 +1,256 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.3", "§11.10"]
+
+// W7-17 L5/b, S-1247 (1) (spec §11.3: "腕の束縛（`match~` のガードの中の束縛も）を根にする読みは、外の条件によらず、その腕のパターンが合う刻みに読む"): seven
+// flows the generator of the break side made (`gen2.py`, the seeds 2000, 2001, 2008, 2016, 2025, 2026 and 2029, each named by its seed), of the forms
+// the dev before L5 gave other values: a read rooted at a binding of an arm under a condition at `sample` (`if g`, `if (g && h)`, `let a = if h { … }`),
+// in a nested `match`, a tuple element, beside `(q1.k at sample)` and `(v at sample)`, and with a `reset_if~`. The values are those of the model of the
+// generator, written from the text; the whole of the sweep stays with the break side.
+
+struct Pd2 {
+  w: U32,
+}
+
+enum W {
+  N,
+  S(Pd2),
+}
+
+impl Default for W {
+  rt fn default() -> W {
+    W.N
+  }
+}
+
+struct Pd {
+  vel: U32,
+  on: Bool,
+  k: W,
+  p: (U32, U32),
+}
+
+impl Default for Pd {
+  rt fn default() -> Pd {
+    Pd { vel: 9, on: true, k: W.N, p: (70, 80) }
+  }
+}
+
+enum V {
+  A,
+  B(Pd),
+}
+
+impl Default for V {
+  rt fn default() -> V {
+    V.B(Pd { vel: 50, on: true, k: W.S(Pd2 { w: 7 }), p: (11, 12) })
+  }
+}
+
+rt fn mk(y: U32) -> V {
+  if y > 100 {
+    V.A
+  } else {
+    V.B(Pd { vel: y, on: y % 2 == 0, k: if y % 3 == 0 { W.N } else { W.S(Pd2 { w: y * 2 }) }, p: (y + 1, y + 2) })
+  }
+}
+
+flow src(y: U32 at sample) -> V at event {
+  if y > 0 {
+    Some(mk(y))
+  } else {
+    None
+  }
+}
+
+rt fn is_on(v: V) -> Bool {
+  match v {
+    V.B(p) => p.on,
+    V.A => false,
+  }
+}
+
+rt fn ident(v: V) -> V {
+  v
+}
+
+flow f2000(v: V at event, x: U32 at sample, g: Bool at sample, h: Bool at sample, c: U32 at sample) -> U32 at sample {
+  if g {
+    match v {
+      V.B(q1) => match q1.k {
+        W.S(_) => q1.vel,
+        W.N => match (q1.k at sample) {
+          W.S(r11) => (r11.w + 0),
+          W.N => x,
+        },
+      },
+      V.A => (4 + (x + x)),
+    }
+  } else { x }
+}
+pub flow t2000(y: U32 at sample, g: Bool at sample, h: Bool at sample, c: U32 at sample, r: Bool at sample) -> U32 at sample {
+  f2000~(src~(y), 1000, g, h, c)
+}
+
+test "f2000" {
+  let a = t2000.render(t2000.In { y: [0, 0, 0, 0, 1, 0, 7, 101], g: [false, true, true, true, true, false, false, true], h: [true, false, true, true, true, false, false, false], c: [2000, 1, 1, 0, 1, 0, 2000, 1], r: [false, false, false, false, false, false, false, false] }, 8.0)
+  let want: [U32; 8] = [1000, 1000, 1000, 1000, 1, 1000, 1000, 2004]
+  for i in 0 ..< 8 {
+    assert a.out[i] == want[i]
+  }
+}
+
+flow f2001(v: V at event, x: U32 at sample, g: Bool at sample, h: Bool at sample, c: U32 at sample) -> U32 at sample {
+  let a = if h {
+    if h {
+      match v {
+        V.B(q1) => (x + q1.p.0),
+        V.A => x,
+      }
+    } else { x }
+  } else { c }
+  a
+}
+pub flow t2001(y: U32 at sample, g: Bool at sample, h: Bool at sample, c: U32 at sample, r: Bool at sample) -> U32 at sample {
+  f2001~(src~(y), 1000, g, h, c)
+}
+
+test "f2001" {
+  let a = t2001.render(t2001.In { y: [0, 0, 0, 0, 3, 6, 2, 1], g: [true, true, true, false, true, true, false, true], h: [false, true, false, true, true, false, false, true], c: [1500, 0, 0, 2000, 1500, 1, 1500, 2000], r: [false, false, false, false, false, false, false, false] }, 8.0)
+  let want: [U32; 8] = [1500, 1000, 0, 1000, 1004, 1, 1500, 1002]
+  for i in 0 ..< 8 {
+    assert a.out[i] == want[i]
+  }
+}
+
+flow f2008(v: V at event, x: U32 at sample, g: Bool at sample, h: Bool at sample, c: U32 at sample) -> U32 at sample {
+  let a = match v {
+    V.B(q1) => match q1.k {
+      W.S(_) => q1.vel,
+      W.N => if !g { if q1.on { q1.p.1 } else { x } } else {
+        if q1.on {
+          match (q1.k at sample) {
+            W.S(r31) => (r31.w + q1.p.0),
+            W.N => x,
+          }
+        } else { (3 + 3) }
+      },
+    },
+    V.A => c,
+  }
+  a
+}
+pub flow t2008(y: U32 at sample, g: Bool at sample, h: Bool at sample, c: U32 at sample, r: Bool at sample) -> U32 at sample {
+  f2008~(src~(y), 1000, g, h, c)
+}
+
+test "f2008" {
+  let a = t2008.render(t2008.In { y: [0, 7, 1, 0, 0, 101, 7, 0], g: [false, true, true, false, false, false, true, true], h: [false, true, false, false, true, true, true, true], c: [1500, 0, 1500, 2000, 2000, 1, 0, 0], r: [false, false, false, false, false, false, false, false] }, 8.0)
+  let want: [U32; 8] = [1000, 7, 1, 1, 1, 1, 7, 7]
+  for i in 0 ..< 8 {
+    assert a.out[i] == want[i]
+  }
+}
+
+flow f2016(v: V at event, x: U32 at sample, g: Bool at sample, h: Bool at sample, c: U32 at sample) -> U32 at sample {
+  let a = if (g && h) {
+    match v {
+      V.B(q1) => ((match (q1.k at sample) {
+        W.S(r2) => (r2.w + q1.p.1),
+        W.N => x,
+      }) + q1.vel),
+      V.A => match v {
+        V.B(Pd { vel: _, on: _, k: _, p: (_, _) }) => (x + c),
+        V.A => 2,
+      },
+    }
+  } else { x }
+  a
+}
+pub flow t2016(y: U32 at sample, g: Bool at sample, h: Bool at sample, c: U32 at sample, r: Bool at sample) -> U32 at sample {
+  f2016~(src~(y), 1000, g, h, c)
+}
+
+test "f2016" {
+  let a = t2016.render(t2016.In { y: [0, 0, 0, 0, 1, 0, 1, 0], g: [true, true, true, true, false, false, true, true], h: [true, true, true, true, true, true, true, false], c: [1, 1500, 2000, 0, 0, 0, 0, 0], r: [false, false, false, false, false, false, false, false] }, 8.0)
+  let want: [U32; 8] = [1000, 1000, 1000, 1000, 1000, 1000, 6, 1000]
+  for i in 0 ..< 8 {
+    assert a.out[i] == want[i]
+  }
+}
+
+flow f2025(v: V at event, x: U32 at sample, g: Bool at sample, h: Bool at sample, c: U32 at sample) -> U32 at sample {
+  let a = if (g && h) {
+    if (g && h) {
+      match v {
+        V.B(q1) => if x > c { q1.p.1 } else { x },
+        V.A => (x + 1),
+      }
+    } else {
+      if h { 2 } else {
+        match (v at sample) {
+          V.B(_) => c,
+          V.A => x,
+        }
+      }
+    }
+  } else { x }
+  a
+}
+pub flow t2025(y: U32 at sample, g: Bool at sample, h: Bool at sample, c: U32 at sample, r: Bool at sample) -> U32 at sample {
+  f2025~(src~(y), 1000, g, h, c)
+}
+
+test "f2025" {
+  let a = t2025.render(t2025.In { y: [0, 0, 0, 0, 2, 7, 2, 2], g: [true, false, false, true, false, true, true, false], h: [true, true, false, true, false, false, true, true], c: [1, 1, 2000, 1, 0, 0, 1, 1500], r: [false, false, false, false, false, false, false, false] }, 8.0)
+  let want: [U32; 8] = [0, 1000, 1000, 0, 1000, 1000, 4, 1000]
+  for i in 0 ..< 8 {
+    assert a.out[i] == want[i]
+  }
+}
+
+flow f2026(v: V at event, x: U32 at sample, g: Bool at sample, h: Bool at sample, c: U32 at sample) -> U32 at sample {
+  if g {
+    (((if g { c } else { c }) + (if x > c { 5 } else { c })) + ((match v {
+      V.B(q1) => q1.p.0,
+      V.A => x,
+    }) + c))
+  } else { x }
+}
+pub flow t2026(y: U32 at sample, g: Bool at sample, h: Bool at sample, c: U32 at sample, r: Bool at sample) -> U32 at sample {
+  f2026~(src~(y), 1000, g, h, c)
+}
+
+test "f2026" {
+  let a = t2026.render(t2026.In { y: [0, 0, 0, 0, 3, 7, 101, 6], g: [false, true, true, false, true, true, true, true], h: [true, true, false, false, true, false, true, true], c: [1, 0, 2000, 2000, 1500, 2000, 1500, 2000], r: [false, false, false, false, false, false, false, false] }, 8.0)
+  let want: [U32; 8] = [1000, 5, 6000, 1000, 4504, 6008, 5500, 6007]
+  for i in 0 ..< 8 {
+    assert a.out[i] == want[i]
+  }
+}
+
+flow f2029(v: V at event, x: U32 at sample, g: Bool at sample, h: Bool at sample, c: U32 at sample) -> U32 at sample {
+  if h {
+    if h {
+      match v {
+        V.B(q1) => q1.p.1,
+        V.A => match v {
+          V.B(Pd { vel: _, on: _, k: _, p: (p6_p, _) }) => if (h || g) { p6_p } else { 4 },
+          V.A => x,
+        },
+      }
+    } else { x }
+  } else { c }
+}
+pub flow t2029(y: U32 at sample, g: Bool at sample, h: Bool at sample, c: U32 at sample, r: Bool at sample) -> U32 at sample {
+  f2029~(src~(y), 1000, g, h, c).reset_if~(r)
+}
+
+test "f2029" {
+  let a = t2029.render(t2029.In { y: [0, 0, 101, 0, 3, 1, 1, 7], g: [false, true, true, true, true, true, false, false], h: [false, true, true, true, true, true, false, false], c: [1500, 2000, 2000, 0, 0, 1, 0, 1500], r: [false, true, false, false, false, false, false, false] }, 8.0)
+  let want: [U32; 8] = [1500, 0, 1000, 1000, 5, 3, 0, 1500]
+  for i in 0 ..< 8 {
+    assert a.out[i] == want[i]
+  }
+}

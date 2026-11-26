@@ -32,6 +32,7 @@ use onsa_sema::Target;
 use onsa_sema::flow_names::{Delay, FlowBuiltin};
 use onsa_syntax::ast::{BinOp, CallKind, ExprId, ExprKind, StmtKind};
 
+use super::arm_reads;
 use super::expr::{Frame, LOW_STACK, Stop};
 use super::flow::{Clock, Known, Seen, clock_of, join};
 use super::rate::{args_of, chain_of, port_exprs};
@@ -346,7 +347,7 @@ pub(super) fn kept(body: &Body, known: &Known, e: ExprId) -> Result<bool, Fault>
 }
 
 /// The clocks of the names in scope in the body of a `par~` whose variable is written at `at`: the index is of `init` (§11.5).
-fn with_index(body: &Body, known: &Known, at: Span) -> Result<Known, Fault> {
+pub(super) fn with_index(body: &Body, known: &Known, at: Span) -> Result<Known, Fault> {
     let mut inside = known.clone();
     inside.insert(body.par_var(at)?, Seen::both(Clock::Init));
     Ok(inside)
@@ -525,6 +526,10 @@ fn free(f: &mut Frame, known: &Known, (root, top): (ExprId, ExprId), e: ExprId, 
     for (x, k, _) in kids(&body, known, root, e, Clock::Const).map_err(stop)? {
         free(f, &k, (root, top), x, here)?;
     }
+    // The reads of the bindings of the arms of a `match` of a name are made at each tick too, where the pattern of the arm matches (S-1247, `arm_reads`), after the object's own read.
+    if matches!(body.ast.expr(e).kind, ExprKind::Match { .. }) {
+        arm_reads::from_free(f, known, (root, top), e, here)?;
+    }
     Ok(())
 }
 
@@ -555,7 +560,14 @@ pub(super) fn source_parts(f: &mut Frame, known: &Known, root: ExprId, e: ExprId
     Ok(())
 }
 
-fn walk(f: &mut Frame, known: &Known, root: ExprId, e: ExprId, here: Clock, guard: Clock) -> Result<(), Stop> {
+pub(super) fn walk(
+    f: &mut Frame,
+    known: &Known,
+    root: ExprId,
+    e: ExprId,
+    here: Clock,
+    guard: Clock,
+) -> Result<(), Stop> {
     let body = f.body;
     let span = body.ast.expr(e).span;
     let stop = |fault| Stop { fault, at: span };
@@ -835,6 +847,7 @@ fn descend(
                 return Ok(());
             }
             let v = f.eval(*scrutinee)?;
+            arm_reads::arm_reads(f, known, root, e, &v, here)?;
             let ty = body.ty(*scrutinee).map_err(stop)?;
             for arm in arms {
                 let mut inner = known.clone();
@@ -872,6 +885,9 @@ fn descend(
             // A `^name` in the object or a guard has no value yet where the walk is (S-1244): what it chooses is decided where the part is made, at the end of the stage.
             let mut deciding = acc <= here && !caret(&body, *scrutinee);
             let (v, ty) = (if deciding { Some(f.eval(*scrutinee)?) } else { None }, body.ty(*scrutinee).map_err(stop)?);
+            if let Some(v) = &v {
+                arm_reads::arm_reads(f, known, root, e, v, here)?;
+            }
             let (mut bound, mut taken, mut plan) =
                 (clock_of(&body, known, root, *scrutinee).map_err(stop)?, None, Vec::new());
             for (n, arm) in arms.iter().enumerate() {

@@ -440,8 +440,8 @@ fn a_part_of_an_event_is_refused_at_the_condition_of_another_stage() {
 
 /// S-1197: a field read of a name of a tick under any condition, in a field
 /// of its type written under no guard, the largest chain; of a binding that
-/// its arm alone has, guarded as a part is, or of no field under a condition
-/// decided at another stage.
+/// its arm alone has, in a field written where its pattern matches, whatever
+/// the conditions (S-1247): of no guard, the scrutinee being a name.
 #[test]
 fn a_field_read_of_a_name_under_a_condition_is_in_a_field_of_no_guard() {
     use crate::clock::EventSrc;
@@ -466,10 +466,10 @@ pub flow f(m: M at event, x: F32 at sample, g: Bool at sample, k: I32 at init) -
     // A binding of a `match~` has a place, in the body of its arm.
     assert_eq!(of("match~ m { n => lp~(if g { n.q } else { x }) }"), [free(0, "n.q")]);
     // One of a `match` has none, nor one of a `match~` in a guard.
-    let held = [g("_out._hoist_0", m, true, "n.q")];
+    let held = [free(0, "n.q")];
     assert_eq!(of("match m { n => x + n.q }"), held);
-    assert_eq!(of("match~ m { n if x > 0.0 && n.q > x => lp~(x), _ => lp~(x) }"), []);
+    assert_eq!(of("match~ m { n if x > 0.0 && n.q > x => lp~(x), _ => lp~(x) }"), held);
     assert_eq!(of("match~ m { n if n.q > x => lp~(x), _ => lp~(x) }"), held);
-    assert_eq!(of("if g { match m { n => x + n.q } } else { x }"), []);
-    assert_eq!(of("match m { n if g => x + n.q, n => n.p.a + x }"), []);
+    assert_eq!(of("if g { match m { n => x + n.q } } else { x }"), held);
+    assert_eq!(of("match m { n if g => x + n.q, n => n.p.a + x }"), [free(0, "n.q"), free(1, "n.p.a")]);
 }

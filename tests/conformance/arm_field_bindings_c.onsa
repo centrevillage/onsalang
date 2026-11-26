@@ -1,0 +1,149 @@
+// onsa.toml
+// [package]
+// name = "arm_field_bindings_c"
+// edition = "2026"
+//
+// [export]
+// prefix = "arm_field_bindings_c_"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "poison"
+// provides = []
+//
+// [test]
+// spec = ["§11.3", "§13.4"]
+// conformance = true
+
+// Conformance (W7-17 L5/b, the middle finding; S-1247, §11.3, §13.4): the interpreter and C give the same values, and the C has no unused variable,
+// when a read rooted at a binding of an arm is the field of the arm (written at the events where the pattern matches) and the work of the event stage
+// binds the same pattern again in another block for a guarded part (`is_on(v)`, `is_s(kk)`), which reads none or only some of the bindings.
+
+struct Pd2 {
+  w: U32,
+}
+
+enum W {
+  N,
+  S(Pd2),
+}
+
+impl Default for W {
+  rt fn default() -> W {
+    W.N
+  }
+}
+
+struct Pd {
+  vel: U32,
+  on: Bool,
+  k: W,
+  p: (U32, U32),
+}
+
+impl Default for Pd {
+  rt fn default() -> Pd {
+    Pd { vel: 9, on: true, k: W.N, p: (70, 80) }
+  }
+}
+
+enum V {
+  A,
+  B(Pd),
+}
+
+impl Default for V {
+  rt fn default() -> V {
+    V.B(Pd { vel: 50, on: true, k: W.S(Pd2 { w: 7 }), p: (11, 12) })
+  }
+}
+
+rt fn mk(y: U32) -> V {
+  if y > 100 {
+    V.A
+  } else {
+    V.B(Pd { vel: y, on: y % 2 == 0, k: if y % 3 == 0 { W.N } else { W.S(Pd2 { w: y *% 2 }) }, p: (y +% 1, y +% 2) })
+  }
+}
+
+flow src(y: U32 at sample) -> V at event {
+  if y > 0 {
+    Some(mk(y))
+  } else {
+    None
+  }
+}
+
+rt fn is_on(v: V) -> Bool {
+  match v {
+    V.B(p) => p.on,
+    V.A => false,
+  }
+}
+
+rt fn is_s(k: W) -> U32 {
+  match k {
+    W.S(r) => r.w,
+    W.N => 3,
+  }
+}
+
+rt fn ident(v: V) -> V {
+  v
+}
+// The arm B binds `q1` for nothing but the field `q1.vel` (the reproduction of the finding).
+flow f0(v: V at event, x: U32 at sample, g: Bool at sample, h: Bool at sample, c: U32 at sample) -> U32 at sample {
+  match v {
+    V.B(q1) => q1.vel,
+    V.A => if is_on(v) { x } else { c },
+  }
+}
+
+// The arm B writes a guarded part that does not read `q1`.
+flow f1(v: V at event, x: U32 at sample, g: Bool at sample, h: Bool at sample, c: U32 at sample) -> U32 at sample {
+  match v {
+    V.B(q1) => q1.vel + (if is_on(v) { x } else { c }),
+    V.A => x,
+  }
+}
+
+// The field `pp.0` reads `pp`, the guarded part reads `kk`: each block binds both.
+flow f2(v: V at event, x: U32 at sample, g: Bool at sample, h: Bool at sample, c: U32 at sample) -> U32 at sample {
+  match v {
+    V.B(Pd { k: kk, p: pp, vel: _, on: _ }) => pp.0 + (if is_s(kk) > 3 { x } else { c }),
+    V.A => x,
+  }
+}
+
+// The inner `match` is on the field `q1.k`; its arm binds `r` for the field `r.w` only.
+flow f3(v: V at event, x: U32 at sample, g: Bool at sample, h: Bool at sample, c: U32 at sample) -> U32 at sample {
+  match v {
+    V.B(q1) => match q1.k {
+      W.S(r) => r.w,
+      W.N => if is_on(v) { x } else { c },
+    },
+    V.A => x,
+  }
+}
+
+@export
+pub flow an_arm_that_writes_nothing(y: U32 at sample, g: Bool at sample, h: Bool at sample, c: U32 at sample) -> U32 at sample {
+  f0~(src~(y), 1000, g, h, c)
+}
+
+@export
+pub flow an_arm_that_writes_without_its_binding(y: U32 at sample, g: Bool at sample, h: Bool at sample, c: U32 at sample) -> U32 at sample {
+  f1~(src~(y), 1000, g, h, c)
+}
+
+@export
+pub flow two_bindings_read_one_in_each_block(y: U32 at sample, g: Bool at sample, h: Bool at sample, c: U32 at sample) -> U32 at sample {
+  f2~(src~(y), 1000, g, h, c)
+}
+
+@export
+pub flow a_nested_match_on_a_field_of_the_arm(y: U32 at sample, g: Bool at sample, h: Bool at sample, c: U32 at sample) -> U32 at sample {
+  f3~(src~(y), 1000, g, h, c)
+}
