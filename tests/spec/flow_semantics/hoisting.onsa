@@ -5,9 +5,9 @@
 
 // A slower-clock expression in a branch whose condition is of `sample` is evaluated where it is reached (spec §11.3, §11.5, S-1157).
 //
-// "条件のどれかがサンプルごとに決まるなら巻き上げず、評価が届いたときに評価する": `100 / p` with a `block` input `p` in the branch of an `if`
+// "条件のどれかが `init`・`block` より後の段（イベント、`sample / N`、`sample`）で決まるなら巻き上げず、評価が届いたときに評価する": `100 / p` with a `block` input `p` in the branch of an `if`
 // whose condition `x > 0.0` is of `sample` is evaluated when the branch is taken. In an untaken `if` branch or on the right of an `&&`
-// that is not needed it is not evaluated, so p = 0 does not panic there ("サンプルごとに決まる条件の枝の中の式は、取られたときだけ panic する").
+// that is not needed it is not evaluated, so p = 0 does not panic there ("panic は、評価する段が動けば起きる").
 
 pub flow slow_in_branch(x: F32 at sample, p: I32 at block) -> F32 at sample {
   if x > 0.0 { x * F32.round_from(100 / p) } else { 0.0 }

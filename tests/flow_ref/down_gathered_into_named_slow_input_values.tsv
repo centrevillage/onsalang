@@ -1,0 +1,5 @@
+# flow_ref 1 source=tests/spec/flow_semantics/down_gathered_into_named_slow_input_values.onsa tests=1 evaluated=1 unavailable=0 skipped=0 waiting=0
+@ a gathered value into an input at (sample / N), then reset_if~: the field of the part goes back to T.default() until the next tick
+init 0 down_gathered_into_named_slow_input_values.gathered_into_a_named_input sr=0x41000000
+process 0 frames=12 in x=[1 1 1 1 2 2 2 2 3 3 3 3] r=[false false false false false false true false false false false false]
+out=[1000 1000 1000 1000 1004 1004 1000 1000 1008 1008 1008 1008]

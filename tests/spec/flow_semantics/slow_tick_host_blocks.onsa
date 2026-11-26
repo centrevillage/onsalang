@@ -3,8 +3,8 @@
 // mode = "test"
 // spec = ["§11.9", "§11.6", "§11.10", "§13.4"]
 
-// W7-16 U5a/t, S-565, S-1127, S-1196 (spec §11.9: "`sample / N` の刻みはカウンタが N の倍数の刻みで、最初の刻みで動く。ホストの区切りに依らない（ホストのブロックの長さを 2^N に揃える必要は無い）";
-// §11.6: "呼び出しを位置 k で分けると … 出力は分けない呼び出しとビットで同じである（`params` が同じとき。`block` は状態を持たず、位相のカウンタはホストの区切りに依らない）"、"長さが 0 の呼び出しも
+// W7-16 U5a/t, S-565, S-1127, S-1196 (spec §11.9: "`sample / N` の刻みはカウンタが N の倍数の刻みで、最初の刻みで動く。ホストの区切りに依らない（§11.6）";
+// §11.6: "呼び出しを位置 k で分けると … 出力は分けない呼び出しとビットで同じである（`params` が同じとき。`block` は状態を持たず、位相のカウンタはホストの区切りに依らない。…）"、"長さが 0 の呼び出し（ホストが 0 フレームで呼ぶ場合）も
 // 正しい呼び出しで、… `sample` の段は評価しない"、生成する `reset`: "位相のカウンタ（§11.9）を 0 にする"): the output of a flow with two delays at `sample / 4` and `sample / 2` and a `sample_tick()`
 // is the same wherever the host cuts the run (a block of any length, one of 0 frames, one of 1 frame) and after a `reset` at any position (the next frame is the frame 0 of a run, whose ticks are at
 // 0, 4, 8, … again and whose count is 0). The values do not depend on the evaluator that runs them. Worked out by hand: for x = 1 2 3 4 5 6 7 and p = 1,

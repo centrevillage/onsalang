@@ -2,7 +2,7 @@
 // [test]
 // spec = ["§11.3", "§11.9"]
 
-// W7-11 U2c/t, S-1197 (spec §11.3: "フィールド・組の要素の読みも計算した部分式で、隠れたフィールドの型はその読み（連なりの全体）の型である（`x + m.vel` は `let v = m.vel` の `x + v` と同じ値で、`M` に `Default` は要らない"、"全体を速い段で読んでから取り出す
+// W7-11 U2c/t, S-1197 (spec §11.3: "フィールド・組の要素の読みも計算した部分式で、隠れたフィールドの型はその読み（連なりの全体）の型で、初めの値はその型の既定である（`m.vel` は `M.default().vel` でなく `F32.default()` から始まり、`M` に `Default` は要らない"、"全体を速い段で読んでから取り出す
 // `(m at sample).vel` は、`M` に `Default` が要り"): the field or the element of a value of the tick `sample / 4` read at `sample` outside a condition (`x + (s.vel at sample)`, `x + (r.vel at sample)` with `r` the result of a call, `n.a.vel`, `t.0`) is a field
 // of the type of the read, so `M` (no `Default`) needs none; the whole read first and the field of it (`(h at sample).vel`) is of the type of `H`, which has a `Default`. These are accepted now and stay so (a read under an `init` or a constant condition is accepted too; the same reads under the other conditions are in
 // slow_field_reads_in_conditions_s1197.onsa, the type that has no `Default` in e0816_slow_field_read_type_s1197.onsa). `check` reads the file with no diagnostic. `a` is a value of `sample / 4`, `x` is a `sample` input.

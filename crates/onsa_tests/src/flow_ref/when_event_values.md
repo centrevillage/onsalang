@@ -2,7 +2,7 @@
 
 - The values are worked out by hand from the text. The format is that of `event_values.md` (the table reader `event_table_tests.rs`).
 - `gen~(x)` gives the event `x` where `x != 0`. The condition `e > 2` is an expression of the event (§11.11): its last value is read at each frame of W (`sample`), false before the first event (`Bool.default()`), and it does nothing at the event itself
-  (§11.10: "イベントの条件でもイベントの刻みでは何もしない"). `(e at sample) < 3` is an expression of `sample` over the last value of `e` (0 before the first event, §11.3). A part that runs gives its runs; one that is stopped keeps its last output, `T.default()` before its first run.
+  (§11.10: "止めるのは x のサンプルレートに結び付く処理（…）で、イベントの刻みの処理は止めない"). `(e at sample) < 3` is an expression of `sample` over the last value of `e` (0 before the first event, §11.3). A part that runs gives its runs; one that is stopped keeps its last output, `T.default()` before its first run.
 - With x = `0 3 0 0 5 0 2 0` the events are 3 (position 1), 5 (position 4), 2 (position 6).
 
 ## 共通の部品

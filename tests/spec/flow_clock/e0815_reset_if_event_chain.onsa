@@ -2,7 +2,7 @@
 // [test]
 // spec = ["§11.3", "§11.10", "§11.11", "§18.1"]
 
-// W7-11 U2r/t, S-559, S-562, S-1209 (spec §11.10: "条件の中で、イベントの値と周期のクロックの値が混ざると E0815（`is_start(tr) && armed`、`armed` は `sample`）"; §11.11: "別の入力のイベントのクロックどうしは比べられない"): a chain of `reset_if~` with an
+// W7-11 U2r/t, S-559, S-562, S-1209 (spec §11.10: "条件の中で、イベントの値と周期のクロックの値が混ざると E0815 である（§11.11）" (a condition such as `is_start(tr) && armed`, `armed` of `sample`, is of this kind); §11.3: "別の入力のイベントのクロックどうしは比べられない"): a chain of `reset_if~` with an
 // event condition keeps the errors of the clocks of the conditions, whatever the lowering of the events does after U2r: the events of two sources in one condition, an event with a `sample` value in one condition, in the second modifier of a chain,
 // and where the receiver is a part that has an event input. The error is at the line of the condition. The accepted chains are in event_reset_chain_accepted.onsa. One error per flow (P-01).
 // `a`, `b`, `e` and `m` are events, `x` and `armed` are `sample` inputs, `g` is a `sample` Bool.

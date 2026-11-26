@@ -2,7 +2,7 @@
 // [test]
 // spec = ["§11.3", "§11.11", "§18.1"]
 
-// W7-11 U2c/t, S-1197 (spec §11.3: "隠れたフィールドの型はその読み（連なりの全体）の型である（…下の E0816 は読みの型で判定する）"; §11.11: "最初のイベントの前は `T.default()`（`T` が `Default` を満たさなければ E0816。`m.vel` のようにフィールドを取り出す読みの `T` は、その読みの型である、§11.3）"):
+// W7-11 U2c/t, S-1197 (spec §11.3: "隠れたフィールドの型はその読み（連なりの全体）の型で、初めの値はその型の既定である（…下の E0816 は読みの型で判定する）"; §11.11: "最初のイベントの前は `T.default()`（`T` が `Default` を満たさなければ E0816。`m.vel` のようにフィールドを取り出す読みの `T` は、その読みの型である、§11.3）"):
 // the event value `m` is a struct `P` that has a `Default` (written by hand), but the field that the flow reads out of it (`m.tag`, `m.a.tag`, under a condition or in an argument) is of the type `Tag`, which has none, so the field that keeps the read for the periodic clock has no default:
 // E0816 at the line of the read. The whole `P` having a `Default` does not help, and the whole read first (`(m at sample).tag`) is no error (event_field_reads_accepted.onsa). One error per flow (P-01). `x` and `g` are `sample` inputs.
 

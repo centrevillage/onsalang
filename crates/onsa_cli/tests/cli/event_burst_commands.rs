@@ -3,7 +3,7 @@
 //! of the one that stops the run (`failure.span`, the line only).
 //!
 //! The order (§11.11: "`.up~`・`.down~` の部品の中から出るイベントの位置は…同じ位置には内側の刻みの順に並ぶ"; "出したイベントの刻みは、呼び出し側が作り手に行わせた刻み一つ（`.up~` を付けた作り手では走り一回）の仕事の全体（保存まで）が済んだ直後に、出た順に、呼び出し側の段の途中で行い";
-//! §11.9: "同じ位置では、入力のイベントの刻み、遅い刻み、`sample` の刻みの順に並ぶ"; §11.10: "イベントの条件は、そのイベントの刻みで初期化する"):
+//! §11.9: "同じ位置では、入力のイベントの刻み、遅い刻み、`sample` の刻みの順に並ぶ"; §11.10: "イベントの条件は、外の `when~` が止めている間もその刻みで初期化する"):
 //! - The receiver of the event of the run 0 of a maker under `.up~(2)` ticks right after that run, before the run 1: a division by 0 in the receiver for the event 0 (R) stops the run before the division in the maker at its run 1 (M). The same where the
 //!   receiver is in the body of a flow that is run twice (the receiver of the same body ticks after its maker's run 0), and where the maker is in a block `.up~(2).down~(2)` (its events are at the position of the tick, one after the other).
 //! - A block that is stopped by nothing runs its tick at the frame 0 in the stage of `sample / 2`, before the stage of `sample` of the frame 0 where the producer of the event gives its event, so the division in the part at the tick (T) comes before the
@@ -146,7 +146,7 @@ fn cases() -> Vec<(String, String, String)> {
     all
 }
 
-/// §11.11 "出したイベントの刻みは、呼び出し側が作り手に行わせた刻み一つ（`.up~` を付けた作り手では走り一回）の仕事の全体（保存まで）が済んだ直後に、出た順に"; §11.9 "同じ位置では、入力のイベントの刻み、遅い刻み、`sample` の刻みの順に並ぶ"; §11.10 "イベントの条件は、そのイベントの刻みで初期化する"
+/// §11.11 "出したイベントの刻みは、呼び出し側が作り手に行わせた刻み一つ（`.up~` を付けた作り手では走り一回）の仕事の全体（保存まで）が済んだ直後に、出た順に"; §11.9 "同じ位置では、入力のイベントの刻み、遅い刻み、`sample` の刻みの順に並ぶ"; §11.10 "イベントの条件は、外の `when~` が止めている間もその刻みで初期化する"
 /// (S-1207, S-1229, S-1234, S-1235). One launch reads the modules of the four groups: each stops at the line of the first place that is not made safe.
 #[test]
 fn the_panic_of_several_events_is_the_first_in_the_order_of_the_runs_u4() {

@@ -2,7 +2,7 @@
 // [test]
 // spec = ["§11.3", "§11.5", "§11.11"]
 
-// W7-11 U2c/t, S-1239 (spec §11.11: "要素か腕に周期の刻みの値を並べる…と、…周期のクロックの式で、要素と腕はその位置までの最後の値"; §11.3: "周期の刻みのクロックの被演算子は揃っていること、パラメータの種類とイベントの値は自由に混ざること"): the forms
+// W7-11 U2c/t, S-1239 (spec §11.11: "別の呼び出しを配列の要素か `if~`・`match~` の腕に並べた形は、条件・対象・ガードか要素・腕のどれかが周期の刻みのクロックの値（`at` で付けたクロックを含む）なら、§11.3 のとおり周期のクロックの式で、要素と腕はその位置までの最後の値"; §11.3: "周期の刻みのクロックの被演算子は揃っていること、パラメータの種類とイベントの値は自由に混ざること"): the forms
 // that have a periodic operand among the events of calls, or whose arms are not the events of calls, and so were accepted before S-1239 and stay so: an arm of a periodic clock, an array of calls with a periodic value in it, a call
 // in the arms with a sum of a periodic value, a plain `if` / `match` on the events of two inputs, the calls moved to a `let` before a plain `if`, a condition that is an event while another arm is periodic. `check` reads the file with no
 // diagnostic. The forms of the arms that S-1239 opens are in event_arms_periodic_condition_s1239.onsa, and the errors in e0815_event_arms_without_a_periodic_clock.onsa. `x` is `sample`, `a` and `b` are `block`, `m` and `n` are

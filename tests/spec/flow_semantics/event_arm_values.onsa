@@ -3,9 +3,9 @@
 // mode = "test"
 // spec = ["§11.5", "§11.11", "§11.3", "§11.10", "§11.4"]
 
-// The events in the arms, the conditions and the targets of `if~` and `match~` (W7-17 U6a/t; A1; S-1239, S-1233, S-1240, S-1249, S-1250; spec §11.5: "`if~ c { a } else { b }` と `match~ x { ... }` は、全ての枝を評価してから一つを選ぶ。…評価の順は、
-// 選ぶ側を先に、次に全ての枝と腕の本体を書いた順"; "`match~` の取られない腕の束縛は、値型の既定値 `T.default()` になる"; "腕の本体で読む束縛のクロックは、対象のクロックと、最初の腕からその腕までのガードのクロックのうち最も速いもの"; §11.11: "`if~`・`match~` の腕に並べて、
-// 条件・対象・ガードにも腕にも周期の刻みのクロックの値が無い形は E0815…条件・対象・ガードが周期の刻みのクロックの値なら、周期のクロックの式で、要素と腕はその位置までの最後の値"; "腕の中の状態を持つもの（イベントの段を含む）は、選びによらず動く").
+// The events in the arms, the conditions and the targets of `if~` and `match~` (W7-17 U6a/t; A1; S-1239, S-1233, S-1240, S-1249, S-1250; spec §11.5: "`if~ c { a } else { b }` と `match~ x { ... }` は、全ての枝を評価してから一つを選ぶ（…）。…評価の順は、
+// 選ぶ側を先に、次に全ての枝と腕の本体を書いた順"; "全ての枝の状態を持つものが進み、状態を持たない部分も全て評価される"; "`match~` の取られない腕の束縛は、値型の既定値 `T.default()` になり、`T` が `Default` を満たさなければ E0816"; "腕の本体で読む束縛のクロックは、対象のクロックと、最初の腕からその腕までのガードのクロックのうち最も速いもの"; §11.11: "別の呼び出しを配列の要素か `if~`・`match~` の腕に並べた形は、
+// 条件・対象・ガードか要素・腕のどれかが周期の刻みのクロックの値（`at` で付けたクロックを含む）なら、§11.3 のとおり周期のクロックの式で、要素と腕はその位置までの最後の値であり、どれも違えば（…）E0815 である").
 // Every arm runs at each event whether it is chosen or not (the receiver of an unchosen arm counts, sums and resets); the value of the `if~` is the value of the chosen arm, read at the frame. The input is `XS` (12 frames); the events are
 //   XS      = 2 3 4 6 5 8 10 7 9 12 14 11
 //   hit 2   = 2@0 4@2 6@3 8@5 10@6 12@9 14@10         hit 3 = 3@1 6@3 9@8 12@9         ev (the odd ones) = 3@1 5@4 7@7 9@8 11@11

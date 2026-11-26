@@ -3,7 +3,7 @@
 // mode = "test"
 // spec = ["§11.10", "§11.9", "§11.4", "§11.6", "§13.4"]
 
-// `.when~(c)` and `.reset_if~(r)` on a built-in delay (`prev~`, `delay~`, `vdelay~`) as the receiver (W7-10 U3b/t; S-1209, S-1217, S-1228). Worked out by hand from the text: §11.10 "受け手は flow の呼び出し（組込みの遅延を含む）か修飾子の連鎖である";
+// `.when~(c)` and `.reset_if~(r)` on a built-in delay (`prev~`, `delay~`, `vdelay~`) as the receiver (W7-10 U3b/t; S-1209, S-1217, S-1228). Worked out by hand from the text: §11.10 "受け手は flow の呼び出し（組込みの遅延を含む。括弧で包んでもよい）か修飾子の連鎖である";
 // the place of the modifier P is the clock of the first argument K ("連鎖の起点のクロック（… 組込みの遅延は第 1 引数のクロック）"; a delay takes no `.down~`/`.up~`, so P = K) and the output of the receiver is read at K, so W = K. The delay
 // runs at the K ticks where `c` holds, and "遅延の長さは動いた刻みで数える" (a stopped tick is no sample of the delay); where it is stopped the caller reads "最後の出力を保つ（一度も動いていなければ `T.default()`）", whatever `init` the
 // delay has. `.reset_if~(r)` puts "遅延の値と書き込み位置" back to its `init` before the stages that follow the tick of the condition (the `init` of the kind `init` is kept). "頭の引数は呼び出し側のもので、止まっている間も評価する".

@@ -472,7 +472,7 @@ flow inp(p: F32 at block) -> F32 at sample {{ sum2~(p at (sample / 2)).down~(4) 
 
 #[test]
 fn a_ring_of_lets_that_a_tick_enters_ticks_with_that_tick_and_one_it_enters_under_at_sample_with_sample() {
-    // §11.3: "互いに頼る `let` は一つのクロックを持ち、外から入る被演算子の刻みのクロックから決まる". The ring of `a` and `b` (the `b` reads `a` and `a` reads `^b`) has the clock of `lf`, a tick of `sample / 4`,
+    // §11.3: "互いに頼る `let`（帰還の輪、§11.11）は一つのクロックを持ち、それは外から入る被演算子の刻みのクロックから、帰還の無い式と同じ規則で決まる". The ring of `a` and `b` (the `b` reads `a` and `a` reads `^b`) has the clock of `lf`, a tick of `sample / 4`,
     // whichever `let` of the ring `lf` enters through, so both tick at c = 0, 4, 8 and the delay counts those ticks. `lf = prev~(p at (sample / 4), 1.0)` is 1 (init) at c = 0, then the p of the tick before:
     // p = 1 for 8 frames gives 1 1 (the `b` of c = 0 is 0 + 1 = 1, of c = 4 it is 1 + 1 = 2): `b at sample` 1 1 1 1 2 2 2 2. p = 2, 5, 7 for calls of 4 frames: lf is 1, 2, 5. `b = a + lf` with `a` the `b`
     // of the tick before: 1, 3, 8. A ring of three (`c = b + 1`, `a` the `c` before): a = 0, 2, 5; b = 1, 4, 10. `b = (a + 1) * lf`: 1, 4, 25. `lf` entering through `a` (`a = prev~(^b) + lf`, `b = a * 2`): a = 1, 4, 13;
@@ -503,7 +503,7 @@ fn a_ring_of_lets_that_a_tick_enters_ticks_with_that_tick_and_one_it_enters_unde
         &f32s(&run(&ring("  let a = prev~(^b)\n  let b = a + lf"), "t", vec![(p(1.0), 8)], &[], &[])),
         &rep(&[(1.0, 4), (2.0, 4)]),
     );
-    // `(lf at sample)` is of `sample` ("`at` で付けたクロックは ... 帰還の輪（輪のクロック）に効く"), so the ring ticks with `sample`: `b` is `a + lf` and `a` the `b` of the frame before: the running sum of `lf`
+    // `(lf at sample)` is of `sample` ("`at` が時機を決める所は、刻みの値を読む式のクロック（上）と、…帰還の輪（輪のクロック、上の読み方）"), so the ring ticks with `sample`: `b` is `a + lf` and `a` the `b` of the frame before: the running sum of `lf`
     // (1 for c < 4, 2 for 4 .. 7, 5 from 8, p = 2, 5, 7): 1 2 3 4 | 6 8 10 12 | 17 22 27 32, in any cut of the calls.
     let src = "flow t(p: F32 at block) -> F32 at sample {
   let lf = prev~(p at (sample / 4), 1.0)

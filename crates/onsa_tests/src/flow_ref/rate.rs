@@ -282,7 +282,7 @@ pub(super) fn cond_tick(clock: Clock, out: i32, outside: &[Bound]) -> i32 {
     }
 }
 
-/// Does a boundary of `outside` gather a port at `k` (moved out by each, as an input of the head is)? §11.10: "境界の内に書いた修飾子の条件は、同じクロックの頭の入力と同じ時点の値を読む（境界の刻みより速い周期の値は頭の入力と
+/// Does a boundary of `outside` gather a port at `k` (moved out by each, as an input of the head is)? §11.10: "境界の内に書いた修飾子の条件は、同じクロックの頭の入力と同じ時点の値を読む（`sample_tick()` の他に刻みの値もイベントの値も読まない条件は W の周期の値で（§11.4）、境界の刻みより速い周期の値は頭の入力と
 /// 同じに境界で集め、…）": the condition of a modifier is a port of its part where a boundary gathers it, else the caller reads it at its tick (`Guard::at`); a value of the parameter kinds (an `at` on one too, §11.3) is not a port.
 fn gathered(k: i32, outside: &[Bound]) -> bool {
     outside.iter().scan(k, |k, b| Some((gathers(*k, b.ratio()), *k += b.ratio()).0)).any(|g| g)

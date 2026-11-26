@@ -1,0 +1,15 @@
+# flow_ref 1 source=tests/spec/flow_semantics/up_event_from_outside_values.onsa tests=2 evaluated=2 unavailable=0 skipped=0 waiting=0
+@ an event from outside into a part under .up~(2) comes before the first run of its position
+init 0 up_event_from_outside_values.from_above sr=0x41000000
+init 1 up_event_from_outside_values.from_below sr=0x41000000
+process 0 frames=5 in q=[0 0 1 0 0]
+out=[2 4 2 4 6]
+process 1 frames=5 in q=[0 0 1 0 0]
+out=[2 4 6 2 4]
+@ sample_tick() in the event stage of a part under .up~(2) is of the position, with the step 0
+init 0 up_event_from_outside_values.tick_above sr=0x41000000
+init 1 up_event_from_outside_values.tick_below sr=0x41000000
+process 0 frames=5 in q=[0 0 1 0 0]
+out=[0 0 4 4 4]
+process 1 frames=5 in q=[0 0 1 0 0]
+out=[0 0 0 4 4]

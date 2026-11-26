@@ -4,9 +4,9 @@
 // spec = ["§11.3", "§11.5", "§11.6"]
 
 // W7-05 U2/t, S-1157 (D'), S-1080, S-1046, R-17 (spec §11.3): the values of an expression in a position of a condition (the branch of an `if`, an arm and a guard of a `match`, the right
-// side of `&&` / `||`) whose slower parts are guarded: "条件の位置の中の `init`・`block` の式は、その位置を選ぶ条件が全て `init`・`block` の段で決まるなら、式のクロックと条件の段のうち最も
+// side of `&&` / `||`) whose slower parts are guarded: "条件の位置の中の `init`・`block` の式は、その位置を選ぶ条件…が全て `init`・`block` の段で決まるなら、式の段と条件の段のうち最も
 // 速い段で、条件が成り立つときだけ評価する". The value does not change ("値は `let` に分けても分けなくても同じである"), and a part that the condition does not take is not evaluated, so a
-// division by zero of it does not happen ("`if d != 0 { x * F32.round_from(100 / d) } else { x }` の守りは fn と同じに効く"). Every value is worked out by hand; `x` is the `sample` input, `d`
+// division by zero of it does not happen ("`100 / n` は `n != 0` のときだけ、`process` の呼び出しごとに 1 回", in the example `hoist`). Every value is worked out by hand; `x` is the `sample` input, `d`
 // and `e` of `block`, `a` of `init`. The guards and the arms with a literal or a struct pattern, which this version cannot lower (E0200 until W8-06), are in hoist_cond_match_forms.onsa. What this version does at the `block` stage for a guard that holds (a panic in a call of 0 frames) is in hoist_cond_panic_block.onsa and
 // hoist_cond_panic_init.onsa; where the guard is of `sample`, in hoist_cond_reached.onsa. The tests here pass before and after the guarded fields: the guard that does not hold is
 // not a difference.

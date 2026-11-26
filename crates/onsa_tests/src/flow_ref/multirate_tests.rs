@@ -119,7 +119,7 @@ flow name(p: F32 at block, q: F32 at block) -> F32 at sample {
         same(&f32s(&calls(src, name, vec![], given)), &want);
     }
     // `(lf at sample) * q` reads a tick at `sample`: the product is of `sample`, made at each frame with the `q` of that frame, and not a field of the tick
-    // (§11.3: "`(lf at sample) * 2.0` は `sample` で計算する"): 2 2 | 10 10 | 10 10 10 10 | 30 30 30 (`lf` is 1, 1, 3 and `q` is 2 for c = 0, 1 and 10 after).
+    // (§11.3: "刻みの値（組込みの遅延とインスタンスの結果、刻みのクロックの入力、`sample_tick()`）を一つでも読む式は、その式のクロックの段の式である"): 2 2 | 10 10 | 10 10 10 10 | 30 30 30 (`lf` is 1, 1, 3 and `q` is 2 for c = 0, 1 and 10 after).
     let given = vec![(pq(1.0, 2.0), 2), (pq(3.0, 10.0), 6), (pq(3.0, 10.0), 3)];
     let want = [2.0, 2.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 30.0, 30.0, 30.0];
     same(&f32s(&calls(src, "name", vec![], given)), &want);
@@ -395,8 +395,7 @@ fn a_loop_whose_clock_is_a_tick_ticks_with_it() {
 
 #[test]
 fn a_loop_that_a_tick_enters_under_an_at_to_sample_ticks_with_sample() {
-    // §11.3: the clock of a loop is that of what enters it from outside, and an `at` gives the clock it names ("`at` で付けたクロックは ... 帰還の輪（輪のクロック）
-    // ... に効く"), so `(lf at sample) + prev~(^u)` is a loop of `sample`: `u` is `lf` plus the `u` of the frame before, at every frame, whatever the clock of `lf`.
+    // §11.3: the clock of a loop is that of what enters it from outside, and an `at` gives the clock it names ("`at` が時機を決める所は、…帰還の輪（輪のクロック、上の読み方）…"), so `(lf at sample) + prev~(^u)` is a loop of `sample`: `u` is `lf` plus the `u` of the frame before, at every frame, whatever the clock of `lf`.
     // `lf = prev~(p at (sample / 4), 1.0)`, p = 2, 5, 7 for three calls of 4 frames: `lf` is 1 (init) at c = 0 .. 3, then the p of c = 0 (2) at c = 4 .. 7 and the p of
     // c = 4 (5) at c = 8 .. 11. u = 1 2 3 4 | 6 8 10 12 | 17 22 27 32. The delay written in the loop as it is (`(prev~(...) at sample)`) is the same.
     let src = "flow lp(p: F32 at block) -> F32 at sample {
@@ -488,7 +487,7 @@ fn the_ticks_of_three_ratios_run_from_the_slowest_and_each_reads_the_one_before(
 #[test]
 fn an_argument_of_a_chain_that_is_slower_than_the_chain_is_made_at_its_own_tick() {
     // §11.3, §11.9: the argument `(lf + q) at (sample / 2)` of `cnt~(...).down~(2)` reads `lf`, a value of `sample / 8`, so it is made at the tick of `lf` (`at` promotes the
-    // value and does not change the stage: "`e` は `e` の式の段で評価し") and `cnt` reads that value at each of its runs. `lf = prev~(q at (sample / 8), 0.0)` is 0.0 for the
+    // value and does not change the stage: "`at` は `e` の値も評価の段も変えず、状態も作らない") and `cnt` reads that value at each of its runs. `lf = prev~(q at (sample / 8), 0.0)` is 0.0 for the
     // 8 frames; at c = 0 the field is 0 + q = 1.0 (q = 1.0 of the first call), and the runs of `cnt` at c = 0, 2, 4, 6 add 1.0 each: n = 1 2 3 4, held two frames each: 1 1 2 2 3 3 4 4.
     // (The `q` of the later calls, 10.0 and 100.0, is not read by the runs: made again at each of them it would give 1 1 11 11 111 111 211 211.)
     let src = format!(

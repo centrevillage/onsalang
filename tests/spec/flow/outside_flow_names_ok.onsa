@@ -5,7 +5,7 @@
 
 // W4-12 U3: what is written outside a flow and is no flow-only syntax, and what a flow body has next to
 // it, are fine (the errors are in negative/e0821_*.onsa). The names of the clocks are names of values
-// as well (§11.3: "`sample` や `block` を変数の名前に使ってもよい"); the built-in names of a flow are
+// as well (§11.3: "クロックの名前（`init` `block` `sample` `event`）は、値と型とは別の名前空間にあり、`at` の後ろでだけ引く"); the built-in names of a flow are
 // ordinary names of a function (§11.4, module/overlap_flow_builtin_fn_ok.onsa), so a local named `prev` is
 // used as a value, and a call of an `rt fn` is a call as any (§11.2). The binary `^` is the exclusive or
 // (§3.1), not the reference `^name` of a flow, which is told by its place (§2.6). The values that a flow

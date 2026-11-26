@@ -10,7 +10,7 @@
 // (`let a = prev~(^b)`) has no candidate in this version (S-1165, provisional): e0813_no_candidate_caret_s1165.onsa. The text of the candidate puts `at sample`
 // after the argument, and the argument is put
 // in parentheses when `at` could not follow it as it is: the operand of `at` that needs parentheses is an expression of a binary operator, a range, `as` or an
-// expression that looks like a block (§3.1, §11.3: "`at` の被演算子に置くのに括弧の要る式"), so
+// expression that looks like a block (§3.1, §11.3: "値が `at` の被演算子に括弧の要る式（§3.1）なら括弧で囲む"), so
 //
 //   prev~(p * 2.0)           is  prev~((p * 2.0) at sample)        (a binary expression: parentheses)
 //   prev~(-p)                is  prev~(-p at sample)               (a prefix operator binds tighter than `at`: none)

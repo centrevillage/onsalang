@@ -167,7 +167,7 @@ flow u2(a: U32 at event) -> U32 at sample { cnt~(a).reset_if~(a >= 5) }
 - イベント（位置, 入力, 値。境界が渡す順）: `(0,'a',3) (1,'a',5) (2,'a',1) (3,'a',9) (3,'a',2)`
 - フレーム: 4
 - 期待の出力: `3 5 6 11`
-- 注: the condition is the event of the input itself: it puts back before the event is added (§11.10: "直に書いた `acc~(m).reset_if~(m != 0)` は戻してから足す"): 3, 5 (back, then 5), 6, then 9 (back, then 9) and 2 (no reset: 11)
+- 注: the condition is the event of the input itself: it puts back before the event is added (§11.11: "acc~(m).reset_if~(m != 0)  // 戻してから足す（§11.10）"): 3, 5 (back, then 5), 6, then 9 (back, then 9) and 2 (no reset: 11)
 
 ### u3
 

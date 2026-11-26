@@ -1,0 +1,38 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.10", "§11.4"]
+
+// The example of §11.10 (X-29): `rise` is the block of the spec, with its comment as written. `rise_block` is that comment, "start が block の値なら pb は
+// prev~(start at sample)": the same with `start` of the kind `block` and `pb = prev~(start at sample)`. Worked out by hand: the delay of `x` is put back (to 0.0) at the frames where `start` turns true, and not where it stays true.
+
+flow rise(x: F32 at sample, start: Bool at sample) -> F32 at sample {
+  let pb = prev~(start)
+  prev~(x).reset_if~(start && !pb) // start が block の値なら pb は prev~(start at sample)
+}
+
+flow rise_block(x: F32 at sample, start: Bool at block) -> F32 at sample {
+  let pb = prev~(start at sample)
+  prev~(x).reset_if~((start at sample) && !pb)
+}
+
+test "rise: the delay of x is put back at the frames where start turns true, not where it stays true" {
+  // start is F T T F T F, so the edges are at the frames 1 and 4; the delay of x = 1 2 3 4 5 6 is 0 1 2 3 4 5, and 0 at the edges.
+  let xs: [F32; 6] = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]
+  let starts: [Bool; 6] = [false, true, true, false, true, false]
+  var out: [F32; 6] = [9.0; 6]
+  var st = rise.init(8.0)
+  rise.process(inout st, rise.In { x: xs, start: starts }, inout out)
+  assert out == [0.0, 0.0, 2.0, 3.0, 0.0, 5.0]
+}
+
+test "rise with start at block: the edge is found over the calls (pb is the start at sample of the frame before), not at each call" {
+  // The calls: start false for the frames 0 1, true for 2 3 4, true for 5 6. The edge is at the frame 2 only (the call at 5 starts with start true and pb true), and the delay of x = 1 .. 7 is 0 1 2 3 4 5 6.
+  let xs: [F32; 7] = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0]
+  var out: [F32; 7] = [9.0; 7]
+  var st = rise_block.init(8.0)
+  rise_block.process(inout st, rise_block.Params { start: false }, xs.slice(0, 2), inout out.slice(0, 2))
+  rise_block.process(inout st, rise_block.Params { start: true }, xs.slice(2, 5), inout out.slice(2, 5))
+  rise_block.process(inout st, rise_block.Params { start: true }, xs.slice(5, 7), inout out.slice(5, 7))
+  assert out == [0.0, 1.0, 0.0, 3.0, 4.0, 5.0, 6.0]
+}

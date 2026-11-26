@@ -2,7 +2,7 @@
 //! the order of the work of a call that has an event in its chain is seen by the values only through a reset, but the report of a panic says which came first. A case is a module with a flow `f` that has a
 //! division by 0 in each of two to five places that run at one position (the frame 0), and the line of the one that stops the run (`failure.span`, the line only).
 //!
-//! The order (§11.3: "引数と修飾子の条件を字面の順に評価してから、初期化と部品の段を外の修飾子から行い"; §11.10: "イベントの条件は、そのイベントの刻みで初期化する"; §11.11: "出したイベントの刻みは、呼び出し側が作り手に行わせた刻み一つ（`.up~` を付けた作り手では走り一回）の仕事の全体（保存まで）が済んだ直後に、出た順に、
+//! The order (§11.3: "引数と修飾子の条件を字面の順に評価してから、初期化と部品の段を外の修飾子から行い"; §11.10: "イベントの条件は、外の `when~` が止めている間もその刻みで初期化する"; §11.11: "出したイベントの刻みは、呼び出し側が作り手に行わせた刻み一つ（`.up~` を付けた作り手では走り一回）の仕事の全体（保存まで）が済んだ直後に、出た順に、
 //! 呼び出し側の段の途中で行い"; "同じクロックを二つ以上の入力に渡すと、部品はイベントごとに、その入力を宣言の順に一つずつ刻む"):
 //! - A condition of an event is read at the tick of that event, that is where its producer is written, so it comes before the arguments and the stage of the call, which are of the `sample` stage and written below it; the
 //!   conditions of two events come in the order of their producers, not in the order they are written in the chain; the conditions of the kind `sample` come in the order written, after the arguments (and before the stage of the part).
@@ -199,8 +199,8 @@ fn cases() -> Vec<(String, String, String)> {
     all
 }
 
-/// §11.3 "引数と修飾子の条件を字面の順に評価してから"; §11.10 "イベントの条件は、そのイベントの刻みで初期化する"; §11.11 "出したイベントの刻みは、呼び出し側が作り手に行わせた刻み一つ（`.up~` を付けた作り手では走り一回）の仕事の全体（保存まで）が済んだ直後に、出た順に"; "同じクロックを二つ以上の入力に渡すと…
-/// 宣言の順に一つずつ刻む（一つの刻みで出たイベントは、次の入力の刻みの前に済ませる）" (S-559, S-562, S-1234, S-1236). One launch reads the modules of the eleven groups: each stops at the line of the first place that is not made safe.
+/// §11.3 "引数と修飾子の条件を字面の順に評価してから"; §11.10 "イベントの条件は、外の `when~` が止めている間もその刻みで初期化する"; §11.11 "出したイベントの刻みは、呼び出し側が作り手に行わせた刻み一つ（`.up~` を付けた作り手では走り一回）の仕事の全体（保存まで）が済んだ直後に、出た順に"; "同じクロックを二つ以上の入力に渡すと…
+/// 宣言の順に一つずつ刻む（同じ位置のイベントが宣言の順に来たのと同じで、一度には刻まない。一つの刻みで出たイベントは、次の入力の刻みの前に済ませる）" (S-559, S-562, S-1234, S-1236). One launch reads the modules of the eleven groups: each stops at the line of the first place that is not made safe.
 #[test]
 fn the_panic_of_a_chain_with_an_event_is_the_first_in_the_order_of_the_ticks_u2r() {
     let d = Dir::pkg("event_reset_panics");

@@ -138,7 +138,7 @@ fn cases() -> Vec<(String, String, String)> {
 }
 
 /// §11.11 "出したイベントの刻みは、呼び出し側が作り手に行わせた刻み一つ（`.up~` を付けた作り手では走り一回）の仕事の全体（保存まで）が済んだ直後に、出た順に、呼び出し側の段の途中で行い、呼び出し側の段の残りはその後に続く"; "同じクロックを二つ以上の入力に渡すと、部品はイベントごとに、その入力を
-/// 宣言の順に一つずつ刻む（一つの刻みで出たイベントは、次の入力の刻みの前に済ませる）"; "`^名前` を通して作り手より上に書いた受け手もその時に刻む" (S-1234, S-1235, S-1236). One launch reads the 14 modules of the five groups: each stops at the
+/// 宣言の順に一つずつ刻む（同じ位置のイベントが宣言の順に来たのと同じで、一度には刻まない。一つの刻みで出たイベントは、次の入力の刻みの前に済ませる）"; "`^名前` を通して作り手より上に書いた受け手もその時に刻む" (S-1234, S-1235, S-1236). One launch reads the 14 modules of the five groups: each stops at the
 /// line of the first place that is not made safe.
 #[test]
 fn the_panic_of_a_position_that_ticks_events_is_the_first_in_the_order_of_the_ticks_u2() {

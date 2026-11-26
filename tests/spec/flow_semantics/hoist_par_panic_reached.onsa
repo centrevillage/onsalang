@@ -4,7 +4,7 @@
 // spec = ["§11.3", "§11.5", "§11.6", "§9.2"]
 
 // W7-05 U3/t, S-1157, S-1140 (spec §11.3, §11.6): what holds with the parts of the body of a `par~` hoisted or not (the panics where the part is reached, and the values), the companion of hoist_par_panic_stage.onsa
-// (the panics of the stage of a part of `block` or `init`, which the hoisting of the body moves before the frames). A condition of `sample` leaves the part where it is reached ("条件のどれかがサンプルごとに決まるなら巻き上げず、
+// (the panics of the stage of a part of `block` or `init`, which the hoisting of the body moves before the frames). A condition of `sample` leaves the part where it is reached ("条件のどれかが `init`・`block` より後の段（イベント、`sample / N`、`sample`）で決まるなら巻き上げず、
 // 評価が届いたときに評価する"): a call of 0 frames and a frame that does not take the branch do not panic, the frame that takes it does. The argument of an instance in the body is evaluated at the `block` stage of the instance
 // (it is an input of `block` of the child), so a part of it panics in a call of 0 frames; the whole `par~` that is a part of `block` is made at `block` as a whole (the hoisting of W7-05 U1). A condition that does not hold
 // makes nothing. `x` is the `sample` input, `d` and `n` of `block`; the values are `U32` and worked out by hand (d = 3: `100 / 3` is 33, 100 / 2 is 50, 100 / 1 is 100). These tests pass before and after the hoisting of the body.

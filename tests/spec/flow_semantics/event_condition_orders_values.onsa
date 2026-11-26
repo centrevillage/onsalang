@@ -1,0 +1,51 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.10", "§11.11"]
+
+// The two orders of `reset_if~` and `when~` where the condition is an event (X-29), worked out by hand from the text of §11.10: "イベントの条件は、外の `when~` が止めている間もその刻みで初期化する（イベントの刻みの処理は止めない）", and
+// "`x.when~(c).reset_if~(r)` は止まっている刻みにも初期化し（保持した出力も `T.default()` に戻る）、`x.reset_if~(r).when~(c)` は動く刻みにだけ初期化する（パラメータの種類と周期のクロックの条件）".
+// `cnt` counts the runs, 1 2 3 .... `c` is 1 1 0 0 1 1 (the part runs at the frames 0 1 4 5) and the event `e` is at the frame 3, a stopped frame (`q` = 0 0 0 1 0 0, `e == e` is the event's own value, a condition of the event).
+//   `inner`  = cnt~().reset_if~(e == e).when~(c): the event resets the part at the frame 3 though it is stopped, and the held output stays: 1 2 2 2, and the part runs from the start at the frame 4: 1 2. Output 1 2 2 2 1 2.
+//   `outer`  = cnt~().when~(c).reset_if~(e == e): the reset is outside the `when~`, so it takes the held output back too (`T.default()` = 0 at the frame 3): 1 2 2 0 1 2.
+//   `inner_sample` has a condition of `sample` (`q > 0`) in the same place as `inner`: it resets at the runs only (the frame 3 is stopped, so no reset): 1 2 2 2 3 4.
+
+flow cnt() -> U32 at sample {
+  let n = prev~(^n) + 1
+  n
+}
+
+flow pulse(x: U32 at sample) -> U32 at event {
+  if x > 0 { Some(x) } else { None }
+}
+
+pub flow inner(c: Bool at sample, q: U32 at sample) -> U32 at sample {
+  let e = pulse~(q)
+  cnt~().reset_if~(e == e).when~(c)
+}
+
+pub flow outer(c: Bool at sample, q: U32 at sample) -> U32 at sample {
+  let e = pulse~(q)
+  cnt~().when~(c).reset_if~(e == e)
+}
+
+pub flow inner_sample(c: Bool at sample, q: U32 at sample) -> U32 at sample {
+  cnt~().reset_if~(q > 0).when~(c)
+}
+
+test "an event condition left of a when~ resets while the part is stopped, and one right of it also takes the held output back" {
+  let cs: [Bool; 6] = [true, true, false, false, true, true]
+  let qs: [U32; 6] = [0, 0, 0, 1, 0, 0]
+  var a: [U32; 6] = [9; 6]
+  var b: [U32; 6] = [9; 6]
+  var c: [U32; 6] = [9; 6]
+  var sa = inner.init(8.0)
+  var sb = outer.init(8.0)
+  var sc = inner_sample.init(8.0)
+  inner.process(inout sa, inner.In { c: cs, q: qs }, inout a)
+  outer.process(inout sb, outer.In { c: cs, q: qs }, inout b)
+  inner_sample.process(inout sc, inner_sample.In { c: cs, q: qs }, inout c)
+  assert a == [1, 2, 2, 2, 1, 2]
+  assert b == [1, 2, 2, 0, 1, 2]
+  assert c == [1, 2, 2, 2, 3, 4]
+}

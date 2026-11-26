@@ -3,7 +3,7 @@
 // mode = "test"
 // spec = ["§11.3", "§11.4"]
 
-// W7-17 L3/e, R-517 (spec §11.3: "刻みの値（…`sample_tick()`）を一つでも読む式は、その式のクロックの段の式である"; "`at` で付けたクロックは値を変えず、…刻みの値を読む式のクロック（上）…に効く"; §11.4: `sample_tick()` は
+// W7-17 L3/e, R-517 (spec §11.3: "刻みの値（…`sample_tick()`）を一つでも読む式は、その式のクロックの段の式である"; "`at` が時機を決める所は、刻みの値を読む式のクロック（上）と、…"; §11.4: `sample_tick()` は
 // 「使う所の刻みのクロックに合わせる」、"`sample_tick()` の他に刻みの値もイベントの値も読まないものは、式の全体にそのクロックの `at` を付けた形と同じ値"; `sample / N` の段で読んでも同じ数（フレームの数）):
 // an expression that reads `sample_tick()` and a value of the parameter kinds with a tick written by `at` (`p at (sample / 4)`, `p` is `block`) is of that tick, so the time it reads is the time of the tick: the frame
 // count at the frames 0, 4, 8, 12 (`sample / 4`) or at the frames 0, 2, 4, 6 (`sample / 2`), and `at sample` keeps the value of the tick for the frames of the tick. Not the time of each frame (the frame 5 reads

@@ -5,7 +5,7 @@
 // W7-04 U1a/t, S-125, S-267, R-286: a form a flow body cannot contain (E0806, §11.2: "一覧に無いもの（`var`、代入、`for`、`while`、
 // `return`、`?`、`assert`、関数値、クロージャ、`handle`、`unsafe` など）は書けない"; a `let` of a nested block, an expression statement and
 // `move` too) and, at a later position of the same unit, a name that is not found (E0302) or defined twice (E0304). The restrictions
-// of a flow body and the names of the locals and the paths are errors of the names stage (§18.1: "本体の制限（E0806。代入の形を含む）"),
+// of a flow body and the names of the locals and the paths are errors of the names stage (§18.1: "本体の制限（E0806。代入の形を含み、`&&` / `||` の右辺の状態を持つものは下）"),
 // so the first by position is the one reported ("残った診断のうち … 最初のものを報告する"): the E0806, at the start of the form (at the
 // `let` for a `let` of a nested block), and not the name error, which may be inside the form itself (a closure with a name error in its
 // body, its parameter type or its effect row; an assignment with a name error on its right). One error per unit.

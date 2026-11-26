@@ -5,8 +5,7 @@
 
 // W7-05 U2/t, S-1157 (D'), S-1138 (§11.3, §11.6, §12.4): the hidden fields of the guarded parts. A part of `init` or `block` in a position of a condition whose conditions are all decided at `init` or `block` is a hoisted
 // part like the one that is not in a condition: its value is kept in a field `<修飾>._hoist_N`, numbered for each `let` (the output expression is `_out`) in the order in which the parts start in the text ("巻き上げの番号は `let` ごとに、
-// 部分式の始まりの字面の順に振る"), and so is the condition that is decided at `block` and read by `sample` (it is a part of `block` in a position that is not a condition: the condition of an `if`, the left side of `&&`). "条件が成り立たない段では
-// フィールドを書かず、そのフィールドは読まれない": the field of the guarded part is there all the same, in the state. A part in a position that a condition of `sample` chooses is not hoisted: it is evaluated where it is reached, so it has no
+// 部分式の始まりの字面の順に振る"), and so is the condition that is decided at `block` and read by `sample` (it is a part of `block` in a position that is not a condition: the condition of an `if`, the left side of `&&`). "高い段で使う、遅い段の部分式の値は、状態の隠れたフィールドに置く": the field of the guarded part is there all the same, in the state. A part in a position that a condition of `sample` chooses is not hoisted: it is evaluated where it is reached, so it has no
 // field (and the input of `block` that it reads is copied into the state, "自分のクロックより速いクロックから読まれる入力"). The hoisted fields of each flow (the golden keeps them with their sizes and offsets, which the implementation makes):
 //
 //   guard_block:         _out._hoist_0 (`n != 0`, Bool), _out._hoist_1 (`F32.round_from(100 / n)`, F32)

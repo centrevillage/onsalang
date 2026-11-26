@@ -3,7 +3,7 @@
 // spec = ["§2.6", "§11.5", "§18.1"]
 // fixes = 1
 
-// W7-06 U1/t, S-1172 (§11.5: "前の `let` に出す修正候補は … 式が腕の束縛を読むときと、`par~` の本体の中にあるときは、この候補を作らない
+// W7-06 U1/t, S-1172 (§11.5: "前の `let` に出す修正候補は … 式が腕の束縛を読むときと、`par~` の本体の中にあるときと、移すと囲む `if~`・`match~` の本体が状態を持たなくなる（E0812）ときは、この候補を作らない
 // （他の候補は残す）"): the thing with state in a branch reads a binding of the arm (the `let` before the `match` would be
 // before the binding), or is in the body of a `par~` (taken out of it, the replication count would change). The lift into a
 // `let` is not offered; the other candidate, the `~` after the `if` / `match`, stays, so each error has one candidate

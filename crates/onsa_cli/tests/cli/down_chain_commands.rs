@@ -97,7 +97,7 @@ fn of_a_stage_of_the_parent_and_a_part_under_a_down_chain_at_one_position_the_sl
     assert_eq!(stop_line("down_chain_panic_slower", &src), line_of(&src, "100 / d"), "the stage of sample / 8: {src}");
 }
 
-/// S-1233 (S-1206, S-1159; §11.3 "インスタンスの呼び出し … がその段に持つ仕事は、出力をその段で読むかによらず、呼び出しを書いた位置で行う"): at one stage (the part under `.down~(4)` runs at the stage
+/// S-1233 (S-1206, S-1159; §11.3 "インスタンスの呼び出し … がその段に持つ仕事 | 出力をその段で読むかによらず、呼び出しを書いた位置（式の評価の順の中の位置）"): at one stage (the part under `.down~(4)` runs at the stage
 /// `sample / 4` of the parent) the part runs where the call is written: after the `let`s above it (the call is in the output, `… at sample`) and before the ones below it (`let k = kid~(p).down~(4)` over the
 /// `let`s). Both divide by the 0 at the frame 4; the one reported is the first of them in the order of the text.
 #[test]

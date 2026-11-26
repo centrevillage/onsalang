@@ -4,8 +4,8 @@
 // spec = ["§11.11", "§11.10", "§11.9", "§11.4", "§11.3", "§11.5"]
 
 // Events under the modifiers, in the forms the other files of this family do not have (W7-17 U4/t3; S-562, S-1186, S-1209, S-1217, S-1229, S-1232 .. S-1236, S-1249, S-1250; spec §11.4: `sample_tick()` of a body is, from the outermost modifier in,
-// N times it plus the step under `.up~(N)` and cut by N under `.down~(N)`, the caller's under `when~`, and "`.up~(N)` の本体の、外から来たイベントの段では、何歩目かを 0 とする"; §11.11: "`.up~` の中では、その位置の最初の刻みの前"; "入力の
-// イベントごとの出力は出る"; "出したイベントの刻みは、作り手の呼び出しのその刻みの仕事（保存まで）が済んだ直後に"; §11.10: "イベントの条件は…その刻みで初期化する"; "`x.when~(c).reset_if~(r)` は…保持した出力も `T.default()` に戻る"; §11.3: a reset that
+// N times it plus the step under `.up~(N)` and cut by N under `.down~(N)`, the caller's under `when~`, and "`.up~(N)` の本体の、外から来たイベントの段では、何歩目かを 0 とする"; §11.11: "境界が渡したイベントは、`.up~` の中でも、その位置の最初の刻みの前に動く"; "入力の
+// イベントごとの出力も出る"; "出したイベントの刻みは、呼び出し側が作り手に行わせた刻み一つ（`.up~` を付けた作り手では走り一回）の仕事の全体（保存まで）が済んだ直後に"; §11.10: "イベントの条件は…その刻みで初期化する"; "`x.when~(c).reset_if~(r)` は…保持した出力も `T.default()` に戻る"; §11.3: a reset that
 // comes after the write of a delay and before its store takes effect after the store (S-1250); §11.5: "全ての枝を評価する"). The outermost flows have ports at `sample` (or `block`) and are run by `render` or `process`. Every value is worked out by hand
 // from the text. `gen(x)` gives the event x at each frame, `pulse(y)` gives y where y > 0, `fwd` gives back what it gets, `jv` gives `sample_tick()`, `jk(k)` gives k plus it, `acc` sums the events and `ord` appends them as digits (both read at `sample`),
 // `stamp` reads the time of its event stage (`t`) and of its stage of `sample`: 100 t + the time of the run, `nv` reads a `let` of an event at `sample`.

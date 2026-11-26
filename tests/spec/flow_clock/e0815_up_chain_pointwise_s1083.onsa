@@ -2,7 +2,7 @@
 // [test]
 // spec = ["§11.9", "§18.1"]
 
-// W7-09 U3b/t, S-1083, provisional reading (1) (spec §11.9: "呼び出し側で `sample * N` の値に点ごとの演算をする形（`ovs2~(x) * d`）は当面は誤り（flow に分けて `.up~(N)` で動かす。後で緩められる）"): an
+// W7-09 U3b/t, S-1083, provisional reading (1) (spec §11.9: "呼び出し側で `sample * N` の値に点ごとの演算をする形（`ovs2~(x) * d`）は当面は誤り（E0815）である"): an
 // operation on the value of `.up~(N)` on the call side is E0815 although the other operand is a value of the parameter kinds or of its own ratio (the ordinary rule of §11.3 would read the first with
 // the clock of the value and the second as its own). The open question is S-1083 (the code); drop this file if another is decided. The error is at the operation. One error per flow, so each form is a
 // flow of its own, and a `let` that reads the error has no mark. `x` is the `sample` input, `p` and `d` are `block` inputs.

@@ -4,7 +4,7 @@
 // spec = ["§11.5", "§3.5"]
 
 // W7-06 U1/t, S-1172 (§11.5: "前の `let` に出す修正候補は、条件の位置 … の中で最も外の状態を持つものの式を … 直前の新しい `let` に
-// 移し、元の位置をその名前に置き換える"; "条件の位置の中の式を前の `let` に出すと、その `let` の段で、枝が取られるかによらず評価する"):
+// 移し、元の位置をその名前に置き換える"; "本体の `let` の値と出力の式も、読まれるか、どこで読まれるかによらず、その段で評価する"):
 // the program that the lift into a `let` makes out of an E0811 (a thing with state in a branch, in the second condition of a chain) and of an E0806 (on the
 // right of `&&`), written out by hand with the names of the author. The value is the value of the branch that is taken, and the thing
 // with state advances on every sample, also on the samples where its branch is not taken (it is evaluated before the

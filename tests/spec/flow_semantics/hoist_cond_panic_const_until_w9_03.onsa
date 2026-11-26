@@ -4,7 +4,7 @@
 // spec = ["§11.3", "§9.2", "§6.6"]
 
 // W7-05 U2/t, S-888 (c') (spec §11.3): THE FORM UNTIL W9-03. The spec says that a constant-clock expression that panics is evaluated at compile time and its panic is E0419
-// ("定数のクロックの式は、`const` の初期化式と同じ評価器でコンパイル時に評価する。評価が panic すると E0419 である"), and that "条件が全て定数ならコンパイル時で（取られない枝は評価しない）、panic は E0419 である". This
+// ("定数のクロックの式…は、`const` の初期化式と同じ評価器でコンパイル時に評価する（§6.6）。評価が panic すると E0419 である"), and that "条件が全て定数なら取られない枝は評価しない". This
 // version does not evaluate a constant expression of a flow at compile time (W9-03 does, and gives the E0419): a `panic("…")` that is on a way with no condition, or with conditions that are all constants, is a
 // panic at run time, as `x + 10 / Z` of a `const` `Z` of 0 is today (hoist_values.onsa), and a constant condition that does not hold takes the branch that is not the panic. What is
 // written here is the run time form only: where the panic is and that it is one (the render panics), not at which stage (the stage of a constant expression is W9-03's). When W9-03 lands, `always` and `constant_on` are

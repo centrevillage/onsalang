@@ -2,7 +2,7 @@
 // [test]
 // spec = ["§11.3", "§11.5", "§11.11", "§18.1"]
 
-// W7-11 U2c/t, S-1197 (spec §11.3: "全体を速い段で読んでから取り出す `(m at sample).vel` は、`M` に `Default` が要り、`M.default().vel` で始まる"、"隠れたフィールドの型はその読み（連なりの全体）の型である…下の E0816 は読みの型で判定する"; §11.11: "最初のイベントの前は
+// W7-11 U2c/t, S-1197 (spec §11.3: "全体を速い段で読んでから取り出す `(m at sample).vel` は、`M` に `Default` が要り、`M.default().vel` で始まる"、"隠れたフィールドの型はその読み（連なりの全体）の型で…下の E0816 は読みの型で判定する"; §11.11: "最初のイベントの前は
 // `T.default()`（`T` が `Default` を満たさなければ E0816。`m.vel` のようにフィールドを取り出す読みの `T` は、その読みの型である、§11.3）"): the event value is read as a whole at a periodic clock (`(m at sample).vel`, a `match m` whose arm has a periodic operand, an `at` on the name), so the
 // field that keeps it is of the type of the whole, `M`, which has no `Default`, or the read of the element is of a type that has none (the element `Tag` of a tuple, a `let` of the field `m.tag`): E0816 at the line of the read. These are errors now and after S-1197
 // (the read of a field of a type that has no `Default` out of a struct that has one is in e0816_event_field_read_type_s1197.onsa). One error per flow (P-01). `M` and `Tag` have no `Default`; `x` and `g` are `sample` inputs.

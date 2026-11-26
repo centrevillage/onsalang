@@ -2,7 +2,7 @@
 // [test]
 // spec = ["§11.3", "§11.9", "§4.5", "§18.1"]
 
-// W7-16 U7d/t, S-1216 (spec §11.3: "N は … 値は 2 以上の 2 のべき乗" with the type `U32`; §11.9: "合成の比は `sample * N`・`sample / N`・`sample` のどれかに閉じる"; the decision: the N of a clock that is composed
+// W7-16 U7d/t, S-1216 (spec §11.3: "N は … 値は 2 以上の 2 のべき乗" with the type `U32`; §11.9: "連鎖は合成で読み、比は掛け合わさる"; the decision: the N of a clock that is composed
 // of the N of a port or a stage and those of the chain is `U32` too, 2^31 or less on the fast side and on the slow side, E0808 past it at the modifier that goes past, the note with the declared N and the
 // path; the product of the N of the modifiers (S-1089, 2^24) does not count the N of a port or a derived clock, so it is not this): a clock composed in a chain is `sample * N` or `sample / N` of the flow
 // that runs it, whatever the arguments are. The forms: (a) the window that an output at `sample * 2^20` under `.up~(4096)` and `.down~(4096)` gathers (2^32 in the middle of the chain), (b) the value of the chain

@@ -333,7 +333,7 @@ fn the_source_of_an_event_is_an_input_or_a_call() {
     assert!(EventSrc::OUTPUT.place(2).is_ok_and(|i| i > 1 << 24));
 }
 
-/// "イベントのクロックは全ての周期の刻みのクロックの下で、パラメータの種類の上にある";
+/// "順序は `定数 < init < block < イベントのクロック < sample / N < sample < sample * N`";
 /// a value of it read faster is stored, whichever the tick.
 #[test]
 fn the_stage_of_an_event_is_between_block_and_every_tick() {
@@ -446,7 +446,7 @@ fn a_join_with_events_is_the_one_of_the_letter_over_every_operands() {
 }
 
 /// "イベントの値は `block` と同じく暗黙に読め、使う所の周期の刻みのクロックの刻みで"; to an input at `init`,
-/// `block`, `sample * N` E0815; "イベントの段の式では、周期の刻みのクロックの値は読めず"; "別の入力のイベントの
+/// `block`, `sample * N` E0815; "イベントの段の式では、周期の刻みのクロックの値（入力を含む）は読めず"; "別の入力のイベントの
 /// クロックどうしは比べられない".
 #[test]
 fn an_event_is_read_at_itself_and_at_the_ticks_of_the_body() {
@@ -502,7 +502,7 @@ fn a_delay_and_a_loop_of_an_event() {
 }
 
 /// S-1196: the ticks that give out the events of an output are of the clock
-/// of its expression; "パラメータの種類だけなら本体の `sample` の刻みで".
+/// of its expression; "パラメータの種類だけ: 本体の sample の刻みごと".
 #[test]
 fn the_clock_that_gives_out_events() {
     for c in [tick(0), tick(-2), event(3), Clock::Error] {

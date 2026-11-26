@@ -36,7 +36,7 @@ test の名前の改行とタブは空白にする。
 | `render <flow> sr=<値> [cfg …] [params …] [frames=<数>] [in …]` | `F.render(..)`。`frames` は `sample` の入力の無い flow だけ |
 | `reset <n>` | `F.reset(inout st)` |
 | `out<経路>=[<フレームごとの値>]` | 直前の `process`・`render` の出力の葉ごと。経路は、スカラが空、`[k]` がチャンネル、`.f` が struct の出力のフィールド、`.f[k]` がそのチャンネル。葉は出力の型から決める（フレームが 0 でも `out.l=[]`・`out.r=[]`、チャンネルの配列は `out[0]=[]`・`out[1]=[]`）。`process` の行も struct の出力のフィールドの名前で書く |
-| `panic <段>` | test の最後の行。段は `init`、`start`（入力の長さの比べ）、`block`、`sample <n>`（その呼び出しでフレーム `n`）、`eval`（test の中の式の panic。範囲外の添字など。`xs.slice(from, to)` の `from > to` もここ、S-1148 の仮の扱い） |
+| `panic <段>` | test の最後の行。段は `init`、`start`（入力の長さの比べ）、`block`、`sample <n>`（その呼び出しでフレーム `n`）、`eval`（test の中の式の panic。範囲外の添字など。`xs.slice(from, to)` の端の逆転 `from > to` は、範囲外と別の誤りとして panic し、ここ、S-1148） |
 
 印（`TESTFAIL`・`PANIC`）の付いた test を評価して合うのは、どれかの呼び出し（か test の式）が panic し、その前の assert が全て成り立つときである。assert が偽で落ちるだけの印付きの test は合わない。印の付いていない test が panic するときも合わない。
 

@@ -3,7 +3,7 @@
 // spec = ["§11.3", "§11.4", "§11.9", "§18.1"]
 
 // W7-09 U3b/t, S-566, S-567, S-557, S-1077, S-1079, S-1139, S-1185 (spec §11.9, §11.3, §11.4): the clock of a chain of modifiers. The chain rate is the call position (the `sample` of the flow
-// that writes the call, not the clock of an argument) with every `.down~(N)` and `.up~(N)` applied (§11.9: "連鎖のレートの起点は最初の呼び出し…連鎖の全ての `.down~`・`.up~` を当てたレートを連鎖のレートと呼ぶ"),
+// that writes the call, not the clock of an argument) with every `.down~(N)` and `.up~(N)` applied (§11.9: "連鎖のレートの起点は最初の呼び出し…連鎖の全ての `.down~`・`.up~` を当てたレートを連鎖のレートと呼び"),
 // so `.down~(2).down~(2)` is `sample / 4` and `.down~(2).up~(2)` is `sample`. The arguments of the first call are read at the chain rate (§11.3: a value of the parameter kinds anywhere, a tick of
 // the same ratio, a slower tick that `at` promotes), and the value of the chain is the value of the output at the chain rate: `lp~(p).down~(4)` is a value of `sample / 4` of the caller, read at
 // `sample` or at a ratio between by `at`, and meets the values of its own ratio (§11.9: "`.down~(N)` の出力は呼び出し側の `sample / N` の値"). A call written in the argument of another chain

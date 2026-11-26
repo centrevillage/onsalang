@@ -21,8 +21,8 @@
 // leaves = ["126:16 E0302"]
 
 // W7-04 U2/t, R-472, S-267, R-286: the clock name after `at` in the body of a flow (`e at nope`) is looked up in the namespace of the clocks, and a
-// name that is not there is E0302 of the names stage, with the position on the name (§11.3: "クロックの名前空間に無い名前は、値や型に同じ名前があっても E0302
-// （名前の段。主の位置はその名前）"). It is one of the errors of the names stage of the unit, so the first by position is reported: before an error of the
+// name that is not there is E0302 of the names stage, with the position on the name (§11.3: "`at` の後ろの名前と底は、クロックの名前空間で引く（無い名前は、値や型に同じ名前があっても E0302。
+// 名前の段で、主の位置はその名前）"). It is one of the errors of the names stage of the unit, so the first by position is reported: before an error of the
 // names stage that comes after it (E0302 of another name, E0304, E0801, E0020 of a `^` on a visible name, E0806, E0811, E0812) it is the error of the
 // unit, and an error of the names stage that comes first is reported instead of it. An error of a later stage (E0401 type, E0805 effect, E0815 clock,
 // E0813 clock parameter in a delay) is not reported when the `at` has a clock that is not found, whatever the position (§18.1: "名前の誤りがある単位では型検査をせず

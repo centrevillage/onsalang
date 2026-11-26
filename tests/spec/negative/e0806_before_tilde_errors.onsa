@@ -4,7 +4,7 @@
 // fixes = 0
 
 // W4-12 U2, S-267, R-286: the restrictions of a flow body (E0806, §11.2) and the `~` of its calls (E0811,
-// E0812, §2.6) are errors of the same names stage (§18.1: "本体の制限（E0806。代入の形を含む）" and "呼び先が
+// E0812, §2.6) are errors of the same names stage (§18.1: "本体の制限（E0806。代入の形を含み、`&&` / `||` の右辺の状態を持つものは下）" and "呼び先が
 // flow かどうかで決まる `~` の有無"), so the first of them by position is the one a unit reports. Each flow
 // has a form a flow body cannot contain (`var`, `while`, `return`, `assert`, an expression statement, a
 // `let` in a nested block, an anonymous function, `move`, an `inout` or `move` argument of an instance or

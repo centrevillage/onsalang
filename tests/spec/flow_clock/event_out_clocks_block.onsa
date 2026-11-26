@@ -1,0 +1,50 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.11", "§11.3"]
+
+// The example of §11.11 on the clock of the event an output gives (X-29), worked out by hand: the event of the output `-> U32 at event` is given at the ticks of the clock of the output expression. `out_x` has an expression of `sample`: one event a frame;
+// `out_m` of the events of its input `m`: one event for each; `out_p` is of a parameter kind only: one event a frame of the body's `sample`; `out_p4` has `p at (sample / 4)`: one event at each tick of `sample / 4`, the frames 0, 4, 8.
+// `acc` sums the events, and `x` is 1 0 0 1 0 0 0 0 1: `out_x` and `out_m` (through `pulse`, an event where `x > 0`) give the running sum 1 1 1 2 2 2 2 2 3, `out_p` with `p = 1` counts the frames, 1 .. 9, and `out_p4` with `p = 1` counts the ticks, 1 1 1 1 2 2 2 2 3.
+//
+
+flow out_x(x: U32 at sample) -> U32 at event { Some(x) }                 // 刻みごと
+flow out_m(m: U32 at event) -> U32 at event { Some(m) }                  // m のイベントごと
+flow out_p(p: U32 at block) -> U32 at event { Some(p) }                  // パラメータの種類だけ: 本体の sample の刻みごと
+flow out_p4(p: U32 at block) -> U32 at event { Some(p at (sample / 4)) } // その刻みごと（4 刻みごと）
+
+flow gen(x: U32 at sample) -> U32 at event {
+  Some(x)
+}
+
+flow acc(e: U32 at event) -> U32 at sample {
+  let n = prev~(^n) + e
+  n
+}
+flow pulse(x: U32 at sample) -> U32 at event {
+  if x > 0 { Some(x) } else { None }
+}
+pub flow t_out_x(x: U32 at sample) -> U32 at sample { acc~(out_x~(x)) }
+pub flow t_out_m(x: U32 at sample) -> U32 at sample { acc~(out_m~(pulse~(x))) }
+pub flow t_out_p(p: U32 at block, x: U32 at sample) -> U32 at sample { acc~(out_p~(p)) + x * 0 }
+pub flow t_out_p4(p: U32 at block, x: U32 at sample) -> U32 at sample { acc~(out_p4~(p)) + x * 0 }
+
+test "out clocks" {
+  let xs: [U32; 9] = [1, 0, 0, 1, 0, 0, 0, 0, 1]
+  var a: [U32; 9] = [9; 9]
+  var b: [U32; 9] = [9; 9]
+  var c: [U32; 9] = [9; 9]
+  var d: [U32; 9] = [9; 9]
+  var sa = t_out_x.init(8.0)
+  var sb = t_out_m.init(8.0)
+  var sc = t_out_p.init(8.0)
+  var sd = t_out_p4.init(8.0)
+  t_out_x.process(inout sa, xs, inout a)
+  t_out_m.process(inout sb, xs, inout b)
+  t_out_p.process(inout sc, t_out_p.Params { p: 1 }, xs, inout c)
+  t_out_p4.process(inout sd, t_out_p4.Params { p: 1 }, xs, inout d)
+  assert a == [1, 1, 1, 2, 2, 2, 2, 2, 3]
+  assert b == [1, 1, 1, 2, 2, 2, 2, 2, 3]
+  assert c == [1, 2, 3, 4, 5, 6, 7, 8, 9]
+  assert d == [1, 1, 1, 1, 2, 2, 2, 2, 3]
+}

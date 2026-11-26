@@ -3,8 +3,8 @@
 // mode = "test"
 // spec = ["§11.3", "§11.4", "§11.9"]
 
-// W7-16 U5b1/t, S-1210, S-1127, S-565 (spec §11.3: "`sample_tick()` だけに刻みのクロックの `at` を付けた式（`(sample_tick() at (sample / 4)) at sample`）も同じで、その刻みの時間を保つ（`let t4 = sample_tick() at
-// (sample / 4)` と分けた形と同じ値）"; "値は `let` に分けても分けなくても同じである"; §11.4: `sample_tick()` は `reset` からの時間を `sample_rate()` の刻みの数で表した `U32` で、`sample / N` の段で読んでも
+// W7-16 U5b1/t, S-1210, S-1127, S-565 (spec §11.3: "`sample_tick()` だけに刻みのクロックの `at` を付けた式も同じで、その刻みの時間を保つ（`let` に
+// 分けた形と同じ値）"; "値は `let` に分けても分けなくても同じである"; §11.4: `sample_tick()` は `reset` からの時間を `sample_rate()` の刻みの数で表した `U32` で、`sample / N` の段で読んでも
 // フレームの数): the three ways to write the time of a tick of `sample / 4` and read it at `sample` are the same value: a `let` that holds `sample_tick() at (sample / 4)` and is read with `at sample`, the
 // expression written in the place of the read, and the computed part `((sample_tick() + 0) at (sample / 4)) at sample`. The value of the frame f is the frame count of the tick that f is in, so the frames 0 to 7
 // read 0 0 0 0 4 4 4 4 (not 0 1 2 3 4 5 6 7, which the current time at each frame would give). It holds where the host cuts the run, and after a `reset`. The N of 2 gives 0 0 2 2 4 4 6 6, and the

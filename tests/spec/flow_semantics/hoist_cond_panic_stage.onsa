@@ -3,8 +3,8 @@
 // mode = "test"
 // spec = ["§11.3", "§9.2", "§6.6"]
 
-// W7-05 U2/t, S-888 (c'), S-1157 (spec §11.3): "`panic("…")` を含む定数の式は、その位置を選ぶ条件が決まる段で評価する": "条件の位置の中の定数のクロックの式は、その位置を選ぶ条件が決まる段で、条件が成り立つときだけ
-// 評価する。... 条件が実行時の段で決まるなら、その段で条件が成り立つときに評価し、同じ panic が実行時に起きる。`panic(msg)` もこの規則に従い、起こらないはずの枝に書ける". A flow body may hold `panic("…")`
+// W7-05 U2/t, S-888 (c'), S-1157 (spec §11.3): "条件の位置の中の定数のクロックの式は、その位置を選ぶ条件が決まる段で、条件が成り立つときだけ評価する（条件が全て定数なら取られない枝は評価しない。
+// `panic(msg)` もこの規則に従い、起こらないはずの枝に書ける、§9.2）"; "panic は、評価する段が動けば起きる。0 フレームの呼び出しと止まっている部品（§11.10）でも panic しうり、`init` の段の式の panic は `init` で起きる". A flow body may hold `panic("…")`
 // (it was E0200). Under a condition of `block` it is evaluated at `block` where the condition holds, a call of 0 frames too; under a condition of `init`, at `init`; under a condition of `sample`, in the frame that
 // takes the branch. Where the condition does not hold nothing panics. `x` is the `sample` input, `n` of `block`, `a` of `init`. The conditions that are all constants (the compile time, E0419) are in
 // hoist_cond_panic_const_until_w9_03.onsa.

@@ -10,9 +10,9 @@ flow det(x: U32 at sample) -> U32 at event { if x != 0 { Some(x) } else { None }
 
 flow carets(x: U32 at sample, g: U32 at block) -> U32 at sample {
   let p = prev~(^d)                 // d は下の作り手のイベント
-  let a = prev~((p at sample) * ^k) // p は書いた位置の値: `let t = p at sample` と `prev~(t * ^k)` に分けた形と同じ
-  let b = prev~((p * ^k) at sample) // p * ^k の値は `sample` の段の終わりのもの
-  let c = prev~(x * (^k * 2))       // ^k * 2 は `block` の段の終わりに評価する: k の下の `let u = k * 2` と `prev~(x * ^u)` に分けた形と同じ
+  let a = prev~((p at sample) * ^k) // `let t = p at sample` と `prev~(t * ^k)` に分けた形と同じ
+  let b = prev~((p * ^k) at sample) // `sample` の段の終わりの `p * ^k`
+  let c = prev~(x * (^k * 2))       // `let u = k * 2` と `prev~(x * ^u)` に分けた形と同じ
   let k: U32 = g + 1
   let d: U32 = det~(x)
   a * 10000 + b * 100 + c

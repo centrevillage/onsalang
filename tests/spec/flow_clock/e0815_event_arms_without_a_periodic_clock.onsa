@@ -2,7 +2,7 @@
 // [test]
 // spec = ["§11.3", "§11.4", "§11.5", "§11.11", "§18.1"]
 
-// W7-11 U2c/t, S-1239 (spec §11.11: "`[det~(x, a), det~(x, b)]` と、`if~`・`match~` の腕に並べて、条件・対象・ガードにも腕にも周期の刻みのクロックの値が無い形（条件がパラメータの種類、イベントの値、`sample_tick()` だけの式）は E0815"; §11.3:
+// W7-11 U2c/t, S-1239 (spec §11.11: "別の呼び出しを配列の要素か `if~`・`match~` の腕に並べた形は、条件・対象・ガードか要素・腕のどれかが周期の刻みのクロックの値（`at` で付けたクロックを含む）なら、§11.3 のとおり周期のクロックの式で、…どれも違えば（条件がパラメータの種類、イベントの値、`sample_tick()` だけの式）E0815 である"; §11.3:
 // "`else if` より後ろの連なりは、一つの部分式として確かめる"; §11.11 "四つの所"): the arms are the events of two calls (each of a clock of its own), and nothing in the condition, the scrutinee or a guard is of a periodic clock, so the expression has no greatest
 // clock: E0815 at the expression. The condition is a parameter kind (`block`, `init`, a constant), `sample_tick()` alone (it is not a periodic value there, §11.11) or an event (of another input than the arms, which are other clocks of their own). The chain after
 // an `else if` is one sub-expression, so a periodic condition before it does not help (`if` and `if~`). The four places mix an event value with a periodic one (the first argument of a delay, the condition of `reset_if~`, the expression of an event output)

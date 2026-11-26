@@ -4,7 +4,7 @@
 // spec = ["§11.3", "§11.6", "§9.2"]
 
 // W7-05 U2/t, S-1157 (D'), S-1046, S-1080 (spec §11.3): where a condition on the way to a part is decided by `sample`, the part is not hoisted and is evaluated when the evaluation reaches
-// it ("条件のどれかがサンプルごとに決まるなら巻き上げず、評価が届いたときに評価する"; "サンプルごとに決まる条件の枝の中の式は、取られたときだけ panic する"). So a call of 0 frames and a frame that
+// it ("条件のどれかが `init`・`block` より後の段（イベント、`sample / N`、`sample`）で決まるなら巻き上げず、評価が届いたときに評価する"; "panic は、評価する段が動けば起きる"). So a call of 0 frames and a frame that
 // does not take the branch do not panic, and a frame that takes it does (at the frame, not at `block`). The same holds with a condition of `block` outside a condition of `sample`,
 // and with one inside it: the way to the part has a condition of `sample` on it. The forms at the end are the ones that are a part of `block` all the same, because the way to the part holds no
 // condition of `sample` (a condition of `sample` that is moved out; the left sides of a chain of `&&`; an `Option` of a Copy struct, which is Copy as a whole, §4.6): they panic at `block` before and after

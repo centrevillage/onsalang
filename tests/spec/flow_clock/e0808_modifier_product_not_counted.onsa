@@ -2,8 +2,8 @@
 // [test]
 // spec = ["§11.3", "§11.9", "§18.1"]
 
-// W7-16 U5b1/t, S-1089 (spec §11.9: "導くクロックと変換の flow の入出力の N は数えない"; §11.3: "N は修飾子の N と同じく … 値は 2 以上の 2 のべき乗（違えば E0808、§11.9）。修飾子の N の積の上限（§11.9）には
-// 数えない"): the product of the N of the modifiers on a path counts the `.down~` and `.up~` only. The N of the derived clock of an expression (`p at (sample / 2147483648)`, 2^31) and the N of the port of a
+// W7-16 U5b1/t, S-1089 (spec §11.9: "導くクロックと変換の flow の入出力の N は積に数えず"; §11.3: "N は修飾子の N と同じく … 値は 2 以上の 2 のべき乗（違えば E0808、§11.9）。修飾子の N の積の上限には
+// 数えず"): the product of the N of the modifiers on a path counts the `.down~` and `.up~` only. The N of the derived clock of an expression (`p at (sample / 2147483648)`, 2^31) and the N of the port of a
 // conversion flow (`x: F32 at (sample * 2147483648)`, `x: F32 at (sample * 65536)`) are not in it: a flow with these is accepted alone, and a caller that runs it with a chain that makes exactly 2^24 is
 // accepted too (with the 2^31 counted it would be past the limit). A frame flow `x: F32 at (sample * 65536)` run by `.down~(65536)` is 2^16 on the path, not 2^32, so a flow that runs it and is run
 // itself by `.down~(256)` is 2^24, and by `.down~(512)` is 2^25 and E0808 at that modifier. The value of the N is the rule of S-1077 apart from this (a power of two that is 2 or more): the

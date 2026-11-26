@@ -3,7 +3,7 @@
 // spec = ["§2.6", "§11.5", "§18.1"]
 // fixes = 0
 
-// W7-06 U3a/t, S-394 (a)+X1, S-1172 (§11.5: "ガードと `if` / `if~` の連鎖の二つ目からの条件の中の状態を持つものには、当てても誤りが残る `~` の候補を出さない"; "式が腕の束縛を
+// W7-06 U3a/t, S-394 (a)+X1, S-1172 (§11.5: "ガードと `if` / `if~` の連鎖の二つ目からの条件と `&&` / `||` の右辺の中の状態を持つものには、当てても誤りが残る `~` の候補を出さない"; "式が腕の束縛を
 // 読むときと、`par~` の本体の中にあるときは、この候補（前の `let` に出す）を作らない（他の候補は残す）"): the thing with state in the guard of a `match~` has no candidate of the
 // `~` (the `match~` is there already), and has none of the lift when it reads a binding of its arm (the `let` before the statement is before the binding), or when it
 // is in the body of a `par~` (taken out of it, the replication count would change). Such an E0811 has no candidate at all (`fixes = 0`; X1: the candidate is a must of the E0811

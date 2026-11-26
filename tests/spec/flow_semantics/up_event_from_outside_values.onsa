@@ -1,0 +1,85 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.11", "§11.4", "§11.9"]
+
+// An event that comes from outside into a part under `.up~(2)` (X-29), worked out by hand from the text of §11.11: "`.down~`・`.up~` の部品の中の `at event` の入力も、全ての位置のイベントで動く（境界が渡したイベントは、`.up~` の中でも、その位置の最初の刻みの前に動く）",
+// and of §11.4: "`.up~(N)` の本体の、外から来たイベントの段では、何歩目かを 0 とする。境界が渡したイベントの段は、その位置の最初の刻みの前に動く".
+// `r` counts the runs of its part and the event puts it back (`cnt~().reset_if~(e == e)`); `hi2` takes the second of the two values of a frame (`v[1]`), so the output is the count of the second run of the frame. The event `d` is made at the frame 2 (`q` = 0 0 1 0 0).
+//   `from_above`: the maker `d` is above the call, so the event comes to the part before the first run of the frame 2: the counts are 2 4 | 1 2 -> 2 | 4 | 6: output 2 4 2 4 6.
+//   `from_below`: the maker is below the call (the call reads `prev~(^d)`), so the event of the frame 2 comes after the two runs of the frame 2 (count 6) and the part is put back before the first run of the frame 3: 2 4 6 2 4.
+// `st` gives `sample_tick()` in its event stage and `acc` adds the events, so the value of the event stage shows. In the event stage of an event from outside the step in the `.up~(2)` is 0, so the value is the time of the position: 2 frames of the outer body
+// before the position 2, which are 4 `sample` ticks of the part (N = 2 times 2); it is 4 in both forms, for the event belongs to the position 2 whichever side the maker is. The output is the sum of the events seen so far: 0 0 4 4 4 above, and 0 0 0 4 4 below
+// (the event of the frame 2 comes after the runs of that frame, so the output of the frame 2 has not got it).
+
+flow cnt() -> U32 at sample {
+  let n = prev~(^n) + 1
+  n
+}
+
+flow pulse(x: U32 at sample) -> U32 at event {
+  if x > 0 { Some(x) } else { None }
+}
+
+flow r(e: U32 at event) -> U32 at sample {
+  cnt~().reset_if~(e == e)
+}
+
+flow hi2(v: U32 at (sample * 2)) -> U32 at sample {
+  v[1]
+}
+
+pub flow from_below(q: U32 at sample) -> U32 at sample {
+  let y = hi2~(r~(prev~(^d)).up~(2))
+  let d: U32 = pulse~(q)
+  y
+}
+
+pub flow from_above(q: U32 at sample) -> U32 at sample {
+  let d: U32 = pulse~(q)
+  hi2~(r~(d).up~(2))
+}
+
+flow acc(e: U32 at event) -> U32 at sample {
+  let n = prev~(^n) + e
+  n
+}
+
+flow st(e: U32 at event) -> U32 at event {
+  Some(sample_tick() + e * 0)
+}
+
+pub flow tick_below(q: U32 at sample) -> U32 at sample {
+  let y = acc~(st~(prev~(^d)).up~(2))
+  let d: U32 = pulse~(q)
+  y
+}
+
+pub flow tick_above(q: U32 at sample) -> U32 at sample {
+  let d: U32 = pulse~(q)
+  acc~(st~(d).up~(2))
+}
+
+test "an event from outside into a part under .up~(2) comes before the first run of its position" {
+  let qs: [U32; 5] = [0, 0, 1, 0, 0]
+  var a: [U32; 5] = [9; 5]
+  var b: [U32; 5] = [9; 5]
+  var sa = from_above.init(8.0)
+  var sb = from_below.init(8.0)
+  from_above.process(inout sa, qs, inout a)
+  from_below.process(inout sb, qs, inout b)
+  assert a == [2, 4, 2, 4, 6]
+  assert b == [2, 4, 6, 2, 4]
+}
+
+test "sample_tick() in the event stage of a part under .up~(2) is of the position, with the step 0" {
+  let qs: [U32; 5] = [0, 0, 1, 0, 0]
+  var a: [U32; 5] = [9; 5]
+  var b: [U32; 5] = [9; 5]
+  var sa = tick_above.init(8.0)
+  var sb = tick_below.init(8.0)
+  tick_above.process(inout sa, qs, inout a)
+  tick_below.process(inout sb, qs, inout b)
+  assert a == [0, 0, 4, 4, 4]
+  assert b == [0, 0, 0, 4, 4]
+}

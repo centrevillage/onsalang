@@ -1,0 +1,35 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.10", "§11.9", "§11.3"]
+
+// A value gathered by a `.down~(N)` and taken by a named flow with an input at `sample / N`, under a `reset_if~` (X-29), worked out by hand from the text of §11.10: the fields that a part writes at a tick and reads at a faster stage are of the part's state, so they go back
+// to `T.default()` at the reset: "刻みで書いて速い段が読むフィールド（…配る配列を含む）は `T.default()` に戻る。カウンタは進んだままなので、次のその刻みまで `T.default()` が読まれる", and the head and the condition of the chain are of the caller's ("その連鎖の頭の引数と
+// 修飾子の条件の式の値は、呼び出し側のものなので触れない"). `sum4` takes four values of a frame, `avg4` gathers 4 frames of `x` for it (`.down~(4)`, output at `sample / 4`: the sum of a window of 4, at the tick after the window); `ramp4` reads its input `v` (at `sample / 4`) at `sample`: v + 1000.
+// `x` = 1 1 1 1 2 2 2 2 3 3 3 3, so the sums of the windows are 4 8 12, and the ticks (the frames 0, 4, 8) read 0, 4, 8: the output is 1000 for the frames 0 .. 3, 1004 for 4 .. 7 and 1008 for 8 .. 11, with the value of the window before at each tick (the sum is of the window that ended). The `r` at the frame 6 puts the field `v`
+// of `ramp4` back to 0 (the field of a part that is read at `sample`), the counter goes on, and it stays 0 until the tick of the frame 8: 1000 at the frames 6 and 7, and the tick of the frame 8 reads 8 as before.
+
+flow sum4(x: U32 at (sample * 4)) -> U32 at sample {
+  x[0] + x[1] + x[2] + x[3]
+}
+
+flow avg4(x: U32 at sample) -> U32 at (sample / 4) {
+  sum4~(x).down~(4)
+}
+
+flow ramp4(v: U32 at (sample / 4)) -> U32 at sample {
+  (v at sample) + 1000
+}
+
+pub flow gathered_into_a_named_input(x: U32 at sample, r: Bool at sample) -> U32 at sample {
+  ramp4~(avg4~(x)).reset_if~(r)
+}
+
+test "a gathered value into an input at (sample / N), then reset_if~: the field of the part goes back to T.default() until the next tick" {
+  let xs: [U32; 12] = [1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3]
+  let rs: [Bool; 12] = [false, false, false, false, false, false, true, false, false, false, false, false]
+  var out: [U32; 12] = [9; 12]
+  var st = gathered_into_a_named_input.init(8.0)
+  gathered_into_a_named_input.process(inout st, gathered_into_a_named_input.In { x: xs, r: rs }, inout out)
+  assert out == [1000, 1000, 1000, 1000, 1004, 1004, 1000, 1000, 1008, 1008, 1008, 1008]
+}

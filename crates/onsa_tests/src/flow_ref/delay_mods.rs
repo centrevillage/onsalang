@@ -1,4 +1,4 @@
-//! A chain of `.when~(c)` and `.reset_if~(r)` on a built-in delay (§11.10: "受け手は flow の呼び出し（組込みの遅延を含む）"). The delay ticks at K, the clock of its first
+//! A chain of `.when~(c)` and `.reset_if~(r)` on a built-in delay (§11.10: "受け手は flow の呼び出し（組込みの遅延を含む。括弧で包んでもよい）"). The delay ticks at K, the clock of its first
 //! argument (§11.4), and takes no `.down~`/`.up~` (E0812), so the place P of each modifier is K and so is the W of a `when~` (§11.10, §11.9: "組込みの遅延は第 1 引数のクロック"). The chain
 //! is the expression, made at each tick of K (or by the stage of K that `hoist.rs` gives it), so a tick of it is one evaluation: the modifiers are taken from the outermost in. A
 //! `reset_if~` whose condition holds at its tick R (the clock of the condition, `at` included, or K for a value of the parameter kinds and `sample_tick()`) puts the values and the write
@@ -6,7 +6,7 @@
 //! reads. R is not faster than K (E0815): a slower one is on the grid of the part it wraps, which is the caller's outside every `when~` (§11.9: the tick of R comes first at its position,
 //! and the delay has no other work there) and, inside one, the frames the part ran ("`when~` の中の格子は動いた刻みで数える"; a run at K is 2^-K frames of `sample`). A `when~` whose condition
 //! does not hold stops the part: the delay neither reads nor stores, and the caller reads the last output it held, `T.default()` if it never ran, whatever `init` the delay has ("一度も動いていなければ
-//! `T.default()`"); "遅延の長さは動いた刻みで数える". The arguments of the delay are the caller's ("頭の引数…は呼び出し側のもので、止まっている間も評価する"): the `d` of a `vdelay~` is evaluated at each
+//! `T.default()`"); "受け手の本体の `sample` は動いた刻みを指し（…`prev~` と遅延の長さはそこから数え…）". The arguments of the delay are the caller's ("頭の引数…は呼び出し側のもので、止まっている間も評価する"): the `d` of a `vdelay~` is evaluated at each
 //! tick, and the value it stores in the second phase too, which stores it only where the delay ran. The conditions are read at each tick from the outermost in, a `reset_if~`'s outside
 //! every `when~` at its R alone, and one inside a `when~` whether it runs the part or not (S-1221, as the conditions of an instance, `Frame::read_conds`).
 

@@ -2,8 +2,8 @@
 // [test]
 // spec = ["§11.3", "§11.9", "§18.1"]
 
-// W7-09 U4a/t, W7-21 U1/t (the chain with `.up~` read at `sample`, and the chain `.down~(2).up~(2)`), S-578, S-1186 (1a), S-1203 (provisional reading (1)), S-1207, S-1214, S-1185 (spec §11.9: "配る型が `Default` を満たさなければ、集める入力の型と同じく、その呼び出しで E0816 である（§11.3 の刻みのフィールドと同じく、
-// `reset_if~` が付くかに依らない）"; §11.3: "刻みで書いて速い段で読むフィールド…の初めの値と…戻り先は `T.default()` である（`T` が `Default` を満たさなければ、速い段で読む式で E0816。速い段で読まない刻みの値には
+// W7-09 U4a/t, W7-21 U1/t (the chain with `.up~` read at `sample`, and the chain `.down~(2).up~(2)`), S-578, S-1186 (1a), S-1203 (provisional reading (1)), S-1207, S-1214, S-1185 (spec §11.9: "配る型が `Default` を満たさなければ、その呼び出しで E0816 である（
+// `reset_if~` が付くかに依らない）"; §11.3: "刻みで書いて速い段が読むフィールド…の初めの値と…戻り先は `T.default()` である（`T` が `Default` を満たさなければ、速い段で読む式で E0816。速い段で読まない刻みの値には
 // 要らない）"): a conversion flow that `.down~(N)` runs deals an output at `sample * N` out of an array that starts at `T.default()`, so the type of the output needs `Default`; the E0816 is at the call, with
 // its chain (the value that becomes a value of the caller's `sample`), S-1203 (1) (an open point: the other readings put it at the call of the flow only, or at the whole chain for both). `NoDef` is a struct with no
 // `Default` (and Copy, as the field `F32` is, as in e0816_tick_field_without_default.onsa). The gather is in e0816_conversion_flow_gather_char.onsa. A chain with `.up~` is read in blocks (S-1207, S-1214): the `.down~` of `.up~(4).down~(8)` wraps the part that `.up~(4)` made, whose output is at `sample * 4`, so it deals it, and the error is at the whole chain, as for a

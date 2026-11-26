@@ -3,7 +3,7 @@
 // spec = ["§11.3", "§11.11", "§18.1"]
 
 // W7-11 U1a/t, S-560 (spec §11.3: "型の中（型引数、配列とタプルの要素、関数型の引数と返り値）と、入出力でない宣言の型（struct のフィールド、enum の列挙子の要素、`type` の右辺、`const` の型）の後ろの `at` は、flow の中でも
-// 外でも構文の段の E0020"; §11.11: "`at event` は入出力の宣言にだけ書く"): the clock `event` written after a type inside a type (a type argument, an element of an array), or after the type of a field of a struct,
+// 外でも構文の段の E0020"; §11.3: "`event` は入出力の宣言にだけ書き、式の `e at event` は E0815 の範囲である"): the clock `event` written after a type inside a type (a type argument, an element of an array), or after the type of a field of a struct,
 // of an element of a variant, or the right side of a `type`, is E0020 in the stage of the syntax, as `at sample` is: the clock is written after the whole type of an input or an output of a flow and nowhere else. The error
 // is at the `at`. Each form is a unit of its own (§18.1). The candidates (a place for the clock, or the form without it) are not counted here.
 

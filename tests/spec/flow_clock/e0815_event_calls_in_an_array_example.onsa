@@ -1,0 +1,25 @@
+// onsa.toml
+// [test]
+// spec = ["§11.11", "§11.3", "§18.1"]
+
+// The example of §11.11 on the calls in an array (X-29), line by line (tools/check_spec_examples.py): the outputs of two calls have a clock each and they cannot be compared (the same as two inputs `a.x + b.y`, §11.3), so an array of them has no greatest clock,
+// and no element is a value of a periodic clock: E0815 at the array, one error for the flow. With an element of `sample` (`x`), or an `at sample` on a call, the array is an expression of `sample` and there is no error.
+
+flow det(x: U32 at sample) -> U32 at event { if x != 0 { Some(x) } else { None } }
+
+flow two_calls_in_an_array(x: U32 at sample, y: U32 at sample) -> [U32; 2] at sample {
+  [det~(x), det~(y)]   // E0815: 要素に周期の刻みの値が無い //~ E0815 @3
+}
+
+// ---- no error: an element of a periodic clock.
+flow a_sample_element(x: U32 at sample, y: U32 at sample) -> [U32; 3] at sample {
+  [det~(x), det~(y), x]
+}
+
+flow at_on_one_call(x: U32 at sample, y: U32 at sample) -> [U32; 2] at sample {
+  [det~(x) at sample, det~(y)]
+}
+
+flow at_on_each_call(x: U32 at sample, y: U32 at sample) -> [U32; 2] at sample {
+  [det~(x) at sample, det~(y) at sample]
+}

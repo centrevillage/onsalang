@@ -1,0 +1,21 @@
+# flow_ref 1 source=tests/spec/flow_semantics/field_reads_start_values.onsa tests=5 evaluated=5 unavailable=0 skipped=0 waiting=0
+@ m.vel is 0.0 before the first event, the default of F32 and not the vel of Note.default()
+init 0 field_reads_start_values.only_a sr=0x41000000
+process 0 frames=7 in v=[0x00000000 0x00000000 0x3e800000 0x00000000 0x3f400000 0x00000000 0x00000000]
+out=[0x00000000 0x00000000 0x3e800000 0x3e800000 0x3f400000 0x3f400000 0x3f400000]
+@ (m at sample).vel is 0.5 before the first event, the vel of Note.default()
+init 0 field_reads_start_values.only_b sr=0x41000000
+process 0 frames=7 in v=[0x00000000 0x00000000 0x3e800000 0x00000000 0x3f400000 0x00000000 0x00000000]
+out=[0x3f000000 0x3f000000 0x3e800000 0x3e800000 0x3f400000 0x3f400000 0x3f400000]
+@ the sum of the block of the spec is x times the two reads
+init 0 field_reads_start_values.sum_of_both sr=0x41000000
+process 0 frames=7 in v=[0x00000000 0x00000000 0x3e800000 0x00000000 0x3f400000 0x00000000 0x00000000] x=[0x3f800000 0x3f800000 0x3f800000 0x3f800000 0x3f800000 0x3f800000 0x3f800000]
+out=[0x3f000000 0x3f000000 0x3f000000 0x3f000000 0x3fc00000 0x3fc00000 0x3fc00000]
+@ after a reset_if~ m.vel is 0.0 until the next event
+init 0 field_reads_start_values.only_a_reset sr=0x41000000
+process 0 frames=7 in v=[0x00000000 0x3e800000 0x00000000 0x00000000 0x3f400000 0x00000000 0x00000000] r=[false false false true false false false]
+out=[0x00000000 0x3e800000 0x3e800000 0x00000000 0x3f400000 0x3f400000 0x3f400000]
+@ after a reset_if~ (m at sample).vel is 0.5 until the next event
+init 0 field_reads_start_values.only_b_reset sr=0x41000000
+process 0 frames=7 in v=[0x00000000 0x3e800000 0x00000000 0x00000000 0x3f400000 0x00000000 0x00000000] r=[false false false true false false false]
+out=[0x3f000000 0x3e800000 0x3e800000 0x3f000000 0x3f400000 0x3f400000 0x3f400000]

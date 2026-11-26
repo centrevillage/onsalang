@@ -5,7 +5,7 @@
 
 // A built-in delay that has a `.reset_if~(c4)` of a condition of `sample / 4`, as the first argument of another delay, as the argument of a flow, in a `par~`, as a `delay~` and a `vdelay~`, and with a `.when~` (W7-11 U2b/t2; S-1233,
 // S-1241, the regression guard of the values of `d439fac` when a delay of an argument is done where it is written). Worked out by hand from §11.4 and §11.10; `x` is 1 2 3 ... 16 and the frames are 0 .. 15.
-// - `c4` is true in the one tick of `sample / 4` where the counter `tk` of the grid reads 3, the tick of the frame 8 (the ticks are the frames 0, 4, 8, 12): "条件の刻みは、条件の式のクロックで決まり…`sample / N` の条件はその刻み" and "真の刻みは全て初期化する"
+// - `c4` is true in the one tick of `sample / 4` where the counter `tk` of the grid reads 3, the tick of the frame 8 (the ticks are the frames 0, 4, 8, 12): "条件の刻みは、条件の式のクロック（`at` で付けたクロックを含む、§11.3）で決まり、刻みのクロックならそのクロックの刻み" and "条件の刻みのうち、真の刻みは全て初期化する"
 //   (§11.10), so the reset is at the frame 8 only, not at the frames 9 .. 11 where `c4` is held true, and "その刻みに続く x の段の前に x の状態を初期値に戻す": the delay gives its `init` at the frame 8 (a delay of `prev~` gives `x[f - 1]` and `0` there,
 //   then gives `x[8] = 9` at the frame 9).
 // - A delay as the first argument of another one gives its output before it stores ("遅延の `e` の中の遅延は、保存の前の出力を読む", §11.4; "`reset_if~` はそこで初期化した後の値", §11.3), so the outer delay gives the inner one's value of the frame before

@@ -5,7 +5,7 @@
 
 // W7-06 U1/t, S-394 (X1), S-1172 (§2.6: "flow の検査の段の E0811 … は、作れる候補（`~` を足す形、状態を持つものを前の `let` に出す形、
 // §11.5）だけを示し、一つも作れなければ候補を出さない（ガードの状態を持つものが腕の束縛を読む `Some(v) if smooth~(v) > 0.5` など）";
-// §11.5: "前の `let` に出す … 式が腕の束縛を読むときと、`par~` の本体の中にあるときは、この候補を作らない"): the E0811 of the
+// §11.5: "前の `let` に出す … 式が腕の束縛を読むときと、`par~` の本体の中にあるときと、移すと囲む `if~`・`match~` の本体が状態を持たなくなる（E0812）ときは、この候補を作らない"): the E0811 of the
 // guard of a plain `match` and of the second condition of a plain `if` chain has no `~` candidate (the guard stays a
 // place that is not evaluated every sample, S-394), so when the lift into a `let` cannot be made either, the error
 // has no candidate at all. The lift cannot be made when the thing with state reads a binding of the arm (the `let`

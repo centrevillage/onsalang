@@ -1,0 +1,101 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.3", "§11.10", "§11.11"]
+
+// The example of §11.3 (X-29), worked out by hand from the text: a field read of an event value is a computed part of its own, and its hidden field is of the type of the whole read (`F32` for `m.vel`) and starts at the default of that type, so
+// `m.vel` is 0.0 before the first event whether or not `Note` has a different default (and `Note` needs no `Default` for it), while the whole read first, `(m at sample).vel`, is `Note.default().vel` = 0.5 until the first event.
+// After the first event both are the `vel` of the event. The same is the value after a `reset_if~`: "`reset_if~`（§11.10）の戻り先は `T.default()` である" (§11.3), 0.0 for `m.vel` and 0.5 for `(m at sample).vel`, until the next event.
+// `field_reads` is the block of the spec and its sum cannot tell the two apart, so `read_a` and `read_b` give each alone. `gen` gives an event `Note { vel: v }` at the frames where `v > 0.0`, and the event of a frame is read at that frame.
+
+struct Note {
+  vel: F32,
+}
+
+impl Default for Note {
+  rt fn default() -> Note {
+    Note { vel: 0.5 }
+  }
+}
+
+flow field_reads(m: Note at event, x: F32 at sample) -> F32 at sample {
+  let a = m.vel             // 最初のイベントの前は 0.0（読みの型 F32 の既定）
+  let b = (m at sample).vel // 最初のイベントの前は 0.5（Note.default() の vel）
+  x * (a + b)
+}
+
+flow read_a(m: Note at event) -> F32 at sample {
+  m.vel
+}
+
+flow read_b(m: Note at event) -> F32 at sample {
+  (m at sample).vel
+}
+
+flow gen(v: F32 at sample) -> Note at event {
+  if v > 0.0 { Some(Note { vel: v }) } else { None }
+}
+
+pub flow sum_of_both(v: F32 at sample, x: F32 at sample) -> F32 at sample {
+  field_reads~(gen~(v), x)
+}
+
+pub flow only_a(v: F32 at sample) -> F32 at sample {
+  read_a~(gen~(v))
+}
+
+pub flow only_b(v: F32 at sample) -> F32 at sample {
+  read_b~(gen~(v))
+}
+
+pub flow only_a_reset(v: F32 at sample, r: Bool at sample) -> F32 at sample {
+  read_a~(gen~(v)).reset_if~(r)
+}
+
+pub flow only_b_reset(v: F32 at sample, r: Bool at sample) -> F32 at sample {
+  read_b~(gen~(v)).reset_if~(r)
+}
+
+// The events are at the frames 2 (vel 0.25) and 4 (vel 0.75).
+const VS: [F32; 7] = [0.0, 0.0, 0.25, 0.0, 0.75, 0.0, 0.0]
+
+// The reset is at the frame 3, where there is no event: after the event of the frame 1 (0.25) and before the event of the frame 4 (0.75).
+const VR: [F32; 7] = [0.0, 0.25, 0.0, 0.0, 0.75, 0.0, 0.0]
+const RS: [Bool; 7] = [false, false, false, true, false, false, false]
+
+test "m.vel is 0.0 before the first event, the default of F32 and not the vel of Note.default()" {
+  var out: [F32; 7] = [9.0; 7]
+  var st = only_a.init(8.0)
+  only_a.process(inout st, VS, inout out)
+  assert out == [0.0, 0.0, 0.25, 0.25, 0.75, 0.75, 0.75]
+}
+
+test "(m at sample).vel is 0.5 before the first event, the vel of Note.default()" {
+  var out: [F32; 7] = [9.0; 7]
+  var st = only_b.init(8.0)
+  only_b.process(inout st, VS, inout out)
+  assert out == [0.5, 0.5, 0.25, 0.25, 0.75, 0.75, 0.75]
+}
+
+test "the sum of the block of the spec is x times the two reads" {
+  // x = 1 everywhere: 0.0 + 0.5 before the first event, then twice the vel.
+  let xs: [F32; 7] = [1.0; 7]
+  var out: [F32; 7] = [9.0; 7]
+  var st = sum_of_both.init(8.0)
+  sum_of_both.process(inout st, sum_of_both.In { v: VS, x: xs }, inout out)
+  assert out == [0.5, 0.5, 0.5, 0.5, 1.5, 1.5, 1.5]
+}
+
+test "after a reset_if~ m.vel is 0.0 until the next event" {
+  var out: [F32; 7] = [9.0; 7]
+  var st = only_a_reset.init(8.0)
+  only_a_reset.process(inout st, only_a_reset.In { v: VR, r: RS }, inout out)
+  assert out == [0.0, 0.25, 0.25, 0.0, 0.75, 0.75, 0.75]
+}
+
+test "after a reset_if~ (m at sample).vel is 0.5 until the next event" {
+  var out: [F32; 7] = [9.0; 7]
+  var st = only_b_reset.init(8.0)
+  only_b_reset.process(inout st, only_b_reset.In { v: VR, r: RS }, inout out)
+  assert out == [0.5, 0.25, 0.25, 0.5, 0.75, 0.75, 0.75]
+}

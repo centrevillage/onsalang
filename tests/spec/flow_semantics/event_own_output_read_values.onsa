@@ -4,7 +4,7 @@
 // spec = ["§11.3", "§11.4", "§11.10", "§11.11"]
 
 // The clock of a delay of the events of a call that is written where the value is read at `sample`, and the first value of an expression of an event (W7-17 U6b/t; S-1237; spec §11.4: "組込みの遅延はクロックに総称で、第 1 引数のクロックで刻み、出力もそのクロックの値である（…第 1 引数が
-// イベントの値なら一つ前のイベント）"; §11.3: "`at` は値も評価の段も変えず、状態も作らない"; §11.11: "イベントの値を `sample`・`sample / N` の入力へ渡すと最後の値で読む"、"最初のイベントの前は `T.default()`"; §11.3: "刻みで書いて速い段が読むフィールド（計算した部分式の隠れた
+// イベントの値なら一つ前のイベント）"; §11.3: "`at` は `e` の値も評価の段も変えず、状態も作らない"; §11.11: "イベントの値を `sample`・`sample / N` の入力へ渡すと最後の値で読む"、"最初のイベントの前は `T.default()`"; §11.3: "刻みで書いて速い段が読むフィールド（計算した部分式の隠れた
 // フィールド…）の初めの値は `T.default()`"): the delay stays at the clock of the events (it ticks at them, and nothing makes it tick at each frame) when its value is given to an input at `sample`, when it is in an expression with `at sample`, or in the
 // condition of a `when~`; and an expression of an event (`prev~(^a) == 0`, with no `at sample` in it) is evaluated at the events and has the default of its own type (here `false`) until the first one. The loops are the form of the
 // example `loops` of §11.11 (`g`, `d`): the call that gives out at each frame of the period reads the last event of its own output. Every value is worked out by hand from the text. The same parts are in event_own_output_ok_values.onsa.

@@ -4,7 +4,7 @@
 // spec = ["§11.3", "§11.11"]
 
 // The expressions of an event that stand in a position of a condition (W7-11 U3/t; S-1158, S-1197, S-563; spec §11.3: "条件の位置の中では、その位置を選ぶ条件が全て定数・`init`・その式と同じ刻みで決まるときだけ書け、その刻みで条件が成り立つときだけ
-// 評価する"; "条件が成り立たない段ではフィールドを書かず"; "名前と、そのフィールド・組の要素の連なりを取り出すだけの式は…書ける。フィールド・組の要素の読みは、条件によらず、守りを付けずに刻みごとに読む"; "値は `let` に分けても分けなくても同じ"，
+// 評価する"; "名前と、そのフィールド・組の要素の連なりを取り出すだけの式（括弧を通す）は…書ける。フィールド・組の要素の読みは、条件によらず、守りを付けずに刻みごとに読む"; "値は `let` に分けても分けなくても同じ"，
 // but a `let` is evaluated whether or not a branch is taken; §11.11: the first value of the field of an expression of an event is `T.default()` of the type of the expression). The events are those of `msgs` (below) over x = 2 3 4 .. 13:
 // off (kind 2, vel 0) at the frames 1 5 9, on (kind 1, vel x) at the frames 3 (5), 7 (9), 11 (13). The expression that has no operand of a periodic clock (`vel(m)`, `is_on(m)`, `vel(m) == 0`, `!is_on(m) || ..`) is an expression of the event whose
 // field is `T.default()` of its own type before the first event (0 for a `U32`, false for a `Bool`), and an expression with `at sample` over the name is computed at sample from the last value of the name (`Msg.default()`: vel 100). Every value is worked out by hand.

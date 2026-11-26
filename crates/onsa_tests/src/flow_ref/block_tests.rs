@@ -89,8 +89,7 @@ fn a_when_of_a_burst_under_an_up_holds_the_burst_of_its_last_run() {
 fn a_reset_between_two_ticks_of_a_boundary_that_deals_puts_the_array_back_before_the_caller_reads_it() {
     // Not a modifier in a block (a form of U2, which the evaluator had wrong): `cb` counts the true inputs, [n, 10 n] at each of the 4 runs of a tick of the `.down~(4)` (every 4 frames), which gathers c of the 4 frames
     // before. `h2~(r)` is r(p - 1) at the even position p: the resets at the frames 2 and 8. The tick 0 reads the defaults (0 0 0 0); the reset at 2 puts back the ring (c(0), c(1)), the count and the dealt array; the tick 4
-    // reads 0 0 1 1: 0, 0, 1 + 100, 2 + 200. At the frame 8 the tick (`sample / 4`, slower than R) deals first, and the reset at `sample / 2` puts the array back after it and before the caller reads it there (§11.10: "条件の刻みより
-    // 遅い刻みは…その位置で先に書いた後に戻す", the array is `T.default()` until the next tick): 0 for the frames 8 .. 11.
+    // reads 0 0 1 1: 0, 0, 1 + 100, 2 + 200. At the frame 8 the tick (`sample / 4`, slower than R) deals first, and the reset at `sample / 2` puts the array back after it and before the caller reads it there (§11.10: "刻みで書いて速い段が読むフィールド…は `T.default()` に戻る。カウンタは進んだままなので、次のその刻みまで `T.default()` が読まれる", the array is `T.default()` until the next tick): 0 for the frames 8 .. 11.
     let src = format!("{MORE}flow cb(b: Bool at sample) -> F32 at (sample * 2) {{
   let n = prev~(^n) + (if b {{ 1.0 }} else {{ 0.0 }})
   [n, n * 10.0]

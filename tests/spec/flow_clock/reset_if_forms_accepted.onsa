@@ -2,8 +2,8 @@
 // [test]
 // spec = ["§11.2", "§11.3", "§11.9", "§11.10", "§18.1"]
 
-// W7-10 U2b/t, S-559, S-1196, S-1209, S-1218 (spec §11.10: "条件の刻みは、条件の式のクロック（`at` で付けたクロックを含む）で決まり、パラメータの種類なら `when~` と同じ条件を読むクロック W の刻み、刻みのクロックならそのクロックの刻み
-// （`.reset_if~(c at (sample / 4))`（`c` は `block`）は `sample / 4` の刻み）"; "W より速い周期のクロックの条件は E0815"): the forms of a `.reset_if~(r)` that are read with no diagnostic. A condition at W, of the kind `block`, slower than W (a
+// W7-10 U2b/t, S-559, S-1196, S-1209, S-1218 (spec §11.10: "条件の刻みは、条件の式のクロック（`at` で付けたクロックを含む、§11.3）で決まり、刻みのクロックならそのクロックの刻み、パラメータの種類なら `when~` と同じ条件を読むクロック W の刻み
+// （W が `sample * N` なら、本体の `sample` の 1 刻みに 1 回で、その N 回の走りの最初の前、§11.4）である"; "W より速い周期のクロックの条件は E0815"): the forms of a `.reset_if~(r)` that are read with no diagnostic. A condition at W, of the kind `block`, slower than W (a
 // tick that is slower is a tick of its own, also when it is written with an `at`), a `.reset_if~` in a chain with a `.when~` in both orders, inside and outside a `.up~` and a `.down~`, in a conversion flow's ring (inside and outside the
 // boundary), in a `let`, in an argument, in an arm of `if~`, in a `par~`. Before W7-10 U2b these were the E0200 of the flow stage (negative/modifier_reset_ticks_past_u32_e0200.onsa); the values are in flow_semantics/reset_if_values.onsa and
 // reset_if_slow_values.onsa, the errors in reset_if_condition_e0815.onsa. `x`, `c` and `r` are `sample` inputs, `p` and `b` are `block` inputs, `l` is `sample / 4`, `m` is `sample / 8`.

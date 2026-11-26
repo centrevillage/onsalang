@@ -3,8 +3,8 @@
 // mode = "test"
 // spec = ["§11.3", "§11.4", "§11.5", "§11.9", "§9.2"]
 
-// W7-11 U2b/t, S-1233, S-1206, S-1159, S-1126, S-1128 (spec §11.3: "一つの段の中では、本体の `let` を上から、最後に出力の式を行う … インスタンスの呼び出しがその段に持つ仕事は、出力をその段で読むかによらず、
-// 呼び出しを書いた位置で行う。組込みの遅延の第 1 引数の中に書いたインスタンスの呼び出し（とその引数）も、書いた位置で行う"; "順が見えるのは、二つの式が panic するときの報告 … だけで、イベントの無い flow の値は
+// W7-11 U2b/t, S-1233, S-1206, S-1159, S-1126, S-1128 (spec §11.3: the table of the order in one stage: "本体の `let` と出力の式 | 上から、最後に出力の式"; "インスタンスの呼び出し（利用者の flow。修飾子の連鎖を含み、組込みの遅延の第 1 引数の中のものとその引数も）がその段に持つ仕事 | 出力をその段で読むかによらず、
+// 呼び出しを書いた位置（式の評価の順の中の位置）"; "順が見えるのは、二つの式が panic するときの報告 … だけで、イベントの無い flow の値は
 // 順によらない"): the values of a flow with no event do not depend on the order inside a stage, so these cases hold before and after the lowering of the stage is written in the order of the text. They are the
 // forms where a call is not at the top of a `let`: in the arm of a `match~` and in a `par~` inside the first argument of a delay, a call with an output at `sample / 4` there, children of the `init`
 // and `block` stages beside a hoisted part, and children that nothing reads (their state moves all the same, seen by the panic of the division that their delay makes). Every value is worked out by hand.

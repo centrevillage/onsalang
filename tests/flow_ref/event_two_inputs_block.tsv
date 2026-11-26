@@ -1,0 +1,8 @@
+# flow_ref 1 source=tests/spec/flow_semantics/event_two_inputs_block.onsa tests=1 evaluated=1 unavailable=0 skipped=0 waiting=0
+@ two inputs
+init 0 event_two_inputs_block.t_via_hit sr=0x41000000
+init 1 event_two_inputs_block.t_written sr=0x41000000
+process 0 frames=6 in x=[3 1 0 2 0 5]
+out=[0 0 0 0 0 0]
+process 1 frames=6 in x=[3 1 0 2 0 5]
+out=[3 1 1 2 2 5]

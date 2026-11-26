@@ -4,8 +4,8 @@
 // spec = ["§11.3", "§11.5"]
 
 // W7-06 U0/t, S-1177 (§11.5: "`par` は状態を持つものでないので、普通の `if` / `match` の枝とガード、`&&` / `||` の右辺に
-// も書け、取られたときだけ評価する"; §11.3: "サンプルごとに決まる条件の枝の中の式は、取られたときだけ panic する"と、
-// "`init`・`block` の段で決まる条件に守られた式は、条件が成り立たなければ panic しない"): a `par` without state in a
+// も書け、取られたときだけ評価する"; §11.3: "条件のどれかが `init`・`block` より後の段（イベント、`sample / N`、`sample`）で決まるなら巻き上げず、評価が届いたときに評価する"と、
+// "その位置を選ぶ条件…が全て `init`・`block` の段で決まるなら、式の段と条件の段のうち最も速い段で、条件が成り立つときだけ評価する"): a `par` without state in a
 // branch of a plain `if`, in an arm of a `match` on an enum, on the right of `&&` / `||`, and nested in another `par`.
 // The guard of a `match` is in par_in_a_match_guard.onsa (the value of a `match` with a guard is E0200 in the lowering
 // of this version, W8-06). The body reads the constant table at an index that is out of the table for the `block` value 3 (`TABLE[k + i]` with `i` = 1), so

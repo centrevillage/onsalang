@@ -1,6 +1,6 @@
 //! Where `onsa test` reports a panic of an expression that reads an event (W7-11 U3/t; spec §11.3, §11.10, §11.11; S-563, S-1158, S-1197, S-1239): an expression that has no operand of a periodic clock is computed at the events,
-//! and in a position that a condition selects (a branch of an `if`, the right side of `&&`) it is computed only at the events where the condition holds ("条件が成り立つときだけ評価する"; "`init`・`block` の段で決まる条件に守られた式は、
-//! 条件が成り立たなければ panic しない"; the same for a condition decided by the same event); a `let` computes it whether or not a branch is taken. A call with a modifier evaluates its arguments and its condition in the order of the
+//! and in a position that a condition selects (a branch of an `if`, the right side of `&&`) it is computed only at the events where the condition holds ("条件が成り立つときだけ評価する"; "その位置を選ぶ条件…が全て `init`・`block` の段で決まるなら、式の段と条件の段のうち最も速い段で、
+//! 条件が成り立つときだけ評価する"; the same for a condition decided by the same event); a `let` computes it whether or not a branch is taken. A call with a modifier evaluates its arguments and its condition in the order of the
 //! text, then the part (§11.3: "引数と修飾子の条件を字面の順に評価してから、初期化と部品の段を外の修飾子から行い").
 //!
 //! The events of `msgs` are one at each frame, with the kind x and the vel 0: the kind 1 is an on event whose vel is 0, so `100 / vel(m)` stops at an on event. A module is one flow `f` and one test `t` that renders it;
@@ -100,8 +100,7 @@ fn cases() -> Vec<(String, String, Option<String>)> {
     all
 }
 
-/// §11.3 "条件の位置の中の…式は…その位置を選ぶ条件が…その式と同じ刻みで決まるときだけ…その刻みで条件が成り立つときだけ評価する"; §11.3 "値は `let` に分けても分けなくても同じである…条件の位置の中の式を前の `let` に出すと、その `let` の段で、
-/// 枝が取られるかによらず評価する"; §11.10 "引数と修飾子の条件を字面の順に評価してから、…部品". One launch reads the 8 modules: a division in a branch chosen by an event stops the run at the event where the condition holds and not at the
+/// §11.3 "条件の位置の中の…式は…その位置を選ぶ条件が…その式と同じ刻みで決まるときだけ…その刻みで条件が成り立つときだけ評価する"; §11.3 "本体の `let` の値と出力の式も、読まれるか、どこで読まれるかによらず、その段で評価する"; §11.3 "値は `let` に分けても分けなくても同じである"; §11.10 "引数と修飾子の条件を字面の順に評価してから、…部品". One launch reads the 8 modules: a division in a branch chosen by an event stops the run at the event where the condition holds and not at the
 /// others (the same for the right side of `&&`); moved to a `let` it stops at the first event; the argument, the condition and the part of a `when~` stop in this order.
 #[test]
 fn the_panic_of_an_expression_that_reads_an_event_is_at_the_events_the_condition_holds_u3() {

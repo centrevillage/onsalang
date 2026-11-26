@@ -4,7 +4,7 @@
 // fixes = 0
 
 // W7-06 U2/t, S-394 (X1), S-1172 (§2.6: "flow の検査の段の E0811 … は、作れる候補 … だけを示し、一つも作れなければ候補を出さない"; §11.5: "前の `let` に
-// 出す … 式が腕の束縛を読むときと、`par~` の本体の中にあるときは、この候補を作らない"): the E0811 of a second or later condition of an `if~` chain
+// 出す … 式が腕の束縛を読むときと、`par~` の本体の中にあるときと、移すと囲む `if~`・`match~` の本体が状態を持たなくなる（E0812）ときは、この候補を作らない"): the E0811 of a second or later condition of an `if~` chain
 // has no `~` candidate (the `if~` is there, and the condition stays a place that is not evaluated every sample), so when the lift into a `let` cannot
 // be made (the thing with state is in the body of a `par~`), the error has no candidate at all. `fixes = 0` says that no error of this file has a
 // candidate. The error is still E0811 and is reported. One error per flow (P-01); the marker is on the line of the offending construct, and the spec

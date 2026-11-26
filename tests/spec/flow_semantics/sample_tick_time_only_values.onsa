@@ -3,10 +3,10 @@
 // mode = "test"
 // spec = ["§11.4", "§11.9", "§11.6", "§12.4"]
 
-// `sample_tick()` in a flow that has no stage of its own and in the flows around it (W7-16 U6a3/t, S-1217, S-1129 (1), S-1127; spec §11.4: "`reset` からの時間を、書いた場所の `sample_rate()` の刻みの数で表した `U32`。`init` と生成する
+// `sample_tick()` in a flow that has no stage of its own and in the flows around it (W7-16 U6a3/t, S-1217, S-1129 (1), S-1127; spec §11.4: "`reset` からの時間を、書いた場所の `sample_rate()` の刻みの数で表した `U32`…`init` と生成する
 // `reset` で 0 になり（その後の最初の刻みで読む値は 0 で、`sample_rate()` の刻みごとに 1 上がる。`sample / N` の段で読んでも同じ数）"). The time is the number of the ticks of the outermost flow since `init` or `reset` (T below, 0 at the
 // first frame), whatever the flows that read it are (a flow with no stage of its own that only reads the time, two of them in one caller, a flow with a stage whose child reads it at a slower tick) and wherever the calls of `process` are cut
-// (§13.4: "ホストのブロックの長さ" does not leak into the state). S-1217 (b): a flow that reads the time and has no stage of its own does not count it in its own `tick`; the number comes from the outermost flow's `process`, which advances it once
+// (§11.9: "ホストの区切りに依らない（§11.6）": the length of the host's block does not leak into the state). S-1217 (b): a flow that reads the time and has no stage of its own does not count it in its own `tick`; the number comes from the outermost flow's `process`, which advances it once
 // for each frame, so two of such flows in one caller read the same T and neither advances it twice. Every value is worked out by hand: `two` is T * 100 + T = 101 T, `time_and_slow` is T * 1000 plus the frame of the last tick of
 // `sample / 4` (T - T % 4, which `so` reads in its stage), `top` is that frame alone.
 

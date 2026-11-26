@@ -3,8 +3,7 @@
 // mode = "test"
 // spec = ["§11.11", "§11.3", "§11.4", "§11.9", "§11.2"]
 
-// The values of the event clock in a straight line (W7-11 U2/t; S-561, S-564, S-1234, S-1235, S-1240; spec §11.11: "出したイベントの刻みは、作り手の呼び出しのその刻みの仕事（保存まで）が済んだ直後に、呼び出し側の段の途中で行い、
-// 呼び出し側の段の残りはその後に続く"; "作り手より下に書いた式と受け手には、その位置の、出した段より後の自分の仕事の前に届く"; "`^名前` を通して作り手より上に書いた受け手もその時に刻むが、その段の上の仕事は済んでいるので、
+// The values of the event clock in a straight line (W7-11 U2/t; S-561, S-564, S-1234, S-1235, S-1240; spec §11.11: "出したイベントの刻みは、呼び出し側が作り手に行わせた刻み一つ（`.up~` を付けた作り手では走り一回）の仕事の全体（保存まで）が済んだ直後に、出た順に、呼び出し側の段の途中で行い、呼び出し側の段の残りはその後に続く"; "作り手より下に書いた式と受け手には、その位置の、出した段より後の自分の仕事の前に届く"; "`^名前` を通して作り手より上に書いた受け手もその時に刻むが、
 // 上の式が読むのは、その式を評価した時点までに出たイベントまでの値"; "同じ位置で速い段が出したイベントは、それより遅い周期の刻みには次の刻みで見える"; §11.3: 保存する値の残りが読むイベントの値は、書いた位置までの最後の値).
 // The outermost flows have ports at `sample` and are rendered. A producer gives its event from a `sample` expression (`gen`), from a `sample / 4` expression (`gen4`) or for each event of its input (`inc`, `odd`); a receiver
 // (`acc`) adds the values of its events and gives the sum at `sample`, so an output frame is the sum of the events up to that frame. Every value is worked out by hand from the text.

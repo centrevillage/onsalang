@@ -324,7 +324,7 @@ fn hold(row: &str, got: &Got, want: &[f32]) {
 #[test]
 fn the_input_ports_of_the_table_read_the_stream_the_way_the_model_does() {
     // The 50 rows (k, r) in {-2 .. 2}^2 with a stream that is exactly at the clock q = k + r, and with `p` of `block`, which a call of `process` changes (the cuts at the frames 5, 12 and 16 are inside the windows
-    // and the ticks of the rows, and the elements are read in the frame they are in, §11.3 "使う所のクロックで変換なしに読める").
+    // and the ticks of the rows, and the elements are read in the frame they are in, §11.3 "パラメータの種類の値は、使う所のクロック（`sample / N` とイベントのクロックを含む）で変換なしに読める").
     let mut jobs = Vec::new();
     for k in RANGE {
         for r in RANGE {
@@ -669,7 +669,7 @@ fn an_argument_that_is_a_call_with_an_output_at_a_tick_is_made_in_the_order_of_t
 #[test]
 fn a_call_at_sample_times_n_kept_in_a_let_or_in_parentheses_or_given_as_a_block_value_is_read_as_the_value_of_the_call()
 {
-    // §11.9 ("`sample * N` の値に点ごとの演算をする形は当面は誤り" is for the operators; a name and a parenthesis are not an operation): `let d = ramp4~(p)` and `sum4~(d)` is `sum4~(ramp4~(p))`, `ramp4` giving
+    // §11.9 ("呼び出し側で `sample * N` の値に点ごとの演算をするか関数の引数にする形（`ovs2~(x) * d`）は当面は誤り" is for the operators; a name and a parenthesis are not an operation): `let d = ramp4~(p)` and `sum4~(d)` is `sum4~(ramp4~(p))`, `ramp4` giving
     // `[c, c + 1, c + 2, c + 3]` for `c` = p (a `block` value is read where it is used) and `sum4` their sum 4 p + 6: p = 1, 2: 10 x 3, 14 x 3, also with the call in parentheses (`h08`).
     // `ramp4~(p).down~(2)` runs at the even c and its 4 elements are dealt to the two frames in order (`sum2` is x[0] + x[1], `w2` is 10 x[0] + x[1]): the frame 2 n reads [q, q + 1] and 2 n + 1 reads [q + 2, q + 3], q = p of
     // the frame 2 n: p = 1 for the first 4 frames, 2 for the next 4: sum2 is 2 q + 1 and 2 q + 5, 3 7 3 7 5 9 5 9; with `w2` (11 q + 1 and 11 q + 23) added, 13 q + 2 and 13 q + 28: 15 41 15 41 28 54 28 54.

@@ -20,7 +20,7 @@
 //! what the plan gives on the evaluator is compared with the interpreter by `twin::run`.
 //!
 //! A built-in delay is the head of a chain of its own (`dtwin`, W7-10 U3be/t; S-1209, S-1217, S-1220; §11.10 "受け手は flow の呼び出し
-//! （組込みの遅延を含む）"): `fa` has `prev~(xv).when~(c).reset_if~(r)` and `fb` the delay put in a flow of its own (`pv~(xv)...`,
+//! （組込みの遅延を含む。括弧で包んでもよい）"): `fa` has `prev~(xv).when~(c).reset_if~(r)` and `fb` the delay put in a flow of its own (`pv~(xv)...`,
 //! `Head::twin`) with the same modifiers, and they give the same outputs. The matrix (`delay_cases`) is every chain of one or two
 //! `when~` and `reset_if~` (both orders) with the conditions `c`, `cb` and `ci`, over `prev~`, `delay~` with an `init` and `vdelay~`;
 //! the mutant negates the first condition of `fb`. A delay takes no `.down~` or `.up~`, so no rate modifier is in these chains.

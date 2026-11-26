@@ -1,0 +1,41 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§18.1"]
+
+// `let c = design(freq) at block` (X-29), from the text of §11.3: "`let c = design(freq) at block` は「この値はブロックごと以下で計算する」という約束になる（`freq` が `sample` なら E0815）". The `at block` of a call of a function says
+// the value is computed at the block at the latest, so the arguments must be values of `block` or slower (a parameter of `block` or `init`; a `sample` argument is faster than `block`, which `at` cannot make slower: E0815, "遅ければ E0815").
+// How many times the call is computed does not show in the values (a flow has no effect), so there are no values here.
+
+rt fn design(f: F32) -> F32 {
+  f * 2.0
+}
+
+pub flow ok_block(x: F32 at sample, freq: F32 at block) -> F32 at sample {
+  let c = design(freq) at block
+  x * c
+}
+
+pub flow ok_init(x: F32 at sample, freq: F32 at init) -> F32 at sample {
+  let c = design(freq) at block
+  x * c
+}
+
+pub flow ok_constant(x: F32 at sample) -> F32 at sample {
+  let c = design(1.5) at block
+  x * c
+}
+
+pub flow bad_sample(x: F32 at sample, freq: F32 at sample) -> F32 at sample {
+  let c = design(freq) at block   //~ E0815
+  x * c
+}
+
+pub flow bad_sample_slower(x: F32 at sample, freq: F32 at (sample / 4)) -> F32 at sample {
+  let c = design(freq) at block   //~ E0815
+  x * c
+}
+
+pub flow bad_sample_in_an_expression(x: F32 at sample, freq: F32 at block) -> F32 at sample {
+  let c = design(freq + x) at block   //~ E0815
+  x * c
+}

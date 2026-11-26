@@ -1,0 +1,43 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.11", "§11.10"]
+
+// The example of §11.11 on where the receiver of the events of a call is written (X-29), worked out by hand: the events a call gives reach the receivers written below it before the work of their own, so a `reset_if~` that has the event `e1` of `fwd~(m)`
+// (the call is above the receiver) resets before the receiver sums (the same as `written` of event_two_inputs_block.onsa), and `acc~(fwd~(m))` is the call in the argument of the receiver, whose event comes first: the sum and then the reset (the same as `via_hit`).
+// For the events 3 1 0 2 0 5 (one at each frame): `below` is 3 1 1 2 2 5 and `in_argument` is 0 at each frame.
+
+flow fwd(m: U32 at event) -> U32 at event { Some(m) }
+
+flow acc(e: U32 at event) -> U32 at sample {
+  let n = prev~(^n) + e
+  n
+}
+
+flow below(m: U32 at event) -> U32 at sample {
+  let e1 = fwd~(m)
+  acc~(m).reset_if~(e1 != 0) // 戻してから足す（受け手は作り手の下）
+}
+
+flow in_argument(m: U32 at event) -> U32 at sample {
+  acc~(fwd~(m)).reset_if~(m != 0) // 足してから戻す（引数が先）
+}
+
+flow gen(x: U32 at sample) -> U32 at event {
+  Some(x)
+}
+
+pub flow t_below(x: U32 at sample) -> U32 at sample { below~(gen~(x)) }
+pub flow t_in_argument(x: U32 at sample) -> U32 at sample { in_argument~(gen~(x)) }
+
+test "below and above" {
+  let xs: [U32; 6] = [3, 1, 0, 2, 0, 5]
+  var c: [U32; 6] = [9; 6]
+  var d: [U32; 6] = [9; 6]
+  var sc = t_below.init(8.0)
+  var sd = t_in_argument.init(8.0)
+  t_below.process(inout sc, xs, inout c)
+  t_in_argument.process(inout sd, xs, inout d)
+  assert c == [3, 1, 1, 2, 2, 5]
+  assert d == [0, 0, 0, 0, 0, 0]
+}

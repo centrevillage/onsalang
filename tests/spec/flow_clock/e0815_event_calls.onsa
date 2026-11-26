@@ -2,8 +2,8 @@
 // [test]
 // spec = ["§11.3", "§11.5", "§11.11", "§18.1"]
 
-// W7-11 U1a/t, S-564, S-1096, S-1239 (spec §11.11: "呼び出しの出力のイベントのクロックは、呼び出しごとに別のクロックで、別の入力のクロックと同じく互いに比べられない（`[det~(x, a), det~(x, b)]` と、`if~`・`match~` の腕に並べて、条件・対象・ガードにも腕にも
-// 周期の刻みのクロックの値が無い形は E0815。…条件・対象・ガードが周期の刻みのクロックの値なら、§11.3 のとおり周期のクロックの式。`par~` の複製は §11.5）"; §11.5: "`e` のクロックが、`e` の中の呼び出しのイベントの出力のクロックのときは、複製ごとに別のクロックで最大が無いので E0815（複製が一つでも同じ）。イベントは複製の中で受け手に渡すか、
+// W7-11 U1a/t, S-564, S-1096, S-1239 (spec §11.11: "呼び出しの出力のイベントのクロックは、呼び出しごとに別のクロックで、別の入力のクロックと同じく互いに比べられない。別の呼び出しを配列の要素か `if~`・`match~` の腕に並べた形は、条件・対象・ガードか要素・腕のどれかが
+// 周期の刻みのクロックの値（`at` で付けたクロックを含む）なら、§11.3 のとおり周期のクロックの式で、…どれも違えば（条件がパラメータの種類、イベントの値、`sample_tick()` だけの式）E0815 である。`par~` の複製は §11.5"; §11.5: "`e` のクロックが、`e` の中の呼び出しのイベントの出力のクロックのときは、複製ごとに別のクロックで最大が無いので E0815（複製が一つでも同じ。§11.11）。イベントは複製の中で受け手に渡すか、
 // 複製の中で `at sample` を付ける（`par~` の外に付けた `at` では直らない）"): the event that a call of a flow gives out has a clock of its own, so two calls (an array, the arms of `if~`, a sum) have no greatest clock, and the copies of a
 // `par~` are as many calls (even one). A call is read where it is made, or given to an input of an event, or marked `at sample` inside the copy, and then there is no error. The error is at the expression that has no greatest clock. One
 // error per flow (§18.1). `x` is the `sample` input; `det` gives out an event when `x` is above its limit. The condition of the `if~` is a `block` value: with a `sample` condition (S-1239) the expression is a `sample` one and is accepted

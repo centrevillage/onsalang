@@ -368,7 +368,7 @@ flow small(x: I64 at sample) -> I64 at sample {
 
 #[test]
 fn a_match_arm_binding_read_by_a_block_or_init_argument_has_its_value_at_that_stage() {
-    // S-1131 (§11.5): "束縛を読む式は、そのクロックの段で評価する（`match~ k { n => lp~(x, (n as F64)) }` の `(n as F64)` は、`k` が `block` なら `process` の
+    // S-1131 (§11.5): "束縛を読む式は、他の式と同じく、その式の段（§11.3）で評価する（`match~ k { n => lp~(x, (n as F64)) }` の `(n as F64)` は、`k` が `block` なら `process` の
     // 呼び出しごとに一度、腕が取られるかによらず評価する）". The binding of the arm has the clock of its object, so the `block` argument `(n as F64)` of
     // `lp~` (k = 3, x = 2.0: 2.0 * 3.0 = 6.0) and the `init` arguments of `st~` and of `prev~` (k = 3: x + 3.0 = 5.0, and the delay starts from 3.0) read the part of
     // the object that the arm takes (here the whole of it), made at that stage and not in the arm. What the arm does not read is as before: `k` itself, a

@@ -1,0 +1,45 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.11", "§11.10"]
+
+// The example of §11.11 on the same events given to two inputs (X-29), worked out by hand: an instance that gets the same event twice ticks its inputs one at a time in the order of their declaration, as if the events had come in that order,
+// so `hit~(m, m)` is `acc~(m)` ticked by its first input `a`, then reset by the second `b != 0`, the sum and then the return ("足してから戻す"), and `written` is the reset first and then the sum ("戻してから足す"). For the events 3 1 0 2 0 5
+// (one at each frame, `gen`): `via_hit` is 0 at each frame (the sum is put back at each non-zero event, and a 0 adds nothing and does not reset), and `written` is 3 1 1 2 2 5 (the sum restarts at each non-zero event: 3, 1, 1 + 0, 2, 2 + 0, 5).
+//
+
+flow acc(e: U32 at event) -> U32 at sample {
+  let n = prev~(^n) + e
+  n
+}
+
+flow hit(a: U32 at event, b: U32 at event) -> U32 at sample {
+  acc~(a).reset_if~(b != 0)
+}
+
+pub flow via_hit(m: U32 at event) -> U32 at sample {
+  hit~(m, m) // 足してから戻す
+}
+
+pub flow written(m: U32 at event) -> U32 at sample {
+  acc~(m).reset_if~(m != 0) // 戻してから足す（§11.10）
+}
+
+flow gen(x: U32 at sample) -> U32 at event {
+  Some(x)
+}
+
+pub flow t_via_hit(x: U32 at sample) -> U32 at sample { via_hit~(gen~(x)) }
+pub flow t_written(x: U32 at sample) -> U32 at sample { written~(gen~(x)) }
+
+test "two inputs" {
+  let xs: [U32; 6] = [3, 1, 0, 2, 0, 5]
+  var a: [U32; 6] = [9; 6]
+  var b: [U32; 6] = [9; 6]
+  var sa = t_via_hit.init(8.0)
+  var sb = t_written.init(8.0)
+  t_via_hit.process(inout sa, xs, inout a)
+  t_written.process(inout sb, xs, inout b)
+  assert a == [0, 0, 0, 0, 0, 0]
+  assert b == [3, 1, 1, 2, 2, 5]
+}

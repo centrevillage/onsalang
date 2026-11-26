@@ -3,7 +3,7 @@
 // mode = "test"
 // spec = ["§11.3", "§11.5", "§11.9", "§11.10"]
 
-// W7-11 U2c/i, S-1197 (spec §11.3: "フィールド・組の要素の読みは、条件によらず、守りを付けずに刻みごとに読む"、"`x + m.vel` は `let v = m.vel` の `x + v` と同じ値"): a field or an element of a name of `sample / 4` in each kind of conditional position
+// W7-11 U2c/i, S-1197 (spec §11.3: "フィールド・組の要素の読みは、条件によらず、守りを付けずに刻みごとに読む"、"名前と、そのフィールド・組の要素の連なりを取り出すだけの式（括弧を通す）は、刻みで読んでも届いたときに読んでも同じ値"): a field or an element of a name of `sample / 4` in each kind of conditional position
 // (the branches of `if`, the later conditions of `if~`, the guards of `match~`, the right of `&&` and `||`, in a `par` in a branch, under a condition of constants, `init` and `block`, in the first argument of a delay with a `^name`, in an argument that a chain
 // gathers) gives the values of its twin, where a `let` before holds the read. Each is restarted at the frames 6 and 10 (`reset_if~`), where what is not read at the tick shows. The flow `_diff` sums the squares of the differences.
 

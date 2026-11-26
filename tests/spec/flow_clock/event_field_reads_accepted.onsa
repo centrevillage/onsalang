@@ -2,7 +2,7 @@
 // [test]
 // spec = ["§11.3", "§11.11"]
 
-// W7-11 U2c/t, S-1197 (spec §11.3: "`x + m.vel` は `let v = m.vel` の `x + v` と同じ値で、`M` に `Default` は要らない"; "全体を速い段で読んでから取り出す `(m at sample).vel` は…"): the field of an event value moved to a `let` before it is read at a periodic clock is a value of the type of the field, so the struct `M`
+// W7-11 U2c/t, S-1197 (spec §11.3: "`m.vel` は `M.default().vel` でなく `F32.default()` から始まり、`M` に `Default` は要らない"; "全体を速い段で読んでから取り出す `(m at sample).vel` は…"): the field of an event value moved to a `let` before it is read at a periodic clock is a value of the type of the field, so the struct `M`
 // that has no `Default` is read with no error, now and after S-1197 (the read in the sum without a `let` needs S-1197: event_field_reads_s1197.onsa). `check` reads the file with no diagnostic. `x` and `g` are `sample` inputs.
 
 pub struct M {

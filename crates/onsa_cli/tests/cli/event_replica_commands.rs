@@ -1,6 +1,6 @@
 //! Which of several panics `onsa test` reports when events tick inside the replicas of a `par~`, the arms of an `if~`, and the part of a `par` (W7-17 U6a/t; spec §11.5 "`par~` は複製ごとに本体をこの順でたどる" (§11.3),
-//! "出したイベントの刻みは、呼び出し側が作り手に行わせた刻み一つ（`.up~` を付けた作り手では走り一回）の仕事の全体（保存まで）が済んだ直後に、出た順に、呼び出し側の段の途中で行い"; "その刻みでは、呼び出し側の本体の、そのイベントのクロックの仕事を、上から式の順にたどり（§11.3。`par~` の中では、その複製の本体）"; §11.5 "`if~`・`match~` は全ての枝を評価する。…腕の中の状態を持つもの
-//! （イベントの段を含む）は、選びによらず動く"; §11.3 "段が刻みの計算した部分式は、より速い式の中でもその刻みで評価し"; S-1096, S-1233, S-1234): the order of the ticks is seen by the values only through a condition, but
+//! "出したイベントの刻みは、呼び出し側が作り手に行わせた刻み一つ（`.up~` を付けた作り手では走り一回）の仕事の全体（保存まで）が済んだ直後に、出た順に、呼び出し側の段の途中で行い"; "その刻みでは、呼び出し側の本体の、そのイベントのクロックの仕事を、上から式の順にたどり（§11.3。`par~` の中では、その複製の本体）"; §11.5 "`if~ c { a } else { b }` と `match~ x { ... }` は、全ての枝を評価してから一つを選ぶ。…全ての枝の状態を持つものが進み、
+//! 状態を持たない部分も全て評価される"; §11.3 "段が刻みの計算した部分式は、より速い式の中でもその刻みで評価し"; S-1096, S-1233, S-1234): the order of the ticks is seen by the values only through a condition, but
 //! the report of a panic says which came first. A case is a module with a flow `f` that has a division by 0 in each of two to three places that run at one position (the frame 0), and the line of the one that stops the run.
 //!
 //! - `replica_order`: the replicas are walked one by one, each with its maker and then the receiver of its event (depth first): the receiver of the replica 0 (C) comes before the maker of the replica 1 (M), and the whole
@@ -100,7 +100,7 @@ fn cases() -> Vec<(String, String, Option<String>)> {
     all
 }
 
-/// §11.3 "`par~` は複製ごとに本体をこの順でたどる"; §11.11 "出したイベントの刻みは、呼び出し側が作り手に行わせた刻み一つ（`.up~` を付けた作り手では走り一回）の仕事の全体（保存まで）が済んだ直後に、出た順に、呼び出し側の段の途中で行い"; "その刻みでは、呼び出し側の本体の、そのイベントのクロックの仕事を、上から式の順にたどり（§11.3。`par~` の中では、その複製の本体）"; §11.5 "全ての枝を評価する";
+/// §11.3 "`par~` は複製ごとに本体をこの順でたどる"; §11.11 "出したイベントの刻みは、呼び出し側が作り手に行わせた刻み一つ（`.up~` を付けた作り手では走り一回）の仕事の全体（保存まで）が済んだ直後に、出た順に、呼び出し側の段の途中で行い"; "その刻みでは、呼び出し側の本体の、そのイベントのクロックの仕事を、上から式の順にたどり（§11.3。`par~` の中では、その複製の本体）"; §11.5 "全ての枝を評価してから一つを選ぶ";
 /// §11.3 "刻みの計算した部分式は…その刻みで評価する". One launch reads the 10 modules of the three groups: each stops at the line of the first place that is not made safe, and the last of each group does not stop.
 #[test]
 fn the_panic_of_a_replica_an_arm_and_a_part_is_the_first_in_the_order_of_the_ticks_u6a() {

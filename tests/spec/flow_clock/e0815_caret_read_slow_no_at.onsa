@@ -1,0 +1,22 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§11.4", "§18.1"]
+
+// `let a = prev~(^b)` where `b` is of a slower clock (X-29), the pair of `tests/spec/flow_semantics/caret_read_at_slow_values.onsa` with no `at`: `a` is of the clock of `^b`, `sample / 4` (the clock of a delay is the clock of its first argument, §11.4),
+// and `x + a` has the operands `sample` and `sample / 4`: E0815 (§11.3, "周期の刻みのクロックの値を別の周期のクロックで使うには `at` を書く"), for an output of the other flow and for an input at `sample / 4`.
+
+flow ticks4() -> U32 at (sample / 4) {
+  sample_tick()
+}
+
+pub flow caret_read_slow_no_at(lf: U32 at (sample / 4), x: U32 at sample) -> U32 at sample {
+  let a = prev~(^b)
+  let b = lf
+  x + a   //~ E0815
+}
+
+pub flow caret_read_slow_call_no_at(x: U32 at sample) -> U32 at sample {
+  let a = prev~(^b)
+  let b = ticks4~()
+  x + a   //~ E0815
+}

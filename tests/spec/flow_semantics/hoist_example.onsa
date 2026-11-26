@@ -1,0 +1,22 @@
+// onsa.toml
+// [test]
+// mode = "check"
+// spec = ["§11.3"]
+
+use std.dsp.db_to_amp
+
+flow hoist(
+  x: F32 at sample, level: F32 at block, p: F32 at block, n: I32 at block, m: I32 at block,
+  d: I32 at block, gate: Bool at sample, cb: Bool at block,
+) -> F32 at sample {
+  let a = x * db_to_amp(level)                                                   // `db_to_amp(level)` は `process` の呼び出しごとに 1 回
+  let b = if n != 0 { x * F32.round_from(100 / n) } else { x }                   // `100 / n` は `n != 0` のときだけ、`process` の呼び出しごとに 1 回
+  let c = if (d != 0) at sample { x * F32.round_from(100 / (d - 1)) } else { x } // 条件が `sample` で決まるので、割り算は届いたときに計算する
+  let g = (d != 0) at sample
+  let e = if g { x * F32.round_from(100 / (d - 1)) } else { x } // `c` と同じ
+  let f = if gate { x * db_to_amp(level) } else { 0.0 }         // 取られたサンプルごとに評価する
+  let h = x + F32.round_from((n at sample) / m)                 // `(n at sample) / m` は `process` の呼び出しごとに 1 回
+  let q = ((p at (sample / 4)) * 2.0) at sample                 // 読む位置の `p` の 2 倍
+  let r = if (cb at (sample / 4)) { p } else { 0.0 }            // `sample / 4` の刻みで選び、次の刻みまで前の値
+  a + b + c + e + f + h + q + (r at sample)
+}

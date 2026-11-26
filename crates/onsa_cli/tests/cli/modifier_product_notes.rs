@@ -1,5 +1,5 @@
 //! The note of the E0808 of the product of the N of the modifiers (W7-16 U5b1/t; spec §11.9, §18.1; S-1089), which the case files in `tests/spec/flow_clock/` cannot pin (the runner of the
-//! cases does not compare notes): "超えると E0808 で、… 位置は超えた修飾子の名前（flow をまたいで超えるときは、包む側の flow の連鎖の修飾子）で、note に経路を示す（中の flow が単独で超えるときは、
+//! cases does not compare notes): "超えると E0808 で、… 位置は超えた修飾子の名前（flow をまたいで超えるときは、包む側の flow の連鎖の修飾子）で、note に経路（後の上限では宣言の N も）を示す（中の flow が単独で超えるときは、
 //! 中の flow にだけ出す）".
 //!
 //! The note shows the path from the body that is the outermost to the instance, so it names the modifiers on it (their N) and, when the path goes through other flows, the flows. The test checks

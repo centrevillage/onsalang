@@ -1,5 +1,5 @@
 //! Where `onsa test` stops, and where it does not, when an argument of a call or an expression that a delay stores reads an event that a call in a later argument or below gives (W7-11 U2/t2; spec §11.3 "保存する値の残りが
-//! 読むイベントの値 … その読みを書いた位置 … までの最後の値", "一つの段の中では、本体の `let` を上から、最後に出力の式を行う", "順が見えるのは、二つの式が panic するときの報告（この順で先のもの）", §11.4, §11.11
+//! 読むイベントの値 … その読みを書いた位置 … までの最後の値", "本体の `let` と出力の式 | 上から、最後に出力の式", "順が見えるのは、二つの式が panic するときの報告（この項の順で先のもの）と、呼び出しが出したイベントの刻みがいつ動くか（§11.11）だけで", §11.4, §11.11
 //! "出したイベントの刻みは、呼び出し側が作り手に行わせた刻み一つ（`.up~` を付けた作り手では走り一回）の仕事の全体（保存まで）が済んだ直後に、出た順に"; S-1240, S-1235, S-1234, S-1206): the values of `tests/spec/flow_semantics/event_saved_values.onsa` are seen here by a division by 0 that the value of an event decides. One launch of `onsa test`
 //! reads a package with a module for each case (`<name>.onsa`, a test `run` that renders `f`), so the group costs one run. Every case is worked out by hand from the spec, none from the output of the compiler.
 //!

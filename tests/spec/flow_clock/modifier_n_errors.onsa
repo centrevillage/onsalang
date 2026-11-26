@@ -6,7 +6,7 @@
 // the length of a delay line and the N of a derived clock (S-1077, S-969; flow_clock/derived_clock_ratio_n_errors.onsa): a value that
 // is not a power of two that is 2 or more is E0808 (`N = 1` and `N = 0` too), a literal of another type, a constant of another type
 // and a prefix `-` are E0401, a literal that `U32` does not hold is E0408, and a name that is not a constant (an input, a `let`, a
-// function) is E0417 (§11.9: "期待型でない値は E0401、定数式でないものは E0417、2 以上の 2 のべき乗（違えば E0808）"). The clock
+// function) is E0417 (§11.9: "N は §4.5 の大きさを表す位置の定数式（型は `U32`）で、値は 2 以上の 2 のべき乗（違えば E0808）"). The clock
 // of the call in error is an error, so what reads it reports nothing (§18.1). The N that needs arithmetic (`K * 2`) waits for W9-03
 // (modifier_n_const_expressions_w9_03.onsa). One error per flow, so each form is a flow of its own. In a chain, the N in error
 // after another modifier is the error of the chain: the E0200 of this version is of a form with no other error (W7-09 U3a).

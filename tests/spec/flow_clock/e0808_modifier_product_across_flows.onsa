@@ -2,8 +2,8 @@
 // [test]
 // spec = ["§11.9", "§18.1"]
 
-// W7-16 U5b1/t, S-1089 (spec §11.9: "一番外の本体からインスタンスまでの経路にある `.down~`・`.up~` の N を、向きによらず全て掛けた積は 2^24 以内である（flow をまたいで数える … ）。超えると E0808 で、
-// flow の検査の段で、どの flow もその本体を一番外として確かめる。位置は超えた修飾子の名前（flow をまたいで超えるときは、包む側の flow の連鎖の修飾子）で、note に経路を示す（中の flow が単独で超えるときは、
+// W7-16 U5b1/t, S-1089 (spec §11.9: "一番外の本体からインスタンスまでの経路にある `.down~`・`.up~` の N を、向きによらず全て掛けた積は 2^24 以内である（flow をまたいで数える … ）"; "超えると E0808 で、
+// flow の検査の段で、どの flow もその本体を一番外として確かめる。位置は超えた修飾子の名前（flow をまたいで超えるときは、包む側の flow の連鎖の修飾子）で、note に経路（後の上限では宣言の N も）を示す（中の flow が単独で超えるときは、
 // 中の flow にだけ出す）"): the product counts through the flows that call one another. A flow `mid` that runs `leaf~(p).down~(4096)` (2^12) is accepted alone, and a flow that runs `mid` with a chain of
 // 2^13 is 2^25 on the path from its body to `leaf`, so the error is at the modifier of the outer chain (the flow that contains the instance with the chain), not in `mid`. Two levels, three levels, the
 // arms of `if~`, `match~` and `par~` are the same, and exactly 2^24 on the path is accepted. A flow that is past the limit by itself has the error in itself only: the flows that call it report nothing

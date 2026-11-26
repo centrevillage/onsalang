@@ -1,0 +1,46 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.3", "§11.4"]
+
+// A loop (`^name`) with no operand of a periodic clock from outside (X-29), worked out by hand from the text of §11.3: "外から刻みのクロックが入らなければ、本体の `sample` である". The clock of a loop is decided by the operands that come in from outside it
+// (the arguments of a delay's `init` and the names read through `^` are not counted), and when none is of a periodic clock the loop is of the `sample` of the body. `l0` has a `prev~(^c, 5)`: the start is 5 and the loop gives the 5 again
+// at each frame, so `x + c` is x + 5; `l1` has the `block` value `g` in the loop (a parameter kind is no periodic clock): `c` = prev c + g = 2 4 6 for g = 2; `l2` has no operand but the start (5 5 5).
+// The loop of `l0`/`l2` is at `sample` also when it is the whole output.
+
+flow l0(x: U32 at sample) -> U32 at sample {
+  let c: U32 = prev~(^c, 5)
+  x + c
+}
+
+flow l1(g: U32 at block) -> U32 at sample {
+  let c: U32 = prev~(^c) + g
+  c
+}
+
+flow l2(g: U32 at block) -> U32 at sample {
+  let c: U32 = prev~(^c, 5)
+  c
+}
+
+test "a loop with no operand of a periodic clock from outside is of sample" {
+  let xs: [U32; 3] = [1, 2, 3]
+  var o: [U32; 3] = [0; 3]
+  var st = l0.init(8.0)
+  l0.process(inout st, xs, inout o)
+  assert o == [6, 7, 8]
+}
+
+test "a loop with a block value only is of sample: c = prev c + g" {
+  var o: [U32; 3] = [0; 3]
+  var st = l1.init(8.0)
+  l1.process(inout st, l1.Params { g: 2 }, inout o)
+  assert o == [2, 4, 6]
+}
+
+test "a loop with a start only is of sample and holds it" {
+  var o: [U32; 3] = [0; 3]
+  var st = l2.init(8.0)
+  l2.process(inout st, l2.Params { g: 1 }, inout o)
+  assert o == [5, 5, 5]
+}

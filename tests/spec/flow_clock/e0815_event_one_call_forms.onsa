@@ -1,0 +1,55 @@
+// onsa.toml
+// [test]
+// spec = ["§11.11", "§11.3", "§11.5", "§18.1"]
+
+// One call in an array or in the arms of `if~`/`match~` (X-29), from the text: the clock of the output of a call is its own, and two different calls have no order (§11.11), so the error needs more than one call. One call, with constants
+// or values of a parameter kind (which mix freely with an event value, §11.3), is an expression of the clock of that call; an element or an arm of `sample` (or an `at sample` on a call, or a condition of `sample`, whose arms are values of `sample`
+// by the last value) is an expression of `sample`; and the call and an event of an input are two clocks with no order, so the error. A condition `kb at (sample / 4)` makes the expression an expression of that clock, which the output `sample`
+// does not take without an `at`. `det` gives out an event when `x` is above `limit`. One error per flow (§18.1).
+
+pub flow det(x: F32 at sample, limit: F32 at block) -> F32 at event {
+  if x > limit { Some(x) } else { None }
+}
+
+// ---- no error: one call.
+pub flow one_call_block_cond(x: F32 at sample, a: F32 at block, kb: Bool at block) -> F32 at sample {
+  if~ kb { det~(x, a) } else { 0.0 }
+}
+
+pub flow one_call_block_arm(x: F32 at sample, a: F32 at block, kb: Bool at block) -> F32 at sample {
+  if~ kb { det~(x, a) } else { a }
+}
+
+pub flow one_call_in_array(x: F32 at sample) -> [F32; 2] at sample {
+  [det~(x, 0.2), 1.0]
+}
+
+pub flow one_at_in_array(x: F32 at sample) -> [F32; 2] at sample {
+  [det~(x, 0.2) at sample, det~(x, 0.7)]
+}
+
+pub flow one_at_in_arm(x: F32 at sample, a: F32 at block, b: F32 at block, kb: Bool at block) -> F32 at sample {
+  if~ kb { det~(x, a) at sample } else { det~(x, b) }
+}
+
+// ---- no error: the condition, the guard or an arm is of `sample`.
+pub flow sample_condition(x: F32 at sample, a: F32 at block, b: F32 at block, kb: Bool at block) -> F32 at sample {
+  if~ (kb at sample) { det~(x, a) } else { det~(x, b) }
+}
+
+pub flow sample_guard(x: F32 at sample, a: F32 at block, b: F32 at block, k: U32 at block, c: Bool at sample) -> F32 at sample {
+  match~ k { 0 if c => det~(x, a), _ => det~(x, b) }
+}
+
+pub flow sample_arm(x: F32 at sample, a: F32 at block, b: F32 at block, k: U32 at block) -> F32 at sample {
+  match~ k { 0 => det~(x, a), 1 => det~(x, b), _ => x }
+}
+
+// ---- the error: the call and the event of an input, and a condition of `sample / 4` for an output of `sample`.
+pub flow call_and_input_event(x: F32 at sample, m: F32 at event) -> [F32; 2] at sample {
+  [det~(x, 0.2), m]   //~ E0815
+}
+
+pub flow slow_condition(x: F32 at sample, a: F32 at block, b: F32 at block, kb: Bool at block) -> F32 at sample {
+  if~ (kb at (sample / 4)) { det~(x, a) } else { det~(x, b) }   //~ E0815
+}

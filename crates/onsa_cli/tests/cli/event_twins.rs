@@ -17,7 +17,7 @@
 //! - a source ticks at the frames where its producer gives `Some(v)`, in the order the producers are written in (§11.11: the tick of an event is right after the work of its producer in the stage of the caller, and the
 //!   events of the same frame come in the order the producers come);
 //! - a tick of a source goes down the lets from the top: a producer of it takes `v`, a reader of it gives its stored value and stores the value of its argument (the value of the tick, §11.3: what a delay stores is
-//!   what is written at its place), and a delay of an event whose condition is of this source (§11.10: "イベントの条件は、そのイベントの刻みで初期化する") is put back to its init if the condition holds, in the order the
+//!   what is written at its place), and a delay of an event whose condition is of this source (§11.10: "イベントの条件は、外の `when~` が止めている間もその刻みで初期化する") is put back to its init if the condition holds, in the order the
 //!   conditions are written, and a delay whose own source this is gives what it holds as its output and stores the value of its argument: the delay that is below the producer of its condition is reset after the
 //!   stage of its own, or before it where the condition is of its own source, and a constant is read at the tick of the source of its delay (§11.10: the clock W of an event is the clock of the first argument).
 //!
@@ -621,7 +621,7 @@ fn model_module(seed: u64) -> (String, usize) {
     (format!("{}{flows}{tests}", head(&xs, "")), PER_SEED)
 }
 
-/// §11.10 "イベントの条件は、そのイベントの刻みで初期化する", §11.11 (the order of the ticks), §11.3 (a delay stores what is written at its place), S-1250: the values of the delays of an event that resets are those of the model.
+/// §11.10 "イベントの条件は、外の `when~` が止めている間もその刻みで初期化する", §11.11 (the order of the ticks), §11.3 (a delay stores what is written at its place), S-1250: the values of the delays of an event that resets are those of the model.
 #[test]
 fn the_delays_of_an_event_reset_by_events_give_the_values_of_the_model_u3() {
     let mut wrong = Vec::new();

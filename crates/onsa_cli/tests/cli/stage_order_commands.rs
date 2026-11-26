@@ -1,4 +1,4 @@
-//! Which of two panics at one position `onsa test` reports, inside one stage of one flow (W7-11 U2b/t; spec §11.3 "一つの段の中では", §3.5 "panic しうる式が複数あるときは", §11.4, §11.5, §11.9, §11.10;
+//! Which of two panics at one position `onsa test` reports, inside one stage of one flow (W7-11 U2b/t; spec §11.3 "一つの段（…）の中の評価は、次の位置で行う", §3.5 "panic しうる式が複数あるときは", §11.4, §11.5, §11.9, §11.10;
 //! S-1233, S-1206, S-1159, S-1126, S-1154, S-1128, S-1241, S-1242, S-1221 (the second half)): the order of the work of a stage is seen by this report only (and by the ticks of an event, §11.11), so a case is a
 //! flow with two divisions by 0 at one position and the line of the one that stops the run (`failure.span`, the line only).
 //!
@@ -107,7 +107,7 @@ fn stage_cases(tags: &[&str], shapes: &[&str]) -> Vec<Case> {
     tags.iter().flat_map(|t| shapes.iter().map(move |s| stage_case(t, s))).collect()
 }
 
-/// §11.3 "一つの段の中では": the `let`s and the output expression go from above and from the left, and a call does its work where it is written (S-1233, S-1206, S-1159, S-1128). In the `sample` stage this
+/// §11.3 "一つの段（…）の中の評価は、次の位置で行う": the `let`s and the output expression go from above and from the left, and a call does its work where it is written (S-1233, S-1206, S-1159, S-1128). In the `sample` stage this
 /// was so before in every shape; in the other three stages the shapes where the parent's division is written first (the call below the `let`, on the right in the output expression) were too.
 #[test]
 fn the_forms_that_stop_in_the_order_of_the_text_did_not_change_with_s1233() {
@@ -211,7 +211,7 @@ fn what_a_delay_stores_is_evaluated_after_the_lets_and_in_the_order_the_delays_a
     assert_first_stops("stage_order_delay_stores", &cases);
 }
 
-/// §11.3 "組込みの遅延の第 1 引数の中に書いたインスタンスの呼び出し（とその引数）も、書いた位置で行う" (S-1126, S-1241, S-1242, S-1233; table: "遅延の第 1 引数の中の呼び出し … 親の `let` → 呼び出し", "`prev~(x, 100 / c)` … 下の
+/// §11.3 "インスタンスの呼び出し（利用者の flow。修飾子の連鎖を含み、組込みの遅延の第 1 引数の中のものとその引数も）がその段に持つ仕事 | …呼び出しを書いた位置（式の評価の順の中の位置）" (S-1126, S-1241, S-1242, S-1233; table: "遅延の第 1 引数の中の呼び出し … 親の `let` → 呼び出し", "`prev~(x, 100 / c)` … 下の
 /// `let` → 遅延の `init` の引数"): a call in the first argument of a delay, at any depth, is run where the delay is written, before the `let` below it (also with a condition after it); so is the condition of a modifier
 /// of a delay in that argument; and the `init` argument of a delay is of the `init` stage where the delay is written, before a `let` of `init` below it. The stores came after the `let`s before.
 #[test]

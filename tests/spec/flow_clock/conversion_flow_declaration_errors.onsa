@@ -3,7 +3,7 @@
 // spec = ["§4.5", "§11.3", "§11.9", "§18.1"]
 
 // W7-09 U4a/t, S-1078, S-1077, S-566 (spec §11.3: "N は修飾子の N と同じく、§4.5 の大きさを表す位置の定数式（型は `U32`）で、値は 2 以上の 2 のべき乗（違えば E0808、§11.9）"; "`sample` でない底（`block`・`init`・
-// `event`）は、入出力の宣言では E0810、式では E0815 である"; "クロックの名前空間に無い名前は、値や型に同じ名前があっても E0302"; §18.1: a part that could not be read is an error that nothing reads): the derived clock of
+// `event`）は、入出力の宣言では E0810、式では E0815 である"; "`at` の後ろの名前と底は、クロックの名前空間で引く（無い名前は、値や型に同じ名前があっても E0302"; §18.1: a part that could not be read is an error that nothing reads): the derived clock of
 // a declaration. The N of an input or an output is E0808 when it is not a power of two that is 2 or more (3, 1, 0), E0401 when its type is not `U32` (a prefix `-`, a literal or a constant of another type), E0408
 // when `U32` does not hold the literal, and E0417 when it is no constant expression (the name of a function). A base that is not `sample` is E0810, and E0302 when the clocks have no such name. The error is at the
 // declaration (the line of the signature). A flow whose declaration is in error has a clock that is an error, so the flow that calls it reports nothing more (no E0815 of an argument or of a result): the last

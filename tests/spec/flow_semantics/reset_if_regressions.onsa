@@ -4,9 +4,9 @@
 // spec = ["§11.10", "§11.9", "§11.4"]
 
 // W7-10 U2b, the break side's high 1 and high 2 and the parent's variant of high 2 (S-1209, S-1218), as S-1228 (P) has them: a `.reset_if~` goes back before the work of its tick and of the stages that
-// follow it, and a `.when~` that is to its left moves the stage of the part that is slower than the `when~`'s W to W's stage (§11.9: "W より遅い中の刻みは、その W の段の中で先に動く"), so that the reset is before it.
+// follow it, and a `.when~` that is to its left moves the stage of the part that is slower than the `when~`'s W to W's stage (§11.9: "`when~` で止まる部品では、W より遅い中の刻みも、その W の段の中で先に動く"), so that the reset is before it.
 // §11.10 (the sentence of S-1228): "その `when~` の外（右）の `reset_if~` はその前に戻し、中の遅い刻みが動く位置では戻した後に書く". A part with no `when~` writes its slower stage first and the reset takes it back
-// ("条件の刻みより遅い刻みは、格子の上の位置でも、その位置で先に書いた後に戻す"), so `x.reset_if~(r)` and `x.when~(true).reset_if~(r)` differ where the reset is at a tick of that stage; `when~(true)` is no exception (S-1228).
+// ("刻みで書いて速い段が読むフィールド…は `T.default()` に戻る。カウンタは進んだままなので、次のその刻みまで `T.default()` が読まれる"), so `x.reset_if~(r)` and `x.when~(true).reset_if~(r)` differ where the reset is at a tick of that stage; `when~(true)` is no exception (S-1228).
 // The values are worked out here from the text. `slot` writes the field `s` at `sample / 2` (1 2 3 4 at the frames 0 2 4 6) and `n` counts the frames: 100 s + n.
 
 flow acc(f: F32 at block) -> F32 at sample {

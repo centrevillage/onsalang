@@ -358,7 +358,7 @@ impl<'a> Frame<'a> {
     }
 
     /// Before a work of the part `b` at its stage `s` (the stage of a head, the rings it reads and writes, the output a `when~` holds), each `reset_if~` outside it that is due and whose tick is not faster than the stage
-    /// of its caller the work is in puts its part back (§11.10: "その刻みに続く x の段の前に"; S-1228 (P)): the work of a slower stage writes first ("条件の刻みより遅い刻みは、…その位置で先に書いた後に戻す"). That stage is
+    /// of its caller the work is in puts its part back (§11.10: "その刻みに続く x の段の前に"; S-1228 (P)): the work of a slower stage writes first ("刻みで書いて速い段が読むフィールド…は `T.default()` に戻る。カウンタは進んだままなので、次のその刻みまで `T.default()` が読まれる"). That stage is
     /// `s` moved out of the parts between as their stages are (`Level::outer`): out of a boundary by `caller_stage`, and to W by a `when~`, which runs the work of the slower ticks inside in its W (§11.9,
     /// `rate::when_level`), so a `reset_if~` outside it puts the part back before that work, and one inside it after.
     pub(super) fn cut(&mut self, key: &NodeKey, levels: &[Level], b: usize, s: i32, at: Span) -> Result<(), Stop> {

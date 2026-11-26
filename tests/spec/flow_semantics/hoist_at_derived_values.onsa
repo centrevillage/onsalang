@@ -3,8 +3,8 @@
 // mode = "test"
 // spec = ["§11.3", "§11.6", "§11.9"]
 
-// W7-09 U2s/t, S-1196, S-1161 (spec §11.3): "`(p at (sample / 4)) * 2.0` と `let m = p at (sample / 4)`（`p` は `block`）は `block` の段で評価し、刻みで書くフィールドを作らず、下の刻みのクロックの式の規則は当たらない
-// （`((p at (sample / 4)) * 2.0) at sample` は、読む位置の `p` の 2 倍である）". The value is the one of the `p` of the call that reads it (not the `p` that a last tick of `sample / 4` kept), it needs
+// W7-09 U2s/t, S-1196, S-1161 (spec §11.3): "パラメータの種類の値だけで決まる式は、`at` で付けたクロックによらず、その値が決まる段（定数・`init`・`block`）の式として扱う"、"パラメータの種類の値だけで決まる式は、刻みのクロックを付けてもこのフィールドを作らない"、
+// and the example `hoist`: `let q = ((p at (sample / 4)) * 2.0) at sample` is "読む位置の `p` の 2 倍". The value is the one of the `p` of the call that reads it (not the `p` that a last tick of `sample / 4` kept), it needs
 // no `Default` (the field of a tick that a faster stage reads is not made, so E0816 does not apply: `Gain` has none), and its panic is the panic of the `block` stage, a call of 0 frames too. `x` is
 // the `sample` input, `p` and `m` of `block`. The tick is not counted by this case: the value does not depend on the frame (the reading of a value that is not of the parameter kinds, `(lf at sample) * 2.0`,
 // is the work of the fields of a slow tick, U2r2).

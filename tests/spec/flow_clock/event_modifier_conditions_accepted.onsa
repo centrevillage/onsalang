@@ -3,7 +3,7 @@
 // spec = ["§11.3", "§11.9", "§11.10", "§11.11"]
 // fixes = 0
 
-// W7-11 U1b/t, S-558, S-1095, S-1209 (spec §11.10: "`c` は…イベントの値（W の刻みで、その位置までの最後の値として読む水準）"、"イベントの条件はそのイベントの刻み"): the condition of `when~` and `reset_if~` that is an event value alone, with a `sample` or a `block` value,
+// W7-11 U1b/t, S-558, S-1095, S-1209 (spec §11.10: "`c` は…イベントの値（W の刻みで、その位置までの最後の値として読む水準）"、"イベントの条件は、外の `when~` が止めている間もその刻みで初期化する"): the condition of `when~` and `reset_if~` that is an event value alone, with a `sample` or a `block` value,
 // or an event `Bool` with the `at` to W, after a `.down~`, outside a clump and in a `par~`; `reset_if~` on a delay of an event. `check` reads the file with no diagnostic. The errors are in e0815_event_modifier_conditions.onsa and
 // e0020_event_when_on_an_event_delay.onsa. `m` and `tr` are events, `x`, `g` and `armed` are `sample` inputs, `k` is `block`, `l4` is `sample / 4`.
 

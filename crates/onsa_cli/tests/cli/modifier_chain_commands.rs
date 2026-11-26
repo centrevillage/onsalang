@@ -154,7 +154,7 @@ fn a_clock_composed_in_a_chain_past_u32_is_e0808_at_every_command() {
     }
 }
 
-/// The E0808 of a clock composed past `U32` has a note (S-1216: "note に宣言の N と経路"; the words are not fixed by the spec, so only that a note is there is read), in each of the six forms
+/// The E0808 of a clock composed past `U32` has a note (S-1216, §11.9: "note に経路（後の上限では宣言の N も）を示す"; the words are not fixed by the spec, so only that a note is there is read), in each of the six forms
 /// (`check --json`: every diagnostic is an E0808 and has a note).
 #[test]
 fn the_e0808_of_a_clock_composed_past_u32_has_a_note() {

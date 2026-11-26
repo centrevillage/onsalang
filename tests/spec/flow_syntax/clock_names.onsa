@@ -5,7 +5,7 @@
 
 // The names of the clocks (`init`, `block`, `sample`) are not keywords: they live in a namespace of
 // their own, searched only after `at` (§11.3), and an ordinary name may be spelled the same
-// ("`sample` や `block` を変数の名前に使ってもよい"). `at` is a keyword (§2.2). The syntax stage
+// ("クロックの名前（`init` `block` `sample` `event`）は、値と型とは別の名前空間にあり、`at` の後ろでだけ引く"). `at` is a keyword (§2.2). The syntax stage
 // reads each of these forms; which name an identifier means is the names stage's. The file is
 // read only (mode = "parse") and written the way `onsa fmt` writes it (spec/tools.md §3.2).
 

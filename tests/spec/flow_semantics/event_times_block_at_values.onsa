@@ -1,0 +1,41 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.3", "§11.11"]
+
+// An event value times a `block` value, with the `at sample` on either side (X-29), worked out by hand from the text: the value of an event is read at the clock where it is used (§11.11), and a `block` value is read at the clock where it is used (§11.3),
+// so `(d at sample) * r` and `d * (r at sample)` are both expressions of `sample` over the last value of `d` and the `r` of the frame, and they have the same values (`d * r` with no `at` is an expression of the event, in event_read_values.onsa).
+// `ev` gives the odd values of `x`; with x = 2 3 4 6 5 8 10 7 the events are 3 (frame 1), 5 (4), 7 (7) and the last value is 0 3 3 3 5 5 5 7. `r` is 10 for the frames 0 .. 5 (a call of 6 frames) and 100 for the frames 6 and 7 (a call of 2 frames), so the
+// product is 0 30 30 30 50 50 and then 5 * 100 = 500 and 7 * 100 = 700.
+
+flow ev(x: U32 at sample) -> U32 at event {
+  if x % 2 == 1 {
+    Some(x)
+  } else {
+    None
+  }
+}
+
+flow now_times_block(x: U32 at sample, r: U32 at block) -> U32 at sample {
+  let d = ev~(x)
+  (d at sample) * r
+}
+
+flow block_at_sample(x: U32 at sample, r: U32 at block) -> U32 at sample {
+  let d = ev~(x)
+  d * (r at sample)
+}
+
+test "d * (r at sample) is the last value of d times the r of the frame, as (d at sample) * r" {
+  let xs: [U32; 8] = [2, 3, 4, 6, 5, 8, 10, 7]
+  var a: [U32; 8] = [0; 8]
+  var b: [U32; 8] = [0; 8]
+  var sa = now_times_block.init(8.0)
+  var sb = block_at_sample.init(8.0)
+  now_times_block.process(inout sa, now_times_block.Params { r: 10 }, xs.slice(0, 6), inout a.slice(0, 6))
+  now_times_block.process(inout sa, now_times_block.Params { r: 100 }, xs.slice(6, 8), inout a.slice(6, 8))
+  block_at_sample.process(inout sb, block_at_sample.Params { r: 10 }, xs.slice(0, 6), inout b.slice(0, 6))
+  block_at_sample.process(inout sb, block_at_sample.Params { r: 100 }, xs.slice(6, 8), inout b.slice(6, 8))
+  assert a == [0, 30, 30, 30, 50, 50, 500, 700]
+  assert b == [0, 30, 30, 30, 50, 50, 500, 700]
+}

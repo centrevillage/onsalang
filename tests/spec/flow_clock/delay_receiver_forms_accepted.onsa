@@ -2,7 +2,7 @@
 // [test]
 // spec = ["§11.9", "§11.10", "§11.4", "§18.1"]
 
-// W7-10 U3b/t (S-1209, S-1203): `.when~(c)` and `.reset_if~(r)` on a built-in delay (`prev~`, `delay~`, `vdelay~`) as the receiver, read with no diagnostic (§11.10: "受け手は flow の呼び出し（組込みの遅延を含む）か修飾子の連鎖である"; the place
+// W7-10 U3b/t (S-1209, S-1203): `.when~(c)` and `.reset_if~(r)` on a built-in delay (`prev~`, `delay~`, `vdelay~`) as the receiver, read with no diagnostic (§11.10: "受け手は flow の呼び出し（組込みの遅延を含む。括弧で包んでもよい）か修飾子の連鎖である"; the place
 // of the modifier P is the clock of the first argument K, so W = K, and the condition is read at K, or is of a parameter kind, a literal, or slower). The first five flows were E0200 in negative/modifier_reset_ticks_past_u32_e0200.onsa
 // until W7-10 U3b (that file keeps the two of S-1225). The values are in flow_semantics/delay_receiver_values.onsa and delay_receiver_twins.onsa, the errors in
 // delay_receiver_e0815.onsa and delay_receiver_e0816.onsa. `x` and `c` are `sample` inputs, `l` is a `sample / 4` input, `d` is a `Bool` of `sample / 4`, `p` and `b` are `block` inputs, `k` and `i` are `init` inputs.

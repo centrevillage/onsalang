@@ -3,9 +3,9 @@
 // spec = ["§11.3", "§11.4"]
 
 // W7-09 U4b/i2, S-567 (K6), S-1158; W7-16 U5b1/t, S-1210 (spec §11.3: "刻みの値（組込みの遅延とインスタンスの結果、刻みのクロックの入力、`sample_tick()`）を一つでも読む式は、その式のクロックの段の式である";
-// "段が刻みの計算した部分式は、より速い式の中でもその刻みで評価し、値を隠れたフィールドに置く。`sample_tick()` だけに刻みのクロックの `at` を付けた式（`(sample_tick() at (sample / 4)) at sample`）も同じで、
-// その刻みの時間を保つ（`let t4 = sample_tick() at (sample / 4)` と分けた形と同じ値）。条件の位置の中では、その位置を選ぶ条件が全て定数・`init`・その式と同じ刻みで決まるときだけ書け … 条件のどれかが他の段
-// （`block`、別の刻み、`sample`）で決まる位置には書けない（E0815 …）。名前とそのフィールドを読むだけなら書ける"): `(sample_tick() % 4) at (sample / 4)` is a computed part of the tick `sample / 4`, as
+// "段が刻みの計算した部分式は、より速い式の中でもその刻みで評価し、値を隠れたフィールドに置く。`sample_tick()` だけに刻みのクロックの `at` を付けた式も同じで、
+// その刻みの時間を保つ（`let` に分けた形と同じ値）。条件の位置の中では、その位置を選ぶ条件が全て定数・`init`・その式と同じ刻みで決まるときだけ書け … 条件のどれかが他の段
+// （`block`、別の刻み、`sample`）で決まる位置には書けない（E0815。…）"; "名前と、そのフィールド・組の要素の連なりを取り出すだけの式（括弧を通す）は、…書ける"): `(sample_tick() % 4) at (sample / 4)` is a computed part of the tick `sample / 4`, as
 // `(l * 2) at (sample / 4)` of an `l` at `sample / 4` is, and `sample_tick() at (sample / 4)` alone is one too (S-1210): read at `sample` it has a field of its tick, with the time of the tick (the values are
 // flow_semantics/sample_tick_at_a_slower_tick_values.onsa). In a branch whose condition is decided at `sample` or at `block` it is E0815, as the same form of `l` (flow_clock/tick_fields_computed_parts.onsa,
 // e0815_tick_field_in_a_condition.onsa); the condition that is `init` or a constant is accepted, and so is the read of a name (`t4 at sample`). One error per flow.

@@ -3,7 +3,7 @@
 // mode = "test"
 // spec = ["§11.10", "§11.11", "§11.3", "§11.4", "§11.9"]
 
-// W7-11 U2r/t2: the forms of `event_reset_values.onsa` that it does not have (§11.10: "刻みのクロックならそのクロックの刻み（`sample / N` の条件はその刻み、イベントの条件はそのイベントの刻み）"; "パラメータの種類なら `when~` と同じ条件を読むクロック W の刻み";
+// W7-11 U2r/t2: the forms of `event_reset_values.onsa` that it does not have (§11.10: "刻みのクロックならそのクロックの刻み、パラメータの種類なら `when~` と同じ条件を読むクロック W の刻み" (a condition of `sample / N` is at that tick and one of an event at the tick of the event, as the tick clocks of §11.3);
 // "刻みで書いて速い段が読むフィールド（…イベントの値を含む）は `T.default()` に戻る"; §11.11: "同じクロックを二つ以上の入力に渡すと、部品はイベントごとに、その入力を宣言の順に一つずつ刻む"). A condition of `sample`, a constant or a parameter of a part of events
 // is read at the place of the call in the sample stage, after the events of the input that were given above it; one of `sample / 4` is in the stage before the sample stage. The field of the caller (the output of a delay read in the
 // caller) is not reset, one in the body of a flow that is the receiver is. Every value is worked out by hand.

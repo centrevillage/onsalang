@@ -4,7 +4,7 @@
 // spec = ["§11.3", "§11.4", "§11.6"]
 
 // W7-05 U1/t, S-152, S-1157 (spec §11.3): `e at k` with `k` faster than the clock of `e` evaluates `e` at its own
-// clock and reads the value at `k` ("`at` は値も評価の段も変えず、状態も作らない"; "`e` はその推論したクロックの段で評価し、値の置き場所は一つである"). A computed
+// clock and reads the value at `k` ("`at` は `e` の値も評価の段も変えず、状態も作らない"; "`e` はその推論したクロックの段で評価し、値の置き場所は一つである"). A computed
 // `e` is accepted now: the file `flow_clock_promotion_until_w7_05.onsa` of the negative cases said an E0200 for these forms.
 // So `(100 / d) at sample` with `d` of `block` is evaluated once for each call, a call of 0 frames too, and the value of the
 // `at` is the value `e` has. Every value is worked out by hand.

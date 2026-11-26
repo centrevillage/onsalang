@@ -2,7 +2,7 @@
 // [test]
 // spec = ["§11.4", "§11.9", "§18.1"]
 
-// W7-09 U3b/t, S-1097, provisional reading (1) (spec §11.4: "第 1 引数に書けるクロックは本体の `sample`・`sample / N`・イベントのクロックで…呼び出し側の `sample * N` の値も誤り"): the first argument of
+// W7-09 U3b/t, S-1097, provisional reading (1) (spec §11.4: "第 1 引数に書けるクロックは本体の `sample`・`sample / N`・イベントのクロックで…呼び出し側の `sample * N` の値も E0813"): the first argument of
 // a delay that is a value of `.up~(N)` of the call side is E0813 (a state is counted in the ticks of the first argument, and a value at `sample * N` has none that the caller has, §11.4). The open
 // question is S-1097 (E0813 or E0815); drop this file if another is decided. The error is at the argument. One error per flow, so each form is a flow of its own. `x` is the `sample` input, `p` is
 // a `block` input.

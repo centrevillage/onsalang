@@ -4,9 +4,9 @@
 // spec = ["§11.11", "§11.10", "§11.9", "§11.3", "§11.4"]
 
 // Events in a chain with a ratio (`.down~(N)`, `.up~(N)`; W7-17 U4/t2 R1; S-559, S-562, S-564, S-1207, S-1209, S-1217, S-1228, S-1229, S-1234, S-1235; spec §11.11: "`.down~`・`.up~` の部品の中の `at event` の入力も、全ての位置のイベントで動く
-// （`.up~` の中では、その位置の最初の刻みの前）"; "同じ位置で速い段が出したイベントは、それより遅い周期の刻みには次の刻みで見える"; "`.up~`・`.down~` の部品の中から出るイベントの位置は、内側の刻みが動く呼び出し側の位置"; §11.9: "同じ位置では、入力のイベントの刻み、
-// 遅い刻み、`sample` の刻みの順に並ぶ"; §11.10: "イベントの条件は、外の `when~` が止めている間もその刻みで初期化する。`.down~(N)` の内（左）に書いた形でも、走りの時点でなく、そのイベントの刻みで初期化する"; "`x.when~(c).reset_if~(r)` は…保持した出力も `T.default()` に戻る、
-// `x.reset_if~(r).when~(c)` は動く刻みにだけ初期化する（イベントの条件ではどちらも止まっている間に初期化し、違いは保持した出力を戻すかだけ）"; "部品の外に書いた `at` の欄も、次の自分の刻みまで前の値である").
+// （境界が渡したイベントは、`.up~` の中でも、その位置の最初の刻みの前に動く）"; "同じ位置で速い段が出したイベントは、それより遅い周期の刻みには次の刻みで見える"; "`.up~`・`.down~` の部品の中から出るイベントの位置は、内側の刻みが動く呼び出し側の位置"; §11.9: "同じ位置では、入力のイベントの刻み、
+// 遅い刻み、`sample` の刻みの順に並ぶ"; §11.10: "イベントの条件は、外の `when~` が止めている間もその刻みで初期化する…`.down~(N)` の内（左）に書いた形…でも、走りの時点でなく、そのイベントの刻みで初期化する"; "`x.when~(c).reset_if~(r)` は…保持した出力も `T.default()` に戻る）、
+// `x.reset_if~(r).when~(c)` は動く刻みにだけ初期化する（パラメータの種類と周期のクロックの条件）"; "部品の外に書いた `at` の欄も、次の自分の刻みまで前の値である").
 // The outermost flows have ports at `sample` (or `block`) and are run by `process`. `gen(x)` gives the event x at each frame, `pulse(x)` gives x where x > 0, `fwd` gives the event it gets, `acc` sums the events it gets and gives the sum at `sample`
 // (the last value of the event at the tick of the call), `ord` appends each event as a digit, `tagged` gives 100 times that sum plus `sample_tick()`. A part under `.down~(N)` is a stage of `sample / N` of the caller, before the `sample` stage of
 // its frame, so it sees the events of the frames before it, not the event that a producer of `sample` gives at the frame of the tick. Every value is worked out by hand from the text.

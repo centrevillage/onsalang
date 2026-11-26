@@ -1,10 +1,11 @@
 // onsa.toml
 // [test]
 // spec = ["§11.3", "§11.11", "§18.1"]
+// fixes = 1
 
-// W7-11 U1a/t, S-560, S-1238 (spec §11.3: "束縛の側の `at` は、型注釈の有無によらず構文の段の E0020"; §11.11: "`at event` は入出力の宣言にだけ書く"): the clock `event` written on the binding side of a `let`
-// (after the name, after the type annotation) is E0020, as `at sample` is. The candidate is not fixed (S-1238: the candidate of §11.3 moves the clock to the value, and `let w = m at event` is E0815
-// whatever it is, so the form that the candidate takes, to remove the clock or to give none, is open; the provisional one removes the clock), so `fixes` is not written and the file does not count the candidates. The
+// W7-11 U1a/t, S-560, S-1238 (spec §11.3: "束縛の側の `at` は、型注釈の有無によらず構文の段の E0020"; "束縛の側が `at event` なら式の `e at event` の E0815 になるので、候補は束縛の側のクロックを除く形である"): the clock `event` written on the binding side of a `let`
+// (after the name, after the type annotation) is E0020, as `at sample` is. The candidate is the one that removes the clock (S-1238: the candidate of §11.3 that moves the clock to the value would give `let w = m at event`, which is E0815
+// whatever the value is), so the one candidate of each flow takes off the `at event` and leaves no error (fixes/e0020_event_binding_clock_candidate_s1238.onsa has the same form as a unit of its own, with `clean`). The
 // error is at the `at`. One error per flow (§18.1).
 
 pub flow binding_clock_after_the_name(m: U32 at event) -> U32 at sample {

@@ -3,8 +3,8 @@
 // spec = ["§3.1", "§3.3", "§11.3", "§18.1"]
 
 // E0011 for `at` (§3.1: "`as` と `at` は連鎖できず、二つ目の被演算子には括弧が要る"; §3.3: "flow の
-// `at` 式も同じ"; §11.3: "二項演算子の被演算子にするときと、`as` / `at` と連鎖させるときは括弧が要る
-// (E0011)"). An `at` expression is not an operand of a binary operator without parentheses, on
+// `at` 式（§11.3）も同じ"; §11.3: "結合の強さと括弧は `as` と
+// 同じである（E0011、§3.1、§3.3）"). An `at` expression is not an operand of a binary operator without parentheses, on
 // either side, and does not chain with another `at` or an `as` in either order. `at` binds tighter
 // than the binary operators and looser than the prefix and postfix forms, so `-x at sample` is
 // `(-x) at sample` and is accepted (flow_syntax/clock_expressions.onsa). E0011 is of the syntax

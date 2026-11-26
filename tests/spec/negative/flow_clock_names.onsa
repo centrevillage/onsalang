@@ -2,9 +2,8 @@
 // [test]
 // spec = ["§11.3", "§15.1", "§18.1"]
 
-// E0302 for a name after `at` that is not a clock of this version (§11.3: "クロックの名前
-// (`init` `block` `sample`) は、値と型とは別の名前空間にあり、`at` の後ろでだけ引く … クロックの名前空間に
-// 無い名前は、値や型に同じ名前があっても E0302（名前の段。主の位置はその名前）", S-359). The
+// E0302 for a name after `at` that is not a clock of this version (§11.3: "クロックの名前（`init` `block` `sample` `event`）は、値と型とは別の名前空間にあり、`at` の後ろでだけ引く … `at` の後ろの名前と底は、クロックの名前空間で引く
+// （無い名前は、値や型に同じ名前があっても E0302。名前の段で、主の位置はその名前）", S-359). The
 // primary position is the token after `at`, and the code is E0302 and not E0308 even when the name
 // is a value, a type or a function in scope: the clocks are a namespace of their own, so the name
 // is simply not found there. The note shows the clocks of this version; the markers do not check

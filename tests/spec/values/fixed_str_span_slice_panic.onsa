@@ -3,7 +3,7 @@
 // mode = "test"
 // spec = ["§5.3", "§4.2"]
 
-// S-614 (W5-12 U3a): the view of a `FixedStr[N]` has the used length, not the capacity, so a `slice` that goes past the used length panics (§5.3: "半開区間 `[from, to)` の `Span`。範囲外は
+// S-614 (W5-12 U3a): the view of a `FixedStr[N]` has the used length, not the capacity, so a `slice` that goes past the used length panics (§5.3: "半開区間 `[from, to)` の `Span`。範囲外（`to > len`）と端の逆転（`from > to`）は
 // panic"; §4.2: "使った長さの部分を見る"). The string "abc" has the capacity 8 and the view has the length 3: `slice(0, 3)` is the whole of it, `slice(0, 5)` is out of the view although it is inside the
 // capacity. The ends that are fine are run first, in the test that does not panic. One panic in each test.
 

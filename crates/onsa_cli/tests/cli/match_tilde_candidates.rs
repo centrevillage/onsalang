@@ -83,7 +83,7 @@ fn the_e0811_of_a_guard_of_a_match_tilde_has_the_lift_only() {
     }
 }
 
-/// S-394 (X1), S-1172 (§11.5: "式が腕の束縛を読むときと、`par~` の本体の中にあるときは、この候補を作らない"): the E0811 of a guard whose thing with
+/// S-394 (X1), S-1172 (§11.5: "式が腕の束縛を読むときと、`par~` の本体の中にあるときと、移すと囲む `if~`・`match~` の本体が状態を持たなくなる（E0812）ときは、この候補を作らない"): the E0811 of a guard whose thing with
 /// state reads a binding of its arm, or that is in the body of a `par~`, has no candidate at all, and is still the E0811 (no E0200, no crash).
 #[test]
 fn the_e0811_of_a_guard_that_cannot_be_lifted_has_no_candidate() {

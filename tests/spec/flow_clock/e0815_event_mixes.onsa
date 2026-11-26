@@ -3,9 +3,8 @@
 // spec = ["§11.3", "§11.5", "§11.11", "§18.1"]
 // fixes = 0
 
-// W7-11 U1a/t, S-560, S-1095 (spec §11.3: "別の入力のイベントのクロックどうしは比べられない（`a.x + b.y` は E0815）"、"最大が無ければ E0815（部分式ごとに確かめ、外の式の被演算子と使う所のクロックは数えない）"; §11.11: "より大きい式の
-// 部分式でも、周期のクロックで読む所に書いても同じで、`(a.x + b.y) + z`（`z` は周期の刻みの値）、`(a.x + b.y) at sample`、`sample` の入力への `lp~(a.x + b.y)` は内側が E0815。`(a.x + z) + b.y` は通る。直すときはイベントの値の側に `at`
-// を書く: `(a.x at sample) + b.y`"): the events of two inputs are not comparable, so the operands `a` and `b` of one expression have no greatest clock: E0815 at the expression, and it is the inner expression that is the error
+// W7-11 U1a/t, S-560, S-1095 (spec §11.3: "別の入力のイベントのクロックどうしは比べられない（`a.x + b.y` は E0815）"、"最大が無ければ E0815（部分式ごとに確かめ、外の式の被演算子と使う所のクロックは数えない"; §11.11: "別の入力のイベントのクロックどうしを混ぜた式の E0815 は、部分式ごとに確かめ、内側の式に出る（§11.3）。直すときはイベントの値の側に `at`
+// を書く"、and the example `event_mix`: "`(a + b) + z`" is "E0815: 内側の a + b に最大のクロックが無い", "`(a + z) + b`" is "通る", "`(a at sample) + b`" is "直した形"): the events of two inputs are not comparable, so the operands `a` and `b` of one expression have no greatest clock: E0815 at the expression, and it is the inner expression that is the error
 // (the clock of a sum is the one of its own operands: not the clock of the larger expression, a `let` or the place where it is read), so `(a + b) + z`, `(a + b) at sample`, `smooth~(a + b)`, a condition and a `let` of it are the same error. The sum
 // with a `sample` operand between the two is the clock `sample` and is fine: `(a + z) + b`, `z + a + b`, and the one with `at` on a side. There is no candidate (S-1095: the note says an `at` on each event value, `fixes = 0` checks it).
 // The length `d` of `vdelay~` is the clock of its first argument or a parameter kind (§11.4), so the event of another input there is the same error. The binding of an arm of `match~` is as fast as its scrutinee and the guards up to its arm (§11.5), so a guard on another event makes it have no clock. One error per flow (§18.1). `a` and `b` are the events of two inputs,
@@ -120,4 +119,12 @@ pub flow fields_of_one_event(a: Note at event, z: U8 at sample) -> U8 at sample 
 
 pub flow binding_and_a_guard_of_one_event(a: F32 at event, x: F32 at sample) -> F32 at sample {
   match~ a { n if a > 0.0 => n + smooth~(x), _ => 0.0 }
+}
+
+// ---- the example of §11.11 (X-29), line by line: the error is on the inner `a + b` of `p`, `q` is fine and `r` is the fixed form (`event_mix` is one error for the flow, at the column of `a + b`).
+flow event_mix(a: F32 at event, b: F32 at event, z: F32 at sample) -> F32 at sample {
+  let p = (a + b) + z        // E0815: 内側の a + b に最大のクロックが無い //~ E0815 @12
+  let q = (a + z) + b        // 通る
+  let r = (a at sample) + b  // 直した形
+  p + q + r
 }

@@ -5,8 +5,8 @@
 
 // An event value read at another clock, the expressions of an event, the output expression of an event, and one event given to two inputs (W7-11 U2/t; S-564, S-1196, S-1236, S-1210; spec §11.11: "`v at sample`・`v at (sample / N)`
 // と書いても同じ意味で、変換の場所を留める（値の欄は §11.3 の巻き上げの隠れた欄）"; "周期の刻みのクロックの被演算子の無いイベントの値の式は、そのイベントのクロックの式で、その刻みごとに評価する"; "本体の出力の式は `Option[E]` で、
-// その式のクロック（`at` で付けたクロックを含む）の刻みで、`Some(v)` のときに一つのイベント `v` を出す（`sample` の式なら刻みごと、入力 `m` のイベントの値なら `m` のイベントごと、パラメータの種類だけなら本体の `sample` の刻みで、
-// `at (sample / N)` を付ければその刻み）"; "同じクロックを二つ以上の入力に渡すと、部品はイベントごとに、その入力を宣言の順に一つずつ刻む"; §11.3: 刻みで書いて速い段が読むフィールドの初めの値は `T.default()`).
+// その式のクロック（`at` で付けたクロックを含む、§11.3）の刻みで、`Some(v)` のときに一つのイベント `v` を出す" and its code block `out_x`, `out_m`, `out_p`, `out_p4` (every tick for a `sample` expression, every event of `m` for an event value, the `sample` tick of the body for the parameter kinds only,
+// the tick of the `at (sample / 4)` that is written); "同じクロックを二つ以上の入力に渡すと、部品はイベントごとに、その入力を宣言の順に一つずつ刻む"; §11.3: 刻みで書いて速い段が読むフィールドの初めの値は `T.default()`).
 // The order of two ticks of one event (S-1236) shows in a value only through the condition of a modifier or a panic (the first is for U2r, the second is in crates/onsa_cli/tests/cli/event_stage_commands.rs); here the sums are the same
 // in whichever order. Every value is worked out by hand.
 

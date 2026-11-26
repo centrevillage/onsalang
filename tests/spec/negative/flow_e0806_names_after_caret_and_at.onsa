@@ -3,7 +3,7 @@
 // spec = ["§11.2", "§11.3", "§15.1", "§18.1"]
 
 // W7-04 U2/t, S-125, S-267, R-472: a name that is not found (E0302) in a `^name` (`prev~(^zz)`, a `^` on a name that no `let` defines) or in the clock of an `at`
-// (`p at nope`, §11.3: "クロックの名前空間に無い名前は … E0302（名前の段。主の位置はその名前）") before a form a flow body cannot contain (E0806, §11.2). All of them
+// (`p at nope`, §11.3: "`at` の後ろの名前と底は、クロックの名前空間で引く（無い名前は、値や型に同じ名前があっても E0302。名前の段で、主の位置はその名前）") before a form a flow body cannot contain (E0806, §11.2). All of them
 // are errors of the names stage (§18.1), so the first by position is reported: the E0302, whatever the E0806 after it is (a `var`, a `for`, a
 // closure, a function value, an assignment, a `?`, a `let` of a nested block, a `while`, a `return`, an `assert`, `move`, `handle`, `unsafe`), and the E0806 when it comes first. One error per unit.
 // The E0801 before an E0806 is in flow_e0806_names_after_e0801.onsa.

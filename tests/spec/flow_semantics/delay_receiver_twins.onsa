@@ -4,7 +4,7 @@
 // spec = ["§11.10", "§11.9", "§11.4", "§13.4"]
 
 // The twins of delay_receiver_values.onsa (W7-10 U3b/t; S-1207, S-1209): a modifier on a built-in delay has the value it has when the delay is put in a flow of its own with the same arguments, and the modifier is put on the call of that flow
-// (§11.10: "受け手は flow の呼び出し（組込みの遅延を含む）か修飾子の連鎖である", the modifiers wrap "左の全体"; §11.4 "利用者の flow のインスタンスと同じく"). `pv` is `flow pv(x: F32 at sample) -> F32 at sample { prev~(x) }`, `dl2` is `delay~(x, 2)`,
+// (§11.10: "受け手は flow の呼び出し（組込みの遅延を含む。括弧で包んでもよい）か修飾子の連鎖である", the modifiers wrap "左の全体"; §11.4 "利用者の flow のインスタンスと同じく"). `pv` is `flow pv(x: F32 at sample) -> F32 at sample { prev~(x) }`, `dl2` is `delay~(x, 2)`,
 // `pv4` is the delay of a value of `sample / 4` as a conversion flow (`x: F32 at (sample / 4)` to `F32 at (sample / 4)`), `vd` is `vdelay~(x, d, 4)`. The flow with the delay in its body (`a_…`) and the one with the named flow (`b_…`) run on every version
 // of the arrays of this file, and the two are equal frame by frame; the arrays are not written down here: they are those of delay_receiver_values.onsa where the cases are the same. A literal condition that always holds (`when~(true)`) or never
 // resets (`reset_if~(false)`) is no condition: the twin is the delay itself.

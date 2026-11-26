@@ -1,0 +1,41 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.9", "§11.10", "§2.2"]
+
+// The names of the modifiers are not reserved words (X-29), from the text of §11.10: "修飾子の名前は別の名前空間にあり、`.名前~(` の頭がインスタンスの式のときだけ引く。組込みは `when`・`reset_if`・`down`・`up` の閉じた一覧で、語の予約（§2.2）は残す".
+// The modifiers are a space of their own and a word is reserved only if §2.2 says so, so `down` and `up` are names of a `let` (and a binding of an input), and `.down~(2)` still is the modifier in a body where the names are bound.
+// `both` has `down = 2 x` and `up = 3 x`, so `down + up` = 5 x. `with_a_modifier` has the names and the modifier: `keep~(up).down~(2)` runs `keep` at the frames 0 and 2 (the head argument is read at the clock of the chain, `sample / 2`, so it is of a `block` kind), and the value read
+// at `sample` is the last value of the tick: for `p` = 1 over the frames 0 1 and 2 over the frames 2 3 it is 3 3 6 6.
+
+flow keep(x: F32 at sample) -> F32 at sample {
+  x
+}
+
+flow both(x: F32 at sample) -> F32 at sample {
+  let down = x * 2.0
+  let up = x * 3.0
+  down + up
+}
+
+flow with_a_modifier(p: F32 at block) -> F32 at sample {
+  let up = p * 3.0
+  let down = keep~(up).down~(2)
+  down at sample
+}
+
+test "down and up are names" {
+  let xs: [F32; 4] = [1.0, 2.0, 3.0, 4.0]
+  var out: [F32; 4] = [0.0; 4]
+  var st = both.init(8.0)
+  both.process(inout st, xs, inout out)
+  assert out == [5.0, 10.0, 15.0, 20.0]
+}
+
+test "a name down in the body does not hide the modifier .down~(2)" {
+  var out: [F32; 4] = [0.0; 4]
+  var st = with_a_modifier.init(8.0)
+  with_a_modifier.process(inout st, with_a_modifier.Params { p: 1.0 }, inout out.slice(0, 2))
+  with_a_modifier.process(inout st, with_a_modifier.Params { p: 2.0 }, inout out.slice(2, 4))
+  assert out == [3.0, 3.0, 6.0, 6.0]
+}

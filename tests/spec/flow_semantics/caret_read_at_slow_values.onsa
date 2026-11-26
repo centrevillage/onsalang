@@ -1,0 +1,32 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.3", "§11.4", "§18.1"]
+
+// `let a = prev~(^b at sample)` where `b` is of a slower clock (X-29), worked out by hand from the text: the clock of a delay is the clock of its first argument (§11.4), and `^b at sample` is `b` put at `sample`, so `a` is an expression of
+// `sample` whatever the clock of `b`. `b` here is the output of `ticks4`, at `sample / 4`, whose value is the time of its tick (`sample_tick()`: 0 at the frame 0, 4 at the frame 4, 8 at the frame 8). `b at sample` is 0 0 0 0 4 4 4 4 8 for the frames 0 .. 8,
+// and the delay of one frame of it is 0 0 0 0 0 4 4 4 4 (the start is `T.default()`). Without the `at` it is an E0815: `tests/spec/flow_clock/e0815_caret_read_slow_no_at.onsa`.
+
+flow ticks4() -> U32 at (sample / 4) {
+  sample_tick()
+}
+
+pub flow caret_read_slow(x: U32 at sample) -> U32 at sample {
+  let a = prev~(^b at sample)
+  let b = ticks4~()
+  x + a
+}
+
+pub flow caret_read_slow_input(lf: U32 at (sample / 4), x: U32 at sample) -> U32 at sample {
+  let a = prev~(^b at sample)
+  let b = lf
+  x + a
+}
+
+test "the delay of ^b at sample is of sample whatever the clock of b" {
+  let xs: [U32; 9] = [1; 9]
+  var out: [U32; 9] = [0; 9]
+  var st = caret_read_slow.init(8.0)
+  caret_read_slow.process(inout st, xs, inout out)
+  assert out == [1, 1, 1, 1, 1, 5, 5, 5, 5]
+}

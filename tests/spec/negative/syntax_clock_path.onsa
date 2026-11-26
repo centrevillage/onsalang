@@ -1,0 +1,23 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§18.1"]
+
+// A path after `at` (X-29), from the text of §11.3: "`at` の後ろは名前一つか、括弧で包んだ導くクロック（`(sample / N)`、`(sample * N)`）で、経路（`x at a.b`）は E0002". The clock names are in a space of their own and
+// are looked up after `at` only, so a path is not read: E0002 in an expression and in the declaration of an input and of an output (the parenthesized derived clock with a path as the base is in syntax_clock_ratio_forms.onsa).
+// One error per declaration unit, so each unit has one marker (§18.1).
+
+pub flow in_an_expression(x: F32 at sample) -> F32 at sample {
+  x at a.b   //~ E0002
+}
+
+pub flow in_an_input(x: F32 at a.b) -> F32 at sample {   //~ E0002
+  x
+}
+
+pub flow in_an_output(x: F32 at sample) -> F32 at a.b {   //~ E0002
+  x
+}
+
+pub flow in_an_expression_of_modules(x: F32 at sample) -> F32 at sample {
+  x at std.sample   //~ E0002
+}
