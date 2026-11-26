@@ -415,8 +415,32 @@ fn one(pending: &Pending, wrappers: &Wrappers, path: &str, src: &str, rot: bool)
 /// The seeds run on the evaluator and, unless `rot`, through the interpreter: the numbers, and a message (the family, the seed,
 /// the forms the program holds, the kind of failure, the program shrunk, how to run it again) for each seed with anything wrong. What
 /// the generator makes has to be read, evaluated and printed: a form that the checker, the evaluator or the printer does not
-/// take is the generator's failure, never dropped. Only the first three failures are shrunk.
-pub fn run(seeds: Vec<u64>, (family, make): Family, rot: bool) -> (Stats, Vec<String>) {
+/// take is the generator's failure, never dropped. Only the first three failures of a part are shrunk.
+/// The seeds of a `heavy_` run are cut into parts run side by side ([`in_parts`]), joined in the order of the seeds.
+pub fn run(seeds: Vec<u64>, family: Family, rot: bool) -> (Stats, Vec<String>) {
+    let (mut s, mut bad) = (Stats::default(), Vec::new());
+    for (p, b) in in_parts(seeds, |part| run_part(part, family, rot)) {
+        (s.programs, s.tests, s.evaluated, s.asserts) =
+            (s.programs + p.programs, s.tests + p.tests, s.evaluated + p.evaluated, s.asserts + p.asserts);
+        (s.compared, s.compared_asserts) = (s.compared + p.compared, s.compared_asserts + p.compared_asserts);
+        bad.extend(b);
+    }
+    (s, bad)
+}
+
+/// `f` on parts of `seeds` in threads side by side, one part for each 25 seeds up to the cores (the seeds of the gate are one
+/// part), the results in the order of the seeds: the `heavy_` runs of hundreds of seeds are the longest of the gate item.
+pub fn in_parts<T: Send>(seeds: Vec<u64>, f: impl Fn(Vec<u64>) -> T + Sync) -> Vec<T> {
+    let cores = std::thread::available_parallelism().map_or(1, usize::from);
+    let size = seeds.len().div_ceil((seeds.len() / 25).clamp(1, cores)).max(1);
+    let f = &f;
+    std::thread::scope(|sc| {
+        let parts: Vec<_> = seeds.chunks(size).map(|c| c.to_vec()).map(|c| sc.spawn(move || f(c))).collect();
+        parts.into_iter().map(|h| h.join().unwrap_or_else(|p| std::panic::resume_unwind(p))).collect()
+    })
+}
+
+fn run_part(seeds: Vec<u64>, (family, make): Family, rot: bool) -> (Stats, Vec<String>) {
     stack::run(move || {
         let (pending, wrappers) =
             (Pending::load(&repo_root()).expect("the list of things pending"), Wrappers::default());

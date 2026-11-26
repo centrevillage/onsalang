@@ -85,6 +85,14 @@ pub fn analysis(src: &str) -> Result<(), String> {
 /// The seeds of a family run in the interpreter alone: the number of tests that ran, and a message for each seed that is wrong
 /// (the program does not run; or, for a mutant (`rot`), no assert fails, and otherwise one does).
 pub fn interpreter_failures(make: Maker, seeds: impl IntoIterator<Item = u64>, rot: bool) -> (usize, Vec<String>) {
+    let parts = super::twin::in_parts(seeds.into_iter().collect(), |part| interpreter_part(make, part, rot));
+    parts.into_iter().fold((0, Vec::new()), |(ran, mut bad), (r, b)| {
+        bad.extend(b);
+        (ran + r, bad)
+    })
+}
+
+fn interpreter_part(make: Maker, seeds: Vec<u64>, rot: bool) -> (usize, Vec<String>) {
     let (mut bad, mut ran) = (Vec::new(), 0);
     for seed in seeds {
         let (src, tags) = make(seed, rot);
