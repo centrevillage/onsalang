@@ -5,8 +5,8 @@
 //! are bound to ([`entries`]), which stage ticks each ([`table`]) and the
 //! most events a run gives out ([`most`]). Each expression of a flow with an
 //! event once and each source once, by the log of their number; the stages
-//! that tick one another end at a tick or an input, as a loop of them is the
-//! one form not run ([`rooted`]).
+//! that tick one another end at a tick or an input, as a loop of them is an
+//! E0815 ([`rooted`]).
 
 use onsa_syntax::ast::Ast;
 
@@ -171,15 +171,15 @@ pub(super) struct Ticked {
 /// nodes, and the stage of it that gives out those of its output (`gives`:
 /// it is at `event`) with the most of them one run of it gives (the [`most`]
 /// runs of the call it runs, of the `burst` of its callee); the time a stage
-/// takes is of the one that ticks it too (`time`). Of a flow with a source that
-/// nothing outside it ticks, its place.
+/// takes is of the one that ticks it too (`time`). Of a flow with calls that
+/// nothing outside them ticks, the first loop of them ([`rooted`]).
 pub(super) fn table(
     info: &FlowInfo,
     gives: bool,
     tables: &[Option<(Vec<Entry>, Read)>],
     burst_of: impl Fn(DefId) -> u32,
     time: &mut BTreeMap<ClockStage, Words>,
-) -> Result<Ticked, Span> {
+) -> Result<Ticked, Vec<NodeId>> {
     let mut plans = info.events.clone();
     let of = |id: NodeId| tables.get(id.0 as usize).and_then(Option::as_ref);
     for p in &mut plans {
@@ -238,27 +238,34 @@ pub(super) fn find(plans: &[EventPlan], s: Option<ClockStage>) -> Option<usize> 
     plans.binary_search_by_key(&src, |p| p.src).ok()
 }
 
-/// The places of `plans`, each after the one that ticks it; or, of sources
-/// that tick one another, the first call in the text of one of them.
-// SPEC-GAP(S-1237): a source that its own output alone ticks is E0200, on the
-// way to the output or not (provisional).
-fn rooted(info: &FlowInfo, plans: &[EventPlan]) -> Result<Vec<usize>, Span> {
-    let (mut seen, mut order, mut loops) = (vec![false; plans.len()], Vec::new(), Vec::new());
+/// The places of `plans`, each after the one that ticks it; or, of calls
+/// that tick one another (§11.11, S-1237), the loop that has the first call in
+/// the text, from it on in the order each ticks the one before.
+fn rooted(info: &FlowInfo, plans: &[EventPlan]) -> Result<Vec<usize>, Vec<NodeId>> {
+    let (mut seen, mut order, mut first) = (vec![false; plans.len()], Vec::new(), None::<Vec<NodeId>>);
+    let at = |id: &NodeId| (info.node(*id).span.start, info.node(*id).span.end);
     for k in 0..plans.len() {
         let (mut path, mut next) = (Vec::new(), Some(k));
         while let Some(j) = next.filter(|&j| !std::mem::replace(&mut seen[j], true)) {
             path.push(j);
             next = find(plans, plans[j].parent);
         }
-        // Back to one of this path, or on to one walked before.
-        let back = next.and_then(|j| path.iter().position(|&p| p == j));
-        loops.extend(back.into_iter().flat_map(|p| &path[p..]).filter_map(|&j| match plans[j].from {
-            EventFrom::Call(id) => Some(info.node(id).span),
-            EventFrom::Input(_) => None,
-        }));
+        // Back to one of this path, or on to one walked before; an input has no parent.
+        if let Some(p) = next.and_then(|j| path.iter().position(|&p| p == j)) {
+            let ids = path[p..].iter().filter_map(|&j| match plans[j].from {
+                EventFrom::Call(id) => Some(id),
+                EventFrom::Input(_) => None,
+            });
+            let mut ring: Vec<NodeId> = ids.collect();
+            let start = (0..ring.len()).min_by_key(|&i| at(&ring[i])).unwrap_or(0);
+            ring.rotate_left(start);
+            if first.as_ref().is_none_or(|f| ring.first().map(at) < f.first().map(at)) {
+                first = Some(ring);
+            }
+        }
         order.extend(path.into_iter().rev());
     }
-    loops.into_iter().min_by_key(|s| (s.start, s.end)).map_or(Ok(order), Err)
+    first.map_or(Ok(order), Err)
 }
 
 #[cfg(test)]

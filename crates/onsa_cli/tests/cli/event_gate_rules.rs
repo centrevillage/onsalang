@@ -7,9 +7,10 @@
 //!   go on (the package is run, a test that calls them gives the values of the case files); `onsa graph` draws them (a `let` of an event is `名前: 型 at event`, `spec/tools.md` §1.1), and `onsa interface` has the size of the
 //!   state of each (§12.4).
 //! - From W7-11 U2r a chain of `reset_if~` only (one or more) runs when it has an event: a receiver whose condition is an event, a receiver that has an event port (a call of a flow with an event input, or an argument that is an
-//!   event), and a built-in delay of an event (its condition is the event of its own or a kind `block`). The form that is E0200 (until W7-17): a source that ticks by itself (`let d = fwd~(prev~(^d))`, on the path of the output,
-//!   off it, and in a loop of two). Each is one E0200 for the flow that has the form, at a place in that flow (the spec fixes the code and says that it is where the form is found, §18.1; so only the lines of the flow are asked), in `test`,
-//!   `dump --core` and `graph <that flow>`; the flows that run in the same package are not stopped (`graph` of one is drawn), and the tests do not run.
+//!   event), and a built-in delay of an event (its condition is the event of its own or a kind `block`).
+//! - From W7-17 U6b a source that ticks by itself (a call whose output is ticked by what leads back to the call: `let d = fwd~(prev~(^d))`, on the path of the output, off it, and in a loop of two) is an E0815 of the check (S-1237, §11.11).
+//!   Each is one E0815 for the flow that has the form, at a place in that flow (the spec fixes the code and the unit, §18.1; so only the lines of the flow are asked), in `check`, `test`, `dump --core`, `interface` and `graph <that flow>`:
+//!   a package that has a flow with the error stops as a package with a diagnostic (the flows with no loop that are beside it have none), and the tests do not run.
 //! - From W7-17 U6a an event in a `par~`, a `par`, an `if~` and a `match~` runs (in a replica and an arm, in a condition, a scrutinee and a guard). From W7-17 U4 a chain of any modifiers runs (a call with `when~`, `.down~` or `.up~` whose callee has an event port, a `.reset_if~` at an event or a `when~`
 //!   at one beside them, in a replica and an arm too), and a flow that gives several events in a stage.
 //! - A package with a mistake of the clock in a flow with an event (E0815: the events of two inputs in one sum) has that diagnostic and no E0200, in every command: the check stops what goes on to the Core.
@@ -40,7 +41,7 @@ const SECOND_IN: &str =
 /// The flows that run after U2.
 const RUNNING: [&str; 7] = [EVENT_IN, EVENT_OUT, READS_OUT, ACC, CALLS_ACC, DRAWN, SECOND_IN];
 
-// ---- the forms that are E0200 after U2: each is one flow
+// ---- the forms that are one flow each: the chains that run after U2 to U4, and the loops of a call that ticks by itself (E0815 from U6b)
 const FWD: &str = "flow fwd(m: U32 at event) -> U32 at event {\n  Some(m)\n}\n";
 const LP: &str = "flow lp(x: F32 at sample) -> F32 at sample {\n  x * 0.5\n}\n";
 const MODDED: &str =
@@ -55,10 +56,12 @@ const EVENT_COND: &str = "pub flow event_cond(x: F32 at sample) -> F32 at sample
 const RESET_CHAIN: &str = "pub flow reset_chain(x: F32 at sample) -> F32 at sample {\n  let d = with_event_out~(x)\n  lp~(x).reset_if~(d != 0).reset_if~(d > 1)\n}\n";
 const RESET_PART: &str = "pub flow reset_part(x: F32 at sample) -> U32 at sample {\n  let d = with_event_out~(x)\n  acc~(d).reset_if~(d != 0)\n}\n";
 const DELAY_OWN: &str = "pub flow delay_own(m: U32 at event) -> U32 at sample {\n  prev~(m, 9).reset_if~(m == 0)\n}\n";
-const ROOTLESS_ON: &str =
-    "pub flow rootless_on(x: F32 at sample) -> U32 at sample {\n  let d = fwd~(prev~(^d))\n  acc~(d)\n}\n";
-const ROOTLESS_OFF: &str = "pub flow rootless_off(x: F32 at sample) -> U32 at sample {\n  let d = fwd~(prev~(^d))\n  let _ = acc~(d)\n  0\n}\n";
-const ROOTLESS_LOOP: &str = "pub flow rootless_loop(x: F32 at sample) -> U32 at sample {\n  let a = fwd~(prev~(^b))\n  let b = fwd~(a)\n  acc~(b)\n}\n";
+/// The loops of a call that ticks by itself: on the path of the output, off it, and of two calls.
+const LOOP_ON: &str =
+    "pub flow loop_on(x: F32 at sample) -> U32 at sample {\n  let d = fwd~(prev~(^d))\n  acc~(d)\n}\n";
+const LOOP_OFF: &str =
+    "pub flow loop_off(x: F32 at sample) -> U32 at sample {\n  let d = fwd~(prev~(^d))\n  let _ = acc~(d)\n  0\n}\n";
+const LOOP_OF_TWO: &str = "pub flow loop_of_two(x: F32 at sample) -> U32 at sample {\n  let a = fwd~(prev~(^b))\n  let b = fwd~(a)\n  acc~(b)\n}\n";
 /// The forms with an event in the head of their own flow, so that nothing but the flow itself is needed.
 const DELAY_MODIFIER: &str =
     "pub flow delay_modifier(m: U32 at event, c: Bool at block) -> U32 at sample {\n  prev~(m).reset_if~(c)\n}\n";
@@ -129,34 +132,33 @@ fn assert_no_internal_error(tag: &str, args: &[&str], out: &Out) {
     assert!(!out.stdout.contains("internal error") && !out.stderr.contains("internal error"), "{tag}: {args:?}");
 }
 
-/// The command ends with 1 and E0200 only, one in the lines of each flow of `flows` and no other, and it does not run the package.
-fn assert_stops_in(tag: &str, d: &Dir, src: &str, args: &[&str], flows: &[&str]) {
+/// The command ends with 1 and the diagnostic `code` only, one in the lines of each flow of `flows` and no other, and it does not run the package.
+fn assert_stops_in(tag: &str, d: &Dir, src: &str, args: &[&str], code: &str, flows: &[&str]) {
     let out = run(d.root(), args);
     let got = errors(&out);
     assert_eq!(out.code, 1, "{tag}: {args:?}: {}{}", out.stdout, out.stderr);
-    assert!(got.iter().all(|(code, _)| code == "E0200"), "{tag}: {args:?}: only E0200: {}{}", out.stdout, out.stderr);
+    assert!(got.iter().all(|(c, _)| c == code), "{tag}: {args:?}: only {code}: {}{}", out.stdout, out.stderr);
     for name in flows {
         let (a, b) = flow_lines(src, name);
         let n = got.iter().filter(|(_, row)| a <= *row && *row <= b).count();
-        assert_eq!(n, 1, "{tag}: {args:?}: one E0200 in `{name}` (lines {a}-{b}): {}{}", out.stdout, out.stderr);
+        assert_eq!(n, 1, "{tag}: {args:?}: one {code} in `{name}` (lines {a}-{b}): {}{}", out.stdout, out.stderr);
     }
-    assert_eq!(got.len(), flows.len(), "{tag}: {args:?}: no E0200 elsewhere: {}{}", out.stdout, out.stderr);
+    assert_eq!(got.len(), flows.len(), "{tag}: {args:?}: no {code} elsewhere: {}{}", out.stdout, out.stderr);
     assert!(!out.stdout.lines().any(|l| l.starts_with("test ")), "{tag}: {args:?}: a test ran: {}", out.stdout);
     assert_no_internal_error(tag, args, &out);
 }
 
-/// `test`, `dump --core` and `graph <flow>` for each flow of `flows` stop in those flows only.
-fn assert_each_stops(tag: &str, flows: &[&str], names: &[&str]) {
+/// `check`, `test`, `dump --core`, `interface` and `graph <flow>` for each flow of `names` end with the diagnostic `code` in those flows only (`graph`
+/// reports the errors of the package as `check` does, §18.1).
+fn assert_each_stops(tag: &str, flows: &[&str], code: &str, names: &[&str]) {
     let (d, src) = package(tag, flows);
-    assert_checks(tag, &d);
     let dir = d.arg();
-    assert_stops_in(tag, &d, &src, &["test"], names);
-    assert_stops_in(tag, &d, &src, &["dump", "--core", &dir], names);
-    for name in names {
-        assert_stops_in(tag, &d, &src, &["graph", name], &[name]);
+    for args in [vec!["check"], vec!["test"], vec!["dump", "--core", dir.as_str()], vec!["interface"]] {
+        assert_stops_in(tag, &d, &src, &args, code, names);
     }
-    let out = run(d.root(), &["graph", "plain"]);
-    assert_eq!(out.code, 0, "{tag}: graph plain: {}{}", out.stdout, out.stderr);
+    for name in names {
+        assert_stops_in(tag, &d, &src, &["graph", name], code, names);
+    }
 }
 
 // ---------------------------------------------------------------- the forms that run
@@ -213,32 +215,22 @@ fn interface_has_the_sizes_of_the_states_of_the_flows_that_run_u2() {
     assert!(!out.stdout.contains("not available"), "the size of the state is known: {}", out.stdout);
 }
 
-// ---------------------------------------------------------------- the forms that stay E0200 after U2
+// ---------------------------------------------------------------- a call that ticks by itself is E0815 of the check (W7-17 U6b, S-1237)
 
-/// A source that ticks by itself (on the path of the output, off it, in a loop of two): one E0200 for the flow that has the form (S-1237). The flows that run in the same package (`acc`, `fwd`, `with_event_out`, `calls_acc`) are
-/// not stopped.
+/// A call that ticks by itself (on the path of the output, off it, in a loop of two): one E0815 for the flow that has the form, in `check`, and the same E0815 in `test`, `dump --core`, `interface` and `graph <that flow>`. The flows
+/// beside them (`acc`, `fwd`, `with_event_out`, `calls_acc`, the one with a `when~`) have no diagnostic and no E0200: the package has the diagnostics of the three flows only, and nothing runs.
 #[test]
-fn a_source_with_no_root_is_one_e0200_for_each_flow_u2() {
-    let flows = [EVENT_OUT, ACC, FWD, LP, CALLS_ACC, MODDED, ROOTLESS_ON, ROOTLESS_OFF, ROOTLESS_LOOP];
-    assert_each_stops("event_stay_calls", &flows, &["rootless_on", "rootless_off", "rootless_loop"]);
-    let (d, _) = package("event_stay_calls_beside", &flows);
-    for flow in ["calls_acc", "modded"] {
-        let out = run(d.root(), &["graph", flow]);
-        assert_eq!(out.code, 0, "graph {flow}: {}{}", out.stdout, out.stderr);
-    }
+fn a_call_that_ticks_by_itself_is_one_e0815_for_each_flow_u6b() {
+    let flows = [EVENT_OUT, ACC, FWD, LP, CALLS_ACC, MODDED, LOOP_ON, LOOP_OFF, LOOP_OF_TWO];
+    assert_each_stops("event_loop_calls", &flows, "E0815", &["loop_on", "loop_off", "loop_of_two"]);
 }
 
-/// The forms that run and the forms that stay E0200 in one package: the stop is the flows that stay, and the flows that run are in the same package (`graph` of one is drawn).
+/// The flows with no loop beside a flow with one: the package has the E0815 of that flow only (none in the others, no E0200), in `check`, `test`, `dump --core` and `interface`, and `graph` of that flow. A package with a flow that has
+/// a diagnostic is stopped as a package (§18.1); what `graph` of another flow of it does is not asked.
 #[test]
-fn flows_that_run_beside_a_flow_that_is_e0200_are_not_stopped_u2() {
-    let flows = [EVENT_OUT, ACC, FWD, CALLS_ACC, DRAWN, MODDED, ROOTLESS_ON];
-    let (d, src) = package("event_beside", &flows);
-    assert_checks("event_beside", &d);
-    assert_stops_in("event_beside", &d, &src, &["test"], &["rootless_on"]);
-    for flow in ["calls_acc", "drawn", "acc", "modded"] {
-        let out = run(d.root(), &["graph", flow]);
-        assert_eq!(out.code, 0, "graph {flow}: {}{}", out.stdout, out.stderr);
-    }
+fn flows_with_no_loop_beside_a_flow_with_one_are_in_a_package_that_stops_u6b() {
+    let flows = [EVENT_OUT, ACC, FWD, CALLS_ACC, DRAWN, MODDED, LOOP_ON];
+    assert_each_stops("event_loop_beside", &flows, "E0815", &["loop_on"]);
 }
 
 // ---------------------------------------------------------------- a chain of `reset_if~` only that has an event (U2r)

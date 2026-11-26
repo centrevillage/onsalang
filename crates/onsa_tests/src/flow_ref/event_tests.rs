@@ -42,3 +42,10 @@ fn an_event_read_without_a_caret_is_the_value_where_it_is_written_whatever_condi
     assert!(r.failed.is_empty() && r.unavailable.is_empty(), "{:#?} {}", r.failed, show(&r));
     assert_eq!(r.passed, ["r1", "r2", "r3", "r4", "r5", "r6", "r7", "r8"], "{}", show(&r));
 }
+
+#[test]
+fn a_delay_of_the_clock_of_an_event_is_read_at_the_period_as_its_output_at_the_last_event() {
+    let r = run_cases(include_str!("event_period_reads_values.md"), &|_| true);
+    assert!(r.failed.is_empty() && r.unavailable.is_empty(), "{:#?} {}", r.failed, show(&r));
+    assert_eq!(r.passed, ["p1", "p2", "p3", "q1", "q2", "q3", "q4", "q5", "q6", "q7"], "{}", show(&r));
+}

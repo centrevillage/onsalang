@@ -1,0 +1,28 @@
+# flow_ref 1 source=tests/spec/flow_semantics/event_own_output_read_values.onsa tests=9 evaluated=9 unavailable=0 skipped=0 waiting=0
+@ plus1 in the loop: x is the last event of g before the frame, so g is 1 1 2 2 3 3 4 4
+render event_own_output_read_values.period_in_the_loop sr=0x41000000 frames=8
+out=[1 1 2 2 3 3 4 4]
+@ a when~ whose condition is an expression of its own events (== 0): it is the default of its type (false) until the first event, so the part is stopped from the start
+render event_own_output_read_values.stopped_by_its_own_level_of_zero sr=0x41000000 in x=[0 3 0 0 5 2 0 7]
+out=[0 3 0 0 5 2 0 7]
+@ a when~ that reads its own event at sample runs while the last event of the delay is 0 and holds the last event after
+render event_own_output_read_values.runs_until_its_own_level sr=0x41000000 in x=[0 3 0 0 5 2 0 7]
+out=[1 9 6 6 11 8 6 13]
+@ a delay with an init in the call that gives its events: the init is given at the first event
+render event_own_output_read_values.with_an_init sr=0x41000000 frames=8
+out=[1 8 2 9 3 10 4 11]
+@ a delay of a delay in the call that gives its events is the g of two events before
+render event_own_output_read_values.delay_of_a_delay sr=0x41000000 frames=8
+out=[1 1 1 2 2 2 3 3]
+@ a delay of the events of a call after the one it is written in is read at the last event
+render event_own_output_read_values.of_a_call_after sr=0x41000000 frames=8
+out=[1 8 2 9 3 10 4 11]
+@ a delay of a sparse event in the argument of a call is read at the last event, in the frame of the event too
+render event_own_output_read_values.of_a_sparse_event sr=0x41000000 in x=[0 3 0 0 5 2 0 7]
+out=[1 10 10 10 4 6 6 3]
+@ a delay of a sparse event in a when~: the part runs while the last output of the delay is 1, and holds its last event
+render event_own_output_read_values.in_a_when_of_a_sparse_event sr=0x41000000 in x=[0 3 0 0 5 2 0 7]
+out=[0 4 4 4 4 4 4 4]
+@ a delay of a sparse event in the condition of a when~ and in the argument: the part runs from the first event while the output is 5
+render event_own_output_read_values.delay_in_the_condition sr=0x41000000 in x=[0 3 0 0 5 2 0 7]
+out=[0 12 15 21 28 28 32 44]

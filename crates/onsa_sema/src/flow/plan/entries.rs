@@ -5,7 +5,8 @@
 //! ([`FlowInfo::time`]), then the fields of its state, which these
 //! decide. The same walk checks the N of `.down~` and `.up~` on the paths
 //! through flows (S-1089) and the clocks they compose (S-1216), E0808 of
-//! the flow stage.
+//! the flow stage, and the loops of calls nothing outside them ticks
+//! (S-1237), E0815.
 //!
 //! One walk after the bodies of all the flows are checked, the callees
 //! before their callers: depth first with a stack of its own (a body never
@@ -141,20 +142,26 @@ fn close(pkg: &Package, a: &mut Analysis, f: DefId, marks: &HashMap<DefId, Mark>
             past_at = Some((at, total, id));
         }
     }
+    // The E0808 of the path first, one of the flow, as before S-1216.
+    let found: Vec<Diagnostic> = match past_at {
+        Some(p) => vec![past_path(pkg, a, f, p, most)],
+        None => unmade_at.into_iter().map(|u| past_u32(pkg, a, f, u)).collect(),
+    };
     let gives = a.def(f).as_flow().is_some_and(FlowDef::gives_events);
     let burst_of = |g| a.flows.get(&g).map_or(1, |g| g.burst);
-    let ticked = match events::table(info, gives, &tables, burst_of, &mut time) {
-        Ok(ticked) => ticked,
-        Err(at) => {
-            // The form not run (`FlowInfo::event_form`).
-            let time = own_time(info);
-            a.flows.entry(f).and_modify(|info| (info.event_form, info.time) = (Some(at), time));
-            return None;
-        }
-    };
     let ast = || match crate::module_of_def(pkg, a, f) {
         Some(m) => &m.parsed.ast,
         None => onsa_diag::internal::bug(None, "a flow of no module"),
+    };
+    let ticked = match events::table(info, gives, &tables, burst_of, &mut time) {
+        Ok(ticked) => ticked,
+        // Before `late` and the walk of `emit`, which go up the parents of no loop.
+        Err(ring) => {
+            let (d, time) = (unticked(a, info, ast(), &ring), own_time(info));
+            a.diagnostics.extend(found.into_iter().chain([d]));
+            a.flows.entry(f).and_modify(|info| (info.unticked, info.time) = (true, time));
+            return None;
+        }
     };
     let ast = (!ticked.events.is_empty()).then(ast);
     let late = |id| ast.map_or(Vec::new(), |ast| events::late(info, &ticked.events, ast, NodeId(id)));
@@ -169,14 +176,46 @@ fn close(pkg: &Package, a: &mut Analysis, f: DefId, marks: &HashMap<DefId, Mark>
     (flow.events, flow.emit, flow.burst) = (ticked.events, ticked.emit, ticked.burst);
     node_work(flow);
     fields::build(flow);
-    // The E0808 of the path first, one of the flow, as before S-1216.
-    if let Some(p) = past_at {
-        a.diagnostics.push(past_path(pkg, a, f, p, most));
-    } else {
-        let found: Vec<Diagnostic> = unmade_at.into_iter().map(|u| past_u32(pkg, a, f, u)).collect();
-        a.diagnostics.extend(found);
-    }
+    a.diagnostics.extend(found);
     counted.then_some(count)
+}
+
+/// The E0815 of the loop `ring` of calls of `info` that nothing outside it
+/// ticks (§11.11, S-1237; [`events::table`]), at the argument of its first
+/// call that ticks its output: a note at that of each other call, and one at
+/// the input of the first callee that gives its events out.
+fn unticked(a: &Analysis, info: &FlowInfo, ast: &onsa_syntax::ast::Ast, ring: &[NodeId]) -> Diagnostic {
+    // The input whose events the callee gives out is the source of it that gives.
+    let arg = |id: NodeId| {
+        let n = info.node(id);
+        let PlanKind::Instance { callee, .. } = n.kind else { onsa_diag::internal::bug(Some(n.span), "no call") };
+        let i = a.flows.get(&callee).and_then(|g| {
+            g.events.iter().find_map(|p| match p.from {
+                EventFrom::Input(i) if p.gives => Some(i as usize),
+                _ => None,
+            })
+        });
+        let found = i.and_then(|i| Some((n.args.get(i)?, a.def(callee).as_flow()?.inputs.get(i)?)));
+        let Some((arg, input)) = found else {
+            onsa_diag::internal::bug(Some(n.span), "a call in a loop of events not at an input")
+        };
+        (ast.expr(arg.expr).span, callee, input)
+    };
+    let (at, callee, input) = arg(ring[0]);
+    let msg = if ring.len() == 1 {
+        "nothing outside the call ticks this argument: it is at the events of the output of the call it is given to, so the call never gives an event (§11.11)"
+    } else {
+        "nothing outside the loop ticks this argument: it is at the events of a loop of calls that only their own outputs tick, so none of them gives an event (§11.11)"
+    };
+    // Each call of the loop is ticked by the next.
+    let mut others: Vec<_> = (1..ring.len()).map(|k| (arg(ring[k]).0, arg(ring[(k + 1) % ring.len()]).1)).collect();
+    others.sort_by_key(|(s, _)| (s.start, s.end));
+    let mut d = Diagnostic::new(Stage::Flow, Code::E0815, at, msg);
+    for (at, by) in others {
+        d = d.with_note(at, format!("this argument is at the events of `{}~`, in the loop", a.def(by).name));
+    }
+    let (name, of) = (&a.def(callee).name, &input.name);
+    d.with_note(input.span, format!("the output of `{name}` gives its events at those of its input `{of}`"))
 }
 
 /// Adds the work of the nodes of `flow` to [`FlowInfo::work`]: of each

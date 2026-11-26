@@ -2,14 +2,16 @@
 //! the text and the traces of the memo of U2, and not of what it makes: the
 //! source of each event clock, the stage that ticks it, the work of each
 //! instance at the events, the stages that give out the events of the
-//! output, and the words of the time; the forms not run; and what a delay
-//! reads of events where it is written (S-1240).
+//! output, and the words of the time; the E0815 of a loop of calls that
+//! nothing outside it ticks (S-1237); and what a delay reads of events where
+//! it is written (S-1240).
 
 use super::super::{Entry, EventFrom, Op, Out, Words};
 use crate::clock::ClockStage;
 use crate::flow::FlowInfo;
 use crate::tests::{analyze, pkg};
 use crate::{Analysis, Package};
+use onsa_diag::Code;
 
 /// A part that gives out an event at `sample`, at `sample / 4`, of an event
 /// and of the first of two; that takes an event; and that does both.
@@ -37,10 +39,15 @@ flow g5(x: U32 at sample, c: U32 at event) -> U32 at event {
 ";
 
 fn analysis(src: &str) -> (Package, Analysis, String) {
+    let (p, a, text) = analyzed(src);
+    assert!(a.diagnostics.is_empty(), "{src}: {:?}", a.diagnostics);
+    (p, a, text)
+}
+
+fn analyzed(src: &str) -> (Package, Analysis, String) {
     let text = format!("{HEAD}{src}");
     let p = pkg(&[("main", &text)]);
     let a = analyze(&p);
-    assert!(a.diagnostics.is_empty(), "{src}: {:?}", a.diagnostics);
     (p, a, text)
 }
 
@@ -455,17 +462,31 @@ fn the_events_of_a_chain_are_ticked_by_the_stage_of_its_runs() {
     }
 }
 
-/// The text of the form not run of the flow `top` of `src`, and whether it
-/// has its tables, with the E0200 of it alone.
+/// The text of the E0815 of the flow `top` of `src` (S-1237), its one
+/// diagnostic, with whether it has its tables; and of every flow planned, that
+/// a call gives out its events in one entry at most and its parent is a stage
+/// of a source of the table, which the walk of the parents relies on.
 fn form(src: &str) -> Option<String> {
-    let (_, a, text) = analysis(src);
+    let (_, a, text) = analyzed(src);
     let f = flow(&a, "top");
-    assert_eq!(f.event_form.is_none(), f.planned(), "{src}");
-    assert_eq!(f.event_gate().map(|d| d.span), f.event_form, "{src}");
-    if f.event_form.is_some() {
+    assert!(
+        a.diagnostics.len() <= 1 && a.diagnostics.iter().all(|d| d.code == Code::E0815),
+        "{src}: {:?}",
+        a.diagnostics
+    );
+    assert_eq!(a.diagnostics.is_empty(), f.planned(), "{src}");
+    if !f.planned() {
         assert!(f.nodes.iter().all(|n| n.entries.is_empty()) && f.fields.is_empty() && f.emit.is_none(), "{src}");
     }
-    f.event_form.map(|s| s.text_in(&text).to_string())
+    for g in a.flows.values().filter(|g| g.planned()) {
+        for p in &g.events {
+            let EventFrom::Call(id) = p.from else { continue };
+            let gives = g.node(id).entries.iter().filter(|e| super::most(g.node(id), &e.ops) > 0).count();
+            assert!(gives <= 1, "{src}: {}", g.node(id).path);
+            assert!(!matches!(p.parent, Some(ClockStage::Event(_))) || super::find(&g.events, p.parent).is_some());
+        }
+    }
+    a.diagnostics.first().map(|d| d.span.text_in(&text).to_string())
 }
 
 fn forms(body: &str) -> Option<String> {
@@ -504,6 +525,9 @@ fn the_chains_run() {
         "  own~(3).down~(2).when~(m > 3) at sample",
         "  own~(x).when~(c).reset_if~(m > 3).when~(m > 4)",
         "  cnt~(m).when~(m > 3)",
+        // A call that gives out events, reset at another.
+        "  let d = fwd~(m).reset_if~(gen~(x) > 3)\n  d at sample",
+        "  let d = gen~(x).reset_if~(m > 3)\n  d at sample",
     ] {
         assert_eq!(forms(run), None, "{run}");
     }
@@ -547,36 +571,65 @@ fn the_replicas_and_the_arms() {
 }
 
 /// S-1237: a source nothing outside it ticks, on the way to the output, not
-/// on it, and two that tick one another, with one after them; at the first
-/// call of the loop in the text. One that the `sample` also ticks is run.
+/// on it, and two that tick one another, with one after them, through a
+/// callee too: an E0815 at the argument of the first call of the loop in the
+/// text that ticks its output, a note at that of each other call and one at
+/// the input of the callee. One that the `sample` also ticks is run.
 #[test]
-fn a_source_its_own_output_ticks_is_not_run() {
+fn a_source_its_own_output_ticks_is_an_e0815() {
     let d = "  let d = fwd~(prev~(^d))\n  d at sample";
-    assert_eq!(forms(d).as_deref(), Some("fwd~(prev~(^d))"));
+    assert_eq!(forms(d).as_deref(), Some("prev~(^d)"));
     let d = "  let d = fwd~(prev~(^d))\n  let n = cnt~(d)\n  x + n - n";
-    assert_eq!(forms(d).as_deref(), Some("fwd~(prev~(^d))"));
+    assert_eq!(forms(d).as_deref(), Some("prev~(^d)"));
     let long = "  let t = fwd~(prev~(^b))\n  let a = fwd~(prev~(^b))\n  let b = fwd~(a)\n  cnt~(t) + cnt~(b)";
-    assert_eq!(forms(long).as_deref(), Some("fwd~(prev~(^b))"));
-    let (_, a, text) = analysis(&format!("pub flow top(x: U32 at sample) -> U32 at sample {{\n{long} + x\n}}\n"));
-    let at = flow(&a, "top").event_form.expect("a loop");
+    assert_eq!(forms(long).as_deref(), Some("prev~(^b)"));
+    let notes = |src: &str| {
+        let (_, a, text) = analyzed(src);
+        let d = a.diagnostics.first().expect("an E0815");
+        let notes = d.notes.iter().map(|n| (n.span.map(|s| s.text_in(&text).to_string()), n.message.clone()));
+        (text[..d.span.start as usize].lines().last().unwrap_or_default().to_string(), notes.collect::<Vec<_>>())
+    };
+    let input =
+        (Some("e: U32 at event".to_string()), "the output of `fwd` gives its events at those of its input `e`".into());
+    let other =
+        |at: &str, by: &str| (Some(at.to_string()), format!("this argument is at the events of `{by}~`, in the loop"));
     // The loop is of `a` and `b`; `t` is after it.
-    assert_eq!(&text[..at.start as usize].lines().last().unwrap_or_default(), &"  let a = ");
+    let two = notes(&format!("pub flow top(x: U32 at sample) -> U32 at sample {{\n{long} + x\n}}\n"));
+    assert_eq!(two, ("  let a = fwd~(".into(), vec![other("a", "fwd"), input.clone()]));
+    let wrap = "flow wrap(m: U32 at event) -> U32 at event {\n  Some(fwd~(m))\n}\n\
+                pub flow top() -> U32 at event {\n  let p = both~(prev~(^q), prev~(^p))\n  let q = wrap~(p)\n  Some(q)\n}\n";
+    let both =
+        (Some("a: U32 at event".to_string()), "the output of `both` gives its events at those of its input `a`".into());
+    assert_eq!(notes(wrap), ("  let p = both~(".into(), vec![other("p", "both"), both]));
+    assert_eq!(form(wrap).as_deref(), Some("prev~(^q)"));
     let own = form("pub flow top() -> U32 at event {\n  let d = fwd~(prev~(^d))\n  Some(d)\n}\n");
-    assert_eq!(own.as_deref(), Some("fwd~(prev~(^d))"));
+    assert_eq!(own.as_deref(), Some("prev~(^d)"));
     assert_eq!(forms("  let d = g5~(x, prev~(^d))\n  d at sample"), None);
+    // Three calls of three flows (W7-17 U6b/b): each note names the callee whose output ticks that argument, in the order of the text.
+    let three = "flow wrap(m: U32 at event) -> U32 at event {\n  Some(fwd~(m))\n}\nflow lt(m: U32 at event) -> U32 at event {\n  Some(m)\n}\n\
+                 pub flow top() -> U32 at event {\n  let a = fwd~(prev~(^c))\n  let b = wrap~(a)\n  let c = lt~(b)\n  Some(c)\n}\n";
+    assert_eq!(notes(three), ("  let a = fwd~(".into(), vec![other("a", "fwd"), other("b", "wrap"), input.clone()]));
+    // The E0808 of the same flow is kept beside it, and §18.1 chooses.
+    let past = "flow one() -> U32 at event {\n  let d = gen~(3).up~(16777216)\n  Some(d)\n}\n\
+                pub flow top() -> U32 at event {\n  let d = one~().up~(16777216)\n  let l = fwd~(prev~(^l))\n  let _ = l\n  Some(d)\n}\n";
+    let (_, a, _) = analyzed(past);
+    let codes: Vec<Code> = a.diagnostics.iter().map(|d| d.code).collect();
+    assert!(codes.contains(&Code::E0808) && codes.contains(&Code::E0815), "{codes:?}");
 }
 
-/// A caller of a flow of a form not run is of a form that is (the source of
-/// the call is in its table, ticked by none): the lowering stops at the
-/// callee, and the check at no internal error.
+/// A caller of a flow with the E0815 of S-1237 has no diagnostic (the source
+/// of the call is in its table, ticked by none), as of a callee in error.
 #[test]
-fn a_caller_of_a_form_not_run_has_its_sources() {
-    let (_, a, _) = analysis(
+fn a_caller_of_a_flow_of_the_e0815_has_its_sources() {
+    let (_, a, _) = analyzed(
         "flow bad(x: U32 at sample, m: U32 at event) -> U32 at event {\n  let _ = (x, m)\n  let d = fwd~(prev~(^d))\n  Some(d)\n}\n\
          pub flow top(x: U32 at sample, m: U32 at event) -> U32 at sample {\n  let d = bad~(x, m)\n  let n = cnt~(d)\n  n + (prev~(d) at sample)\n}\n\
          pub flow on(x: U32 at sample, m: U32 at event) -> U32 at event {\n  let d = bad~(x, m)\n  Some(d)\n}\n\
          pub flow last(x: U32 at sample, m: U32 at event) -> U32 at sample {\n  cnt~(on~(x, m))\n}\n",
     );
+    let bad = a.def(crate::tests::def(&a, "bad")).span;
+    let [d] = &a.diagnostics[..] else { panic!("{:?}", a.diagnostics) };
+    assert!(d.code == Code::E0815 && bad.start <= d.span.start && d.span.end <= bad.end, "{d:?}");
     assert!(!flow(&a, "bad").planned() && flow(&a, "bad").events.len() == 2);
     let f = flow(&a, "top");
     assert_eq!(events(f), (vec!["m < -".into(), "d.bad_0 < -".into()], None));

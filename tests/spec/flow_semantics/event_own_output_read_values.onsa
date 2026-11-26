@@ -1,0 +1,160 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.3", "§11.4", "§11.10", "§11.11"]
+
+// The clock of a delay of the events of a call that is written where the value is read at `sample`, and the first value of an expression of an event (W7-17 U6b/t; S-1237; spec §11.4: "組込みの遅延はクロックに総称で、第 1 引数のクロックで刻み、出力もそのクロックの値である（…第 1 引数が
+// イベントの値なら一つ前のイベント）"; §11.3: "`at` は値も評価の段も変えず、状態も作らない"; §11.11: "イベントの値を `sample`・`sample / N` の入力へ渡すと最後の値で読む"、"最初のイベントの前は `T.default()`"; §11.3: "刻みで書いて速い段が読むフィールド（計算した部分式の隠れた
+// フィールド…）の初めの値は `T.default()`"): the delay stays at the clock of the events (it ticks at them, and nothing makes it tick at each frame) when its value is given to an input at `sample`, when it is in an expression with `at sample`, or in the
+// condition of a `when~`; and an expression of an event (`prev~(^a) == 0`, with no `at sample` in it) is evaluated at the events and has the default of its own type (here `false`) until the first one. The loops are the form of the
+// example `loops` of §11.11 (`g`, `d`): the call that gives out at each frame of the period reads the last event of its own output. Every value is worked out by hand from the text. The same parts are in event_own_output_ok_values.onsa.
+
+const XS: [U32; 8] = [0, 3, 0, 0, 5, 2, 0, 7]
+
+flow fwd(m: U32 at event) -> U32 at event { Some(m) }
+flow held_p(m: U32 at event) -> U32 at event { Some((m at sample) + 1) }
+flow plus1(x: U32 at sample) -> U32 at event { Some(x + 1) }
+
+// `plus1` gives x + 1 at each frame, x the last event of g (0 before), g the events of `plus1` through `fwd`; the delay of g gives S (0 first) to x
+pub flow period_in_the_loop() -> U32 at sample {
+  let g: U32 = fwd~(plus1~(prev~(^g)))
+  g at sample
+}
+
+// the condition is an expression of the clock of the events of a: it is evaluated at them, and before the first it is `false`: the part does not run at the frame 0, and nothing comes to it
+pub flow stopped_by_its_own_level_of_zero(x: U32 at sample) -> U32 at sample {
+  let a: U32 = held_p~(prev~(^a, 5)).when~(prev~(^a) == 0)
+  (a at sample) + x
+}
+
+// the condition reads the last event of the delay at `sample` (0 before the first): it is 0 at first, so the part runs; the delay gives the value of the event before (0, then 1), and the part stops at the frame 2
+pub flow runs_until_its_own_level(x: U32 at sample) -> U32 at sample {
+  let a: U32 = held_p~(prev~(^a, 5)).when~((prev~(^a) at sample) == 0)
+  (a at sample) + x
+}
+
+test "plus1 in the loop: x is the last event of g before the frame, so g is 1 1 2 2 3 3 4 4" {
+  // The frame 0: x = 0 gives 1; the delay (store 0) gives 0, then stores 1. The frame 1: x = 0 gives 1; the delay gives 1. The frame 2: x = 1 gives 2; the delay gives 1, then stores 2. The frame 3: x = 1 gives 2; the delay gives 2 ...
+  let o = period_in_the_loop.render(8, 8.0)
+  let w: [U32; 8] = [1, 1, 2, 2, 3, 3, 4, 4]
+  for t in 0 ..< 8 {
+    assert o.out[t] == w[t]
+  }
+}
+
+test "a when~ whose condition is an expression of its own events (== 0): it is the default of its type (false) until the first event, so the part is stopped from the start" {
+  let z = stopped_by_its_own_level_of_zero.render(XS, 8.0)
+  for t in 0 ..< 8 {
+    assert z.out[t] == XS[t]
+  }
+}
+
+test "a when~ that reads its own event at sample runs while the last event of the delay is 0 and holds the last event after" {
+  // The frame 0: the condition (the last event of the delay: 0 before the first) is true; the part gives M + 1 = 1 (M the last event of m, 0 first); the delay of the condition (init 0) gives 0, the delay of the head (init 5) gives 5 to m and stores 1.
+  // The frame 1: the condition is 0: true again; the part gives 5 + 1 = 6; the delay of the condition gives 1 (the event before). The frame 2: the condition is 1: the part stops and the last event, 6, is read.
+  let o = runs_until_its_own_level.render(XS, 8.0)
+  let w: [U32; 8] = [1, 9, 6, 6, 11, 8, 6, 13]
+  for t in 0 ..< 8 {
+    assert o.out[t] == w[t]
+  }
+}
+
+// ---- the same read in other places of the call that gives the events, and in the calls around it (W7-17 U6b-e): the delay ticks at the events of g, and a part of `sample` reads the output at the last of them (0 before the first)
+
+flow det(x: U32 at sample) -> U32 at event { if x != 0 { Some(x) } else { None } }
+
+// the init 7: the delay gives 7 at the first event, then the g of the event before; x is 0 7 1 8 2 9 3 10
+pub flow with_an_init() -> U32 at sample {
+  let g: U32 = fwd~(plus1~(prev~(^g, 7)))
+  g at sample
+}
+
+// a delay of a delay: the g of two events before; x is 0 0 0 1 1 1 2 2
+pub flow delay_of_a_delay() -> U32 at sample {
+  let g: U32 = fwd~(plus1~(prev~(prev~(^g))))
+  g at sample
+}
+
+// the delay is of the events of b, a call after the one it is written in (a gives at each frame): x is 0 7 1 8 2 9 3 10, the same as with the init
+pub flow of_a_call_after() -> U32 at sample {
+  let a: U32 = plus1~(prev~(^b, 7))
+  let b: U32 = fwd~(a)
+  b at sample
+}
+
+// the events of det are 3@1 5@4 2@5 7@7: the delay gives 9, 3, 5, 2 at them, and x is the last (0 before the first), seen in the frame of the event too (the call is written below det): x is 0 9 9 9 3 5 5 2
+pub flow of_a_sparse_event(x: U32 at sample) -> U32 at sample {
+  let e = det~(x)
+  let y: U32 = plus1~(prev~(e, 9))
+  y at sample
+}
+
+// the condition of a `when~` is the last output of that delay (0 before the first event): it is 1 (the init) in the frames 1 to 3, then 3, 5, 5, 2; the part gives 3 + 1 there and stops
+pub flow in_a_when_of_a_sparse_event(x: U32 at sample) -> U32 at sample {
+  let e = det~(x)
+  let a: U32 = held_p~(e).when~((prev~(e, 1) at sample) == 1)
+  a at sample
+}
+
+test "a delay with an init in the call that gives its events: the init is given at the first event" {
+  let o = with_an_init.render(8, 8.0)
+  let w: [U32; 8] = [1, 8, 2, 9, 3, 10, 4, 11]
+  for t in 0 ..< 8 {
+    assert o.out[t] == w[t]
+  }
+}
+
+test "a delay of a delay in the call that gives its events is the g of two events before" {
+  let o = delay_of_a_delay.render(8, 8.0)
+  let w: [U32; 8] = [1, 1, 1, 2, 2, 2, 3, 3]
+  for t in 0 ..< 8 {
+    assert o.out[t] == w[t]
+  }
+}
+
+test "a delay of the events of a call after the one it is written in is read at the last event" {
+  let o = of_a_call_after.render(8, 8.0)
+  let w: [U32; 8] = [1, 8, 2, 9, 3, 10, 4, 11]
+  for t in 0 ..< 8 {
+    assert o.out[t] == w[t]
+  }
+}
+
+test "a delay of a sparse event in the argument of a call is read at the last event, in the frame of the event too" {
+  let o = of_a_sparse_event.render(XS, 8.0)
+  let w: [U32; 8] = [1, 10, 10, 10, 4, 6, 6, 3]
+  for t in 0 ..< 8 {
+    assert o.out[t] == w[t]
+  }
+}
+
+test "a delay of a sparse event in a when~: the part runs while the last output of the delay is 1, and holds its last event" {
+  let o = in_a_when_of_a_sparse_event.render(XS, 8.0)
+  let w: [U32; 8] = [0, 4, 4, 4, 4, 4, 4, 4]
+  for t in 0 ..< 8 {
+    assert o.out[t] == w[t]
+  }
+}
+
+// A delay of a sparse event written in the condition of a `when~` and in the argument of the call (W7-17 U6b/b, a form the evaluator read at `sample`
+// before): the two delays tick at the events of e; the condition is false until the first, then the level of the last output (5 == 5, then 3, 5, 2).
+flow held_ev(m: U32 at event) -> U32 at event { Some((m at sample) + 1) }
+flow sum_ev(m: U32 at event) -> U32 at sample {
+  let n = prev~(^n) + m
+  n
+}
+pub flow delay_in_the_condition(x: U32 at sample) -> U32 at sample {
+  let e = det~(x)
+  let g: U32 = held_ev~(prev~(e, 5)).when~(prev~(e, 5) == 5)
+  sum_ev~(g) + (e at sample) + x
+}
+
+test "a delay of a sparse event in the condition of a when~ and in the argument: the part runs from the first event while the output is 5" {
+  // The frame 1: m = 5, the condition 5 == 5, the part gives 6; the frames 2 and 3 give 6; the frame 4: m = 3, the condition 3 (stopped); the
+  // frame 5: m = 5, 5 (runs, 6); the frame 6 gives 6; the frame 7: m = 2, 2 (stopped). The sums 0 6 12 18 18 24 30 30, with e and x.
+  let o = delay_in_the_condition.render(XS, 8.0)
+  let w: [U32; 8] = [0, 12, 15, 21, 28, 28, 32, 44]
+  for t in 0 ..< 8 {
+    assert o.out[t] == w[t]
+  }
+}

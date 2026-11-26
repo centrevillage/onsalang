@@ -743,10 +743,6 @@ fn outputs(
             Err(onsa_driver::GraphError::Usage(e)) => {
                 run.problems.push(Problem::Failed(format!("graph `{flow}`: {e}")))
             }
-            Err(onsa_driver::GraphError::Diagnostics(d)) => {
-                let d = LowerError::Diagnostics(d);
-                run.problems.push(stage_problem(&loaded.sources, StageFailure::Lower(&d)))
-            }
             Err(onsa_driver::GraphError::Internal(e)) => run.problems.push(internal_problem(&loaded.sources, &e, None)),
         }
     }

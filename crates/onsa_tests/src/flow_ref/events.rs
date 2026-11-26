@@ -12,7 +12,7 @@ use onsa_syntax::ast::{ExprId, ExprKind};
 
 use super::expr::{Frame, Stop};
 use super::flow::{Clock, Known, Step, clock_of, enter, stage};
-use super::hoist::{caret, field_of, kept, kids, made_at, stage_of};
+use super::hoist::{caret, field_of, kept, kids, made_at, source_clock, stage_of};
 use super::rate::{Bound, chain_of};
 use super::scalar::{Fault, Fault::Internal};
 use super::sema_view::{Body, Called, Stage, input_clock, output_stage};
@@ -110,6 +110,10 @@ impl<'a> Frame<'a> {
         for st in steps.iter().filter(|s| !matches!(s.clock, Clock::Event(_))) {
             self.default_parts(&st.known, st.init, (st.init, Clock::Const), at)?;
         }
+        // The parts in the call of a step that is a source of the clock itself (`prev~(^g)` in `g`'s own call) are made by its stage, and read before it as defaults.
+        for st in steps.iter().filter(|s| source_clock(&body, s.init) == Some(s.clock)) {
+            self.default_source_parts(&st.known, st.init, (st.init, st.clock), at)?;
+        }
         for st in steps.iter().filter(|s| matches!(s.clock, Clock::Event(_)) && !s.emits) {
             let ty = body.ty(st.init).map_err(here)?;
             match (st.pat, self.shape(ty, at)?.default_value()) {
@@ -155,6 +159,27 @@ impl<'a> Frame<'a> {
             true => self.replicate(e, |_: &()| 0, each).map(drop),
             false => each(self),
         }
+    }
+
+    /// The parts of the clock `k` under the call `e`, the source of `k` (`hoist::source_parts` makes them), start at `T.default()`.
+    fn default_source_parts(
+        &mut self,
+        known: &Known,
+        root: ExprId,
+        (e, k): (ExprId, Clock),
+        at: Span,
+    ) -> Result<(), Stop> {
+        let (body, here) = (self.body, |fault| Stop { fault, at });
+        for (x, kn, g) in kids(&body, known, root, e, Clock::Const).map_err(here)? {
+            // The call of another source is a part of its own clock, and the parts in its arguments are of the clocks of theirs: those are walked on into.
+            if event_part(&body, &kn, root, (x, g)).map_err(here)?.is_some() {
+                self.default_parts(&kn, root, (x, g), at)?;
+            }
+            if source_clock(&body, x).is_some() || event_part(&body, &kn, root, (x, g)).map_err(here)?.is_none() {
+                self.default_source_parts(&kn, root, (x, k), at)?;
+            }
+        }
+        Ok(())
     }
 
     /// The instance of a flow that gives events, made by the call `call`: its output is `T.default()` of the type of the event until it gives one.

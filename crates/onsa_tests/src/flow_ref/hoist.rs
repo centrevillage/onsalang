@@ -519,6 +519,28 @@ fn reads_field(body: &Body, e: ExprId) -> bool {
     field_of(body, e).is_some() || body.ast.sub_exprs(e).into_iter().any(|x| reads_field(body, x))
 }
 
+/// The clock of the events the call `e` gives when `e` is a call (of an instance, with its chain of modifiers) of a flow that gives events, else `None`: the clock of a step that is that call.
+pub(super) fn source_clock(body: &Body, e: ExprId) -> Option<Clock> {
+    let head = chain_of(body, e).ok().flatten().map_or(e, |c| c.head);
+    let call = matches!(body.ast.expr(head).kind, ExprKind::Call { .. });
+    (call && matches!(body.called(head), Ok(Called::Flow(_)))).then(|| super::events::call_src(head))
+}
+
+/// The step of a call that gives events (`let g = fwd~(plus1~(prev~(^g)))`) runs in the stage of its own events: the parts of the call (its arguments and the conditions of its modifiers, under the calls in them) that are of that clock are
+/// made there too, as the parts of any other `let` of that clock are (§11.3, §11.4: `prev~(^g)` ticks at the events of `g`, wherever it is written, and a part of `sample` that reads it reads the last of them). The call itself is run by its own stage.
+pub(super) fn source_parts(f: &mut Frame, known: &Known, root: ExprId, e: ExprId, here: Clock) -> Result<(), Stop> {
+    let body = f.body;
+    let stop = |fault| Stop { fault, at: body.ast.expr(e).span };
+    for (x, k, g) in kids(&body, known, root, e, Clock::Const).map_err(stop)? {
+        if stage_of(&body, &k, root, x).map_err(stop)? == here {
+            walk(f, &k, root, x, here, g)?;
+        } else {
+            source_parts(f, &k, root, x, here)?;
+        }
+    }
+    Ok(())
+}
+
 fn walk(f: &mut Frame, known: &Known, root: ExprId, e: ExprId, here: Clock, guard: Clock) -> Result<(), Stop> {
     let body = f.body;
     let span = body.ast.expr(e).span;
@@ -533,7 +555,11 @@ fn walk(f: &mut Frame, known: &Known, root: ExprId, e: ExprId, here: Clock, guar
     }
     let made = made_at(&body, e, (clock, guard));
     if made < here {
-        // Made by a stage before: not again, but the work the calls in it have in this stage is done where they are written (S-1233).
+        // Made by a stage before: not again, but the work the calls in it have in this stage is done where they are written (S-1233). The arguments of a call of another source are of that source's clock or of this one's (a delay of this
+        // stage's events in an argument of a call of a source before it), and the parts of this one in them are made here.
+        if matches!(here, Clock::Event(_)) && has_state(&body, e) {
+            source_parts(f, known, root, e, here)?;
+        }
         return visit(f, known, root, e, here, guard);
     }
     if made == here && kept(&body, known, e).map_err(stop)? {

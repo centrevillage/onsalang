@@ -725,9 +725,6 @@ fn graph(io: &mut Io<'_>, svg: bool, flow: &str, paths: &[PathBuf]) -> Done {
     let scope = onsa_driver::guard(|| loaded.focus_module()).map_err(|e| internal(io, &loaded.sources, &e))?;
     let dot = onsa_driver::graph(&analyzed, flow, scope.as_deref()).map_err(|e| match e {
         onsa_driver::GraphError::Usage(e) => cannot_work(io, e),
-        onsa_driver::GraphError::Diagnostics(d) => {
-            print_diagnostics(io, Form::Text, &loaded.sources, &d, Outcome::Problems)
-        }
         onsa_driver::GraphError::Internal(e) => internal(io, &loaded.sources, &e),
     })?;
     if svg {

@@ -1,0 +1,43 @@
+# flow_ref 1 source=tests/spec/flow_semantics/event_own_output_ok_values.onsa tests=14 evaluated=14 unavailable=0 skipped=0 waiting=0
+@ c: the events of e tick the call, and its output has them (once each: the tick of its own n gives nothing more)
+render event_own_output_ok_values.c_form sr=0x41000000 in x=[0 3 0 0 5 2 0 7]
+out=[0 3 3 3 8 10 10 17]
+@ d: the callee that gives out at each tick of the period makes the events, and its input has them the same frame after the stage of the callee
+render event_own_output_ok_values.d_form sr=0x41000000 in x=[0 3 0 0 5 2 0 7]
+out=[0 8 5 10 15 17 15 27]
+@ g: the part that gives out only when it reads a value that is not 0 reads 0 for ever, and gives nothing
+render event_own_output_ok_values.g_form sr=0x41000000 in x=[0 3 0 0 5 2 0 7]
+out=[0 3 0 0 5 2 0 7]
+@ half in the loop: gives out at the frames of the grid of two, the last value of g between
+render event_own_output_ok_values.half_period_in_the_loop sr=0x41000000 frames=8
+out=[0 0 5 5 0 0 5 5]
+@ a value of a parameter kind only is given out at each frame of the period of the flow, whatever m has
+render event_own_output_ok_values.parameter_only_in_the_loop sr=0x41000000 frames=8
+out=[3 6 9 12 15 18 21 24]
+@ a callee that gives only None gives nothing: the output is the default (0) for ever
+render event_own_output_ok_values.none_only_in_the_loop sr=0x41000000 in x=[0 3 0 0 5 2 0 7]
+out=[0 3 0 0 5 2 0 7]
+@ fwd of a call that is ticked by e: the events are the ones of e, and the n that is ticked by d gives nothing
+render event_own_output_ok_values.argument_from_a_call sr=0x41000000 in x=[0 3 0 0 5 2 0 7]
+out=[0 3 3 3 8 10 10 17]
+@ the same part in two calls that are ticked from outside: each has the events of e with its own step
+render event_own_output_ok_values.the_same_part_twice sr=0x41000000 in x=[0 3 0 0 5 2 0 7]
+out=[0 405 405 405 1012 1316 1316 2125]
+@ the same wrapping flow in three calls and two levels is not a loop: the events of e go through, each level adding its step
+render event_own_output_ok_values.the_same_wrap_nested sr=0x41000000 in x=[0 3 0 0 5 2 0 7]
+out=[0 40507 40507 40507 101216 131622 131622 212533]
+@ a call that gives at each tick of the period between the two calls of a loop: the two have events of their own every frame
+render event_own_output_ok_values.period_between sr=0x41000000 frames=8
+out=[500 505 1005 1010 1510 1515 2015 2020]
+@ a when~ that holds the part by the level of its own event: the condition has no event at first, the part does not run, and nothing is given out
+render event_own_output_ok_values.stopped_by_its_own_level sr=0x41000000 in x=[0 3 0 0 5 2 0 7]
+out=[0 3 0 0 5 2 0 7]
+@ a reset_if~ with the condition of its own event that is never true: the events of the sum are given out as with none
+render event_own_output_ok_values.reset_by_its_own_event sr=0x41000000 in x=[0 3 0 0 5 2 0 7]
+out=[0 3 3 3 11 21 21 38]
+@ four runs of echo in a flow around them: the four events are given after the four runs, and each is received before the next
+render event_own_output_ok_values.quad_wrapped sr=0x41000000 frames=4
+out=[1 104 417 1772]
+@ the same with the call that has the four runs of an up~: each event is received after its run, before the next
+render event_own_output_ok_values.quad_direct sr=0x41000000 frames=4
+out=[203 1321 9044 61987]

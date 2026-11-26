@@ -1,0 +1,269 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.3", "§11.9", "§11.10", "§11.11"]
+
+// The forms that look like a loop of a call and its own output (W7-17 U6b/t; S-1237, S-1251; spec §11.11: "呼び出しの出力を刻むもの（呼び先の出力の式のクロック。それが呼び先の入力のクロックなら、その入力への引数のクロック）をたどって、その呼び出し自身に
+// 戻る形は、決して刻まないので E0815 である"; the example `loops`: `c`, `d` and `g` are fine) and tick: something else than the call itself ticks it (an event from outside, a callee that gives out at each tick of a period, a call between), or the call
+// is ticked by itself and there is nothing to tell by the clocks (a callee that gives only `None`; a `when~` that holds the part by the level of its own event; a `reset_if~` of its own event as a condition). The error forms are in
+// e0815_event_own_output.onsa. Every value is worked out by hand from the text; the input is `XS` (8 frames, the events of `det` are 3@1 5@4 2@5 7@7, with the sum 0 3 3 3 8 10 10 17 and the count 0 1 1 1 2 3 3 4 by the frame).
+// The events of a period (a callee that gives at each tick of `sample`, of `sample / 2`) are given at the place of the tick, and the receivers of the caller have them after the stage of the callee (§11.11: "作り手より下に書いた式と受け手には、その位置の、出した段より
+// 後の自分の仕事の前に届く（出した段より遅い周期の刻みは済んでいるので、次の刻みで見える）"), so what a callee reads from its own events at `sample` is the last of the frames before.
+
+const XS: [U32; 8] = [0, 3, 0, 0, 5, 2, 0, 7]
+
+// The parts: `det` gives an event of x when x is not 0 (a source of events from outside), `fwd` and `two` give out the events of m, `inc` the events of m + 1, `held` and `held_p` give out at each tick of `sample`, `half` at each second one,
+// `every_in` and `never` have nothing that ticks them but the period of the flow itself, `sum_ev` gives the running sum of its events, `acc` sums the events it gets.
+flow det(x: U32 at sample) -> U32 at event { if x != 0 { Some(x) } else { None } }
+flow fwd(m: U32 at event) -> U32 at event { Some(m) }
+flow two(m: U32 at event, n: U32 at event) -> U32 at event { Some(m) }
+flow two_inc(m: U32 at event, n: U32 at event) -> U32 at event { Some(m + 1) }
+flow inc(m: U32 at event) -> U32 at event { Some(m + 1) }
+flow wrap_inc(m: U32 at event) -> U32 at event { Some(inc~(m)) }
+flow held(m: U32 at event) -> U32 at event { Some(m at sample) }
+flow held_p(m: U32 at event) -> U32 at event { Some((m at sample) + 1) }
+flow half(m: U32 at event) -> U32 at event { Some(m at (sample / 2)) }
+flow every_in(k: U32 at block, m: U32 at event) -> U32 at event { Some(k) }
+flow never(m: U32 at event) -> U32 at event { None }
+
+flow sum_ev(m: U32 at event) -> U32 at event {
+  let n = prev~(^n) + m
+  Some(n)
+}
+
+flow acc(e: U32 at event) -> U32 at sample {
+  let n = prev~(^n) + e
+  n
+}
+
+// ---- the example `loops` of the text: `c`, `d`, `g` (each in a flow of its own, since `a`, `b`, `p` are the error)
+
+// `c`: `two` ticks by m, and e from outside gives m; its n is its own output, which only gives its n a tick (n has no work)
+pub flow c_form(x: U32 at sample) -> U32 at sample {
+  let e = det~(x)
+  let c: U32 = two~(e, prev~(^c, 5))
+  acc~(c)
+}
+
+// `d`: `held` gives out at each tick of the period, and its m has the events of its own
+pub flow d_form(x: U32 at sample) -> U32 at sample {
+  let d: U32 = held~(prev~(^d, 5))
+  acc~(d) + x
+}
+
+// `g`: `det` gives out when the value that it reads is not 0, and it reads the last event of g, which is 0 for ever (the default before the first event)
+pub flow g_form(x: U32 at sample) -> U32 at sample {
+  let g: U32 = fwd~(det~(prev~(^g)))
+  (g at sample) + x
+}
+
+test "c: the events of e tick the call, and its output has them (once each: the tick of its own n gives nothing more)" {
+  let o = c_form.render(XS, 8.0)
+  let w: [U32; 8] = [0, 3, 3, 3, 8, 10, 10, 17]
+  for t in 0 ..< 8 {
+    assert o.out[t] == w[t]
+  }
+}
+
+test "d: the callee that gives out at each tick of the period makes the events, and its input has them the same frame after the stage of the callee" {
+  // d is 0 at the frame 0 (m has no event yet); the delay gives 5 (its init) to m; the d of the frame 1 is 5, and the delay gives the 0 stored; so d is 0 5 0 5 ..., the sums 0 5 5 10 10 15 15 20, and x is added.
+  let o = d_form.render(XS, 8.0)
+  let w: [U32; 8] = [0, 8, 5, 10, 15, 17, 15, 27]
+  for t in 0 ..< 8 {
+    assert o.out[t] == w[t]
+  }
+}
+
+test "g: the part that gives out only when it reads a value that is not 0 reads 0 for ever, and gives nothing" {
+  let o = g_form.render(XS, 8.0)
+  for t in 0 ..< 8 {
+    assert o.out[t] == XS[t]
+  }
+}
+
+// ---- the callee gives out at each tick of a period, of `sample` (with its input a value read at `sample`), of `sample / 2`, or at the period of the flow with a value of a parameter kind only
+
+// `half` gives out at the frames 0 2 4 6 the last event of its m (0 first), and m has the events of h through the delay (5 first)
+pub flow half_period_in_the_loop() -> U32 at sample {
+  let h: U32 = half~(prev~(^h, 5))
+  h at sample
+}
+
+// the value is a parameter only: it gives 3 at each frame, whatever m has; the sum of the events is 3 6 9 ...
+pub flow parameter_only_in_the_loop() -> U32 at sample {
+  let a: U32 = every_in~(3, prev~(^a, 5))
+  acc~(a)
+}
+
+// `never` gives only `None`: the call is ticked by itself in the clocks, and nothing comes out of it
+pub flow none_only_in_the_loop(x: U32 at sample) -> U32 at sample {
+  let a: U32 = never~(prev~(^a, 5))
+  (a at sample) + x
+}
+
+test "half in the loop: gives out at the frames of the grid of two, the last value of g between" {
+  // The frame 0: m has no event, gives 0; the delay (store 5) gives 5 to m, then stores 0. The frame 2: gives 5; the delay gives 0 to m, then stores 5. The frame 4: gives 0; the frame 6: gives 5.
+  let o = half_period_in_the_loop.render(8, 8.0)
+  let w: [U32; 8] = [0, 0, 5, 5, 0, 0, 5, 5]
+  for t in 0 ..< 8 {
+    assert o.out[t] == w[t]
+  }
+}
+
+test "a value of a parameter kind only is given out at each frame of the period of the flow, whatever m has" {
+  let o = parameter_only_in_the_loop.render(8, 8.0)
+  let w: [U32; 8] = [3, 6, 9, 12, 15, 18, 21, 24]
+  for t in 0 ..< 8 {
+    assert o.out[t] == w[t]
+  }
+}
+
+test "a callee that gives only None gives nothing: the output is the default (0) for ever" {
+  let o = none_only_in_the_loop.render(XS, 8.0)
+  for t in 0 ..< 8 {
+    assert o.out[t] == XS[t]
+  }
+}
+
+// ---- the clock that ticks comes from outside, or from a call that is ticked from outside, and the same part is used by more than one call
+
+// `fwd` of the output of `two` that is ticked by e: the clock is the one of e, and `prev~(^d)` is d, the events of which tick the n of `two`, and nothing else
+pub flow argument_from_a_call(x: U32 at sample) -> U32 at sample {
+  let e = det~(x)
+  let d: U32 = fwd~(two~(e, prev~(^d, 5)))
+  acc~(d)
+}
+
+// the same part (`two_inc`) in two calls, each ticked from outside: c has e + 1, c2 has the events of c + 1; the sums of the events are (the sum of e) + (the count) and + 2 (the count): 0 4 4 4 10 13 13 21 and 0 5 5 5 12 16 16 25
+pub flow the_same_part_twice(x: U32 at sample) -> U32 at sample {
+  let e = det~(x)
+  let c: U32 = two_inc~(e, prev~(^c, 5))
+  let c2: U32 = two_inc~(c, prev~(^c2, 6))
+  acc~(c) * 100 + acc~(c2)
+}
+
+// the same wrapping flow in three calls, and in two levels: the events of e + 1, + 2 and + 4 (`wrap_inc` of `wrap_inc` of the third)
+pub flow the_same_wrap_nested(x: U32 at sample) -> U32 at sample {
+  let e = det~(x)
+  let a = wrap_inc~(e)
+  let b = wrap_inc~(a)
+  let n = wrap_inc~(wrap_inc~(b))
+  acc~(a) * 10000 + acc~(b) * 100 + acc~(n)
+}
+
+test "fwd of a call that is ticked by e: the events are the ones of e, and the n that is ticked by d gives nothing" {
+  let o = argument_from_a_call.render(XS, 8.0)
+  let w: [U32; 8] = [0, 3, 3, 3, 8, 10, 10, 17]
+  for t in 0 ..< 8 {
+    assert o.out[t] == w[t]
+  }
+}
+
+test "the same part in two calls that are ticked from outside: each has the events of e with its own step" {
+  let o = the_same_part_twice.render(XS, 8.0)
+  let w: [U32; 8] = [0, 405, 405, 405, 1012, 1316, 1316, 2125]
+  for t in 0 ..< 8 {
+    assert o.out[t] == w[t]
+  }
+}
+
+test "the same wrapping flow in three calls and two levels is not a loop: the events of e go through, each level adding its step" {
+  // The sums of the steps 1, 2, 4: (sum, count) as in the comment of the flow: 4 5 7 at the frame 1, 10 12 16 at the frame 4, 13 16 22 at the frame 5, 21 25 33 at the frame 7.
+  let o = the_same_wrap_nested.render(XS, 8.0)
+  let w: [U32; 8] = [0, 40507, 40507, 40507, 101216, 131622, 131622, 212533]
+  for t in 0 ..< 8 {
+    assert o.out[t] == w[t]
+  }
+}
+
+// ---- a call that gives at each tick of the period, between the two calls of a loop of two
+
+// `b` gives out at each frame the last event of `a` (0 first), and `a` has the events of b (the delay: 5 first) through `fwd`: b is 0 5 0 5 ..., a is 5 0 5 0 ...
+pub flow period_between() -> U32 at sample {
+  let a: U32 = fwd~(prev~(^b, 5))
+  let b: U32 = held~(a)
+  acc~(a) * 100 + acc~(b)
+}
+
+test "a call that gives at each tick of the period between the two calls of a loop: the two have events of their own every frame" {
+  // The sums of b: 0 5 5 10 10 15 15 20; of a: 5 5 10 10 15 15 20 20.
+  let o = period_between.render(8, 8.0)
+  let w: [U32; 8] = [500, 505, 1005, 1010, 1510, 1515, 2015, 2020]
+  for t in 0 ..< 8 {
+    assert o.out[t] == w[t]
+  }
+}
+
+// ---- the part is stopped by the level of its own event, or reset by it: the clocks do not tell, the values do
+
+// the condition is an expression of the clock of the events of a (a delay of them): its last value before the first event is the default of its type (false), so the part is stopped from the start and gives no event
+pub flow stopped_by_its_own_level(x: U32 at sample) -> U32 at sample {
+  let a: U32 = held_p~(prev~(^a, 5)).when~(prev~(^a) != 0)
+  (a at sample) + x
+}
+
+// the events of `sum_ev` by e (3 8 10 17) are the condition of a `reset_if~` that is never true (99): the condition is read at the events of the call itself
+pub flow reset_by_its_own_event(x: U32 at sample) -> U32 at sample {
+  let e = det~(x)
+  let a: U32 = sum_ev~(e).reset_if~(prev~(^a) == 99)
+  acc~(a)
+}
+
+test "a when~ that holds the part by the level of its own event: the condition has no event at first, the part does not run, and nothing is given out" {
+  let o = stopped_by_its_own_level.render(XS, 8.0)
+  for t in 0 ..< 8 {
+    assert o.out[t] == XS[t]
+  }
+}
+
+test "a reset_if~ with the condition of its own event that is never true: the events of the sum are given out as with none" {
+  // The events of a are 3 8 10 17 (the running sum of e), and acc sums them: 0 3 3 3 11 21 21 38.
+  let o = reset_by_its_own_event.render(XS, 8.0)
+  let w: [U32; 8] = [0, 3, 3, 3, 11, 21, 21, 38]
+  for t in 0 ..< 8 {
+    assert o.out[t] == w[t]
+  }
+}
+
+// ---- S-1251 in a loop of its own events: the events of a part within a flow come back to the input of the flow after the whole work of the tick; four runs of an `.up~`
+
+/// the events of m summed, given out at each run: the sum plus 1
+flow echo(m: U32 at event) -> U32 at event {
+  let n = prev~(^n) + m
+  Some((n at sample) + 1)
+}
+
+/// four runs of `echo` in the one tick of the flow
+flow quad(m: U32 at event) -> U32 at event {
+  Some(echo~(m).up~(4))
+}
+
+pub flow quad_wrapped() -> U32 at sample {
+  let a: U32 = quad~(prev~(^a, 100))
+  a at sample
+}
+
+pub flow quad_direct() -> U32 at sample {
+  let a: U32 = echo~(prev~(^a, 100)).up~(4)
+  a at sample
+}
+
+test "four runs of echo in a flow around them: the four events are given after the four runs, and each is received before the next" {
+  // The tick of the frame 0: the four runs give 1 (m has no event); the four events a = 1 come to m through the delay: 100 1 1 1, n = 100 101 102 103. The frame 1: the runs give 104; the events come with m = 1 (the a before), 104, 104, 104:
+  // n = 104 208 312 416. The frame 2: 417; m = 104 417 417 417: n = 520 937 1354 1771. The frame 3: 1772.
+  let o = quad_wrapped.render(4, 8.0)
+  let w: [U32; 4] = [1, 104, 417, 1772]
+  for t in 0 ..< 4 {
+    assert o.out[t] == w[t]
+  }
+}
+
+test "the same with the call that has the four runs of an up~: each event is received after its run, before the next" {
+  // The runs of the frame 0: 1 (m = 100: n = 100), 101 (m = 1: n = 101), 102 (m = 101: n = 202), 203 (m = 102: n = 304). The frame 1: 305 (m = 203: n = 507), 508 (m = 305: n = 812), 813 (m = 508: n = 1320), 1321 (m = 813: n = 2133).
+  // The frame 2: 2134 (m = 1321: n = 3454), 3455 (m = 2134: n = 5588), 5589 (m = 3455: n = 9043), 9044 (m = 5589: n = 14632). The frame 3: 14633 (m = 9044: n = 23676), 23677 (m = 14633: n = 38309), 38310 (m = 23677: n = 61986), 61987.
+  let o = quad_direct.render(4, 8.0)
+  let w: [U32; 4] = [203, 1321, 9044, 61987]
+  for t in 0 ..< 4 {
+    assert o.out[t] == w[t]
+  }
+}

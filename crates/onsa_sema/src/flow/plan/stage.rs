@@ -6,19 +6,10 @@ use super::*;
 
 impl FlowInfo {
     /// Whether the tables of the plan are made, the entries and the fields
-    /// of its state too: of a complete flow of no form the gate stops
-    /// ([`FlowInfo::event_gate`]).
+    /// of its state too: of a complete flow with no E0815 of its walk
+    /// ([`FlowInfo::unticked`]).
     pub fn planned(&self) -> bool {
-        self.complete && self.event_form.is_none()
-    }
-
-    /// The E0200 of the form of the flow this version checks and does not
-    /// run ([`FlowInfo::event_form`]). The check does not report it; what
-    /// reads the plan of the flow stops at it before it reads one: the
-    /// lowering, at a flow it comes to, and `onsa graph`.
-    pub fn event_gate(&self) -> Option<Diagnostic> {
-        let at = self.event_form.filter(|_| self.complete)?;
-        Some(onsa_diag::unsupported::Feature::EventClocks.diagnostic(onsa_diag::Stage::Flow, at, &[]))
+        self.complete && !self.unticked
     }
 
     /// The event clock of the source `src` (§11.11).

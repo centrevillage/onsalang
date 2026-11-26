@@ -24,7 +24,7 @@ use onsa_syntax::ast::{CallKind, ExprId, ExprKind, PatId, StmtKind};
 
 use super::chain::Gate;
 use super::expr::{Frame, Hoisted, Stop};
-use super::hoist::{has_state, pre, seen_of, stage_of};
+use super::hoist::{has_state, pre, seen_of, source_clock, source_parts, stage_of};
 use super::host::FnHost;
 use super::rate::{Conds, Level, chain_of, components, derived, levels, on_tick, ring_clock, slow_ticks};
 use super::scalar::{Fault, PanicKind};
@@ -413,6 +413,9 @@ pub(super) fn stage(f: &mut Frame, steps: &[Step], out: &mut Value, at: Stage) -
         // Where a call that an expression of the step reads is written (`read_call` makes the arguments the call gathers there).
         f.run.iter_mut().for_each(|run| run.step = Some((s.known.clone(), s.init)));
         if s.clock.runs_at(at) {
+            if matches!(at, Stage::Event(_)) && source_clock(&f.body, s.init) == Some(s.clock) {
+                source_parts(f, &s.known, s.init, s.init, s.clock)?;
+            }
             match s.pat {
                 Some(pat) => f.bind(pat, s.init)?,
                 None if s.emits => {

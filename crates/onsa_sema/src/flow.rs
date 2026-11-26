@@ -368,9 +368,9 @@ pub struct FlowInfo {
     /// (§11.9, §11.11), 1 but of an `.up~` on the way to it: that many
     /// `Option`s, of a tick alone (an event ticks a stage once).
     pub burst: u32,
-    /// The form of the event clock this version checks and does not run
-    /// (§11.11, S-1237): a source nothing outside it ticks (`plan`'s `events`).
-    pub(crate) event_form: Option<Span>,
+    /// The tables are not made: of calls that nothing outside them ticks, an
+    /// E0815 (§11.11, S-1237; `plan`'s `events`). [`FlowInfo::planned`].
+    pub(crate) unticked: bool,
     pub complete: bool,
 }
 

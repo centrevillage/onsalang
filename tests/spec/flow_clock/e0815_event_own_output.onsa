@@ -1,0 +1,210 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§11.5", "§11.10", "§11.11", "§18.1"]
+
+// W7-17 U6b/t, S-1237 (spec §11.11: "呼び出しの出力を刻むもの（呼び先の出力の式のクロック。それが呼び先の入力のクロックなら、その入力への引数のクロック）をたどって、その呼び出し自身に戻る形は、決して刻まないので E0815 である"; §18.1: one
+// error a unit, the first; the unused binding E0309 only where no other stage has an error): a call whose output is ticked by what ticks the output expression of the callee (by an input of the callee: the clock of the argument to it), and the
+// chain of that leads back to the call, never ticks. The decision is by the structure of the clocks alone (a callee that gives only `None`, a maker that reads 0 for ever, a `when~` that is held by the level of its own event are not the error, see
+// the values in event_own_output_ok_values.onsa). One error for a flow, whatever the number of loops (S-1237: the unit of §18.1); the place is the argument that is to the input that ticks the output, of the first call of the loop in the order of the
+// source (the spec leaves the place to the decision, and the marks are with the column). A flow that calls a flow with a loop has no error of it. The first block is the example of §11.11, line by line (tools/check_spec_examples.py); `loops` has three
+// loops and one error, at `a`.
+
+flow fwd(m: U32 at event) -> U32 at event { Some(m) }                  // m のイベントごとに出す
+flow two(m: U32 at event, n: U32 at event) -> U32 at event { Some(m) } // m のイベントごとに出す（n では出さない）
+flow held(m: U32 at event) -> U32 at event { Some(m at sample) }       // 刻みごとに出す
+flow wrap(m: U32 at event) -> U32 at event { Some(fwd~(m)) }           // 中の fwd が出すごとに出す
+flow det(x: U32 at sample) -> U32 at event { if x != 0 { Some(x) } else { None } }
+
+flow loops(x: U32 at sample) -> U32 at sample {
+  let e = det~(x)
+  let a: U32 = fwd~(prev~(^a, 5))    // E0815: a を刻むのは a だけ（初めの値 5 はイベントにならない） //~ E0815 @21
+  let b: U32 = two~(prev~(^b, 5), e) // E0815: two は m で出す。e は n に届くだけ
+  let p: U32 = fwd~(prev~(^q, 5))    // E0815: p は q が、q は wrap の中の fwd を通して p が刻む
+  let q: U32 = wrap~(p)
+  let c: U32 = two~(e, prev~(^c, 5)) // 通る: e が刻む
+  let d: U32 = held~(prev~(^d, 5))   // 通る: held は刻みごとに出す
+  let g: U32 = fwd~(det~(prev~(^g))) // 通る: det は刻みごとに出しうる（読む値が 0 のままなので出ないだけ）
+  (a at sample) + (b at sample) + (q at sample) + (c at sample) + (d at sample) + (g at sample)
+}
+
+// ---- the parts the forms below use (no error here).
+flow wrap2(m: U32 at event) -> U32 at event { Some(wrap~(m)) }
+
+flow acc(e: U32 at event) -> U32 at sample {
+  let n = prev~(^n) + e
+  n
+}
+
+// ---- the error: one flow, one loop each.
+// the call ticks its own input
+flow own(x: U32 at sample) -> U32 at sample {
+  let a: U32 = fwd~(prev~(^a)) //~ E0815 @21
+  (a at sample) + x
+}
+
+flow own_with_arithmetic(x: U32 at sample) -> U32 at sample {
+  let a: U32 = fwd~(prev~(^a) + 1) //~ E0815 @21
+  (a at sample) + x
+}
+
+// two calls turn it (the error is at the first of them in the order of the source)
+flow two_calls(x: U32 at sample) -> U32 at sample {
+  let a: U32 = fwd~(prev~(^b, 5)) //~ E0815 @21
+  let b: U32 = fwd~(a)
+  (b at sample) + x
+}
+
+flow three_calls(x: U32 at sample) -> U32 at sample {
+  let a: U32 = fwd~(prev~(^c)) //~ E0815 @21
+  let b: U32 = fwd~(a)
+  let c: U32 = fwd~(b)
+  (c at sample) + x
+}
+
+// through the flow that wraps the callee: one level and two
+flow through_one_wrap(x: U32 at sample) -> U32 at sample {
+  let a: U32 = wrap~(prev~(^a, 5)) //~ E0815 @22
+  (a at sample) + x
+}
+
+flow through_two_wraps(x: U32 at sample) -> U32 at sample {
+  let a: U32 = wrap2~(prev~(^a, 5)) //~ E0815 @23
+  (a at sample) + x
+}
+
+flow wraps_of_two_calls(x: U32 at sample) -> U32 at sample {
+  let a: U32 = wrap~(prev~(^b)) //~ E0815 @22
+  let b: U32 = wrap2~(a)
+  (b at sample) + x
+}
+
+// only the input that ticks the output is in the loop, the other input comes from outside
+flow ticking_input_only(x: U32 at sample) -> U32 at sample {
+  let e = det~(x)
+  let b: U32 = two~(prev~(^b, 5), e) //~ E0815 @21
+  (b at sample) + x
+}
+
+flow ticking_input_only_of_an_input(m: U32 at event) -> U32 at sample {
+  let b: U32 = two~(prev~(^b), m) //~ E0815 @21
+  b at sample
+}
+
+// the input that ticks the output is the second, and the first is from outside and works inside the callee (W7-17 U6b/b): the mark is at the second argument
+flow second_ticks(a: U32 at event, b: U32 at event) -> U32 at event {
+  let _ = fwd~(a)
+  Some(b)
+}
+flow ticking_second_input(x: U32 at sample) -> U32 at sample {
+  let e = det~(x)
+  let d: U32 = second_ticks~(e, prev~(^d, 5)) //~ E0815 @33
+  (d at sample) + (e at sample) + x
+}
+// the same clock to the two inputs
+flow same_clock_to_two_inputs(x: U32 at sample) -> U32 at sample {
+  let p = prev~(^a)
+  let a: U32 = two~(p, p) //~ E0815 @21
+  (a at sample) + x
+}
+
+// the modifiers on the call of the loop
+flow with_when(x: U32 at sample, c: Bool at sample) -> U32 at sample {
+  let a: U32 = fwd~(prev~(^a)).when~(c) //~ E0815 @21
+  (a at sample) + x
+}
+
+flow with_reset_if(x: U32 at sample, r: Bool at sample) -> U32 at sample {
+  let a: U32 = fwd~(prev~(^a)).reset_if~(r) //~ E0815 @21
+  (a at sample) + x
+}
+
+flow with_up(x: U32 at sample) -> U32 at sample {
+  let a: U32 = fwd~(prev~(^a)).up~(2) //~ E0815 @21
+  (a at sample) + x
+}
+
+flow with_down(x: U32 at sample) -> U32 at sample {
+  let a: U32 = fwd~(prev~(^a)).down~(2) //~ E0815 @21
+  (a at sample) + x
+}
+
+flow with_a_chain(x: U32 at sample, c: Bool at sample) -> U32 at sample {
+  let a: U32 = fwd~(prev~(^a)).down~(2).when~(c) //~ E0815 @21
+  (a at sample) + x
+}
+
+// in the arm of an `if~` and of a `match~` (the condition and the target are of a parameter kind: the clock of the value is the clock of the call)
+flow in_an_if_arm(c: Bool at block, x: U32 at sample) -> U32 at sample {
+  let a: U32 = if~ c { fwd~(prev~(^a)) } else { 0 } //~ E0815 @29
+  (a at sample) + x
+}
+
+flow in_a_match_arm(k: U32 at block, x: U32 at sample) -> U32 at sample {
+  let a: U32 = match~ k {
+    0 => fwd~(prev~(^a)), //~ E0815 @15
+    _ => 0,
+  }
+  (a at sample) + x
+}
+
+// the delay is `delay~`
+flow with_delay(x: U32 at sample) -> U32 at sample {
+  let a: U32 = fwd~(delay~(^a, 2)) //~ E0815 @21
+  (a at sample) + x
+}
+
+// the loop is not read (E0815 and not E0309: the stage of the clocks is before that of the unused binding, §18.1)
+flow unread(x: U32 at sample) -> U32 at sample {
+  let a: U32 = fwd~(prev~(^a, 5)) //~ E0815 @21
+  x
+}
+
+flow unread_two_calls(x: U32 at sample) -> U32 at sample {
+  let a: U32 = fwd~(prev~(^b)) //~ E0815 @21
+  let b: U32 = fwd~(a)
+  x
+}
+
+// a call that hangs on the loop is not in it: the mark is at the one call of the loop, before or after the call that hangs
+flow hangs_after(x: U32 at sample) -> U32 at sample {
+  let a: U32 = fwd~(prev~(^a, 5)) //~ E0815 @21
+  let b: U32 = fwd~(a)
+  acc~(b) + x
+}
+
+flow hangs_before(x: U32 at sample) -> U32 at sample {
+  let b: U32 = fwd~(prev~(^a))
+  let a: U32 = fwd~(prev~(^a, 5)) //~ E0815 @21
+  acc~(b) + x
+}
+
+// two loops in a flow: one error, at the first loop in the order of the source
+flow two_loops(x: U32 at sample) -> U32 at sample {
+  let a: U32 = fwd~(prev~(^a)) //~ E0815 @21
+  let b: U32 = fwd~(prev~(^b))
+  (a at sample) + (b at sample) + x
+}
+
+// a flow with a loop, and the flows that call it (no error of the loop in the caller)
+flow has_a_loop(x: U32 at sample) -> U32 at sample {
+  let a: U32 = fwd~(prev~(^a, 5)) //~ E0815 @21
+  (a at sample) + x
+}
+
+flow calls_the_loop(x: U32 at sample) -> U32 at sample {
+  has_a_loop~(x) + 1
+}
+
+flow calls_the_loop_in_a_chain(x: U32 at sample) -> U32 at sample {
+  has_a_loop~(x).when~(x != 0)
+}
+
+// a flow with a loop that gives out an event, and the one that takes it
+flow gives_a_loop(x: U32 at sample) -> U32 at event {
+  let a: U32 = fwd~(prev~(^a, 5)) //~ E0815 @21
+  Some(a at sample)
+}
+
+flow receives_the_loop(x: U32 at sample) -> U32 at sample {
+  acc~(gives_a_loop~(x))
+}
