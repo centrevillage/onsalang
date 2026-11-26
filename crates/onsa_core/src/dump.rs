@@ -589,14 +589,22 @@ impl<'a> Dumper<'a> {
                 self.out.push('}');
             }
             ExprKind::Block(b) => self.block(b),
-            ExprKind::Panic { msg: id, .. } => match self.m.messages.get(id.0 as usize) {
-                Some(text) => {
-                    let _ = write!(self.out, "panic({text:?})");
+            ExprKind::Panic { msg: id, shown, .. } => {
+                match self.m.messages.get(id.0 as usize) {
+                    Some(text) => {
+                        let _ = write!(self.out, "panic({text:?}");
+                    }
+                    None => {
+                        let _ = write!(self.out, "panic(<bad message {}>", id.0);
+                    }
                 }
-                None => {
-                    let _ = write!(self.out, "panic(<bad message {}>)", id.0);
+                // The values a failed `assert` shows: `panic("assert a == 1"; a, 1:I32)`.
+                if !shown.is_empty() {
+                    self.out.push_str("; ");
+                    self.exprs(shown);
                 }
-            },
+                self.out.push(')');
+            }
         }
     }
 }

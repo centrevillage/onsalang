@@ -48,7 +48,9 @@ pub(super) fn run_tests(
                 .problems
                 .push(Problem::Case(format!("test {} is marked both TESTFAIL and PANIC; keep one", t.full_name()))),
             (Some(f), false, None) => {
-                run.problems.push(Problem::TestFailed { full: t.full_name(), message: f.message.clone() })
+                // With the values of a failed comparison (S-1261), as the text of `onsa test`.
+                let message = f.value_lines().iter().fold(f.message.clone(), |m, l| format!("{m}\n{l}"));
+                run.problems.push(Problem::TestFailed { full: t.full_name(), message })
             }
             (None, true, _) => {
                 run.problems.push(Problem::Failed(format!("test {} passed but is marked TESTFAIL", t.full_name())))

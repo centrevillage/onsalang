@@ -101,6 +101,13 @@ impl<'a> Checker<'a> {
             StmtKind::Assert(e) => {
                 let bool_ = self.bool_();
                 self.check_expr(*e, Some(bool_))?;
+                // A candidate of `shown_asserts`, kept by `finish` when its types have `Show`.
+                let cmp = self.ast.without_parens(*e);
+                if let ExprKind::Binary { op, .. } = self.expr(cmp).kind
+                    && op.group() == onsa_syntax::ast::OpGroup::Comparison
+                {
+                    self.info.shown_asserts.insert(*e, cmp);
+                }
                 Ok(())
             }
             StmtKind::Expr(e) => {

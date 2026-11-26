@@ -261,6 +261,19 @@ impl<'a> Checker<'a> {
         }
     }
 
+    /// Of the comparisons of `assert`s ([`BodyInfo::shown_asserts`]), those
+    /// whose two operands have resolved types that satisfy `Show` (§18.1,
+    /// S-1261): of a type parameter, by its bounds and not by an instance.
+    fn keep_shown_asserts(&mut self) {
+        let shown = |ck: &Self, cmp: ExprId| {
+            let ExprKind::Binary { lhs, rhs, .. } = ck.expr(cmp).kind else { return false };
+            [lhs, rhs].iter().all(|x| ck.info.expr_types.get(x).is_some_and(|&t| ck.satisfies(t, Bound::Show)))
+        };
+        let mut asserts = std::mem::take(&mut self.info.shown_asserts);
+        asserts.retain(|_, &mut c| shown(self, c));
+        self.info.shown_asserts = asserts;
+    }
+
     /// The end of the body and the resolution of the tables.
     pub(super) fn finish(mut self) -> BodyInfo {
         self.no_trial_goes_on();
@@ -277,6 +290,7 @@ impl<'a> Checker<'a> {
         for v in self.info.views.values_mut() {
             v.to = self.infer.resolve(&mut self.a.types, v.to);
         }
+        self.keep_shown_asserts();
         for from in self.info.closure_rows.values_mut() {
             if let RowFrom::Expected(t) = from {
                 *t = self.infer.resolve(&mut self.a.types, *t);

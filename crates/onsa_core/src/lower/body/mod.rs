@@ -229,7 +229,7 @@ fn lower_block(lw: &mut Lowerer, cx: &mut FnCx, b: &ast::Block, want: &Ty) -> R<
     match last {
         Some(&s) if b.tail.is_none() && !block.diverges() => {
             let msg = lw.msg("unreachable");
-            let panic = ExprKind::Panic { msg, origin: PanicOrigin::Panic };
+            let panic = ExprKind::Panic { msg, origin: PanicOrigin::Panic, shown: Vec::new() };
             let value = Some(Box::new(Expr::new(want.clone(), cx.ast.stmt(s).span, panic)));
             Ok(Block { value, ..block })
         }
@@ -332,7 +332,11 @@ fn lower_stmt(lw: &mut Lowerer, cx: &mut FnCx, s: StmtId, out: &mut Vec<Stmt>) -
             Ok(())
         }
         AS::Assert(e) => {
-            let c = lower_expr(lw, cx, *e)?;
+            let shown = cx.info.shown_asserts.get(e).filter(|&&c| !lw.holes.contains(&Hole::Expr(cx.module, c)));
+            let (c, shown) = match shown {
+                Some(&cmp) => assert_comparison(lw, cx, cmp, out)?,
+                None => (lower_expr(lw, cx, *e)?, Vec::new()),
+            };
             // The message of a failed `assert` (§11.8, §18.1): `assert <source
             // of the expression>`, made here only (R-183); the interpreter,
             // `onsa test` and C's `panic_messages` all show it as it is. The
@@ -346,7 +350,11 @@ fn lower_stmt(lw: &mut Lowerer, cx: &mut FnCx, s: StmtId, out: &mut Vec<Stmt>) -
             let then = Block {
                 stmts: vec![stmt(
                     span,
-                    StmtKind::Expr(Expr::new(Ty::Unit, span, ExprKind::Panic { msg, origin: PanicOrigin::Assert })),
+                    StmtKind::Expr(Expr::new(
+                        Ty::Unit,
+                        span,
+                        ExprKind::Panic { msg, origin: PanicOrigin::Assert, shown },
+                    )),
                 )],
                 value: None,
             };
@@ -355,6 +363,39 @@ fn lower_stmt(lw: &mut Lowerer, cx: &mut FnCx, s: StmtId, out: &mut Vec<Stmt>) -
         }
         AS::Expr(e) => lower_expr_stmt(lw, cx, *e, out),
     }
+}
+
+/// The comparison `cmp` of an `assert` that shows its values (§18.1,
+/// S-1261), and the two values: each operand lowered and evaluated once, in
+/// order (§3.5). When one has an effect, the left is put in a temporary first
+/// (the right may change what it reads), and so is the right with one; an
+/// operand without an effect is read again when the `assert` fails, to the
+/// same value, as the comparison passed it without a panic.
+fn assert_comparison(lw: &mut Lowerer, cx: &mut FnCx, cmp: ExprId, out: &mut Vec<Stmt>) -> R<(Expr, Vec<Expr>)> {
+    let &AK::Binary { op, op_span, lhs, rhs } = &cx.expr(cmp).kind else {
+        return Err(internal(cx.expr(cmp).span, "a shown `assert` of no comparison"));
+    };
+    let mut l = lower_expr(lw, cx, lhs)?;
+    let mut r = lower_expr(lw, cx, rhs)?;
+    let effect = (super::build::has_effect(&l), super::build::has_effect(&r));
+    // SPEC-GAP(S-1263): a `const` has no temporary of its own (`Feature::ConstBindings`): the
+    // `assert` of its initializer with an operand of an effect shows no values.
+    let shows = !(cx.constant && (effect.0 || effect.1));
+    let mut bind = |cx: &mut FnCx, x: Expr| {
+        let (span, t) = (x.span, cx.temp("__shown", x.ty.clone()));
+        out.push(stmt(span, StmtKind::Let(t, x)));
+        local_expr(cx, t, span)
+    };
+    if shows && (effect.0 || effect.1) {
+        l = bind(cx, l);
+    }
+    if shows && effect.1 {
+        r = bind(cx, r);
+    }
+    let shown = if shows { vec![l.clone(), r.clone()] } else { Vec::new() };
+    let sp = cx.expr(cmp).span;
+    let c = expr::comparison(lw, (op, op_span), l, r, sp).map_err(|f| at_hole(f, Hole::Expr(cx.module, cmp)))?;
+    Ok((c, shown))
 }
 
 /// An expression in statement position: `if` / blocks become statements

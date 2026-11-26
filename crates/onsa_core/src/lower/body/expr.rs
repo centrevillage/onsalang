@@ -249,46 +249,7 @@ fn lower_binary(
             let lop = if op.group() == OpGroup::And { LogicOp::And } else { LogicOp::Or };
             Expr::new(Ty::Bool, sp, ExprKind::Logic { op: lop, lhs: Box::new(l), rhs: Box::new(r) })
         }
-        OpGroup::Comparison => {
-            let cop = match op {
-                ABinOp::Eq => CmpOp::Eq,
-                ABinOp::Ne => CmpOp::Ne,
-                ABinOp::Lt => CmpOp::Lt,
-                ABinOp::Le => CmpOp::Le,
-                ABinOp::Gt => CmpOp::Gt,
-                ABinOp::Ge => CmpOp::Ge,
-                ABinOp::Add
-                | ABinOp::Sub
-                | ABinOp::Mul
-                | ABinOp::Div
-                | ABinOp::Rem
-                | ABinOp::WrapAdd
-                | ABinOp::WrapSub
-                | ABinOp::WrapMul
-                | ABinOp::SatAdd
-                | ABinOp::SatSub
-                | ABinOp::SatMul
-                | ABinOp::And
-                | ABinOp::Or
-                | ABinOp::BitAnd
-                | ABinOp::BitOr
-                | ABinOp::BitXor
-                | ABinOp::Shl
-                | ABinOp::Shr => return Err(not_in_group()),
-            };
-            if super::eq::compared_directly(&l.ty) {
-                super::eq::compare(cop, l, r, sp)?
-            } else if matches!(cop, CmpOp::Eq | CmpOp::Ne) {
-                let call = super::eq::eq_expr(lw, l, r, sp, op_span)?;
-                if cop == CmpOp::Eq {
-                    call
-                } else {
-                    Expr::new(Ty::Bool, sp, ExprKind::Unary(UnOp::Not, Box::new(call)))
-                }
-            } else {
-                return Err(unsupported(op_span, Feature::OrderingAggregates, &[]));
-            }
-        }
+        OpGroup::Comparison => comparison(lw, (op, op_span), l, r, sp)?,
         OpGroup::Additive | OpGroup::Multiplicative | OpGroup::Remainder | OpGroup::Bitwise => {
             let (bop, overflow) = match op {
                 ABinOp::Add => (BinOp::Add, Overflow::Checked),
@@ -336,6 +297,47 @@ fn lower_binary(
         return Err(internal(sp, "binary operator type"));
     }
     Ok(out)
+}
+
+/// The comparison `op` of the lowered operands `l` and `r` (§3.1), at `sp`:
+/// the one form of a comparison, of the binary operator and of an `assert`
+/// that shows its values (S-1261, D-15).
+pub(super) fn comparison(lw: &mut Lowerer, (op, op_span): (ABinOp, Span), l: Expr, r: Expr, sp: Span) -> R<Expr> {
+    let not_in_group = || internal(op_span, "an operator out of its group");
+    let cop = match op {
+        ABinOp::Eq => CmpOp::Eq,
+        ABinOp::Ne => CmpOp::Ne,
+        ABinOp::Lt => CmpOp::Lt,
+        ABinOp::Le => CmpOp::Le,
+        ABinOp::Gt => CmpOp::Gt,
+        ABinOp::Ge => CmpOp::Ge,
+        ABinOp::Add
+        | ABinOp::Sub
+        | ABinOp::Mul
+        | ABinOp::Div
+        | ABinOp::Rem
+        | ABinOp::WrapAdd
+        | ABinOp::WrapSub
+        | ABinOp::WrapMul
+        | ABinOp::SatAdd
+        | ABinOp::SatSub
+        | ABinOp::SatMul
+        | ABinOp::And
+        | ABinOp::Or
+        | ABinOp::BitAnd
+        | ABinOp::BitOr
+        | ABinOp::BitXor
+        | ABinOp::Shl
+        | ABinOp::Shr => return Err(not_in_group()),
+    };
+    if super::eq::compared_directly(&l.ty) {
+        super::eq::compare(cop, l, r, sp)
+    } else if matches!(cop, CmpOp::Eq | CmpOp::Ne) {
+        let call = super::eq::eq_expr(lw, l, r, sp, op_span)?;
+        Ok(if cop == CmpOp::Eq { call } else { Expr::new(Ty::Bool, sp, ExprKind::Unary(UnOp::Not, Box::new(call))) })
+    } else {
+        Err(unsupported(op_span, Feature::OrderingAggregates, &[]))
+    }
 }
 
 fn lower_try(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId, inner: ExprId, ty: Ty, span: Span) -> R<Expr> {

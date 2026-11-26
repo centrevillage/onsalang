@@ -89,7 +89,11 @@ pub(super) fn gen_process<'b>(lw: &mut Lowerer<'b>, shape: &FlowShape, info: &'b
         let panic = Block {
             stmts: vec![stmt(
                 span,
-                StmtKind::Expr(Expr::new(Ty::Unit, span, ExprKind::Panic { msg, origin: PanicOrigin::Panic })),
+                StmtKind::Expr(Expr::new(
+                    Ty::Unit,
+                    span,
+                    ExprKind::Panic { msg, origin: PanicOrigin::Panic, shown: Vec::new() },
+                )),
             )],
             value: None,
         };

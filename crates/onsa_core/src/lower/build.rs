@@ -117,9 +117,9 @@ pub(super) fn materialize(cx: &mut FnCx, e: Expr, stmts: &mut Vec<Stmt>, name: &
 }
 
 /// Whether evaluating `e` may have an effect: a call, an `inout` argument, a
-/// block. Of one without (`i + 1`, `ys[j] as U32`, `min(i, 1)`), a second
+/// block. Of one without (`i + 1`, `ys[j] as U32`, `min(i, 1)`, `Some(i)`), a second
 /// evaluation gives the same value or the same panic, in the same order.
-fn has_effect(e: &Expr) -> bool {
+pub(super) fn has_effect(e: &Expr) -> bool {
     match &e.kind {
         ExprKind::Lit(_) | ExprKind::Local(_) | ExprKind::Const(_) | ExprKind::Zeroed => false,
         ExprKind::Unary(_, x)
@@ -134,6 +134,9 @@ fn has_effect(e: &Expr) -> bool {
         ExprKind::Prim { prim, args } => {
             !prim.computes_only() || args.iter().any(|a| a.mode == Mode::Inout || has_effect(&a.expr))
         }
+        ExprKind::Struct { fields: xs, .. } | ExprKind::Variant { fields: xs, .. } => xs.iter().any(has_effect),
+        ExprKind::Array(xs) | ExprKind::Tuple(xs) => xs.iter().any(has_effect),
+        ExprKind::Repeat { elem, .. } => has_effect(elem),
         _ => true,
     }
 }

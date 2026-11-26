@@ -1223,7 +1223,11 @@ fn a_panic_carries_its_origin() {
                 locals: Vec::new(),
                 body: Some(Block {
                     stmts: Vec::new(),
-                    value: Some(Box::new(Expr::new(Ty::Unit, sp(), ExprKind::Panic { msg: MsgId(0), origin }))),
+                    value: Some(Box::new(Expr::new(
+                        Ty::Unit,
+                        sp(),
+                        ExprKind::Panic { msg: MsgId(0), origin, shown: Vec::new() },
+                    ))),
                 }),
                 span: sp(),
                 fp_relaxed: false,

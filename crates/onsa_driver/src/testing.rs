@@ -58,6 +58,9 @@ pub struct TestFailure {
     /// A failed `assert` or another panic (X9-36): the `kind` of `--json`
     /// (§18.1, S-554); the text output does not show it.
     pub origin: onsa_core::PanicOrigin,
+    /// The `left` and the `right` of a failed `assert` that shows them
+    /// (§18.1, S-1261).
+    pub shown: Option<[String; 2]>,
 }
 
 impl TestFailure {
@@ -66,6 +69,14 @@ impl TestFailure {
     /// `span` where every position is in std (the body of a test of std).
     fn shown_at(&self) -> Span {
         std::iter::once(&self.span).chain(&self.calls).find(|s| !s.file.is_shared()).copied().unwrap_or(self.span)
+    }
+
+    /// The lines of the values in the text, indented as the lines of the
+    /// message after its first (`spec/tools.md` §4 does not fix their form):
+    /// `left: <value>` and `right: <value>`, the names of the JSON.
+    pub fn value_lines(&self) -> Vec<String> {
+        let values = self.shown.iter().flat_map(|vs| SHOWN.iter().zip(vs));
+        values.flat_map(|(name, v)| message_lines(&format!("{name}: {v}")).collect::<Vec<_>>()).map(continued).collect()
     }
 }
 
@@ -123,8 +134,8 @@ impl TestReport {
                     let mut lines = message_lines(&f.message);
                     let first = lines.next().unwrap_or_default();
                     out.push_str(&format!("test {} failed at {}:{line}: {first}\n", t.full_name(), file.name()));
-                    for rest in lines {
-                        out.push_str(&format!("{CONTINUATION}{rest}\n"));
+                    for rest in lines.map(continued).chain(f.value_lines()) {
+                        out.push_str(&format!("{rest}\n"));
                     }
                 }
             }
@@ -155,6 +166,10 @@ impl TestReport {
             message: &'a str,
             span: onsa_diag::JsonSpan<'a>,
             calls: Vec<Call<'a>>,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            left: Option<&'a str>,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            right: Option<&'a str>,
         }
         #[derive(Serialize)]
         struct Call<'a> {
@@ -175,6 +190,8 @@ impl TestReport {
                     message: &f.message,
                     span: onsa_diag::json_span(sources, f.span),
                     calls: f.calls.iter().map(|&s| Call { span: onsa_diag::json_span(sources, s) }).collect(),
+                    left: f.shown.as_ref().map(|[l, _]| l.as_str()),
+                    right: f.shown.as_ref().map(|[_, r]| r.as_str()),
                 }),
             })
             .collect();
@@ -182,9 +199,18 @@ impl TestReport {
     }
 }
 
+/// The names of the two values of [`TestFailure::shown`], in the JSON and
+/// in the text (§18.1).
+const SHOWN: [&str; 2] = ["left", "right"];
+
 /// The indentation of the lines of a message after its first in the text
 /// (`spec/tools.md` §4 does not fix its width).
 const CONTINUATION: &str = "    ";
+
+/// `line` as a line after the first of a failure in the text.
+fn continued(line: String) -> String {
+    format!("{CONTINUATION}{line}")
+}
 
 /// The lines of `message`, split at the line breaks of spec §2.5 (LF, and CR
 /// LF as one), each with the characters that may not be written there (a CR
@@ -301,7 +327,8 @@ fn run_selected(module: &onsa_core::Module, tests: &[(onsa_core::FnId, &onsa_cor
 /// panic's as it is: an `assert` lowers to the panic with the message §11.8
 /// gives it (`assert <source>`, `onsa_core` lowering, R-183).
 fn failure_of(module: &onsa_core::Module, test: onsa_core::FnId, p: onsa_interp::Panic) -> TestFailure {
-    TestFailure { message: p.message, span: p.span, calls: source_calls(module, test, &p.calls), origin: p.origin }
+    let calls = source_calls(module, test, &p.calls);
+    TestFailure { message: p.message, span: p.span, calls, origin: p.origin, shown: p.shown }
 }
 
 /// The positions of the calls of `calls` (innermost first, the outermost

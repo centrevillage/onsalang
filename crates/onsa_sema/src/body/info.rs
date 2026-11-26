@@ -200,6 +200,11 @@ pub struct BodyInfo {
     /// The `?` expressions that passed the check → their constructors: the
     /// lowering reads them (S-71, D-15).
     pub tries: HashMap<ExprId, TryArms>,
+    /// The expression of an `assert` whose failure shows the values of the
+    /// two sides (§18.1, S-1261) → the comparison it is without its outer
+    /// parentheses: both operands of a type that satisfies `Show`, a type
+    /// parameter by its bounds. The types stage decides, the lowering reads.
+    pub shown_asserts: HashMap<ExprId, ExprId>,
     /// What diverges (§7), as the names stage recorded it.
     pub diverging: crate::tails::Diverging,
     /// The rows of the heads of the bindings (§5.4), and the marks of the

@@ -475,6 +475,10 @@ pub enum ExprKind {
     Panic {
         msg: MsgId,
         origin: PanicOrigin,
+        /// Of a failed `assert` of a comparison whose operands have `Show`
+        /// (§18.1, S-1261), the two values compared, each a read with no
+        /// effect; else empty. Only the interpreter evaluates them.
+        shown: Vec<Expr>,
     },
 }
 

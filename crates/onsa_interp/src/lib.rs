@@ -38,7 +38,7 @@ use onsa_diag::{Diagnostic, Span};
 use calls::ConstState;
 use place::{ArgVal, PlaceRef};
 pub use std_fns::unsupported;
-pub use value::{ArrayData, Proj, Slot, SpanRef, Value, show, slot, zero};
+pub use value::{ArrayData, Proj, Slot, SpanRef, Value, show, show_as, slot, zero};
 
 /// A panic of the program (spec §9.2, and a call beyond the depth limit of
 /// §12.5) with the position of the instruction that raised it.
@@ -56,6 +56,9 @@ pub struct Panic {
     /// A failed `assert` (of Core, or of `std.dsp.test.assert_near`) or
     /// another panic: what the message cannot tell (X9-36).
     pub origin: PanicOrigin,
+    /// The `Show` strings of the two values a failed `assert` compared,
+    /// each cut when long (§18.1, S-1261).
+    pub shown: Option<[String; 2]>,
 }
 
 /// A call a panic went out of ([`Panic::calls`]).
@@ -142,7 +145,7 @@ fn out_of_range<T>(bounds: Bounds, span: Span, msg: String) -> R<T> {
 }
 
 fn panic_from<T>(origin: PanicOrigin, span: Span, msg: impl Into<String>) -> R<T> {
-    Err(Signal::Fail(Failure::Panic(Panic { message: msg.into(), span, calls: Vec::new(), origin })))
+    Err(Signal::Fail(Failure::Panic(Panic { message: msg.into(), span, calls: Vec::new(), origin, shown: None })))
 }
 
 /// The interpreter found a state it cannot be in at `span`: an internal

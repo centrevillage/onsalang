@@ -323,6 +323,8 @@ pub fn show(v: &Value) -> String {
         Value::F32(x) => show_float(f64::from(*x), &format!("{x:e}")),
         Value::F64(x) => show_float(*x, &format!("{x:e}")),
         Value::Bool(b) => b.to_string(),
+        // SPEC-GAP(S-270): a `Char` in its literal form (§6.3, S-1261 G5) with the escapes of Rust's
+        // `{:?}`; which characters are escaped, and how, is not decided.
         Value::Char(c) => format!("{c:?}"),
         Value::Unit => "()".into(),
         Value::Array(ArrayData::F32(xs)) => format!("[F32; {}]", xs.len()),
@@ -335,5 +337,33 @@ pub fn show(v: &Value) -> String {
         Value::Span(s) => format!("Span[{}..{}]", s.start, s.start + s.len),
         Value::Buf(b) => format!("Buf[{}]", b.borrow().f32_samples().map(|v| v.len()).unwrap_or(0)),
         Value::Fn(f) => format!("fn#{}", f.0),
+    }
+}
+
+/// The `Show` string of `v`, a value of the type `ty` (§6.3): of an array
+/// (of either storage), a tuple and an enum, by their parts, an enum by the
+/// names of its variants. The enums with `Show` in this version are `Option`
+/// and `Result` alone (a derive of it is E0200), which §6.3 writes with no
+/// type name; no struct has it.
+pub fn show_as(m: &Module, ty: &Ty, v: &Value) -> String {
+    let all = |xs: &mut dyn Iterator<Item = String>| xs.collect::<Vec<_>>().join(", ");
+    match (ty, v) {
+        (Ty::Array(t, _), Value::Array(xs)) => {
+            format!("[{}]", all(&mut (0..xs.len()).map(|i| show_as(m, t, &xs.get(i)))))
+        }
+        (Ty::Tuple(ts), Value::Tuple(xs)) => {
+            format!("({})", all(&mut ts.iter().zip(xs).map(|(t, x)| show_as(m, t, x))))
+        }
+        (Ty::Enum(id), Value::Enum { tag, fields }) => match &m.ty(*id).kind {
+            TypeDefKind::Enum { variants } if (*tag as usize) < variants.len() => {
+                let (name, tys) = &variants[*tag as usize];
+                match fields.is_empty() {
+                    true => name.clone(),
+                    false => format!("{name}({})", all(&mut tys.iter().zip(fields).map(|(t, x)| show_as(m, t, x)))),
+                }
+            }
+            _ => show(v),
+        },
+        _ => show(v),
     }
 }

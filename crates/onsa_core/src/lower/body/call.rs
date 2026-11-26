@@ -171,7 +171,7 @@ pub(super) fn lower_call(
             let text = args.first().and_then(|a| cx.ast.panic_message(a));
             let Some(text) = text else { return Err(internal(span, "panic without its message")) };
             let msg = lw.msg(&text);
-            Ok(Expr::new(ty, span, ExprKind::Panic { msg, origin: PanicOrigin::Panic }))
+            Ok(Expr::new(ty, span, ExprKind::Panic { msg, origin: PanicOrigin::Panic, shown: Vec::new() }))
         }
         Target::Value => Err(unsupported(span, Feature::CallsThroughFnValues, &[])),
         _ => Err(internal(span, "call target")),

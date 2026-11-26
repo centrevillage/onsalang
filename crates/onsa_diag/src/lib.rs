@@ -25,6 +25,7 @@ pub mod unsupported;
 use std::collections::BTreeMap;
 
 pub use codes::{Category, Code, FixRule, NoteRule, Stage};
+pub use quote::cut;
 pub use repeat::{first_repeat, repeated};
 pub use source::{FileId, LineCol, LineIndex, SHARED_BASE, SharedFiles, SourceFile, SourceMap};
 

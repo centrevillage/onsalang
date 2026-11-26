@@ -899,7 +899,7 @@ fn a_panic_holds_its_origin() {
     for f in &m.fns {
         let Some(body) = &f.body else { continue };
         crate::walk::walk_block(body, &mut |e| {
-            if let ExprKind::Panic { msg, origin } = &e.kind {
+            if let ExprKind::Panic { msg, origin, .. } = &e.kind {
                 got.push((m.messages[msg.0 as usize].clone(), *origin));
             }
         });
@@ -912,6 +912,72 @@ fn a_panic_holds_its_origin() {
             ("called `unwrap()` on `None`".to_string(), PanicOrigin::Panic)
         ]
     );
+}
+
+/// A failed `assert` of a comparison of operands with `Show` holds the two
+/// values (§18.1, S-1261): an operand without an effect read again, both in
+/// temporaries, in order, when the right has one; none of `()`, and none of
+/// the operand of an effect of a `const`, which binds no temporary.
+#[test]
+fn a_shown_assert_holds_its_values_and_binds_an_effect_in_order() {
+    let m = core(
+        "pub fn next(inout n: I32) -> I32 {\n  n = n + 1\n  n\n}\n\
+         pub fn one() -> I32 {\n  1\n}\n\
+         pub const K: I32 = {\n  assert one() == 1\n  2\n}\n\
+         pub fn f(x: I32, o: Option[I32]) -> I32 {\n  assert (x * 2 == 1)\n  assert o != None\n  var y = x\n  \
+         assert y == next(inout y)\n  assert () == ()\n  K\n}\n",
+    );
+    let f = m.fns.iter().find(|f| f.name.ends_with(".f")).expect("f");
+    let text = crate::dump::dump_item(&m, &f.name);
+    for want in [
+        "panic(\"assert (x * 2 == 1)\"; (x * 2:I32), 1:I32)",
+        "panic(\"assert o != None\"; o, std.core.Option__I32.None)",
+        "panic(\"assert y == next(inout y)\"; __shown@",
+        "panic(\"assert () == ()\")",
+    ] {
+        assert!(text.contains(want), "no {want:?} in\n{text}");
+    }
+    let (left, right) = (text.find("let __shown").expect("a temporary"), text.find("next(inout").expect("the call"));
+    assert!(left < right, "the left is bound before the call:\n{text}");
+    let k = m.consts.iter().find(|c| c.name.ends_with(".K")).expect("K");
+    let mut panics = Vec::new();
+    crate::walk::walk_expr(&k.init, &mut |e| {
+        if let ExprKind::Panic { shown, .. } = &e.kind {
+            panics.push(shown.len());
+        }
+    });
+    assert_eq!(panics, [0], "{}", dump(&m));
+}
+
+/// The `shown` of the `assert` of `x == 1` in the one function of `m`.
+fn shown_of(m: &mut Module) -> &mut Vec<Expr> {
+    let body = m.fns.iter_mut().find_map(|f| f.body.as_mut()).expect("a body");
+    let Some(StmtKind::If(_, then, _)) = body.stmts.iter_mut().map(|s| &mut s.kind).next() else { panic!("no if") };
+    let Some(StmtKind::Expr(Expr { kind: ExprKind::Panic { shown, .. }, .. })) =
+        then.stmts.first_mut().map(|s| &mut s.kind)
+    else {
+        panic!("no panic")
+    };
+    shown
+}
+
+/// The values of a `Panic` are its children (V-01, R-439): `verify` checks
+/// them, so a read of a local out of range there is an error, and the walk
+/// meets them, after the comparison (`x` twice).
+#[test]
+fn the_values_of_a_panic_are_checked_and_walked() {
+    let mut m = core("pub fn f(x: I32) {\n  assert x == 1\n}\n");
+    let reads = |m: &Module| {
+        let mut n = 0;
+        crate::walk::walk_block(m.fns.iter().find_map(|f| f.body.as_ref()).expect("a body"), &mut |e| {
+            n += usize::from(matches!(e.kind, ExprKind::Local(_)));
+        });
+        n
+    };
+    assert_eq!(shown_of(&mut m).len(), 2, "{}", dump(&m));
+    assert_eq!(reads(&m), 2, "{}", dump(&m));
+    shown_of(&mut m)[0].kind = ExprKind::Local(LocalId(999));
+    assert!(verify(&m).is_err(), "{}", dump(&m));
 }
 
 // ---------------------------------------------------------------- limits

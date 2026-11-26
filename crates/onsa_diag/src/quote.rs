@@ -15,6 +15,16 @@ const WIDTH: usize = 120;
 /// The mark at an end of a quoted line that is cut.
 const CUT: &str = "...";
 
+/// `s` cut to its first [`WIDTH`] characters and [`CUT`] when it is longer:
+/// a long value shown in a failure of `onsa test` (§18.1, S-1261), which
+/// shares the width and the mark of a quoted line.
+pub fn cut(s: &str) -> String {
+    match s.char_indices().nth(WIDTH) {
+        Some((at, _)) => format!("{}{CUT}", &s[..at]),
+        None => s.to_string(),
+    }
+}
+
 /// `c` as one character that prints as itself: a C0 control character (the
 /// tab and the line end too) and DEL as its picture (U+2400..U+2421, ESC as
 /// `␛`), any other control character (C1) and a character that overrides the
@@ -171,5 +181,15 @@ mod tests {
         let text = crate::to_text(&sources, &[d]);
         assert!(text.contains("replace `␛␊` with `␇␉`"), "{text}");
         assert!(text.contains("  x␛\n  ^\n"), "{text}");
+    }
+
+    /// A value of [`WIDTH`] characters is whole; one more is cut to [`WIDTH`]
+    /// and [`CUT`], by characters and not bytes.
+    #[test]
+    fn a_value_longer_than_the_width_is_cut_by_characters() {
+        let whole = "é".repeat(WIDTH);
+        assert_eq!(cut(&whole), whole);
+        assert_eq!(cut(&format!("{whole}x")), format!("{whole}{CUT}"));
+        assert_eq!(cut(""), "");
     }
 }

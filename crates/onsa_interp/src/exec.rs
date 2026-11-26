@@ -8,8 +8,8 @@ use onsa_diag::Span;
 
 use crate::numeric::{bool_of, int_kind_of, int_of};
 use crate::place::{ArgVal, Frame, Leaf, Loc};
-use crate::value::{ArrayData, SpanRef, Value, int_value, slot, zero};
-use crate::{Interp, R, Signal, internal, out_of_range, panic_from};
+use crate::value::{ArrayData, SpanRef, Value, int_value, show_as, slot, zero};
+use crate::{Failure, Interp, Panic, R, Signal, internal, out_of_range};
 
 impl<'m> Interp<'m> {
     // ------------------------------------------------------------ statements
@@ -176,7 +176,7 @@ impl<'m> Interp<'m> {
             ExprKind::IfExpr { cond, then, else_ } => self.eval_if(f, cond, then, else_),
             ExprKind::Switch { scrutinee, arms, default } => self.eval_switch(f, scrutinee, arms, default, e),
             ExprKind::Block(b) => self.exec_block(f, b),
-            ExprKind::Panic { msg, origin } => self.eval_panic(*msg, *origin, span),
+            ExprKind::Panic { msg, origin, shown } => self.eval_panic(f, (*msg, *origin), shown, span),
         }
     }
 
@@ -228,8 +228,14 @@ impl<'m> Interp<'m> {
 
     #[cold]
     #[inline(never)]
-    fn eval_panic(&self, msg: MsgId, origin: PanicOrigin, span: Span) -> R<Value> {
-        panic_from(origin, span, self.m.messages[msg.0 as usize].clone())
+    fn eval_panic(&self, f: &mut Frame, (msg, origin): (MsgId, PanicOrigin), shown: &[Expr], span: Span) -> R<Value> {
+        let mut value = |x: &Expr| Ok(onsa_diag::cut(&show_as(self.m, &x.ty, &self.eval(f, x)?)));
+        let shown = match shown {
+            [l, r] => Some([value(l)?, value(r)?]),
+            _ => None,
+        };
+        let message = self.m.messages[msg.0 as usize].clone();
+        Err(Signal::Fail(Failure::Panic(Panic { message, span, calls: Vec::new(), origin, shown })))
     }
 
     #[inline(never)]

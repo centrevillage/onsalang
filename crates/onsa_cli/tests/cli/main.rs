@@ -139,6 +139,7 @@ mod slow_written_forms;
 mod stage_order_commands;
 mod std_privilege;
 mod syntax_units;
+mod test_assert_values;
 mod test_failure_positions;
 mod test_file_selection;
 mod test_identity;

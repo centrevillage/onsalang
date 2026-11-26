@@ -73,7 +73,7 @@ pub enum Child<'e> {
 pub fn for_each_child<'e>(e: &'e Expr, f: &mut dyn FnMut(Child<'e>)) {
     let mut exprs = |xs: &mut dyn Iterator<Item = &'e Expr>| xs.for_each(|x| f(Child::Expr(x)));
     match &e.kind {
-        ExprKind::Lit(_) | ExprKind::Local(_) | ExprKind::Const(_) | ExprKind::Zeroed | ExprKind::Panic { .. } => {}
+        ExprKind::Lit(_) | ExprKind::Local(_) | ExprKind::Const(_) | ExprKind::Zeroed => {}
         ExprKind::Unary(_, x) | ExprKind::Cast(x) | ExprKind::SpanOf(x) | ExprKind::Tag(x) => f(Child::Expr(x)),
         ExprKind::Binary { lhs, rhs, .. } | ExprKind::Cmp { lhs, rhs, .. } | ExprKind::Logic { lhs, rhs, .. } => {
             exprs(&mut [&**lhs, &**rhs].into_iter())
@@ -82,7 +82,7 @@ pub fn for_each_child<'e>(e: &'e Expr, f: &mut dyn FnMut(Child<'e>)) {
         ExprKind::Field { base, .. } | ExprKind::Payload { base, .. } => f(Child::Expr(base)),
         ExprKind::Index { base, index, .. } => exprs(&mut [&**base, &**index].into_iter()),
         ExprKind::Struct { fields: xs, .. } | ExprKind::Variant { fields: xs, .. } => exprs(&mut xs.iter()),
-        ExprKind::Array(xs) | ExprKind::Tuple(xs) => exprs(&mut xs.iter()),
+        ExprKind::Array(xs) | ExprKind::Tuple(xs) | ExprKind::Panic { shown: xs, .. } => exprs(&mut xs.iter()),
         ExprKind::Repeat { elem, .. } => f(Child::Expr(elem)),
         ExprKind::IfExpr { cond, then, else_ } => {
             f(Child::Expr(cond));

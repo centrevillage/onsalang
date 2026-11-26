@@ -113,8 +113,11 @@ fn the_dump_marks_ids_out_of_range() {
         unit(ExprKind::Variant { ty: TypeId(997), tag: 0, fields: Vec::new() }),
         unit(ExprKind::Zeroed),
     ];
-    let value =
-        Expr::new(Ty::Struct(TypeId(996)), span, ExprKind::Panic { msg: MsgId(999), origin: PanicOrigin::Panic });
+    let value = Expr::new(
+        Ty::Struct(TypeId(996)),
+        span,
+        ExprKind::Panic { msg: MsgId(999), origin: PanicOrigin::Panic, shown: Vec::new() },
+    );
     set_body(&mut m, stmts, value);
     let text = onsa_core::dump_item(&m, "t.f");
     for part in [

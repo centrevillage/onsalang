@@ -100,8 +100,9 @@ fn test voice "resonator decays"() -> () {
     let __arr: Buf[F32] = std.dsp.test.impulse(48000:U32)
     span(__arr)
   }, 48000.0:F32)
-  if (!(std.dsp.test.energy(span(o.0), 47000:U32, 48000:U32) < 1e-12:F64)) {
-    panic("assert energy(o.out, 47000, 48000) < 1.0e-12")
+  let __shown: F64 = std.dsp.test.energy(span(o.0), 47000:U32, 48000:U32)
+  if (!(__shown < 1e-12:F64)) {
+    panic("assert energy(o.out, 47000, 48000) < 1.0e-12"; __shown, 1e-12:F64)
   }
 }
 rt fn voice.saw.ctl(inout s: voice.saw.State, p: voice.saw.Params) -> () {
@@ -355,19 +356,21 @@ rt fn voice.Poly.process(inout self: voice.Poly, inout out: Span[F32], inout scr
 }
 fn test voice "voice renders a second of sound"() -> () {
   let o: voice.voice.Rendered = voice.voice.render(voice.voice.Config {}, voice.voice.Params { f0: 110.0:F32, vowel_f1: 700.0:F32, vowel_f2: 1220.0:F32, gain: 0.5:F32 }, 48000:U32, 48000.0:F32)
-  if (!(std.dsp.test.energy(span(o.0), 0:U32, 48000:U32) > 0.0:F64)) {
-    panic("assert energy(o.out, 0, 48000) > 0.0")
+  let __shown@1: F64 = std.dsp.test.energy(span(o.0), 0:U32, 48000:U32)
+  if (!(__shown@1 > 0.0:F64)) {
+    panic("assert energy(o.out, 0, 48000) > 0.0"; __shown@1, 0.0:F64)
   }
-  if (!(std.dsp.test.energy(span(o.0), 0:U32, 48000:U32) < 48000.0:F64)) {
-    panic("assert energy(o.out, 0, 48000) < 48000.0")
+  let __shown@2: F64 = std.dsp.test.energy(span(o.0), 0:U32, 48000:U32)
+  if (!(__shown@2 < 48000.0:F64)) {
+    panic("assert energy(o.out, 0, 48000) < 48000.0"; __shown@2, 48000.0:F64)
   }
 }
 fn std.dsp.test.energy(xs: Span[F32], from: U32, to: U32) -> F64 {
   if (!(from <= to)) {
-    panic("assert from <= to")
+    panic("assert from <= to"; from, to)
   }
   if (!(to <= len(xs))) {
-    panic("assert to <= xs.len()")
+    panic("assert to <= xs.len()"; to, len(xs))
   }
   let acc: F64 = 0.0:F64
   for i in from..to {
