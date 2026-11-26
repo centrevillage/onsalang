@@ -1,0 +1,9 @@
+@export
+pub flow t(x: F32 at sample) -> F32 at sample {
+  x
+}
+
+@export
+pub flow t_reset(x: F32 at sample) -> F32 at sample {
+  x
+}
