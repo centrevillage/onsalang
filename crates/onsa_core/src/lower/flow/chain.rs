@@ -150,6 +150,8 @@ fn child_time(cx: &mut FnCx, out: &mut Vec<Stmt>, w: &Walk, words: usize) -> R<V
         if b.ratio.slower_than_body() && time.len() != 2 {
             return Err(internal(w.span, "one word of time"));
         }
+        // SPEC-GAP(S-1252): the stage of an event a run gives out is at the
+        // time of that run (provisional (1)).
         let j = w.j(k).or((!b.ratio.slower_than_body()).then_some(&first));
         let kept = fold(&time, b.ratio, j, w.span)?.into_iter().take(if k == 0 { words } else { 2 });
         time = kept.zip(["t_in", "t_hi_in"]).map(|(e, name)| materialize(cx, e, out, name)).collect();

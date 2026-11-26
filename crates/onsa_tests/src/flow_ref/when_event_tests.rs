@@ -1,5 +1,5 @@
 //! A `when~` of an event on the evaluator (W7-11 U3/e; §11.10, §11.11, §11.3, S-563, S-1209): the table of values worked out by hand (`when_event_values.md`), run as the table of `event_values.md` is. The form of W7-17 (a `when~`
-//! with the `reset_if~` of an event in one chain) is in it (the section `u1`) and runs from W7-17 U4.
+//! with the `reset_if~` of an event in one chain) is in it (the section `u1`, with its value) and runs since W7-17 U4.
 
 use super::event_table_tests::run_cases;
 

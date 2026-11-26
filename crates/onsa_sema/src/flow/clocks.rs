@@ -10,7 +10,9 @@
 //!   the [`loop_clock`] of the join of its `let`s (§11.3, S-567 P3). The
 //!   checks that give a clock in error decide it in every mode and report at
 //!   `Check` only (R-496), so a `^y` of a `let` in error is in error; of
-//!   operands that read a ⊥ they decide nothing in stage 1 ([`Walk::bottoms`]).
+//!   operands that read a ⊥ they decide nothing in stage 1 ([`Walk::bottoms`]),
+//!   and a loop solved is walked again for its `let`s in error, which a read
+//!   out of the loop takes so (R-511, [`Walk::failing`]).
 //! - Stage 2 (`Check`) walks the `let`s in their order and the output, with
 //!   `^y` the value of stage 1, records every clock, checks the flow rules
 //!   ([`checks`]) all through, keeping the first diagnostic in the order of
@@ -18,11 +20,11 @@
 //!   ([`NodeBuilder`]), and gives each value of `sample_tick()` the clock of
 //!   the place that uses it ([`Walk::settle`]).
 //!
-//! Each expression is walked at most three times; the components are linear
-//! in the reads (Tarjan), so the walk is linear in the body, with no bound of
-//! rounds. [`finish_flow`] makes the tables of the flow from the walk and the
-//! state marking (`reads`), and the plan of the nodes (`plan`) of a walk with
-//! no diagnostic.
+//! Each expression is walked at most four times (three out of a loop); the
+//! components are linear in the reads (Tarjan), so the walk is linear in the
+//! body, with no bound of rounds. [`finish_flow`] makes the tables of the
+//! flow from the walk and the state marking (`reads`), and the plan of the
+//! nodes (`plan`) of a walk with no diagnostic.
 
 use onsa_diag::hash::HashSet;
 use onsa_syntax::ast::{Ast, BinOp, MatchArm};
@@ -269,6 +271,15 @@ pub(super) struct Walk<'a> {
     loop_clash: Vec<Option<Clashed>>,
     /// Stage 1: the loops of `let`s, each in the order of its `let`s ([`mix`]).
     loops: Vec<Vec<usize>>,
+    /// Stage 1: the component of each `let`, and whether it is of a loop and
+    /// in error at the clock of the loop: a read of it from another component
+    /// takes a clock in error, which it reports, not its reader (§18.1, S-1133,
+    /// R-511); a read in its loop takes the clock of the loop, which leaves the
+    /// error of the loop to its `let`s.
+    component: Vec<usize>,
+    failing: Vec<bool>,
+    /// The component of the `let` walked, none of the output.
+    reader: Option<usize>,
     /// The stages of the `let`s checked, in their order ([`stages::of_params`]).
     let_stages: Vec<Clock>,
     /// [`Walked::output`].
@@ -349,6 +360,9 @@ pub(super) fn walk(
         clash: None,
         loop_clash: vec![None; n],
         loops: Vec::new(),
+        component: vec![0; n],
+        failing: vec![false; n],
+        reader: None,
         let_stages: Vec::new(),
         output: Clock::SAMPLE,
     };
@@ -398,7 +412,9 @@ impl Walk<'_> {
             deps.push(d);
         }
         self.mode = Mode::Solve;
-        for scc in loops::components(&deps) {
+        for (n, scc) in loops::components(&deps).into_iter().enumerate() {
+            self.reader = Some(n);
+            scc.lets.iter().for_each(|&k| self.component[k] = n);
             // The first clash in a loop, in the order of its `let`s, then of
             // their clocks: of the `let` the second operand enters (S-1198).
             let mut clashed = None;
@@ -421,6 +437,12 @@ impl Walk<'_> {
             for &k in &scc.lets {
                 self.lets[k] = Some(c);
             }
+            if scc.looped && c != Clock::Error {
+                for &k in &scc.lets {
+                    self.failing[k] = self.expr(self.cx.pending[k].init) == Some(Clock::Error);
+                }
+                self.clash = None;
+            }
             if scc.looped {
                 self.loops.push(scc.lets);
             }
@@ -434,6 +456,7 @@ impl Walk<'_> {
         let cx = self.cx;
         for (k, p) in cx.pending.iter().enumerate() {
             self.recorder.owner(Owner::Let(k as u32));
+            self.reader = Some(self.component[k]);
             self.stmt = Some(Stmt { root: p.init, start: p.span.start });
             let c = grounded(self.expr(p.init).unwrap_or(Clock::Const));
             self.settle(p.init, c);
@@ -446,6 +469,7 @@ impl Walk<'_> {
             }
             self.check_let(p);
         }
+        self.reader = None;
         if let Some(out) = self.cx.output {
             self.recorder.owner(Owner::Output);
             self.stmt = Some(Stmt { root: out, start: self.ast.expr(out).span.start });
@@ -650,11 +674,13 @@ impl Walk<'_> {
         }
         if let Some(&k) = self.cx.let_of_local.get(&id) {
             let feedback = matches!(self.ast.expr(e).kind, ExprKind::Feedback(_));
+            let failed = self.failing[k] && self.reader != Some(self.component[k]);
             return match self.mode {
                 Mode::Deps => {
                     self.deps.push(k);
                     None
                 }
+                _ if failed => Some(Clock::Error),
                 Mode::Check if !feedback => self.checked[k].or(self.lets[k]),
                 Mode::Solve | Mode::Check => {
                     self.bottom |= self.lets[k].is_none();

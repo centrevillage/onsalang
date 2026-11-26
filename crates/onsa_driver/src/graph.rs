@@ -108,6 +108,8 @@ impl Graph<'_> {
             bug(Some(self.ast.expr(flow.body).span), "a plan with other inputs than its flow")
         }
         let mut items = Vec::new();
+        // SPEC-GAP(S-1256): a vertex by the name of the input, so two inputs
+        // `_` are one vertex (provisional: as it is).
         for (&l, input) in info.inputs.iter().zip(&flow.inputs) {
             let name = info.body.locals[l.0 as usize].name.clone();
             self.local_node.insert(l, name.clone());
@@ -268,7 +270,7 @@ fn typed(ty: &str, r: Clock, at: Span) -> String {
 /// The colour of a clock at `at` (§1.1): the stages before `block` gray,
 /// `block` blue, `sample` black.
 // SPEC-GAP(S-1084): the other ticks, an event and the ambient clock are
-// black too (none but the ticks is made in this version).
+// black too.
 fn rate_color(r: Clock, at: Span) -> &'static str {
     match r {
         Clock::Const | Clock::Init => "gray40",

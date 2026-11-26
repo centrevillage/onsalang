@@ -124,7 +124,7 @@ flow f1(m: U32 at event, g: Bool at sample) -> U32 at sample {
 - 期待の出力: `0 1 0 0 0 1 0`
 - 注: the field `t.0` (a `Bool`) is read at each event whatever `g` says (§11.3, S-1197: "フィールド・組の要素の読みは、条件によらず、守りを付けずに刻みごとに読む"), under parentheses too: false before the first event, true for 3 (positions 1 .. 2), false for 1 (3 .. 4), true for 4 (5 ..). The output is 1 where `g` holds and the field is true (positions 1 and 5)
 
-## (u) not yet (W7-17): the table has the case and no value
+## (u) a `when~` and the `reset_if~` of an event in one chain (W7-17 U4)
 
 ### u1
 
@@ -137,4 +137,5 @@ flow u1(x: U32 at sample) -> U32 at sample {
 
 - 入力 `x`: `0 3 0 0 5 0 2 0`
 - フレーム: 8
-- 注: a `when~` and the `reset_if~` of an event in one chain
+- 期待の出力: `0 1 2 3 1 2 2 2`
+- 注: a `when~` and the `reset_if~` of an event in one chain: `e > 2` runs the part at the positions 1 .. 5 (the event 2 of position 6 stops it, the output kept), and `e > 4` is true from the event 5 (position 4), which sets the part back at the event (the count and the kept output are 0 again) before its run of that position: 0 (not run), 1 2 3, then 1 (the count again from 1), 2, and 2 2 kept (§11.10: "イベントの条件は、外の `when~` が止めている間もその刻みで初期化する", a level: the events 3 and 2 give no true `e > 4`)

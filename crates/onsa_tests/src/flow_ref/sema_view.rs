@@ -399,8 +399,8 @@ impl Callee<'_> {
     }
 }
 
-/// A stage of a flow (§11.3): `init`, `block`, and a tick of the ratio `2^r` of `sample` (`Tick(0)` is `sample`, a slower tick `r < 0`, §11.9). The inputs
-/// of a declaration are at the first three today; W7-17 has the others.
+/// A stage of a flow (§11.3): `init`, `block`, the events of a source, and a tick of the ratio `2^r` of `sample` (`Tick(0)` is `sample`, a slower tick `r < 0`,
+/// §11.9). An input of a declaration is at any of them (`stage_of` of its clock).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Stage {
     Init,

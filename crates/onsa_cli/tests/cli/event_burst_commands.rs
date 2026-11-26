@@ -2,7 +2,7 @@
 //! the events they give is seen by the values only through a reset, but the report of a panic says which came first. A case is a module with a flow `f` that has a division by 0 in each of two or three places that run at the frame 0, and the line
 //! of the one that stops the run (`failure.span`, the line only).
 //!
-//! The order (§11.11: "`.up~`・`.down~` の部品の中から出るイベントの位置は…同じ位置には内側の刻みの順に並ぶ。走りごとに、その走りの直後に受け手の刻みを行う"; "出したイベントの刻みは、作り手の呼び出しのその刻みの仕事（保存まで）が済んだ直後に、呼び出し側の段の途中で行い";
+//! The order (§11.11: "`.up~`・`.down~` の部品の中から出るイベントの位置は…同じ位置には内側の刻みの順に並ぶ"; "出したイベントの刻みは、呼び出し側が作り手に行わせた刻み一つ（`.up~` を付けた作り手では走り一回）の仕事の全体（保存まで）が済んだ直後に、出た順に、呼び出し側の段の途中で行い";
 //! §11.9: "同じ位置では、入力のイベントの刻み、遅い刻み、`sample` の刻みの順に並ぶ"; §11.10: "イベントの条件は、そのイベントの刻みで初期化する"):
 //! - The receiver of the event of the run 0 of a maker under `.up~(2)` ticks right after that run, before the run 1: a division by 0 in the receiver for the event 0 (R) stops the run before the division in the maker at its run 1 (M). The same where the
 //!   receiver is in the body of a flow that is run twice (the receiver of the same body ticks after its maker's run 0), and where the maker is in a block `.up~(2).down~(2)` (its events are at the position of the tick, one after the other).
@@ -146,7 +146,7 @@ fn cases() -> Vec<(String, String, String)> {
     all
 }
 
-/// §11.11 "走りごとに、その走りの直後に受け手の刻みを行う", "出したイベントの刻みは、作り手の呼び出しのその刻みの仕事が済んだ直後に"; §11.9 "同じ位置では、入力のイベントの刻み、遅い刻み、`sample` の刻みの順に並ぶ"; §11.10 "イベントの条件は、そのイベントの刻みで初期化する"
+/// §11.11 "出したイベントの刻みは、呼び出し側が作り手に行わせた刻み一つ（`.up~` を付けた作り手では走り一回）の仕事の全体（保存まで）が済んだ直後に、出た順に"; §11.9 "同じ位置では、入力のイベントの刻み、遅い刻み、`sample` の刻みの順に並ぶ"; §11.10 "イベントの条件は、そのイベントの刻みで初期化する"
 /// (S-1207, S-1229, S-1234, S-1235). One launch reads the modules of the four groups: each stops at the line of the first place that is not made safe.
 #[test]
 fn the_panic_of_several_events_is_the_first_in_the_order_of_the_runs_u4() {

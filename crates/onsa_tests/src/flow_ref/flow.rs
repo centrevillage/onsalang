@@ -76,8 +76,8 @@ impl Seen {
 
 pub(super) type Known = HashMap<LocalId, Seen>;
 
-/// The clock of an expression of two operands: the faster, as §11.3 has it. `None` for two that do not join (the event
-/// clocks of two inputs, W7-17); there is always one today.
+/// The clock of an expression of two operands: the faster, as §11.3 has it. The events of two sources have no order (E0815 of the check,
+/// §11.11, so the evaluator is never given an expression that holds both), and the larger source stands for them; the result is `Some` always.
 pub fn join(a: Clock, b: Clock) -> Option<Clock> {
     Some(match (a, b) {
         // `sample_tick()` has the clock of the place that reads it (§11.4): with an event it is that event's (§11.11).
@@ -146,8 +146,8 @@ impl Ctx {
 /// (`known`); one that `known` has not must be bound inside `root`, the expression being clocked (an arm of a `match`),
 /// and has no clock of its own: bound anywhere else is an internal error. A constant has none, a delay or an instance
 /// ticks with the `sample` of the body (§11.4: the first argument of a delay is at `sample`, or `^name`, which has no clock of
-/// its own and is read as `sample`, §11.3; a constant or a `block` one is E0813; the clock of the events of a delay comes
-/// with W7-17), and `e at k` has the clock `k` (§11.3).
+/// its own and is read as `sample`, §11.3; a constant or a `block` one is E0813; a delay of an event value ticks at the events of
+/// that value, §11.11), and `e at k` has the clock `k` (§11.3).
 pub(super) fn clock_of(body: &Body, known: &Known, root: ExprId, e: ExprId) -> Result<Clock, Fault> {
     match &body.ast.expr(e).kind {
         ExprKind::Call { kind, args, .. } if matches!(kind, CallKind::Flow) || body.time_call(e) => {
@@ -580,7 +580,7 @@ impl Inst {
             for i in members {
                 let (pat, init) = lets[i];
                 let own = seen_of(body, &known, init, init).map_err(at(init))?;
-                // A step of a loop that gives events of its own (a call of a maker) keeps its source: two makers in one loop (`let a = f~(prev~(^b))`, `let b = g~(a)`) have no one clock, `join` of two sources is none.
+                // A step of a loop that gives events of its own (a call of a maker) keeps its source: two makers in one loop (`let a = f~(prev~(^b))`, `let b = g~(a)`) have no one clock (the events of two sources do not join, E0815 where an expression holds both), so the step keeps its own.
                 let clock = match ring {
                     Some(c) if !matches!((c, own.stage), (Clock::Event(_), Clock::Event(_))) => Seen::both(c),
                     _ => own,

@@ -10,7 +10,8 @@
 // that no E0011 is left in the unit after it is applied (the runner applies it and checks). The candidate is one for
 // a chain too: `x as I32 as F64 + 1.0` is `((x as I32) as F64) + 1.0`, the inner `as` in parentheses for the chain and
 // the whole in parentheses for the operand. One error per declaration unit. The same forms parenthesized are in
-// e0011_chain_parenthesized.onsa, and the ends of a range in e0011_chain_range_end.onsa.
+// e0011_chain_parenthesized.onsa, and the ends of a range in e0011_chain_range_end.onsa. An expression on two lines is one
+// form too, and its error is at its first `as`.
 
 fn id64(a: F64) -> F64 {
   a
@@ -71,4 +72,9 @@ pub fn a_chain_in_a_closure(x: I16) -> F64 {
 
 pub fn a_chain_in_a_generic_function[T](t: T, x: I16) -> (T, F64) {
   (t, x as I32 as F64 + 1.0)   //~ E0011
+}
+
+pub fn a_cast_and_a_chain_on_two_lines(x: U16, y: U8) -> U32 {
+  x as U32 +   //~ E0011
+    y as U16 as U32
 }

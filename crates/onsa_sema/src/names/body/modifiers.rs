@@ -89,6 +89,8 @@ impl Walker<'_> {
             // are the E0811 of §11.10.
             // SPEC-GAP(S-1202): of a value, a method of the value, as before
             // (E0413, provisional (1)).
+            // SPEC-GAP(R-521): a condition that reads a past value in the first
+            // argument of a delay too (provisional, as of a flow).
             (CallKind::Plain, Some(m), _) if takes(m) && m.ratio_op().is_none() => {
                 let msg = format!("`{shown}` is a modifier of an instance, written `.{shown}~(…)` (§11.10)");
                 let fix = Fix::insert("add `~`", span.file, end, "~");

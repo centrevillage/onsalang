@@ -170,6 +170,9 @@ impl Walker<'_> {
                 return Ok(());
             }
             (Mark::Stateful(Stateful::Delay(_)), CallKind::Flow) => return Ok(()),
+            // SPEC-GAP(R-521): with an argument that reads a past value in the
+            // first argument of a delay (`prev~(lp(^w))`) too, where the `~`
+            // leaves an E0801 (§2.6 "必ず示す", provisional; §18.1 has none).
             (Mark::Stateful(what), CallKind::Plain) => {
                 let msg = self.stateful(what);
                 let fix = Fix::insert("add `~`", span.file, end, "~");

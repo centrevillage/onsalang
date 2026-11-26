@@ -523,7 +523,7 @@ impl Walk<'_> {
                 "an event is read at `sample` and `(sample / N)`, never slower (§11.11)".into()
             }
             (true, _) => format!("read it at `{to}` with `at` (§11.3)"),
-            (false, true) => "a conversion flow takes it (§11.9)".into(),
+            (false, true) => format!("a value at `{to}` comes from a conversion flow or a `.up~` (§11.3, §11.9)"),
             (false, false) => "a value is never made slower (§11.3)".into(),
         };
         let msg = format!(

@@ -1,0 +1,69 @@
+# flow_ref 1 source=tests/spec/flow_semantics/sample_tick_with_a_parameter_at_a_tick_values.onsa tests=14 evaluated=14 unavailable=0 skipped=0 waiting=0
+@ the time and a parameter at sample / 4 in an expression: the time of the tick, kept for its four frames
+init 0 sample_tick_with_a_parameter_at_a_tick_values.sum_in_an_expression sr=0x41000000
+process 0 params p=1 frames=16
+out=[1 1 1 1 5 5 5 5 9 9 9 9 13 13 13 13]
+@ the same in two lets, the name of the parameter and the sum
+init 0 sample_tick_with_a_parameter_at_a_tick_values.sum_by_lets sr=0x41000000
+process 0 params p=1 frames=16
+out=[1 1 1 1 5 5 5 5 9 9 9 9 13 13 13 13]
+@ the same as the argument of a call of a function
+init 0 sample_tick_with_a_parameter_at_a_tick_values.sum_in_a_call sr=0x41000000
+process 0 params p=1 frames=16
+out=[1 1 1 1 5 5 5 5 9 9 9 9 13 13 13 13]
+@ a tick of sample / 2: the ticks at the frames 0 2 4 6 read 0 2 4 6, p = 1
+init 0 sample_tick_with_a_parameter_at_a_tick_values.sum_every_two sr=0x41000000
+process 0 params p=1 frames=16
+out=[1 1 3 3 5 5 7 7 9 9 11 11 13 13 15 15]
+@ the parameter changes with the call and the value of the tick is made again: p = 0 and p = 4
+init 0 sample_tick_with_a_parameter_at_a_tick_values.sum_in_an_expression sr=0x41000000
+process 0 params p=0 frames=16
+out=[0 0 0 0 4 4 4 4 8 8 8 8 12 12 12 12]
+process 0 params p=4 frames=16
+out=[20 20 20 20 24 24 24 24 28 28 28 28 32 32 32 32]
+@ the sum is kept where the host cuts the run in the middle of a tick
+init 0 sample_tick_with_a_parameter_at_a_tick_values.sum_in_an_expression sr=0x41000000
+process 0 params p=1 frames=6
+out=[1 1 1 1 5 5]
+process 0 params p=1 frames=10
+out=[5 5 9 9 9 9 13 13 13 13]
+@ the time and the parameter in a condition of && and the let that holds it: 1 for the frames of the ticks 4 and 12
+init 0 sample_tick_with_a_parameter_at_a_tick_values.and_in_a_let sr=0x41000000
+process 0 params p=true frames=16
+out=[0 0 0 0 1 1 1 1 0 0 0 0 1 1 1 1]
+process 0 params p=false frames=16
+out=[0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0]
+@ the remainder of the sum: p = 0 holds at the ticks 4 and 12, p = 4 at the ticks 0 and 8
+init 0 sample_tick_with_a_parameter_at_a_tick_values.remainder_of_the_sum sr=0x41000000
+process 0 params p=0 frames=16
+out=[0 0 0 0 1 1 1 1 0 0 0 0 1 1 1 1]
+init 1 sample_tick_with_a_parameter_at_a_tick_values.remainder_of_the_sum sr=0x41000000
+process 1 params p=4 frames=16
+out=[1 1 1 1 0 0 0 0 1 1 1 1 0 0 0 0]
+@ a parameter at a tick alone, with no time in it, is read where it is: its value at each frame
+init 0 sample_tick_with_a_parameter_at_a_tick_values.of_the_block_part_alone sr=0x41000000
+process 0 params p=3 frames=16
+out=[6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6]
+@ a tick of sample / 8: the ticks at the frames 0 and 8 read 0 and 8, p = 1
+init 0 sample_tick_with_a_parameter_at_a_tick_values.sum_every_eight sr=0x41000000
+process 0 params p=1 frames=16
+out=[1 1 1 1 1 1 1 1 9 9 9 9 9 9 9 9]
+@ with a sample input the sum is the value of its tick for the four frames, added to the input of each frame
+init 0 sample_tick_with_a_parameter_at_a_tick_values.sum_with_a_sample_input sr=0x41000000
+process 0 params p=1 frames=16 in x=[10 10 10 10 10 10 10 10 10 10 10 10 10 10 10 10]
+out=[11 11 11 11 15 15 15 15 19 19 19 19 23 23 23 23]
+@ the parameter in a branch of an if the time chooses: the value of the tick where the time is 4 or 12 (12 mod 8 is 4), else 0
+init 0 sample_tick_with_a_parameter_at_a_tick_values.picked_in_an_if sr=0x41000000
+process 0 params p=3 frames=16
+out=[0 0 0 0 3 3 3 3 0 0 0 0 3 3 3 3]
+@ the parameter compared in a let, with the time: p = 3 holds at the ticks 4 and 12, p = 2 never
+init 0 sample_tick_with_a_parameter_at_a_tick_values.compared_by_name sr=0x41000000
+process 0 params p=3 frames=16
+out=[0 0 0 0 1 1 1 1 0 0 0 0 1 1 1 1]
+init 1 sample_tick_with_a_parameter_at_a_tick_values.compared_by_name sr=0x41000000
+process 1 params p=2 frames=16
+out=[0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0]
+@ the sum with the clock of the time written (`sample_tick() at (sample / 4)`) is the same value as the sum without it
+init 0 sample_tick_with_a_parameter_at_a_tick_values.sum_with_the_tick_written sr=0x41000000
+process 0 params p=1 frames=16
+out=[1 1 1 1 5 5 5 5 9 9 9 9 13 13 13 13]

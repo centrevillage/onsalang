@@ -8,7 +8,7 @@
 //! strengths placed on the groups that clash, one per placement.
 
 use std::cell::RefCell;
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 
 use onsa_diag::{Code, Diagnostic, Edit, Fix, Span, Stage};
 
@@ -40,24 +40,22 @@ pub(crate) fn check(ast: &Ast, kind_of: &dyn Fn(ExprId) -> NodeKind, limit: Limi
     // clocks under another one (a chain of `as` / `at` is one form, as a stack
     // is).
     let mut inner = HashSet::new();
-    // The operands of a chain and the ends of a range: a chain of `as` / `at`
-    // there is one error with the others of its expression (§3.3, S-348).
-    let mut operand = HashSet::new();
     for (i, e) in ast.exprs.iter().enumerate() {
-        match e.kind {
-            ExprKind::Binary { lhs, rhs, .. } => operand.extend([lhs, rhs]),
-            ExprKind::Range(head) | ExprKind::Par { range: head, .. } => operand.extend([head.lo, head.hi]),
-            _ => {}
-        }
         if let ExprKind::Binary { lhs, rhs, .. } = e.kind {
             inner.extend([lhs, rhs].into_iter().filter(|&c| matches!(ast.expr(c).kind, ExprKind::Binary { .. })));
         }
-        if let Some(operand) = ast.as_or_at_operand(ExprId(i as u32))
-            && ast.as_or_at_operand(operand).is_some()
+        if let Some(o) = ast.as_or_at_operand(ExprId(i as u32))
+            && ast.as_or_at_operand(o).is_some()
         {
-            inner.insert(operand);
+            inner.insert(o);
         }
     }
+    // The operand positions of E0011 of each form ([`cast_places`]), and all
+    // of them: a chain of `as` / `at` there is one error with the others of
+    // its form (§3.3, S-348).
+    let places: HashMap<ExprId, Vec<ExprId>> =
+        (0..ast.exprs.len() as u32).map(ExprId).filter_map(|e| Some((e, cast_places(ast, e, &inner)?))).collect();
+    let placed: HashSet<ExprId> = places.values().flatten().copied().collect();
     let in_a_type = const_args(ast);
     for (i, expr) in ast.exprs.iter().enumerate() {
         let id = ExprId(i as u32);
@@ -73,7 +71,7 @@ pub(crate) fn check(ast: &Ast, kind_of: &dyn Fn(ExprId) -> NodeKind, limit: Limi
                 // (§3.3, S-348).
                 let span = ast.expr(id).span;
                 let what = "`as` and `at` are written in parentheses when they are an operand (§3.1)";
-                if let Some(mut d) = operand_casts(ast, &operands, what, limit, span) {
+                if let Some(mut d) = operand_casts(ast, &places[&id], what, limit, span) {
                     if let Some(fix) = derived_clock_reading(ast, id, &in_a_type)
                         && !too_deep(limit, span, std::slice::from_ref(&fix), 0)
                     {
@@ -89,15 +87,15 @@ pub(crate) fn check(ast: &Ast, kind_of: &dyn Fn(ExprId) -> NodeKind, limit: Limi
             // E0011: a cast or a clock is parenthesized as an end of a range
             // too: the range symbols are weaker than `as` and `at` (§3.1,
             // §3.3, S-340); those of one head are one form (S-348).
-            ExprKind::Range(head) | ExprKind::Par { range: head, .. } => {
+            ExprKind::Range(_) | ExprKind::Par { .. } => {
                 let what = "`as` and `at` are written in parentheses when they are an end of a range (§3.1)";
-                diagnostics.extend(operand_casts(ast, &[head.lo, head.hi], what, limit, expr.span));
+                diagnostics.extend(operand_casts(ast, &places[&id], what, limit, expr.span));
             }
             // A chain that is an operand is the error of its expression's
             // arm (S-348).
             ExprKind::Cast { .. } | ExprKind::At { .. }
                 if !inner.contains(&id)
-                    && !operand.contains(&id)
+                    && !placed.contains(&id)
                     && ast.as_or_at_operand(id).is_some_and(|o| ast.as_or_at_operand(o).is_some()) =>
             {
                 // E0011: `x as A as B` is `(x as A) as B` written out, and so
@@ -138,9 +136,9 @@ pub(crate) fn check(ast: &Ast, kind_of: &dyn Fn(ExprId) -> NodeKind, limit: Limi
                 // The blank after the innermost operator goes too (S-410:
                 // `- - x` is `-(-x)`, which leaves no blank after a prefix).
                 let last = ops[ops.len() - 1];
-                let operand = Span::new(last.file, last.start + 1, ast.expr(e).span.start);
-                if !operand.is_empty() && src(operand).trim().is_empty() {
-                    edits.push(Edit::delete(operand));
+                let blank = Span::new(last.file, last.start + 1, ast.expr(e).span.start);
+                if !blank.is_empty() && src(blank).trim().is_empty() {
+                    edits.push(Edit::delete(blank));
                 }
                 edits.push(Edit::insert(expr.span.file, expr.span.end, ")".repeat(ops.len() - 1)));
                 let d = Diagnostic::new(
@@ -218,6 +216,19 @@ fn block_like_errors(ast: &Ast, kind_of: &dyn Fn(ExprId) -> NodeKind, limit: Lim
     }
 }
 
+/// The operand positions of E0011 of the form `e` (§3.1, §3.3, S-348): the
+/// operands of a chain at its root (not `inner`), the ends of a range. The
+/// one list of them (D-15).
+// SPEC-GAP(S-1257): the operands of a binary expression at an end of a range
+// are of that expression, apart from the ends (provisional (2)).
+fn cast_places(ast: &Ast, e: ExprId, inner: &HashSet<ExprId>) -> Option<Vec<ExprId>> {
+    match ast.expr(e).kind {
+        ExprKind::Binary { .. } if !inner.contains(&e) => Some(chain_nodes(ast, e).1),
+        ExprKind::Range(head) | ExprKind::Par { range: head, .. } => Some(vec![head.lo, head.hi]),
+        _ => None,
+    }
+}
+
 /// E0011 for the casts and clocks among `operands` (of a chain or the ends
 /// of a range, of the form at `span`): one form, parenthesized whole with
 /// their chains (§3.3, S-348); the main span is the first.
@@ -233,7 +244,7 @@ fn operand_casts(ast: &Ast, operands: &[ExprId], what: &str, limit: Limit, span:
 /// The parentheses of the cast or clock `e` round each inner one of its
 /// chain (`x as I16 as I32` is `(x as I16) as I32`, §3.1, S-118), and round
 /// `e` too when `whole` (an operand, S-348). The `(` at one place are one
-/// insertion; the edits are in the order of the text.
+/// insertion; the edits of a candidate are applied together, in no order (§18.1).
 fn unchained(ast: &Ast, e: ExprId, whole: bool) -> Vec<Edit> {
     let span = ast.expr(e).span;
     let mut closes: Vec<Edit> = std::iter::successors(ast.as_or_at_operand(e), |&o| ast.as_or_at_operand(o))
@@ -258,6 +269,8 @@ fn unchained(ast: &Ast, e: ExprId, whole: bool) -> Vec<Edit> {
 /// (`in_a_type`, [`const_args`]) the candidate's text reads as a type with a
 /// clock, which is no part of a type (E0020, S-356): none there (§18.1).
 // SPEC-GAP(S-1193): a constant name is told by its spelling, a path and a parenthesis take no candidate.
+// SPEC-GAP(S-1254): of a chain on the left too (provisional (1)).
+// SPEC-GAP(S-1258): of a `/` at the root only (provisional (2)).
 fn derived_clock_reading(ast: &Ast, e: ExprId, in_a_type: &impl Fn(Span) -> bool) -> Option<Fix> {
     if in_a_type(ast.expr(e).span) {
         return None;

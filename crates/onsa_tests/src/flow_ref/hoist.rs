@@ -178,6 +178,15 @@ pub(super) fn stage_of(body: &Body, known: &Known, root: ExprId, e: ExprId) -> R
             for c in conditions(body, e) {
                 stage = join(stage, clock_of(body, known, root, c)?).unwrap_or(stage);
             }
+            // R-517 (§11.3, §11.4): `sample_tick()` reads the clock of the place that uses it, and an expression that reads it with a value of the parameter kinds that `at` gave a tick
+            // (`sample_tick() % 8 == 4 && (p at (sample / 4))`) is of that tick: its time is the time of the tick, not of each `sample`.
+            if stage == Clock::AMBIENT {
+                match clock_of(body, known, root, e) {
+                    Ok(read) => stage = read,
+                    Err(Fault::Unavailable(_)) => {}
+                    Err(fault) => return Err(fault),
+                }
+            }
             Ok(stage)
         }
     }

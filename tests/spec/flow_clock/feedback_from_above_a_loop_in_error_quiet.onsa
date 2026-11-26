@@ -1,0 +1,37 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§11.5", "§18.1"]
+
+// A loop of `let`s (§11.3: a `let` that reads itself through `^`) whose `let` is a part in error (its
+// clock comes from a check that failed, S-1133) is read through `^` from a `let` above it, out of the
+// loop. The reader gets no diagnostic (§18.1: the part that reads what could not be read reports
+// nothing), and the error reported is that of the `let` of the loop, though the reader comes first in
+// the text (R-511). A `let` in the loop is no reader of that kind: the error of the loop is its own.
+// The last flow is the control: a loop with no error leaves the reader its own E0815.
+
+pub fn slow(v: F32) -> F32 { v * 0.5 }
+
+pub flow reader_above_a_loop(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let c = prev~(slow(^a))
+  let a = slow(prev~(^a) + p)                                  //~ E0815
+  c + a + x
+}
+
+pub flow reader_above_a_loop_of_two(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let c = prev~(slow(^b))
+  let a = prev~(^b)
+  let b = slow(a + p)                                          //~ E0815
+  c + b + x
+}
+
+flow reader_of_a_clash_above_a_loop(x: F32 at sample, p: F32 at block, q: F32 at (sample / 2)) -> F32 at sample {
+  let c = prev~(^a + q)
+  let a = slow(prev~(^a) + p)                                  //~ E0815
+  c + a + x
+}
+
+pub flow reader_above_a_loop_with_no_error(x: F32 at sample) -> F32 at sample {
+  let c = prev~(slow(^a))                                      //~ E0815
+  let a = prev~(^a) + x
+  c + a
+}

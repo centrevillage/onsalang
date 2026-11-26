@@ -3,7 +3,7 @@
 // mode = "test"
 // spec = ["§11.10", "§11.11", "§11.9"]
 
-// The level of an event in the condition of a `.when~` of a chain with a `.down~` (W7-11 U3/t; S-563, S-1209): W is the clock of the output of the receiver, `sample / 4`. E0200 until W7-17 (a chain with a ratio). `lv` gives the event x but for 2.
+// The level of an event in the condition of a `.when~` of a chain with a `.down~` (W7-11 U3/t; S-563, S-1209): W is the clock of the output of the receiver, `sample / 4`. `lv` gives the event x but for 2.
 
 const XS: [U32; 12] = [2, 2, 1, 2, 0, 2, 2, 1, 0, 2, 2, 2]
 const XB: [U32; 12] = [2, 1, 0, 1, 2, 0, 1, 0, 2, 2, 2, 2]

@@ -165,6 +165,7 @@ file sample_tick_condition_grid_values.tsv rows=97 tests=11 evaluated=11 unavail
 file sample_tick_explicit_burst_values.tsv rows=31 tests=4 evaluated=4 unavailable=0 skipped=0 waiting=0
 file sample_tick_time_only_values.tsv rows=51 tests=5 evaluated=5 unavailable=0 skipped=0 waiting=0
 file sample_tick_values.tsv rows=54 tests=10 evaluated=10 unavailable=0 skipped=0 waiting=0
+file sample_tick_with_a_parameter_at_a_tick_values.tsv rows=69 tests=14 evaluated=14 unavailable=0 skipped=0 waiting=0
 file scalar_assoc_const_flows.tsv rows=19 tests=6 evaluated=6 unavailable=0 skipped=0 waiting=0
 file scalar_assoc_const_param.tsv rows=10 tests=3 evaluated=3 unavailable=0 skipped=0 waiting=1
 file scalar_bits_delay_length.tsv rows=10 tests=3 evaluated=3 unavailable=0 skipped=0 waiting=0
@@ -201,4 +202,4 @@ file when_identity_regressions.tsv rows=78 tests=5 evaluated=5 unavailable=0 ski
 file when_slow_head_values.tsv rows=47 tests=5 evaluated=5 unavailable=0 skipped=0 waiting=0
 file when_slow_values.tsv rows=86 tests=9 evaluated=9 unavailable=0 skipped=0 waiting=0
 file when_values.tsv rows=77 tests=10 evaluated=10 unavailable=0 skipped=0 waiting=0
-total files=202 rows=9201 tests=1567 evaluated=1505 unavailable=1 skipped=61 waiting=6
+total files=203 rows=9270 tests=1581 evaluated=1519 unavailable=1 skipped=61 waiting=6

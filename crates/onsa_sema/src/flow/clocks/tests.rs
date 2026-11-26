@@ -521,6 +521,24 @@ fn the_e0815_of_a_slower_argument_says_to_read_it_with_at() {
     }
 }
 
+/// A `sample` value given to an input at `sample * N` of the caller (in the
+/// frame of an `.up~`, and of the input of a conversion flow) is E0815, whose
+/// text names what makes such a value (§11.3, §11.9), not that a value is
+/// never made slower: the argument is the slower one (R-513).
+#[test]
+fn the_e0815_of_a_sample_value_to_an_input_at_sample_times_n_names_what_makes_one() {
+    let fold = "flow fold2(x: F32 at (sample * 2)) -> F32 at sample { 0.0 }\n";
+    let up = the_text("  let y = lp~(x).up~(2)\n  x");
+    let flow = check(&format!("{fold}pub flow f(x: F32 at sample) -> F32 at sample {{\n  fold2~(x)\n}}\n"));
+    let [d] = &flow.diagnostics[..] else { panic!("one diagnostic expected: {:?}", flow.diagnostics) };
+    for (code, msg) in [(up.0, up.1), (format!("{:?}", d.code), d.message.clone())] {
+        assert_eq!(code, "E0815", "{msg}");
+        let text =
+            "is at `sample * 2`; a value at `sample * 2` comes from a conversion flow or a `.up~` (§11.3, §11.9)";
+        assert!(msg.contains(text) && !msg.contains("slower"), "{msg}");
+    }
+}
+
 /// The two views of a port of a derived clock (§11.9): the body reads an
 /// input at `(sample * 2)` as an array of 2 at its `sample` and one at
 /// `(sample / 4)` at that tick, and a caller reads them in the frame of its

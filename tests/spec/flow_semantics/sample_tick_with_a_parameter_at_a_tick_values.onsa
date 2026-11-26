@@ -1,0 +1,189 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.3", "§11.4"]
+
+// W7-17 L3/e, R-517 (spec §11.3: "刻みの値（…`sample_tick()`）を一つでも読む式は、その式のクロックの段の式である"; "`at` で付けたクロックは値を変えず、…刻みの値を読む式のクロック（上）…に効く"; §11.4: `sample_tick()` は
+// 「使う所の刻みのクロックに合わせる」、"`sample_tick()` の他に刻みの値もイベントの値も読まないものは、式の全体にそのクロックの `at` を付けた形と同じ値"; `sample / N` の段で読んでも同じ数（フレームの数）):
+// an expression that reads `sample_tick()` and a value of the parameter kinds with a tick written by `at` (`p at (sample / 4)`, `p` is `block`) is of that tick, so the time it reads is the time of the tick: the frame
+// count at the frames 0, 4, 8, 12 (`sample / 4`) or at the frames 0, 2, 4, 6 (`sample / 2`), and `at sample` keeps the value of the tick for the frames of the tick. Not the time of each frame (the frame 5 reads
+// 4, not 5). The forms are the same whether the part is in a `let` of its own, a name (`m`) or the expression itself, and in a call of a function. Every value is worked out by hand: the time of the ticks of
+// `sample / 4` is 0 4 8 12, so `% 8 == 4` holds at the ticks 4 and 12 (the frames 4 to 7 and 12 to 15 for `at sample`).
+
+pub flow sum_in_an_expression(p: U32 at block) -> U32 at sample {
+  (sample_tick() + (p at (sample / 4))) at sample
+}
+
+pub flow sum_by_lets(p: U32 at block) -> U32 at sample {
+  let m = p at (sample / 4)
+  let s = sample_tick() + m
+  s at sample
+}
+
+pub flow sum_every_two(p: U32 at block) -> U32 at sample {
+  (sample_tick() + (p at (sample / 2))) at sample
+}
+
+pub flow sum_in_a_call(p: U32 at block) -> U32 at sample {
+  plus(sample_tick(), p at (sample / 4)) at sample
+}
+
+pub flow and_in_a_let(p: Bool at block) -> U32 at sample {
+  let t = sample_tick() % 8 == 4 && (p at (sample / 4))
+  if (t at sample) { 1 } else { 0 }
+}
+
+pub flow remainder_of_the_sum(p: U32 at block) -> U32 at sample {
+  let y = ((sample_tick() + (p at (sample / 4))) % 8 == 4) at sample
+  if y { 1 } else { 0 }
+}
+
+pub flow of_the_block_part_alone(p: U32 at block) -> U32 at sample {
+  ((p at (sample / 4)) * 2) at sample
+}
+
+pub flow sum_with_the_tick_written(p: U32 at block) -> U32 at sample {
+  ((sample_tick() at (sample / 4)) + (p at (sample / 4))) at sample
+}
+
+pub flow sum_every_eight(p: U32 at block) -> U32 at sample {
+  (sample_tick() + (p at (sample / 8))) at sample
+}
+
+pub flow sum_with_a_sample_input(x: U32 at sample, p: U32 at block) -> U32 at sample {
+  x + ((sample_tick() + (p at (sample / 4))) at sample)
+}
+
+pub flow picked_in_an_if(p: U32 at block) -> U32 at sample {
+  (if sample_tick() % 8 == 4 { p at (sample / 4) } else { 0 }) at sample
+}
+
+pub flow compared_by_name(p: U32 at block) -> U32 at sample {
+  let m = p at (sample / 4)
+  if ((sample_tick() % 8 == 4 && m == 3) at sample) { 1 } else { 0 }
+}
+
+rt fn plus(a: U32, b: U32) -> U32 {
+  a + b
+}
+
+fn same(o: [U32; 16], e: [U32; 16]) -> Bool {
+  o == e
+}
+
+test "the time and a parameter at sample / 4 in an expression: the time of the tick, kept for its four frames" {
+  // p = 1: the ticks are at the frames 0 4 8 12 and read 0 4 8 12, so 1 5 9 13 for four frames each.
+  var out: [U32; 16] = [99; 16]
+  var st = sum_in_an_expression.init(8.0)
+  sum_in_an_expression.process(inout st, sum_in_an_expression.Params { p: 1 }, inout out)
+  assert same(out, [1, 1, 1, 1, 5, 5, 5, 5, 9, 9, 9, 9, 13, 13, 13, 13])
+}
+
+test "the same in two lets, the name of the parameter and the sum" {
+  var out: [U32; 16] = [99; 16]
+  var st = sum_by_lets.init(8.0)
+  sum_by_lets.process(inout st, sum_by_lets.Params { p: 1 }, inout out)
+  assert same(out, [1, 1, 1, 1, 5, 5, 5, 5, 9, 9, 9, 9, 13, 13, 13, 13])
+}
+
+test "the same as the argument of a call of a function" {
+  var out: [U32; 16] = [99; 16]
+  var st = sum_in_a_call.init(8.0)
+  sum_in_a_call.process(inout st, sum_in_a_call.Params { p: 1 }, inout out)
+  assert same(out, [1, 1, 1, 1, 5, 5, 5, 5, 9, 9, 9, 9, 13, 13, 13, 13])
+}
+
+test "a tick of sample / 2: the ticks at the frames 0 2 4 6 read 0 2 4 6, p = 1" {
+  var out: [U32; 16] = [99; 16]
+  var st = sum_every_two.init(8.0)
+  sum_every_two.process(inout st, sum_every_two.Params { p: 1 }, inout out)
+  assert same(out, [1, 1, 3, 3, 5, 5, 7, 7, 9, 9, 11, 11, 13, 13, 15, 15])
+}
+
+test "the parameter changes with the call and the value of the tick is made again: p = 0 and p = 4" {
+  // p = 0: 0 4 8 12.  p = 4: 4 8 12 16, in a call of its own (the time goes on: the second call reads the frames 16 on, 16 20 24 28 and p = 4 gives 20 24 28 32).
+  var out: [U32; 16] = [99; 16]
+  var st = sum_in_an_expression.init(8.0)
+  sum_in_an_expression.process(inout st, sum_in_an_expression.Params { p: 0 }, inout out)
+  assert same(out, [0, 0, 0, 0, 4, 4, 4, 4, 8, 8, 8, 8, 12, 12, 12, 12])
+  sum_in_an_expression.process(inout st, sum_in_an_expression.Params { p: 4 }, inout out)
+  assert same(out, [20, 20, 20, 20, 24, 24, 24, 24, 28, 28, 28, 28, 32, 32, 32, 32])
+}
+
+test "the sum is kept where the host cuts the run in the middle of a tick" {
+  // The cut at the frame 6 is in the tick of the frames 4 to 7: the second call goes on with 5 (4 + 1) for the frames 6 and 7.
+  var out: [U32; 16] = [99; 16]
+  var st = sum_in_an_expression.init(8.0)
+  sum_in_an_expression.process(inout st, sum_in_an_expression.Params { p: 1 }, inout out.slice(0, 6))
+  sum_in_an_expression.process(inout st, sum_in_an_expression.Params { p: 1 }, inout out.slice(6, 16))
+  assert same(out, [1, 1, 1, 1, 5, 5, 5, 5, 9, 9, 9, 9, 13, 13, 13, 13])
+}
+
+test "the time and the parameter in a condition of && and the let that holds it: 1 for the frames of the ticks 4 and 12" {
+  // The time of a tick of sample / 4 is 0 4 8 12; `% 8 == 4` holds at 4 and 12, so the frames 4 to 7 and 12 to 15.
+  var out: [U32; 16] = [99; 16]
+  var st = and_in_a_let.init(8.0)
+  and_in_a_let.process(inout st, and_in_a_let.Params { p: true }, inout out)
+  assert same(out, [0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 1, 1, 1, 1])
+  and_in_a_let.process(inout st, and_in_a_let.Params { p: false }, inout out)
+  assert same(out, [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
+}
+
+test "the remainder of the sum: p = 0 holds at the ticks 4 and 12, p = 4 at the ticks 0 and 8" {
+  // p = 0: (0 4 8 12) % 8 == 4 at 4 and 12.  p = 4: (4 8 12 16) % 8 == 4 at the ticks 0 (4) and 8 (12).
+  var out: [U32; 16] = [99; 16]
+  var st = remainder_of_the_sum.init(8.0)
+  remainder_of_the_sum.process(inout st, remainder_of_the_sum.Params { p: 0 }, inout out)
+  assert same(out, [0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 1, 1, 1, 1])
+  var st2 = remainder_of_the_sum.init(8.0)
+  remainder_of_the_sum.process(inout st2, remainder_of_the_sum.Params { p: 4 }, inout out)
+  assert same(out, [1, 1, 1, 1, 0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0])
+}
+
+test "a parameter at a tick alone, with no time in it, is read where it is: its value at each frame" {
+  var out: [U32; 16] = [99; 16]
+  var st = of_the_block_part_alone.init(8.0)
+  of_the_block_part_alone.process(inout st, of_the_block_part_alone.Params { p: 3 }, inout out)
+  assert same(out, [6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6])
+}
+
+test "a tick of sample / 8: the ticks at the frames 0 and 8 read 0 and 8, p = 1" {
+  var out: [U32; 16] = [99; 16]
+  var st = sum_every_eight.init(8.0)
+  sum_every_eight.process(inout st, sum_every_eight.Params { p: 1 }, inout out)
+  assert same(out, [1, 1, 1, 1, 1, 1, 1, 1, 9, 9, 9, 9, 9, 9, 9, 9])
+}
+
+test "with a sample input the sum is the value of its tick for the four frames, added to the input of each frame" {
+  // x = 10 at each frame: 10 + (1 5 9 13 for four frames each).
+  var out: [U32; 16] = [99; 16]
+  let x: [U32; 16] = [10; 16]
+  var st = sum_with_a_sample_input.init(8.0)
+  sum_with_a_sample_input.process(inout st, sum_with_a_sample_input.Params { p: 1 }, x, inout out)
+  assert same(out, [11, 11, 11, 11, 15, 15, 15, 15, 19, 19, 19, 19, 23, 23, 23, 23])
+}
+
+test "the parameter in a branch of an if the time chooses: the value of the tick where the time is 4 or 12 (12 mod 8 is 4), else 0" {
+  // Of the ticks 0 4 8 12 the time % 8 is 0 4 0 4: the branch of p is taken at the ticks 4 and 12, p = 3.
+  var out: [U32; 16] = [99; 16]
+  var st = picked_in_an_if.init(8.0)
+  picked_in_an_if.process(inout st, picked_in_an_if.Params { p: 3 }, inout out)
+  assert same(out, [0, 0, 0, 0, 3, 3, 3, 3, 0, 0, 0, 0, 3, 3, 3, 3])
+}
+
+test "the parameter compared in a let, with the time: p = 3 holds at the ticks 4 and 12, p = 2 never" {
+  var out: [U32; 16] = [99; 16]
+  var st = compared_by_name.init(8.0)
+  compared_by_name.process(inout st, compared_by_name.Params { p: 3 }, inout out)
+  assert same(out, [0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 1, 1, 1, 1])
+  var st2 = compared_by_name.init(8.0)
+  compared_by_name.process(inout st2, compared_by_name.Params { p: 2 }, inout out)
+  assert same(out, [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
+}
+
+test "the sum with the clock of the time written (`sample_tick() at (sample / 4)`) is the same value as the sum without it" {
+  var out: [U32; 16] = [99; 16]
+  var st = sum_with_the_tick_written.init(8.0)
+  sum_with_the_tick_written.process(inout st, sum_with_the_tick_written.Params { p: 1 }, inout out)
+  assert same(out, [1, 1, 1, 1, 5, 5, 5, 5, 9, 9, 9, 9, 13, 13, 13, 13])
+}

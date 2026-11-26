@@ -583,3 +583,58 @@ flow init_in(x: I32 at sample, k: I32 at init) -> I32 at sample {
     assert_eq!(run("block_in", &[], &[("g", 4)]), [0, 16, 24]);
     assert_eq!(run("init_in", &[("k", 1)], &[]), [0, 4, 5]);
 }
+
+// ---------------------------------------------------------------------------------------------------------------------------------
+// W7-17 L3/e, R-517 (§11.3, §11.4): `sample_tick()` with a value of the parameter kinds that `at` gave a tick (`p at (sample / 4)`, `p` is `block`) is of that tick: it reads the time of the tick (the frames 0 4 8 12
+// for `sample / 4`, which `at sample` keeps for the four frames of the tick), not the time of each frame.
+
+/// The outputs of `f` of `src` (a `U32` output, no `sample` input) for `frames` frames with the `block` input `p`, the calls cut at `cuts`.
+fn tick_time_outputs(src: &'static str, p: Value, frames: usize, cuts: &'static [usize]) -> Vec<i128> {
+    with_flow(src, "f", move |view, def| {
+        let mut me = Instance::init(view, def, 8.0, &[], None).expect("init");
+        let mut all = Vec::new();
+        let mut from = 0;
+        for to in cuts.iter().copied().chain([frames]) {
+            let outs = me.process(&[("p", p.clone())], &[], to - from, None).expect("process");
+            all.extend(outs.iter().map(|o| if let Value::Int(_, n, _) = o { *n } else { panic!("{o:?}") }));
+            from = to;
+        }
+        all
+    })
+}
+
+#[test]
+fn the_time_and_a_parameter_at_a_tick_read_the_time_of_the_tick() {
+    // p = 1, the ticks of `sample / 4` at the frames 0 4 8 12 read 0 4 8 12: 1 1 1 1 5 5 5 5 9 9 9 9 13 13 (14 frames), with a cut in the middle of the tick of the frames 4 to 7 the same.
+    let expr = "flow f(p: U32 at block) -> U32 at sample { (sample_tick() + (p at (sample / 4))) at sample }";
+    let lets = "flow f(p: U32 at block) -> U32 at sample {
+  let m = p at (sample / 4)
+  let s = sample_tick() + m
+  s at sample
+}";
+    let want = [1, 1, 1, 1, 5, 5, 5, 5, 9, 9, 9, 9, 13, 13];
+    assert_eq!(tick_time_outputs(expr, u32v(1), 14, &[]), want);
+    assert_eq!(tick_time_outputs(expr, u32v(1), 14, &[0, 6, 6]), want);
+    assert_eq!(tick_time_outputs(lets, u32v(1), 14, &[]), want);
+    // `sample / 2`: the ticks at 0 2 4 6 read 0 2 4 6; with p = 10: 10 10 12 12 14 14 16 16.
+    let two = "flow f(p: U32 at block) -> U32 at sample { (sample_tick() + (p at (sample / 2))) at sample }";
+    assert_eq!(tick_time_outputs(two, u32v(10), 8, &[]), [10, 10, 12, 12, 14, 14, 16, 16]);
+}
+
+#[test]
+fn the_time_in_a_condition_and_a_parameter_at_a_tick_decide_at_the_tick() {
+    // The time of the ticks 0 4 8 12 is `% 8 == 4` at 4 and 12: the frames 4 to 7 and 12 and 13 (the value kept for the frames of the tick).
+    let and = "flow f(p: Bool at block) -> U32 at sample {
+  let t = sample_tick() % 8 == 4 && (p at (sample / 4))
+  if (t at sample) { 1 } else { 0 }
+}";
+    let rem = "flow f(p: U32 at block) -> U32 at sample {
+  let y = ((sample_tick() + (p at (sample / 4))) % 8 == 4) at sample
+  if y { 1 } else { 0 }
+}";
+    assert_eq!(tick_time_outputs(and, Value::Bool(true), 14, &[]), [0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 1, 1]);
+    assert_eq!(tick_time_outputs(and, Value::Bool(false), 14, &[]), [0; 14]);
+    // p = 0: the sum is the time, 4 and 12 hold; p = 4: 4 8 12 16 holds at the ticks 0 and 8.
+    assert_eq!(tick_time_outputs(rem, u32v(0), 14, &[]), [0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 1, 1]);
+    assert_eq!(tick_time_outputs(rem, u32v(4), 14, &[]), [1, 1, 1, 1, 0, 0, 0, 0, 1, 1, 1, 1, 0, 0]);
+}
