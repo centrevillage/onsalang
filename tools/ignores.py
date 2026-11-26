@@ -383,6 +383,14 @@ def collect(paths, reason=None):
     return found, problems
 
 
+def waiting_for(paths, work):
+    """(found, problems) of `collect`: the ignored tests whose reason starts with `work` (WORK_AT_START, as `stale`
+    reads them: after `work` is DONE the gate fails on each), of the files that hold `work` (the reason is a string of
+    the file: the rest is not scanned). `work.py commit --done` stops on them."""
+    found, problems = collect([f for f in rs_files(paths) if work in f.read_text(encoding="utf-8")], work)
+    return [(f, t) for f, t in found if (m := WORK_AT_START.match(t.reason or "")) and m.group(0) == work], problems
+
+
 def show(f, t):
     return f"{f}:{t.line}\t{t.name}\t{t.reason if t.reason is not None else '-'}"
 

@@ -13,6 +13,7 @@
     tools/work.py lines [--base B] [--estimate N] [--tree DIR]
     tools/work.py commit -m SUBJECT [-m TEXT ...] [-F FILE] [PATH ...] [--done ID] [--docs-checked A..B WORK]
                          [--co-author "NAME <MAIL>"] [--no-sweep] [--tree DIR]
+    tools/work.py waits ID [--tree DIR]
     tools/work.py help [--role ROLE] [COMMAND]
 
 `new` makes the worktree `<main>/.claude/worktrees/<name>` (`WORKTREES`) of the main tree of DIR (default
@@ -112,7 +113,9 @@ tree holds (uncommitted changes and untracked files too) from a base (`--base`):
 files and removals too; `git commit --only`): the changes of the other paths and the index stay. A named path
 with no change is listed; with none at all, nothing is committed (exit 1). The message is the `-m` paragraphs and
 then `-F`'s. `--done ID` writes `status=DONE` the way `docs.py set` does (the swap files checked) and adds its
-file to the paths. `--docs-checked A..B WORK` (both ends commits of the tree: the range checked, the HEAD of then at both ends
+file to the paths; first it does nothing and exits 1 when something waits for ID that the gate fails on once ID is DONE
+(X-19 1, `waiting_items`: the entries of tests/pending.toml until ID, the ignores whose reason starts with ID), and
+after the commit it shows the lines of `waits`. `--docs-checked A..B WORK` (both ends commits of the tree: the range checked, the HEAD of then at both ends
 for an uncommitted diff) writes the trailer
 `<docs.DOCS_CHECKED>: A..B (WORK, onsa-docs)`, the ends as short hashes (X-12), and checks after the commit that `docs.last_docs_check` reads it,
 a line when not; `--co-author` writes `Co-Authored-By:` after it. When the commit fails, the untracked files
@@ -120,6 +123,10 @@ it added to the index leave it and the file of `--done` gets back what it held. 
 branch, its files, the uncommitted changes not in it. Last, the line `auto sweep: …` of what it started in the
 main tree (`after_commit.on_commit`): the sweep after a commit of the code or the cases, with `--no-sweep` the
 base binaries alone after a commit of the code, else nothing (exit 1 when it cannot ask: the commit stays).
+
+`waits ID` (X-27 TU2; it reads, exit 0 whatever it finds) shows the lines of the text files of `tests/` and `crates/`
+that name ID (`-` and `_` alike, any case: `W7-05 U2`, `UNTIL_W7_05_U2`, `until_w7_05`; `named_form`) beside a word of
+WAIT_WORDS (`wait_lines`), and then what `commit --done ID` stops on, with their counts.
 
 But for the worktree `new` makes, the removals above, `sync` and `commit`, nothing here commits, stashes, resets
 the tree or checks paths out. Exit 0 on success, 1 when a step fails, the patch does not apply or `take` stops
@@ -144,7 +151,9 @@ import fuzz  # noqa: E402
 import gate_runs  # noqa: E402
 import gate_steps  # noqa: E402
 import handback  # noqa: E402
+import ignores  # noqa: E402
 import narrowing  # noqa: E402
+import pending  # noqa: E402
 import repo  # noqa: E402
 
 ROOT = repo.ROOT
@@ -163,6 +172,10 @@ AGAIN = "work check: run it again in the main tree"
 CODE_SUFFIXES = (".rs", ".py", ".sh", ".c", ".h", ".js")
 ONSA_CODE = ("std/", "examples/")  # the directories whose `.onsa` files are code (W5-12 (3))
 ALREADY = "already in the tree (its reverse applies); nothing to do"
+# The words of waiting beside the ID of a work closed (`waits`; more lines rather than one missed: it only tells; 待 not of 期待)
+WAIT_WORDS = re.compile(r"until|wait(?:s|ing)?\s+for|pending|\bonce\b|not\s+yet|E0200|(?<!期)待|まで|まだ", re.I)
+WAIT_DIRS = ("tests", "crates")
+UNTIL_KEY = re.compile(r"\s*until\s*=")  # an entry's field of tests/pending.toml: shown as the entry, not as text
 
 
 class Failed(Exception):
@@ -1009,6 +1022,53 @@ def mark_done(tree, id_):
     return rel, held
 
 
+def named_form(id_):
+    """The spelling of `id_` in the text: `-` and `_` alike, any case, not after a letter or a digit nor before a digit."""
+    return re.compile(r"(?<![A-Za-z0-9])" + "[-_]".join(map(re.escape, id_.split("-"))) + r"(?![0-9])", re.I)
+
+
+def wait_lines(root, id_):
+    """`path:line: excerpt` (from the name or the word to the other) of the lines of the text files (UTF-8) of
+    WAIT_DIRS, not in a build output, that name `id_` beside a word of WAIT_WORDS."""
+    form, out = named_form(id_), []
+    for top in WAIT_DIRS:
+        for d, dirs, files in os.walk(root / top):
+            at = Path(d).relative_to(root).as_posix()
+            dirs[:] = sorted(x for x in dirs if not repo.is_build_output(root, f"{at}/{x}"))
+            for rel in (f"{at}/{name}" for name in sorted(files)):
+                try:
+                    text = (root / rel).read_text(encoding="utf-8")
+                except UnicodeDecodeError:
+                    continue  # no text
+                for i, line in enumerate(text.splitlines() if form.search(text) else (), 1):
+                    m, w = form.search(line), WAIT_WORDS.search(line)
+                    if m and w and not (rel == PENDING and UNTIL_KEY.match(line)):
+                        out.append(f"{rel}:{i}: {docs.excerpt(line, min(m.start(), w.start()), max(m.end(), w.end()))}")
+    return out
+
+
+def waiting_items(root, id_):
+    """What `commit --done <id_>` stops on, as the lines of `pending.py list` and `ignores.py list`: the entries of
+    tests/pending.toml until `id_` (as `pending.py list --until` and the gate, W1-01, read them), the ignores of
+    `crates/` for it (`ignores.waiting_for`); and the problems of reading them."""
+    path, crates = root / PENDING, root / "crates"
+    entries, problems = repo.load_pending(path) if path.is_file() else ([], [])
+    found, more = ignores.waiting_for([crates], id_) if crates.is_dir() else ([], [])
+    return ([pending.list_line(e) for e in entries if e.until == id_],
+            [ignores.show(pending.show_path(f, root), t) for f, t in found], problems + more)  # fmt: skip
+
+
+def waits(args):
+    tree = Path(args.tree)
+    if repo.kind_of(args.id) is None:
+        raise Failed(f"waits: {args.id}: not an ID")
+    lines, (entries, ignored, problems) = wait_lines(tree, args.id), waiting_items(tree, args.id)
+    print("\n".join([*lines, *entries, *ignored, *problems,
+                     f"waits {args.id}: {len(lines)} line(s) beside a word of waiting; commit --done stops on "
+                     f"{len(entries)} entr(ies) of {PENDING} and {len(ignored)} ignored test(s), {len(problems)} problem(s)"]))
+    return 0
+
+
 def commit(args):
     tree = Path(args.tree)
     if repo.tree_kind(tree) is None:
@@ -1024,6 +1084,11 @@ def commit(args):
     if not paths and not args.done:
         raise Failed("commit: name the paths to commit (or --done)")
     if args.done:
+        entries, ignored, problems = waiting_items(tree, args.done)
+        if entries or ignored or problems:
+            raise Failed("\n".join([*entries, *ignored, *problems, f"commit: --done {args.done}: {len(entries)} entr(ies) "
+                                    f"of {PENDING} and {len(ignored)} ignored test(s) wait for it, {len(problems)} "
+                                    "problem(s) of reading them; nothing done"]))
         done = mark_done(tree, args.done)
         paths.append(done[0].as_posix())
     try:
@@ -1057,12 +1122,19 @@ def commit(args):
     branch = git(tree, "branch", "--show-current").stdout.decode().strip() or "no branch"
     print(f"commit {short(tree)} on {branch}: {len(files)} file(s); "
           f"{len(uncommitted(tree))} uncommitted change(s) not in it")  # fmt: skip
+    if args.done and (said := wait_lines(tree, args.done)):
+        print("\n".join([*said, f"commit: {len(said)} line(s) name {args.done} beside a word of waiting (work.py waits)"]))
     try:
         print(after_commit.on_commit(tree.resolve(), sweep=not args.no_sweep))
     except (narrowing.NarrowError, OSError) as e:
         print(f"auto sweep: not asked: {e} (the commit is made; tools/after_commit.py --now)")
         return 1
     return 0
+
+
+def waits_args(p):
+    p.add_argument("id", help="the work to be closed (W7-05)")
+    p.add_argument("--tree", default=ROOT, help="the tree (default the one of this tool)")
 
 
 def sync_args(p):
@@ -1224,6 +1296,11 @@ COMMANDS = {
                "パッチを check の見つけた形で当て、3-way の後は索引から外し、当てたことを控える",
                "check を読んだ後。担当の引き継ぎのパッチは、自分の作業ツリーで `work.py sync --apply <パッチ>` が当てて WIP を置く",
                "work.py apply /tmp/x1.patch --to .claude/worktrees/x2"),
+    "waits": C(waits_args, failing(waits), ("parent",),
+               "閉じる作業を名指して待つ字（`tests/`・`crates/` の行で、ID（`-` と `_`、大文字小文字を同じに読む）が待つ語と並ぶもの）と、"
+               "commit --done が止める項目（until がその作業の tests/pending.toml の項目、理由がその作業で始まる #[ignore]）を並べる。知らせるだけで終了 0",
+               "作業を DONE にする前の点検で、残った待ちの注を探すとき（commit --done もコミットの後に同じ行を出す）",
+               "work.py waits W7-05"),
     "commit": C(commit_args, failing(commit), ("parent",),
                 "名指した経路の今の中身だけをコミットし（未追跡と削除も。他の変更と索引は残す）、--done で作業を DONE に、--docs-checked と --co-author で trailer を書く。主のツリーでコードか事例に触れたら網羅の検査を裏で起こす（--no-sweep で外し、コードに触れたら基のバイナリだけを保存する）",
                 "親が主のツリーでコミットするとき。git の commit が失敗したら、索引と --done のファイルを元に戻す",

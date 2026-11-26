@@ -418,6 +418,11 @@ def _write_checked(path, text, expect):
     return True
 
 
+def list_line(e):
+    """A line of `list` (`work.py commit --done` shows the entries it stops on so, too)."""
+    return f"{e.until}\t{', '.join(e.reasons)}\t{e.kind}\t{e.target}"
+
+
 def list_args(p):
     p.add_argument("--until", help="a work or a stage (W3-11, W3)")
     p.add_argument("--reason")
@@ -445,7 +450,7 @@ def edit(args):
     if args.cmd == "list":
         for e in entries:
             if args.until in (None, e.until, stage_of(e.until)) and args.reason in (None, *e.reasons) and args.kind in (None, e.kind):
-                print(f"{e.until}\t{', '.join(e.reasons)}\t{e.kind}\t{e.target}")
+                print(list_line(e))
         return 0
     if args.cmd == "remove":
         missing = [t for t in args.targets if not any(e.target == t for e in entries)]

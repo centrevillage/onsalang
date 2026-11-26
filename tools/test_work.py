@@ -25,7 +25,7 @@ import handback  # noqa: E402
 import narrowing  # noqa: E402
 import repo  # noqa: E402
 import work  # noqa: E402
-from selftest_support import quiet, quiet_out, git_in, NOTHING, NEW_LAYOUT  # noqa: E402
+from selftest_support import entry, quiet, quiet_out, git_in, NOTHING, NEW_LAYOUT  # noqa: E402
 
 
 class Take(unittest.TestCase):
@@ -837,9 +837,57 @@ class Work(unittest.TestCase):
         names = list(work.COMMANDS)
         self.assertEqual([x.split()[0] for x in quiet_out(work.main, ["help"])[1][: len(names)]], names)
         # in the order of the work (X-9 U8): an agent's first command first
-        self.assertEqual(names, ["sync", "lines", "new", "take", "patch", "check", "apply", "commit", "done", "close",
+        self.assertEqual(names, ["sync", "lines", "new", "take", "patch", "check", "apply", "waits", "commit", "done", "close",
                                  "remove"])  # fmt: skip
         self.assertEqual(quiet_out(work.main, ["help", "--role", "i"])[1][0].split()[0], "sync")
+
+
+class Waits(unittest.TestCase):
+    """tools/work.py `waits` (X-27 TU2) on a made-up tree: the lines that name the work beside a word of waiting."""
+
+    FILES = {
+        "tests/a.onsa": "// until W7-05 it is E0200\n"  # (a): the work, its unit, `_` for `-`, any case
+                        "// so it is waiting for W8-06 and, for the stages, for W7-05 U2\n"
+                        "// the calls the list UNTIL_W7_05_U2 sets aside\n"
+                        "// candidate: e0813_no_candidate_until_w7_05.onsa\n"
+                        "// W7-05 U1 の説明、期待値\n"  # (b): no word of waiting
+                        "// until W7-050, until W7-15, xW7-05 until\n"  # (c): other works, a longer name
+                        "// until U3a\n",  # (e): a unit's name alone
+        "tests/pending.toml": entry("test-case", "tests/a.onsa", until="W7-05", note="W7-05 U2 まで確かめられない")
+                              + entry("test-case", "tests/b.onsa", until="W7-15", note="W7-05 で済んだ"),
+        "crates/x/Cargo.toml": "",
+        "crates/x/target/debug/a.rs": "// until W7-05\n",  # a build output
+        "crates/x/src/lib.rs": '#[test]\n#[ignore = "W7-05 U3: x"]\nfn t() {}\n#[test]\n#[ignore = "W7-15: until W7-05"]\nfn u() {}\n',
+    }  # fmt: skip
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name)
+        for rel, text in self.FILES.items():
+            (self.root / rel).parent.mkdir(parents=True, exist_ok=True)
+            (self.root / rel).write_text(text, encoding="utf-8")
+        (self.root / "tests" / "bin.dat").write_bytes(b"\xff until W7-05\n")  # no text
+
+    def test_waits(self):
+        code, lines = quiet_out(work.main, ["waits", "W7-05", "--tree", str(self.root)])
+        self.assertEqual((code, lines), (0, [
+            "tests/a.onsa:1: // until W7-05 it is E0200", "tests/a.onsa:2: // so it is waiting for W8-06 and, for the stages, for W7-05 U2",
+            "tests/a.onsa:3: // the calls the list UNTIL_W7_05_U2 sets aside",
+            "tests/a.onsa:4: // candidate: e0813_no_candidate_until_w7_05.onsa",
+            "tests/pending.toml:6: note = \"W7-05 U2 まで確かめられない\"",  # (d); not the field `until`
+            "crates/x/src/lib.rs:5: #[ignore = \"W7-15: until W7-05\"]",
+            "W7-05\tS-45\ttest-case\ttests/a.onsa", "crates/x/src/lib.rs:3\tt\tW7-05 U3: x",
+            "waits W7-05: 6 line(s) beside a word of waiting; commit --done stops on 1 entr(ies) of tests/pending.toml "
+            "and 1 ignored test(s), 0 problem(s)"]))  # fmt: skip
+        self.assertEqual(quiet_out(work.main, ["waits", "W7-5", "--tree", str(self.root)])[1][-1],
+                         "waits W7-5: 0 line(s) beside a word of waiting; commit --done stops on 0 entr(ies) of "
+                         "tests/pending.toml and 0 ignored test(s), 0 problem(s)")  # fmt: skip
+        self.assertEqual(quiet_out(work.main, ["waits", "W7", "--tree", str(self.root)]), (1, ["waits: W7: not an ID"]))
+        (self.root / "tests" / "pending.toml").write_text("[[pending]]\nkind = 1\n")
+        code, lines = quiet_out(work.main, ["waits", "W7-05", "--tree", str(self.root)])
+        self.assertEqual(code, 0)
+        self.assertRegex(lines[-1], r"1 ignored test\(s\), [1-9] problem\(s\)$")
 
 
 class WorkSync(unittest.TestCase):
@@ -1054,6 +1102,37 @@ class WorkSync(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertIn("commit: --done W9-99: no file of it; nothing done", lines)
         self.assertEqual(self.commit("-m", "x"), (1, ["commit: name the paths to commit (or --done)"]))
+
+    def test_commit_done_stops_on_what_waits(self):
+        """X-19 1, X-27 TU2: an entry of tests/pending.toml until the work, or an ignore whose reason starts with it,
+        stops `--done` before anything is written; another work's do not; the lines of `waits` follow the commit."""
+        w1 = self.documents()
+        rs = self.main / "crates" / "x" / "src" / "lib.rs"
+        rs.parent.mkdir(parents=True)
+        (self.main / "a.txt").write_text("changed\n")
+        held, head = w1.read_bytes(), self.head(self.main)
+        for pending_toml, rust, shown in (
+            (entry("test-case", "tests/a.onsa", until="W1-01"), "", "W1-01\tS-45\ttest-case\ttests/a.onsa"),
+            ("", '#[test]\n#[ignore = "W1-01 U2: x"]\nfn t() {}\n', "crates/x/src/lib.rs:3\tt\tW1-01 U2: x"),
+        ):  # fmt: skip
+            with self.subTest(shown=shown):
+                (self.main / "tests" / "pending.toml").write_text(pending_toml)
+                rs.write_text(rust)
+                status = git_in(self.main, "status", "--porcelain")
+                code, lines = self.commit("-m", "the work", "a.txt", "--done", "W1-01")
+                self.assertEqual((code, lines[0]), (1, shown))
+                self.assertRegex(lines[1], r"^commit: --done W1-01: \d entr\(ies\) of tests/pending.toml and \d ignored "
+                                 r"test\(s\) wait for it, 0 problem\(s\) of reading them; nothing done$")
+                self.assertEqual((w1.read_bytes(), self.head(self.main)), (held, head))
+                self.assertEqual(git_in(self.main, "status", "--porcelain"), status)
+        (self.main / "tests" / "pending.toml").write_text(entry("test-case", "tests/a.onsa", until="W1-02"))
+        rs.write_text('#[test]\n#[ignore = "W1-02 U1: W1-01 x"]\nfn t() {}\n')
+        (self.main / "tests" / "a.onsa").write_text("// one\n// until W1-01 U2\n")
+        code, lines = self.commit("-m", "the work", "a.txt", "--done", "W1-01")
+        self.assertEqual(code, 0, lines)
+        self.assertEqual(lines[-3:-1], ["tests/a.onsa:2: // until W1-01 U2",
+                                        "commit: 1 line(s) name W1-01 beside a word of waiting (work.py waits)"])  # fmt: skip
+        self.assertIn('status = "DONE"', w1.read_text())
 
     def test_a_failed_commit_puts_the_tree_back(self):
         w1 = self.documents()

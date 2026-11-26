@@ -11,7 +11,7 @@
                              [--before W4-02|W4] [--no-fix] [--waiting] [--count] | changes [--since DATE]
                              [--stage W3] [--section §6] | ticket W UNIT/ROLE[-handover] [--out FILE]
                              | stale [--all]
-    python3 -B tools/docs.py set ID KEY=VALUE... | note ID LABEL TEXT [--by WHO] | new KIND [--title T]
+    python3 -B tools/docs.py set ID KEY=VALUE... [--dry-run] | note ID LABEL TEXT [--by WHO] | new KIND [--title T]
                              [--stage W4] [KEY=VALUE...] | draft S... --group N
     python3 -B tools/docs.py blind FILE...|--group N --out FILE | answers FILE...|--group N
     python3 -B tools/docs.py help [--role ROLE] [COMMAND]   (the purpose, the time, the roles, an example)
@@ -29,7 +29,8 @@ depth 0 with `-` for the type and from).
   `graph` shows the relations of the decisions as a graph made on the spot (`cmd_graph`).
   `show`, `list`, `changes`, `ticket` and the writes need the directory of the kind. The writes check the
   swap files first, write through `write_atomic`, and `set`, `new` refuse a text whose head fields would
-  break (a) or (b) of the file or (c) of it and its partners (`check_write`). `new S` shows the S of the
+  break (a) or (b) of the file or (c) of it and its partners (`check_write`); `set --dry-run` checks the same and
+  prints the same lines, with the exit code of the write, and writes nothing. `new S` shows the S of the
   same sections or family (X9-12, `akin`); `ticket` the lines of `tests/` that name its IDs (X9-67) and
   the lines of the `持ち越し` of the other works that name it (W4-18 U10f, `carried_to`).
   `blind` and `answers` (X9-65, X9-66) read the drafts of the gaps (the files given, or of a group).
@@ -2014,6 +2015,7 @@ def _found(ids, id_):
 def set_args(p):
     p.add_argument("id")
     p.add_argument("fields", nargs="+", metavar="KEY=VALUE", help="`,` divides an array; `KEY=` removes the field")
+    p.add_argument("--dry-run", action="store_true", help="the same checks and lines, and nothing is written")
 
 
 def cmd_set(args):
@@ -2030,15 +2032,18 @@ def cmd_set(args):
     text = head_update(ids.root, w.rel, {**w.values, **changes}, table.order)
     if found := check_write(ids.root, {w.rel: text}):
         return _refused("set", map(str, found))
-    write_atomic(ids.root / w.rel, text)
+    if not args.dry_run:
+        write_atomic(ids.root / w.rel, text)
     shown = [f"{k} = {toml_value(v)}" if v is not None else f"{k} removed" for k, v in changes.items()]
     print(f"{w.rel.as_posix()}: {'; '.join(shown)}")
+    if args.dry_run:
+        print("docs set: --dry-run: nothing is written")
     return 0
 
 
 def note_args(p):
     p.add_argument("id")
-    p.add_argument("label", help="判断, 保留, 補い, …")
+    p.add_argument("label", help="判断, 保留, 補い, …（日付は書かない: 道具が `（<今日>、<書き手>）` を付ける）")
     p.add_argument("text")
     p.add_argument("--by", default="親", help="the writer (default: 親)")
 
@@ -2552,7 +2557,7 @@ COMMANDS = {
     "changes": C(changes_args, cmd_changes, ("parent",), "決めた日・段・節で絞って、決定の変更点を並べる",
                  "決定の変更点を見るとき（別に書かない）。下書きを確かめる段で、その節の決定を探すとき（`--section <§>`）",
                  "docs.py changes --section §6"),
-    "set": C(set_args, cmd_set, EDITORS, "ID のファイルの頭の欄を書く（`KEY=` は欄を消す）",
+    "set": C(set_args, cmd_set, EDITORS, "ID のファイルの頭の欄を書く（`KEY=` は欄を消す。`--dry-run` は書かずに同じ確かめと行を出す）",
              "ID のファイルの頭の欄を書くとき（親は、決定の反映で `status=DECIDED decided=<日付>`。作業の "
              "`status=DONE` は、作業のコミットの `work.py commit --done <ID>` が書く。点検の担当は、親が作業票に規則を書いたときだけ）",
              "docs.py set S-537 status=DECIDED decided=2026-10-18"),

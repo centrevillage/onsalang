@@ -1565,6 +1565,13 @@ class DocsCommands(DocsTree):
             "tasks/W/W1-02.md:6: `doing` on a work that is DONE, not DOING"], [w2, "issues/R/R-1.md"])  # fmt: skip
         self.assertRefused(("set", "W1-02", "status=DONE", "doing="), ["issues/R/R-1.md:2: OPEN, but every work of `fix` is DONE (W1-02)"], [w2])
         self.assertRefused(("set", "W1-02", "status=", "doing="), ["tasks/W/W1-02.md:1: the field `status` is required (tasks/W/README.md)"], [w2])
+        # --dry-run (X-27 TU2): the same refusal, or the same line, and nothing is written
+        self.assertRefused(("set", "W1-02", "status=DONE", "doing=", "--dry-run"),
+                           ["issues/R/R-1.md:2: OPEN, but every work of `fix` is DONE (W1-02)"], [w2, "issues/R/R-1.md"])
+        before = self.read("issues/R/R-1.md")
+        self.assertEqual(self.run_("set", "R-1", "status=DONE", "--dry-run"),
+                         (0, ['issues/R/R-1.md: status = "DONE"', "docs set: --dry-run: nothing is written"]))
+        self.assertEqual(self.read("issues/R/R-1.md"), before)
         # in order, both are written
         self.assertEqual(self.run_("set", "R-1", "status=DONE")[0], 0)
         self.assertEqual(self.run_("set", "W1-02", "status=DONE", "doing=")[0], 0)
