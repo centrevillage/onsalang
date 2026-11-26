@@ -119,6 +119,16 @@ impl Walker<'_> {
             })
     }
 
+    /// The candidate of an E0811 that adds `~` at `at` to the call `e` with
+    /// none (§2.6): none where its arguments, made those of a flow or a
+    /// condition (`fed`), read a past value ([`Self::reads_past`]), which the
+    /// `~` would leave as the E0801 of §11.2 (S-1259, as S-1245).
+    pub(super) fn add_tilde(&self, e: ExprId, at: u32, fed: bool) -> Option<Fix> {
+        let ExprKind::Call { args, .. } = &self.ast.expr(e).kind else { return None };
+        let past = fed && args.iter().any(|a| self.reads_past(a.expr));
+        (!past).then(|| Fix::insert("add `~`", self.ast.expr(e).span.file, at, "~"))
+    }
+
     fn in_delay(&self) -> bool {
         matches!(self.order.reach, Reach::Delay | Reach::Choose)
     }

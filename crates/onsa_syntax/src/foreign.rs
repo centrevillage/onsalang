@@ -1063,6 +1063,13 @@ fn closed_expr(c: &Cursor) -> Option<(NodeKind, u32)> {
     c.closed.iter().copied().rfind(|n| n.0.class() == Class::Expr)
 }
 
+/// Whether the failure is right after an expression: one that closed before
+/// it on its line ([`closed_expr`]), or one that ends the line before
+/// ([`Cursor::head_symbol_after_operand`]).
+pub(crate) fn after_an_expression(c: &Cursor) -> bool {
+    closed_expr(c).is_some() || c.head_symbol_after_operand().is_some()
+}
+
 /// Whether the expression that ended right before the failure
 /// ([`closed_expr`]) is a path of names ([`crate::callee::Link::names_a_path`]).
 fn after_a_path(c: &Cursor) -> bool {

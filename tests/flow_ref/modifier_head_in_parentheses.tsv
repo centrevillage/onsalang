@@ -1,0 +1,29 @@
+# flow_ref 1 source=tests/spec/flow_semantics/modifier_head_in_parentheses.onsa tests=4 evaluated=4 unavailable=0 skipped=0 waiting=0
+@ a when~ after a head in parentheses runs the instance as the form without them
+init 0 modifier_head_in_parentheses.when_p sr=0x41000000
+init 1 modifier_head_in_parentheses.when_n sr=0x41000000
+process 0 frames=8 in c=[true false true true false false true true]
+out=[0x3f800000 0x3f800000 0x40800000 0x41000000 0x41000000 0x41000000 0x41700000 0x41b80000]
+process 1 frames=8 in c=[true false true true false false true true]
+out=[0x3f800000 0x3f800000 0x40800000 0x41000000 0x41000000 0x41000000 0x41700000 0x41b80000]
+@ a reset_if~ after a head in two parentheses resets the instance as the form without them
+init 0 modifier_head_in_parentheses.reset_p sr=0x41000000
+init 1 modifier_head_in_parentheses.reset_n sr=0x41000000
+process 0 frames=8 in r=[false false true false false true true false]
+out=[0x3f800000 0x40400000 0x40400000 0x40e00000 0x41400000 0x40c00000 0x40e00000 0x41700000]
+process 1 frames=8 in r=[false false true false false true true false]
+out=[0x3f800000 0x40400000 0x40400000 0x40e00000 0x41400000 0x40c00000 0x40e00000 0x41700000]
+@ a down~ after a head in parentheses runs on the grid of sample / 2 as the form without them
+init 0 modifier_head_in_parentheses.down_p sr=0x41000000
+init 1 modifier_head_in_parentheses.down_n sr=0x41000000
+process 0 params f=0x40400000 frames=8
+out=[0x40400000 0x40400000 0x40c00000 0x40c00000 0x41100000 0x41100000 0x41400000 0x41400000]
+process 1 params f=0x40400000 frames=8
+out=[0x40400000 0x40400000 0x40c00000 0x40c00000 0x41100000 0x41100000 0x41400000 0x41400000]
+@ a chain whose left is in parentheses is the chain without them
+init 0 modifier_head_in_parentheses.chain_p sr=0x41000000
+init 1 modifier_head_in_parentheses.chain_n sr=0x41000000
+process 0 frames=8 in c=[true true false true false true true false] r=[false false false true false false true false]
+out=[0x3f800000 0x40400000 0x40400000 0x40800000 0x40800000 0x41200000 0x40e00000 0x40e00000]
+process 1 frames=8 in c=[true true false true false true true false] r=[false false false true false false true false]
+out=[0x3f800000 0x40400000 0x40400000 0x40800000 0x40800000 0x41200000 0x40e00000 0x40e00000]

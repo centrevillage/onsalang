@@ -1,0 +1,38 @@
+// onsa.toml
+// [test]
+// spec = ["§2.6", "§11.2", "§11.10", "§18.1"]
+// fixes = 0
+
+// S-1259 (§2.6, §18.1; R-521): the E0811 of the names stage of a call with no `~` shows no candidate where the `~`
+// would lead to the E0801 of §11.2: in the first argument of a delay, an argument of the flow (or the condition of the
+// modifier) that reads a past value, a `^name` of a later `let` or a binding of a `match~` whose choice reads one
+// (S-1245). The E0811 stays. A past value in a delay inside the argument is that delay's (`lp(prev~(^w))`, which takes
+// the candidate, as `lp(x)` does: fixes/ cases of E0811). One error in each unit.
+
+flow lp(x: F32 at sample) -> F32 at sample {
+  prev~(x)
+}
+
+pub flow feedback_in_an_argument(x: F32 at sample) -> F32 at sample {
+  let a = prev~(lp(^w))                             //~ E0811
+  let w = x + a
+  w
+}
+
+pub flow in_an_operation_of_an_argument(x: F32 at sample) -> F32 at sample {
+  let a = prev~(lp(^w + 1.0) + 2.0)                 //~ E0811
+  let w = x + a
+  w
+}
+
+pub flow a_binding_a_past_value_chooses(x: F32 at sample) -> F32 at sample {
+  let a = prev~(match~ ^w { b => lp(b) })           //~ E0811
+  let w: F32 = x + a
+  w
+}
+
+pub flow a_condition_of_a_modifier(x: F32 at sample) -> F32 at sample {
+  let a = prev~(lp~(x).when(^c))                    //~ E0811
+  let c = x > 0.0
+  a
+}

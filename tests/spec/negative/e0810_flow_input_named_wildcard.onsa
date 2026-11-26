@@ -1,0 +1,30 @@
+// onsa.toml
+// [test]
+// spec = ["§11.6", "§11.2", "§5.1", "§18.1"]
+// fixes = 0
+
+// S-1092 (§11.6): a flow input is named, as its name is that of its field in the types the flow generates (`Config`,
+// `Params`, `In`), its C name, the default id of its `@param` and the name of its vertex in `onsa graph`. An input named
+// `_` is the E0810 of the heading (the names stage), at the `_`, with no candidate (the name is the writer's) and a note
+// that an input that is not read keeps a name (an unused input is no E0309, §5.1). One `_` or two, at any clock: one
+// error in each unit. A flow that calls one has no error of its own, and a parameter `_` of a function stays.
+
+pub flow one_at_init(_: F32 at init, x: F32 at sample) -> F32 at sample {   //~ E0810
+  x
+}
+
+pub flow two(_: F32 at block, _: F32 at sample, x: F32 at sample) -> F32 at sample {   //~ E0810
+  x
+}
+
+pub flow last(x: F32 at sample, _: Bool at sample) -> F32 at sample {   //~ E0810
+  x
+}
+
+pub flow user(x: F32 at sample) -> F32 at sample {
+  one_at_init~(1.0, x) + two~(1.0, x, x)
+}
+
+pub fn g(x: F32, _: F32) -> F32 {
+  x
+}

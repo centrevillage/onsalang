@@ -185,13 +185,16 @@ fn the_e0020_candidate_moves_the_whole_derived_clock_or_removes_it() {
 
 #[test]
 fn a_postfix_when_is_e0002_with_a_note_of_the_chain_and_is_no_e0200() {
-    // S-1082 is open: this is its provisional reading (2).
+    // S-1082: after any expression, as after `f~(…)` (tests/spec/negative/syntax_when_after_an_expression.onsa).
     let sig = "(x: F32 at sample, c: Bool at sample) -> F32 at sample";
     for (body, word) in [
         ("lp~(x) when c", "when"),
         ("prev~(x) when c", "when"),
         ("let y = lp~(x) when c\n  y", "when"),
         ("lp~(x) reset_if c", "reset_if"),
+        ("let y = (lp~(x)) when c\n  y", "when"),
+        ("let y = x reset_if c\n  y", "reset_if"),
+        ("let y = lp~(x)\n    when c\n  y", "when"),
     ] {
         let d = only(&flow(sig, body), "E0002");
         let notes = notes_text(&d);

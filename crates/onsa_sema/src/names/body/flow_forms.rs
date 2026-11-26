@@ -73,11 +73,9 @@ const ASSIGNMENT: &str = "assignment; every signal is defined once by `let`";
 
 impl Walker<'_> {
     /// E0806 at `span` for `what`, which a flow body cannot contain.
-    // SPEC-GAP(S-1100): §18.1 orders the diagnostics by their start and then
-    // their end, and does not say whether the names stage reads the names in
-    // a form of E0806 (as §4.5 says of a constant expression): here it does
-    // not, so `nope(x)?`, `nope = x` and the statement `nope(x)` are the E0806
-    // of the whole form, not the E0302 of `nope` that starts with it.
+    // S-1100: the names stage does not read the names in a form of E0806,
+    // so `nope(x)?`, `nope = x` and the statement `nope(x)` are the E0806 of
+    // the whole form, not the E0302 of `nope` that starts with it.
     fn forbidden(&mut self, span: Span, what: &str) -> Stop {
         self.e0806(span, format!("a flow body cannot contain {what} (§11.2)"))
     }
@@ -125,9 +123,9 @@ impl Walker<'_> {
     /// has none), and the body has its output after
     /// it. To a name a `let` defined, the note of the accumulation of §18.1
     /// and no candidate.
-    // SPEC-GAP(S-1102): a tuple or a field as the target has no candidate.
-    // SPEC-GAP(S-1105): to an input, an item, a type or a builtin name, no
-    // note: `let x = prev~(^x) + x` would be an E0304 or an E0320.
+    // S-1102: a tuple or a field as the target has no candidate.
+    // S-1105: to an input, an item, a type or a builtin name, no note: `let
+    // x = prev~(^x) + x` would be an E0304 or an E0320.
     fn flow_assign(&mut self, s: StmtId, target: ExprId, value: ExprId) -> Stop {
         let d = self.e0806_at(self.ast.stmt(s).span, format!("a flow body cannot contain {ASSIGNMENT} (§11.2)"));
         let ExprKind::Path(p) = &self.ast.expr(target).kind else { return self.fail(Fail::Report(d)) };
@@ -170,8 +168,7 @@ impl Walker<'_> {
 
     /// E0806 at the closing brace of the flow body `body` with no output
     /// expression (§11.2), after its statements.
-    // SPEC-GAP(S-1101): §11.2 gives the body as `let`s and the output, and not
-    // the code and the place of a body with no output: E0806 at its `}`.
+    // S-1101: a body with no output is E0806 at its `}`.
     pub(super) fn no_output(&mut self, body: ExprId) -> Stop {
         let span = self.ast.expr(body).span;
         let msg = "a flow body ends with its output expression (§11.2)";
@@ -197,8 +194,8 @@ impl Walker<'_> {
     /// delay, a function or a method) with `inout` or `move` (R-342), before
     /// its names.
     pub(super) fn flow_arg(&mut self, a: &Arg) -> W {
-        // SPEC-GAP(S-1099): at the argument with its mark (`inout x`), as of
-        // an instance before.
+        // S-1099: at the argument with its mark (`inout x`), as of an instance
+        // before.
         match a.mode {
             Mode::Borrow => Ok(()),
             _ => Err(self.forbidden(a.span, "`inout` / `move` arguments; signals are read-only values")),

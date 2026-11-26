@@ -197,8 +197,8 @@ pub(super) struct Walked {
 /// A place that is not evaluated on every sample (§11.5), around a part of
 /// the walk; the innermost decides the error of a thing with state in it
 /// (S-1188).
-// SPEC-GAP(S-1188): the innermost place, of a right of `&&` / `||` and a
-// branch one in the other (provisional).
+// S-1188: the innermost place, of a right of `&&` / `||` and a branch
+// one in the other.
 #[derive(Debug, Clone, Copy)]
 enum Site {
     /// A branch of `if` / `match` (E0811); `head` the `if` that starts its
@@ -615,9 +615,8 @@ impl Walk<'_> {
             | ExprKind::TupleIndex { base: x, .. }
             | ExprKind::TypeArgs { base: x, .. }
             | ExprKind::Repeat { elem: x, .. } => self.expr(*x),
-            // SPEC-GAP(S-1083): an operation of a value of the `sample * N`
-            // of the caller is E0815 (provisional (1)), as of the operands of
-            // a join.
+            // S-1083: an operation of a value of the `sample * N` of the caller is
+            // E0815, as of the operands of a join.
             ExprKind::Cast { expr: x, .. } | ExprKind::Unary { expr: x, .. } => match self.expr(*x) {
                 Some(c) => self.join(e, &[(Some(*x), Some(c)), (None, Some(Clock::Const))]),
                 None => None,
@@ -957,8 +956,8 @@ impl Walk<'_> {
         // Its port in its frame, of a periodic value (§11.10, R3: `sample_tick()` alone of
         // W): read at the stage of the ring that gathers it, else at its own. Not of a value
         // of the parameter kinds `at` a tick (§11.3: the `at` makes no state).
-        // SPEC-GAP(S-1227): a condition mixing a signal and a value of the parameter
-        // kinds (`c && b`) is of the signal's clock: the whole of it is gathered (provisional).
+        // S-1227: a condition mixing a signal and a value of the parameter
+        // kinds (`c && b`) is of the signal's clock: the whole of it is gathered.
         let port = match c {
             Some(Clock::Tick(k)) if !stages::of_params(self, cond) => Some(k),
             Some(Clock::Ambient) => Some(Ratio(w.0.min(0))),
@@ -983,9 +982,9 @@ impl Walk<'_> {
     /// in its frame, is a tick of a counter of one `U32` word
     /// ([`Ratio::made_n`]) in each frame from its own out to the caller's
     /// ([`super::plan::bounds::run_at`]); else the E0200 of S-1225.
-    // SPEC-GAP(S-1225): a tick slower than `sample / 2^31` in a frame of the
-    // chain (of an `.up~` outside it) is an E0200 (provisional), whether or
-    // not a `.when~` outside it drives it.
+    // S-1225: a tick slower than `sample / 2^31` in a frame of the chain (of
+    // an `.up~` outside it) is an E0200, whether or not a `.when~` outside it
+    // drives it.
     fn reset_tick(&mut self, chain: &ModifierChain, i: usize, guards: &[PlanGuard], rp: Ratio) -> bool {
         let mods = || chain.mods.iter().map(|m| &m.plan);
         let frames = (i..chain.mods.len())
@@ -1079,8 +1078,8 @@ impl Walk<'_> {
             if recorded.is_ok() {
                 self.recorder.leave_node();
             }
-            // SPEC-GAP(S-1155): of a value type neither Copy nor `Default`,
-            // the E0810 is the one (provisional): not the E0816 of an omitted `init`.
+            // S-1155: of a value type neither Copy nor `Default`, the E0810 is the
+            // one: not the E0816 of an omitted `init`.
             let not_copy = matches!(call.kind, NodeKind::Delay(..)) && self.check_delay_value(e);
             if let Err(d) = recorded
                 && !not_copy

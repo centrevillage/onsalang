@@ -640,8 +640,8 @@ fn named_columns<'c>(sampled: &[&'c FlowInput], columns: &'c [Vec<Value>]) -> Ve
 }
 
 /// The part `part` of `vs` (all of it when none) as its length and range; a range that is not inside is a panic.
-// SPEC-GAP(S-1148): `xs.slice(from, to)` with `from > to` is out of range here, as in the interpreter (the other reading
-// is an empty `Span`).
+// S-1148: `xs.slice(from, to)` with `from > to` panics, as in the interpreter, apart from an index
+// out of range.
 fn cut(vs: &[Value], part: Option<Range<usize>>) -> Result<(usize, Range<usize>), Fault> {
     let at = part.unwrap_or(0..vs.len());
     Ok((vs.get(at.clone()).ok_or(Fault::Panic(PanicKind::Bounds))?.len(), at))

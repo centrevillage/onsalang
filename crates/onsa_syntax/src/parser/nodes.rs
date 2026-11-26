@@ -151,7 +151,7 @@ impl<'a> Parser<'a> {
             | StructLitField | StructLitRest | TypeArgsExpr | FeedbackExpr => 0,
             // The clock of an input or output counts no level (the heading
             // counts none, §2.5, S-361); in an expression it is in an `AtExpr`.
-            // SPEC-GAP(S-1194): the parenthesis of a derived clock counts no level; N's own forms count theirs.
+            // S-1194: the parenthesis of a derived clock counts no level; N's own forms count theirs.
             Clock => 0,
             ParenExpr | TupleExpr | ArrayExpr | RepeatExpr | IfExpr | MatchExpr | ClosureExpr | HandleExpr
             | UnsafeExpr | ParExpr | MoveExpr | RangeExpr | CastExpr | AtExpr | PrefixExpr | CallExpr | FieldExpr

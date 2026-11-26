@@ -536,8 +536,8 @@ pub const KEYWORDS: &[Keyword] = &[
     kw("true", TokenKind::KwTrue),
     kw("false", TokenKind::KwFalse),
     reserved("clock", TokenKind::KwClock, Feature::DerivedClocks),
-    reserved("when", TokenKind::KwWhen, Feature::ConditionalInstances),
-    reserved("reset_if", TokenKind::KwResetIf, Feature::ResetInstances),
+    kw("when", TokenKind::KwWhen),
+    kw("reset_if", TokenKind::KwResetIf),
     reserved("ser", TokenKind::KwSer, Feature::SerialFlows),
     reserved("static", TokenKind::KwStatic, Feature::StaticMarks),
 ];
@@ -609,7 +609,7 @@ mod tests {
             assert!(KEYWORDS[..i].iter().all(|k| k.text != text && k.kind != kind), "{text} twice");
         }
         let reserved: Vec<&str> = KEYWORDS.iter().filter(|k| k.reserved.is_some()).map(|k| k.text).collect();
-        assert_eq!(reserved, ["clock", "when", "reset_if", "ser", "static"]);
+        assert_eq!(reserved, ["clock", "ser", "static"]);
         assert_eq!(TokenKind::KwIf.reserved(), None);
         for not in [TokenKind::Ident, TokenKind::Underscore, TokenKind::Plus, TokenKind::Eof, TokenKind::Semi] {
             assert!(!not.is_keyword(), "{not:?}");

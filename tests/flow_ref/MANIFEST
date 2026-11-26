@@ -126,6 +126,7 @@ file match_tilde_select_order.tsv rows=62 tests=18 evaluated=18 unavailable=0 sk
 file modifier_block_regress.tsv rows=70 tests=5 evaluated=5 unavailable=0 skipped=0 waiting=0
 file modifier_block_regress_kept.tsv rows=12 tests=2 evaluated=2 unavailable=0 skipped=0 waiting=0
 file modifier_block_twins.tsv rows=76 tests=4 evaluated=4 unavailable=0 skipped=0 waiting=0
+file modifier_head_in_parentheses.tsv rows=29 tests=4 evaluated=4 unavailable=0 skipped=0 waiting=0
 file modifier_names_not_reserved_values.tsv rows=11 tests=2 evaluated=2 unavailable=0 skipped=0 waiting=0
 file nan_and_inf.tsv rows=7 tests=2 evaluated=2 unavailable=0 skipped=0 waiting=0
 file par_branch.tsv rows=5 tests=1 evaluated=1 unavailable=0 skipped=0 waiting=0
@@ -213,4 +214,4 @@ file when_identity_regressions.tsv rows=78 tests=5 evaluated=5 unavailable=0 ski
 file when_slow_head_values.tsv rows=47 tests=5 evaluated=5 unavailable=0 skipped=0 waiting=0
 file when_slow_values.tsv rows=86 tests=9 evaluated=9 unavailable=0 skipped=0 waiting=0
 file when_values.tsv rows=77 tests=10 evaluated=10 unavailable=0 skipped=0 waiting=0
-total files=214 rows=9392 tests=1601 evaluated=1539 unavailable=1 skipped=61 waiting=6
+total files=215 rows=9421 tests=1605 evaluated=1543 unavailable=1 skipped=61 waiting=6

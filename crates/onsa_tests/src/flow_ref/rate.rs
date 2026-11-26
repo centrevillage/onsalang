@@ -155,7 +155,8 @@ pub(super) fn chain_of(body: &Body, e: ExprId) -> Result<Option<Chain>, Fault> {
             Modifier::When => Bound::When(n),
             Modifier::ResetIf => Bound::ResetIf(n),
         });
-        at = receiver;
+        // A receiver in parentheses is the call in them (S-1181).
+        at = body.ast.without_parens(receiver);
     }
     bounds.reverse();
     Ok(Some(Chain { head, bounds }))
@@ -325,7 +326,7 @@ pub(super) fn levels(
                     continue;
                 }
                 let tick = cond_tick(cc.clock, prev.out, outside);
-                // SPEC-GAP(S-1227): a condition that mixes a signal and a value of the parameter kinds is a value of a tick, which a boundary gathers whole (provisional (1)).
+                // S-1227: a condition that mixes a signal and a value of the parameter kinds is a value of a tick, which a boundary gathers whole.
                 let mut part =
                     if let Bound::When(_) = bound { when_level(prev, cond) } else { reset_level(prev, cond, tick) };
                 let n = part.ins.len() - 1;

@@ -3,10 +3,10 @@
 // spec = ["§2.2", "§11.10", "§18.1"]
 
 // E0002 for the postfix clause of an instance, `lp~(x) when c` (§2.2: "後置の節（`saw~(f0) when c`）は構文の段の誤りで、
-// note で連鎖の形を示す"; S-1082, which is open: this is its provisional reading (2), the code of a syntax error; the
-// reading (1) keeps the E0200 of the reserved word). The words `when` and `reset_if` are modifiers in the form
-// `.when~(c)` only (§11.10), so after an instance call they are no clause. The note that shows the chain is read by
-// the CLI test derived_clock_syntax.rs. One error per declaration unit.
+// note で連鎖の形を示す"; S-1082: the code of a syntax error, no E0200). The words `when` and `reset_if` are
+// modifiers in the form `.when~(c)` only (§11.10), so after an instance call they are no clause. The forms after other
+// expressions are in syntax_when_after_an_expression.onsa. The note that shows the chain is read by the CLI test
+// derived_clock_syntax.rs. One error per declaration unit.
 
 pub flow lp(x: F32 at sample) -> F32 at sample {
   0.5 * (x + prev~(x))

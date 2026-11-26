@@ -112,9 +112,9 @@ fn close(pkg: &Package, a: &mut Analysis, f: DefId, marks: &HashMap<DefId, Mark>
         };
         let Some(g) = table(callee) else {
             tables.push(None);
-            // SPEC-GAP(S-1212): a callee in error leaves the whole flow not
-            // counted (its other paths too), so the flows that run it say
-            // nothing until the error is mended.
+            // S-1212: a callee in error leaves the whole flow not counted (its
+            // other paths too), so the flows that run it say nothing until the
+            // error is mended.
             counted = false;
             continue;
         };

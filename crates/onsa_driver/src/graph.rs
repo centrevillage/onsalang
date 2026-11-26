@@ -108,8 +108,8 @@ impl Graph<'_> {
             bug(Some(self.ast.expr(flow.body).span), "a plan with other inputs than its flow")
         }
         let mut items = Vec::new();
-        // SPEC-GAP(S-1256): a vertex by the name of the input, so two inputs
-        // `_` are one vertex (provisional: as it is).
+        // S-1256: a vertex by the name of the input (an input is never `_`,
+        // S-1092).
         for (&l, input) in info.inputs.iter().zip(&flow.inputs) {
             let name = info.body.locals[l.0 as usize].name.clone();
             self.local_node.insert(l, name.clone());
@@ -122,8 +122,8 @@ impl Graph<'_> {
     }
 
     /// The `let`s, each a vertex of its scope (§11.6): its name.
-    // SPEC-GAP(S-1169): a `let` of a pattern is the vertex of its first
-    // name, and one that binds none `_<m>`, as its nodes are qualified.
+    // S-1169: a `let` of a pattern is the vertex of its first name, and one
+    // that binds none `_<m>`, as its nodes are qualified.
     fn lets(&mut self) -> Vec<Item> {
         let info = self.info;
         self.let_names = info.let_scopes();
@@ -174,8 +174,8 @@ impl Graph<'_> {
 
     /// The frame of the `par~` `id` (§1.3): the heading of its range, its
     /// index as an input of its clock (`init`), and the nodes of its body.
-    // SPEC-GAP(S-1176): the vertex of a `par~` in the body is in the frame,
-    // beside its own frame; that of a `par~` in no body is in none.
+    // S-1176: the vertex of a `par~` in the body is in the frame, beside
+    // its own frame; that of a `par~` in no body is in none.
     fn frame(&mut self, id: NodeId) -> Item {
         let info = self.info;
         let node = info.node(id);
@@ -199,8 +199,8 @@ impl Graph<'_> {
     fn node_label(&self, node: &PlanNode, e: ExprId) -> String {
         // `prev_0 = prev~`, `src = saw~`: the name without its scope
         // (spec/tools.md §1.1).
-        // SPEC-GAP(S-1084): with the modifiers of its chain, the N as a
-        // value (`lp~.down~(4)`, `prev~.when~(…)`), of the plan (provisional (2)).
+        // S-1084: with the modifiers of its chain, the N as a value
+        // (`lp~.down~(4)`, `prev~.when~(…)`), of the plan.
         let chain = node.chain.iter().map(|m| match m.ratio.and_then(|r| r.n()) {
             Some(n) => format!(".{}~({n})", m.modifier.name()),
             None => format!(".{}~(…)", m.modifier.name()),
@@ -210,8 +210,7 @@ impl Graph<'_> {
             // A delay is its kind, with no length (§1.1).
             (_, Some(d)) => format!("{}~{chain}", d.name()),
             (PlanKind::Instance { callee, .. }, None) => format!("{}~{chain}", self.a.def(*callee).name),
-            // SPEC-GAP(S-1170): as written and with its range, as the heading
-            // of its frame.
+            // S-1170: as written and with its range, as the heading of its frame.
             (PlanKind::Par { .. }, None) => format!("{} {}", spelling(self.ast, node.expr), range(node)),
             // `PlanKind::delay` names every delay.
             (PlanKind::Prev { .. } | PlanKind::Delay { .. } | PlanKind::Vdelay { .. }, None) => {
@@ -224,8 +223,8 @@ impl Graph<'_> {
 
 /// The vertex of the index `var` of the `par~` `id` (§1.3): `<path>.<var>`
 /// (`saws.i`), unless a node of its body has that name.
-// SPEC-GAP(S-1168): then `<path>._<var>`, of the form no user writes (`_`
-// first, §2.3, §11.6), which no node of the body has (`<kind>_<n>`).
+// S-1168: then `<path>._<var>`, of the form no user writes (`_` first,
+// §2.3, §11.6), which no node of the body has (`<kind>_<n>`).
 fn index_name(info: &FlowInfo, id: NodeId, var: &str) -> String {
     let node = info.node(id);
     let name = qualify(&node.path, var);
@@ -245,8 +244,8 @@ fn spelling(ast: &Ast, e: ExprId) -> &'static str {
 }
 
 /// The range of the `par~` `node` as written (§11.5): `0..<4`, `1..=3`.
-// SPEC-GAP(S-1171): `a..=b` as written, not as `a..<b + 1` (no `U32` holds
-// the end past `U32`'s maximum).
+// S-1171: `a..=b` as written, not as `a..<b + 1` (no `U32` holds the
+// end past `U32`'s maximum).
 fn range(node: &PlanNode) -> String {
     let PlanKind::Par { from, count, end, .. } = node.kind else { bug(Some(node.span), "a range of no `par~`") };
     // One replica or more (§11.5), and the end written is a `U32`.
@@ -269,8 +268,7 @@ fn typed(ty: &str, r: Clock, at: Span) -> String {
 
 /// The colour of a clock at `at` (§1.1): the stages before `block` gray,
 /// `block` blue, `sample` black.
-// SPEC-GAP(S-1084): the other ticks, an event and the ambient clock are
-// black too.
+// S-1084: the other ticks, an event and the ambient clock are black too.
 fn rate_color(r: Clock, at: Span) -> &'static str {
     match r {
         Clock::Const | Clock::Init => "gray40",

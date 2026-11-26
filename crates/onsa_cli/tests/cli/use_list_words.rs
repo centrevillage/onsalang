@@ -53,11 +53,11 @@ fn want(items: &[(&str, u64, &str)]) -> BTreeSet<(String, u64, String)> {
 
 const KP: &str = "pub fn g() -> I32 {\n  1\n}\n\npub fn h() -> I32 {\n  2\n}\n";
 
-/// The words: a reserved word is E0200, a keyword is E0002 (§2.2, §15.1).
+/// The words: a reserved word is E0200, a keyword is E0002 (§2.2, §15.1; `when` and `reset_if` are keywords, S-1082).
 const WORDS: [(&str, &str); 9] = [
     ("clock", "E0200"),
-    ("when", "E0200"),
-    ("reset_if", "E0200"),
+    ("when", "E0002"),
+    ("reset_if", "E0002"),
     ("ser", "E0200"),
     ("static", "E0200"),
     ("match", "E0002"),

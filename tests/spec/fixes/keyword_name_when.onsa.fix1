@@ -1,0 +1,40 @@
+// onsa.toml
+// [test]
+// spec = ["§2.2", "§2.3", "§11.10", "§18.1"]
+// fixes = 1
+
+// S-1082 (§2.2): `when` and `reset_if` are keywords (the names of the modifiers, written `.when~(c)` only, §11.10), and
+// out of a modifier they are syntax errors, no E0200: written as the name of a declaration they are E0002 as any other
+// keyword is (`let match = x`, S-654), and the one candidate adds a `_` at the end of the name (`when_`, `reset_if_`).
+// One error in each unit.
+
+pub fn let_when(x: F32) -> F32 {
+  let when_ = x                                      //~ E0002
+  x
+}
+
+pub fn var_reset_if() -> I32 {
+  var reset_if_: I32 = 1                             //~ E0002
+  1
+}
+
+pub fn when_(x: F32) -> F32 {                        //~ E0002
+  x
+}
+
+pub fn param_reset_if(reset_if_: F32) -> F32 {       //~ E0002
+  1.0
+}
+
+pub struct S {
+  when_: F32,                                        //~ E0002
+}
+
+pub flow flow_let(x: F32 at sample) -> F32 at sample {
+  let reset_if_ = x                                  //~ E0002
+  x
+}
+
+pub flow flow_input(when_: F32 at sample) -> F32 at sample {   //~ E0002
+  1.0
+}

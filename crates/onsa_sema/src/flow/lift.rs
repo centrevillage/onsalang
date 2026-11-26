@@ -41,9 +41,9 @@ pub(in crate::flow) struct Stmt {
 /// in the body of a replication or reads a binding of an arm (§11.5: the
 /// `let` would be outside them), or any binding the statement does not see.
 /// Linear in the statement and the names of the body.
-// SPEC-GAP(S-1190): of two things with state side by side, the one at the
-// place of the diagnostic only is moved; the other stays, the error of the
-// next round (provisional).
+// S-1190: of two things with state side by side, the one at the place of
+// the diagnostic only is moved; the other stays, the error of the next
+// round.
 pub(in crate::flow) fn lift(b: &Body, thing: ExprId, kind: &str, stmt: Stmt, per: Option<&str>) -> Option<Fix> {
     let (ast, span) = (b.ast, b.ast.expr(thing).span);
     if under_par(ast, stmt.root, thing)? || !reads_seen(b, thing) {

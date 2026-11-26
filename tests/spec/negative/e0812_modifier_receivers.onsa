@@ -3,13 +3,13 @@
 // spec = ["§2.6", "§11.4", "§11.9", "§11.10", "§18.1"]
 // fixes = 0
 
-// W7-09 U3a/t, S-555, S-556, S-1085, S-1086, S-1091, S-1181: a modifier is looked up only when the head of `.name~(` is the call of an
+// W7-09 U3a/t, S-555, S-556, S-1085, S-1086, S-1091: a modifier is looked up only when the head of `.name~(` is the call of an
 // instance (a user flow, a built-in delay, a modifier chain, §11.10: "`.名前~(` の頭がインスタンスの式のときだけ引く"). The E0812
 // of the names stage is reported, with no candidate (`fixes = 0`), when
 //   - the receiver is a value: an input, a name bound by `let` (also of an instance or of a chain: "インスタンスを指す名前は持たな
 //     い"), the result of a function, a `par~`, an `if~` or a `match~` (§11.10: "`let` で受けた名前…、値、`par`・`par~`、`if~` /
-//     `match~` は E0812"). A head in parentheses is a value too (S-1181, provisional reading (2); drop that section if it is
-//     decided otherwise);
+//     `match~` は E0812"). A head in parentheses is read through them (S-1181): its forms are in
+//     modifier_head_in_parentheses_errors.onsa;
 //   - the receiver is a built-in delay and the modifier is `down` or `up`: the delay takes the clock of its first argument, so the
 //     chain rate would be apart from it (S-1091, provisional (1); §11.4: "総称の遅延に `.down~`・`.up~` を付けると…誤り");
 //   - the name is not one of the closed list, on an instance or on a value (`foo`, `Down`; S-1086).
@@ -42,12 +42,6 @@ pub flow when_on_a_par_tilde(x: F32 at sample, c: Bool at sample) -> F32 at samp
 
 pub flow when_on_an_if_tilde(x: F32 at sample, c: Bool at sample) -> F32 at sample {
   (if~ c { lp~(x) } else { 0.0 }).when~(c)          //~ E0812
-}
-
-// ---- a head in parentheses (S-1181) ----
-
-pub flow down_on_a_parenthesized_instance(x: F32 at sample) -> F32 at sample {
-  (lp~(x)).down~(2)                                 //~ E0812
 }
 
 // ---- a built-in delay with `down` or `up` (S-1091) ----

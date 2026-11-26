@@ -139,7 +139,7 @@ fn the_e0812_of_a_modifier_shows_the_list_of_the_modifiers() {
     let bodies = [
         "x.when~(c)",
         "let s = lp~(p).down~(4)\n  s.down~(2) at sample",
-        "(lp~(x)).reset_if~(c)",
+        "(lp~(x) + 1.0).reset_if~(c)",
         "lp~(x).foo~(c)",
         "lp~(x).when~(c).Up~(2)",
     ];

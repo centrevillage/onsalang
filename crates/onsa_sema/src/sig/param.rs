@@ -162,7 +162,7 @@ impl<'p> Sema<'p> {
             self.report(id, e0809(attr.span, "`@param` goes on `block` inputs only (§11.7)".into()));
             return None;
         }
-        // SPEC-GAP(S-1121): a value type out of the list is the one E0809 of the attribute.
+        // S-1121: a value type out of the list is the one E0809 of the attribute.
         let Some(kind) = param_kind(self.a.types.get(ty)) else {
             self.wrong_param_type(id, ty, ty_span);
             return None;

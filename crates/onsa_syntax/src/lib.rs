@@ -242,8 +242,8 @@ pub(crate) fn read(file: FileId, text: &str, ctx: parser::ItemCtx) -> Read {
     // after it is the unit's syntax error: §18.1 ("the first in the text")
     // may not hold there until the recovery by statement (S-59) lowers
     // the statements before the error (accepted, 2026-10-08).
-    // SPEC-GAP(S-1253): an error of this stage after it is reported first too
-    // (provisional: as it is).
+    // S-1253: an error of this stage after it is reported first too (the
+    // text of §18.1 stays).
     groups::check(&ast, &|e| map.expr_kind(&cst, e), limit, &mut diagnostics);
     let mut apart = out.apart;
     foreign::clocks(&cst, limit, &mut diagnostics, &mut apart);

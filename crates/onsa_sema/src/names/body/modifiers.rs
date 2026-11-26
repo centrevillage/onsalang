@@ -44,17 +44,19 @@ impl Walker<'_> {
     /// name not in the list on a value).
     pub(super) fn modifier_mark(&mut self, e: ExprId, callee: ExprId, kind: CallKind) -> Option<W> {
         // The form is `.name~(` (§11.10).
-        // SPEC-GAP(S-1201): with type arguments (`.when::[I32]~(c)`) the
-        // rows of §2.6, as before (provisional (1)).
+        // S-1201: with type arguments (`.when::[I32]~(c)`) the rows of §2.6, as
+        // before.
         let ExprKind::Field { base, name } = &self.ast.expr(callee).kind else { return None };
-        let head = self.out.modifiers.get(base).map_or(*base, |m| m.head);
+        // S-1181: a head through its parentheses (`(lp~(x)).down~(2)`), as
+        // fmt writes it; the receiver is as written.
+        let inner = self.ast.without_parens(*base);
+        let head = self.out.modifiers.get(&inner).map_or(inner, |m| m.head);
         let (receiver, listed) = (self.receiver_of(head), Modifier::named(&name.name));
         let (span, end) = (self.ast.expr(e).span, self.ast.expr(callee).span.end);
         let shown = &name.name;
         // An instance takes any; a delay `when~` and `reset_if~`, which keep
         // the rate of its first argument (§11.9).
-        // SPEC-GAP(S-1091): `down~` and `up~` of a delay are an E0812 of the
-        // receiver (provisional (1)).
+        // S-1091: `down~` and `up~` of a delay are an E0812 of the receiver.
         let takes = |m: Modifier| match receiver {
             Receiver::Instance => true,
             Receiver::Delay(_) => m.ratio_op().is_none(),
@@ -84,17 +86,14 @@ impl Walker<'_> {
                 };
                 Diagnostic::new(Stage::Names, Code::E0812, span, msg).with_rule(listed_rule())
             }
-            // SPEC-GAP(S-1178): `down` and `up` with no `~` are a method of
-            // the value, as before (provisional (1)); `when` and `reset_if`
-            // are the E0811 of §11.10.
-            // SPEC-GAP(S-1202): of a value, a method of the value, as before
-            // (E0413, provisional (1)).
-            // SPEC-GAP(R-521): a condition that reads a past value in the first
-            // argument of a delay too (provisional, as of a flow).
+            // S-1178: `down` and `up` with no `~` are a method of the value, as
+            // before; `when` and `reset_if` are the E0811 of §11.10.
+            // S-1202: of a value, a method of the value, as before (E0413).
+            // S-1259: no `~` that leads to an E0801 (`prev~(lp~(x).when(^c))`).
             (CallKind::Plain, Some(m), _) if takes(m) && m.ratio_op().is_none() => {
                 let msg = format!("`{shown}` is a modifier of an instance, written `.{shown}~(…)` (§11.10)");
-                let fix = Fix::insert("add `~`", span.file, end, "~");
-                Diagnostic::new(Stage::Names, Code::E0811, span, msg).with_fix(fix)
+                let d = Diagnostic::new(Stage::Names, Code::E0811, span, msg);
+                self.add_tilde(e, end, true).into_iter().fold(d, Diagnostic::with_fix)
             }
             // The candidate of S-811: the `!` that a flow body cannot contain
             // (§11.2) to the `~` of the modifier.
@@ -122,18 +121,15 @@ impl Walker<'_> {
                     _ => Receiver::Value,
                 }
             }
-            // SPEC-GAP(S-1181): a head in parentheses is a value
-            // (provisional (2)), as a name bound by `let` is.
             _ => Receiver::Value,
         }
     }
 }
 
 /// The note of an E0812 of a modifier (§11.10): the receivers and the list.
-// SPEC-GAP(S-1085): of a value with a name of the list, this note
-// (provisional (1)).
-// SPEC-GAP(S-1086): of an instance with a name not in the list too, and of
-// a value with one the general note of §2.6 (provisional (1)).
+// S-1085: of a value with a name of the list, this note.
+// S-1086: of an instance with a name not in the list too, and of a value
+// with one the general note of §2.6.
 fn listed_rule() -> String {
     let names: Vec<String> = Modifier::ALL.iter().map(|m| format!("`{}~`", m.name())).collect();
     format!(

@@ -9,7 +9,8 @@
 // 使える）"; S-169, S-279, S-371). A module name cannot start an expression, so the module is
 // reached through the module before it (`kp.clock.tick()`) or by a name taken from it
 // (`use kp.clock.{tick}`). The word standing alone where a name is read (the head of an
-// expression, an element of the list of a `use`) is E0200 at the word.
+// expression, an element of the list of a `use`) is E0200 at the word; `when` and `reset_if` are
+// keywords there, no reserved words (S-1082), the E0002 of any keyword.
 
 use kp
 use kp.clock.tick
@@ -29,13 +30,13 @@ pub fn through_the_names() -> U32 {
   tick() + after() + order() + latch() + beat() + late() + rank() + gate()
 }
 
-// ---- the word where a name is read: E0200 at the word
+// ---- the word where a name is read: E0200 at the word (E0002 of the keywords `when` and `reset_if`)
 
 use kp.{clock}                  //~ E0200 @9
 
-use kp.{when, after}            //~ E0200 @9
+use kp.{when, after}            //~ E0002 @9
 
-use kp.{tick, reset_if}         //~ E0200 @15
+use kp.{tick, reset_if}         //~ E0002 @15
 
 use kp.{ser}                    //~ E0200 @9
 
@@ -44,7 +45,7 @@ pub fn word_as_the_head_of_a_path() -> U32 {
 }
 
 pub fn word_as_the_head_of_another_path() -> U32 {
-  when.late()                   //~ E0200 @3
+  when.late()                   //~ E0002 @3
 }
 
 pub fn word_as_a_call() -> U32 {
@@ -52,5 +53,5 @@ pub fn word_as_a_call() -> U32 {
 }
 
 pub fn word_as_a_value() -> U32 {
-  reset_if                      //~ E0200 @3
+  reset_if                      //~ E0002 @3
 }

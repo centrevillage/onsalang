@@ -135,8 +135,8 @@ impl<'a> Parser<'a> {
     /// (§18.1). Any other N is E0002 alone. This N is any that the
     /// parenthesis reads, by the tokens; that of the second candidate of the
     /// E0011 of `x at sample / N` is S-1078's, on the tree (`crate::groups`).
-    // SPEC-GAP(S-1255): an operator at the head of a line is read into the
-    // clock as any other (provisional (a)).
+    // S-1255: an operator at the head of a line is read into the clock as
+    // any other.
     fn bare_ratio(&mut self, name: Token) -> PResult<bool> {
         let op = self.peek_index();
         if !matches!(self.tokens[op].kind, TokenKind::Slash | TokenKind::Star) {

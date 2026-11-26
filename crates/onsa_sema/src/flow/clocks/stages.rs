@@ -52,8 +52,8 @@ pub(super) fn of_walk(w: &Walk) -> (HashMap<ExprId, Clock>, HashMap<LocalId, Clo
 /// kinds, of the `let`s it checked: of a condition of a modifier as it is
 /// checked ([`Walk::guard_cond`]). The stages of those `let`s are kept in
 /// the walk and each made once: linear in the body over all the calls.
-// SPEC-GAP(S-1227): of `c && b` (a signal and a value of the parameter
-// kinds), the stage of the signal: the whole condition is gathered (provisional).
+// S-1227: of `c && b` (a signal and a value of the parameter kinds), the
+// stage of the signal: the whole condition is gathered.
 pub(super) fn of_params(w: &mut Walk, e: ExprId) -> bool {
     let lets = std::mem::take(&mut w.let_stages);
     let mut s = Stages { w: &*w, memo: HashMap::default(), lets };
@@ -142,8 +142,8 @@ impl<'w, 'a> Stages<'w, 'a> {
     /// input, a binding of an arm (whose stage is the clock its choice is
     /// decided by) and the index of a `par`, its clock. `^y` is in the first
     /// argument of a delay, of the clock of the delay.
-    // SPEC-GAP(S-1199): a binding of an arm is of its clock, not of the stage of its value.
-    // SPEC-GAP(S-1200): a name a `let` destructures is of the stage of the whole `let`.
+    // S-1199: a binding of an arm is of its clock, not of the stage of its value.
+    // S-1200: a name a `let` destructures is of the stage of the whole `let`.
     fn name(&mut self, e: ExprId, c: Clock) -> Clock {
         let Some(Target::Local(id)) = self.w.body.targets.get(&e) else { return c };
         match self.w.cx.let_of_local.get(id) {

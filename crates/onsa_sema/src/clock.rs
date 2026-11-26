@@ -359,8 +359,8 @@ impl Clock {
     /// in parentheses, `(sample / 4)`, else [`Clock::shown`]. The one text of
     /// the clocks `onsa graph` and `onsa interface` write (S-1084), which the
     /// diagnostics do not (their text is [`Clock::shown`]).
-    // SPEC-GAP(S-1084): the parentheses of the declaration in the labels and
-    // the heading (provisional (2)).
+    // S-1084: the parentheses of the declaration in the labels and the
+    // heading.
     pub fn written(self, at: Span) -> String {
         let shown = self.shown(at);
         if self.of_ratio() { format!("({shown})") } else { shown }
@@ -504,8 +504,8 @@ pub fn promote(value: Clock, to: Clock) -> Result<Clock, Clash> {
 /// (§11.4, E0813): a tick of the body (`sample`, `sample / N`), an event and
 /// `sample_tick()` (S-567 K6), not a parameter kind nor the `sample * N` of
 /// the caller. A clock in error holds (no second diagnostic).
-// SPEC-GAP(S-1097): the `sample * N` of the caller is this E0813, with no
-// candidate (provisional).
+// S-1097: the `sample * N` of the caller is this E0813, with no
+// candidate.
 pub fn keeps_delay_state(c: Clock) -> bool {
     match c {
         Clock::Tick(k) => !k.faster_than_body(),
@@ -554,8 +554,7 @@ pub fn rooted(c: Clock, root: Clock) -> Clock {
 /// [`rooted`] at a place of no tick of its own (a `let`, a loop, a delay, the
 /// text of a diagnostic): the lowest clock `sample_tick()` takes, the
 /// `sample` of the body (§11.4). The one place of that clock (D-15).
-// SPEC-GAP(S-1180): a `let` of `sample_tick()` alone is the `sample` of the
-// body (provisional (1)).
+// S-1180: a `let` of `sample_tick()` alone is the `sample` of the body.
 pub fn grounded(c: Clock) -> Clock {
     rooted(c, Clock::SAMPLE)
 }

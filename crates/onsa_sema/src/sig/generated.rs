@@ -412,7 +412,7 @@ impl<'p> Sema<'p> {
                 // The `@param` of an input of a type no signal has, or with a
                 // diagnostic, is not read (§6.5: as the arguments of an
                 // attribute in excess).
-                // SPEC-GAP(S-1121): its other E0809 are not reported either.
+                // S-1121: its other E0809 are not reported either.
                 let param =
                     attr.filter(|_| !unfit).and_then(|a| self.lower_param_attr(cx, h.flow, a, clock, (ty, span)));
                 // R-489: nor is the `@param` it must have.

@@ -39,8 +39,8 @@ pub fn size_align_for(m: &Module, ty: &Ty, ptr: u32) -> (u32, u32) {
         Ty::Char => (4, 4),
         // No value is of no bytes, as in C (R-504): `()`, a tuple or struct of
         // no fields hold one byte, an array of none one element.
-        // SPEC-GAP(S-1156): §12.4 does not give the size of a value of no
-        // elements or no fields; the bytes its C takes for now.
+        // S-1156: a value of no elements or no fields takes the bytes its C takes
+        // (one byte, aligned to one).
         Ty::Unit => (1, 1),
         Ty::Array(e, n) => {
             let (s, a) = size_align_for(m, e, ptr);

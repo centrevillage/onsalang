@@ -17,6 +17,9 @@ pub(super) struct FlowHeading {
     pub(super) out: Option<Span>,
 }
 
+/// The note of an input named `_` (§11.6, S-1092).
+const UNNAMED_INPUT_RULE: &str = "the name of a flow input is the name of its field in the types the flow generates (`Config`, `Params`, `In`), of its C name and of the default id of its `@param`; an input that is not read keeps a name too (an unused input is no E0309, §5.1)";
+
 impl<'p> Sema<'p> {
     // ------------------------------------------------------------ flows
 
@@ -40,7 +43,12 @@ impl<'p> Sema<'p> {
         for (k, p) in f.params.iter().enumerate() {
             let (name, name_span) = match &p.name {
                 ParamName::Ident(i) => (i.name.clone(), i.span),
-                ParamName::Wild(s) => ("_".into(), *s),
+                // S-1092: an input has a name, which its field and its C name are.
+                ParamName::Wild(s) => {
+                    let d = Diagnostic::new(Stage::Names, Code::E0810, *s, "a flow input has a name, not `_` (§11.6)");
+                    self.report(id, d.with_found("_").with_rule(UNNAMED_INPUT_RULE));
+                    ("_".into(), *s)
+                }
                 ParamName::SelfParam(s) => {
                     self.report(id, Diagnostic::new(Stage::Names, Code::E0002, *s, "a flow has no `self`"));
                     continue;

@@ -178,8 +178,7 @@ impl Choose<'_> {
             Some(c @ (Clock::Tick(_) | Clock::Event(_))) => {
                 let slow = c.stage().filter(|&d| d.stored_slower_than(at) && self.tick_field(e));
                 let Some(d) = slow else { return Place::Here };
-                // SPEC-GAP(S-1195): of a type that is not Copy, E0200
-                // (provisional).
+                // S-1195: of a type that is not Copy, E0200.
                 return match g.admits(d) {
                     _ if !self.nodes.contains_key(&e) && !self.copy(e) => Place::NotCopy(d),
                     _ if self.of_name(e).is_some() => Place::Field(d),
@@ -190,8 +189,7 @@ impl Choose<'_> {
             _ => return Place::Here,
         };
         let s = match g {
-            // SPEC-GAP(S-1184): under a condition decided at a tick, where
-            // it is reached (provisional).
+            // S-1184: under a condition decided at a tick, where it is reached.
             Cond::Late | Cond::Tick(_) => return Place::Here,
             g => g.stage().map_or(d, |c| c.max(d)),
         };
@@ -229,8 +227,8 @@ impl Choose<'_> {
     /// `sample_tick()` under the `at` of the tick or an event value with it,
     /// which keeps the value at the tick as a `let` of it would (S-1210,
     /// §11.11), whose value is kept there with no name (§11.3, §11.6).
-    // SPEC-GAP(S-1231): an event value with the `at` of a slower tick stands
-    // in a conditional position as `sample_tick()` with it does (provisional).
+    // S-1231: an event value with the `at` of a slower tick stands in a
+    // conditional position as `sample_tick()` with it does.
     fn tick_field(&self, e: ExprId) -> bool {
         let event = |x: ExprId| matches!(self.clocks.stage(x), Some(Clock::Event(_)));
         match &self.ast.expr(e).kind {
@@ -312,12 +310,11 @@ fn value_of(kind: &ExprKind) -> Option<ExprId> {
 /// subexpressions, named `_hoist_<n>` after the scope of the owner (§11.6),
 /// in the order of their fields (§12.4: the `let`s in their order, then the
 /// output, then the body of each `par~`, whose replica holds them).
-// SPEC-GAP(S-1164): two hoisted subexpressions of one owner that start at one
+// S-1164: two hoisted subexpressions of one owner that start at one
 // place (`make(a) * level`, `level` at `block`, and its `make(a)` at
 // `init`) are numbered the outer first, in the order of the walk.
-// SPEC-GAP(S-1140): those of the body of a `par~` are of each replica,
-// numbered in that body by themselves, after the scope of the `par~`
-// (`saws._hoist_0`).
+// S-1140: those of the body of a `par~` are of each replica, numbered in
+// that body by themselves, after the scope of the `par~` (`saws._hoist_0`).
 pub(super) fn table(info: &mut FlowInfo, ast: &Ast, marked: Vec<(ExprId, ClockStage, Owner, bool)>) {
     let scopes = info.let_scopes();
     let rank = |o: Owner| match o {

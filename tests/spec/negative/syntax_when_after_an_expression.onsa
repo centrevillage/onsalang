@@ -1,0 +1,50 @@
+// onsa.toml
+// [test]
+// spec = ["§2.2", "§11.10", "§18.1"]
+// fixes = 0
+
+// S-1082 (§2.2: "後置の節（`saw~(f0) when c`）は構文の段の誤りで、note で連鎖の形を示す"): a `when` or a `reset_if`
+// after an expression is a postfix clause, the E0002 of the syntax stage with the chain of the modifiers as its note
+// (`.when~(c)`, `.reset_if~(r)`), and no candidate; not the E0200 of a reserved word. After a value, after an
+// instance in parentheses, after a chain, after `par~` and `if~`, and at the head of the next line, in a function too.
+// The forms right after `f~(…)` are in syntax_postfix_when.onsa; the note is read by the CLI test
+// derived_clock_syntax.rs. One error in each unit.
+
+pub flow lp(x: F32 at sample) -> F32 at sample {
+  0.5 * (x + prev~(x))
+}
+
+pub flow after_a_value(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  let y = x when c                                  //~ E0002
+  y
+}
+
+pub flow after_parentheses(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  let y = (lp~(x)) when c                           //~ E0002
+  y
+}
+
+pub flow after_a_chain(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  let y = lp~(x).down~(2) when c                    //~ E0002
+  y
+}
+
+pub flow after_par(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  let y = par~ i in 0 ..< 2 { lp~(x) } when c       //~ E0002
+  y[0]
+}
+
+pub flow after_if(x: F32 at sample, c: Bool at sample, r: Bool at sample) -> F32 at sample {
+  if~ c { lp~(x) } else { 0.0 } reset_if r          //~ E0002
+}
+
+pub flow at_the_next_line(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  let y = lp~(x)
+    when c                                          //~ E0002
+  y
+}
+
+pub fn in_a_function(x: F32) -> F32 {
+  let y = x when x > 0.0                            //~ E0002
+  y
+}

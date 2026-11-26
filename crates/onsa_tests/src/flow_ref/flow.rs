@@ -585,8 +585,8 @@ impl Inst {
                     Some(c) if !matches!((c, own.stage), (Clock::Event(_), Clock::Event(_))) => Seen::both(c),
                     _ => own,
                 };
-                // SPEC-GAP(S-1119): the locals the pattern binds (a `let` taken apart) have the clock of the whole right
-                // side, as the interpreter has it; the other reading gives each the clock of its own element.
+                // S-1119: the locals the pattern binds (a `let` taken apart) have the clock of the whole right
+                // side, as the interpreter has it.
                 known.extend(body.pat_locals(pat).map_err(at(init))?.into_iter().map(|l| (l, clock)));
                 seen[i] = Some(clock);
             }

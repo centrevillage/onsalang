@@ -32,8 +32,8 @@ pub(in crate::flow) use crate::flow_names::qualify;
 /// `<field>._on_<m>`, `<field>._tick_<m>` and `<field>._held_<m>`, but the
 /// held output of the guard `outermost`, which its caller reads, `<field>.held`;
 /// of a delay a guard stops, `<field>._ran`; its `<field>._open` and `<field>._back_<at>`.
-// SPEC-GAP(S-1220): the names and the order of the fields of a guard, of the
-// ring of a condition and of `_ran`, `_open` and `_back_<at>`, provisional.
+// S-1220: the names and the order of the fields of a guard, of the ring
+// of a condition and of `_ran`, `_open` and `_back_<at>`.
 pub(in crate::flow) fn part(field: &str, p: Part, outermost: Option<u32>) -> String {
     match p {
         Part::Held(g) if Some(g) == outermost => format!("{field}.held"),
@@ -90,10 +90,10 @@ pub(in crate::flow) fn scopes<'a>(locals: impl Iterator<Item = &'a [LocalId]>, b
 /// The names of the nodes of a flow body while the walk records them, in
 /// the order the names of their calls come in the text (the outer call
 /// first): numbered by part of the body and kind (§11.6).
-// SPEC-GAP(S-1141): the body of each `par~` counts by itself from 0, apart
-// from the `let` or the output that holds the `par~`.
-// SPEC-GAP(S-1142): a `par`, which has no field, takes a number of the kind
-// `par` too, in one series with the `par~`s.
+// S-1141: the body of each `par~` counts by itself from 0, apart from
+// the `let` or the output that holds the `par~`.
+// S-1142: a `par`, which has no field, takes a number of the kind `par`
+// too, in one series with the `par~`s.
 pub(in crate::flow) struct Namer {
     numbers: HashMap<(Owner, String), u32>,
     /// The scope of the nodes of each `let`.
@@ -102,7 +102,7 @@ pub(in crate::flow) struct Namer {
     /// parentheses, and that name (S-148), but a replication whose body
     /// holds no state ([`holds_state`]): a `par`, no node of state, is
     /// named `<let>.par_N`, the whole value of its `let` or not (§11.6).
-    // SPEC-GAP(S-1143): a value in parentheses is the call itself (`let a =
+    // S-1143: a value in parentheses is the call itself (`let a =
     // (prev~(x))` is `a`); one under `at` is not (`let b = prev~(x) at
     // sample` is `b.prev_0`).
     whole: HashMap<ExprId, String>,

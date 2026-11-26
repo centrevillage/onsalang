@@ -76,7 +76,8 @@ pub flow second_condition_of_if_tilde(m: Note at event, x: F32 at sample, g: Boo
 }
 
 // S-1231: the part `(v at (sample / 4)) at sample` of a value of a tick is not a name read; it is E0815 here as `sample_tick()` is (a temporary reading).
-// SPEC-GAP(S-1231): whether a name of an event with an `at` to a slower tick, read at `sample`, may stand in a position that a `sample` condition selects; this is E0815 until it is decided.
+// S-1231: a name of an event with an `at` to a slower tick, read at `sample`, is a computed part of the tick, and in a
+// position that a `sample` condition selects it is E0815.
 pub flow slow_at_under_a_sample_condition(v: F32 at event, g: Bool at sample) -> F32 at sample {
   if g { (v at (sample / 4)) at sample } else { 0.0 }         //~ E0815
 }

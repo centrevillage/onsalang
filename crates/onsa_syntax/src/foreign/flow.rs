@@ -353,8 +353,8 @@ fn to_value(cst: &Cst, text: &str, clock: NodeId, stmt: NodeId, (marks, side, se
         inner = first_expr(inner)?;
     }
     let at = clock_text(cst, text, clock);
-    // SPEC-GAP(S-1238): `at event`, which no value takes (§11.11, E0815), is
-    // taken out (provisional).
+    // S-1238: `at event`, which no value takes (§11.11, E0815), is taken
+    // out.
     if cst.kind(inner) == NodeKind::AtExpr || at.strip_prefix(" at ") == Some(super::EVENT) {
         return Some(vec![Fix::new("remove the clock", out.edits(""))]);
     }

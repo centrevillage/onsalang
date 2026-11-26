@@ -101,7 +101,8 @@ impl Stage {
 /// `Required` only where the spec text says the code always shows a candidate:
 /// E0003, E0714 (W3-02, D5; E0004 is
 /// not, S-430; E0320 is not: a file or directory name has none, §2.3, S-300;
-/// E0812 is not: a `~` on a value has none, §2.6, S-590).
+/// E0812 is not: a `~` on a value has none, §2.6, S-590; E0811 is not: a
+/// `~` that leads to the E0801 of a past value has none, §2.6, S-1259).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum FixRule {
     Required,
@@ -111,9 +112,6 @@ pub enum FixRule {
     /// Required of a diagnostic of any stage but the flow stage: E0713, whose
     /// `!` a flow body cannot contain (§11.2, S-811).
     OutsideFlow,
-    /// Required of a diagnostic of the names stage only: E0811, whose
-    /// candidates of the flow stage may be none (§2.6, S-394).
-    Names,
     Optional,
 }
 
@@ -125,7 +123,6 @@ impl Code {
             FixRule::Required => true,
             FixRule::Syntax => stage == Stage::Syntax,
             FixRule::OutsideFlow => stage != Stage::Flow,
-            FixRule::Names => stage == Stage::Names,
             FixRule::Optional => false,
         }
     }
@@ -414,7 +411,7 @@ codes! {
         "`@param` is missing, misplaced, or malformed";
     E0810 = 810, Flow, [Names, Flow], Optional, Optional,
         "a flow input or output without `at` or at a clock it may not have, a signal value type that is not Copy, a type that holds a function type (inputs, outputs, the body), or a value type that cannot cross (a struct `sample` input)";
-    E0811 = 811, Flow, [Names, Flow], Names, Optional,
+    E0811 = 811, Flow, [Names, Flow], Optional, Optional,
         "a flow call or a `par` that holds state needs `~`, and nothing with state stands where it is not evaluated every sample";
     E0812 = 812, Flow, [Names, Flow], Optional, Optional,
         "`~` used on something that is not a flow, or on an `if` / `match` / `par` with no state in it";
@@ -505,10 +502,6 @@ mod tests {
         let required: Vec<&str> =
             Code::ALL.iter().filter(|c| c.fix_rule() == FixRule::Required).map(|c| c.as_str()).collect();
         assert_eq!(required, ["E0003", "E0714"]);
-        // §2.6, S-394: the E0811 of the flow stage shows the candidates it can make.
-        let names: Vec<&str> =
-            Code::ALL.iter().filter(|c| c.fix_rule() == FixRule::Names).map(|c| c.as_str()).collect();
-        assert_eq!(names, ["E0811"]);
         // §11.2: the E0713 of a flow body has none.
         let outside: Vec<&str> =
             Code::ALL.iter().filter(|c| c.fix_rule() == FixRule::OutsideFlow).map(|c| c.as_str()).collect();

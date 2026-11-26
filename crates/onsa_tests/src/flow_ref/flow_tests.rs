@@ -293,8 +293,8 @@ fn a_local_that_has_no_clock_is_an_internal_error_and_not_a_constant() {
 
 #[test]
 fn the_locals_of_a_let_that_is_taken_apart_have_the_clock_of_the_let() {
-    // SPEC-GAP(S-1119): the locals of a `let` taken apart have the clock of the whole right side (the other reading is
-    // that of the element each is bound to; `v` below would be of `block`). The values are the same, the counts differ.
+    // S-1119: the locals of a `let` taken apart have the clock of the whole right side (not that
+    // of the element each is bound to; `v` below would be of `block`). The values are the same, the counts differ.
     // `(a, b) = (p, p + 1)` reads `p` (block): `a` and `b` are of `block`, and so is `c = bd(a)` (made once for each
     // call: the clock of a name that is not known would be that of a constant, made at `init` with no `a` to read).
     // `((m, n), z) = ((a, 2), 3)` reads `a`: block too. `(u, v) = (x, p)` reads `x` (sample): both locals are of `sample`

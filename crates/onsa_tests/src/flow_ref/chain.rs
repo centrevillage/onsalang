@@ -250,8 +250,8 @@ impl<'a> Frame<'a> {
 
     /// The condition of each `when~` and `reset_if~` of the chain at `key` that is read in the stage `sx` of this one (`Guard::at`, §11.10: at its clock, where the arguments of the head of that clock are read, or at its W), but one that
     /// a boundary gathers, which its part reads from its port (`cond_of`). Those of one stage are read in the order written, the leftmost first (S-1233, S-1221).
-    // SPEC-GAP(S-1221): the condition of a `when~` or `reset_if~` inside a `when~` is read at its W or tick whether or not the outer one runs the part (provisional, as the arguments of the head are; only a panic shows it), and
-    // the conditions of a stage outermost first (the order the spec does not say either).
+    // S-1221: the condition of a `when~` or `reset_if~` inside a `when~` is read at its W or tick whether or not the outer one runs the part (as the arguments of the head are; only a panic shows it), and
+    // the conditions of a stage outermost first.
     fn read_conds(&mut self, key: &NodeKey, levels: &[Level], sx: i32) -> Result<(), Stop> {
         let at = self.body.ast.expr(key.call).span;
         for (b, when) in levels.iter().enumerate().filter_map(|(b, lv)| lv.guard.map(|w| (b, w))) {

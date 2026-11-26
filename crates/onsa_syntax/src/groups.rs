@@ -219,8 +219,8 @@ fn block_like_errors(ast: &Ast, kind_of: &dyn Fn(ExprId) -> NodeKind, limit: Lim
 /// The operand positions of E0011 of the form `e` (§3.1, §3.3, S-348): the
 /// operands of a chain at its root (not `inner`), the ends of a range. The
 /// one list of them (D-15).
-// SPEC-GAP(S-1257): the operands of a binary expression at an end of a range
-// are of that expression, apart from the ends (provisional (2)).
+// S-1257: the operands of a binary expression at an end of a range are
+// of that expression, apart from the ends.
 fn cast_places(ast: &Ast, e: ExprId, inner: &HashSet<ExprId>) -> Option<Vec<ExprId>> {
     match ast.expr(e).kind {
         ExprKind::Binary { .. } if !inner.contains(&e) => Some(chain_nodes(ast, e).1),
@@ -268,9 +268,9 @@ fn unchained(ast: &Ast, e: ExprId, whole: bool) -> Vec<Edit> {
 /// its spelling (`UPPER_SNAKE`, one name). In a constant argument of a type
 /// (`in_a_type`, [`const_args`]) the candidate's text reads as a type with a
 /// clock, which is no part of a type (E0020, S-356): none there (§18.1).
-// SPEC-GAP(S-1193): a constant name is told by its spelling, a path and a parenthesis take no candidate.
-// SPEC-GAP(S-1254): of a chain on the left too (provisional (1)).
-// SPEC-GAP(S-1258): of a `/` at the root only (provisional (2)).
+// S-1193: a constant name is told by its spelling, a path and a parenthesis take no candidate.
+// S-1254: of a chain on the left too.
+// S-1258: of a `/` at the root only.
 fn derived_clock_reading(ast: &Ast, e: ExprId, in_a_type: &impl Fn(Span) -> bool) -> Option<Fix> {
     if in_a_type(ast.expr(e).span) {
         return None;

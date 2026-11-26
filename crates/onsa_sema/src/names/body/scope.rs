@@ -232,10 +232,10 @@ pub(crate) fn unused_binding(b: &Binding, ast: &Ast, readers: Vec<Span>) -> Diag
     if b.kind == BindingKind::Var {
         return d.with_rule("a `var` cannot be named `_`: write `let _ = e` for a value that is not used");
     }
-    // SPEC-GAP(S-1145): a binding that is read (by a `let` nothing reached
-    // reads) has no candidate, which would leave the reads of the name with
-    // no binding (E0302); a note shows the first `let` that reads it, and
-    // the number of the others (one note, however many read it).
+    // S-1145: a binding that is read (by a `let` nothing reached reads) has
+    // no candidate, which would leave the reads of the name with no binding
+    // (E0302); a note shows the first `let` that reads it, and the number of
+    // the others (one note, however many read it).
     if b.reads > 0 {
         let Some(&first) = readers.first() else { return d };
         let more = match readers.len() - 1 {

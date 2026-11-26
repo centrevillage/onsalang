@@ -170,13 +170,11 @@ impl Walker<'_> {
                 return Ok(());
             }
             (Mark::Stateful(Stateful::Delay(_)), CallKind::Flow) => return Ok(()),
-            // SPEC-GAP(R-521): with an argument that reads a past value in the
-            // first argument of a delay (`prev~(lp(^w))`) too, where the `~`
-            // leaves an E0801 (§2.6 "必ず示す", provisional; §18.1 has none).
+            // S-1259: no `~` that leads to an E0801 (`prev~(lp(^w))`).
             (Mark::Stateful(what), CallKind::Plain) => {
-                let msg = self.stateful(what);
-                let fix = Fix::insert("add `~`", span.file, end, "~");
-                Diagnostic::new(Stage::Names, Code::E0811, span, msg).with_fix(fix)
+                let d = Diagnostic::new(Stage::Names, Code::E0811, span, self.stateful(what));
+                let fix = self.add_tilde(e, end, matches!(what, Stateful::Flow(_)));
+                fix.into_iter().fold(d, Diagnostic::with_fix)
             }
             // `!(` and `.(`, which a flow body cannot contain (§11.2, S-811,
             // S-813): the candidate writes the mark of the callee, of a flow

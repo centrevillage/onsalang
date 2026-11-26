@@ -306,7 +306,7 @@ impl<'a> Walker<'a> {
         let fail = match self.member_error(&path_of(&segs[..=at]), self.written(err, &segs[..=at], owner)) {
             Fail::Report(d) => Fail::Report(match (self.a.default_note(of, &segs[at].name), of) {
                 (Some(note), _) => d.with_rule(note),
-                // SPEC-GAP(S-1112): the E0302 of an absent `process_inplace` (R-480) is of the names stage.
+                // S-1112: the E0302 of an absent `process_inplace` (R-480) is of the names stage.
                 (None, Entity::Def(flow)) => self.a.with_ungenerated_notes(d, flow, &segs[at].name),
                 (None, _) => d,
             }),

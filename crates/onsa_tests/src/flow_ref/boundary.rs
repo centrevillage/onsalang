@@ -59,8 +59,8 @@ impl<'a> Boundary<'a> {
 
     /// `_init`: the instance as `init` makes it, `Ok` (a call that is made again starts the state from the beginning, and a
     /// poisoned instance is a new one), or `Poisoned` with the instance uninitialized when `init` panics.
-    // SPEC-GAP(S-1132): an `init` called on an instance that is poisoned (not one that `init` left uninitialized) is read as a fresh
-    // instance, not poisoned; the spec says that `init` again frees the uninitialized one and that `reset` frees the poisoned.
+    // S-1132: an `init` called on an instance that is poisoned (not one that `init` left uninitialized) is read as a fresh
+    // instance, not poisoned: `init` makes the whole state again.
     pub fn init<'h>(&mut self, config: &[(&str, Value)], host: Option<&'h mut dyn FnHost>) -> Result<Status, Stop>
     where
         'a: 'h,

@@ -264,7 +264,7 @@ fn label_of<'a>(dot: &'a str, id: &str) -> (&'a str, &'a str) {
 #[test]
 fn the_label_of_an_instance_with_modifiers_writes_the_modifiers_and_the_clock_of_the_chain() {
     let dot = graph_of_f();
-    // SPEC-GAP(S-1084): `tools.md` §1.1 has no label for modifiers; the provisional form is `<name> = lp~.down~(4): F32 at (sample / 4)`.
+    // S-1084: the modifiers are in the label of the node: `<name> = lp~.down~(4): F32 at (sample / 4)`.
     let cases = [
         ("b.lp_0", "lp~.down~(4): F32 at (sample / 4)"),
         ("c.lp_0", "lp~.down~(2).down~(4): F32 at (sample / 8)"),
@@ -296,8 +296,7 @@ fn the_label_of_an_instance_with_modifiers_writes_the_modifiers_and_the_clock_of
 #[test]
 fn a_chain_adds_no_colour_and_the_head_argument_has_its_edge() {
     let dot = graph_of_f();
-    // SPEC-GAP(S-1084): `tools.md` §1.1 names the colours of `init`, `block` and `sample` only; the provisional reading (2) is that a tick is
-    // black, as `sample` is, and no colour is added.
+    // S-1084: a tick is black, as `sample` is, and no colour is added to those of `init`, `block` and `sample` (`tools.md` §1.1).
     for line in dot.lines().map(str::trim).filter(|l| l.starts_with('"') && l.contains(" [") && !l.contains("->")) {
         let colour = attr(line, "color").unwrap_or_else(|| panic!("a vertex has a colour: {line}"));
         assert!(

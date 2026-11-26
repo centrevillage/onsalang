@@ -150,8 +150,8 @@ fn child_time(cx: &mut FnCx, out: &mut Vec<Stmt>, w: &Walk, words: usize) -> R<V
         if b.ratio.slower_than_body() && time.len() != 2 {
             return Err(internal(w.span, "one word of time"));
         }
-        // SPEC-GAP(S-1252): the stage of an event a run gives out is at the
-        // time of that run (provisional (1)).
+        // S-1252: the stage of an event a run gives out is at the time of that
+        // run.
         let j = w.j(k).or((!b.ratio.slower_than_body()).then_some(&first));
         let kept = fold(&time, b.ratio, j, w.span)?.into_iter().take(if k == 0 { words } else { 2 });
         time = kept.zip(["t_in", "t_hi_in"]).map(|(e, name)| materialize(cx, e, out, name)).collect();
@@ -633,8 +633,8 @@ fn ports(
 ) -> R<()> {
     let args: &[ExprId] = if let PlanKind::Instance { args, .. } = &w.n.kind { args } else { &[] };
     let args = (0u32..).zip(args).map(|(i, &e)| (Port::Input(i), e));
-    // SPEC-GAP(S-1221): the condition of a guard or a `.reset_if~` inside one that
-    // stops it is read too, as the arguments of the head are (provisional).
+    // S-1221: the condition of a guard or a `.reset_if~` inside one that
+    // stops it is read too, as the arguments of the head are.
     let conds = (0u32..).zip(&w.n.chain).filter_map(|(at, m)| Some((Port::Cond(at), m.cond?)));
     for (port, e) in args.chain(conds).collect::<Vec<_>>() {
         if !reads.contains(&port) {

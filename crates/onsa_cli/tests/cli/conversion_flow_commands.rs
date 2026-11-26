@@ -292,8 +292,7 @@ fn graph_of_a_conversion_flow_has_a_vertex_for_each_port_with_its_ratio() {
     assert!(!out.stderr.contains("internal error"), "{}", out.stderr);
     let dot = out.stdout;
 
-    // SPEC-GAP(S-1084): the clock of a derived port is written in the label as `sample / 4`; whether the parenthesis of the declaration
-    // (`at (sample / 4)`) is kept is not written, so only the ratio is asked.
+    // S-1084: the clock of a derived port is written in the label in the form of the declaration; only the ratio is asked here.
     for (id, name, ratio) in
         [("lf", "lf: F32 at ", "sample / 4"), ("x", "x: F32 at ", "sample * 2"), ("_out", "out: ", "sample * 2")]
     {

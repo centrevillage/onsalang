@@ -49,11 +49,18 @@ fn words_package(tag: &str, main: &str) -> Dir {
 }
 
 /// §15.1, R-266: a keyword that a `use` takes is E0002, one diagnostic with a note and no candidate: as the
-/// last name of a path, as the element of a list, as the name of a module of the package (`match.onsa`).
+/// last name of a path, as the element of a list, as the name of a module of the package (`match.onsa`); the
+/// keywords `when` and `reset_if` too (S-1082).
 #[test]
 fn a_keyword_taken_by_a_use_is_e0002_with_a_note_and_no_candidate() {
     let mut problems = Vec::new();
-    for (tag, line) in [("path", "use std.test\n"), ("list", "use std.{test}\n"), ("module", "use match\n")] {
+    for (tag, line) in [
+        ("path", "use std.test\n"),
+        ("list", "use std.{test}\n"),
+        ("module", "use match\n"),
+        ("when", "use kp.when\n"),
+        ("reset_if", "use kp.{reset_if}\n"),
+    ] {
         let d = words_package(&format!("rules_keyword_{tag}"), line);
         let (out, doc) = check_json(d.root());
         if out.code != 1 || codes(&doc) != set(&["E0002"]) || diagnostics(&doc).len() != 1 {
@@ -73,17 +80,10 @@ fn a_keyword_taken_by_a_use_is_e0002_with_a_note_and_no_candidate() {
 
 /// §15.1, §2.2, R-266: a reserved word that a `use` takes is E0200 at the word, one diagnostic with no
 /// candidate: the last name of a path (`use kp.clock`), the head of a path of one name (`use clock`), an element
-/// of a list (`use kp.{clock}`), and the words `when`, `reset_if`, `ser`.
+/// of a list (`use kp.{clock}`), and the word `ser`.
 #[test]
 fn a_reserved_word_taken_by_a_use_is_e0200_at_the_word() {
-    let forms: [(&str, u64); 6] = [
-        ("use kp.clock", 8),
-        ("use clock", 5),
-        ("use kp.{clock}", 9),
-        ("use kp.when", 8),
-        ("use kp.{reset_if}", 9),
-        ("use ser", 5),
-    ];
+    let forms: [(&str, u64); 4] = [("use kp.clock", 8), ("use clock", 5), ("use kp.{clock}", 9), ("use ser", 5)];
     let mut problems = Vec::new();
     for (i, (line, col)) in forms.iter().enumerate() {
         let d = words_package(&format!("rules_word_{i}"), &format!("{line}\n"));

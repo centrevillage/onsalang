@@ -1,0 +1,103 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.10", "§11.9", "§3.1", "§18.2"]
+
+// A head in parentheses is the call of an instance (S-1181, §11.10): `(rs~(x)).when~(c)`, `((rs~(x))).reset_if~(r)`,
+// `(acc~(f)).down~(2)` and a chain whose left is in parentheses are read through the parentheses, as the form without
+// them (a parenthesis only groups, §3.1, and fmt takes off the parentheses round a postfix expression without changing
+// what any stage judges, §18.2). Each flow `*_p` is the form in parentheses of the flow `*_n`, and the test compares
+// their outputs on the same inputs.
+
+flow ramp() -> F32 at sample {
+  let t = prev~(^t) + 1.0
+  t
+}
+
+flow rs(x: F32 at sample) -> F32 at sample {
+  let y = x + prev~(^y)
+  y
+}
+
+flow acc(f: F32 at block) -> F32 at sample {
+  let n = f + prev~(^n)
+  n
+}
+
+pub flow when_p(c: Bool at sample) -> F32 at sample {
+  (rs~(ramp~())).when~(c)
+}
+
+pub flow when_n(c: Bool at sample) -> F32 at sample {
+  rs~(ramp~()).when~(c)
+}
+
+pub flow reset_p(r: Bool at sample) -> F32 at sample {
+  ((rs~(ramp~()))).reset_if~(r)
+}
+
+pub flow reset_n(r: Bool at sample) -> F32 at sample {
+  rs~(ramp~()).reset_if~(r)
+}
+
+pub flow down_p(f: F32 at block) -> F32 at sample {
+  let s = (acc~(f)).down~(2)
+  s at sample
+}
+
+pub flow down_n(f: F32 at block) -> F32 at sample {
+  let s = acc~(f).down~(2)
+  s at sample
+}
+
+pub flow chain_p(c: Bool at sample, r: Bool at sample) -> F32 at sample {
+  ((rs~(ramp~())).when~(c)).reset_if~(r)
+}
+
+pub flow chain_n(c: Bool at sample, r: Bool at sample) -> F32 at sample {
+  rs~(ramp~()).when~(c).reset_if~(r)
+}
+
+test "a when~ after a head in parentheses runs the instance as the form without them" {
+  let c: [Bool; 8] = [true, false, true, true, false, false, true, true]
+  var a: [F32; 8] = [0.0; 8]
+  var b: [F32; 8] = [0.0; 8]
+  var sa = when_p.init(8.0)
+  var sb = when_n.init(8.0)
+  when_p.process(inout sa, c, inout a)
+  when_n.process(inout sb, c, inout b)
+  assert a == b
+}
+
+test "a reset_if~ after a head in two parentheses resets the instance as the form without them" {
+  let r: [Bool; 8] = [false, false, true, false, false, true, true, false]
+  var a: [F32; 8] = [0.0; 8]
+  var b: [F32; 8] = [0.0; 8]
+  var sa = reset_p.init(8.0)
+  var sb = reset_n.init(8.0)
+  reset_p.process(inout sa, r, inout a)
+  reset_n.process(inout sb, r, inout b)
+  assert a == b
+}
+
+test "a down~ after a head in parentheses runs on the grid of sample / 2 as the form without them" {
+  var a: [F32; 8] = [0.0; 8]
+  var b: [F32; 8] = [0.0; 8]
+  var sa = down_p.init(8.0)
+  var sb = down_n.init(8.0)
+  down_p.process(inout sa, down_p.Params { f: 3.0 }, inout a)
+  down_n.process(inout sb, down_n.Params { f: 3.0 }, inout b)
+  assert a == b
+}
+
+test "a chain whose left is in parentheses is the chain without them" {
+  let c: [Bool; 8] = [true, true, false, true, false, true, true, false]
+  let r: [Bool; 8] = [false, false, false, true, false, false, true, false]
+  var a: [F32; 8] = [0.0; 8]
+  var b: [F32; 8] = [0.0; 8]
+  var sa = chain_p.init(8.0)
+  var sb = chain_n.init(8.0)
+  chain_p.process(inout sa, chain_p.In { c: c, r: r }, inout a)
+  chain_n.process(inout sb, chain_n.In { c: c, r: r }, inout b)
+  assert a == b
+}

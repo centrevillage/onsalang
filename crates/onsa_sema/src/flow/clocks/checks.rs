@@ -133,12 +133,11 @@ impl Walk<'_> {
     /// in error then (§11.5 gives no rule of its clock): no outer check reads
     /// its clock; one whose type holds a function type keeps the clock its
     /// rule gives, which rests on no type (S-1133).
-    // SPEC-GAP(S-1152): every visited expression whose type holds a function
-    // is an E0810 and the first by place is the one reported (provisional).
+    // S-1152: every visited expression whose type holds a function is an
+    // E0810 and the first by place is the one reported.
     pub(super) fn fault(&mut self, e: ExprId) -> Option<Fault> {
         let ty = self.ty_of(e);
-        // SPEC-GAP(S-1153): of one expression that is both, E0805 is the one
-        // (provisional).
+        // S-1153: of one expression that is both, E0805 is the one.
         if let Some(what) = self.made(e, ty) {
             return Some(Fault::Alloc(what));
         }
@@ -218,10 +217,9 @@ impl Walk<'_> {
     /// M-7), with a note at the expression of each. `looped`: they enter one
     /// loop of `let`s, which has one clock, and `e` is the initializer of the
     /// `let` that the second enters.
-    // SPEC-GAP(S-1198): the E0815 of a loop of `let`s is one, at the
-    // initializer of the `let` that the second operand enters (provisional).
-    // SPEC-GAP(S-1083): `sample * N` of the caller with another operand is
-    // this E0815 (provisional).
+    // S-1198: the E0815 of a loop of `let`s is one, at the initializer of
+    // the `let` that the second operand enters.
+    // S-1083: `sample * N` of the caller with another operand is this E0815.
     pub(super) fn report_clash(&mut self, e: ExprId, ops: Clashed, looped: bool) {
         let span = self.ast.expr(e).span;
         let [a, b] = ops.map(|(_, c)| shown(c, span));
@@ -309,11 +307,11 @@ impl Walk<'_> {
     /// `next` (§11.5, S-1177): E0812 at its `~` (S-392) when no body holds
     /// state, with the candidate that takes the `~` off (a space before a
     /// `next` it touches). Its clock stays the join of its parts.
-    // SPEC-GAP(S-392): the main place of the E0812 is the `~` (provisional).
-    // SPEC-GAP(S-1191): a later condition or a guard with state is no
-    // branch, so not counted: E0812 too (provisional).
-    // SPEC-GAP(S-1192): the `if~` / `match~` of the E0812 keeps its clock, as
-    // a `par~` that holds none (provisional).
+    // S-392: the main place of the E0812 is the `~`.
+    // S-1191: a later condition or a guard with state is no branch, so not
+    // counted: E0812 too.
+    // S-1192: the `if~` / `match~` of the E0812 keeps its clock, as a `par~`
+    // that holds none.
     pub(super) fn check_tilde(
         &mut self,
         tilde: Span,
@@ -337,10 +335,8 @@ impl Walk<'_> {
     /// at `Check`, E0816 at the binding of a type that does not satisfy
     /// `Default`. Its bindings, in the order of the text (none but at
     /// `Check`).
-    // SPEC-GAP(S-1174): every binding of every arm, read or not
-    // (provisional).
-    // SPEC-GAP(S-392): the main place of the E0816 is the binding
-    // (provisional).
+    // S-1174: every binding of every arm, read or not.
+    // S-392: the main place of the E0816 is the binding.
     pub(super) fn check_arm_bindings(&mut self, pat: PatId) -> Vec<LocalId> {
         let mut bound = Vec::new();
         if !self.checking() {
@@ -399,12 +395,11 @@ impl Walk<'_> {
     /// (S-1183), then the lift into a `let`.
     // SPEC-GAP(S-1183): the `~` of the innermost branch, of a place in others
     // (provisional).
-    // SPEC-GAP(S-1173): the E0806 at the flow check stage (provisional).
-    // SPEC-GAP(S-392): the main place of the E0811 / E0806 is the whole thing
-    // with state, `lp~(x)` (provisional).
-    // SPEC-GAP(S-1189): the thing in error has the error clock (its callers
-    // give `Clock::Error` on false), so an `at` around it reports nothing
-    // (provisional).
+    // S-1173: the E0806 at the flow check stage.
+    // S-392: the main place of the E0811 / E0806 is the whole thing with
+    // state, `lp~(x)`.
+    // S-1189: the thing in error has the error clock (its callers give
+    // `Clock::Error` on false), so an `at` around it reports nothing.
     pub(super) fn stateful_here(&mut self, e: ExprId, kind: &str, frame: Option<ClockFrame>) -> bool {
         let Some(&site) = self.sites.last() else { return true };
         let span = self.ast.expr(e).span;
@@ -544,7 +539,7 @@ impl Walk<'_> {
     /// whole chain (S-1203 (1)), of a value type that does not satisfy
     /// `Default` ([`crate::signal::no_default_signal`]). Its type is the same
     /// at every boundary and guard: one of each input and one of the output.
-    // SPEC-GAP(S-1203): the places, provisional (1).
+    // S-1203: the places of the chain, the whole of it.
     pub(super) fn check_gather_deal(&mut self, e: ExprId, g: DefId, args: &[ExprId]) {
         let (a, name) = (self.a, &self.a.def(g).name);
         // Of a flow with a port in error, none (§18.1).
@@ -576,7 +571,7 @@ impl Walk<'_> {
     /// holds, of a part that has not run (§11.10, S-558: `T.default()`, an
     /// `init` of a delay too), at the whole chain (S-1203 (1)), of a type
     /// that does not satisfy `Default`; none of a chain with no `.when~`.
-    // SPEC-GAP(S-1203): the place, provisional (1).
+    // S-1203: the place of the chain, the whole of it.
     pub(super) fn held_default(&self, e: ExprId, name: &str) -> Option<Diagnostic> {
         let chain = self.cx.chains.get(&e)?;
         chain.mods.iter().find(|m| m.plan.modifier == crate::flow_names::Modifier::When)?;
@@ -659,8 +654,8 @@ impl Walk<'_> {
             diag = diag.with_rule(rule);
         }
         let inside = self.diag.as_ref().is_some_and(|d| span.start <= d.span.start && d.span.end <= span.end);
-        // SPEC-GAP(S-1165): `^b` (past parentheses and `at`) has no candidate:
-        // the error it would leave may be in the `let` of `b`, walked later.
+        // S-1165: `^b` (past parentheses and `at`) has no candidate: the error
+        // it would leave may be in the `let` of `b`, walked later.
         let mut bare = first;
         while let ExprKind::Paren(x) | ExprKind::At { expr: x, .. } = &self.ast.expr(bare).kind {
             bare = *x;
@@ -686,7 +681,7 @@ impl Walk<'_> {
     /// with the candidate that takes every one of the chain off; of `.reset_if~`, a condition at
     /// a periodic clock, faster than W (the event clock of the delay), E0815, else
     /// the read of its condition at the event it is of, of no event at W.
-    // SPEC-GAP(S-1243): a condition at a periodic clock is E0815 (provisional).
+    // S-1243: a condition at a periodic clock is E0815.
     pub(super) fn event_delay_modifier(&mut self, e: ExprId, head: ExprId, at: Clock) {
         let mods = || self.cx.chains.get(&head).into_iter().flat_map(|c| &c.mods);
         let Some((i, m)) = (0u32..).zip(mods()).find(|(_, m)| m.call == e) else { return };

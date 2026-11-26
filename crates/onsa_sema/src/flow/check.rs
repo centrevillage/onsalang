@@ -333,7 +333,7 @@ impl<'a> Checker<'a> {
         } else if let Ok(n) = u32::try_from(n) {
             return Some(n);
         } else {
-            // SPEC-GAP(S-1147): the code of a count past `U32` (E0808 or E0409); E0808 for now.
+            // S-1147: a count past `U32` is E0808, as an N past its limit is.
             format!("{n}, more than the size `N` of `[T; N]`, a `U32`, holds")
         };
         let msg = format!(
@@ -447,8 +447,7 @@ impl<'a> Checker<'a> {
     /// recorded once in the chain of its head ([`ModifierChain`]).
     fn check_modifier(&mut self, e: ExprId, m: ModifierCall, args: &[Arg], expected: Option<TyId>) -> R<TyId> {
         let t = self.check_expr(m.receiver, expected)?;
-        // SPEC-GAP(S-1090): the number of the arguments is E0412, as of a
-        // delay (provisional (1)).
+        // S-1090: the number of the arguments is E0412, as of a delay.
         let [arg] = args else {
             let msg = format!("the modifier `{}~` takes 1 argument but {} were given", m.modifier.name(), args.len());
             return Err(self.err(Code::E0412, self.expr(e).span, msg));

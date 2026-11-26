@@ -872,16 +872,12 @@ fn a_reserved_word_is_e0200_where_it_is_read() {
     // §2.2, S-169, S-279, S-371: the E0200 at the word, wherever it is
     // read, and no E0002 there.
     for (src, word) in [
-        ("fn f() {\n  let when = 1\n}\n", "when"),
         ("fn ser() {\n}\n", "ser"),
-        ("fn f(reset_if: I32) {\n}\n", "reset_if"),
         ("struct S {\n  clock: I32,\n}\n", "clock"),
         ("use std.math.{clock}\n", "clock"),
         ("flow f(x: F32 at clock) -> F32 at sample {\n  x\n}\n", "clock"),
         ("flow f(x: F32) -> F32 {\n  let y = x + prev~(^clock)\n  y\n}\n", "clock"),
-        ("fn f() {\n  when\n}\n", "when"),
         ("clock fast = sample / 32\n", "clock"),
-        ("fn f(x: I32) {\n  x when 1\n}\n", "when"),
     ] {
         let p = parse(src);
         let d: Vec<(Code, &str)> =
@@ -892,6 +888,42 @@ fn a_reserved_word_is_e0200_where_it_is_read() {
     for src in ["fn f(s: S) -> I32 {\n  s.clock\n}\n", "use clock.{x}\n", "use test.{Gen}\n", "use a.ser.{x}\n"] {
         assert_eq!(codes(src), vec![], "{src}");
     }
+}
+
+/// §2.2, S-1082: `when` and `reset_if` out of a modifier are syntax errors,
+/// no E0200: a name of a declaration as of another keyword (`let match`),
+/// with the candidate `when_`, and after an expression a postfix clause, with
+/// the chain of the modifiers as its note and no candidate.
+#[test]
+fn when_and_reset_if_out_of_a_modifier_are_syntax_errors() {
+    let postfix = "written as a chain: `lp~(x).when~(c)`";
+    for (src, word, fix) in [
+        ("fn f() {\n  let when = 1\n}\n", "when", Some("when_")),
+        ("fn f(reset_if: I32) {\n}\n", "reset_if", Some("reset_if_")),
+        ("fn when() {\n}\n", "when", Some("when_")),
+        ("struct S {\n  reset_if: I32,\n}\n", "reset_if", Some("reset_if_")),
+        ("fn f() {\n  when\n}\n", "when", Some("when_")),
+        ("fn f(x: I32) {\n  x when 1\n}\n", "when", None),
+        ("flow f(x: F32 at sample) -> F32 at sample {\n  let y = (g~(x)) when x > 0.0\n  y\n}\n", "when", None),
+        (
+            "flow f(x: F32 at sample) -> F32 at sample {\n  let y = g~(x)\n    reset_if x > 0.0\n  y\n}\n",
+            "reset_if",
+            None,
+        ),
+        ("flow f(c: Bool at sample) -> F32 at sample {\n  if~ c { g~(1.0) } else { 0.0 } when c\n}\n", "when", None),
+    ] {
+        let p = parse(src);
+        let [d] = p.diagnostics.as_slice() else { panic!("{src}: {:?}", p.diagnostics) };
+        assert_eq!((d.code, &src[d.span.start as usize..d.span.end as usize]), (Code::E0002, word), "{src}");
+        let fixes: Vec<&str> = d.fixes.iter().flat_map(|f| f.edits()).map(|e| e.replace.as_str()).collect();
+        assert_eq!(fixes, fix.into_iter().collect::<Vec<_>>(), "{src}");
+        let noted = d.notes.iter().any(|n| n.message.contains(postfix));
+        assert_eq!(noted, fix.is_none(), "{src}: {d:?}");
+    }
+    // A pattern before it is no expression: the general E0002 (`Some(v) when v > 0 =>`).
+    let p = parse("fn f(o: Option[I32]) -> I32 {\n  match o {\n    Some(v) when v > 0 => v,\n    _ => 0,\n  }\n}\n");
+    let [d] = p.diagnostics.as_slice() else { panic!("{:?}", p.diagnostics) };
+    assert!(d.code == Code::E0002 && d.notes.iter().all(|n| !n.message.contains(postfix)), "{d:?}");
 }
 
 /// The words before a head are one E0002 with its note, and the member is

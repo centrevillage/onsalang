@@ -402,7 +402,7 @@ fn attr<'a>(n: &'a Node, key: &str) -> Option<&'a str> {
 
 /// The clock a colour stands for (§1.1: `init` and a constant gray, `block` blue, `sample` black).
 fn clock_of_color(n: &Node) -> &'static str {
-    // SPEC-GAP(S-1084): the spec names the colours by word (灰色, 青, 黒) and the example of §1.3 writes `gray40`; the test reads any
+    // S-1084: the spec names the colours by word (灰色, 青, 黒) and the example of §1.3 writes `gray40`; the test reads any
     // `gray…` or `grey…` as gray, `blue` as blue and `black` as black, and no other colour.
     let c = attr(n, "color").unwrap_or_else(|| panic!("the vertex \"{}\" has no colour: {n:?}", n.id));
     if c.starts_with("gray") || c.starts_with("grey") {
@@ -536,8 +536,7 @@ fn the_vertex_of_a_par_that_is_a_let_is_a_box_with_the_range_in_its_label() {
     let saws = dot.node("saws");
     assert!(attr(saws, "shape").is_none_or(|s| s == "box"), "a `let` is a box: {saws:?}");
     assert_eq!(clock_of_color(saws), "sample");
-    // SPEC-GAP(S-1170): §1.1 gives a `let` the label `名前 = 式の種類: 型 at クロック` and does not say whether the label of the
-    // vertex of a `par~` has the range; the provisional form writes it (the heading of the frame has it too).
+    // S-1170: the label of the vertex of a `par~` has its range, as the heading of the frame has.
     assert_eq!(dot.label("saws"), "saws = par~ 0..<4: [F32; 4] at sample");
 }
 
@@ -721,7 +720,7 @@ fn the_label_of_a_delay_is_its_kind_without_the_length() {
 fn the_label_of_a_delay_with_a_chain_has_its_modifiers_after_its_kind() {
     let dot = graph_of(LABELS, "chained");
     // §1.1: a delay is its kind only, with no length.
-    // SPEC-GAP(S-1084): the modifiers of its chain follow the kind, in their order, a condition as `(…)` (the provisional (2), as of an
+    // S-1084: the modifiers of its chain follow the kind, in their order, a condition as `(…)` (as of an
     // instance: `lp~.down~(4)`); a delay with no chain has none.
     for (id, label) in [
         ("q", "q = prev~.when~(…): F32 at sample"),
@@ -734,8 +733,8 @@ fn the_label_of_a_delay_with_a_chain_has_its_modifiers_after_its_kind() {
 
 #[test]
 fn no_vertex_has_a_colour_other_than_the_three_of_the_clocks() {
-    // SPEC-GAP(S-1084): the clocks that derive from `sample` (`sample / N`, `sample * N`, an event) have no colour in §1.1; no flow here has
-    // one, and the provisional reading is that no colour is added, so every vertex of these flows is gray, blue or black.
+    // S-1084: the clocks that derive from `sample` (`sample / N`, `sample * N`, an event) are black, as `sample` is; no flow here has
+    // one, so every vertex of these flows is gray, blue or black.
     for (file, flow) in
         [(FRAMES, "unison"), (FRAMES, "nest"), (LABELS, "labels"), (LABELS, "two_frames"), (LABELS, "destructure")]
     {
@@ -781,9 +780,9 @@ fn the_indices_of_two_pars_with_one_index_name_are_two_vertices_in_two_frames() 
 #[test]
 fn an_index_named_like_a_node_of_its_body_is_not_that_node() {
     let dot = graph_of(LABELS, "shadow");
-    // SPEC-GAP(S-1168): the node of `lp~(x * F32.round_from(lp_0))` is named `lps.lp_0` by §11.6 and the vertex of the index `lp_0` is
-    // `lps.lp_0` by §1.3, the same name. The provisional reading is that they are two vertices; the name of the vertex of the index is
-    // the implementation's, and the test asks only that the two are different vertices and not declared twice.
+    // S-1168: the node of `lp~(x * F32.round_from(lp_0))` is named `lps.lp_0` by §11.6 and the index `lp_0` would be
+    // `lps.lp_0` by §1.3, the same name; they are two vertices, the index `lps._lp_0`, and the test asks only that the two
+    // are different vertices and not declared twice.
     assert!(dot.declared_twice().is_empty(), "a vertex is declared twice: {:?}", dot.declared_twice());
     let of_label = |label: &str| -> Vec<&str> {
         dot.nodes.iter().filter(|n| n.attrs.get("label").is_some_and(|l| l == label)).map(|n| n.id.as_str()).collect()
@@ -807,7 +806,7 @@ fn the_heading_of_an_inclusive_range_is_the_written_form_with_the_number_of_repl
     let dot = graph_of(LABELS, "inclusive");
     assert_eq!(dot.frames.len(), 2, "{:?}", dot.frames);
     // §11.5: `a ..= b` has `b - a + 1` replicas; `1 ..= 3` has 3 and the two ends of the `U32` range have 2, with no overflow of `b + 1`.
-    // SPEC-GAP(S-1171): §1.3 gives the heading of `..<` only; the provisional form of `..=` keeps the written operator.
+    // S-1171: the heading of `..=` keeps the written operator, as that of `..<` (§1.3).
     dot.frame_with_label("par~ i in 1..=3（×3）");
     dot.frame_with_label("par~ k in 4294967294..=4294967295（×2）");
 }
@@ -815,9 +814,9 @@ fn the_heading_of_an_inclusive_range_is_the_written_form_with_the_number_of_repl
 #[test]
 fn a_let_with_more_than_one_name_and_a_let_of_the_wildcard_are_named_as_the_qualification() {
     let dot = graph_of(LABELS, "destructure");
-    // SPEC-GAP(S-1169): §1.1 names the vertex of a `let` by the name of the `let` and does not name a `let` of more than one name or of no
-    // name; the provisional reading is the qualification of §11.6: the first name of the pattern (`let Pair { l: p, r: q }` and
-    // `let (a, b)` are `p` and `a`), and `_<number>` for a `let` with no name (the two `let _` are `_0` and `_1`).
+    // S-1169: a `let` of more than one name or of no name is named by the qualification of §11.6: the first name of the
+    // pattern (`let Pair { l: p, r: q }` and `let (a, b)` are `p` and `a`), and `_<number>` for a `let` with no name (the two
+    // `let _` are `_0` and `_1`).
     for id in ["p", "a", "_0", "_1"] {
         assert!(
             dot.find(id).is_some_and(|n| attr(n, "shape").is_none_or(|s| s == "box")),
