@@ -1,0 +1,5 @@
+pub struct Mm { name: Str, n: U32 }
+
+fn unused_struct_param(m: Mm) -> U32 { 1 }
+
+fn pass(m: Mm) -> U32 { unused_struct_param(m) }
