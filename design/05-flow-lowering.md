@@ -121,5 +121,6 @@ rt fn resonator.process(inout s, params, input: Span[F32], inout output: Span[F3
     - 周期の段の `Each` の中から出すイベントを自分の出力にする flow は、出す段 `FlowInfo::emit` の一回の走りで `FlowInfo::burst` 個までを出す（`events::most`: 比 N の段 y の作り手は `N >> |y|` 回、`once` は 1 回、`when~` は動いたとして数える。途中の作り手の積。`.up~` の N の積の上限 2^24（S-1089）を超えない）。イベントの段は一つ（`Run` が `Each` の外にある）。
     - `burst` が 1 なら `Option` のまま。多ければその周期の段の関数だけが `[Option[E]; burst]` を返す: `__out` と次の場所 `__n`（`mod.rs` の `Gave`）に、中の源の段が返した順に入れる（`None` を返した所は穴で、`None` の作り手は場所を使わない）。呼ぶ側の `give` は、呼び先の仕事の全体（保存まで）の後に、順に一つずつ刻む（S-1251）。
   - 自分の出力だけで刻む呼び出しの輪（S-1237）は、計画の段で `events::table` が輪を返し、`entries::close` が check の E0815 を出して表を作らない（`FlowInfo::unticked`、`planned()` が偽）。
+  - 一か所にした判断（W7-17 L1、D-15）: 「連鎖を持つ遅延」は `PlanNode::chained_delay`（sema と Core）、イベントを出す呼び出しの出力を刻む入力は `events::giving`、呼び出しを囲む `par~` の鎖は `FlowInfo::around`。
     降下と `graph` は check の誤りで止まるので、この形に来ない。`late` と `emit` の歩きは輪の無い `parent` に頼るので、輪の検査の後に置く。
 - （2026-10-06、点検 C-66: 例を S-27、S-30、S-33、S-44、S-86、S-102、R-13、R-92 に合わせた。名前と巻き上げの細部は点検の C-36。）
