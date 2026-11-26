@@ -1,0 +1,74 @@
+// onsa.toml
+// [test]
+// spec = ["§3.1", "§3.3", "§18.1"]
+// fixes = 1
+
+// E0011 for an `as` chain (§3.1: "`as` と `at` は連鎖できず、二つ目の被演算子には括弧が要る") that is also an operand of
+// a binary operator (§3.3: an `as` expression is an operand of a symbol weaker than it only in parentheses), and the
+// candidate of §18.1. All the bare `as` and `at` in the operand positions of one expression are one error, and the one
+// candidate puts all of them in parentheses (`x as U32 + y as U16 as U32` is `(x as U32) + ((y as U16) as U32)`), so
+// that no E0011 is left in the unit after it is applied (the runner applies it and checks). The candidate is one for
+// a chain too: `x as I32 as F64 + 1.0` is `((x as I32) as F64) + 1.0`, the inner `as` in parentheses for the chain and
+// the whole in parentheses for the operand. One error per declaration unit. The same forms parenthesized are in
+// e0011_chain_parenthesized.onsa, and the ends of a range in e0011_chain_range_end.onsa.
+
+fn id64(a: F64) -> F64 {
+  a
+}
+
+pub fn chain_then_sum(x: I16) -> F64 {
+  x as I32 as F64 + 1.0   //~ E0011
+}
+
+pub fn sum_then_chain(x: I16) -> F64 {
+  1.0 + x as I32 as F64   //~ E0011
+}
+
+pub fn a_chain_of_three_in_a_product(x: I8) -> F64 {
+  x as I16 as I32 as F64 * 2.0   //~ E0011
+}
+
+pub fn a_cast_and_a_chain(x: U16, y: U8) -> U32 {
+  x as U32 + y as U16 as U32   //~ E0011
+}
+
+pub fn two_chains(x: U8, y: U8) -> U32 {
+  x as U16 as U32 + y as U16 as U32   //~ E0011
+}
+
+pub fn a_chain_after_a_prefix(x: I8) -> F64 {
+  -x as I16 as F64 * 2.0   //~ E0011
+}
+
+pub fn a_chain_in_a_let(x: I16) -> F64 {
+  let y = x as I32 as F64 + 1.0   //~ E0011
+  y
+}
+
+pub fn a_chain_in_an_argument(x: I16) -> F64 {
+  id64(x as I32 as F64 + 1.0)   //~ E0011
+}
+
+pub fn a_chain_in_a_condition(x: I8) -> I32 {
+  if x as I16 as I32 > 3 {   //~ E0011
+    1
+  } else {
+    0
+  }
+}
+
+pub fn a_chain_in_an_arm(x: I16, k: U32) -> F64 {
+  match k {
+    0 => x as I32 as F64 * 2.0,   //~ E0011
+    _ => 0.0,
+  }
+}
+
+pub fn a_chain_in_a_closure(x: I16) -> F64 {
+  let f = fn(a: I16) -> F64 { a as I32 as F64 + 1.0 }   //~ E0011
+  f.(x)
+}
+
+pub fn a_chain_in_a_generic_function[T](t: T, x: I16) -> (T, F64) {
+  (t, x as I32 as F64 + 1.0)   //~ E0011
+}

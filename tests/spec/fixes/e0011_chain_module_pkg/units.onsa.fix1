@@ -1,0 +1,11 @@
+pub fn bias() -> F64 {
+  0.5
+}
+
+pub fn widen(x: I16) -> F64 {
+  ((x as I32) as F64) * 2.0   //~ E0011
+}
+
+pub fn narrow_sum(x: I8, y: I8) -> I32 {
+  ((x as I16) as I32) + ((y as I16) as I32)   //~ E0011
+}

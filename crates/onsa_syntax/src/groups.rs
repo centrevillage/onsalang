@@ -40,7 +40,15 @@ pub(crate) fn check(ast: &Ast, kind_of: &dyn Fn(ExprId) -> NodeKind, limit: Limi
     // clocks under another one (a chain of `as` / `at` is one form, as a stack
     // is).
     let mut inner = HashSet::new();
+    // The operands of a chain and the ends of a range: a chain of `as` / `at`
+    // there is one error with the others of its expression (§3.3, S-348).
+    let mut operand = HashSet::new();
     for (i, e) in ast.exprs.iter().enumerate() {
+        match e.kind {
+            ExprKind::Binary { lhs, rhs, .. } => operand.extend([lhs, rhs]),
+            ExprKind::Range(head) | ExprKind::Par { range: head, .. } => operand.extend([head.lo, head.hi]),
+            _ => {}
+        }
         if let ExprKind::Binary { lhs, rhs, .. } = e.kind {
             inner.extend([lhs, rhs].into_iter().filter(|&c| matches!(ast.expr(c).kind, ExprKind::Binary { .. })));
         }
@@ -63,25 +71,9 @@ pub(crate) fn check(ast: &Ast, kind_of: &dyn Fn(ExprId) -> NodeKind, limit: Limi
                 // a chain.
                 // Those of one chain are one form, parenthesized whole
                 // (§3.3, S-348).
-                let casts: Vec<Span> = operands
-                    .iter()
-                    .filter(|&&o| ast.as_or_at_operand(o).is_some())
-                    .map(|&o| ast.expr(o).span)
-                    .collect();
-                if let Some(&first) = casts.first() {
-                    let edits = casts
-                        .iter()
-                        .flat_map(|s| [Edit::insert(s.file, s.start, "("), Edit::insert(s.file, s.end, ")")])
-                        .collect();
-                    let d = Diagnostic::new(
-                        Stage::Syntax,
-                        Code::E0011,
-                        first,
-                        "`as` and `at` are written in parentheses when they are an operand (§3.1)",
-                    )
-                    .with_found(src(first));
-                    let span = ast.expr(id).span;
-                    let mut d = parenthesized(d, limit, span, "parenthesize it", edits);
+                let span = ast.expr(id).span;
+                let what = "`as` and `at` are written in parentheses when they are an operand (§3.1)";
+                if let Some(mut d) = operand_casts(ast, &operands, what, limit, span) {
                     if let Some(fix) = derived_clock_reading(ast, id, &in_a_type)
                         && !too_deep(limit, span, std::slice::from_ref(&fix), 0)
                     {
@@ -98,40 +90,19 @@ pub(crate) fn check(ast: &Ast, kind_of: &dyn Fn(ExprId) -> NodeKind, limit: Limi
             // too: the range symbols are weaker than `as` and `at` (§3.1,
             // §3.3, S-340); those of one head are one form (S-348).
             ExprKind::Range(head) | ExprKind::Par { range: head, .. } => {
-                let casts: Vec<Span> = [head.lo, head.hi]
-                    .into_iter()
-                    .filter(|&o| ast.as_or_at_operand(o).is_some())
-                    .map(|o| ast.expr(o).span)
-                    .collect();
-                if let Some(&first) = casts.first() {
-                    let edits = casts
-                        .iter()
-                        .flat_map(|s| [Edit::insert(s.file, s.start, "("), Edit::insert(s.file, s.end, ")")])
-                        .collect();
-                    let d = Diagnostic::new(
-                        Stage::Syntax,
-                        Code::E0011,
-                        first,
-                        "`as` and `at` are written in parentheses when they are an end of a range (§3.1)",
-                    )
-                    .with_found(src(first));
-                    diagnostics.push(parenthesized(d, limit, expr.span, "parenthesize it", edits));
-                }
+                let what = "`as` and `at` are written in parentheses when they are an end of a range (§3.1)";
+                diagnostics.extend(operand_casts(ast, &[head.lo, head.hi], what, limit, expr.span));
             }
+            // A chain that is an operand is the error of its expression's
+            // arm (S-348).
             ExprKind::Cast { .. } | ExprKind::At { .. }
                 if !inner.contains(&id)
+                    && !operand.contains(&id)
                     && ast.as_or_at_operand(id).is_some_and(|o| ast.as_or_at_operand(o).is_some()) =>
             {
                 // E0011: `x as A as B` is `(x as A) as B` written out, and so
                 // are `at` and the mixed chains (§3.1, S-118).
-                let mut e = ast.as_or_at_operand(id).unwrap_or(id);
-                let mut closes = Vec::new();
-                while let Some(base) = ast.as_or_at_operand(e) {
-                    closes.push(Edit::insert(expr.span.file, ast.expr(e).span.end, ")"));
-                    e = base;
-                }
-                let mut edits = vec![Edit::insert(expr.span.file, expr.span.start, "(".repeat(closes.len()))];
-                edits.extend(closes.into_iter().rev());
+                let edits = unchained(ast, id, false);
                 let d = Diagnostic::new(
                     Stage::Syntax,
                     Code::E0011,
@@ -247,6 +218,36 @@ fn block_like_errors(ast: &Ast, kind_of: &dyn Fn(ExprId) -> NodeKind, limit: Lim
     }
 }
 
+/// E0011 for the casts and clocks among `operands` (of a chain or the ends
+/// of a range, of the form at `span`): one form, parenthesized whole with
+/// their chains (§3.3, S-348); the main span is the first.
+fn operand_casts(ast: &Ast, operands: &[ExprId], what: &str, limit: Limit, span: Span) -> Option<Diagnostic> {
+    let casts: Vec<ExprId> = operands.iter().copied().filter(|&o| ast.as_or_at_operand(o).is_some()).collect();
+    let first = ast.expr(*casts.first()?).span;
+    let edits = casts.iter().flat_map(|&o| unchained(ast, o, true)).collect();
+    let found = &limit.text[first.start as usize..first.end as usize];
+    let d = Diagnostic::new(Stage::Syntax, Code::E0011, first, what).with_found(found);
+    Some(parenthesized(d, limit, span, "parenthesize it", edits))
+}
+
+/// The parentheses of the cast or clock `e` round each inner one of its
+/// chain (`x as I16 as I32` is `(x as I16) as I32`, §3.1, S-118), and round
+/// `e` too when `whole` (an operand, S-348). The `(` at one place are one
+/// insertion; the edits are in the order of the text.
+fn unchained(ast: &Ast, e: ExprId, whole: bool) -> Vec<Edit> {
+    let span = ast.expr(e).span;
+    let mut closes: Vec<Edit> = std::iter::successors(ast.as_or_at_operand(e), |&o| ast.as_or_at_operand(o))
+        .filter(|&o| ast.as_or_at_operand(o).is_some())
+        .map(|o| Edit::insert(span.file, ast.expr(o).span.end, ")"))
+        .collect();
+    let opens = closes.len() + usize::from(whole);
+    closes.reverse();
+    if whole {
+        closes.push(Edit::insert(span.file, span.end, ")"));
+    }
+    (opens > 0).then(|| Edit::insert(span.file, span.start, "(".repeat(opens))).into_iter().chain(closes).collect()
+}
+
 /// The second candidate of the E0011 of `x at sample / N` (S-1078): the
 /// reading of the writer who meant a derived clock, `x at (sample / N)`, when
 /// the chain `e` is that one `/` and N an integer literal or the name of a
@@ -272,7 +273,9 @@ fn derived_clock_reading(ast: &Ast, e: ExprId, in_a_type: &impl Fn(Span) -> bool
         return None;
     }
     let (start, end) = (clock.name.span, ast.expr(*rhs).span);
-    let edits = vec![Edit::insert(start.file, start.start, "("), Edit::insert(end.file, end.end, ")")];
+    // A chain on the left is parenthesized as in the first candidate (S-348).
+    let mut edits = unchained(ast, *lhs, false);
+    edits.extend([Edit::insert(start.file, start.start, "("), Edit::insert(end.file, end.end, ")")]);
     Some(Fix::new("write the derived clock in parentheses", edits))
 }
 
@@ -1039,6 +1042,31 @@ mod tests {
         assert_eq!(check("n at sample as F32"), vec![(Code::E0011, Some("(n at sample) as F32".into()))]);
         assert!(check("-x at sample").is_empty());
         assert!(check("(x at block) at sample").is_empty());
+    }
+
+    #[test]
+    fn chains_as_operands_are_one_error() {
+        // §3.1, §3.3, S-348: the chains are among the casts of the expression.
+        let one = |src: &str, fixed: &[&str]| {
+            let d = all(src);
+            assert_eq!(d, vec![(Code::E0011, fixed.iter().map(|s| s.to_string()).collect())], "{src}");
+            assert!(fixed.iter().all(|f| all(f).is_empty()), "{src}: {fixed:?}");
+        };
+        one("x as I64 as F64 + 1.0", &["((x as I64) as F64) + 1.0"]);
+        one("1.0 + x as I64 as F64", &["1.0 + ((x as I64) as F64)"]);
+        one("x as U32 + y as U16 as U32", &["(x as U32) + ((y as U16) as U32)"]);
+        one("x as I16 as I32 as F64 * 2.0", &["(((x as I16) as I32) as F64) * 2.0"]);
+        // S-1078: the reading of a derived clock parenthesizes the chain too.
+        one("p as F32 at sample / 2", &["((p as F32) at sample) / 2", "(p as F32) at (sample / 2)"]);
+        one("p at block at sample / N", &["((p at block) at sample) / N", "(p at block) at (sample / N)"]);
+        // The end of a range.
+        let text = "fn f(x: U8) {\n  for i in 0 ..< x as U16 as U32 {\n  }\n}";
+        let p = crate::parse(FileId(0), text);
+        assert_eq!(p.diagnostics.len(), 1, "{:?}", p.diagnostics);
+        let edits: Vec<&onsa_diag::Edit> = p.diagnostics[0].fixes[0].edits().iter().collect();
+        let after = onsa_diag::apply_text(text, &edits).unwrap();
+        assert!(after.contains("0 ..< ((x as U16) as U32) {"), "{after}");
+        assert!(crate::parse(FileId(0), &after).diagnostics.is_empty());
     }
 
     #[test]

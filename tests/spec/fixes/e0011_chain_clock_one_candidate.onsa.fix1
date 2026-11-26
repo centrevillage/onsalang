@@ -1,0 +1,36 @@
+// onsa.toml
+// [test]
+// spec = ["§3.1", "§3.3", "§11.3", "§18.1"]
+// fixes = 1
+
+// E0011 for a chain of `as` / `at` that is also an operand of a binary operator, where the second candidate of a ratio
+// is not offered (S-1078: only for `/` with an integer literal or a constant name on the right, see
+// e0011_chain_clock_ratio.onsa). One candidate: the chain and the whole parenthesized, `((p as F32) at sample) + 2.0`.
+// The operator is `+` or `*` (an expression `e at (sample * N)` is E0815 later, so it is no candidate), or the operator
+// is `/` with a right side that is a name that is no constant or a float literal. The runner applies the candidate and
+// checks that no E0011 is left. One error per declaration unit (§18.1).
+
+pub flow cast_then_sum(p: I16 at block) -> F32 at sample {
+  ((p as F32) at sample) + 2.0   //~ E0011
+}
+
+pub flow sum_then_cast(p: I16 at block) -> F32 at sample {
+  2.0 + ((p as F32) at sample)   //~ E0011
+}
+
+pub flow clock_chain_then_product(p: I32 at init) -> I32 at sample {
+  ((p at block) at sample) * 2   //~ E0011
+}
+
+pub flow cast_then_ratio_by_an_input(p: I16 at block, x: F32 at sample) -> F32 at sample {
+  ((p as F32) at sample) / x   //~ E0011
+}
+
+pub flow cast_then_ratio_by_a_float(p: I16 at block) -> F32 at sample {
+  ((p as F32) at sample) / 2.0   //~ E0011
+}
+
+pub flow clock_chain_in_a_let(p: F32 at init) -> F32 at sample {
+  let a = ((p at block) at sample) + 1.0   //~ E0011
+  a
+}

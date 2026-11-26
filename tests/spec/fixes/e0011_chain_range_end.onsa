@@ -1,0 +1,68 @@
+// onsa.toml
+// [test]
+// spec = ["§3.1", "§3.3", "§18.1"]
+// fixes = 1
+
+// E0011 for an `as` chain at an end of the range of a head (§3.3: "見出しの範囲の両端も同じ"). The range symbols are
+// weaker than `as`, so an `as` expression at an end is parenthesized, and a chain of them is parenthesized twice: the
+// one candidate is `0 ..< ((x as U16) as U32)`, with the ends of the head all in parentheses and one error for the
+// head (the two ends of one head are one error, §18.1). The runner applies the candidate and checks that no E0011 is
+// left. The heads are those of `for` in a `fn` and of `par` and `par~` in a flow (an `as` is no constant expression,
+// §4.5, so an E0417 of a later stage follows the candidate in those two); the forms with one `as` at an end and the
+// end `..=` are in negative/cast_operands.onsa, and the chains parenthesized in e0011_chain_parenthesized.onsa.
+
+const K: U8 = 3
+
+pub fn chain_at_the_end(x: U8) -> U32 {
+  var t: U32 = 0
+  for i in 0 ..< x as U16 as U32 {   //~ E0011
+    t = t + i
+  }
+  t
+}
+
+pub fn chain_at_the_start(x: U8) -> U32 {
+  var t: U32 = 0
+  for i in x as U16 as U32 ..< 9 {   //~ E0011
+    t = t + i
+  }
+  t
+}
+
+pub fn chains_at_both_ends(a: U8, b: U8) -> U32 {
+  var t: U32 = 0
+  for i in a as U16 as U32 ..< b as U16 as U32 {   //~ E0011
+    t = t + i
+  }
+  t
+}
+
+pub fn chain_in_a_sum_at_the_end(x: U8) -> U32 {
+  var t: U32 = 0
+  for i in 0 ..< x as U16 as U32 + 1 {   //~ E0011
+    t = t + i
+  }
+  t
+}
+
+pub fn cast_at_the_start_chain_at_the_end(a: U16, b: U8) -> U32 {
+  var t: U32 = 0
+  for i in a as U32 ..< b as U16 as U32 {   //~ E0011
+    t = t + i
+  }
+  t
+}
+
+pub flow chain_in_a_par(x: F32 at sample) -> F32 at sample {
+  let ys = par i in 0 ..< K as U16 as U32 {   //~ E0011
+    x * F32.round_from(i)
+  }
+  ys[0]
+}
+
+pub flow chain_in_a_par_tilde(x: F32 at sample) -> F32 at sample {
+  let ys = par~ i in 0 ..< K as U16 as U32 {   //~ E0011
+    prev~(x * F32.round_from(i))
+  }
+  ys[0]
+}

@@ -1,0 +1,35 @@
+// onsa.toml
+// [test]
+// spec = ["§3.1", "§3.3", "§11.3", "§18.1"]
+// fixes = 2
+
+// E0011 for a chain of `as` / `at` that ends in `at sample / N` with an integer literal on the right (§3.3, §11.3,
+// S-1078: "式の括弧の無い `x at sample / 2` は E0011 のまま、今の候補 `(x at sample) / 2` に `x at (sample / 2)` を並べる
+// （`/` で、右が整数のリテラルか定数の名前のときだけ）"). The form that the rule names is `<operand> at sample / 2`
+// with the chain before `at` as its operand, so the diagnostic has two candidates and each puts the inner `as` / `at`
+// in parentheses too, the operand of the `at` (§3.1): `((p as I32) at sample) / 2` and `(p as I32) at (sample / 2)`.
+// The runner applies each and checks that no E0011 is left after it (R-509 (4): the candidate that parenthesized only
+// the `at` left the chain). One error per declaration unit (§18.1). With another operator or another right side (one
+// candidate) the forms are in e0011_chain_clock_one_candidate.onsa, and the forms without a chain in
+// e0011_clock_ratio_two_candidates.onsa.
+
+fn id32(a: I32) -> I32 {
+  a
+}
+
+pub flow cast_then_ratio(p: I16 at block) -> I32 at sample {
+  (p as I32) at (sample / 2)   //~ E0011
+}
+
+pub flow clock_chain_then_ratio(p: I32 at init) -> I32 at sample {
+  (p at block) at (sample / 2)   //~ E0011
+}
+
+pub flow cast_then_ratio_in_a_let(p: I16 at block) -> I32 at sample {
+  let a = (p as I32) at (sample / 8)   //~ E0011
+  a
+}
+
+pub flow clock_chain_then_ratio_in_an_argument(p: I32 at init) -> I32 at sample {
+  id32((p at block) at (sample / 4))   //~ E0011
+}

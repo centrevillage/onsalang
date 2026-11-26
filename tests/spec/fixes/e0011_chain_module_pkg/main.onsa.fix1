@@ -1,0 +1,24 @@
+// onsa.toml
+// [test]
+// spec = ["§3.1", "§3.3", "§15.1", "§18.1"]
+// fixes = 1
+
+// E0011 for a chain of `as` that is an operand of a binary operator (§3.1, §3.3), in the root file and in a module
+// that it imports (units.onsa). The candidate is the same in both files and does not depend on where a name comes
+// from: the chain and the whole in parentheses, `((x as I32) as F64) + bias()`. One error in each function (§18.1);
+// the functions that use the module are in `fine`.
+
+use units
+use units.{bias, widen}
+
+pub fn sum(x: I16) -> F64 {
+  ((x as I32) as F64) + bias()   //~ E0011
+}
+
+pub fn sum_after_a_call(x: I16) -> F64 {
+  bias() + ((x as I32) as F64)   //~ E0011
+}
+
+pub fn fine(x: I16) -> F64 {
+  widen(x) + bias() + ((x as I32) as F64)
+}

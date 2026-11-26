@@ -1,0 +1,44 @@
+// onsa.toml
+// [test]
+// spec = ["§3.1", "§3.3", "§11.3"]
+// fixes = 0
+
+// The chains of `e0011_chain_*.onsa` with the parentheses written (§3.1, §3.3: the second operand of `as` and `at` and
+// the operand of a binary operator or of a range symbol are in parentheses): no E0011 and no candidate. The parentheses
+// are not redundant, so `onsa fmt` keeps them (spec/tools.md §3.3).
+
+pub fn chain_then_sum(x: I16) -> F64 {
+  ((x as I32) as F64) + 1.0
+}
+
+pub fn a_cast_and_a_chain(x: U16, y: U8) -> U32 {
+  (x as U32) + ((y as U16) as U32)
+}
+
+pub fn a_chain_of_three_in_a_product(x: I8) -> F64 {
+  (((x as I16) as I32) as F64) * 2.0
+}
+
+pub fn a_chain_alone(x: I16) -> F64 {
+  (x as I32) as F64
+}
+
+pub fn chain_at_the_end(x: U8) -> U32 {
+  var t: U32 = 0
+  for i in 0 ..< ((x as U16) as U32) {
+    t = t + i
+  }
+  t
+}
+
+pub flow cast_then_sum(p: I16 at block) -> F32 at sample {
+  ((p as F32) at sample) + 2.0
+}
+
+pub flow clock_chain_then_ratio_by_the_operator(p: I32 at init) -> I32 at sample {
+  ((p at block) at sample) / 2
+}
+
+pub flow clock_chain_then_ratio_by_the_clock(p: I32 at init) -> I32 at sample {
+  ((p at block) at (sample / 2)) at sample
+}
