@@ -58,7 +58,7 @@ pub(crate) fn lower_flow_expr(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId) -> R<O
                 saved_reads(lw, cx, &mut stmts, &info.node(id).saved, (name, info.node(id).owner))?;
             }
             // Of a chain, read by the ops of its entry (§11.10).
-            if n.chain.is_empty() {
+            if !n.chained_delay() {
                 delay_value(lw, cx, &mut stmts, &state, id)?
             } else {
                 let v = super::chain::entry(lw, cx, &mut stmts, id, &state)?;
@@ -172,7 +172,7 @@ pub(super) fn delay_work(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, i
     if stage == ClockStage::Init {
         super::phases::init_delay(lw, cx, out, id)?;
     }
-    if saving || n.chain.is_empty() {
+    if saving || !n.chained_delay() {
         return Ok(());
     }
     // Its entry of a stage of a condition slower than it, or the conditions alone.
@@ -216,7 +216,7 @@ pub(super) fn saved_reads(
         let (info, span) = (cx.flow.as_ref().expect("flow context").info, cx.ast.expr(e).span);
         let owner = info.hoist_of(e).map_or(of.1, |h| info.hoist(h).owner);
         let mut loops = Vec::new();
-        for p in around(info, owner).into_iter().skip(around(info, of.1).len()) {
+        for p in info.around(owner).into_iter().skip(info.around(of.1).len()) {
             let state = super::branches::here(cx, span)?.1;
             let (r, elem) = replicas(lw, cx, p, &state, span)?;
             cx.flow.as_mut().unwrap().push_scope(elem);
@@ -240,7 +240,7 @@ pub(super) fn saved_reads(
 /// stage reads: a `let` ([`super::chain::hold`]); in a `par~`, whose loop ends
 /// before, the element of the replica of a local of the function.
 fn keep(cx: &mut FnCx, out: &mut Vec<Stmt>, (name, owner): (&str, Owner), v: Expr) -> R<Expr> {
-    let pars = around(cx.flow.as_ref().expect("flow context").info, owner);
+    let pars = cx.flow.as_ref().expect("flow context").info.around(owner);
     if pars.is_empty() {
         return Ok(super::chain::hold(cx, out, v, name));
     }

@@ -46,7 +46,7 @@ mod effect_notes;
 mod empty_brackets;
 mod error_type_sweep;
 mod event_burst_commands;
-mod event_gate_rules;
+mod event_head_commands;
 mod event_insertions;
 mod event_interface_rules;
 mod event_modifier_commands;

@@ -85,6 +85,9 @@ pub fn run_all_with(root: &Path, update: Update) -> Report {
             .failures
             .push("no graph of a flow was checked for a cycle of solid edges (`onsa graph`, spec/tools.md)".into());
     }
+    if report.cases.iter().all(|c| c.run.graph_frames == 0) {
+        report.failures.push("no frame of a graph was checked for its properties (`onsa graph`, spec/tools.md)".into());
+    }
     if report.cases.iter().all(|c| c.run.fix_copies == 0 && c.run.copies_rewritten.is_empty()) {
         report.failures.push("no copy of the text after the candidates (.fixK) was compared".into());
     }

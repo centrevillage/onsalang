@@ -56,27 +56,7 @@ pub(super) fn table(n: &PlanNode, heads: &[ClockStage], to: Option<(ClockStage, 
         Some(d) if !wider(n, d, n.bounds.len() as u32) => Read::Array(d),
         _ => Read::Run,
     };
-    // Where the caller reads it: its output moved out of the outermost boundary.
-    let read_at = n.bounds.last().and_then(|l| Some(bounds::step(ClockStage::Tick(l.out?), l.ratio)));
-    let entries = level.into_iter().map(|(caller, ops)| {
-        let mut writes = false;
-        Op::walk(&ops, &mut |op| {
-            writes |= match *op {
-                _ if op.makes_value() => true,
-                Op::Run { out: Out::Deal(b), .. }
-                | Op::Hold { out: Out::Deal(b), .. }
-                | Op::Deal { to: To::Array(b), .. } => read == Read::Array(b) && read_at == Some(caller),
-                // A reset of the array read, before it is read (§11.10).
-                Op::Reset { at } => {
-                    matches!(read, Read::Array(b) if n.reset_parts(at).contains(&Part::Deal(b)))
-                        && read_at == Some(caller)
-                }
-                _ => false,
-            }
-        });
-        Entry { caller, read: writes, ops }
-    });
-    (entries.collect(), read)
+    (level.into_iter().map(|(caller, ops)| Entry { caller, ops }).collect(), read)
 }
 
 /// Whether the window of the array of the boundary `to` of `n` (of the

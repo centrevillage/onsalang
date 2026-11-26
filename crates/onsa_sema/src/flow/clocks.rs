@@ -745,7 +745,7 @@ impl Walk<'_> {
             ops.push((Some(arm.body), body));
         }
         if record {
-            self.tilde.insert(e, TildeMatch { arms: bound, pars: self.recorder.pars() });
+            self.tilde.insert(e, TildeMatch { arms: bound, owner: self.recorder.owner_now() });
         }
         self.join(e, &ops)
     }

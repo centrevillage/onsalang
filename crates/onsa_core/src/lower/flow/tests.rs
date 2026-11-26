@@ -328,6 +328,28 @@ fn a_condition_of_an_event_is_kept_before_the_stage_of_the_event() {
     in_order(&event_fn(f, "f.tick"), &["let y.prev_0@5: Bool = s.0\n", "t.gen.tick(", "t.f.ev_0(", "if y.prev_0@5 {"]);
 }
 
+/// §3.5: a field read as a condition is kept in a local only in a function
+/// a call gives out events in; not in a `tick` with events of an input
+/// alone (`a`), nor in one whose call gives them out in the function of the
+/// event of an input (`b`: `fwd~(m)`).
+#[test]
+fn a_condition_of_a_field_is_read_in_place_where_no_call_gives_events() {
+    let flow = |name: &str, call: &str, cond: &str| {
+        format!(
+            "pub flow {name}(m: U32 at event, x: U32 at sample) -> U32 at sample {{\n{call}  cnt~(x).when~(({cond} > 3) at sample)\n}}\n"
+        )
+    };
+    let src = format!(
+        "flow fwd(m: U32 at event) -> U32 at event {{ Some(m) }}\nflow cnt(x: U32 at sample) -> U32 at sample {{ x / 2 }}\n{}{}",
+        flow("a", "", "m"),
+        flow("b", "  let e = fwd~(m)\n", "e")
+    );
+    for name in ["a", "b"] {
+        let t = tick(&src, name);
+        assert!(!t.contains("__cond") && t.contains("  if s."), "{name}:\n{t}");
+    }
+}
+
 /// S-1240, S-1249: what a delay stores reads an event with no `^` in a local
 /// made where it is written, after the work in it and whatever a condition
 /// with a `^` chooses; a `^name` at the end of the stage. A part of

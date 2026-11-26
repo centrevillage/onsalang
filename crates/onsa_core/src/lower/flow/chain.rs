@@ -508,7 +508,7 @@ fn give(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, w: &Walk, v: Expr)
     };
     let some = super::event_option(lw.a, span)?.keep;
     let event = payload(lw, v.clone(), some, 0)?;
-    let vars = around(w.info, w.n.owner).into_iter().map(|p| range(w.info, p, span));
+    let vars = w.info.around(w.n.owner).into_iter().map(|p| range(w.info, p, span));
     let vars = vars.map(|r| Ok(local_expr(cx, LocalId(r?.0.0), span)));
     let inputs = vars.chain([Ok(event)]).collect::<R<Vec<_>>>()?;
     let gave = gave.map(|g| Ok((g.place()?, g.next))).transpose()?;
@@ -674,15 +674,15 @@ pub(super) fn inputs_of(
 
 /// `v` as a value read later (§3.5): a `let` in `out`, of a place with an
 /// index too, whose panic is here ([`materialize`] leaves it where the place
-/// is read); a literal and a place with no index as they are, but, in a flow
-/// with events, a field: the stage of an event may write it before the read
-/// (§11.11).
+/// is read); a literal and a place with no index as they are, but, in a
+/// function a call gives out events in (their `parent`), a field: the stage
+/// of an event may write it before the read (§11.11).
 pub(super) fn hold(cx: &mut FnCx, out: &mut Vec<Stmt>, v: Expr, name: &str) -> Expr {
     let mut place = &v;
     while let ExprKind::Field { base, .. } = &place.kind {
         place = base;
     }
-    let events = cx.flow.as_ref().is_some_and(|f| !f.info.events.is_empty());
+    let events = cx.flow.as_ref().is_some_and(|f| f.info.events.iter().any(|p| p.parent == Some(f.now.stage)));
     let field = matches!(v.kind, ExprKind::Field { .. });
     if matches!(place.kind, ExprKind::Lit(_) | ExprKind::Local(_)) && !(events && field) {
         return v;

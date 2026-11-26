@@ -4,7 +4,7 @@
 
 use super::flow::PanicAt;
 use super::interp_host::Wrappers;
-use super::walk::{Panic, Skip, TestRun, Verdict, run_case};
+use super::walk::{Event, Panic, Skip, TestRun, Verdict, run_case};
 use onsa_driver::PackageInput;
 
 // `acc` is a running sum: 1 2 3 4 gives 1 3 6 10. `gain` multiplies by a `block` value, `off` adds an `init` one, `inv` is
@@ -82,6 +82,42 @@ fn reset_puts_the_state_back_and_two_states_of_a_flow_are_apart() {
   assert out[3] == 20.0
 }");
     assert_eq!((r.verdict, r.asserts, r.panic), (Verdict::Ok, 4, None));
+}
+
+#[test]
+fn a_state_made_in_a_loop_is_made_again_each_pass_and_the_pass_reads_its_own() {
+    // §7: the body of a `for` runs once for each value, with its `var` made afresh. `acc` of 1 2 gives 1 3 on each pass (a
+    // state of the pass before would give 6 9 on the second); `off` has the config `n` of the pass, 1 2 3 + n. The three
+    // passes of the first loop make states 0 1 2, the two of the loop after it 3 4 (an `init` of each pass is an event).
+    let r = one("test \"loop\" {
+  let xs: [F32; 2] = [1.0, 2.0]
+  for n in 0 ..< 3 {
+    var out: [F32; 2] = [0.0; 2]
+    var st = acc.init(8.0)
+    acc.process(inout st, xs, inout out)
+    assert out[0] == 1.0
+    assert out[1] == 3.0
+    assert n < 3
+  }
+  for n in 1 ..< 3 {
+    var out: [F32; 3] = [0.0; 3]
+    var st = off.init(off.Config { c: F32.round_from(n) }, 8.0)
+    off.process(inout st, ramp(), inout out)
+    assert out[0] == 1.0 + F32.round_from(n)
+    assert out[2] == 3.0 + F32.round_from(n)
+  }
+}");
+    assert_eq!((&r.verdict, r.asserts, r.panic), (&Verdict::Ok, 13, None));
+    let used: Vec<(usize, usize)> = r
+        .events
+        .iter()
+        .filter_map(|e| match e {
+            Event::Init { state, .. } => Some((0, *state)),
+            Event::Process { state, .. } => Some((1, *state)),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(used, [(0, 0), (1, 0), (0, 1), (1, 1), (0, 2), (1, 2), (0, 3), (1, 3), (0, 4), (1, 4)]);
 }
 
 #[test]

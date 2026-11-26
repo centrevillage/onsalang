@@ -382,18 +382,21 @@ pub(super) fn levels(
 /// (`feed`), and the part at the tick of its grid, in W (§11.10: "呼び出し側の値を、部品の中の刻みの時点で読む").
 fn when_level(inside: &Level, cond: ExprId) -> Level {
     let w = inside.out.min(0);
-    let slow = inside.ins.iter().flatten().copied().filter(|k| *k < w);
-    let stages: BTreeSet<i32> = inside.stages.iter().map(|y| (*y).max(w)).chain([w, 0]).chain(slow).collect();
-    Level {
+    let mut part = Level {
         ratio: 0,
         ins: inside.ins.clone(),
         out: inside.out,
         gathers: Vec::new(),
         deals: false,
-        stages: stages.into_iter().collect(),
+        stages: Vec::new(),
         made: w,
         guard: Some(Guard { kind: Modifier::When, cond, w, at: w, port: None, ev: false }),
-    }
+    };
+    // The stages the part runs in are those inside moved out by `outer` (the one rule of what a `when~` runs in W), W and the `sample`, and the tick of an input slower than W. The moving shows in no value (`run_when` does nothing in a stage slower than W, so a mutant of it passes the gate and `heavy_`); it is kept so that `stages` says what the part runs in.
+    let slow = inside.ins.iter().flatten().copied().filter(|k| *k < w);
+    let stages: BTreeSet<i32> = inside.stages.iter().map(|y| part.outer(*y)).chain([w, 0]).chain(slow).collect();
+    part.stages = stages.into_iter().collect();
+    part
 }
 
 /// The part that a `.reset_if~(c)` makes of the part `inside` (§11.10): the same ports, stages and output (made again at R where that is later), and the tick R of `c` (`cond_tick`), a stage of it (once a frame, before the

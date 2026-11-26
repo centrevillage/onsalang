@@ -630,3 +630,42 @@ fn an_event_to_a_block_input_of_another_package_has_no_candidate() {
     assert_eq!(candidates(crate::analyze(&user)), 0);
     assert_eq!(candidates(check(&format!("{held}\n{caller}"))), 1);
 }
+
+/// The edges of the walk that `to` reads, by the name of the local read
+/// (`from`) and whether it is read a tick later.
+fn reads_of(f: &Found, to: crate::flow::Vertex) -> Vec<(String, bool)> {
+    let locals = &f.a.flows[&f.flow].body.locals;
+    let named = |v: crate::flow::Vertex| match v {
+        crate::flow::Vertex::Local(l) => locals[l.0 as usize].name.clone(),
+        other => format!("{other:?}"),
+    };
+    f.walked.edges.iter().filter(|e| e.to == to).map(|e| (named(e.from), e.lookback)).collect()
+}
+
+/// W7-15 U3 (5), §11.4 and §18.1: only a node that was recorded reads its
+/// first argument a tick later. A delay of a type that has no `Default` and
+/// no `init` is an E0816 and has no node (the plan of the flow is none), so
+/// what its first argument reads is read by the reader around it as it
+/// reads it, and the reader's own look-back is kept for what that reader
+/// reads after the delay.
+#[test]
+fn a_delay_that_is_no_node_leaves_the_look_back_of_the_reader_around_it() {
+    use crate::flow::{NodeId, Vertex};
+    let head = "pub rt fn pick(c: Char) -> F32 {\n  if c == 'a' { 1.0 } else { 0.0 }\n}\n";
+    let flow = |a: &str| {
+        format!(
+            "{head}pub flow f(x: F32 at sample) -> F32 at sample {{\n  let v: Char = if x > 0.0 {{ 'a' }} else {{ 'b' }}\n  let a = {a}\n  a\n}}\n"
+        )
+    };
+    // The reader is a `let` that is no look-back: `v` is read at once.
+    let f = walk_of(&flow("pick(prev~(v))"), "f");
+    assert_eq!(f.code(), Some(onsa_diag::Code::E0816), "{:?}", f.walked.diag);
+    assert!(f.walked.recorded.is_empty(), "the delay has no node");
+    assert_eq!(reads_of(&f, Vertex::Let(1)), [("v".to_string(), false)]);
+    // The reader is a delay (a node) that holds the failed one in its first
+    // argument: what it reads after the failed delay is read a tick later, as `v` is.
+    let f = walk_of(&flow("prev~(pick(prev~(v)) + x)"), "f");
+    assert_eq!(f.code(), Some(onsa_diag::Code::E0816), "{:?}", f.walked.diag);
+    assert_eq!(f.walked.recorded.len(), 1, "the outer delay only");
+    assert_eq!(reads_of(&f, Vertex::Node(NodeId(0))), [("v".to_string(), true), ("x".to_string(), true)]);
+}

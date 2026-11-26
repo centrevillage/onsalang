@@ -379,6 +379,10 @@ fn the_most_events_of_a_run() {
              flow of(d: U32 at event) -> U32 at event {{\n  let a = fwd~(d)\n  Some(a)\n}}\n\
              pub flow top(m: U32 at event, c: Bool at sample) -> U32 at event {{\n  let _ = (m, c)\n  let d = {d}\n  Some(d)\n}}\n"
         ));
+        // Of every entry of each flow, the count of the Core's drive.
+        for n in a.flows.values().flat_map(|g| &g.nodes) {
+            n.entries.iter().for_each(|e| assert_eq!(super::most(n, &e.ops), driven(n, &e.ops), "{d}: {}", n.path));
+        }
         let f = flow(&a, "top");
         (stage(f, f.emit.expect("a stage")), f.burst)
     };
@@ -431,6 +435,32 @@ fn the_most_events_of_a_run() {
     assert!(!a.diagnostics.is_empty() && a.diagnostics.iter().all(|d| d.code == onsa_diag::Code::E0808));
     assert_eq!(flow(&a, "one").burst, 1 << 24);
     assert_eq!(flow(&a, "top").burst, u32::MAX);
+}
+
+/// The runs of the head of `n` that give out events in `ops` as the Core
+/// drives them (`phases::drive`), not as [`super::most`] counts them: the
+/// N runs j of an `.up~` (j = 0 alone of its `once`), in each the ops of a
+/// stage at each j a multiple of its N ([`crate::clock::Ratio::made_n`]),
+/// those of `sample` at each; a guard as if it ran.
+fn driven(n: &super::super::PlanNode, ops: &[Op]) -> u32 {
+    let runs = |op: &Op| match op {
+        Op::Run { out: Out::Event, .. } => 1,
+        Op::When { ops, .. } => driven(n, ops),
+        Op::Each { once: true, groups, .. } => groups.iter().map(|g| driven(n, &g.1)).sum(),
+        Op::Each { bound, groups, .. } => {
+            let up = n.bounds[*bound as usize].ratio.n().expect("an N");
+            let at = |y: ClockStage, j: u64| match y {
+                ClockStage::SAMPLE => true,
+                ClockStage::Tick(k) => j & (k.made_n().expect("a counter") - 1) == 0,
+                _ => panic!("{}: a run of no tick in an `.up~`", n.path),
+            };
+            let each =
+                |(y, ops): &(ClockStage, Vec<Op>)| (0..up).filter(|&j| at(*y, j)).count() as u32 * driven(n, ops);
+            groups.iter().map(each).sum()
+        }
+        _ => 0,
+    };
+    ops.iter().map(runs).sum()
 }
 
 /// The stage that ticks the events of a maker under a guard and an `.up~`

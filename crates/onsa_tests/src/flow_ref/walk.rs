@@ -437,7 +437,7 @@ impl<'a> Walk<'_, 'a> {
         Ok((sample_rate, rest))
     }
 
-    /// The state `inout st` names, made by the `var` of its local.
+    /// The state `inout st` names, made by the `var` of its local: the last one it made (a `var` in the body of a `for` makes one for each pass).
     fn state<'s>(
         states: &'s mut [(LocalId, Instance<'a>)],
         body: Body<'a>,
@@ -447,7 +447,7 @@ impl<'a> Walk<'_, 'a> {
         let Ok(Target::Local(l)) = body.target(arg.expr) else {
             return Err(Fault::Unavailable("a state that is no local").into());
         };
-        let at = states.iter().position(|(m, _)| m == l).ok_or(Fault::Internal("a state that was not made"))?;
+        let at = states.iter().rposition(|(m, _)| m == l).ok_or(Fault::Internal("a state that was not made"))?;
         Ok((at, &mut states[at].1))
     }
 

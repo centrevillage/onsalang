@@ -20,7 +20,7 @@ use std::collections::BTreeSet;
 use super::twin::Rng;
 use super::twin_reset::reset_cond;
 use super::twin_when::{
-    Cond, HEADER, Head, Mod, Plan, SIGNATURE, cond_at, fits, flow_body, lets, net, program, tests, w_of,
+    Cond, FRAMES, HEADER, Head, Mod, Plan, SIGNATURE, cond_at, fits, flow_body, lets, net, program, signal, tests, w_of,
 };
 
 /// The time alone, in the three writings a seed picks from: bare, mixed with an `init` value (`sample_rate()` is 8 in the tests), mixed with a `block` value.
@@ -118,6 +118,30 @@ fn with(m: &Mod, text: &str) -> Mod {
     }
 }
 
+/// The calls of `process` cut at 3, 7, 12 and 13 frames with `cb` true in the first call and false in the second, of `fa` and `fb`, which must give the same frames (S-1230,
+/// the break side: the condition of the time alone is "the time that the grid of its clock kept at its last tick", so a `block` value in it and the part `fb` writes the same way
+/// have to keep the value of the last tick over a change of `cb` between two calls, whichever tick the cut falls on). They are the last lines of the test `chunks`, in `tail`.
+fn cuts(rng: &mut Rng, tail: &str) -> String {
+    let body = tail.strip_suffix("}\n").unwrap_or_else(|| panic!("a test block ends the program: {tail}"));
+    let mut t = format!("{body}  let cc: [Bool; {FRAMES}] = [{}]\n", signal(rng));
+    for (n, cut) in [3, 7, 12, 13].into_iter().enumerate() {
+        let calls = [(0, cut, "true"), (cut, FRAMES, "false")];
+        for f in ["fa", "fb"] {
+            t += &format!("  var sc{f}{n} = {f}.init({f}.Config {{ ci: true, cti: true, cfi: false }}, 8.0)\n");
+            for (m, (from, to, cb)) in calls.iter().enumerate() {
+                t += &format!("  var oc{f}{n}_{m}: [F32; {0}] = [0.0; {0}]\n", to - from);
+                t += &format!(
+                    "  {f}.process(inout sc{f}{n}, {f}.Params {{ cb: {cb}, ct: true, cf: false }}, cc.slice({from}, {to}), inout oc{f}{n}_{m})\n"
+                );
+            }
+        }
+        for (m, (from, to, _)) in calls.iter().enumerate() {
+            (0..to - from).for_each(|i| t += &format!("  assert ocfa{n}_{m}[{i}] == ocfb{n}_{m}[{i}]\n"));
+        }
+    }
+    t + "}\n"
+}
+
 /// The program of a seed of the family `time_at` (with `rot`, `fb` has the mutant), and the forms it holds.
 pub fn make_at(seed: u64, rot: bool) -> (String, BTreeSet<&'static str>) {
     let mut rng = Rng::new(seed);
@@ -125,7 +149,8 @@ pub fn make_at(seed: u64, rot: bool) -> (String, BTreeSet<&'static str>) {
     let mut fb = s.all.clone();
     fb[s.ti] = with(&s.all[s.ti], &text_at(&s, rot));
     let plan = Plan { kind: "time", head: s.head, fa: s.all.clone(), fb, at: vec![s.ti] };
-    (program(&mut rng, &plan), s.tags)
+    let text = program(&mut rng, &plan);
+    (cuts(&mut rng, &text), s.tags)
 }
 
 /// The program of a seed of the family `time_port`, and the forms it holds.
@@ -145,5 +170,6 @@ pub fn make_port(seed: u64, rot: bool) -> (String, BTreeSet<&'static str>) {
         lets(s.head, rest),
         chain_text(rest)
     );
-    (format!("{HEADER}{gp}{fa}{fb}{}", tests(&mut rng)), s.tags)
+    let tests = tests(&mut rng);
+    (format!("{HEADER}{gp}{fa}{fb}{}", cuts(&mut rng, &tests)), s.tags)
 }

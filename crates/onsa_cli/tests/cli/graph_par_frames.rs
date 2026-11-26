@@ -706,17 +706,30 @@ fn the_label_of_a_constant_let_has_no_clock_and_is_gray() {
     let dot = graph_of(LABELS, "labels");
     let two = dot.node("two");
     assert_eq!(clock_of_color(two), "init", "a constant is gray (§1.1)");
-    // SPEC-GAP(S-397): §1.1 gives a `let` the label `名前 = 式の種類: 型 at クロック` and does not say what a constant has for a clock;
-    // the provisional form writes no clock (there is no name for it after `at`).
+    // §1.1: a constant `let` writes no clock.
     assert_eq!(dot.label("two"), "two: F32");
 }
 
 #[test]
 fn the_label_of_a_delay_is_its_kind_without_the_length() {
     let dot = graph_of(LABELS, "labels");
-    // SPEC-GAP(S-397): §1.1 writes the label of a node `saw_0 = saw~: 型 at クロック` and does not say whether a delay shows its length
-    // and its maximum; the provisional form shows the kind only.
+    // §1.1: a delay is its kind only, with no length and no maximum.
     assert_eq!(dot.label("d"), "d = delay~: F32 at sample");
+}
+
+#[test]
+fn the_label_of_a_delay_with_a_chain_has_its_modifiers_after_its_kind() {
+    let dot = graph_of(LABELS, "chained");
+    // §1.1: a delay is its kind only, with no length.
+    // SPEC-GAP(S-1084): the modifiers of its chain follow the kind, in their order, a condition as `(…)` (the provisional (2), as of an
+    // instance: `lp~.down~(4)`); a delay with no chain has none.
+    for (id, label) in [
+        ("q", "q = prev~.when~(…): F32 at sample"),
+        ("r", "r = delay~.reset_if~(…): F32 at sample"),
+        ("d", "d = delay~: F32 at sample"),
+    ] {
+        assert_eq!(dot.label(id), label);
+    }
 }
 
 #[test]

@@ -108,16 +108,6 @@ pub(super) fn range(info: &FlowInfo, id: NodeId, span: Span) -> R<(onsa_sema::Lo
     }
 }
 
-/// The `par~`s (and the `par`s) around what `owner` owns, the outermost first.
-pub(super) fn around(info: &FlowInfo, mut owner: Owner) -> Vec<NodeId> {
-    let mut pars = Vec::new();
-    while let Owner::Par(p) = owner {
-        pars.insert(0, p);
-        owner = info.node(p).owner;
-    }
-    pars
-}
-
 /// The replicas of the `par~` `id`, with the locals of a loop over them in
 /// `cx`, and the state of the one of the iteration in `state` (or it, of none).
 pub(super) fn replicas(lw: &Lowerer, cx: &mut FnCx, id: NodeId, state: &Expr, span: Span) -> R<(Replicas, Expr)> {
@@ -339,10 +329,10 @@ impl<'b> Gen<'b> {
                 info.bound_at.get(b).is_some_and(|r| r.iter().any(|&s| info.run_stage(s) == stage))
             };
             for &b in t.arms.iter().flatten().filter(here) {
-                let pars = if info.store_bindings.contains(&b) { &t.pars[..] } else { &[] };
+                let pars = if info.store_bindings.contains(&b) { info.around(t.owner) } else { Vec::new() };
                 let local = &self.cx.locals[b.0 as usize];
                 let (name, ty) = (format!("__bind.{}", local.name), local.ty.clone());
-                let place = replicas_place(&mut self.cx, &mut self.stmts, &name, ty, pars, span)?;
+                let place = replicas_place(&mut self.cx, &mut self.stmts, &name, ty, &pars, span)?;
                 self.flow().now.local_override.insert(b.0, place);
             }
         }

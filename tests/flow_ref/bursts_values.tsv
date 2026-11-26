@@ -142,86 +142,86 @@ reset 1
 process 1 frames=4
 out=[1 203 405 607]
 init 2 bursts_values.combo sr=0x41000000
-process 0 params p=0x40a00000 frames=1
-out=[0x4b05bedc]
-reset 0
-process 0 params p=0x3f800000 frames=12
+process 2 params p=0x40a00000 frames=1
+out=[0x4b05be58]
+reset 2
+process 2 params p=0x3f800000 frames=12
 out=[0x4a83ddf0 0x4b05be63 0x4a83de1c 0x4b05be79 0x4a83de48 0x4b05be8f 0x4a83de74 0x4b05bea5 0x4a83dea0 0x4b05bebb 0x4a83decc 0x4b05bed1]
 init 3 bursts_values.time_burst sr=0x41000000
-process 1 frames=1
-out=[809]
-reset 1
-process 1 frames=4
+process 3 frames=1
+out=[1]
+reset 3
+process 3 frames=4
 out=[1 203 405 607]
 init 4 bursts_values.combo sr=0x41000000
-process 0 params p=0x40a00000 frames=2
-out=[0x4b05bedc 0x4b498e47]
-reset 0
-process 0 params p=0x3f800000 frames=12
+process 4 params p=0x40a00000 frames=2
+out=[0x4b05be58 0x4b498dc3]
+reset 4
+process 4 params p=0x3f800000 frames=12
 out=[0x4a83ddf0 0x4b05be63 0x4a83de1c 0x4b05be79 0x4a83de48 0x4b05be8f 0x4a83de74 0x4b05bea5 0x4a83dea0 0x4b05bebb 0x4a83decc 0x4b05bed1]
 init 5 bursts_values.time_burst sr=0x41000000
-process 1 frames=2
-out=[809 1011]
-reset 1
-process 1 frames=4
+process 5 frames=2
+out=[1 203]
+reset 5
+process 5 frames=4
 out=[1 203 405 607]
 init 6 bursts_values.combo sr=0x41000000
-process 0 params p=0x40a00000 frames=3
-out=[0x4b05bedc 0x4b498e47 0x4b05bef2]
-reset 0
-process 0 params p=0x3f800000 frames=12
+process 6 params p=0x40a00000 frames=3
+out=[0x4b05be58 0x4b498dc3 0x4b05be6e]
+reset 6
+process 6 params p=0x3f800000 frames=12
 out=[0x4a83ddf0 0x4b05be63 0x4a83de1c 0x4b05be79 0x4a83de48 0x4b05be8f 0x4a83de74 0x4b05bea5 0x4a83dea0 0x4b05bebb 0x4a83decc 0x4b05bed1]
 init 7 bursts_values.time_burst sr=0x41000000
-process 1 frames=3
-out=[809 1011 1213]
-reset 1
-process 1 frames=4
+process 7 frames=3
+out=[1 203 405]
+reset 7
+process 7 frames=4
 out=[1 203 405 607]
 init 8 bursts_values.combo sr=0x41000000
-process 0 params p=0x40a00000 frames=4
-out=[0x4b05bedc 0x4b498e47 0x4b05bef2 0x4b498e5d]
-reset 0
-process 0 params p=0x3f800000 frames=12
+process 8 params p=0x40a00000 frames=4
+out=[0x4b05be58 0x4b498dc3 0x4b05be6e 0x4b498dd9]
+reset 8
+process 8 params p=0x3f800000 frames=12
 out=[0x4a83ddf0 0x4b05be63 0x4a83de1c 0x4b05be79 0x4a83de48 0x4b05be8f 0x4a83de74 0x4b05bea5 0x4a83dea0 0x4b05bebb 0x4a83decc 0x4b05bed1]
 init 9 bursts_values.time_burst sr=0x41000000
-process 1 frames=4
-out=[809 1011 1213 1415]
-reset 1
-process 1 frames=4
+process 9 frames=4
+out=[1 203 405 607]
+reset 9
+process 9 frames=4
 out=[1 203 405 607]
 init 10 bursts_values.combo sr=0x41000000
-process 0 params p=0x40a00000 frames=5
-out=[0x4b05bedc 0x4b498e47 0x4b05bef2 0x4b498e5d 0x4b05bf08]
-reset 0
-process 0 params p=0x3f800000 frames=12
+process 10 params p=0x40a00000 frames=5
+out=[0x4b05be58 0x4b498dc3 0x4b05be6e 0x4b498dd9 0x4b05be84]
+reset 10
+process 10 params p=0x3f800000 frames=12
 out=[0x4a83ddf0 0x4b05be63 0x4a83de1c 0x4b05be79 0x4a83de48 0x4b05be8f 0x4a83de74 0x4b05bea5 0x4a83dea0 0x4b05bebb 0x4a83decc 0x4b05bed1]
 init 11 bursts_values.time_burst sr=0x41000000
-process 1 frames=5
-out=[809 1011 1213 1415 1617]
-reset 1
-process 1 frames=4
+process 11 frames=5
+out=[1 203 405 607 809]
+reset 11
+process 11 frames=4
 out=[1 203 405 607]
 init 12 bursts_values.combo sr=0x41000000
-process 0 params p=0x40a00000 frames=6
-out=[0x4b05bedc 0x4b498e47 0x4b05bef2 0x4b498e5d 0x4b05bf08 0x4b498e73]
-reset 0
-process 0 params p=0x3f800000 frames=12
+process 12 params p=0x40a00000 frames=6
+out=[0x4b05be58 0x4b498dc3 0x4b05be6e 0x4b498dd9 0x4b05be84 0x4b498def]
+reset 12
+process 12 params p=0x3f800000 frames=12
 out=[0x4a83ddf0 0x4b05be63 0x4a83de1c 0x4b05be79 0x4a83de48 0x4b05be8f 0x4a83de74 0x4b05bea5 0x4a83dea0 0x4b05bebb 0x4a83decc 0x4b05bed1]
 init 13 bursts_values.time_burst sr=0x41000000
-process 1 frames=6
-out=[809 1011 1213 1415 1617 1819]
-reset 1
-process 1 frames=4
+process 13 frames=6
+out=[1 203 405 607 809 1011]
+reset 13
+process 13 frames=4
 out=[1 203 405 607]
 init 14 bursts_values.combo sr=0x41000000
-process 0 params p=0x40a00000 frames=7
-out=[0x4b05bedc 0x4b498e47 0x4b05bef2 0x4b498e5d 0x4b05bf08 0x4b498e73 0x4b05bf1e]
-reset 0
-process 0 params p=0x3f800000 frames=12
+process 14 params p=0x40a00000 frames=7
+out=[0x4b05be58 0x4b498dc3 0x4b05be6e 0x4b498dd9 0x4b05be84 0x4b498def 0x4b05be9a]
+reset 14
+process 14 params p=0x3f800000 frames=12
 out=[0x4a83ddf0 0x4b05be63 0x4a83de1c 0x4b05be79 0x4a83de48 0x4b05be8f 0x4a83de74 0x4b05bea5 0x4a83dea0 0x4b05bebb 0x4a83decc 0x4b05bed1]
 init 15 bursts_values.time_burst sr=0x41000000
-process 1 frames=7
-out=[809 1011 1213 1415 1617 1819 2021]
-reset 1
-process 1 frames=4
+process 15 frames=7
+out=[1 203 405 607 809 1011 1213]
+reset 15
+process 15 frames=4
 out=[1 203 405 607]

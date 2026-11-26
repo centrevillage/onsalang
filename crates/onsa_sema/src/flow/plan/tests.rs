@@ -195,10 +195,10 @@ pub flow f(x: F32 at sample, k: U32 at sample) -> F32 at sample {
     assert!(a.diagnostics.is_empty(), "{:?}", a.diagnostics);
     let f = flow(&a, "f");
     let [o, i] = f.tilde_matches.values().collect::<Vec<_>>()[..] else { panic!("{:?}", f.tilde_matches) };
-    assert_eq!((o.arms.iter().map(Vec::len).collect::<Vec<_>>(), o.pars.as_slice()), (vec![1, 0], &[][..]));
+    assert_eq!((o.arms.iter().map(Vec::len).collect::<Vec<_>>(), f.around(o.owner)), (vec![1, 0], vec![]));
     assert_eq!(
-        (i.arms.iter().map(Vec::len).collect::<Vec<_>>(), i.pars.as_slice()),
-        (vec![0, 1], &[named(f, "s.par_0")][..])
+        (i.arms.iter().map(Vec::len).collect::<Vec<_>>(), f.around(i.owner)),
+        (vec![0, 1], vec![named(f, "s.par_0")])
     );
     // `n` is read in the first argument of a delay, `v` in that of an instance.
     assert_eq!(f.store_bindings.iter().copied().collect::<Vec<_>>(), [i.arms[1][0]]);
@@ -241,7 +241,7 @@ pub flow u(x: F32 at sample) -> F32 at sample {
     let bounds: Vec<_> = d.bounds.iter().map(|b| (b.at, b.gathers.len(), b.deals)).collect();
     assert_eq!(bounds, [(0, 0, false), (1, 0, false)]);
     // The output made at `sample / 2` inside the `.down~(2)`, at `sample` out of the `.up~(2)`.
-    assert_eq!(drawn(d), "0*: Each(1,j)[-1: R(0,V)]   read=Run");
+    assert_eq!(drawn(d), "0: Each(1,j)[-1: R(0,V)]   read=Run");
     let b = f.node(named(f, "b.lp_0"));
     assert_eq!((b.frame, b.clock, b.chain.len()), (Ratio(-3), Clock::Tick(Ratio(-3)), 2));
     assert_eq!(b.args.iter().map(|r| r.at).collect::<Vec<_>>(), [Clock::Tick(Ratio(-3))]);
@@ -421,7 +421,7 @@ pub flow h1(x: F32 at sample, p: F32 at block) -> F32 at sample {
     let r3 = &flow(&a, "r3").nodes[0];
     let rings: Vec<_> = r3.bounds.iter().flat_map(|b| b.gathers.iter().map(|g| g.1)).collect();
     assert_eq!(rings, [tick(0), tick(0)]);
-    assert_eq!(runs_read(r3), [(tick(0), tick(-2), false)]);
+    assert_eq!(runs(r3), [(tick(0), tick(-2))]);
     let row = "-2: Each(0,j)[0: R(0,D(1))] | -1: G(1,0,ring2), Deal(2<-1) | 0: G(2,0,arg)   read=Array(2)";
     assert_eq!(drawn(r3), row);
     assert_eq!(r3.bounds[2].ins, [Some(Ratio(1))], "the input of the part the outermost wraps is at `sample * 2`");
@@ -452,7 +452,7 @@ pub flow dy(p: F32 at block) -> F32 at sample { mk4~(p).down~(4).down~(2) at sam
 /// deals (W7-16 U6a2): each boundary (its ports, the inputs it gathers with
 /// the stage of the frame around it, whether it deals), the stage of this
 /// flow each ring is written at (of its [`super::Op::Ring`]), the runs
-/// (of its entries, [`runs_read`]), and the stage the node is read at. Of the hand table of the memo of U6a0 (1.5, its rows b–h, the
+/// (of its entries, [`runs`]), and the stage the node is read at. Of the hand table of the memo of U6a0 (1.5, its rows b–h, the
 /// row c of a parameter kind gathered, S-1214), each ring, `St_L`, `made_L`
 /// and the stages of the head as the model of W7-21
 /// (`target/notes/176/w721/u1/b/mymodel.py`, as `plansweep.py` reads it)
@@ -465,26 +465,26 @@ fn downs_that_gather_and_deal(heads: &str) {
     let t = |k| ClockStage::Tick(Ratio(k));
     // A boundary: ins, out, gathers (input, stage of the frame around it), deals.
     type B = (Vec<Option<i32>>, i32, Vec<(u32, i32)>, bool);
-    // The flow, its boundaries, the stage of this flow of each ring, the runs (body, caller, read), the stage it is read at.
-    type Row = (&'static str, Vec<B>, Vec<i32>, Vec<(i32, i32, bool)>, i32);
+    // The flow, its boundaries, the stage of this flow of each ring, the runs (body, caller), the stage it is read at.
+    type Row = (&'static str, Vec<B>, Vec<i32>, Vec<(i32, i32)>, i32);
     let rows: Vec<Row> = vec![
-        ("db", vec![(vec![Some(2)], 0, vec![(0, 0)], false)], vec![0], vec![(0, -2, true)], -2),
+        ("db", vec![(vec![Some(2)], 0, vec![(0, 0)], false)], vec![0], vec![(0, -2)], -2),
         (
             "dc",
             vec![(vec![Some(2)], 0, vec![(0, 0)], false), (vec![Some(0)], -2, vec![], false)],
             vec![-1],
-            vec![(0, -3, true)],
+            vec![(0, -3)],
             -3,
         ),
-        ("dd", vec![(vec![None], 2, vec![], true)], vec![], vec![(0, -2, false)], 0),
-        ("de", vec![(vec![Some(2)], 2, vec![(0, 0)], true)], vec![0], vec![(0, -2, false)], 0),
-        ("df", vec![(vec![None], 1, vec![], true)], vec![], vec![(0, -2, false)], -1),
-        ("dg", vec![(vec![Some(1)], 0, vec![(0, -1)], false)], vec![-1], vec![(0, -2, true)], -2),
-        ("dh", vec![(vec![Some(0), None], 0, vec![], false)], vec![], vec![(-1, -2, false), (0, -1, true)], -1),
-        ("dx", vec![(vec![Some(1), Some(1)], 0, vec![(0, 0), (1, 0)], false)], vec![0, 0], vec![(0, -1, true)], -1),
-        ("dy", vec![(vec![None], 2, vec![], true), (vec![None], 0, vec![], false)], vec![], vec![(0, -3, false)], -1),
+        ("dd", vec![(vec![None], 2, vec![], true)], vec![], vec![(0, -2)], 0),
+        ("de", vec![(vec![Some(2)], 2, vec![(0, 0)], true)], vec![0], vec![(0, -2)], 0),
+        ("df", vec![(vec![None], 1, vec![], true)], vec![], vec![(0, -2)], -1),
+        ("dg", vec![(vec![Some(1)], 0, vec![(0, -1)], false)], vec![-1], vec![(0, -2)], -2),
+        ("dh", vec![(vec![Some(0), None], 0, vec![], false)], vec![], vec![(-1, -2), (0, -1)], -1),
+        ("dx", vec![(vec![Some(1), Some(1)], 0, vec![(0, 0), (1, 0)], false)], vec![0, 0], vec![(0, -1)], -1),
+        ("dy", vec![(vec![None], 2, vec![], true), (vec![None], 0, vec![], false)], vec![], vec![(0, -3)], -1),
     ];
-    for (name, bounds, rings, runs, read) in rows {
+    for (name, bounds, rings, ran, read) in rows {
         let f = flow(&a, name);
         let n = f.nodes.iter().find(|n| !n.bounds.is_empty()).unwrap_or_else(|| panic!("{name}: no chain"));
         let got: Vec<B> = n
@@ -515,8 +515,8 @@ fn downs_that_gather_and_deal(heads: &str) {
         written.sort();
         let want: Vec<_> = (0u32..).zip(rings.iter().map(|&k| t(k))).collect();
         assert_eq!(written, want, "{name}");
-        let got = runs_read(n);
-        assert_eq!(got, runs.iter().map(|&(b, c, r)| (t(b), t(c), r)).collect::<Vec<_>>(), "{name}");
+        let got = runs(n);
+        assert_eq!(got, ran.iter().map(|&(b, c)| (t(b), t(c))).collect::<Vec<_>>(), "{name}");
         let dealt = matches!(n.read, super::Read::Array(_));
         assert_eq!(dealt, n.bounds.iter().any(|b| b.deals), "{name}");
         let id = super::NodeId(f.nodes.iter().position(|m| m.expr == n.expr).unwrap() as u32);
@@ -552,21 +552,21 @@ pub flow m8u(p: F32 at block) -> F32 at sample { g4~(mk8~(p).down~(2).up~(2).dow
     let a = check(&format!("{heads}{callers}{DOWNS}{eight}"));
     assert!(a.diagnostics.is_empty(), "{:?}", a.diagnostics);
     let rows = [
-        ("db", "-2*: R(0,V) | 0: G(0,0,arg)   read=Run"),
-        ("dc", "-3*: R(0,V) | -1: G(0,0,arg)   read=Run"),
+        ("db", "-2: R(0,V) | 0: G(0,0,arg)   read=Run"),
+        ("dc", "-3: R(0,V) | -1: G(0,0,arg)   read=Run"),
         ("dd", "-2: R(0,D(0))   read=Array(0)"),
         ("de", "-2: R(0,D(0)) | 0: G(0,0,arg)   read=Array(0)"),
         ("df", "-2: R(0,D(0))   read=Array(0)"),
-        ("dg", "-2*: R(0,V) | -1: G(0,0,arg)   read=Run"),
-        ("dh", "-2: R(-1,-) | -1*: R(0,V)   read=Run"),
-        ("dx", "-1*: R(0,V) | 0: G(0,0,arg), G(0,1,arg)   read=Run"),
+        ("dg", "-2: R(0,V) | -1: G(0,0,arg)   read=Run"),
+        ("dh", "-2: R(-1,-) | -1: R(0,V)   read=Run"),
+        ("dx", "-1: R(0,V) | 0: G(0,0,arg), G(0,1,arg)   read=Run"),
         ("dy", "-3: R(0,D(0))   read=Array(0)"),
         // S-1214 (1): `g4~(x).down~(2).down~(2)`.
-        ("r9", "-2*: R(0,V) | -1: G(0,0,ring1) | 0: G(1,0,arg)   read=Run"),
+        ("r9", "-2: R(0,V) | -1: G(0,0,ring1) | 0: G(1,0,arg)   read=Run"),
         ("rx7", "-2: Each(0,j)[-1: R(-1,-); 0: R(0,D(1))] | 0: G(1,0,arg)   read=Array(1)"),
         ("ra", "-2: Each(0,j)[0: R(0,D(1))] | -1: Deal(2<-1)   read=Array(2)"),
         ("m8", "-2: R(0,D(0)) | -1: Deal(1<-0)   read=Array(1)"),
-        ("r6", "0*: Each(1,j)[-1: R(0,V); 0: G(0,0,arg)]   read=Run"),
+        ("r6", "0: Each(1,j)[-1: R(0,V); 0: G(0,0,arg)]   read=Run"),
         ("r3", "-2: Each(0,j)[0: R(0,D(1))] | -1: G(1,0,ring2), Deal(2<-1) | 0: G(2,0,arg)   read=Array(2)"),
         ("m8u", "-1: Each(1,j)[-1: R(0,D(0))], Deal(2<-0)   read=Array(2)"),
     ];
@@ -746,7 +746,7 @@ const U6B_ROWS: &[(&str, &str, &str)] = &[
     (
         "ch00",
         "pub flow ch00(x: F32 at (sample / 8)) -> F32 at (sample / 4) { h_n2_n1~(x).up~(2).down~(4).down~(4).up~(4) }",
-        "-3: Each(3,once)[-5: Each(0,once)[-2: R(-2,-)]] | -2*: Each(3,once)[-4: Each(0,j)[-1: R(-1,V); 0: R(0,-)]]   read=Run",
+        "-3: Each(3,once)[-5: Each(0,once)[-2: R(-2,-)]] | -2: Each(3,once)[-4: Each(0,j)[-1: R(-1,V); 0: R(0,-)]]   read=Run",
     ),
     (
         "ch01",
@@ -761,22 +761,22 @@ const U6B_ROWS: &[(&str, &str, &str)] = &[
     (
         "ch03",
         "pub flow ch03(x: F32 at (sample / 8)) -> F32 at (sample / 4) { h_n1_0_s1~(x, 1.0).down~(4).up~(4).down~(4) }",
-        "-3: Each(1,once)[-3: R(-1,-)] | -2*: Each(1,j)[-2: R(0,V)]   read=Run",
+        "-3: Each(1,once)[-3: R(-1,-)] | -2: Each(1,j)[-2: R(0,V)]   read=Run",
     ),
     (
         "ch04",
         "pub flow ch04(x: F32 at (sample / 2)) -> F32 at sample { r3~(h_n2_2~(x).down~(2).up~(2).up~(2)) }",
-        "-1: Each(2,once)[-2: Each(1,once)[-3: R(-2,-)]] | 0*: Each(2,j)[0: Each(1,j)[-1: R(0,D(0)), Deal(V<-0@0)]]   read=Run",
+        "-1: Each(2,once)[-2: Each(1,once)[-3: R(-2,-)]] | 0: Each(2,j)[0: Each(1,j)[-1: R(0,D(0)), Deal(V<-0@0)]]   read=Run",
     ),
     (
         "ch05",
         "pub flow ch05() -> F32 at sample { r1~(h_p_2_s2~(1.0).down~(2).down~(4).up~(4)) }",
-        "-3: Each(2,once)[-5: R(-2,-)] | -1: Each(2,once)[-3: R(0,D(0))] | 0*: Each(2,j)[-2: Deal(1<-0)]   read=Array(1)",
+        "-3: Each(2,once)[-5: R(-2,-)] | -1: Each(2,once)[-3: R(0,D(0))] | 0: Each(2,j)[-2: Deal(1<-0)]   read=Array(1)",
     ),
     (
         "ch06",
         "pub flow ch06(x: F32 at sample) -> F32 at (sample / 4) { h_2_0_s1~(x, 1.0).down~(4).up~(2).down~(2) }",
-        "-3: Each(1,once)[-3: R(-1,-)] | -2*: Each(1,once)[-2: R(0,V)] | -1: Each(1,j)[0: G(0,0,ring2)] | 0: G(2,0,arg)   read=Run",
+        "-3: Each(1,once)[-3: R(-1,-)] | -2: Each(1,once)[-2: R(0,V)] | -1: Each(1,j)[0: G(0,0,ring2)] | 0: G(2,0,arg)   read=Run",
     ),
     (
         "ch07",
@@ -801,27 +801,27 @@ const U6B_ROWS: &[(&str, &str, &str)] = &[
     (
         "ch11",
         "pub flow ch11(x: F32 at sample) -> F32 at sample { r2~(h_1_2_s1~(b1~(x), 1.0).down~(2).down~(2).up~(4)) }",
-        "-1: Each(2,once)[-3: R(-1,-)] | 0*: Each(2,j)[-2: R(0,D(0)); -1: G(0,0,arg), Deal(1<-0), Deal(V<-1@1)]   read=Run",
+        "-1: Each(2,once)[-3: R(-1,-)] | 0: Each(2,j)[-2: R(0,D(0)); -1: G(0,0,arg), Deal(1<-0), Deal(V<-1@1)]   read=Run",
     ),
     (
         "ch12",
         "pub flow ch12(x: F32 at sample) -> F32 at sample { r2~(h_n1_0_s2~(b1~(x), 1.0).up~(2).down~(2).up~(4)) }",
-        "0*: Each(2,j)[-2: Each(0,once)[-2: R(-2,-)]; -1: Each(0,j)[-1: R(-1,-); 0: R(0,D(1))], Deal(V<-1@1)]   read=Run",
+        "0: Each(2,j)[-2: Each(0,once)[-2: R(-2,-)]; -1: Each(0,j)[-1: R(-1,-); 0: R(0,D(1))], Deal(V<-1@1)]   read=Run",
     ),
     (
         "ch13",
         "pub flow ch13() -> F32 at sample { r3~(h_p_2~().up~(4).down~(2).down~(2).up~(2)) }",
-        "-1: Each(3,once)[-2: Each(0,j)[0: R(0,D(1))]] | 0*: Each(3,j)[-1: Deal(2<-1)]   read=Array(2)",
+        "-1: Each(3,once)[-2: Each(0,j)[0: R(0,D(1))]] | 0: Each(3,j)[-1: Deal(2<-1)]   read=Array(2)",
     ),
     (
         "ch14",
         "pub flow ch14(x: F32 at (sample / 4)) -> F32 at sample { r1~(h_n2_1_s1~(x, 1.0).down~(4).down~(2).up~(4).up~(2)) }",
-        "-2: Each(3,once)[-3: Each(2,once)[-5: R(-2,-)]] | -1: Each(3,once)[-2: Each(2,once)[-4: R(-1,-)]] | 0*: Each(3,j)[-1: Each(2,once)[-3: R(0,D(0))]]   read=Array(0)",
+        "-2: Each(3,once)[-3: Each(2,once)[-5: R(-2,-)]] | -1: Each(3,once)[-2: Each(2,once)[-4: R(-1,-)]] | 0: Each(3,j)[-1: Each(2,once)[-3: R(0,D(0))]]   read=Array(0)",
     ),
     (
         "ch15",
         "pub flow ch15(x: F32 at (sample / 32)) -> F32 at (sample / 16) { h_n2_n1_s1~(x, 1.0).down~(2).down~(4).up~(4).down~(4) }",
-        "-5: Each(2,once)[-5: R(-2,-)] | -4*: Each(2,once)[-4: R(-1,V)] | -3: Each(2,once)[-3: R(0,-)]   read=Run",
+        "-5: Each(2,once)[-5: R(-2,-)] | -4: Each(2,once)[-4: R(-1,V)] | -3: Each(2,once)[-3: R(0,-)]   read=Run",
     ),
     (
         "ch16",
@@ -831,17 +831,17 @@ const U6B_ROWS: &[(&str, &str, &str)] = &[
     (
         "ch17",
         "pub flow ch17(x: F32 at (sample / 16)) -> F32 at (sample / 8) { h_n2_n1~(x).down~(2).down~(2).up~(2).down~(2) }",
-        "-4: Each(2,once)[-4: R(-2,-)] | -3*: Each(2,once)[-3: R(-1,V)] | -2: Each(2,once)[-2: R(0,-)]   read=Run",
+        "-4: Each(2,once)[-4: R(-2,-)] | -3: Each(2,once)[-3: R(-1,V)] | -2: Each(2,once)[-2: R(0,-)]   read=Run",
     ),
     (
         "ch18",
         "pub flow ch18(x: F32 at (sample / 16)) -> F32 at (sample / 8) { h_n1_0_s2~(x, 1.0).down~(2).down~(4) }",
-        "-5: R(-2,-) | -4: R(-1,-) | -3*: R(0,V)   read=Run",
+        "-5: R(-2,-) | -4: R(-1,-) | -3: R(0,V)   read=Run",
     ),
     (
         "ch19",
         "pub flow ch19() -> F32 at (sample / 16) { h_p_n2_s1~(1.0).down~(4).down~(2).down~(2).up~(4) }",
-        "-4*: Each(3,once)[-6: R(-2,V)] | -3: Each(3,once)[-5: R(-1,-)] | -2: Each(3,once)[-4: R(0,-)]   read=Run",
+        "-4: Each(3,once)[-6: R(-2,V)] | -3: Each(3,once)[-5: R(-1,-)] | -2: Each(3,once)[-4: R(0,-)]   read=Run",
     ),
     (
         "ch20",
@@ -851,12 +851,12 @@ const U6B_ROWS: &[(&str, &str, &str)] = &[
     (
         "ch21",
         "pub flow ch21(x: F32 at (sample / 8)) -> F32 at (sample / 32) { h_1_n1~(x).down~(4).down~(4).down~(4).up~(4) }",
-        "-5*: Each(3,once)[-7: R(-1,V)] | -4: Each(3,once)[-6: R(0,-)] | -3: Each(3,once)[-5: G(0,0,arg)]   read=Run",
+        "-5: Each(3,once)[-7: R(-1,V)] | -4: Each(3,once)[-6: R(0,-)] | -3: Each(3,once)[-5: G(0,0,arg)]   read=Run",
     ),
     (
         "ch22",
         "pub flow ch22(x: F32 at (sample / 2)) -> F32 at (sample / 8) { h_1_n1_s2~(x, 1.0).down~(2).up~(2).down~(4) }",
-        "-4: Each(1,once)[-3: R(-2,-)] | -3*: Each(1,once)[-2: R(-1,V)] | -2: Each(1,j)[-1: R(0,-); 0: G(0,0,ring2)] | -1: G(2,0,arg)   read=Run",
+        "-4: Each(1,once)[-3: R(-2,-)] | -3: Each(1,once)[-2: R(-1,V)] | -2: Each(1,j)[-1: R(0,-); 0: G(0,0,ring2)] | -1: G(2,0,arg)   read=Run",
     ),
     (
         "ch23",
@@ -871,7 +871,7 @@ const U6B_ROWS: &[(&str, &str, &str)] = &[
     (
         "ch25",
         "pub flow ch25(x: F32 at sample) -> F32 at (sample / 2) { h_2_0_s2~(b1~(x), 1.0).down~(2).down~(2).up~(2) }",
-        "-3: Each(2,once)[-4: R(-2,-)] | -1*: Each(2,once)[-2: R(0,V)] | 0: Each(2,j)[-1: G(0,0,ring1); 0: G(1,0,arg)]   read=Run",
+        "-3: Each(2,once)[-4: R(-2,-)] | -1: Each(2,once)[-2: R(0,V)] | 0: Each(2,j)[-1: G(0,0,ring1); 0: G(1,0,arg)]   read=Run",
     ),
     (
         "ch26",
@@ -891,22 +891,22 @@ const U6B_ROWS: &[(&str, &str, &str)] = &[
     (
         "ch29",
         "pub flow ch29() -> F32 at (sample / 32) { h_p_n1_s2~(1.0).down~(4).down~(2).up~(2).down~(4) }",
-        "-6: Each(2,once)[-5: R(-2,-)] | -5*: Each(2,once)[-4: R(-1,V)] | -4: Each(2,once)[-3: R(0,-)]   read=Run",
+        "-6: Each(2,once)[-5: R(-2,-)] | -5: Each(2,once)[-4: R(-1,V)] | -4: Each(2,once)[-3: R(0,-)]   read=Run",
     ),
     (
         "ch30",
         "pub flow ch30(x: F32 at (sample / 2)) -> F32 at (sample / 8) { h_2_0~(x).down~(2).down~(4).up~(2).down~(2) }",
-        "-3*: Each(2,once)[-3: R(0,V)] | -2: Each(2,once)[-2: G(0,0,ring1)] | -1: Each(2,j)[-1: G(1,0,arg)]   read=Run",
+        "-3: Each(2,once)[-3: R(0,V)] | -2: Each(2,once)[-2: G(0,0,ring1)] | -1: Each(2,j)[-1: G(1,0,arg)]   read=Run",
     ),
     (
         "ch31",
         "pub flow ch31(x: F32 at (sample / 4)) -> F32 at (sample / 32) { h_1_n2~(x).down~(2).down~(2).down~(2) }",
-        "-5*: R(-2,V) | -3: R(0,-) | -2: G(0,0,arg)   read=Run",
+        "-5: R(-2,V) | -3: R(0,-) | -2: G(0,0,arg)   read=Run",
     ),
     (
         "ch32",
         "pub flow ch32(x: F32 at (sample / 16)) -> F32 at (sample / 16) { h_n2_n2~(x).down~(2).up~(2).down~(4) }",
-        "-4*: Each(1,once)[-3: R(-2,V)] | -2: Each(1,j)[-1: R(0,-)]   read=Run",
+        "-4: Each(1,once)[-3: R(-2,V)] | -2: Each(1,j)[-1: R(0,-)]   read=Run",
     ),
     (
         "ch33",
@@ -985,7 +985,7 @@ fn input(port: super::Port) -> u32 {
 
 /// The table of the work of the node `n` drawn ([`steps_of_a_chain`]).
 fn drawn(n: &super::PlanNode) -> String {
-    let entry = |e: &super::Entry| format!("{}{}: {}", st(e.caller), if e.read { "*" } else { "" }, drawn_ops(&e.ops));
+    let entry = |e: &super::Entry| format!("{}: {}", st(e.caller), drawn_ops(&e.ops));
     let read = match n.read {
         super::Read::Run => "Run".to_string(),
         super::Read::Array(b) => format!("Array({b})"),
@@ -993,25 +993,24 @@ fn drawn(n: &super::PlanNode) -> String {
     format!("{}   read={read}", n.entries.iter().map(entry).collect::<Vec<_>>().join(" | "))
 }
 
-/// The runs of the entries of `n` ([`super::Entry::runs`]), each with
-/// whether its entry is read where the call is.
-fn runs_read(n: &super::PlanNode) -> Vec<(crate::clock::ClockStage, crate::clock::ClockStage, bool)> {
-    let read = |c| n.entries.iter().any(|e| e.caller == c && e.read);
-    super::Entry::runs(&n.entries).into_iter().map(|(b, c)| (b, c, read(c))).collect()
+/// The runs of the entries of `n` ([`super::Entry::runs`]).
+fn runs(n: &super::PlanNode) -> Vec<(crate::clock::ClockStage, crate::clock::ClockStage)> {
+    super::Entry::runs(&n.entries)
 }
 
 /// The stage of the caller that makes what it reads of the instance `n`
-/// (§11.9): of the entry read, else of the entry that writes the array it
-/// reads (a run that deals into it, or the copy of it).
+/// (§11.9): of the entry that makes its value, else of the entry that writes
+/// the array it reads (a run that deals into it, or the copy of it).
 fn made_at(n: &super::PlanNode) -> crate::clock::ClockStage {
     use super::{Op, Out, Read, To};
     let makes = |e: &super::Entry| {
-        let mut makes = e.read;
+        let mut makes = false;
         Op::walk(&e.ops, &mut |op| {
-            makes |= match (n.read, op) {
-                (Read::Array(b), Op::Run { out: Out::Deal(d), .. } | Op::Deal { to: To::Array(d), .. }) => b == *d,
-                _ => false,
-            }
+            makes |= op.makes_value()
+                || match (n.read, op) {
+                    (Read::Array(b), Op::Run { out: Out::Deal(d), .. } | Op::Deal { to: To::Array(d), .. }) => b == *d,
+                    _ => false,
+                }
         });
         makes
     };
@@ -1204,13 +1203,13 @@ pub flow plain(x: F32 at sample) -> F32 at sample {
     let a = check(src);
     assert!(a.diagnostics.is_empty(), "{:?}", a.diagnostics);
     let tick = |k| crate::clock::ClockStage::Tick(crate::clock::Ratio(k));
-    let run = |b, c, read| (tick(b), tick(c), read);
+    let run = |b, c| (tick(b), tick(c));
     let (gc, ch, top, plain) = (flow(&a, "gc"), flow(&a, "ch"), flow(&a, "top"), flow(&a, "plain"));
     assert_eq!([&gc.stages, &ch.stages], [&[tick(-2)], &[tick(-2)]]);
     assert_eq!(top.stages, [tick(-2), tick(-1)]);
-    assert_eq!(runs_read(ch.node(named(ch, "_out.gc_0"))), [run(-2, -2, false), run(0, 0, true)]);
+    assert_eq!(runs(ch.node(named(ch, "_out.gc_0"))), [run(-2, -2), run(0, 0)]);
     for path in ["_out.ch_0", "_out.par_0.ch_0"] {
-        assert_eq!(runs_read(top.node(named(top, path))), [run(-2, -2, false), run(0, 0, true)], "{path}");
+        assert_eq!(runs(top.node(named(top, path))), [run(-2, -2), run(0, 0)], "{path}");
     }
     assert!(top.node(named(top, "d.prev_0")).entries.is_empty());
     assert_eq!([gc.reads_time(), ch.reads_time(), top.reads_time(), plain.reads_time()], [false, true, true, false]);
@@ -1355,37 +1354,37 @@ pub flow w10(c: Bool at init) -> F32 at sample { pick0~(mk2~().down~(2).when~(c)
     let a = check(src);
     assert!(a.diagnostics.is_empty(), "{:?}", a.diagnostics);
     let rows = [
-        ("w0", "0*: W(0,r)[], W(0,l@-1)[R(-1,-)], W(0,l+)[R(0,H(0))], Hold(0,V)   read=Run", "._tick_0 .held"),
+        ("w0", "0: W(0,r)[], W(0,l@-1)[R(-1,-)], W(0,l+)[R(0,H(0))], Hold(0,V)   read=Run", "._tick_0 .held"),
         (
             "w1",
-            "-2*: W(0,r)[], W(0,l@-3)[R(-1,-)], W(0,l)[R(0,H(0))], Hold(0,V) | 0: W(0,k+)[]   read=Run",
+            "-2: W(0,r)[], W(0,l@-3)[R(-1,-)], W(0,l)[R(0,H(0))], Hold(0,V) | 0: W(0,k+)[]   read=Run",
             "._on_0 ._tick_0 .held",
         ),
-        ("w2", "-2*: W(0,r)[], W(0,l@-1)[R(-1,-)], W(0,l+)[R(0,H(0))], Hold(0,V)   read=Run", "._tick_0 .held"),
-        ("w3", "-2*: W(0,r)[R(-2,H(0))], Hold(0,V) | 0: W(0,k)[R(0,-)]   read=Run", "._on_0 .held"),
+        ("w2", "-2: W(0,r)[], W(0,l@-1)[R(-1,-)], W(0,l+)[R(0,H(0))], Hold(0,V)   read=Run", "._tick_0 .held"),
+        ("w3", "-2: W(0,r)[R(-2,H(0))], Hold(0,V) | 0: W(0,k)[R(0,-)]   read=Run", "._on_0 .held"),
         (
             "w4",
-            "0*: Each(0,j)[0: W(0,r)[], W(0,l@-1)[R(-1,-)], W(0,l+)[R(0,H(0))], Hold(0,V)]   read=Run",
+            "0: Each(0,j)[0: W(0,r)[], W(0,l@-1)[R(-1,-)], W(0,l+)[R(0,H(0))], Hold(0,V)]   read=Run",
             "._tick_0 .held",
         ),
-        ("w5", "0*: W(0,r)[Each(0,j)[-1: R(-1,-); 0: R(0,V)]], Hold(0,V)   read=Run", ".held"),
+        ("w5", "0: W(0,r)[Each(0,j)[-1: R(-1,-); 0: R(0,V)]], Hold(0,V)   read=Run", ".held"),
         (
             "w6",
-            "-2*: W(1,r)[W(0,r)[], W(0,l@-1)[R(-1,-)], W(0,l+)[R(0,H(0))], Hold(0,H(1))], Hold(1,V)   read=Run",
+            "-2: W(1,r)[W(0,r)[], W(0,l@-1)[R(-1,-)], W(0,l+)[R(0,H(0))], Hold(0,H(1))], Hold(1,V)   read=Run",
             "._tick_0 ._held_0 .held",
         ),
-        ("w7", "0*: W(0,r)[R(0,V)], Hold(0,V)   read=Run", ".held"),
+        ("w7", "0: W(0,r)[R(0,V)], Hold(0,V)   read=Run", ".held"),
         ("w8", "-2: W(0,r)[R(0,D(0))], Hold(0,D(0))   read=Array(0)", ".held ._deal_0"),
         (
             "w9",
-            "0*: W(0,r)[], W(0,l@-2)[R(0,D(0))], W(0,l+)[Deal(H(0)<-0@1)], Hold(0,V)   read=Run",
+            "0: W(0,r)[], W(0,l@-2)[R(0,D(0))], W(0,l+)[Deal(H(0)<-0@1)], Hold(0,V)   read=Run",
             "._deal_0 ._tick_0 .held",
         ),
         // The two `.up~` widen the window of the array dealt, but the `when~` holds the value
         // in its own frame: no copy of the whole array past it (W7-10 U1e).
         (
             "w10",
-            "0*: Each(2,j)[0: Each(1,j)[0: W(0,r)[], W(0,l@-1)[R(0,D(0))], W(0,l+)[Deal(H(0)<-0@1)], Hold(0,V)]]   read=Run",
+            "0: Each(2,j)[0: Each(1,j)[0: W(0,r)[], W(0,l@-1)[R(0,D(0))], W(0,l+)[Deal(H(0)<-0@1)], Hold(0,V)]]   read=Run",
             "._deal_0 ._tick_0 .held",
         ),
     ];
@@ -1431,14 +1430,14 @@ pub flow d5(x: F32 at sample) -> F32 at sample {
     let a = check(src);
     assert!(a.diagnostics.is_empty(), "{:?}", a.diagnostics);
     let rows = [
-        ("d0", "0*: W(0,r)[R(0,H(0))], Hold(0,V)   read=Run", ".held ._ran"),
-        ("d1", "0*: Reset(0), R(0,V)   read=Run", ".buf .w"),
-        ("d2", "-2: Reset(0) | 0*: R(0,V)   read=Run", ""),
-        ("d3", "0*: Reset(1), W(0,r)[R(0,H(0))], Hold(0,V)   read=Run", ".held ._ran"),
-        ("d4", "0*: W(0,r)[Reset(0), R(0,H(0))], Hold(0,V)   read=Run", ".held ._ran"),
+        ("d0", "0: W(0,r)[R(0,H(0))], Hold(0,V)   read=Run", ".held ._ran"),
+        ("d1", "0: Reset(0), R(0,V)   read=Run", ".buf .w"),
+        ("d2", "-2: Reset(0) | 0: R(0,V)   read=Run", ""),
+        ("d3", "0: Reset(1), W(0,r)[R(0,H(0))], Hold(0,V)   read=Run", ".held ._ran"),
+        ("d4", "0: W(0,r)[Reset(0), R(0,H(0))], Hold(0,V)   read=Run", ".held ._ran"),
         (
             "d5",
-            "-2*: W(0,r)[], W(0,l@-4)[Reset(0)], W(0,l)[R(-2,H(0))], Hold(0,V) | 0: W(0,k+)[]   read=Run",
+            "-2: W(0,r)[], W(0,l@-4)[Reset(0)], W(0,l)[R(-2,H(0))], Hold(0,V) | 0: W(0,k+)[]   read=Run",
             "._on_0 ._tick_0 .held ._ran",
         ),
     ];
@@ -1497,23 +1496,23 @@ pub flow r5(p: Bool at block, q: Bool at block, c: Bool at sample) -> F32 at sam
     let rows = [
         (
             "r1",
-            "-1: Reset(1) | 0*: W(0,r)[], W(0,l@-2)[R(-2,-)], W(0,l+)[R(0,H(0))], Hold(0,V)   read=Run",
+            "-1: Reset(1) | 0: W(0,r)[], W(0,l@-2)[R(-2,-)], W(0,l+)[R(0,H(0))], Hold(0,V)   read=Run",
             "._tick_0 .held",
         ),
         (
             "r2",
-            "-1: Reset(2) | 0*: Each(0,j)[0: W(0,r)[], W(0,l@-3)[R(-3,-)], W(0,l+)[R(0,H(0))], Hold(0,V)]   read=Run",
+            "-1: Reset(2) | 0: Each(0,j)[0: W(0,r)[], W(0,l@-3)[R(-3,-)], W(0,l+)[R(0,H(0))], Hold(0,V)]   read=Run",
             "._tick_0 .held",
         ),
         (
             "r3",
-            "0*: W(1,r)[], W(1,l@-1)[Reset(1)], W(1,l+)[W(0,r)[], W(0,l@-2)[R(-2,-)], W(0,l+)[R(0,H(0))], Hold(0,H(1))], Hold(1,V)   read=Run",
+            "0: W(1,r)[], W(1,l@-1)[Reset(1)], W(1,l+)[W(0,r)[], W(0,l@-2)[R(-2,-)], W(0,l+)[R(0,H(0))], Hold(0,H(1))], Hold(1,V)   read=Run",
             "._tick_0 ._held_0 ._tick_1 .held",
         ),
-        ("r4", "0*: Reset(1), W(0,r)[R(0,H(0))], Hold(0,V)   read=Run", ".held"),
+        ("r4", "0: Reset(1), W(0,r)[R(0,H(0))], Hold(0,V)   read=Run", ".held"),
         (
             "r5",
-            "-1: Reset(3) | 0*: W(1,r)[], W(1,l@-2)[Reset(1)], W(1,l+)[W(0,r)[], W(0,l@-3)[R(-3,-)], W(0,l+)[R(0,H(0))], Hold(0,H(1))], Hold(1,V)   read=Run",
+            "-1: Reset(3) | 0: W(1,r)[], W(1,l@-2)[Reset(1)], W(1,l+)[W(0,r)[], W(0,l@-3)[R(-3,-)], W(0,l+)[R(0,H(0))], Hold(0,H(1))], Hold(1,V)   read=Run",
             "._tick_0 ._held_0 ._tick_1 .held",
         ),
     ];
@@ -1543,6 +1542,8 @@ flow mk4() -> F32 at (sample * 4) {\n  let n = cnt~()\n  [n, n, n, n]\n}
 flow g2(x: F32 at (sample * 2)) -> F32 at sample { x[0] + x[1] }
 flow pk2(x: Bool at (sample * 2)) -> Bool at sample { x[1] }
 flow h2(c: Bool at sample) -> Bool at (sample / 2) { pk2~(c).down~(2) }
+flow pk4(x: Bool at (sample * 4)) -> Bool at sample { x[3] }
+flow h4(c: Bool at sample) -> Bool at (sample / 4) { pk4~(c).down~(4) }
 ";
     let chains = [
         "cnt~().when~(c).up~(2).down~(2)",
@@ -1570,6 +1571,17 @@ flow h2(c: Bool at sample) -> Bool at (sample / 2) { pk2~(c).down~(2) }
         "cnt~().up~(2).when~(sample_tick() % 3 == 0).down~(2).when~(c)",
         "cnt~().up~(2).reset_if~(sample_tick() % 3 == 0).down~(2).when~(c)",
         "cnt~().up~(2).when~(sample_tick() % 3 == 0).down~(2).up~(2).down~(2).when~(c)",
+        // A `reset_if~` with ratios outside it other than the `.down~(2)` of the rows above (S-1230): its condition is a value of the parameter kinds, `sample_tick()` or a signal of the clock
+        // that the blocks right of it give, so its tick R is that clock in the caller's terms and the read stage follows it.
+        "cnt~().up~(2).reset_if~(p).down~(2).up~(2).down~(2)",
+        "cnt~().up~(2).reset_if~(h2~(r)).down~(2).up~(2).down~(2)",
+        "cnt~().up~(4).reset_if~(h4~(r)).down~(4)",
+        "cnt~().up~(4).reset_if~(p at (sample / 4)).down~(4)",
+        "g2~(cnt~().up~(4).reset_if~(p).down~(2))",
+        "g2~(cnt~().up~(4).reset_if~(h2~(r)).down~(2).when~(c))",
+        "cnt~().up~(4).reset_if~(h4~(r)).down~(2).up~(2).down~(4).when~(c)",
+        "cnt~().up~(2).reset_if~(sample_tick() % 3 == 0).down~(2).up~(2).down~(2).when~(c)",
+        "cnt~().up~(2).up~(2).reset_if~(h4~(r)).down~(2).down~(2).reset_if~(p at (sample / 2))",
     ];
     let mut src = heads.to_string();
     for (k, ch) in chains.iter().enumerate() {
@@ -1687,4 +1699,46 @@ pub flow t(p: Bool at block, q: Bool at block, c: Bool at sample) -> F32 at samp
         .map(|n| n.chain.iter().filter(|m| m.cond.is_some()).map(|m| m.port.is_some()).collect())
         .collect();
     assert_eq!(ports, [vec![false], vec![false], vec![false, false], vec![true]]);
+}
+
+/// §11.10, §11.9: the condition of a modifier inside a block of a clock faster than the `.down~` that closes the block is gathered by that
+/// boundary, as the inputs of the head are (a ring, from the `sample` of its frame); one of the clock of the boundary or slower, and a value
+/// of the parameter kinds, are read where they are. The clock of the condition is its own in the caller's terms, and the ratios right of the
+/// modifier are the frame it is compared in (the break side of S-1230: one mutant of that move out was caught by the cases only).
+#[test]
+fn a_condition_faster_than_the_boundary_that_closes_its_block_is_gathered() {
+    let heads = "flow cnt() -> F32 at sample {\n  let n = prev~(^n) + 1.0\n  n\n}
+flow pk2(x: Bool at (sample * 2)) -> Bool at sample { x[1] }
+flow h2(c: Bool at sample) -> Bool at (sample / 2) { pk2~(c).down~(2) }
+flow pk4(x: Bool at (sample * 4)) -> Bool at sample { x[3] }
+flow h4(c: Bool at sample) -> Bool at (sample / 4) { pk4~(c).down~(4) }
+";
+    // (the chain, the place of the modifier with the condition, gathered)
+    let rows = [
+        ("cnt~().up~(2).when~(h2~(c)).up~(2).down~(4)", 1, true),
+        ("cnt~().up~(2).reset_if~(h2~(c)).up~(2).down~(4)", 1, true),
+        ("cnt~().up~(2).when~(sample_tick() % 3 == 0).up~(2).down~(4)", 1, true),
+        ("cnt~().up~(2).reset_if~(sample_tick() % 3 == 0).up~(2).down~(4)", 1, true),
+        ("cnt~().up~(2).when~(h2~(c) && sample_tick() % 3 == 0).up~(2).down~(4)", 1, true),
+        ("cnt~().when~(c).up~(2).down~(2)", 0, true),
+        ("cnt~().reset_if~(c).up~(2).down~(2)", 0, true),
+        ("cnt~().up~(2).down~(2).when~(c).up~(2).down~(2)", 2, true),
+        ("cnt~().up~(2).when~(h2~(c)).down~(2)", 1, false),
+        ("cnt~().up~(4).when~(h4~(c)).down~(4)", 1, false),
+        ("cnt~().up~(4).when~(h4~(c)).down~(2).up~(2).down~(4)", 1, false),
+        ("cnt~().up~(4).when~(p).down~(4)", 1, false),
+        ("cnt~().up~(2).when~(p).up~(2).down~(4)", 1, false),
+    ];
+    let mut src = heads.to_string();
+    for (k, (chain, ..)) in rows.iter().enumerate() {
+        src += &format!("pub flow t{k}(p: Bool at block, c: Bool at sample) -> F32 at sample {{ {chain} }}\n");
+    }
+    let a = check(&src);
+    assert!(a.diagnostics.is_empty(), "{:?}", a.diagnostics);
+    for (k, (chain, place, gathered)) in rows.iter().enumerate() {
+        let f = flow(&a, &format!("t{k}"));
+        let n = f.nodes.iter().find(|n| n.chain.len() > 1).unwrap_or_else(|| panic!("t{k}: no chain"));
+        let ring = n.ring_of(n.inside(*place) as usize, super::Port::Cond(*place));
+        assert_eq!(ring.is_some(), *gathered, "`{chain}`, the condition at {place}");
+    }
 }

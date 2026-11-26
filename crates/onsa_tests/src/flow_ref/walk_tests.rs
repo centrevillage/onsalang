@@ -93,7 +93,7 @@ fn a_marked_test_must_panic_and_a_panic_is_taken_at_its_frame() {
 
 #[test]
 fn what_is_not_run_is_skipped_with_its_reason() {
-    // a `for` is no statement of this unit; a test that calls no function of a flow compares nothing of the evaluator; a
+    // a `for` over an array is no statement of this unit (one over a range is); a test that calls no function of a flow compares nothing of the evaluator; a
     // `Span` is a view.
     let reason = |t: TestRun| match t.verdict {
         Verdict::Skipped(s) => s,

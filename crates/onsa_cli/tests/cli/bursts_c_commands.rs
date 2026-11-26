@@ -11,7 +11,7 @@
 //! - the two together with a state, `g2~(ramp2~(1.0)) + g4~(mk8~(p).down~(2))`: the n-th frame of `ramp2` has `n, n + 0.5` (`11 n + 5` = 16, 27, 38 ...) and so 14336, 18791, 14358, 18813 ... A `reset` puts the counter of
 //!   `ramp2` and the dealt array back, and the next frame is a tick.
 
-use crate::down_two_boundaries_c_commands::{build_flows, driver, frames_of};
+use crate::down_two_boundaries_c_commands::same_in_c_of;
 
 const FLOWS: &str = "\
 flow g2(x: F32 at (sample * 2)) -> F32 at sample {
@@ -90,19 +90,7 @@ pub flow combo(
 
 /// Each flow: the frames of one run of `frames` frames (at least 7, the last cut) (`has_input`: it has the input `x`), in one call, in the pieces `1 1 5 7` and after a `reset` that follows 0, 1, 3, 5, 6 or 7 frames of another run, are `want`.
 fn same_in_c(tag: &str, flows: &[(&str, bool, u32, Vec<i64>)]) {
-    let dir = build_flows(tag, FLOWS);
-    for (flow, has_input, frames, want) in flows {
-        let exe = driver(&dir, flow, *has_input);
-        for junk in [0, 1, 3, 5, 6, 7] {
-            for cuts in [&[][..], &[1, 1, 5, 7][..]] {
-                assert_eq!(
-                    &frames_of(&exe, junk, *frames, cuts),
-                    want,
-                    "{flow} after {junk} frames of another run, cut at {cuts:?}"
-                );
-            }
-        }
-    }
+    same_in_c_of(FLOWS, tag, flows);
 }
 
 /// A bundle that goes by with no chain, and a `block` value and a constant given to a port at `sample * 2`: the values worked out in the header.

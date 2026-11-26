@@ -72,9 +72,12 @@ impl NodeBuilder {
         self.namer.apart(init);
     }
 
-    /// The `par~`s around the place walked now, the outermost first.
-    pub(super) fn pars(&self) -> Vec<NodeId> {
-        self.owners.iter().filter_map(|o| if let Owner::Par(p) = o { Some(*p) } else { None }).collect()
+    /// The part of the body that holds the place walked now.
+    pub(super) fn owner_now(&self) -> Owner {
+        let Some(&o) = self.owners.last() else {
+            onsa_diag::internal::bug(None, "a place outside a `let` and the output")
+        };
+        o
     }
 
     /// The nodes of the body, in the order of their [`NodeId`]s, and the

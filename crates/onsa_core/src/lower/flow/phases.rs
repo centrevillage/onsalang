@@ -134,6 +134,7 @@ pub(super) fn own_stage(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, id
     let span = cx.ast.expr(n.expr).span;
     let PlanKind::Instance { callee, .. } = n.kind else { return Err(internal(span, "a stage of no instance")) };
     // W7-21 U1: a chain of a callee with no table (in error) has no entries.
+    // A chain of an instance (`PlanNode::chained_delay` is of a delay).
     if !n.chain.is_empty() && n.entries.is_empty() {
         return Err(internal(span, "a chain of an instance with no entries"));
     }
@@ -369,7 +370,7 @@ pub(super) fn gen_stage<'b>(
         let t = g.cx.info.expr_types.get(&info.node(id).expr).copied();
         let t = t.ok_or_else(|| internal(span, "an event of no type"))?;
         let t = lw.core_ty(t, &[], span)?;
-        for p in around(info, info.node(id).owner) {
+        for p in info.around(info.node(id).owner) {
             g.param_local(LocalId(range(info, p, span)?.0.0), Mode::Borrow);
             g.flow().now.pinned.push(p);
         }

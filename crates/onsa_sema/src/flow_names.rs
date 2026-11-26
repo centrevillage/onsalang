@@ -23,6 +23,11 @@ pub const OUTPUT_SCOPE: &str = "_out";
 pub(crate) const PAR: &str = "par";
 pub const HOIST: &str = "_hoist";
 
+/// `<scope>.<name>` (`a.prev_0`, §11.6): the one join of a scope and a name.
+pub fn qualify(scope: &str, name: &str) -> String {
+    format!("{scope}.{name}")
+}
+
 /// A fixed field of the state of a flow (§11.6, §12.4, S-1138).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FixedField {

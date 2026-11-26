@@ -98,6 +98,7 @@ impl InstState {
         self.cells.values_mut().for_each(|c| c.back(soft));
         self.mods.values_mut().for_each(|m| m.reset(soft));
         self.children.values_mut().for_each(|c| {
+            // `done` of a `reset_if~` stays as the counters do; clearing it too shows in no value (a mutant that does passes the gate and `heavy_`): a reset is put before or after the work of a stage, and no stage is asked a second time after it.
             if !soft {
                 c.done = None;
             }
@@ -912,6 +913,7 @@ impl<'a> Frame<'a> {
                     f.locals.insert(f.body.input(&i.name).ok_or(here(Internal("an input with no local")))?, d);
                 }
             }
+            // The output of an instance made at a tick slower than `sample`. Without it nothing shows (a mutant passes the gate and `heavy_`): the condition of a `reset_if~` is not faster than the output (E0815), so the work that makes it comes after the reset, and one that a `when~` stops reads `held`.
             let between = inst.levels.last().is_some_and(|top| top.made < 0);
             for st in inst.steps.iter().filter(|st| !st.emits && (slow(st.clock) || (st.pat.is_none() && between))) {
                 let ty = f.body.ty(st.init).map_err(here)?;

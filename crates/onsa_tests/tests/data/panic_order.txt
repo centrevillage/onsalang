@@ -1,0 +1,89 @@
+# The programs of the model of the first panic (W7-17 L1/t, from `pan.py` and `pan2.py` of the break side of W7-11 U2b), one section each:
+# `## <name> <the number of the site that panics first>`, then the text of the program. The numbers are those of the sites (`K / (x - 4)` and `K / d`)
+# in the order the model gives from §11.3, §11.4 and §11.10: the slower stage (`sample / 4`) of a frame before the `sample` stage, the writes of delays after
+# the reads, the later stage reads of a `^name` after the first. The test runs `render` on the 8 frames; `x - 4` is 0 at the frame 4, where `d4` becomes 0 too.
+## pan_293 103
+pub flow f(x: I32 at sample, p: I32 at block) -> I32 at sample {
+  let d4 = prev~(p at (sample / 4), 1)
+  let a0 = 
+(101 / (x - 4))
+  let a1 = 
+(102 / (x - 4))
+  (a0 + a1 + (d4 at sample) + ((prev~(
+(103 / d4)) at sample) + 
+(104 / (x - 4))))
+}
+
+test "stops" {
+  let xs: [I32; 8] = [0, 1, 2, 3, 4, 5, 6, 7]
+  let o = f.render(f.Params { p: 0 }, xs, 8.0)
+  assert o.out[0] == 0
+}
+## pan_290 102
+pub flow f(x: I32 at sample, p: I32 at block) -> I32 at sample {
+  let d4 = prev~(p at (sample / 4), 1)
+  let a0 = (par~ i in 0 ..< 3 { prev~((x + 
+(101 / (x - 4)))) })[0]
+  let a1 = 
+(102 / (x - 4))
+  let a2 = 
+(103 / (x - 4))
+  (a0 + a1 + a2 + (d4 at sample) + 
+(104 / (x - 4)))
+}
+
+test "stops" {
+  let xs: [I32; 8] = [0, 1, 2, 3, 4, 5, 6, 7]
+  let o = f.render(f.Params { p: 0 }, xs, 8.0)
+  assert o.out[0] == 0
+}
+## pan2_292 103
+pub flow f(x: I32 at sample, p: I32 at block) -> I32 at sample {
+  let d4 = prev~(p at (sample / 4), 1)
+  let a0 = 
+(101 / (x - 4))
+  let q9 = d4 + 1
+  (a0 + (d4 at sample) + (q9 at sample) + (match~ p { 1 => prev~((x + 
+(102 / (x - 4)))), _ => (par~ i in 0 ..< 3 { prev~((x + (
+(103 / d4) at sample))) })[0] }))
+}
+
+test "stops" {
+  let xs: [I32; 8] = [0, 1, 2, 3, 4, 5, 6, 7]
+  let o = f.render(f.Params { p: 0 }, xs, 8.0)
+  assert o.out[0] == 0
+}
+## pan2_late_180 102
+pub flow f(x: I32 at sample, p: I32 at block) -> I32 at sample {
+  let d4 = prev~(p at (sample / 4), 1)
+  let a0 = prev~((x + ((((^q9 + 
+(102 / d4)) % 101) at sample) + 
+(103 / (x - 4))))).reset_if~((
+(101 / (x - 4)) % 2) > 5)
+  let q9 = d4 + 1
+  (a0 + (d4 at sample) + (q9 at sample) + 
+(104 / (x - 4)))
+}
+
+test "stops" {
+  let xs: [I32; 8] = [0, 1, 2, 3, 4, 5, 6, 7]
+  let o = f.render(f.Params { p: 0 }, xs, 8.0)
+  assert o.out[0] == 0
+}
+## pan2_late_159 102
+pub flow f(x: I32 at sample, p: I32 at block) -> I32 at sample {
+  let d4 = prev~(p at (sample / 4), 1)
+  let a0 = prev~((x + 
+(101 / (x - 4))))
+  let a1 = 
+(102 / (x - 4))
+  let q9 = d4 + 1
+  (a0 + a1 + (d4 at sample) + (q9 at sample) + prev~((x + (par~ i in 0 ..< 2 { prev~((x + 
+(103 / (x - 4)))) })[0])))
+}
+
+test "stops" {
+  let xs: [I32; 8] = [0, 1, 2, 3, 4, 5, 6, 7]
+  let o = f.render(f.Params { p: 0 }, xs, 8.0)
+  assert o.out[0] == 0
+}

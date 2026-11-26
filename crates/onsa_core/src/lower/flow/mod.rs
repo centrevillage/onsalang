@@ -111,7 +111,7 @@ mod tests;
 use boundary::{gen_params_default, gen_process, gen_process_inplace, gen_render};
 pub(crate) use branches::{tilde_if, tilde_match};
 pub(crate) use generated::burst_ty;
-use generated::{Gen, around, init_value, range, replicas, replicas_place, ring_len, sfield, spread};
+use generated::{Gen, init_value, range, replicas, replicas_place, ring_len, sfield, spread};
 pub(crate) use hoist::HoistUses;
 pub(crate) use nodes::lower_flow_expr;
 use phases::{StageRun, call_stage, drive, gen_ctl, gen_init, gen_reset, gen_stage};

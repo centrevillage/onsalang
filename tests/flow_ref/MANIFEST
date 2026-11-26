@@ -150,6 +150,7 @@ file r242_const_let_chain.tsv rows=4 tests=1 evaluated=1 unavailable=0 skipped=0
 file r242_const_let_three_stages.tsv rows=4 tests=1 evaluated=1 unavailable=0 skipped=0 waiting=0
 file reset_boundary.tsv rows=30 tests=3 evaluated=3 unavailable=0 skipped=0 waiting=0
 file reset_if_block_values.tsv rows=64 tests=8 evaluated=8 unavailable=0 skipped=0 waiting=0
+file reset_if_condition_mixed_with_slow_signal.tsv rows=27 tests=4 evaluated=4 unavailable=0 skipped=0 waiting=0
 file reset_if_regressions.tsv rows=66 tests=5 evaluated=5 unavailable=0 skipped=0 waiting=0
 file reset_if_slow_condition_delay_values.tsv rows=46 tests=6 evaluated=6 unavailable=0 skipped=0 waiting=0
 file reset_if_slow_values.tsv rows=133 tests=8 evaluated=8 unavailable=0 skipped=0 waiting=0
@@ -200,4 +201,4 @@ file when_identity_regressions.tsv rows=78 tests=5 evaluated=5 unavailable=0 ski
 file when_slow_head_values.tsv rows=47 tests=5 evaluated=5 unavailable=0 skipped=0 waiting=0
 file when_slow_values.tsv rows=86 tests=9 evaluated=9 unavailable=0 skipped=0 waiting=0
 file when_values.tsv rows=77 tests=10 evaluated=10 unavailable=0 skipped=0 waiting=0
-total files=201 rows=9174 tests=1563 evaluated=1501 unavailable=1 skipped=61 waiting=6
+total files=202 rows=9201 tests=1567 evaluated=1505 unavailable=1 skipped=61 waiting=6

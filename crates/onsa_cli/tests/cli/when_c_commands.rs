@@ -6,7 +6,7 @@
 //! - `slot~(p).down~(4).when~(k > 2.0)` and `slot~(p).when~(k > 2.0).down~(4)` (`k` = the grid + 1, p = 10): the first two grids read 0 (never ran); the runs 0 .. 3 at the grids 2 .. 5 give 1001 1002 2003 2004, each held 4 frames.
 //!   A `reset` after any frames of the run before it (p = 5) leaves no last output and no count: the next frame is the frame 0.
 
-use crate::down_two_boundaries_c_commands::{build_flows, driver, frames_of};
+use crate::down_two_boundaries_c_commands::same_in_c_of;
 
 const FLOWS: &str = "\
 flow acc(f: F32 at block) -> F32 at sample {
@@ -47,23 +47,6 @@ pub flow when_then_down(
 /// Each flow: the frames of one run of `frames` frames (`has_input`: it has the input `x`), in one call, in the pieces `1 1 5 7` and after a `reset` that follows 0, 1, 3, 5, 6 or 7 frames of another run, are `want`.
 fn same_in_c(tag: &str, flows: &[(&str, bool, u32, Vec<i64>)]) {
     same_in_c_of(FLOWS, tag, flows);
-}
-
-/// `same_in_c` for the flows of `src`.
-fn same_in_c_of(src: &str, tag: &str, flows: &[(&str, bool, u32, Vec<i64>)]) {
-    let dir = build_flows(tag, src);
-    for (flow, has_input, frames, want) in flows {
-        let exe = driver(&dir, flow, *has_input);
-        for junk in [0, 1, 3, 5, 6, 7] {
-            for cuts in [&[][..], &[1, 1, 5, 7][..]] {
-                assert_eq!(
-                    &frames_of(&exe, junk, *frames, cuts),
-                    want,
-                    "{flow} after {junk} frames of another run, cut at {cuts:?}"
-                );
-            }
-        }
-    }
 }
 
 /// W = P: the condition is read at each frame, the part runs on the frames where it holds and its grid of `sample / 2` counts the runs (the frames 2, 3 and 6 are stopped, §11.10).

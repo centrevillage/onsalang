@@ -19,6 +19,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use onsa_diag::{Code, Diagnostic, Stage};
+use onsa_syntax::ast::Ast;
 
 use super::*;
 use crate::Package;
@@ -33,7 +34,7 @@ enum Mark {
 /// (S-1089) and the first step of that path with an N, the flow and its
 /// node (none of a path with no N); none when it is not counted: of no
 /// table, past 2^24 in it, or through a callee not counted.
-type Most = Option<(u32, Option<(DefId, NodeId)>)>;
+type NExp = Option<(u32, Option<(DefId, NodeId)>)>;
 
 /// The place of an E0808 of a path (S-1089), the exponent of its N and the
 /// node of its first step.
@@ -49,7 +50,7 @@ pub(crate) fn walk(pkg: &Package, a: &mut Analysis) {
     let mut roots: Vec<DefId> = a.flows.keys().copied().collect();
     roots.sort();
     let mut marks: HashMap<DefId, Mark> = HashMap::default();
-    let mut most: HashMap<DefId, Most> = HashMap::default();
+    let mut most: HashMap<DefId, NExp> = HashMap::default();
     for root in roots {
         if marks.contains_key(&root) {
             continue;
@@ -83,7 +84,7 @@ pub(crate) fn walk(pkg: &Package, a: &mut Analysis) {
 /// take and its fields, reports the first of its nodes past 2^24 on a path
 /// through flows (by the place of the modifier, §18.1), else each chain that
 /// composes a clock past `U32`, and gives its count.
-fn close(pkg: &Package, a: &mut Analysis, f: DefId, marks: &HashMap<DefId, Mark>, most: &HashMap<DefId, Most>) -> Most {
+fn close(pkg: &Package, a: &mut Analysis, f: DefId, marks: &HashMap<DefId, Mark>, most: &HashMap<DefId, NExp>) -> NExp {
     let info = a.flows.get(&f)?;
     let mut time = own_time(info);
     // A flow in error, whose entries nothing reads.
@@ -103,7 +104,7 @@ fn close(pkg: &Package, a: &mut Analysis, f: DefId, marks: &HashMap<DefId, Mark>
         let id = NodeId(i as u32);
         let PlanKind::Instance { callee, .. } = n.kind else {
             // A delay with a chain runs at its one stage (§11.10), a stage of this flow.
-            let stage = n.clock.stage().filter(|_| n.kind.delay().is_some() && !n.chain.is_empty());
+            let stage = n.clock.stage().filter(|_| n.chained_delay());
             let mut table = stage.map(|s| steps::table(n, &[s], Some((s, Out::Value))));
             table.iter_mut().for_each(|t| events::entries(n, None, &mut t.0));
             tables.push(table);
@@ -155,25 +156,26 @@ fn close(pkg: &Package, a: &mut Analysis, f: DefId, marks: &HashMap<DefId, Mark>
     };
     let ticked = match events::table(info, gives, &tables, burst_of, &mut time) {
         Ok(ticked) => ticked,
-        // Before `late` and the walk of `emit`, which go up the parents of no loop.
+        // Before `late_resets` and the walk of `emit`, which go up the parents of no loop.
         Err(ring) => {
-            let (d, time) = (unticked(a, info, ast(), &ring), own_time(info));
+            let (d, time) = (unticked(a, info, ast(), &ring, &tables), own_time(info));
             a.diagnostics.extend(found.into_iter().chain([d]));
             a.flows.entry(f).and_modify(|info| (info.unticked, info.time) = (true, time));
             return None;
         }
     };
     let ast = (!ticked.events.is_empty()).then(ast);
-    let late = |id| ast.map_or(Vec::new(), |ast| events::late(info, &ticked.events, ast, NodeId(id)));
-    let late: Vec<Vec<u32>> = (0..info.nodes.len() as u32).map(late).collect();
     let callers = tables.iter().flatten().flat_map(|t| &t.0).map(|e| e.caller);
     stages.extend(callers.filter(|s| s.slow_tick()));
     let Some(flow) = a.flows.get_mut(&f) else { onsa_diag::internal::bug(None, "a flow closed out of the table") };
     let set = |n: &mut PlanNode, (e, read)| (n.entries, n.read) = (e, read);
     flow.nodes.iter_mut().zip(tables).for_each(|(n, t)| t.into_iter().for_each(|t| set(n, t)));
-    flow.nodes.iter_mut().zip(late).for_each(|(n, late)| n.late = late);
     (flow.stages, flow.time) = (stages.into_iter().collect(), time);
     (flow.events, flow.emit, flow.burst) = (ticked.events, ticked.emit, ticked.burst);
+    if let Some(ast) = ast {
+        let late: Vec<Vec<u32>> = (0..flow.nodes.len() as u32).map(|id| flow.late_resets(ast, NodeId(id))).collect();
+        flow.nodes.iter_mut().zip(late).for_each(|(n, late)| n.late = late);
+    }
     node_work(flow);
     fields::build(flow);
     a.diagnostics.extend(found);
@@ -183,17 +185,19 @@ fn close(pkg: &Package, a: &mut Analysis, f: DefId, marks: &HashMap<DefId, Mark>
 /// The E0815 of the loop `ring` of calls of `info` that nothing outside it
 /// ticks (§11.11, S-1237; [`events::table`]), at the argument of its first
 /// call that ticks its output: a note at that of each other call, and one at
-/// the input of the first callee that gives its events out.
-fn unticked(a: &Analysis, info: &FlowInfo, ast: &onsa_syntax::ast::Ast, ring: &[NodeId]) -> Diagnostic {
-    // The input whose events the callee gives out is the source of it that gives.
+/// the input of the first callee that gives its events out. Of the tables of
+/// the nodes, `tables`.
+fn unticked(a: &Analysis, info: &FlowInfo, ast: &Ast, ring: &[NodeId], tables: &[events::Table]) -> Diagnostic {
+    // The input whose events the callee gives out: of the stage its run that gives runs.
     let arg = |id: NodeId| {
         let n = info.node(id);
         let PlanKind::Instance { callee, .. } = n.kind else { onsa_diag::internal::bug(Some(n.span), "no call") };
-        let i = a.flows.get(&callee).and_then(|g| {
-            g.events.iter().find_map(|p| match p.from {
-                EventFrom::Input(i) if p.gives => Some(i as usize),
-                _ => None,
-            })
+        let body = tables.get(id.0 as usize).and_then(Option::as_ref).and_then(|t| events::giving(&t.0));
+        let i = a.flows.get(&callee).zip(body).and_then(|(g, (_, body))| {
+            match g.events.get(events::find(&g.events, Some(body))?)?.from {
+                EventFrom::Input(i) => Some(i as usize),
+                EventFrom::Call(_) => None,
+            }
         });
         let found = i.and_then(|i| Some((n.args.get(i)?, a.def(callee).as_flow()?.inputs.get(i)?)));
         let Some((arg, input)) = found else {
@@ -341,7 +345,7 @@ fn callee_time(time: &mut BTreeMap<ClockStage, Words>, info: &FlowInfo, n: &Plan
 /// the body of `f` through its node `id`, at the modifier `at` of its chain
 /// (§11.9, S-1089), with a note at each step of the path with a chain of N
 /// (25 at most, each of an N of 2 or more): the node and the N of its chain.
-fn past_path(pkg: &Package, a: &Analysis, f: DefId, (at, total, id): Past, most: &HashMap<DefId, Most>) -> Diagnostic {
+fn past_path(pkg: &Package, a: &Analysis, f: DefId, (at, total, id): Past, most: &HashMap<DefId, NExp>) -> Diagnostic {
     let msg = format!(
         "the N of the `.down~` and `.up~` on the path from the body of `{}` multiply to 2^{total}, past 2^24 (§11.9)",
         a.def(f).name

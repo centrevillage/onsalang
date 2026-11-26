@@ -253,7 +253,7 @@ impl Structs<'_> {
         }
         chain.for_each(&mut push);
         // The store of a delay is of the ticks it ran (§11.10).
-        if n.kind.delay().is_some() && !n.guards.is_empty() {
+        if n.chained_delay() && !n.guards.is_empty() {
             push(Part::Ran);
         }
         n.late_flags().into_iter().for_each(&mut push);

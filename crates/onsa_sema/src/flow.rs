@@ -375,11 +375,12 @@ pub struct FlowInfo {
 }
 
 /// A `match~` of a flow body (§11.5): the bindings of each arm in the order
-/// of the text, and the `par~`s around it, the outermost first.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+/// of the text, and the part of the body it is in, of the `par~`s around it
+/// ([`FlowInfo::around`]).
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TildeMatch {
     pub arms: Vec<Vec<LocalId>>,
-    pub pars: Vec<NodeId>,
+    pub owner: Owner,
 }
 
 // ---------------------------------------------------------------- checker side

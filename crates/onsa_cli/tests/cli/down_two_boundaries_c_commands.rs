@@ -153,6 +153,23 @@ pub fn frames_of(exe: &str, junk: u32, frames: u32, cuts: &[u32]) -> Vec<i64> {
         .collect()
 }
 
+/// Each flow of the package `src` (built for the host as `tag`): the frames of one run of `frames` frames (`has_input`: it has the input `x`), in one call, in the pieces `1 1 5 7` and after a `reset` that follows 0, 1, 3, 5, 6 or 7 frames of another run, are `want`.
+pub fn same_in_c_of(src: &str, tag: &str, flows: &[(&str, bool, u32, Vec<i64>)]) {
+    let dir = build_flows(tag, src);
+    for (flow, has_input, frames, want) in flows {
+        let exe = driver(&dir, flow, *has_input);
+        for junk in [0, 1, 3, 5, 6, 7] {
+            for cuts in [&[][..], &[1, 1, 5, 7][..]] {
+                assert_eq!(
+                    &frames_of(&exe, junk, *frames, cuts),
+                    want,
+                    "{flow} after {junk} frames of another run, cut at {cuts:?}"
+                );
+            }
+        }
+    }
+}
+
 /// A gather and a gather-and-deal at two boundaries: the values worked out in the header, in one call, in the pieces `1 1 5 7` (a piece of 0 frames) and after a `reset` that follows 1, 3, 5, 6 or 7 frames of another run.
 #[test]
 fn the_values_of_a_chain_that_gathers_at_two_boundaries_are_the_same_in_c() {

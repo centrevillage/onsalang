@@ -645,20 +645,22 @@ pub fn tags_of(plan: &Plan) -> BTreeSet<&'static str> {
 /// The values `cb` takes in the parts of a `process`.
 pub const BOOLS: &[&str] = &["true", "true", "false"];
 
+/// The frames of a `Bool` signal of `FRAMES` frames, as the elements of an array (a run of the same value is as likely as a turn).
+pub fn signal(rng: &mut Rng) -> String {
+    let mut v = rng.chance(50);
+    let bits: Vec<&str> = (0..FRAMES)
+        .map(|_| {
+            v ^= rng.chance(35);
+            if v { "true" } else { "false" }
+        })
+        .collect();
+    bits.join(", ")
+}
+
 /// The tests: `render` of `fa` and `fb` on a grid of `ci` and `cb` (`ct` and `cti` always true), and `process` of both cut at
 /// three places with `cb` changing between the parts, a `reset` before the last. Every output of `fa` is asserted equal to the
 /// one of `fb`.
 pub fn tests(rng: &mut Rng) -> String {
-    let signal = |rng: &mut Rng| {
-        let mut v = rng.chance(50);
-        let bits: Vec<&str> = (0..FRAMES)
-            .map(|_| {
-                v ^= rng.chance(35);
-                if v { "true" } else { "false" }
-            })
-            .collect();
-        bits.join(", ")
-    };
     let mut t = format!("test \"render\" {{\n  let cs: [Bool; {FRAMES}] = [{}]\n", signal(rng));
     for (k, (ci, cb)) in [(true, true), (true, false), (false, true)].into_iter().enumerate() {
         for f in ["fa", "fb"] {

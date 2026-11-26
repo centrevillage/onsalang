@@ -39,7 +39,7 @@ const COVER: &str = "h_slot h_sl h_sltk h_tk h_acc h_lp h_dws h_mk2 h_mk4 h_oute
     o_burst o_slow w_slow w_pos w_p r_in_block blk burst_up k_atid c_at_sample";
 /// The seeds of the gate for the matrix of `exotic`, and what they hold: the forms of the breaker's two highs (a state given back
 /// before a slow stage wrote, a deal array read before it was given back) and the head with a `when~` inside.
-const EXOTIC_GATE: [u64; 7] = [307, 489, 983, 137, 853, 1308, 1611];
+const EXOTIC_GATE: [u64; 7] = [326, 521, 1015, 139, 885, 1340, 1643];
 const EXOTIC_COVER: &str = "h_tk h_slot h_sl h_mk2 h_mk4 h_outer r_1 r_2 r_3 r_has_when r_slow_has_when r_in_when r_has_up r_in_up r_has_down \
     r_in_down r_has_two_when f_block t_block o_plain o_burst o_slow ins_front ins_mid ins_end len_3 len_4 r_in_block";
 

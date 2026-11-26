@@ -1,6 +1,6 @@
 // onsa.toml
 // [test]
-// spec = ["§11.5", "§11.6", "§18.2"]
+// spec = ["§11.5", "§11.6", "§11.10", "§18.2"]
 
 // W7-15 U3/t (spec/tools.md §1.1, §1.2, §1.3; §11.5, §11.6): the flows that the tests of `crates/onsa_cli/tests/cli/graph_par_frames.rs` give to `onsa graph`
 // (this file is checked as a program, so the sources of those tests are programs; no golden file of the graphs is kept for them). Each flow is for one test:
@@ -11,6 +11,7 @@
 //   shadow:        a `par~` whose index has the name of a node of its body (S-1168)
 //   inclusive:     `a ..= b` (S-1171)
 //   destructure:   a `let` of more than one name, and `let _` (S-1169)
+//   chained:       the `let`s of delays with the modifiers of their chains, and of one with none (S-1084)
 //   (the `par` with no state, the value of a `let`, is in graph_labels_stateless_par.onsa: it is a case of its own, W7-06 U0)
 
 pub flow lp(x: F32 at sample) -> F32 at sample {
@@ -68,4 +69,11 @@ pub flow destructure(x: F32 at sample) -> F32 at sample {
   let _ = lp~(x)
   let _ = lp~(p)
   a + b
+}
+
+pub flow chained(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  let q = prev~(x).when~(c)
+  let r = delay~(x, 2).reset_if~(c)
+  let d = delay~(x, 2)
+  (q + r) + d
 }

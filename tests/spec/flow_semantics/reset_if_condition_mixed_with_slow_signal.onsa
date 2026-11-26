@@ -1,0 +1,97 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.10", "§11.4", "§11.3", "§11.9"]
+
+// A condition that mixes `sample_tick()` with a signal slower than the clock W that reads it (W7-17 L1/t, the break side of W7-10 S1230: `gap1.onsa`; S-1227 (provisional reading of a mixed condition), S-1230). `c4` is the gathered
+// value of `c` at `sample / 4` (the ticks at the frames 0 4 8 12; the tick 0 gathers the defaults, `false`, and a later tick `c[3]` of the 4 frames before it, all true here), so `c4` is false, true, true, true at those ticks. The chain is
+// `cnt~().up~(2).M(K).down~(2).when~(c)` with `c` always true: the boundary of the `.down~(2)` ticks at the even frames, each tick runs `cnt` twice (1 2, 3 4, ...) and deals the two outputs to its frame and the next, and W of `M` is
+// `sample / 2`.
+//
+// The mixed condition `K = c4 && sample_tick() % 3 == 0` is a value of the clock of `c4`, `sample / 4`: `sample_tick()` takes "the clock of the place" beside it (§11.4), so it is the time of the tick of `c4`. At the ticks 0 4 8 12 it
+// reads the times 0 4 8 12 with `c4` false true true true: `K` is true at the tick 12 only, and a `sample / 4` value is held by a faster reader (§11.3), so a reader at `sample / 2` sees true at the frames 12 13 14 15.
+//
+// `reset_if~` (§11.10): "条件の刻みは、条件の式のクロック（`at` で付けたクロックを含む）で決まり ... 刻みのクロックならそのクロックの刻み"; the condition is read as a level ("真の刻みは全て初期化する").
+// - `K` itself resets at the ticks of its clock `sample / 4` where it is true: the frame 12 once. `cnt` is put back before the run of the tick 12: 1 2 3 4 5 6 7 8 9 10 11 12 | 1 2 3 4.
+// - `(K) at (sample / 2)` has the clock `sample / 2` (W): the ticks 0 2 ... 14 read `K` held, true at the ticks 12 and 14, so `cnt` is put back before the runs of both: 1 2 ... 12 | 1 2 | 1 2.
+//   The two writings differ, as the sentence for `sample_tick()` alone ("式の全体に W の `at` を付けた形と同じ") does not cover a condition that reads another tick value.
+//
+// `when~` (§11.10: the condition is read at W, "W より遅い周期のクロックの値（保持で読む）"): `K` and `(K) at (sample / 2)` are the same value, true at the ticks 12 and 14, and `cnt` runs at both: the part never ran before the tick 12
+// (twelve 0), the tick 12 runs 1 2 (frames 12 13) and the tick 14 runs 3 4 (frames 14 15).
+
+flow cnt() -> F32 at sample {
+  let n = prev~(^n) + 1.0
+  n
+}
+
+flow lb4(c: Bool at (sample * 4)) -> Bool at sample {
+  c[3]
+}
+
+pub flow reset_direct(c: Bool at sample) -> F32 at sample {
+  let c4 = lb4~(c).down~(4)
+  cnt~().up~(2).reset_if~(c4 && sample_tick() % 3 == 0).down~(2).when~(c)
+}
+
+pub flow reset_at(c: Bool at sample) -> F32 at sample {
+  let c4 = lb4~(c).down~(4)
+  cnt~().up~(2).reset_if~((c4 && sample_tick() % 3 == 0) at (sample / 2)).down~(2).when~(c)
+}
+
+pub flow when_direct(c: Bool at sample) -> F32 at sample {
+  let c4 = lb4~(c).down~(4)
+  cnt~().up~(2).when~(c4 && sample_tick() % 3 == 0).down~(2).when~(c)
+}
+
+pub flow when_at(c: Bool at sample) -> F32 at sample {
+  let c4 = lb4~(c).down~(4)
+  cnt~().up~(2).when~((c4 && sample_tick() % 3 == 0) at (sample / 2)).down~(2).when~(c)
+}
+
+const ON: [Bool; 16] = [true; 16]
+
+test "a reset_if~ whose condition mixes the time with a signal of sample / 4 resets at the ticks of that signal: the frame 12 only" {
+  var o: [F32; 16] = [0.0; 16]
+  var s = reset_direct.init(8.0)
+  reset_direct.process(inout s, ON, inout o)
+  let want: [F32; 16] = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 1.0, 2.0, 3.0, 4.0]
+  assert o == want
+}
+
+test "the same condition with the at of W is held at W: it resets at the ticks 12 and 14" {
+  var o: [F32; 16] = [0.0; 16]
+  var s = reset_at.init(8.0)
+  reset_at.process(inout s, ON, inout o)
+  let want: [F32; 16] = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 1.0, 2.0, 1.0, 2.0]
+  assert o == want
+}
+
+test "a when~ reads that condition at W with the slower signal held, so with or without the at of W the part runs at the ticks 12 and 14" {
+  var a: [F32; 16] = [0.0; 16]
+  var b: [F32; 16] = [0.0; 16]
+  var sa = when_direct.init(8.0)
+  var sb = when_at.init(8.0)
+  when_direct.process(inout sa, ON, inout a)
+  when_at.process(inout sb, ON, inout b)
+  let want: [F32; 16] = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 2.0, 3.0, 4.0]
+  assert a == want
+  assert b == want
+}
+
+test "the reset_if~ of the signal's ticks gives the same values when the call is cut before and after the tick 12" {
+  // The state is the one of the run: a cut changes nothing (§13.4). The call cut at the frame 11 has the reset in its second piece, the one cut at 13 has the tick 12 in its first.
+  var s1 = reset_direct.init(8.0)
+  var a1: [F32; 11] = [0.0; 11]
+  var a2: [F32; 5] = [0.0; 5]
+  reset_direct.process(inout s1, [true; 11], inout a1)
+  reset_direct.process(inout s1, [true; 5], inout a2)
+  assert a1 == [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0]
+  assert a2 == [12.0, 1.0, 2.0, 3.0, 4.0]
+  var s2 = reset_direct.init(8.0)
+  var b1: [F32; 13] = [0.0; 13]
+  var b2: [F32; 3] = [0.0; 3]
+  reset_direct.process(inout s2, [true; 13], inout b1)
+  reset_direct.process(inout s2, [true; 3], inout b2)
+  assert b1 == [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 1.0]
+  assert b2 == [2.0, 3.0, 4.0]
+}

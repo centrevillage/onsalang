@@ -24,7 +24,7 @@ use onsa_sema::body::LocalId;
 use onsa_sema::clock::Clock;
 use onsa_sema::def::{DefKind, FlowDef};
 use onsa_sema::flow::{FlowInfo, NodeId, Owner, PlanKind, PlanNode, Vertex};
-use onsa_sema::flow_names::OUTPUT_SCOPE;
+use onsa_sema::flow_names::{OUTPUT_SCOPE, qualify};
 use onsa_sema::{Analysis, DefId};
 use onsa_syntax::ast::{Ast, ExprId, RangeEnd};
 
@@ -104,6 +104,9 @@ impl Graph<'_> {
 
     fn inputs(&mut self, flow: &FlowDef) -> Vec<Item> {
         let info = self.info;
+        if info.inputs.len() != flow.inputs.len() {
+            bug(Some(self.ast.expr(flow.body).span), "a plan with other inputs than its flow")
+        }
         let mut items = Vec::new();
         for (&l, input) in info.inputs.iter().zip(&flow.inputs) {
             let name = info.body.locals[l.0 as usize].name.clone();
@@ -194,18 +197,17 @@ impl Graph<'_> {
     fn node_label(&self, node: &PlanNode, e: ExprId) -> String {
         // `prev_0 = prev~`, `src = saw~`: the name without its scope
         // (spec/tools.md §1.1).
+        // SPEC-GAP(S-1084): with the modifiers of its chain, the N as a
+        // value (`lp~.down~(4)`, `prev~.when~(…)`), of the plan (provisional (2)).
+        let chain = node.chain.iter().map(|m| match m.ratio.and_then(|r| r.n()) {
+            Some(n) => format!(".{}~({n})", m.modifier.name()),
+            None => format!(".{}~(…)", m.modifier.name()),
+        });
+        let chain: String = chain.collect();
         let what = match (&node.kind, node.kind.delay()) {
-            // SPEC-GAP(S-397): a delay is its kind, with no length.
-            (_, Some(d)) => format!("{}~", d.name()),
-            // SPEC-GAP(S-1084): with the modifiers of its chain, the N as a
-            // value (`lp~.down~(4)`), of the plan (provisional (2)).
-            (PlanKind::Instance { callee, .. }, None) => {
-                let chain = node.chain.iter().map(|m| match m.ratio.and_then(|r| r.n()) {
-                    Some(n) => format!(".{}~({n})", m.modifier.name()),
-                    None => format!(".{}~(…)", m.modifier.name()),
-                });
-                format!("{}~{}", self.a.def(*callee).name, chain.collect::<String>())
-            }
+            // A delay is its kind, with no length (§1.1).
+            (_, Some(d)) => format!("{}~{chain}", d.name()),
+            (PlanKind::Instance { callee, .. }, None) => format!("{}~{chain}", self.a.def(*callee).name),
             // SPEC-GAP(S-1170): as written and with its range, as the heading
             // of its frame.
             (PlanKind::Par { .. }, None) => format!("{} {}", spelling(self.ast, node.expr), range(node)),
@@ -224,10 +226,10 @@ impl Graph<'_> {
 // first, §2.3, §11.6), which no node of the body has (`<kind>_<n>`).
 fn index_name(info: &FlowInfo, id: NodeId, var: &str) -> String {
     let node = info.node(id);
-    let name = format!("{}.{var}", node.path);
+    let name = qualify(&node.path, var);
     let children = info.roots(Owner::Par(id));
     match children.iter().any(|&c| info.node(c).path == name) {
-        true => format!("{}._{var}", node.path),
+        true => qualify(&node.path, &format!("_{var}")),
         false => name,
     }
 }
@@ -254,9 +256,8 @@ fn range(node: &PlanNode) -> String {
     format!("{from}{}{to}", end.symbol())
 }
 
-/// `type at clock`, or the type alone for a constant (§11.3); a clock with
-/// no text is an internal error at `at`.
-// SPEC-GAP(S-397): a constant `let` has no clock in its label.
+/// `type at clock`, or the type alone for a constant (§11.3, §1.1); a clock
+/// with no text is an internal error at `at`.
 fn typed(ty: &str, r: Clock, at: Span) -> String {
     match r {
         Clock::Const => ty.to_string(),
@@ -279,7 +280,7 @@ fn rate_color(r: Clock, at: Span) -> &'static str {
 
 /// The flows of the user's package, in their order. The package by its
 /// place, not its name: a dependency may have the same name (R-88).
-fn own_flows(a: &Analysis) -> impl Iterator<Item = DefId> + '_ {
+pub(crate) fn own_flows(a: &Analysis) -> impl Iterator<Item = DefId> + '_ {
     let own = |d: &onsa_sema::def::Def| matches!(d.kind, DefKind::Flow(_)) && a.modules.is_own(d.module);
     a.defs.iter().enumerate().filter(move |(_, d)| own(d)).map(|(i, _)| DefId(i as u32))
 }
@@ -486,7 +487,9 @@ impl Drawing {
                         path.push((w, 0));
                     }
                     1 => {
-                        let from = path.iter().position(|&(u, _)| u == w).unwrap_or(0);
+                        let Some(from) = path.iter().position(|&(u, _)| u == w) else {
+                            bug(None, "a vertex on the path that is not on it")
+                        };
                         let cycle = path[from..].iter().map(|&(u, _)| u).chain([w]);
                         return Some(cycle.map(|u| names[u].to_string()).collect());
                     }

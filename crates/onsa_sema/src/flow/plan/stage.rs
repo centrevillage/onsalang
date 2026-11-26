@@ -177,6 +177,12 @@ impl FlowInfo {
 }
 
 impl PlanNode {
+    /// It is a built-in delay with a chain (§11.10), which runs at its one
+    /// stage with an entry of it: the one test of it (D-15).
+    pub fn chained_delay(&self) -> bool {
+        self.kind.delay().is_some() && !self.chain.is_empty()
+    }
+
     /// Its entry of the stage `s` of this flow (§11.9, [`Entry`]): the one
     /// question the Core asks of its work.
     pub fn entry(&self, s: ClockStage) -> Option<&Entry> {

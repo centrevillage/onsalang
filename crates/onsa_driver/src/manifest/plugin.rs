@@ -4,7 +4,6 @@
 use std::collections::HashMap;
 
 use onsa_diag::{Code, Diagnostic, Note, Span};
-use onsa_sema::def::DefKind;
 use onsa_sema::{Analysis, DefId, Package};
 
 /// The path a `flow` of a `[[plugin]]` writes, and the place of its value.
@@ -19,10 +18,8 @@ pub(crate) fn resolve(a: &Analysis, flows: &[PluginFlow]) -> Vec<Option<DefId>> 
     }
     // Of two flows of a path (the later an E0305), the first, as `onsa graph`.
     let mut by_path: HashMap<String, DefId> = HashMap::new();
-    for d in (0..a.defs.len() as u32).map(DefId) {
-        if matches!(a.def(d).kind, DefKind::Flow(_)) && a.modules.is_own(a.def(d).module) {
-            by_path.entry(a.qualified_name(d)).or_insert(d);
-        }
+    for d in crate::graph::own_flows(a) {
+        by_path.entry(a.qualified_name(d)).or_insert(d);
     }
     flows.iter().map(|(path, _)| by_path.get(path).copied()).collect()
 }

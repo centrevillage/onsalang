@@ -5,7 +5,7 @@
 //!
 //! - `rid`: `X.reset_if~(false)` and `X.when~(true)` put in at any place of a chain that has `reset_if~` of its own (`fa` has them
 //!   in, `fb` has not; inside or outside a `reset_if~`, a `.up~`, a `.when~`), but a `when~(true)` only where S-1228 keeps it a twin
-//!   (`when_twin_ok`: with a `reset_if~` outside it, only for a part that has no stage slower than the reset's tick);
+//!   (`when_twin_ok`: with a `reset_if~` outside it, only for a part with no slow stage and no `.up~`: `slow_head`);
 //! - `slowc`: a condition slower than W is held at W, so `.when~(k > 1.5)` (`k` counts the ticks of a slower grid) and
 //!   `.when~(sample_tick() >= N)` (true from the tick where `k` is 2) are the same (not inside a block, where a `sample_tick()`
 //!   is gathered with the inputs and `k` is read at its own tick);
@@ -49,12 +49,20 @@ const HEADS: [Head; 15] = [
 /// than its W to W's stage (§11.9), and a `reset_if~` outside it goes back before that stage, whereas with no `when~` the stage of
 /// the part writes first and the reset takes it back: so the two chains differ where the reset's tick is a tick of such a stage
 /// (a slow stage of the head `slot`, a slow input, a copy of a slower condition, a burst dealt, the ring and the array of a block).
-/// With a `reset_if~` outside it the `when~(true)` is put in only where the part to its left has none: the head `tk` or `acc` with
-/// `.down~` alone to its left. With no `reset_if~` outside it, anywhere.
+/// With a `reset_if~` outside it the `when~(true)` is put in only where the part to its left has no slow stage and no `.up~`: the head
+/// is one of `tk`, `acc` and `lp` (`slow_head`), and a `.down~`, a `when~` and a `reset_if~` to its left are no hindrance (the chains with
+/// it put in agreed with the chains without it in 2000 programs, W7-10 (P)); a burst head (`mk2`, `mk4`) is a hindrance, which the
+/// matrix of `exotic` shows. With no `reset_if~` outside it, anywhere.
 fn when_twin_ok(head: Head, chain: &[Mod], p: usize) -> bool {
     let reset_outside = chain[p..].iter().any(|m| matches!(m, Mod::Reset(_)));
-    let fast = matches!(head, Head::Tk | Head::Acc) && chain[..p].iter().all(|m| matches!(m, Mod::Down(_)));
-    !reset_outside || fast
+    let plain = !slow_head(head) && !chain[..p].iter().any(|m| matches!(m, Mod::Up(_)));
+    !reset_outside || plain
+}
+
+/// Is the head one that has a stage slower than the `sample` of the chain (`slot`, `dws4`), an input slower than it (`sl`, the inside of
+/// `outer2`) or a burst that a `.down~` deals (`mk2`, `mk4`)?
+fn slow_head(head: Head) -> bool {
+    matches!(head, Head::Slot | Head::Sl | Head::SlTk | Head::Dws | Head::Mk2 | Head::Mk4 | Head::Outer)
 }
 
 /// A condition that never holds, read at W (`w`): a literal, a `block` or `init` input that is false, `c && cf`, or `cf` at a

@@ -140,6 +140,8 @@ impl Report {
         );
         let graphs: usize = self.cases.iter().map(|c| c.run.graph_flows).sum();
         let _ = write!(s, "\ngraphs of flows checked for a cycle of solid edges (`onsa graph`): {graphs}");
+        let frames: usize = self.cases.iter().map(|c| c.run.graph_frames).sum();
+        let _ = write!(s, "\ngraph frames checked for their properties: {frames}");
         let copies: usize = self.cases.iter().map(|c| c.run.fix_copies).sum();
         let rewritten: Vec<&String> = self.cases.iter().flat_map(|c| &c.run.copies_rewritten).collect();
         let _ = write!(

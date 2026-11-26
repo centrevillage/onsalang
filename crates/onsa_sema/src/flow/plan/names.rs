@@ -23,10 +23,7 @@ pub(in crate::flow) fn local(kind: &str, n: u32) -> String {
     format!("{kind}_{n}")
 }
 
-/// `<scope>.<name>` (`a.prev_0`).
-pub(in crate::flow) fn qualify(scope: &str, name: &str) -> String {
-    format!("{scope}.{name}")
-}
+pub(in crate::flow) use crate::flow_names::qualify;
 
 /// The field of the part `p` of a node whose own field is `field`:
 /// `<field>.buf`, `<field>.w`, `<field>.init`, `<field>._gather_<b>_<i>`

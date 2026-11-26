@@ -129,7 +129,7 @@ pub(super) fn entries(n: &PlanNode, g: Option<&FlowInfo>, entries: &mut Vec<Entr
                 ops.append(&mut e.ops);
                 e.ops = ops;
             }
-            None => entries.push(Entry { caller, read: false, ops }),
+            None => entries.push(Entry { caller, ops }),
         }
     }
 }
@@ -158,6 +158,28 @@ fn most(n: &PlanNode, ops: &[Op]) -> u32 {
     ops.iter().map(runs).fold(0, u32::saturating_add)
 }
 
+/// The run of a call that gives its events out ([`Out::Event`]) in its
+/// table `entries` (in the runs of an `.up~` and under a guard too): the stage
+/// of its entry, which ticks them ([`EventPlan::parent`]), and the stage of
+/// the callee it runs, of the input they are at when that is an event. The
+/// one place of it (D-15).
+pub(super) fn giving(entries: &[Entry]) -> Option<(ClockStage, ClockStage)> {
+    // The first entry and run are the only ones: one stage of a caller gives out the events of a call at
+    // most (S-1237, I1–I5; `form` of the tests asserts it), and its runs there run one stage of the callee.
+    entries.iter().find_map(|e| {
+        let mut body = None;
+        Op::walk(&e.ops, &mut |op| {
+            if let Op::Run { body: b, out: Out::Event } = *op {
+                body = body.or(Some(b));
+            }
+        });
+        Some((e.caller, body?))
+    })
+}
+
+/// The table of a node, of the walk ([`PlanNode::entries`], [`PlanNode::read`]).
+pub(super) type Table = Option<(Vec<Entry>, Read)>;
+
 /// The events of a flow with what the table gives of them ([`table`]).
 pub(super) struct Ticked {
     pub events: Vec<EventPlan>,
@@ -176,7 +198,7 @@ pub(super) struct Ticked {
 pub(super) fn table(
     info: &FlowInfo,
     gives: bool,
-    tables: &[Option<(Vec<Entry>, Read)>],
+    tables: &[Table],
     burst_of: impl Fn(DefId) -> u32,
     time: &mut BTreeMap<ClockStage, Words>,
 ) -> Result<Ticked, Vec<NodeId>> {
@@ -184,9 +206,7 @@ pub(super) fn table(
     let of = |id: NodeId| tables.get(id.0 as usize).and_then(Option::as_ref);
     for p in &mut plans {
         if let EventFrom::Call(id) = p.from {
-            // In the runs of an `.up~` and under a guard too.
-            let emits = |e: &&Entry| most(info.node(id), &e.ops) > 0;
-            p.parent = of(id).and_then(|t| t.0.iter().find(emits)).map(|e| e.caller);
+            p.parent = of(id).and_then(|t| giving(&t.0)).map(|(caller, _)| caller);
         }
     }
     for k in rooted(info, &plans)?.into_iter().rev() {
@@ -210,26 +230,35 @@ pub(super) fn table(
     Ok(Ticked { events: plans, emit, burst })
 }
 
-/// The resets of the delay `id` of `info`, by their place in its chain, that
-/// an event may tick between the place it is written at and its store (§11.3,
-/// S-1250; [`PlanNode::late`]): the event, or one whose stage ticks it, is
-/// given out in the function of the stage of the delay, by a call after it.
-/// Of any other the delay has been stored, or is not yet read: the functions
-/// of the stages are in one another by the events given out alone, and an
-/// event of an input comes of the caller between them (S-1251).
-pub(super) fn late(info: &FlowInfo, plans: &[EventPlan], ast: &Ast, id: NodeId) -> Vec<u32> {
-    let n = info.node(id);
-    let Some(own) = info.node_stage(id).filter(|_| n.kind.delay().is_some()) else { return Vec::new() };
-    // What is made in the order of the text: a chain after its head and its conditions (§11.3).
-    let end = |id: NodeId| {
-        let n = info.node(id);
-        let conds = n.chain.iter().filter_map(|m| Some(ast.expr(m.cond?).span.end));
-        conds.fold(n.span.end, u32::max)
-    };
-    let after = |p: &EventPlan| matches!(p.from, EventFrom::Call(c) if p.parent == Some(own) && end(c) > end(id));
-    let ticks = |s: Option<ClockStage>| std::iter::successors(find(plans, s), |&k| find(plans, plans[k].parent));
-    let late = |m: &PlanModifier| ticks(m.reset).any(|k| after(&plans[k]));
-    (0..).zip(&n.chain).filter(|(_, m)| late(m)).map(|(at, _)| at).collect()
+impl FlowInfo {
+    /// The resets of the delay `id`, by their place in its chain, that an
+    /// event may tick between the place it is written at and its store (§11.3,
+    /// S-1250; [`PlanNode::late`]): the event, or one whose stage ticks it, is
+    /// given out in the function of the stage of the delay, by a call made
+    /// after it ([`PlanNode::done_at`]). Of any other the delay has been
+    /// stored, or is not yet read: the functions of the stages are in one
+    /// another by the events given out alone, and an event of an input comes
+    /// of the caller between them (S-1251). Of the [`FlowInfo::events`] of a
+    /// flow whose stages tick one another with no loop ([`rooted`]).
+    pub(super) fn late_resets(&self, ast: &Ast, id: NodeId) -> Vec<u32> {
+        let (n, plans) = (self.node(id), &self.events);
+        let Some(own) = self.node_stage(id).filter(|_| n.kind.delay().is_some()) else { return Vec::new() };
+        let done = n.done_at(ast);
+        let after = |p: &EventPlan| matches!(p.from, EventFrom::Call(c) if p.parent == Some(own) && self.node(c).done_at(ast) > done);
+        let ticks = |s: Option<ClockStage>| std::iter::successors(find(plans, s), |&k| find(plans, plans[k].parent));
+        let late = |m: &PlanModifier| ticks(m.reset).any(|k| after(&plans[k]));
+        (0..).zip(&n.chain).filter(|(_, m)| late(m)).map(|(at, _)| at).collect()
+    }
+}
+
+impl PlanNode {
+    /// Where its work is done in the order of the text, which is that of
+    /// evaluation (§11.3): the end of its chain, after its head and its
+    /// conditions. The one place of it (D-15).
+    pub(super) fn done_at(&self, ast: &Ast) -> u32 {
+        let conds = self.chain.iter().filter_map(|m| Some(ast.expr(m.cond?).span.end));
+        conds.fold(self.span.end, u32::max)
+    }
 }
 
 /// The source of `plans` whose stage is `s`, by its place in them.

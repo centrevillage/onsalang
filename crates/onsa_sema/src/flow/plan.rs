@@ -185,7 +185,7 @@ pub struct PlanNode {
     /// written ([`events::saved`], §11.3, S-1240); none of another node.
     pub saved: Vec<ExprId>,
     /// Of a delay, its resets that may come between the place it is written at
-    /// and its store ([`events::late`], S-1250), by their place in `chain`;
+    /// and its store ([`FlowInfo::late_resets`], S-1250), by their place in `chain`;
     /// made by the walk of the table ([`entries`]).
     pub late: Vec<u32>,
 }
@@ -193,14 +193,10 @@ pub struct PlanNode {
 /// The work of an instance in the function of the stage `caller` of this
 /// flow (§11.9, S-1088, S-1207): its `ops`, in the order of §11.9 (the
 /// slow ticks, then the ticks of `sample`), which the Core lowers as they
-/// are. `read`: this flow reads the instance in that function and they
-/// write what it reads (a [`Op::Run`] of [`Out::Value`], a [`Op::Deal`] to
-/// [`To::Value`], or one of either into the array of its [`Read::Array`]).
-/// Read or not, they are where the call is written, before its value.
+/// are, where the call is written, before its value.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Entry {
     pub caller: ClockStage,
-    pub read: bool,
     pub ops: Vec<Op>,
 }
 
@@ -553,6 +549,17 @@ impl FlowInfo {
         names::scopes(self.lets.iter().map(|l| l.locals.as_slice()), &self.body)
     }
 
+    /// The `par~`s (and the `par`s) around what `owner` owns, the outermost
+    /// first: the one walk of them (D-15).
+    pub fn around(&self, mut owner: Owner) -> Vec<NodeId> {
+        let mut pars = Vec::new();
+        while let Owner::Par(p) = owner {
+            pars.insert(0, p);
+            owner = self.node(p).owner;
+        }
+        pars
+    }
+
     /// The nodes no `par~` holds: of each `let` in their order, then of the
     /// output.
     pub fn top(&self) -> impl Iterator<Item = NodeId> + '_ {
@@ -596,8 +603,8 @@ pub(super) fn build(
                 for &(at, port) in &w.nodes[k].ports {
                     r.chain.get_mut(at as usize).into_iter().for_each(|m| m.port = Some(port));
                 }
-                // Of a delay, by its clock, known now (§11.10: P = W = that of its first argument).
-                if r.kind.delay().is_some() && !r.chain.is_empty() {
+                // Of a delay, by its clock, known now (§11.10: P = W = that of its first argument); none of no chain.
+                if r.kind.delay().is_some() {
                     (r.bounds, r.guards, _) = bounds::bounds(&r.chain, bounds::Ports::delay(w.nodes[k].clock));
                 }
                 bounds::conds(&r.chain, &mut r.bounds);

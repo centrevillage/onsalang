@@ -58,6 +58,7 @@ use crate::{Expected, PanicMark, parse_markers};
 
 mod all;
 mod build;
+pub mod graph_props;
 mod markers;
 mod report;
 mod test_blocks;
@@ -218,6 +219,8 @@ pub struct CaseRun {
     /// The flows whose graphs were checked for a cycle of solid edges
     /// (`spec/tools.md` §1.2, [`onsa_driver::graph::check_graphs`]).
     pub graph_flows: usize,
+    /// The frames of those graphs, whose properties ([`graph_props`]) were checked.
+    pub graph_frames: usize,
 }
 
 /// A target of a case that built: its C, for the C checks ([`crate::ccheck`]).
@@ -734,6 +737,10 @@ fn outputs(
         Ok(check) => {
             run.graph_flows = check.flows;
             run.problems.extend(check.problems.into_iter().map(|p| Problem::Failed(format!("graph: {p}"))));
+            // The properties of the text (spec/tools.md §1.1, §1.3), and the flows complete against those drawn.
+            let found = graph_props::check(analyzed, check.flows);
+            run.graph_frames = found.frames;
+            run.problems.extend(found.problems.into_iter().map(|p| Problem::Failed(format!("graph: {p}"))));
         }
         Err(e) => run.problems.push(internal_problem(&loaded.sources, &e, None)),
     }

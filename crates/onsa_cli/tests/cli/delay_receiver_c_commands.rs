@@ -9,7 +9,7 @@
 //! - `prev~(l).when~(l != 30.0)` with `l = acc~(p).down~(4)` (10 20 30 40 50 60 at the grids of 4 frames): the delay ticks at the grid, the grid 2 is stopped; the grids 0 1 3 4 5 give 0 10 20 40 50 and the grid 2 keeps 10, each held 4 frames.
 //! - `prev~(x).reset_if~(k == 2.0)` with `k = acc~(1.0).down~(4)` (the grid 1, the frame 4): the reset is before the stage of the delay at that frame: 0 1 2 3 | 0 5 6 7 8 9.
 
-use crate::down_two_boundaries_c_commands::{build_flows, driver, frames_of};
+use crate::down_two_boundaries_c_commands::same_in_c_of;
 
 const FLOWS: &str = "\
 flow acc(f: F32 at block) -> F32 at sample {
@@ -55,19 +55,7 @@ pub flow slow_when(
 
 /// Each flow: the frames of one run of `frames` frames (`has_input`: it has the input `x`), in one call, in the pieces `1 1 5 7` and after a `reset` that follows 0, 1, 3, 5, 6 or 7 frames of another run, are `want`.
 fn same_in_c(tag: &str, flows: &[(&str, bool, u32, Vec<i64>)]) {
-    let dir = build_flows(tag, FLOWS);
-    for (flow, has_input, frames, want) in flows {
-        let exe = driver(&dir, flow, *has_input);
-        for junk in [0, 1, 3, 5, 6, 7] {
-            for cuts in [&[][..], &[1, 1, 5, 7][..]] {
-                assert_eq!(
-                    &frames_of(&exe, junk, *frames, cuts),
-                    want,
-                    "{flow} after {junk} frames of another run, cut at {cuts:?}"
-                );
-            }
-        }
-    }
+    same_in_c_of(FLOWS, tag, flows);
 }
 
 /// W = P = K: the condition is read at each frame, the delay runs on the frames where it holds and counts them (the frames 2, 4 and 5 are stopped, §11.10), and the reset puts the ring back before the frame.
