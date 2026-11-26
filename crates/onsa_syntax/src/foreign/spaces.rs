@@ -290,7 +290,7 @@ pub(super) fn asymmetric_binary_space(c: &Cursor) -> Option<Hit> {
     let prev = c.before(c.at)?;
     // After a `for`, a `while` or a declaration the sign follows no operand
     // (S-236): no candidate makes it binary.
-    if c.end_at(prev) == Some(super::End::NoOperand) {
+    if c.ends_no_operand(prev) {
         return None;
     }
     let mut fixes = vec![Fix::insert("write blanks on both sides", c.file, c.span(c.at).end, " ")];

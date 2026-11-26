@@ -1,0 +1,28 @@
+// onsa.toml
+// [test]
+// spec = ["§2.2", "§2.3", "§18.1"]
+// fixes = 1
+// [[test.fix]]
+// at = "22:13"
+// code = "E0002"
+// candidate = 1
+// leaves = ["23:3 E0002"]
+// [[test.fix]]
+// at = "26:13"
+// code = "E0002"
+// candidate = 1
+// leaves = ["27:3 E0002"]
+
+// E0002 for `when` and `reset_if` written as the name of a flow input and read in the body (S-1082, S-654, §2.3), as
+// `keyword_name_param_used.onsa` for `in`. The candidate is `when_` at the input only. The `when` of the body is the
+// error of the unit after that (an expression, where it cannot start one: no postfix clause, no expression before it
+// on its line or the line before), with the same candidate: the fix takes two steps, and the diagnostic that is left
+// after the first is the second step (`leaves`). One error in each unit.
+
+pub flow fw(when_: F32 at sample) -> F32 at sample { //~ E0002
+  when
+}
+
+pub flow fr(reset_if_: F32 at sample) -> F32 at sample {   //~ E0002
+  reset_if
+}

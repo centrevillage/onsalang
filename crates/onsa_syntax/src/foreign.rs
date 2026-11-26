@@ -961,7 +961,7 @@ impl Cursor<'_> {
         let kind = self.kind(s);
         let operand = ends_operand(self.kind(prev)) || (matches!(kind, Pipe | Eq) && self.kind(prev) == Underscore);
         let head = matches!(kind, Arrow | Eq);
-        (operand && (head || self.end_at(prev) != Some(End::NoOperand))).then_some((s, prev))
+        (operand && (head || !self.ends_no_operand(prev))).then_some((s, prev))
     }
 
     /// The symbol the failure is at: the token of the failure, or, when the
@@ -975,6 +975,13 @@ impl Cursor<'_> {
     /// when the parser read one to its end there ([`End`]).
     pub(crate) fn end_at(&self, i: usize) -> Option<End> {
         self.ends.binary_search_by_key(&i, |e| e.0).ok().map(|k| self.ends[k].1)
+    }
+
+    /// Whether token `i` ends a statement or a declaration that ends no
+    /// operand ([`End::NoOperand`]: a `for`, a `while`, the body of a
+    /// function): no operator and no postfix clause goes on with it (S-236).
+    pub(crate) fn ends_no_operand(&self, i: usize) -> bool {
+        self.end_at(i) == Some(End::NoOperand)
     }
 }
 
@@ -1064,10 +1071,18 @@ fn closed_expr(c: &Cursor) -> Option<(NodeKind, u32)> {
 }
 
 /// Whether the failure is right after an expression: one that closed before
-/// it on its line ([`closed_expr`]), or one that ends the line before
-/// ([`Cursor::head_symbol_after_operand`]).
+/// it on its line ([`closed_expr`]), but the body of a statement or a
+/// declaration that ends no operand ([`Cursor::ends_no_operand`]); or, at the
+/// head of a line, one the line before ends, where a binary operator would go
+/// on with it ([`lines::goes_on_after_operand`]). Where the name of a
+/// declaration goes (after a keyword, an opener, a `,`, an attribute) is
+/// never after one.
 pub(crate) fn after_an_expression(c: &Cursor) -> bool {
-    closed_expr(c).is_some() || c.head_symbol_after_operand().is_some()
+    if c.lines.at_line_head(c.symbol_ahead()) {
+        let head = c.head_symbol_after_operand();
+        return head.is_some_and(|(s, _)| !lines::starts_an_arm(c, s) && lines::goes_on_after_operand(c));
+    }
+    closed_expr(c).is_some() && c.sig_before(c.at).is_none_or(|p| !c.ends_no_operand(p))
 }
 
 /// Whether the expression that ended right before the failure

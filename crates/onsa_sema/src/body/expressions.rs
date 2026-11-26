@@ -418,7 +418,7 @@ impl<'a> Checker<'a> {
         match self.ty(bt) {
             Ty::Tuple(ts) if (index as usize) < ts.len() => Ok(ts[index as usize]),
             Ty::Error => Ok(bt),
-            // SPEC-GAP(S-260): an element of a struct whose unit failed in
+            // S-260: an element of a struct whose unit failed in
             // the syntax stage gets no diagnostic, as a field does
             // (`field_type`; a tuple struct `struct Hz(F32)` is one, S-39).
             Ty::Named(d, _) if self.a.partly_read(d) => Ok(self.a.types.error()),
@@ -527,7 +527,7 @@ impl<'a> Checker<'a> {
                 self.unify_at(span, a, x)?;
             }
         }
-        // SPEC-GAP(S-260): the fields of a struct whose unit failed in the
+        // S-260: the fields of a struct whose unit failed in the
         // syntax stage are not all known: no diagnostic for an unknown or a
         // missing field.
         let failed = self.a.partly_read(d);
@@ -630,7 +630,7 @@ impl<'a> Checker<'a> {
 
     /// Whether the arms of a `match` of a value of type `st` are judged, for
     /// exhaustiveness and for reachability alike.
-    // SPEC-GAP(S-260): the variants of an enum whose unit failed in the
+    // S-260: the variants of an enum whose unit failed in the
     // syntax stage are not all known; its `match` is not judged. Nor is the
     // `match` of a value of the error type (§18.1, R-271).
     pub(super) fn judges_arms(&self, st: TyId) -> bool {

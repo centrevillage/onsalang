@@ -351,9 +351,8 @@ pub(super) fn leading(c: &Cursor) -> Option<(usize, usize)> {
         return None;
     }
     let (s, prev) = c.head_symbol_after_operand()?;
-    let arm = c.want == Want::Separator(NodeKind::MatchArms) && arm_ahead(c.tokens, c.brackets(), s);
     let touching = c.gap_after(s) == Gap::None && !crate::starts::starts_operand(c.kind(s + 1));
-    if c.want == Want::Pattern || arm || touching {
+    if c.want == Want::Pattern || starts_an_arm(c, s) || touching {
         return None;
     }
     let fits = match kind {
@@ -405,7 +404,21 @@ fn leading_binary(c: &Cursor, s: usize) -> bool {
     if kind == Pipe && in_pattern(c) {
         return true;
     }
-    closed_expr(c).is_some() || (c.kind(c.at) != Newline && c.closed.is_empty())
+    goes_on_after_operand(c)
+}
+
+/// Whether the symbol `s` at the head of a line starts the next arm of a
+/// `match` (S-386): it goes on with no line before.
+pub(super) fn starts_an_arm(c: &Cursor, s: usize) -> bool {
+    c.want == Want::Separator(NodeKind::MatchArms) && arm_ahead(c.tokens, c.brackets(), s)
+}
+
+/// Whether the head of the line of the failure, after an operand, goes on
+/// with the expression of the line before (§2.5): one closed there, or a
+/// statement that starts after one (the line break read, nothing closed
+/// since). Not after a type or a name of a declaration (a field, a variant).
+pub(super) fn goes_on_after_operand(c: &Cursor) -> bool {
+    closed_expr(c).is_some() || (c.kind(c.at) != TokenKind::Newline && c.closed.is_empty())
 }
 
 /// A `|` where a pattern starts (`| 0 | 1 =>`, `Some(| 0)`, `let | (a, b) = p`;

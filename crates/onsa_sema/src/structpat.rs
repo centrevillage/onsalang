@@ -78,7 +78,7 @@ impl<'a> Checker<'a> {
         self.of_owner(d, &args, owner, span)?;
         let named = self.a.types.intern(Ty::Named(d, args.clone()));
         self.unify_at(span, named, ty)?;
-        // SPEC-GAP(S-260): as for the fields of a struct literal.
+        // S-260: as for the fields of a struct literal.
         let failed = self.a.partly_read(d);
         let written: Vec<&Ident> = fields.iter().map(|(f, _)| f).collect();
         match rest {

@@ -364,7 +364,7 @@ impl<'a> Parser<'a> {
     /// opaque types of an `extern`, §14.1). A declaration with a list of its
     /// own is never a member, so declarations do not nest without bound
     /// (they count no level, spec §2.5).
-    // SPEC-GAP(S-263): the closed list of the declarations a declaration holds is not written in the spec; the conservative reading of §18.1, §8.1 and §14.1.
+    // S-263: the list of the members is closed (the ones above, by §18.1, §8.1 and §14.1); any other declaration is an E0002 with a note.
     fn not_a_member(&mut self, t: Token, kind: Option<(Token, Option<&str>)>, ctx: ItemCtx) -> ParseError {
         let (owner, members) = match ctx {
             ItemCtx::Trait => ("a `trait`", "functions and `const`s"),

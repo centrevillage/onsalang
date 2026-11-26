@@ -102,12 +102,11 @@ impl<'a> Parser<'a> {
         }
         let cursor = self.cursor(at, want);
         let foreign::Failure { rows, general, prefixed, resume } = foreign::at_failure(&cursor);
-        // A `when` or `reset_if` after an expression, a name of no
-        // declaration (`lp~(x) when c`, §2.2, S-1082): a postfix clause, a
-        // syntax error with the chain of the modifiers.
-        let postfix = matches!(t.kind, TokenKind::KwWhen | TokenKind::KwResetIf)
-            && named.is_none()
-            && foreign::after_an_expression(&cursor);
+        // A `when` or `reset_if` after an expression (`lp~(x) when c`, §2.2,
+        // S-1082; where a name is declared is no such place): a postfix
+        // clause, a syntax error with the chain of the modifiers.
+        let postfix =
+            matches!(t.kind, TokenKind::KwWhen | TokenKind::KwResetIf) && foreign::after_an_expression(&cursor);
         self.prefixed.extend(prefixed);
         let read_by_a_row = !rows.is_empty();
         for d in rows {

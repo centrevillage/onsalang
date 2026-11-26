@@ -174,8 +174,9 @@ impl<'a> Checker<'a> {
     /// literal's at the end of the body (§4.7). The origins of `deferred.rs` name the
     /// expression that made a variable; this net catches every variable no origin covers,
     /// so that no open type reaches the lowering.
-    // SPEC-GAP(S-262): a variable that only diverging expressions decide (`let x = { return }`,
-    // `let x = if c { return } else { return }`) has no type: E0406 at that expression.
+    // S-262: a variable that only diverging expressions decide has no type: E0406 at that
+    // expression. The diverging `let` (S-268) and a diverging part that is always evaluated
+    // (S-291) are the E0503 before it, so the net is for what no rule before it reports.
     fn open_variable_net(&mut self) {
         let mut open: Vec<(Span, ExprId)> = Vec::new();
         for (&e, &t) in &self.info.expr_types {

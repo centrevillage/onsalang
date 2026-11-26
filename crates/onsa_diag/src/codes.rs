@@ -410,7 +410,7 @@ codes! {
     E0809 = 809, Flow, [Flow, Build], Optional, Optional,
         "`@param` is missing, misplaced, or malformed";
     E0810 = 810, Flow, [Names, Flow], Optional, Optional,
-        "a flow input or output without `at` or at a clock it may not have, a signal value type that is not Copy, a type that holds a function type (inputs, outputs, the body), or a value type that cannot cross (a struct `sample` input)";
+        "a flow input or output without `at` or at a clock it may not have, a signal value type that is not Copy, a type that holds a function type (inputs, outputs, the body), a value type that cannot cross (a struct `sample` input), or an input named `_` (its name is a field of the generated types)";
     E0811 = 811, Flow, [Names, Flow], Optional, Optional,
         "a flow call or a `par` that holds state needs `~`, and nothing with state stands where it is not evaluated every sample";
     E0812 = 812, Flow, [Names, Flow], Optional, Optional,

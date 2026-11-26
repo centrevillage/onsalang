@@ -341,7 +341,7 @@ impl Walker<'_> {
     /// E0020 at `^name` (`span`) of a visible name (§11.2, S-116): of a value,
     /// the candidate takes the `^` off in the first argument of a delay, and
     /// out of it both `name` and `prev~(name)`, the intent not being one.
-    // SPEC-GAP(S-1107): `^` on what is no value (a function `^g`) is this
+    // S-1107: `^` on what is no value (a function `^g`) is this
     // E0020 with no candidate.
     fn caret_visible(&mut self, span: Span, name: &Ident, value: bool) -> Stop {
         let caret = Span { end: name.span.start, ..span };

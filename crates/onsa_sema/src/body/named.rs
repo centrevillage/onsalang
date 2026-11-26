@@ -412,7 +412,7 @@ impl<'a> Checker<'a> {
                     self.field_reach(d, &f, name.span)?;
                     return Ok(self.a.types.subst(f.ty, &args));
                 }
-                // SPEC-GAP(S-260): a field of a struct whose unit failed in the
+                // S-260: a field of a struct whose unit failed in the
                 // syntax stage gets no diagnostic, whatever its name (the
                 // fields that were not read are not known, R-71).
                 if self.a.partly_read(d) {

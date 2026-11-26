@@ -392,8 +392,8 @@ pub fn fmt_cannot_read(path: &Path, e: &std::io::Error) -> String {
 /// the diagnostics (§4, S-232). The exit code is 2 if a file could not be
 /// taken (a syntax diagnostic, a read or a write), else 1 for `--check` with
 /// a file to rewrite, else 0. An internal error stops at once.
-// SPEC-GAP(S-261): with several files, 2 wins over 1, and the list of the
-// files to reformat is a result of the command, on the standard output.
+// S-261: with several files, 2 wins over 1, and the list of the files to
+// reformat is a result of the command, on the standard output.
 fn fmt(io: &mut Io<'_>, check: bool, paths: &[PathBuf]) -> Outcome {
     let mut changed = false;
     let mut failed = false;

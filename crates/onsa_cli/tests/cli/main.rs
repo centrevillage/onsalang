@@ -125,6 +125,7 @@ mod package_naming;
 mod package_tests_dir;
 mod package_tree;
 mod panic_insertions;
+mod paren_head_twins;
 mod pattern_guard_candidates;
 mod pattern_rows;
 mod planar_caller_generics;
@@ -162,6 +163,7 @@ mod use_repair_loop;
 mod use_shapes;
 mod visibility;
 mod when_c_commands;
+mod when_keyword_mirror;
 
 /// Every file of tests in this directory is a module above: a file with no `mod` line is not
 /// compiled, and its tests go unrun without a failure.
