@@ -1832,6 +1832,155 @@ class DocsCommands(DocsTree):
         ])  # fmt: skip
 
 
+class DocsRange(unittest.TestCase):
+    """`docs.py range A..B` (X-27 TU4) in a made-up git repository: the sections, the quotes and the names."""
+
+    SPEC = {
+        "spec/02-a.md": "## 2. A\n\n### 2.1 X\n\n古い規則の文はここにある。\n\n短い字。\n\n### 2.2 Y\n\n残る規則の文もここにある。\n",
+        "spec/03-b.md": "## 3. B\n\n### 3.2 Z\n\nz の文。\n\nz の二つ目の文。\n",
+        "spec/tools.md": "# T\n\n## 4. `onsa test`\n\nt の文。\n",
+    }
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name).resolve()
+        git_in(self.root, "init", "-q")
+        for rel, text in self.SPEC.items():
+            self.write(rel, text)
+        for n, spec in ((1, "§2.1"), (2, "§3"), (3, "§2.2"), (4, "tools.md §4"), (5, "§4")):
+            self.decision(n, "OPEN", spec)
+        self.write("crates/a/src/lib.rs", "pub(crate) fn run_child() {}\nfn kept() {}\nfn moved() {}\npub const MOST: u32 = 1;\n")
+        self.write("crates/a/src/other.rs", "fn other() { kept(); }\n")
+        self.write("tools/t.py", "def old_tool():\n    pass\n")
+        self.base = self.commit("base")
+
+    def write(self, rel, text):
+        p = self.root / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(text, encoding="utf-8")
+
+    def edit(self, rel, old, new):
+        self.write(rel, (self.root / rel).read_text(encoding="utf-8").replace(old, new))
+
+    def decision(self, n, status, spec):
+        self.write(f"decisions/S/S-{n}.md", f'+++\nstatus = "{status}"\nspec = ["{spec}"]\n+++\n# S-{n} t\n\n- 空白: x\n')
+
+    def doc(self, rel, status, body):
+        self.write(rel, f'+++\nstatus = "{status}"\n+++\n# {Path(rel).stem} t\n\n{body}\n')
+
+    def commit(self, message):
+        git_in(self.root, "add", "-A")
+        git_in(self.root, "commit", "-q", "--allow-empty", "-m", message)
+        return git_in(self.root, "rev-parse", "HEAD").strip()
+
+    def rows(self, part, start=None, end=""):
+        code, out = quiet_out(docs_tool.main, ["range", f"{start or self.base}..{end}", "--only", part, "--root", str(self.root)])
+        self.assertEqual(code, 0, out)
+        self.assertTrue(out[-1].startswith("docs range "), out)
+        return [line.split("\t") for line in out[:-1]]
+
+    def test_a_section_under_no_spec_of_the_decisions_of_its_commit(self):
+        self.decision(1, "DECIDED", "§2.1")  # (a): §2.1 is under its `spec`, §3.2 is not
+        self.edit("spec/02-a.md", "古い規則", "新しい規則")
+        self.edit("spec/03-b.md", "z の文。", "z の新しい文。")
+        sha = self.commit("Decide S-1: the rule")[:8]
+        self.assertEqual(self.rows("sections"), [["section", "§3.2", f"{sha} Decide S-1: the rule"]])
+
+    def test_a_section_under_a_section_of_the_spec(self):
+        self.decision(2, "DECIDED", "§3")  # (b): `§3` takes `§3.2` (`under`, as `changes --section`)
+        self.edit("spec/03-b.md", "z の文。", "z の新しい文。")
+        self.commit("Decide S-2")
+        self.assertEqual(self.rows("sections"), [])
+
+    def test_the_decisions_of_a_commit(self):
+        # named in the subject (decided before the range), or decided by the commit; a deletion is put on the parent's heading
+        self.decision(1, "DECIDED", "§2.1")
+        start = self.commit("Decide S-1")
+        self.edit("spec/02-a.md", "短い字。\n\n", "")
+        self.commit("Do W1-01 (S-1)")
+        self.edit("spec/03-b.md", "z の二つ目の文。\n", "")
+        sha = self.commit("Tidy the spec")[:8]
+        self.assertEqual(self.rows("sections", start), [["section", "§3.2", f"{sha} Tidy the spec"]])
+
+    def test_a_decision_with_no_section_changed(self):
+        self.decision(3, "DECIDED", "§2.2")  # (c)
+        self.edit("decisions/S/S-1.md", "- 空白: x", "- 空白: y")  # changed, not decided
+        self.commit("Decide S-3")
+        self.assertEqual(self.rows("sections"), [["decided", "S-3", "§2.2"]])
+        start = self.commit("after")
+        self.edit("decisions/S/S-3.md", "- 空白: x\n", "- 空白: x\n- 決定: z\n")  # a `決定` put in: decided again
+        self.commit("Write the decision of S-3")
+        self.assertEqual(self.rows("sections", start), [["decided", "S-3", "§2.2"]])
+
+    def test_the_sections_of_the_spec_of_the_tools(self):
+        self.decision(4, "DECIDED", "tools.md §4")  # (d): `tools.md §4`, not `§4`
+        self.edit("spec/tools.md", "t の文。", "t の新しい文。")
+        self.commit("Decide S-4")
+        self.assertEqual(self.rows("sections"), [])
+        start = self.commit("after")
+        self.decision(5, "DECIDED", "§4")
+        self.edit("spec/tools.md", "t の新しい文。", "t の文。")
+        sha = self.commit("Decide S-5")[:8]
+        self.assertEqual(self.rows("sections", start), [["section", "tools.md §4", f"{sha} Decide S-5"], ["decided", "S-5", "§4"]])
+
+    def test_the_quotes_the_range_took_out_of_the_spec(self):
+        self.write("tests/a.onsa", "\n".join([
+            "// §2.1「古い規則の文はここにある」",  # (a)
+            "// 「残る規則の文もここにある」",  # (b) still in B
+            "",
+            "// 「言い換えた規則の文である」と",  # (c) in neither
+            '// "古い規則の文はここにある…残る規則の文',  # (d) the piece taken out only, over two lines of one run
+            '// もここにある"、「短い字」',  # (e) short
+            "fn f() {}  // 「古い規則の文はここにある」 not a run of `//` lines",
+        ]) + "\n")  # fmt: skip
+        self.write("crates/a/tests/t.rs", "/// 「古い規則の文はここにある」\n")
+        self.write("tests/README.md", "「古い規則の文はここにある」\n")  # not a file of the code
+        start = self.commit("cases")
+        self.assertEqual(self.rows("quotes", start), [])  # no change of the spec: nothing read
+        self.edit("spec/02-a.md", "古い規則", "新しい規則")
+        self.edit("spec/02-a.md", "短い字。\n\n", "")
+        self.commit("change the spec")
+        near = "古い規則の文はここにある"
+        self.assertEqual(self.rows("quotes", start), [
+            ["quote", "crates/a/tests/t.rs:1-1", near, "新しい規則の文はここにある。"],
+            ["quote", "tests/a.onsa:1-2", near, "新しい規則の文はここにある。"],
+            ["quote", "tests/a.onsa:4-6", near, "新しい規則の文はここにある。"],
+        ])  # fmt: skip
+
+    def test_the_names_taken_out_left_in_the_living_documents(self):
+        self.edit("crates/a/src/lib.rs", "pub(crate) fn run_child() {}\nfn kept() {}\nfn moved() {}\n", "")
+        self.write("crates/a/src/other.rs", "fn other() { kept(); }\nfn moved() {}\n")  # (c) used, (d) moved
+        self.write("tools/t.py", "def new_tool():\n    pass\n")
+        start = self.commit("take out")
+        self.write("crates/a/src/lib.rs", "fn temp() {}\n")
+        self.commit("put in")
+        self.write("crates/a/src/lib.rs", "\n")  # a name made and taken out in the range
+        self.commit("take out again")
+        names = "`run_child`・`kept`・`moved`・`a::temp()`・`old_tool`・`MOST`"
+        self.doc("tasks/W/W1-01.md", "PLAN", f"- 持ち越し: {names}")  # (a)
+        self.doc("tasks/W/W1-02.md", "DONE", f"- 持ち越し: {names}")  # (b)
+        self.doc("issues/R/R-1.md", "OPEN", f"- 場所: {names}\n- 判断: `run_child` 名の run_child")
+        self.doc("issues/X/X-1.md", "DONE", "- 案: x")
+        self.write("issues/X/X-1/a.md", names)  # with X-1
+        self.write("rules/a.md", f"{names}\n")
+        self.write("spec/README.md", f"{names}\n")  # the spec is not a living document
+        end = self.commit("docs")
+        self.assertEqual(self.rows("names", self.base, end), [
+            ["name", n, rel, f] for rel in ("issues/R/R-1.md:7", "rules/a.md:1", "tasks/W/W1-01.md:6")
+            for n, f in (("run_child", "crates/a/src/lib.rs"), ("temp", "crates/a/src/lib.rs"), ("old_tool", "tools/t.py"),
+                         ("MOST", "crates/a/src/lib.rs"))
+            if rel != "issues/R/R-1.md:7" or n == "run_child"
+        ])  # fmt: skip
+
+    def test_not_a_range(self):
+        for rng in ("nosuch..", "..HEAD", f"{self.base}...HEAD"):
+            code, out = quiet_out(docs_tool.main, ["range", rng, "--root", str(self.root)])
+            self.assertEqual(code, 2, (rng, out))
+        code, out = quiet_out(docs_tool.main, ["range", self.base, "--root", str(self.root)])  # B is HEAD
+        self.assertEqual((code, out), (0, [f"docs range {self.base[:7]}..{self.base[:7]}: nothing"]))
+
+
 class ToolHelp(unittest.TestCase):
     """The help by role (X9-7, X-9 U2): `repo.ROLES`, `repo.Command`, and `docs.py help [--role R] [COMMAND]`."""
 

@@ -10,7 +10,7 @@
     python3 -B tools/docs.py show ID [--relations] | list KIND [--status S] [--stage W4] [--group N]
                              [--before W4-02|W4] [--no-fix] [--waiting] [--count] | changes [--since DATE]
                              [--stage W3] [--section §6] | ticket W UNIT/ROLE[-handover] [--out FILE]
-                             | stale [--all]
+                             | stale [--all] | range A..B [--only sections|quotes|names]
     python3 -B tools/docs.py set ID KEY=VALUE... [--dry-run] | note ID LABEL TEXT [--by WHO] | new KIND [--title T]
                              [--stage W4] [KEY=VALUE...] | draft S... --group N
     python3 -B tools/docs.py blind FILE...|--group N --out FILE | answers FILE...|--group N
@@ -36,6 +36,9 @@ depth 0 with `-` for the type and from).
   `blind` and `answers` (X9-65, X9-66) read the drafts of the gaps (the files given, or of a group).
   `stale` (X-21 P-2) shows the lines of the `持ち越し` of the works (`carried`; not DONE unless `--all`) with no
   mark of a thing done that name a DECIDED S or a DONE R beside a verb of STALE: suspects, exit 0 whatever it finds.
+  `range` (X-27 TU4) reads the commits A and B by git (not the working tree): the sections the range changed under
+  none of the `spec` of its decisions, the quotes of the comments the range took out of the spec, and the names it
+  took out of the code left in the living documents (RANGE_HELP); exit 0 whatever it finds.
 
 - `fmt` (DT-4): breaks each line longer than LONG after a `。` at the depth 0 of the brackets
   （）()「」『』【】 and outside the code spans and the bold, packing the line to WIDTH characters
@@ -76,6 +79,8 @@ depth 0 with `-` for the type and from).
 The head fields (DF-1) are read by `read_head` and written in the normal form by `head_update` /
 `write_head` (U3's `set`); the field table of a directory is `field_table`.
 """
+import argparse
+import difflib
 import fnmatch
 import importlib.util
 import itertools
@@ -93,6 +98,7 @@ from datetime import date
 from pathlib import Path
 
 import gate_steps
+import narrowing
 import repo
 import spec_blocks
 
@@ -1173,14 +1179,19 @@ def labelled(tree, rel):
         yield n, line, label
 
 
+def a_record(kind, line, label):
+    """A line of an R's place (`場所`, or its first item in the form of the review `重さ・判断・観点｜場所｜…`): a fact
+    of the past (`live_lines`, `range`)."""
+    return kind == "R" and (label == "場所" or (line.startswith("- ") and "｜" in line))
+
+
 def live_lines(ids):
-    """(rel, line number, line, a record) of the bodies of the living documents (LIVE); a record is a line of
-    an R's place (`場所`, or its first item in the form of the review `重さ・判断・観点｜場所｜…`): a fact of the past."""
+    """(rel, line number, line, a record (`a_record`)) of the bodies of the living documents (LIVE)."""
     for kind, (status, alive) in LIVE.items():
         for _, rel, v in ids.heads([kind]):
             if (v.get("status") == status) == alive:
                 for n, line, label in labelled(ids.tree, rel):
-                    yield rel, n, line, kind == "R" and (label == "場所" or (line.startswith("- ") and "｜" in line))
+                    yield rel, n, line, a_record(kind, line, label)
 
 
 def warn_units(ids):
@@ -2521,6 +2532,286 @@ def cmd_stale(args):
     return 0
 
 
+# ---------------------------------------------------------------- range (X-27 TU4): what the commits of a range left
+
+SPEC_MD = f":(glob){repo.SPEC_DIR}/*.md"  # the spec `range` reads (the spec of the tools too)
+HUNK = re.compile(r"@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@")
+SUBJECT = 60  # the characters of a commit's subject shown
+QUOTE_MIN = 8  # a piece of a quote with fewer characters (white space taken out) is not looked for
+QUOTE_FILES = ("tests", "crates")
+QUOTE_FILE = re.compile(r"\.(?:onsa|rs|fix\d+)$")
+COMMENT_LINE = re.compile(r"\s*//[/!]?\s?")
+QUOTED = re.compile(r'"([^"]*[぀-ヿ一-鿿][^"]*)"|「([^」]+)」')  # with a letter of Japanese
+SENTENCE = re.compile(r"(?<=[。\n])")
+NEAR = 0.3  # the cutoff of difflib for the sentence of B shown beside a quote
+DECLARED = {  # the forms of a declaration on a line taken out of the code, by the suffix of its file
+    ".rs": re.compile(r"\s*(?:pub(?:\([^)]*\))?\s+)?(?:(?:const|async|unsafe|extern\s+\"[^\"]*\")\s+)*"
+                      r"(?:fn|struct|enum|const|static|type|trait|mod)\s+(?:mut\s+)?([A-Za-z_]\w*)"),
+    ".py": re.compile(r"\s*(?:async\s+)?(?:def|class)\s+([A-Za-z_]\w*)"),
+}  # fmt: skip
+CLOSED = ("DONE", "DECIDED", "WONTFIX", "DROPPED")  # the records of the files of the IDs: not living documents
+LIVE_DOCS = (*(f"{d}/" for d in repo.DOC_DIRS if d != repo.SPEC_DIR), ".claude/agents/", "tests/",
+             *(p.as_posix() for p in repo.ROOT_DOCS))  # fmt: skip
+CODE_SPAN = re.compile(r"`([^`\n]+)`")
+WORD = re.compile(r"[A-Za-z0-9_]+")  # a word of the code, and of a code span of the documents
+
+
+class GitTree(Tree):
+    """A Tree of texts read from git ({rel: text}, `git_texts`), not of the working tree."""
+
+    def __init__(self, texts):
+        super().__init__(ROOT, texts)
+        self.texts = texts
+
+    def lines(self, rel):
+        if rel not in self._lines:
+            self._lines[rel] = self.texts[rel].split("\n")
+        return self._lines[rel]
+
+
+def git_texts(root, objects):
+    """{`<commit>:<path>`: its text, None when it is not there} by one `git cat-file --batch`."""
+    objects = list(dict.fromkeys(objects))
+    try:
+        r = subprocess.run(["git", "cat-file", "--batch"], cwd=root, input="".join(f"{o}\n" for o in objects).encode(),
+                           capture_output=True, timeout=repo.GIT_TIMEOUT)  # fmt: skip
+    except (OSError, subprocess.TimeoutExpired) as e:
+        raise DocsError(f"git cat-file: {e}") from e
+    if r.returncode != 0:
+        raise DocsError(f"git cat-file: {r.stderr.decode('utf-8', 'replace').strip() or f'exit {r.returncode}'}")
+    out, at, texts = r.stdout, 0, {}
+    for o in objects:
+        end = out.index(b"\n", at)
+        head, at = out[at:end].split(), end + 1
+        size = int(head[2]) if len(head) == 3 else None  # `<name> missing` (or `ambiguous`)
+        texts[o] = None if size is None else out[at : at + size].decode("utf-8", "replace")
+        at += 0 if size is None else size + 1
+    return texts
+
+
+def commit_of(root, rev):
+    r = git_run(root, "rev-parse", "--verify", "--quiet", f"{rev}^{{commit}}")
+    if r.returncode != 0:
+        raise DocsError(f"{rev}: not a commit")
+    return r.stdout.strip()
+
+
+def diff_hunks(lines):
+    """(the line `commit <sha> <subject>` before it or None, the old path, the new path (None for /dev/null), the
+    first old line, the first new line, the lines taken out, the lines put in) of each hunk of `git diff -U0` (and
+    of `git log -p -U0 --format='commit %H %s'`)."""
+    commit = old = new = None
+    lines = iter(lines)
+    for line in lines:
+        if line.startswith("commit "):
+            commit = line
+        elif line.startswith(("--- ", "+++ ")):
+            path = line[6:] if line[4:6] in ("a/", "b/") else None
+            old, new = (path, new) if line[0] == "-" else (old, path)
+        elif m := HUNK.match(line):
+            want, body = int(m[2] or 1) + int(m[4] or 1), []
+            for x in lines:
+                body += [] if x.startswith("\\") else [x]  # `\ No newline at end of file`
+                if len(body) == want:
+                    break
+            out, put = [x[1:] for x in body if x[:1] == "-"], [x[1:] for x in body if x[:1] == "+"]
+            yield commit, old, new, int(m[1]), int(m[3]), out, put
+
+
+def changed_sections(root, a, b):
+    """{`<sha> <subject>`: {section: None}} of the commits of A..B that changed the spec: each line changed on the
+    deepest numbered heading over it (`spec_blocks.heading_lines`) in the commit's text, or for a hunk that only takes
+    lines out, in its parent's; `tools.md §n` in `spec/tools.md`, the file's path before its first heading."""
+    log = git_lines(root, "log", "-p", "-U0", "--no-merges", "--reverse", "--format=commit %H %s", f"{a}..{b}", "--",
+                    SPEC_MD)  # fmt: skip
+    places = []
+    for commit, old, new, o, n, out, put in diff_hunks(log):
+        c, sha = commit[7:], commit[7:].split(" ")[0]
+        places.append((c, f"{sha}:{new}", n, len(put)) if put else (c, f"{sha}^:{old}", o, len(out)))
+    texts, headings, found = git_texts(root, [p[1] for p in places]), {}, {}
+    for commit, obj, first, count in places:
+        rel = obj.split(":", 1)[1]
+        if obj not in headings:
+            headings[obj] = spec_blocks.heading_lines(texts[obj] or "")
+        for line in range(first, first + count):
+            sec = next((s for at, s in reversed(headings[obj]) if at <= line), None)
+            name = rel if sec is None else f"{'tools.md ' * (rel == repo.SPEC_TOOLS.as_posix())}§{sec}"
+            found.setdefault(commit, {})[name] = None
+    return found
+
+
+def decided_in(root, a, b):
+    """(ID, its `spec` at B) of the decisions (DECISIONS) DECIDED at B whose file A..B changed, with the status
+    made DECIDED or a line `- 決定` (LABEL) put in."""
+    rels = [r for r in git_lines(root, "diff", "--name-only", a, b, "--", "decisions/")
+            if (k := repo.kind_of(Path(r).stem)) and k.name in DECISIONS
+            and repo.path_of(Path(r).stem) == Path(r)]  # fmt: skip
+    texts = git_texts(root, [f"{c}:{r}" for r in rels for c in (a, b)])
+    for r in rels:
+        new, old = texts[f"{b}:{r}"] or "", texts[f"{a}:{r}"] or ""
+        v, was = read_head(new).values or {}, read_head(old).values or {}
+        put = set(new.split("\n")) - set(old.split("\n"))
+        if v.get("status") == "DECIDED" and (was.get("status") != "DECIDED" or any(
+                (m := LABEL.match(x)) and m[1] == "決定" for x in put)):  # fmt: skip
+            yield Path(r).stem, _listed(v.get("spec"))
+
+
+def range_sections(root, a, b):
+    """`section`: a section a commit of A..B changed under none of the `spec` at B of its decisions (those its subject
+    names, and those of `decided_in` whose file it changed); `decided`: one of `decided_in` with none changed."""
+    decided, changed, sha, touched = dict(decided_in(root, a, b)), changed_sections(root, a, b), None, {}
+    for line in git_lines(root, "log", "--name-only", "--format=commit %H", f"{a}..{b}", "--", "decisions/"):
+        sha = line[7:] if line.startswith("commit ") else sha
+        touched.setdefault(sha, set()).update({Path(line).stem} & decided.keys())
+    named = {c: {i for i in repo.ID_RE.findall(c) if repo.kind_of(i).name in DECISIONS} for c in changed}
+    rels = {i: repo.path_of(i).as_posix() for i in set().union(*named.values()) - decided.keys()}
+    texts = git_texts(root, [f"{b}:{r}" for r in rels.values()])
+    spec = {i: _listed((read_head(texts[f"{b}:{r}"] or "").values or {}).get("spec")) for i, r in rels.items()} | decided
+    missing = {}
+    for commit, secs in changed.items():
+        heads = [t for i in named[commit] | touched.get(commit.split(" ")[0], set()) for t in spec[i]]
+        for sec in (s for s in secs if not any(under(s, t) for t in heads)):
+            missing.setdefault(sec, []).append(f"{commit[:8]} {commit.split(' ', 1)[-1][:SUBJECT]}")
+    for sec, commits in sorted(missing.items(), key=lambda s: section_key(s[0])):
+        yield f"section\t{sec}\t{'; '.join(commits)}"
+    for id_, heads in sorted(decided.items(), key=lambda d: id_key(d[0])):
+        if not any(under(s, t) for secs in changed.values() for s in secs for t in heads):
+            yield f"decided\t{id_}\t{', '.join(heads) or NONE}"
+
+
+def squash(text):
+    return re.sub(r"\s+", "", text)
+
+
+def spec_of(root, commit):
+    rels = [r for r in git_lines(root, "ls-tree", "--name-only", commit, f"{repo.SPEC_DIR}/") if r.endswith(".md")]
+    return "\n".join(t or "" for t in git_texts(root, [f"{commit}:{r}" for r in rels]).values())
+
+
+def comment_runs(text):
+    """(the first line, the last line, the text joined) of each run of lines `//` (COMMENT_LINE)."""
+    lines, i = text.split("\n"), 0
+    while i < len(lines):
+        j = i
+        while j < len(lines) and COMMENT_LINE.match(lines[j]):
+            j += 1
+        if j > i:
+            yield i + 1, j, "".join(COMMENT_LINE.sub("", x, count=1).strip() for x in lines[i:j])
+        i = max(j, i + 1)
+
+
+def pieces(quote):
+    """The pieces of a quote cut at `…` out of its code spans."""
+    out, cur, code = [], "", False
+    for ch in quote + "…":
+        code ^= ch == "`"
+        out, cur = (out + [cur.strip()], "") if ch == "…" and not code else (out, cur + ch)
+    return [p for p in out if p]
+
+
+def stale_quotes(root, a, b):
+    if not git_lines(root, "diff", "--name-only", a, b, "--", SPEC_MD):
+        return
+    old, new_text = squash(spec_of(root, a)), spec_of(root, b)
+    new, sentences = squash(new_text), [s.strip() for s in SENTENCE.split(new_text) if len(s.strip()) > QUOTE_MIN]
+    rels = [r for r in git_lines(root, "ls-tree", "-r", "--name-only", b, "--", *QUOTE_FILES) if QUOTE_FILE.search(r)]
+    texts = git_texts(root, [f"{b}:{r}" for r in rels])
+    for r in rels:
+        for first, last, text in comment_runs(texts[f"{b}:{r}"] or ""):
+            for piece in (p for m in QUOTED.finditer(text) for p in pieces(m[1] or m[2])):
+                if len(w := squash(piece)) >= QUOTE_MIN and w in old and w not in new:
+                    near = difflib.get_close_matches(piece, sentences, 1, NEAR)
+                    yield f"quote\t{r}:{first}-{last}\t{piece}\t{near[0] if near else NONE}"
+
+
+def gone_names(root, a, b):
+    """{name: a file it was in} of the declarations (DECLARED) on the lines the commits of A..B took out of the code
+    (`narrowing.BUILT_FROM`) whose name is no word of the text files of the code at B."""
+    names = {}
+    log = git_lines(root, "log", "-p", "-U0", "--no-merges", "--format=commit %H", f"{a}..{b}", "--", *narrowing.BUILT_FROM)
+    for _, old, _, _, _, out, _ in diff_hunks(log):
+        form = DECLARED.get(Path(old or "").suffix)
+        for m in filter(None, (form.match(x) for x in out) if form else ()):
+            names.setdefault(m[1], old)
+    if not names:
+        return {}
+    r = git_run(root, "grep", "-I", "-l", "-e", "", b, "--", *narrowing.BUILT_FROM)  # `<B>:<path>` of the text files
+    if r.returncode > 1:
+        raise DocsError(f"git grep: {r.stderr.strip() or f'exit {r.returncode}'}")
+    words = {w for text in git_texts(root, r.stdout.splitlines()).values() for w in WORD.findall(text or "")}
+    return {n: f for n, f in names.items() if n not in words}  # faster than `git grep -w -o` of the names
+
+
+def live_docs(root, b):
+    """(the GitTree of the living documents at B, (rel, kind) of each): the `.md` files under LIVE_DOCS but the
+    files of the IDs whose status is CLOSED (a draft with its S, a file under `issues/X/X-6/` with X-6)."""
+    rels = [r for r in git_lines(root, "ls-tree", "-r", "--name-only", b) if r.endswith(".md") and r.startswith(LIVE_DOCS)]
+    texts = git_texts(root, [f"{b}:{r}" for r in rels])
+    tree, out = GitTree({Path(r): texts[f"{b}:{r}"] or "" for r in rels}), []
+    for rel in tree.texts:
+        depth = [len(Path(k.dir).parts) for k in repo.KINDS if k.dir and rel.parent.is_relative_to(k.dir)]
+        id_ = rel.parts[depth[0]].removesuffix(".draft.md").removesuffix(".md") if depth else ""
+        kind = repo.kind_of(id_)
+        p = repo.path_of(id_) if kind and kind.dir else None
+        if p in tree.texts and (tree.head(p).values or {}).get("status") in CLOSED:
+            continue
+        out.append((rel, kind and kind.name))
+    return tree, out
+
+
+def names_left(root, a, b):
+    if not (gone := gone_names(root, a, b)):
+        return
+    tree, docs = live_docs(root, b)
+    for rel, kind in docs:
+        for n, line, label in labelled(tree, rel):
+            words = [] if a_record(kind, line, label) else WORD.findall(" ".join(CODE_SPAN.findall(line)))
+            for name in dict.fromkeys(w for w in words if w in gone):
+                yield f"name\t{name}\t{rel.as_posix()}:{n}\t{gone[name]}"
+
+
+RANGE_PARTS = {"sections": range_sections, "quotes": stale_quotes, "names": names_left}
+RANGE_HELP = f"""\
+出力の行（タブ区切り。行があっても終了コードは 0。範囲の読めないときと使い方の誤りは 2）:
+  section  <節>  <コミット 題の頭>…   範囲のコミットが改めた節のうち、そのコミットの決定のどの `spec` の下にも無いもの
+  decided  <ID>  <spec>               範囲で決めた決定のうち、`spec` の下の節を範囲で一つも改めていないもの
+  quote    <経路:行-行>  <断片>  <B の近い文>   注が引く断片のうち、A の仕様にあり B の仕様に無いもの
+  name     <名前>  <経路:行>  <消した行のファイル>   範囲で消え B のコードに無い名前が、生きている文書に残る所
+読み方: 読むのは git の A と B の中身とその間のコミットで、作業ツリーの未コミットは読まない。
+  節: 範囲のコミットごとの差分の行を、そのコミットの中身（行を除くだけの塊は親の中身）で最も深い番号の見出しに
+  当てる（`spec/tools.md` は `tools.md §n`、見出しの前の行はファイルの経路）。決定の `spec` の `§6` は、
+  `changes --section` と同じく `§6.1` も含む。範囲で決めた決定は、範囲で変わった `decisions/` の決定のファイル
+  のうち、B で DECIDED で、範囲で DECIDED にしたか `- 決定` の行を足したもの。コミットの決定は、その題が名指す
+  決定と、そのコミットがファイルを改めた範囲で決めた決定（`spec` は B の頭の欄で読む）。
+  引用: B の {'・'.join(QUOTE_FILES)} の `//` の行の連なりの中の `"…"`（日本語を含む）と `「…」` を、コードの外の
+  `…` で断片に分け、空白を除いて {QUOTE_MIN} 字未満の断片を外す。範囲が仕様を改めなければ何も読まずに 0 行。
+  名前: 範囲のコミットがコード（{'・'.join(narrowing.BUILT_FROM)}）から除いた行の宣言
+  （DECLARED: `.rs` の fn・struct・enum・const・static・type・trait・mod、`.py` の def・class）の名前のうち、B のコードに語として無いもの。
+  生きている文書: {'・'.join(LIVE_DOCS)} の `.md`。状態が {'・'.join(CLOSED)} の ID のファイル
+  （下書きと `issues/X/X-6/` の下のファイルはその ID に従う）と R の `場所` の行を除く。バッククォートの中の語を見る。
+"""
+
+
+def range_args(p):
+    p.add_argument("range", metavar="A..B", help="the commits A..B (`A..` or `A`: B is HEAD)")
+    p.add_argument("--only", choices=RANGE_PARTS, help="one part: sections (section, decided), quotes or names")
+    p.epilog, p.formatter_class = RANGE_HELP, argparse.RawDescriptionHelpFormatter
+
+
+def cmd_range(args):
+    a, _, b = args.range.partition("..")
+    if not a or b.startswith("."):
+        raise DocsError(f"{args.range}: not a range `A..B`")
+    a, b, counts = commit_of(args.root, a), commit_of(args.root, b or "HEAD"), {}
+    for part, rows in RANGE_PARTS.items():
+        for row in rows(args.root, a, b) if args.only in (None, part) else ():
+            print(row)
+            counts[row.split("\t")[0]] = counts.get(row.split("\t")[0], 0) + 1
+    shown = ", ".join(f"{k} {n}" for k, n in counts.items()) or "nothing"
+    print(f"docs range {a[:7]}..{b[:7]}: {shown}")
+    return 0
+
+
 # ---------------------------------------------------------------- the subcommands
 
 EDITORS = ("parent", "i", "docs")  # the roles that edit the documents (the help of `fmt`, `swaps`, `check`, the writes)
@@ -2589,6 +2880,11 @@ COMMANDS = {
                "「済み」の印（`（済み: …）`）の無い行を、ID と状態・経路:行・行で並べる（疑いで、誤りとは限らない。終了コードは 0）",
                "文書の点検で、済んだ決定や直しを待つと書いたままの持ち越しを探すとき。既定は DONE でない作業だけ（`--all` で全て）",
                "docs.py stale"),
+    "range": C(range_args, cmd_range, ("parent", "docs"),
+               "範囲（`A..B` のコミット）で改めた仕様の節のうち範囲の決定の `spec` に無いもの、範囲で仕様から消えた字を引く注、"
+               "範囲で消えた名前が生きている文書に残る所を並べる（知らせるだけ。終了コードは 0）",
+               "文書の点検で、範囲の決定を反映した仕様の差分の節と `spec` の欄、古くなった注の引用、消えた名前の残りを突き合わせるとき",
+               "docs.py range 82c6a6ba..4d55e228"),
 }  # fmt: skip
 
 
