@@ -204,6 +204,29 @@ class Ignores(unittest.TestCase):
             self.assertTrue(any(x.startswith("listed\t") and "cli/n.rs" in x and "\tboth_a\t" in x for x in lines), lines)
             self.assertTrue(any("`both_b` of tests/cli/main.rs" in x for x in lines), lines)
 
+    def test_passing_against_a_target_with_path_modules(self):
+        # R-516: `tests/fr.rs` takes `#[path = "fr/m.rs"] mod m;`; a `mod` with no file of its own is of `tests/fr.rs`.
+        with tempfile.TemporaryDirectory() as tmp:
+            tests = Path(tmp) / "crates" / "c" / "tests"
+            (tests / "fr").mkdir(parents=True)
+            (tests / "fr" / "m.rs").write_text(RUST, encoding="utf-8")
+            (tests / "fr.rs").write_text('#[path = "fr/m.rs"]\nmod m;\n' + RUST, encoding="utf-8")
+            out = "\n".join(["     Running tests/fr.rs (target/debug/deps/fr-0)", "m::direct_with_reason: test",
+                             "inline::both_a: test", "both_b: test"])
+            done = subprocess.CompletedProcess([], 0, stdout=out)
+            with mock.patch.object(ignores, "ROOT", Path(tmp)), mock.patch.object(ignores.subprocess, "run",
+                                                                                   return_value=done):
+                buf = io.StringIO()
+                with mock.patch.object(sys, "stdout", buf):
+                    code = ignores.main(["passing", "-p", "c", "--test", "fr", "--list"])
+            lines = buf.getvalue().splitlines()
+            self.assertEqual(code, 0, lines)  # every test cargo listed is one a file shows
+            for file, name in [("fr/m.rs", "direct_with_reason"), ("fr.rs", "both_a"), ("fr.rs", "both_b")]:
+                self.assertTrue(any(x.startswith("listed\t") and f"tests/{file}:" in x and f"\t{name}\t" in x
+                                    for x in lines), (file, name, lines))
+            self.assertTrue(any(x.startswith("not run\t") and "tests/fr.rs:" in x and "\tdirect_with_reason\t" in x
+                                for x in lines), lines)
+
 
 class IgnoresStale(TempRepo):
     """tools/ignores.py stale (the gate item `ignores`, R-224): an ignore whose reason names a work done or unknown."""

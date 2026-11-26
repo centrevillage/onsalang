@@ -390,7 +390,9 @@ def show(f, t):
 def run_cargo(crate, binary, listing, timeout, cwd=ROOT):
     """{(group, name): status} of the ignored tests cargo runs or lists (group: `tests/x.rs`, or `src`).
 
-    In a test target of module files (`tests/cli/main.rs`), a test `m::…::name` is of `tests/cli/m.rs`."""
+    In a test target of module files (`tests/cli/main.rs`, or `tests/x.rs` with `#[path = "x/m.rs"] mod m`), a test
+    `m::…::name` is of `tests/cli/m.rs` (`tests/x/m.rs`) where that file is (R-516), else of the target's file."""
+    crate_dir = ROOT / "crates" / crate
     cmd = ["cargo", "test", "-p", crate, *(["--test", binary] if binary else []), "--no-fail-fast", "--", "--ignored"]
     r = subprocess.run(cmd + (["--list"] if listing else []), cwd=cwd, stdout=subprocess.PIPE,
                        stderr=subprocess.STDOUT, text=True, timeout=timeout)
@@ -401,7 +403,9 @@ def run_cargo(crate, binary, listing, timeout, cwd=ROOT):
             binaries += 1
         elif res := re.match(r"test (\S+) \.\.\. (ok|FAILED)$" if not listing else r"(\S+): test$", line):
             path = res.group(1).split("::")
-            file = group[: -len("main.rs")] + path[0] + ".rs" if group.endswith("/main.rs") and path[1:] else group
+            mods = group[: -len("main.rs")] if group.endswith("/main.rs") else group[: -len(".rs")] + "/"
+            mod = mods + path[0] + ".rs"
+            file = mod if group != "src" and path[1:] and (crate_dir / mod).is_file() else group
             out[(file, path[-1])] = "listed" if listing else res.group(2)
     return out, r.returncode if binaries else f"{r.returncode}, and no `Running` line", r.stdout
 
