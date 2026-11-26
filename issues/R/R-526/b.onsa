@@ -1,0 +1,3 @@
+fn f(x: F32, a: U32) -> Option[F32 as U32 / a .b] {
+    None
+}

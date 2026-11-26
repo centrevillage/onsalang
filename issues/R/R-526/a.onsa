@@ -1,0 +1,4 @@
+fn f(x: F32) -> I64 {
+    let y = x as I64 + 1 /* c */
+    y
+}
