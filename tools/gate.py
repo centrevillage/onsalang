@@ -44,6 +44,9 @@ a worktree adds one to its own (`--quick` too), with the git tree it checked, fo
 
 An item marked `stage_end_only` (the deep fuzzing, `fuzz.py --deep`) runs only
 with `--stage-end` and is SKIPPED otherwise: it is heavy on the machine (W3-03).
+An item marked `not_in_work` (`heavy`, the `heavy_` tests and `tests/heavy/`) is
+SKIPPED by a work check (`--work` alone) and runs in the sweeps after a commit, at a
+stage end and when named (`--only heavy`).
 
 A pendable gate item listed in `tests/pending.toml` (kind `gate`, target =
 the item's name) is expected to fail: its failure is shown as pending, and its
@@ -259,6 +262,8 @@ def _skipped(step, entry, form, named=None):
         return "left out by --quick"
     if step.stage_end_only and form.stage_end is None:
         return "runs only with --stage-end"
+    if step.not_in_work and form.work and named is None:
+        return "left out of a work check: the sweeps after a commit and --stage-end run it"
     if entry is not None and form.stage_end is None and entry.until not in form.w_works:
         return f"listed until {entry.until}: runs with --work {entry.until} or --stage-end"
     if step.touches and form.work and named is None and form.changed is not None and _untouched(step, form.changed):

@@ -135,6 +135,18 @@ class GateWiring(GateRun):
         self.run_main(["--stage-end", "W3"], steps)
         self.assertTrue((self.repo.root / "argv-deep").exists())
 
+    def test_not_in_work(self):
+        steps = [fake("a"), fake("slowtests", 0, not_in_work=True)]
+        code, out = self.run_main(["--work", "W3-07"], steps)
+        self.assertEqual(code, 0)
+        self.assertFalse((self.repo.root / "argv-slowtests").exists())
+        self.assertIn("left out of a work check", out)
+        self.run_main(["--work", "W3-07", "--only", "slowtests"], steps)
+        self.assertTrue((self.repo.root / "argv-slowtests").exists())
+        (self.repo.root / "argv-slowtests").unlink()
+        self.run_main(["--stage-end", "W3"], steps)
+        self.assertTrue((self.repo.root / "argv-slowtests").exists())
+
     def test_quick(self):
         steps = [fake("a"), fake("slow", 1, slow=True)]
         code, out = self.run_main(["--quick"], steps)

@@ -52,6 +52,7 @@ class RealSteps(unittest.TestCase):
         self.assertEqual([s.name for s in gate_steps.STEPS if s.slow], slow)
         # the deep fuzzing runs only at a stage end (W3-03)
         self.assertEqual([s.name for s in gate_steps.STEPS if s.stage_end_only], ["fuzz-deep"])
+        self.assertEqual([s.name for s in gate_steps.STEPS if s.not_in_work], ["heavy"])
         # the only items that may be listed: the fix loop (S-475, by case only), the test vectors against the
         # interpreter and the C (W2-02, by case only), the keywords (W3-02, by case only) and the C checks (W1-06)
         self.assertEqual(gate_steps.pendable(),

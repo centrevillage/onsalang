@@ -89,6 +89,7 @@ class Step:
     counts_rows: bool = False  # its case entries must say `rows = N`, the failing rows they hold
     slow: bool = False  # left out by `--quick`
     stage_end_only: bool = False  # runs only at a stage end (`--stage-end`)
+    not_in_work: bool = False  # a work check leaves it out: the sweeps after a commit, a stage end and `--only` run it
     narrows: tuple = ()  # its tools: narrowed in a work check, a shard in a sweep (X-1)
     touches: tuple = ()  # a work check runs it only when the diff touches one of these
     touches_except: tuple = ()  # the places in `touches` that do not count
@@ -106,10 +107,10 @@ STEPS = [
     Step("clippy", ("cargo", "clippy", "--workspace", "--all-targets", "--", "-D", "warnings")),
     # Every test binary runs, the ones after a failing one too (X9-70).
     Step("test", ("cargo", "test", "--workspace", "--no-fail-fast")),
-    # X-24: the tests and the cases too slow for every run, the ignored tests named `heavy_…`. The work checks and the
-    # sweeps run them when what they try changed.
+    # X-24: the tests and the cases too slow for every run, the ignored tests named `heavy_…`. The sweeps run them when
+    # what they try changed; a work check leaves them out (190th session: the work check was past its budget, X-20).
     Step("heavy", ("cargo", "test", "--workspace", "--no-fail-fast", "--", "--ignored", "heavy_"),
-         slow=True, touches=("crates/", "tests/heavy/"), sweep=True),
+         slow=True, touches=("crates/", "tests/heavy/"), sweep=True, not_in_work=True),
     # The compiler does not fail inside on mutated inputs (Q-06, W1-04).
     Step("fuzz", (*PY, str(TOOLS / "fuzz.py")), slow=True, narrows=FUZZ_TOOLS),
     # The mutants that nest thousands deep (S-183, W3-14), with the replay: heavy on the machine
