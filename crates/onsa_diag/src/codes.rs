@@ -351,6 +351,8 @@ codes! {
         "refutable pattern in `let`";
     E0503 = 503, Exhaustiveness, [Types], Optional, Optional,
         "unreachable statement after a diverging one, or `match` arm the arms before it cover";
+    E0504 = 504, Exhaustiveness, [Types], Optional, Optional,
+        "a guard reads a name that two alternatives able to match one value bind to different parts";
     E0601 = 601, Effects, [Effects], Optional, Optional,
         "effect used but not in the function's effect row";
     E0602 = 602, Effects, [Names], Optional, Optional,
