@@ -66,7 +66,7 @@ fn atom(body: &Body, e: ExprId) -> bool {
     }
 }
 
-/// Does `e` hold a `^name` that counts (§11.3, S-1249: "中の遅延の第 1 引数の中の `^名前` は、その遅延の出力なので数えない")? The `^name` in the first argument of a delay inside `e` is the output of that delay, not read by `e`:
+/// Does `e` hold a `^name` that counts (§11.3, S-1249: "対象とガードの中の、入れ子の遅延の第 1 引数の中の `^名前` は、その遅延の出力なので数えない")? The `^name` in the first argument of a delay inside `e` is the output of that delay, not read by `e`:
 /// `prev~(^d)` is a delay of the clock of `d` and holds no `^name` that moves what it is in. (`feedback` is every `^name`, which the loops of the clocks follow.)
 pub(super) fn caret(body: &Body, e: ExprId) -> bool {
     if matches!(body.ast.expr(e).kind, ExprKind::Feedback(_)) {
@@ -180,9 +180,14 @@ pub(super) fn stage_of(body: &Body, known: &Known, root: ExprId, e: ExprId) -> R
             }
             // R-517 (§11.3, §11.4): `sample_tick()` reads the clock of the place that uses it, and an expression that reads it with a value of the parameter kinds that `at` gave a tick
             // (`sample_tick() % 8 == 4 && (p at (sample / 4))`) is of that tick: its time is the time of the tick, not of each `sample`.
-            if stage == Clock::AMBIENT {
+            //
+            // R-528 (§11.3, §11.11): an event value with a value of the parameter kinds that `at` gave a tick (`d * (r at sample)`, `d` of an event, `r` of `block`) is of that tick as well: the
+            // operand of a tick is in it, so it is not "an expression of the event with no operand of a tick", and `d` is read as the last value at the tick (as in `(d at sample) * r`).
+            if stage == Clock::AMBIENT || matches!(stage, Clock::Event(_)) {
                 match clock_of(body, known, root, e) {
-                    Ok(read) => stage = read,
+                    Ok(read @ Clock::Tick(_)) => stage = read,
+                    Ok(read) if stage == Clock::AMBIENT => stage = read,
+                    Ok(_) => {}
                     Err(Fault::Unavailable(_)) => {}
                     Err(fault) => return Err(fault),
                 }
@@ -637,7 +642,7 @@ pub(super) fn forget_early(f: &mut Frame, early: Vec<ExprId>) {
     }
 }
 
-/// The calls in `e`, a part that a stage before made (so nothing of it is made again): in the order they are written, each does what it has in the stage `here` (S-1233: "出力をその段で読むかによらず、呼び出しを書いた位置で行う"),
+/// The calls in `e`, a part that a stage before made (so nothing of it is made again): in the order they are written, each does what it has in the stage `here` (S-1233, §11.3: "出力をその段で読むかによらず、呼び出しを書いた位置（式の評価の順の中の位置）"),
 /// after the calls in its arguments. It makes no value (what a call gathers is `gather_args`'s), so it takes no condition: a call is where it is evaluated whatever the branch (§11.5: E0811 keeps one out of a branch that is not taken).
 fn visit(f: &mut Frame, known: &Known, root: ExprId, e: ExprId, here: Clock, guard: Clock) -> Result<(), Stop> {
     let body = f.body;
