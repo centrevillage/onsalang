@@ -45,7 +45,7 @@ impl<'p> Sema<'p> {
                 ParamName::Ident(i) => (i.name.clone(), i.span),
                 // S-1092: an input has a name, which its field and its C name are.
                 ParamName::Wild(s) => {
-                    let d = Diagnostic::new(Stage::Names, Code::E0810, *s, "a flow input has a name, not `_` (§11.6)");
+                    let d = Diagnostic::new(Stage::Names, Code::E0810, *s, "a flow input has a name, not `_` (§11.2)");
                     self.report(id, d.with_found("_").with_rule(UNNAMED_INPUT_RULE));
                     ("_".into(), *s)
                 }

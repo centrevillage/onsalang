@@ -3,7 +3,7 @@
 // spec = ["§11.6", "§11.2", "§5.1", "§18.1"]
 // fixes = 0
 
-// S-1092 (§11.6): a flow input is named, as its name is that of its field in the types the flow generates (`Config`,
+// S-1092 (§11.2): a flow input is named, as its name is that of its field in the types the flow generates (`Config`,
 // `Params`, `In`), its C name, the default id of its `@param` and the name of its vertex in `onsa graph`. An input named
 // `_` is the E0810 of the heading (the names stage), at the `_`, with no candidate (the name is the writer's) and a note
 // that an input that is not read keeps a name (an unused input is no E0309, §5.1). One `_` or two, at any clock: one
