@@ -41,7 +41,11 @@ shows the wall seconds and the cpu seconds (user + sys of the children). The cpu
 55% in an A/A of one binary, 2026-10-20): judge on a quiet machine.
 `probe` writes the cases of a file (`probe_cases`) as packages below `--out` and runs every binary on each, `check
 --json` or `--cmd`, named as in `speed` (W4-03, 70th session: the scripts the agents copied per worktree).
+`core` and `c` take `--sub` (the same rewriting of the texts of both binaries before they are compared) and `--lines`
+(the texts compared as multisets of lines, the lines of one side only shown): X-27 TU3, the scripts of W7-08 U2 and
+W7-07 U1 for the units that change set marks only, or move lines.
 """
+import argparse
 import io
 import json
 import os
@@ -169,11 +173,11 @@ def executable(parser, b) -> str:
     return str(p)
 
 
-def compared(args, units, run, show, ran=None, where="tests") -> int:
+def compared(args, units, run, show, ran=None, where="tests", key=lambda r: r) -> int:
     """`run(binary, case)` of both binaries on every case, `--jobs` at a time. Lists the
-    cases that differ or fell (a str is a fall), each with `show(before, after)`, and the count. No pair compared is
-    no pass: every case fell in both, or, with `ran`, no pair is `ran(before, after)`. `where` names, below `--root`,
-    where the cases come from."""
+    cases that differ (by `key` of the results) or fell (a str is a fall), each with `show(before, after)`, and the
+    count. No pair compared is no pass: every case fell in both, or, with `ran`, no pair is `ran(before, after)`.
+    `where` names, below `--root`, where the cases come from."""
     before, after = (executable(args.parser_, b) for b in (args.before, args.after))
     if not units:
         print(f"{args.cmd}: no case in {where} of {args.root}")
@@ -182,9 +186,9 @@ def compared(args, units, run, show, ran=None, where="tests") -> int:
         results = list(ex.map(lambda c: (run(before, c), run(after, c)), units))
     differ = one = both = 0
     for case, (b, a) in zip(units, results):
-        fell = isinstance(b, str) + isinstance(a, str)
-        if b != a or fell:
-            differ, one, both = differ + (b != a), one + (fell == 1), both + (fell == 2)
+        fell, other = isinstance(b, str) + isinstance(a, str), key(b) != key(a)
+        if other or fell:
+            differ, one, both = differ + other, one + (fell == 1), both + (fell == 2)
             print(case, *show(b, a), sep="\n")
     print(f"{len(units)} cases, {differ} differ, {one} fell in one binary only, {both} fell in both")
     if ran and not any(ran(b, a) for b, a in results):
@@ -251,9 +255,67 @@ def texts(before, after) -> list:
     for i, label in ((1, "line"), (2, "stdout line")):
         if i < len(before) and before[i] != after[i]:
             out.append(f"  {label} {first_line(before[i], after[i])}")
-    if len(before) > 3 and before[3] != after[3]:
-        gone, new = (sorted(set(x[3]) - set(y[3])) for x, y in ((before, after), (after, before)))
-        out.append("  files: " + " ".join([f"-{n}" for n in gone] + [f"+{n}" for n in new]))
+    return out + (files_line(before[3], after[3]) if len(before) > 3 else [])
+
+
+def files_line(before, after) -> list:
+    """`  files: -<name> +<name>`: the names of the files on one side only (none: no line)."""
+    gone, new = sorted(set(before) - set(after)), sorted(set(after) - set(before))
+    return ["  files: " + " ".join([f"-{n}" for n in gone] + [f"+{n}" for n in new])] if gone or new else []
+
+
+def substitution(text) -> tuple:
+    """(the pattern, the replacement) of `--sub <pattern>=<replacement>`, as bytes: split at the first `=` with no
+    backslash before it. A pattern or a replacement that does not read is a usage error."""
+    parts = re.split(r"(?<!\\)=", text, maxsplit=1)
+    if len(parts) < 2:
+        raise argparse.ArgumentTypeError(f"{text!r}: no `=` between the pattern and the replacement")
+    try:
+        pattern = re.compile(parts[0].encode())
+        pattern.sub(parts[1].encode(), b"")  # reads the replacement: a group the pattern has not is an error
+    except (re.error, IndexError) as e:
+        raise argparse.ArgumentTypeError(f"{text!r}: {e}") from None
+    return pattern, parts[1].encode()
+
+
+def each_text(r, f):
+    """`r`, a result of `outcome` or `built`, with `f` applied to each of its texts (the output, the contents of the
+    files written); a fall, an exit code, a name and the None of a BINARY file are kept."""
+    return f(r) if isinstance(r, bytes) else tuple(each_text(x, f) for x in r) if isinstance(r, tuple) else r
+
+
+def lines_of(text: bytes) -> list:
+    """The lines `--lines` compares: their leading and trailing blanks taken off."""
+    return [x.strip() for x in text.split(b"\n")]
+
+
+def rewritten(args, run, show) -> dict:
+    """The `run`, `show` and `key` of `compared` for `core` and `c`: the texts of each run rewritten by every `--sub`
+    in order; with `--lines`, compared as multisets of `lines_of` and shown by `line_changes`."""
+    def sub(text):
+        for pattern, replacement in args.sub:
+            text = pattern.sub(replacement, text)
+        return text
+
+    out = {"run": lambda b, u: each_text(run(b, u), sub), "show": show}
+    multiset = {"show": line_changes, "key": lambda r: each_text(r, lambda t: sorted(lines_of(t)))}
+    return out | (multiset if args.lines else {})
+
+
+def line_changes(before, after) -> list:
+    """The lines of a case of `--lines`: how a binary fell, or the exit codes, the files written on one side only
+    (`c`), and the lines of each text on one side only, counted as a multiset (`-` before, `+` after), named `output`
+    and by the file in `c`."""
+    if isinstance(before, str) or isinstance(after, str):
+        return texts(before, after)
+    nb, na = ({"": r[1]} if len(r) == 2 else {"output ": r[1], **{f"{n} ": t for n, t in r[2] if t is not None}}
+              for r in (before, after))  # fmt: skip
+    out = [f"  before: exit {before[0]}", f"  after:  exit {after[0]}"]
+    out += files_line([n for n, _ in before[2]], [n for n, _ in after[2]]) if len(before) > 2 else []
+    for name in [n for n in nb if n in na]:
+        b, a = (Counter(lines_of(x[name])) for x in (nb, na))
+        out += [f"  {name}{sign} {x.decode('utf-8', 'replace')}" for sign, d in (("-", b - a), ("+", a - b))
+                for x in d.elements()]  # fmt: skip
     return out
 
 
@@ -271,7 +333,7 @@ def cst(args) -> int:
 def core(args) -> int:
     units = core_cases(args.root)
     run = lambda b, c: outcome([b, "dump", "--core", c], args.root)  # noqa: E731
-    return compared(args, units, run, texts, ok, f"tests (but {REVIEW}) and examples")
+    return compared(args, units, ran=ok, where=f"tests (but {REVIEW}) and examples", **rewritten(args, run, texts))
 
 
 class Flow(NamedTuple):
@@ -373,10 +435,8 @@ def build_lines(before, after) -> list:
         if codes[0] != codes[1]:
             out.append(f"  codes: {' '.join(codes[0]) or 'none'} -> {' '.join(codes[1]) or 'none'}")
     fb, fa = dict(before[2]), dict(after[2])
-    if fb.keys() != fa.keys():
-        out.append("  files: " + " ".join([f"-{n}" for n in sorted(fb.keys() - fa.keys())] +
-                                          [f"+{n}" for n in sorted(fa.keys() - fb.keys())]))  # fmt: skip
-    return out + [f"  {n} line {first_line(fb[n], fa[n])}" for n in sorted(fb.keys() & fa.keys()) if fb[n] != fa[n]]
+    return out + files_line(fb, fa) + [f"  {n} line {first_line(fb[n], fa[n])}" for n in sorted(fb.keys() & fa.keys())
+                                       if fb[n] != fa[n]]  # fmt: skip
 
 
 def c(args) -> int:
@@ -390,7 +450,8 @@ def c(args) -> int:
         inputs = len({b.case for b in builds})
         print(f"c: {len(builds)} builds of {inputs} inputs with targets in the HEAD of {args.root}")
         run = lambda binary, b: built(binary, b, tmp)  # noqa: E731
-        return compared(args, builds, run, build_lines, ok, f"the HEAD of tests (but {REVIEW}) and examples")
+        where = f"the HEAD of tests (but {REVIEW}) and examples"
+        return compared(args, builds, ran=ok, where=where, **rewritten(args, run, build_lines))
 
 
 def contract(binary, path):
@@ -695,6 +756,19 @@ def diags_args(p):
     p.set_defaults(parser_=p)
 
 
+def rewrite_args(p):
+    diags_args(p)
+    p.add_argument("--sub", action="append", default=[], type=substitution, metavar="PATTERN=REPLACEMENT",
+                   help=r"両方のバイナリの出力（core は dump の出力、c は診断の出力と書いたファイルの中身）に当ててから比べる置き換え。"
+                        r"最初の、\ の後でない = で、型（Python の正規表現、バイト列に当てる）と置き換え（\1 などの群の参照が使える）に分ける。"
+                        r"型の中の = は \= と書く。繰り返すと書いた順に当てる。型か置き換えが読めなければ使い方の誤り（終了コード 2）")
+    p.add_argument("--lines", action="store_true",
+                   help="出力を行の多重集合として比べ（行の前後の空白は外すので、字下げだけの違いは数えない。見るときは付けずに回す）、"
+                        "違う入力ごとに終了コードと、前だけの行（-）・後だけの行（+）を出す。並べ替えだけの違いは違いにならない。"
+                        "c は診断の出力を output、書いたファイルをその名前で行の前に付け、片方だけのファイルは files の行。"
+                        "--sub と一緒なら置き換えた後の行で比べる。終了コードの決まりは付けないときと同じ")
+
+
 def fixes_args(p):
     p.add_argument("before", help="前の onsa_cases")
     p.add_argument("after", help="後の onsa_cases")
@@ -756,22 +830,23 @@ COMMANDS = {
              "二つのバイナリの dump --cst --tree を fuzz の種の .onsa に 1 ファイルずつ回し（構文だけなので tests/review-phase1 も）、終了コードか出力（CST の木）が違うファイルと落ちたファイルを並べる。両方で終了コード 0 のファイルが無ければ失敗",
              "字句・構文解析のリファクタリングの前後で、CST が変わっていないかを見るとき（diags と fmt より直接。AST への降下は見ない）。前のバイナリは diags と同じ",
              "compare.py cst <主のツリー>/target/base/<基>/onsa target/debug/onsa"),
-    "core": C(diags_args, core, ("parent", "i", "b"),
+    "core": C(rewrite_args, core, ("parent", "i", "b"),
               "二つのバイナリの dump --core を、tests/ の事例（diags と同じ。未知の入力を持つ tests/review-phase1 は、"
               "降下に進む命令に一括でかけないので除く。rules/common.md 3.2）と examples（パッケージはディレクトリで）に回し、終了コードか出力が違う入力と落ちた入力を並べる。両方で終了コード 0 の入力が無ければ失敗",
-              "意味解析・降下のリファクタリングの前後で、Core IR が変わっていないかを見るとき（check を回す diags では降下を確かめられない）。前のバイナリは diags と同じ",
+              "意味解析・降下のリファクタリングの前後で、Core IR が変わっていないかを見るとき（check を回す diags では降下を確かめられない）。前のバイナリは diags と同じ。"
+              "決めた印だけが変わる単位は --sub で両方を置き換えて、行の並べ替えだけの単位は --lines で比べる",
               "compare.py core <主のツリー>/target/base/<基>/onsa target/debug/onsa"),
     "graph": C(diags_args, graph, ("parent", "i", "b"),
                "二つのバイナリの graph <flow> <ファイル> を、core の入力の各 .onsa（パッケージは中のファイルごと）の行頭で宣言した flow ごとに回し、"
                "終了コードか出力（DOT）が違う <ファイル>::<flow> と落ちたものを並べる。行頭でない宣言（同じ行の前に属性がある、字下げした）は比べない。両方で終了コード 0 の flow が無ければ失敗",
                "graph の作り（計画の辺・描き方）を変える単位の前後で、出力が変わっていないか（変わった所が意図どおりか）を見るとき。前のバイナリは diags と同じ",
                "compare.py graph <主のツリー>/target/base/<基>/onsa target/debug/onsa"),
-    "c": C(diags_args, c, ("parent", "i", "b"),
+    "c": C(rewrite_args, c, ("parent", "i", "b"),
            "二つのバイナリの build を、HEAD の tests/（tests/review-phase1 と fuzz の入力を除く）と examples の写しで、core と同じ入力の全てのターゲットに回し"
            "（マニフェストを断片に持つファイルは、断片から [test] を除いた onsa.toml の一つのパッケージにして）、終了コード・出力（診断）・書いたファイル"
            "（C、ヘッダ、onsa_build.json。.o と .a は名前だけ）が違うビルドと落ちたビルドを並べる",
            "後端・降下の変更の前後で、生成する C とビルドの診断が変わっていないか（変わった所が意図どおりか）を見るとき。前のバイナリは diags と同じ。"
-           "入力は HEAD のものなので、作業ツリーで書き換えた事例は前のまま比べる",
+           "入力は HEAD のものなので、作業ツリーで書き換えた事例は前のまま比べる。--sub と --lines は core と同じ",
            "compare.py c <主のツリー>/target/base/<基>/onsa target/debug/onsa"),
     "fixes": C(fixes_args, fixes, ("parent", "i", "b"),
                "二つの onsa_cases の --fix-contract を入力ごとに一つずつ回し、候補の数（前 -> 後）と約束を守ったか破ったかの組に分け、後で破った入力と、候補が減り前は守っていた入力と、落ちた入力を並べる",

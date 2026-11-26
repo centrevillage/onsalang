@@ -9,11 +9,17 @@ The host sequences of a case (`[[test.host]]`, the calls at the C boundary) run 
 many passed, and one that fails or does not run is a problem of the case (without a C compiler, a problem of kind
 `harness`, as in the test). Without `--hosts` the `ok` says nothing of them: the line says how many did not run.
 
-    tools/run_cases.py [--tree DIR] [--bin ONSA_CASES] [--hosts] --work DIR <path under tests/>...
+    tools/run_cases.py [--tree DIR] [--bin ONSA_CASES] [--hosts | --c ITEM] --work DIR <path under tests/>...
 
 --tree  the tree whose cases are run (default: this repository)
 --bin   the case runner (default: <tree>/target/debug/onsa_cases)
 --hosts run the host sequences too (a C compiler, the C check `c-clang`'s, builds them)
+--c     run the C check ITEM (one of `onsa_cases --c-items`: c-clang, c-gcc, …; another name is a usage error, exit 2)
+        on the cases copied instead of the cases themselves, as the gate runs it on all (`onsa_cases --c ITEM <work>`);
+        its lines (a line a case `<path>[<target>]`) are printed as they are. With --hosts it is a usage error (exit 2).
+        An empty tests/pending.toml is written in the work directory: as with the cases, a case listed there fails as
+        without the list. Exit 0 when the item passes, 1 when it fails or cannot run (its exit 2: no C compiler, no
+        case copied that builds a target; its last line says CANNOT RUN).
 --work  a scratch directory of the caller, emptied first: an absolute path outside the tree and this repository
         (and its main tree, run from a work tree), neither in them nor holding them; any other is refused with
         exit 1, nothing removed
@@ -24,6 +30,11 @@ It writes no copy either (the `.fixK` of a case, a golden file): they are made b
 `UPDATE_GOLDEN=1 cargo test -p onsa_tests --test cases`, which runs every case (about 5 s).
 A problem is printed whole, its lines indented.
 Exit 0 when every case passes, 1 otherwise (without the runner too: a line says which path is not there).
+A runner older than the code it is built from gets a line first (X-19 2), and the run goes on: it is not built here.
+The code is every file below `narrowing.BUILT_FROM` but `tools/` (scripts, not built into the runner), the tests of a
+crate (`crates/<crate>/tests/`) and names that start with `.`; the newest by the time of the file is named. Missed:
+a file removed, and a runner copied or touched after the change; told without need: a change that cargo does not
+rebuild the runner for (a crate it does not use), and a runner of another tree (`--bin`).
 """
 import argparse
 import glob
@@ -35,6 +46,7 @@ import sys
 from pathlib import Path
 
 sys.dont_write_bytecode = True
+import narrowing  # noqa: E402
 import repo  # noqa: E402
 
 
@@ -73,11 +85,35 @@ def declared(case):
     return out + [f"graph/{n}.{f}.dot" for f in case.get("golden_graph", [])]
 
 
+def code_files(tree):
+    """The files of `tree` the case runner is built from, as the docstring says."""
+    for spec in (x for x in narrowing.BUILT_FROM if x != "tools"):
+        glob_ = spec.startswith(":(glob)")
+        for top in glob.glob(os.path.join(tree, spec[7:])) if glob_ else [os.path.join(tree, spec)]:
+            yield from [top] if os.path.isfile(top) else []
+            for d, dirs, files in os.walk(top):
+                crate = os.path.dirname(os.path.relpath(d, tree)) == "crates"
+                dirs[:] = [x for x in dirs if not x.startswith(".") and not (crate and x == "tests")]
+                yield from (os.path.join(d, f) for f in files if not f.startswith("."))
+
+
+def stale(tree, runner):
+    """The line of a runner older than the newest of `code_files(tree)`, or None."""
+    newest = max(code_files(tree), key=os.path.getmtime, default=None)
+    late = newest and os.path.getmtime(newest) - os.path.getmtime(runner)
+    if late and late > 0:
+        return (f"note: {runner} is older than {os.path.relpath(newest, tree)} by {late:.0f} s ({late / 3600:.1f} h): "
+                "`cargo build -p onsa_tests --bin onsa_cases` builds it; this run goes on")
+    return None
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--tree", default=str(Path(__file__).resolve().parent.parent))
     ap.add_argument("--bin")
-    ap.add_argument("--hosts", action="store_true")
+    one = ap.add_mutually_exclusive_group()
+    one.add_argument("--hosts", action="store_true")
+    one.add_argument("--c", metavar="ITEM")
     ap.add_argument("--work", required=True)
     ap.add_argument("paths", nargs="+")
     a = ap.parse_args(argv)
@@ -90,6 +126,11 @@ def main(argv=None) -> int:
     if shutil.which(runner) is None:
         print(f"no case runner: {runner} (build it, or pass one with --bin)")
         return 1
+    items = json.loads(subprocess.run([runner, "--c-items"], capture_output=True, timeout=60).stdout) if a.c else []
+    if a.c and a.c not in items:
+        ap.error(f"--c {a.c}: not an item of `onsa_cases --c-items` ({', '.join(items)})")
+    if note := stale(a.tree, runner):
+        print(note)
     shutil.rmtree(a.work, ignore_errors=True)
     for rel in a.paths:
         src = os.path.join(tests, rel)
@@ -113,6 +154,11 @@ def main(argv=None) -> int:
         if os.path.isfile(src := os.path.join(tests, "golden", g)):  # one missing is the run's problem
             os.makedirs(os.path.dirname(dst := os.path.join(a.work, "tests", "golden", g)), exist_ok=True)
             shutil.copy(src, dst)
+    if a.c:  # the item reads the list (its exit 2 when no case copied builds a target)
+        Path(a.work, "tests", "pending.toml").write_text("")
+        r = subprocess.run([runner, "--c", a.c, a.work], capture_output=True, text=True, timeout=1800)
+        print(r.stdout + r.stderr, end="")
+        return 0 if r.returncode == 0 else 1
     r = subprocess.run([runner, "--run", *(["--hosts"] if a.hosts else []), a.work],
                        capture_output=True, text=True, timeout=600)  # fmt: skip
     try:

@@ -336,6 +336,60 @@ class Compare(unittest.TestCase):
         self.assertEqual(quiet_out(compare.main, ["core", before, after, "--root", str(self.root / "empty")]), (1, [
             f"core: no case in tests (but tests/review-phase1) and examples of {self.root / 'empty'}"]))
 
+    def test_core_sub_lines(self):
+        """X-27 TU3: `--sub` rewrites the outputs of both binaries before they are compared, in the order given;
+        `--lines` compares them as multisets of lines, their blanks around taken off, and shows the lines of one side
+        only; together, the lines rewritten. The exit codes are as without them."""
+        mark = "a\n  s.1 = x [known 3]\nb\n"
+        moved = {"tests/a.onsa": [0, "a\n  s.1 = x [3]\nb\n"], "tests/c.onsa": [0, "b\ns.1 = x [known 3]\n    a\n"]}
+        before, after, same, fell = self.fakes({
+            "before": {"*": [0, mark], "tests/p": [0, "a\nb\nb\n"]},
+            "after": {"*": [0, mark], **moved, "tests/b.onsa": [0, "a\n  s.1 = y [3]\nb\n"],
+                      "tests/d.onsa": [0, "a\n  s.2 = x [known 3]\nb\n"], "tests/p": [0, "a\nb\n"]},
+            "same": {"*": [0, mark], **moved, "tests/p": [0, "a\nb\nb\n"]},
+            "fell": {"*": [0, mark], "tests/p": [0, "a\nb\nb\n"], "tests/a.onsa": ["kill", ""]}},
+            "before", "after", "same", "fell")  # fmt: skip
+        run = lambda a, *more: quiet_out(compare.main, ["core", before, a, "--root", str(self.root), *more])  # noqa: E731
+        sub = ("--sub", r"\[known =[")
+        self.assertEqual(run(after, *sub), (1, [
+            "tests/b.onsa", "  before: exit 0, 4 lines", "  after:  exit 0, 4 lines",
+            "  line 2: '  s.1 = x [3]' -> '  s.1 = y [3]'",
+            "tests/c.onsa", "  before: exit 0, 4 lines", "  after:  exit 0, 4 lines", "  line 1: 'a' -> 'b'",
+            "tests/d.onsa", "  before: exit 0, 4 lines", "  after:  exit 0, 4 lines",
+            "  line 2: '  s.1 = x [3]' -> '  s.2 = x [3]'",
+            "tests/p", "  before: exit 0, 4 lines", "  after:  exit 0, 3 lines", "  line 3: 'b' -> ''",
+            "5 cases, 4 differ, 0 fell in one binary only, 0 fell in both"]))  # fmt: skip
+        exits = ["  before: exit 0", "  after:  exit 0"]
+        self.assertEqual(run(after, "--lines"), (1, [
+            "tests/a.onsa", *exits, "  - s.1 = x [known 3]", "  + s.1 = x [3]",
+            "tests/b.onsa", *exits, "  - s.1 = x [known 3]", "  + s.1 = y [3]",
+            "tests/d.onsa", *exits, "  - s.1 = x [known 3]", "  + s.2 = x [known 3]",
+            "tests/p", *exits, "  - b",
+            "5 cases, 4 differ, 0 fell in one binary only, 0 fell in both"]))  # fmt: skip
+        self.assertEqual(run(after, *sub, "--lines"), (1, [
+            "tests/b.onsa", *exits, "  - s.1 = x [3]", "  + s.1 = y [3]",
+            "tests/d.onsa", *exits, "  - s.1 = x [3]", "  + s.2 = x [3]",
+            "tests/p", *exits, "  - b",
+            "5 cases, 3 differ, 0 fell in one binary only, 0 fell in both"]))  # fmt: skip
+        self.assertEqual(run(same, *sub, "--lines"), (0, ["5 cases, 0 differ, 0 fell in one binary only, 0 fell in both"]))
+        self.assertEqual(run(same, "--sub", "known=", "--sub", r"\[ =[", "--lines")[0], 0)  # in the order given
+        self.assertEqual(run(same, "--sub", r"\[ =[", "--sub", "known=", "--lines")[0], 1)
+        self.assertEqual(run(fell, "--lines"), (1, ["tests/a.onsa", "  before: exit 0", "  after:  signal 9",
+                                                    "5 cases, 1 differ, 1 fell in one binary only, 0 fell in both"]))
+
+    def test_substitution(self):
+        # X-27 TU3: split at the first `=` with no backslash before it; a `=` of the pattern is written `\=`. A pattern
+        # or a replacement that does not read, or no `=`, is a usage error.
+        pattern, replacement = compare.substitution(r"a\=(b)=<\1=>")
+        self.assertEqual(pattern.sub(replacement, b"a=b ab"), b"<b=> ab")
+        before, after = self.fakes({}, "before", "after")
+        for bad in ("(=x", r"a=\2", "ab"):
+            buf = io.StringIO()
+            with self.subTest(bad=bad), mock.patch.object(sys, "stderr", buf), self.assertRaises(SystemExit) as e:
+                compare.main(["core", before, after, "--sub", bad])
+            self.assertEqual(e.exception.code, 2)
+            self.assertIn("--sub", buf.getvalue())
+
     def test_graph(self):
         # W7-15 U1: `graph <flow> <file>` of each flow declared at the head of a line of each file of the inputs of
         # `core` (a package's files each; tests/review-phase1 and tests/fuzz are not taken), each name once.
@@ -434,8 +488,9 @@ class Compare(unittest.TestCase):
         for n in ("before", "after"):
             (self.bin / n).write_text(FAKE_BUILD.format(exe=sys.executable))
             (self.bin / n).chmod(0o755)
-        def run(*names):
-            return quiet_out(compare.main, ["c", *(str(self.bin / n) for n in names), "--root", str(self.root)])
+        def run(before, after, *more):
+            return quiet_out(compare.main, ["c", str(self.bin / before), str(self.bin / after), "--root", str(self.root),
+                                            *more])  # fmt: skip
         (self.bin / "cases.json").write_text(json.dumps(listed[:3]))
         self.assertEqual(run("before", "before"), (1, ["c: tests/d.onsa: not a case that `onsa_cases` lists (a file is "
                                                        "built with the manifest of its fragment)"]))  # fmt: skip
@@ -451,6 +506,18 @@ class Compare(unittest.TestCase):
             "  codes: none -> E0200",
             "  files: -m.a -m.c -onsa_build.json",
             "4 cases, 2 differ, 0 fell in one binary only, 0 fell in both"]))  # fmt: skip
+        # X-27 TU3: `--sub` rewrites the files written too, `--lines` names the file of a line.
+        (self.bin / "build.json").write_text(json.dumps({"before": {"t1": [0, "x = 1;\nint a1;\n"]},
+                                                         "after": {"t1": [0, "int a2;\n  x = 1;\n"]}}))  # fmt: skip
+        sub = ("--sub", r"a\d=a")
+        self.assertEqual(run("before", "after", *sub), (1, [head,
+            "tests/a.onsa [t1]", "  before: exit 0, 3 files", "  after:  exit 0, 3 files", "  m.c line 1: 'x = 1;' -> 'int a;'",
+            "4 cases, 1 differ, 0 fell in one binary only, 0 fell in both"]))  # fmt: skip
+        self.assertEqual(run("before", "after", "--lines"), (1, [head,
+            "tests/a.onsa [t1]", "  before: exit 0", "  after:  exit 0", "  m.c - int a1;", "  m.c + int a2;",
+            "4 cases, 1 differ, 0 fell in one binary only, 0 fell in both"]))  # fmt: skip
+        self.assertEqual(run("before", "after", *sub, "--lines"),
+                         (0, [head, "4 cases, 0 differ, 0 fell in one binary only, 0 fell in both"]))
 
     def test_speed_turns_round(self):
         b1, b2 = self.fakes({}, "b1", "b2")
