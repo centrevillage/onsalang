@@ -235,7 +235,7 @@ impl<'m> Interp<'m> {
             _ => None,
         };
         let message = self.m.messages[msg.0 as usize].clone();
-        Err(Signal::Fail(Failure::Panic(Panic { message, span, calls: Vec::new(), origin, shown })))
+        Err(Signal::Fail(Box::new(Failure::Panic(Panic { message, span, calls: Vec::new(), origin, shown }))))
     }
 
     #[inline(never)]

@@ -52,7 +52,7 @@ impl<'m> Interp<'m> {
     /// A primitive the interpreter does not provide: the check before the
     /// run finds it first.
     pub(super) fn lacking(&self, prim: &Prim, span: Span) -> R<Value> {
-        Err(Signal::Fail(Failure::Unsupported(unsupported_at(prim, span))))
+        Err(Signal::Fail(Box::new(Failure::Unsupported(unsupported_at(prim, span)))))
     }
 }
 

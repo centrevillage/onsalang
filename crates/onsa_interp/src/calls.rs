@@ -8,7 +8,7 @@ use onsa_diag::Span;
 
 use crate::place::{ArgVal, Frame, Loc};
 use crate::value::{Value, slot};
-use crate::{CallSite, Failure, Interp, MAX_CALL_DEPTH, Panic, R, STACK_RESERVE, Signal, internal, panic};
+use crate::{CallSite, Failure, Interp, MAX_CALL_DEPTH, R, STACK_RESERVE, Signal, internal, panic};
 
 pub(super) enum ConstState {
     Unevaluated,
@@ -61,7 +61,7 @@ impl<'m> Interp<'m> {
     /// ([`Interp::run_body`] and [`Interp::eval_const`] take the rest).
     pub(super) fn failure_of(s: Signal, at: Span) -> Failure {
         match s {
-            Signal::Fail(f) => f,
+            Signal::Fail(f) => *f,
             Signal::Return(_) | Signal::Break | Signal::Continue => internal(at, "control flow escaped an evaluation"),
         }
     }
@@ -187,7 +187,7 @@ impl<'m> Interp<'m> {
         let r = self.run_body(fn_, args);
         self.depth.set(self.depth.get() - 1);
         match r {
-            Err(Signal::Fail(Failure::Panic(p))) => Err(out_of_call(p, site, fn_)),
+            Err(Signal::Fail(e)) => Err(out_of_call(e, site, fn_)),
             r => r,
         }
     }
@@ -235,12 +235,15 @@ impl<'m> Interp<'m> {
     }
 }
 
-/// A panic that goes out of the call of `callee` at `site` ([`Panic::calls`]).
+/// A failure that goes out of the call of `callee` at `site`: a panic
+/// records it ([`crate::Panic::calls`]).
 #[cold]
 #[inline(never)]
-fn out_of_call(mut p: Panic, site: Span, callee: FnId) -> Signal {
-    p.calls.push(CallSite { span: site, callee });
-    Signal::Fail(Failure::Panic(p))
+fn out_of_call(mut e: Box<Failure>, site: Span, callee: FnId) -> Signal {
+    if let Failure::Panic(p) = &mut *e {
+        p.calls.push(CallSite { span: site, callee });
+    }
+    Signal::Fail(e)
 }
 
 /// The panic of a call beyond [`MAX_CALL_DEPTH`] (spec §12.5), at the call.
