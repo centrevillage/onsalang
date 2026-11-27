@@ -440,3 +440,215 @@ fn each_function_and_type_of_a_flow_is_checked() {
         assert!(err.rule == Rule::V20 && err.fn_name == m.flows[0].name, "{name}: {err}");
     }
 }
+
+fn st(span: Span, kind: StmtKind) -> Stmt {
+    Stmt { span, kind }
+}
+
+fn block(stmts: Vec<Stmt>, value: Expr) -> Block {
+    Block { stmts, value: Some(Box::new(value)) }
+}
+
+/// A block expression of `stmts` and then the value `value`.
+fn inline(stmts: Vec<Stmt>, value: Expr) -> Expr {
+    Expr::new(value.ty, sp(), ExprKind::Block(block(stmts, value)))
+}
+
+fn yes() -> Expr {
+    lit(Types::BOOL, Lit::Bool(true))
+}
+
+/// `g` of the locals `a` and `b` (`U32`): its statements `stmts`, then the
+/// value of the local `l`, read at `at()`.
+fn reads(l: u32, stmts: Vec<Stmt>) -> Module {
+    let mut m = base();
+    m.messages.push("m".into());
+    let ab = vec![Local { name: "a".into(), ty: Types::U32 }, Local { name: "b".into(), ty: Types::U32 }];
+    m.fns.push(f("g", vec![], Types::U32, ab, stmts, Expr::new(Types::U32, at(), ExprKind::Local(LocalId(l)))));
+    m
+}
+
+/// V-04: a local is seen from its definition to the end of its scope. A
+/// block a backend opens and a child not always evaluated close the names
+/// defined in them; a block expression does not (W8-02, the `tick` of a
+/// flow); an assignment defines nothing.
+#[test]
+fn a_local_is_seen_in_its_scope_only() {
+    let let_a = || st(sp(), StmtKind::Let(LocalId(0), one()));
+    let unit = || lit(Types::UNIT, Lit::Unit);
+    let empty = || block(vec![], unit());
+    let expr = |e| st(sp(), StmtKind::Expr(e));
+    let if_expr = |then| ExprKind::IfExpr { cond: Box::new(yes()), then, else_: empty() };
+    let logic = ExprKind::Logic { op: LogicOp::And, lhs: Box::new(yes()), rhs: Box::new(inline(vec![let_a()], yes())) };
+    let panic =
+        ExprKind::Panic { msg: MsgId(0), origin: PanicOrigin::Panic, shown: vec![inline(vec![let_a()], one())] };
+    let past = [
+        ("an arm of an if", st(sp(), StmtKind::If(yes(), block(vec![let_a()], unit()), empty()))),
+        ("an arm of an if expression", expr(Expr::new(Types::UNIT, sp(), if_expr(block(vec![let_a()], unit()))))),
+        ("the body of a while", st(sp(), StmtKind::While(yes(), block(vec![let_a()], unit())))),
+        ("the right operand of a logic", expr(Expr::new(Types::BOOL, sp(), logic))),
+        ("the condition of a while", st(sp(), StmtKind::While(inline(vec![let_a()], yes()), empty()))),
+        ("a value a panic shows", expr(Expr::new(Types::UNIT, sp(), panic))),
+    ];
+    for (name, s) in past {
+        let err = rejected(&reads(0, vec![s]), Rule::V04, "local `a` read before definition");
+        assert_eq!(err.span, Some(at()), "{name}: {err}");
+    }
+    // The condition of a while is not seen in its body.
+    let body = block(vec![st(sp(), StmtKind::Expr(Expr::new(Types::U32, at(), ExprKind::Local(LocalId(0)))))], unit());
+    let s = st(sp(), StmtKind::While(inline(vec![let_a()], yes()), body));
+    assert_eq!(rejected(&reads(1, vec![let_b(), s]), Rule::V04, "local `a` read").span, Some(at()));
+    // The variable of a `for` past its body; an assignment to a local never defined.
+    let for_ = st(sp(), StmtKind::ForRange(LocalId(1), one(), one(), empty()));
+    assert_eq!(rejected(&reads(1, vec![for_]), Rule::V04, "local `b` read before").span, Some(at()));
+    let assign = st(at(), StmtKind::Assign(Place::Local(LocalId(0)), one()));
+    assert_eq!(rejected(&reads(0, vec![assign]), Rule::V04, "local `a` written before").span, Some(at()));
+    // Seen: past a block expression, a condition of an if in its arms and
+    // past it, a second `let`, the variable of a `for` in its body.
+    let mut m = reads(0, vec![expr(inline(vec![let_a()], unit()))]);
+    let cond = inline(vec![let_a()], yes());
+    let arm = || block(vec![], Expr::new(Types::U32, sp(), ExprKind::Local(LocalId(0))));
+    let if_ = ExprKind::IfExpr { cond: Box::new(cond), then: arm(), else_: arm() };
+    let ab = m.fns[0].locals.clone();
+    m.fns.push(f("h", vec![], Types::U32, ab.clone(), vec![expr(Expr::new(Types::U32, sp(), if_))], read(0)));
+    let read_b = block(vec![expr(read(1))], unit());
+    let for_ = st(sp(), StmtKind::ForRange(LocalId(1), one(), one(), read_b));
+    m.fns.push(f("k", vec![], Types::U32, ab, vec![let_a(), let_a(), for_], read(0)));
+    m.fill_all_facts();
+    verify(&m).expect("seen");
+}
+
+fn read(l: u32) -> Expr {
+    Expr::new(Types::U32, sp(), ExprKind::Local(LocalId(l)))
+}
+
+fn let_b() -> Stmt {
+    st(sp(), StmtKind::Let(LocalId(1), one()))
+}
+
+/// V-05: neither an assignment nor an `inout` argument writes a place of a
+/// parameter taken by borrow; one taken by `inout` or by move is written.
+#[test]
+fn a_borrowed_parameter_is_not_written() {
+    let arr = |m: &mut Module| m.tys.intern(TyKind::Array(Types::U32, 2));
+    let g = |m: &mut Module, mode, ty, stmts| {
+        let x = Param { local: LocalId(0), mode, ty };
+        let unit = lit(Types::UNIT, Lit::Unit);
+        m.fns.push(f("g", vec![x], Types::UNIT, vec![Local { name: "x".into(), ty }], stmts, unit));
+    };
+    let mut m = base();
+    g(&mut m, Mode::Borrow, Types::U32, vec![st(at(), StmtKind::Assign(Place::Local(LocalId(0)), one()))]);
+    assert_eq!(rejected(&m, Rule::V05, "write to the borrowed parameter `x`").span, Some(at()));
+    let mut m = base();
+    let t = arr(&mut m);
+    let elem = Place::Index(Box::new(Place::Local(LocalId(0))), Box::new(one()), sp(), Bounds::Checked);
+    g(&mut m, Mode::Borrow, t, vec![st(at(), StmtKind::Assign(elem, one()))]);
+    assert_eq!(rejected(&m, Rule::V05, "write to the borrowed parameter `x`").span, Some(at()));
+    // `callee(inout y: U32)` given `x`, or `x[0]` of an array.
+    let callee = |m: &mut Module| {
+        let y = Param { local: LocalId(0), mode: Mode::Inout, ty: Types::U32 };
+        let unit = lit(Types::UNIT, Lit::Unit);
+        m.fns.push(f("callee", vec![y], Types::UNIT, vec![Local { name: "y".into(), ty: Types::U32 }], vec![], unit));
+    };
+    let pass = |x: Expr| {
+        let call = ExprKind::Call { fn_: FnId(0), args: vec![Arg { mode: Mode::Inout, expr: x }] };
+        vec![st(sp(), StmtKind::Expr(Expr::new(Types::UNIT, at(), call)))]
+    };
+    let mut m = base();
+    callee(&mut m);
+    g(&mut m, Mode::Borrow, Types::U32, pass(read(0)));
+    assert_eq!(rejected(&m, Rule::V05, "write to the borrowed parameter `x`").span, Some(at()));
+    let mut m = base();
+    callee(&mut m);
+    let t = arr(&mut m);
+    let base_x = Box::new(Expr::new(t, sp(), ExprKind::Local(LocalId(0))));
+    let index = ExprKind::Index { base: base_x, index: Box::new(one()), bounds: Bounds::Checked };
+    g(&mut m, Mode::Borrow, t, pass(Expr::new(Types::U32, sp(), index)));
+    rejected(&m, Rule::V05, "write to the borrowed parameter `x`");
+    // Written: a parameter by `inout`, one by move.
+    for mode in [Mode::Inout, Mode::Move] {
+        let mut m = base();
+        callee(&mut m);
+        let mut stmts = pass(read(0));
+        stmts.push(st(sp(), StmtKind::Assign(Place::Local(LocalId(0)), one())));
+        g(&mut m, mode, Types::U32, stmts);
+        m.fill_all_facts();
+        verify(&m).expect("written");
+    }
+}
+
+/// V-07: a `break` is in the body of a loop. The condition of a `while` is
+/// outside its body (§7): there a `break` is of the loop around it, and
+/// with none it is rejected.
+#[test]
+fn a_break_is_in_the_body_of_a_loop() {
+    let unit = || lit(Types::UNIT, Lit::Unit);
+    let breaks = || {
+        let leave = block(vec![st(at(), StmtKind::Break)], unit());
+        let cond = inline(vec![st(sp(), StmtKind::If(yes(), leave, block(vec![], unit())))], yes());
+        st(sp(), StmtKind::While(cond, block(vec![], unit())))
+    };
+    let mut m = base();
+    m.fns.push(f("g", vec![], Types::UNIT, vec![], vec![breaks()], unit()));
+    assert_eq!(rejected(&m, Rule::V07, "break / continue outside a loop").span, Some(at()));
+    let mut m = base();
+    let outer = st(sp(), StmtKind::While(yes(), block(vec![breaks()], unit())));
+    m.fns.push(f("g", vec![], Types::UNIT, vec![], vec![outer], unit()));
+    m.fill_all_facts();
+    verify(&m).expect("of the loop around");
+}
+
+/// The loop is left: a `break` after a `while` is outside a loop.
+#[test]
+fn a_break_after_a_loop_is_outside_it() {
+    let unit = || lit(Types::UNIT, Lit::Unit);
+    let mut m = base();
+    let looped = st(sp(), StmtKind::While(yes(), block(vec![], unit())));
+    m.fns.push(f("g", vec![], Types::UNIT, vec![], vec![looped, st(at(), StmtKind::Break)], unit()));
+    assert_eq!(rejected(&m, Rule::V07, "break / continue outside a loop").span, Some(at()));
+}
+
+/// A local seen outside stays seen past an inner scope that `let`s it again.
+#[test]
+fn a_second_let_in_an_arm_does_not_end_with_the_arm() {
+    let unit = || lit(Types::UNIT, Lit::Unit);
+    let let_a = || st(sp(), StmtKind::Let(LocalId(0), one()));
+    let arm = block(vec![let_a()], unit());
+    let s = st(sp(), StmtKind::If(yes(), arm, block(vec![], unit())));
+    let mut m = reads(0, vec![let_a(), s]);
+    m.fill_all_facts();
+    verify(&m).expect("seen past the arm");
+}
+
+/// The local of a `let` is not seen in its own value.
+#[test]
+fn a_let_is_not_seen_in_its_value() {
+    let s = st(sp(), StmtKind::Let(LocalId(0), Expr::new(Types::U32, at(), ExprKind::Local(LocalId(0)))));
+    assert_eq!(rejected(&reads(1, vec![s]), Rule::V04, "local `a` read before definition").span, Some(at()));
+}
+
+/// An `inout` argument of a field of a borrowed parameter.
+#[test]
+fn a_field_of_a_borrowed_parameter_is_not_written() {
+    let mut m = base();
+    let s = m.tys.intern(TyKind::Struct(TypeId(0)));
+    let unit = || lit(Types::UNIT, Lit::Unit);
+    let y = Param { local: LocalId(0), mode: Mode::Inout, ty: Types::U32 };
+    m.fns.push(f("callee", vec![y], Types::UNIT, vec![Local { name: "y".into(), ty: Types::U32 }], vec![], unit()));
+    let x = Param { local: LocalId(0), mode: Mode::Borrow, ty: s };
+    let base_x = Box::new(Expr::new(s, sp(), ExprKind::Local(LocalId(0))));
+    let field = Expr::new(Types::U32, sp(), ExprKind::Field { base: base_x, index: 0 });
+    let call = ExprKind::Call { fn_: FnId(0), args: vec![Arg { mode: Mode::Inout, expr: field }] };
+    let stmts = vec![st(sp(), StmtKind::Expr(Expr::new(Types::UNIT, at(), call)))];
+    m.fns.push(f("g", vec![x], Types::UNIT, vec![Local { name: "x".into(), ty: s }], stmts, unit()));
+    rejected(&m, Rule::V05, "write to the borrowed parameter `x`");
+}
+
+/// The value of a block in a loop is checked: a local read there before
+/// its definition (V-04).
+#[test]
+fn a_value_of_a_block_in_a_loop_is_checked() {
+    let value = Expr::new(Types::U32, at(), ExprKind::Local(LocalId(0)));
+    let s = st(sp(), StmtKind::While(yes(), block(vec![], value)));
+    assert_eq!(rejected(&reads(1, vec![let_b(), s]), Rule::V04, "local `a` read before").span, Some(at()));
+}

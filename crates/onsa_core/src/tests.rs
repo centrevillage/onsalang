@@ -1277,3 +1277,24 @@ fn the_counter_advances_in_tick_alone_and_sample_tick_reads_the_time_passed() {
 fn tick_id(m: &Module, end: &str) -> FnId {
     FnId(m.fns.iter().position(|f| f.name.ends_with(end)).expect("the function") as u32)
 }
+
+/// V-19 (W8-02): the sample loop of `process` ends with it: an index known in range after the loop is rejected.
+#[test]
+fn the_verifier_rejects_an_index_known_after_the_sample_loop() {
+    let mut m = core("pub flow f(x: F32 at sample) -> F32 at sample {\n  x\n}\n");
+    let span = onsa_diag::Span::new(FileId(0), 0, 0);
+    let one = m.tys.intern(TyKind::Array(Types::U32, 1));
+    m.fill_all_facts();
+    let zero = Expr::new(Types::U32, span, ExprKind::Lit(Lit::Int(0)));
+    let base = Expr::new(one, span, ExprKind::Array(vec![zero.clone()]));
+    let e = Expr::new(
+        Types::U32,
+        span,
+        ExprKind::Index { base: Box::new(base), index: Box::new(zero), bounds: Bounds::Known },
+    );
+    let process = m.flows[0].fns.process.expect("a `process`").0 as usize;
+    verify(&m).unwrap_or_else(|e| panic!("{e}"));
+    m.fns[process].body.as_mut().expect("a body").stmts.push(Stmt { span, kind: StmtKind::Expr(e) });
+    let err = verify(&m).unwrap_err();
+    assert_eq!(err.rule, crate::Rule::V19, "{err}");
+}

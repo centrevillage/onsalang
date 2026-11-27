@@ -8,6 +8,7 @@ use onsa_diag::Span;
 use crate::ir::*;
 
 mod ids;
+mod scope;
 mod types;
 
 /// A rule of the verifier: its number in the list of `design/04-core.md`,
@@ -51,16 +52,17 @@ pub fn verify(m: &Module) -> Result<(), VerifyError> {
         let mut v = V {
             m,
             f: None,
-            defined: Vec::new(),
+            visible: Vec::new(),
+            undo: Vec::new(),
             lets: Vec::new(),
-            loops: 0,
+            in_loop: false,
             process: false,
             known: false,
             name: c.name.clone(),
             at: Some(c.init.span),
         };
-        let t = v.expr(&c.init)?;
-        v.same(t, c.ty, "const initializer")?;
+        v.expr(&c.init)?;
+        v.same(c.init.ty, c.ty, "const initializer")?;
     }
     // The generated `process` of each flow, marked once (V-19).
     let mut process = vec![false; m.fns.len()];
@@ -74,9 +76,10 @@ pub fn verify(m: &Module) -> Result<(), VerifyError> {
         let mut v = V {
             m,
             f: Some(f),
-            defined: vec![false; f.locals.len()],
+            visible: vec![false; f.locals.len()],
+            undo: Vec::new(),
             lets: vec![false; f.locals.len()],
-            loops: 0,
+            in_loop: false,
             process,
             known: false,
             name: f.name.clone(),
@@ -93,7 +96,7 @@ pub fn verify(m: &Module) -> Result<(), VerifyError> {
         if f.test.is_some() && (!f.params.is_empty() || f.ret != Types::UNIT) {
             return Err(v.err(Rule::V01, "a test function with parameters or a value"));
         }
-        let t = v.block(body)?;
+        v.block(body)?;
         // V-18 (R-481): stored at the function's level, a local with a `let` below the top of the body.
         for &h in &f.hoisted {
             let top = body.stmts.iter().any(|s| matches!(s.kind, StmtKind::Let(l, _) if l == h));
@@ -102,8 +105,8 @@ pub fn verify(m: &Module) -> Result<(), VerifyError> {
             }
         }
         if !body.diverges() {
-            match t {
-                Some(t) => v.same(t, f.ret, "body value")?,
+            match &body.value {
+                Some(t) => v.same(t.ty, f.ret, "body value")?,
                 None => v.same(Types::UNIT, f.ret, "body without a value")?,
             }
         }
@@ -114,10 +117,14 @@ pub fn verify(m: &Module) -> Result<(), VerifyError> {
 struct V<'a> {
     m: &'a Module,
     f: Option<&'a FnDef>,
-    defined: Vec<bool>,
+    /// The locals seen where a node is (V-04), and the ones that became so,
+    /// in order, to undo when a scope of names closes.
+    visible: Vec<bool>,
+    undo: Vec<LocalId>,
     /// The locals a `let` defines.
     lets: Vec<bool>,
-    loops: u32,
+    /// Under the body of a loop (V-07).
+    in_loop: bool,
     /// The function is the `process` generated for a flow (`FlowFns::process`).
     process: bool,
     /// V-19 (S-196): an index `Bounds::Known` may be here, in the sample loop of a `process`.
@@ -132,28 +139,5 @@ type R<T> = Result<T, VerifyError>;
 impl<'a> V<'a> {
     fn err(&self, rule: Rule, msg: impl Into<String>) -> VerifyError {
         VerifyError { rule, fn_name: self.name.clone(), span: self.at, message: msg.into() }
-    }
-
-    fn read_local(&self, l: LocalId) -> R<CTy> {
-        let t = self.local_ty(l)?;
-        if !self.defined[l.0 as usize] {
-            let name = &self.f.unwrap().locals[l.0 as usize].name;
-            return Err(self.err(Rule::V04, format!("local `{name}` read before definition")));
-        }
-        Ok(t)
-    }
-
-    fn define(&mut self, l: LocalId) -> R<()> {
-        self.local_ty(l)?;
-        self.defined[l.0 as usize] = true;
-        Ok(())
-    }
-
-    /// V-19 (S-196): an index known in range is in the sample loop of a `process` only.
-    fn bounds(&self, b: Bounds) -> R<()> {
-        if b == Bounds::Known && !self.known {
-            return Err(self.err(Rule::V19, "an index known in range outside the sample loop of `process`"));
-        }
-        Ok(())
     }
 }

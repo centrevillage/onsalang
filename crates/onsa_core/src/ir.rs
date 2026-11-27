@@ -437,6 +437,18 @@ impl Place {
     }
 }
 
+impl Expr {
+    /// The local at the root of an expression that is a place
+    /// ([`Expr::as_place`], then [`Place::root`]), with no place made.
+    pub fn place_root(&self) -> Option<LocalId> {
+        match &self.kind {
+            ExprKind::Local(l) => Some(*l),
+            ExprKind::Field { base, .. } | ExprKind::Index { base, .. } => base.place_root(),
+            _ => None,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum UnOp {
     /// `-`: checked on signed integers, plain on floats.
