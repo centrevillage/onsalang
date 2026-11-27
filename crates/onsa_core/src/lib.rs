@@ -19,7 +19,7 @@ mod tests;
 
 pub use dump::{dump, dump_item};
 pub use ir::*;
-pub use layout::{FieldLayout, FlowLayout, RecordLayout, flow_layout, flow_layout_for, size_align, size_align_for};
+pub use layout::{FieldLayout, FlowLayout, RecordLayout, TyFacts, flow_layout, size_align};
 pub use lower::flow::{FlowFns, FlowMeta};
 pub use lower::{GenericArg, LowerFailure, LowerOptions, lower, lower_with};
 pub use onsa_sema::def::{ParamInfo, ParamKey, ParamKind, ParamNumber};

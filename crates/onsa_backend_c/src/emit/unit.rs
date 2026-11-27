@@ -36,7 +36,7 @@ pub(crate) fn emit_unit(m: &Module, opts: &EmitOptions) -> Result<CUnit, Vec<Dia
         let symbol = format!("{}{}", opts.prefix(), ident(&short));
         let upper: String =
             symbol.chars().map(|c| if c.is_ascii_alphanumeric() { c.to_ascii_uppercase() } else { '_' }).collect();
-        let layout = onsa_core::flow_layout_for(m, meta.fns.state, opts.bulk_threshold, opts.ptr_size);
+        let layout = onsa_core::flow_layout(m, meta.fns.state, opts.bulk_threshold);
         cx.exports.push(Export { meta_index: i, symbol, upper, layout });
     }
     let mut export_fns: Vec<FnId> = Vec::new();

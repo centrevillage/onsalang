@@ -379,16 +379,36 @@ struct Facts {
     error: bool,
 }
 
+/// The forms of a type a measure counts (§4.4).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Shape {
+    Unit,
+    Tuple,
+    Array,
+    /// A name with its arguments (`Option[T]`, `Span[T]`).
+    Applied,
+    Fn,
+}
+
+/// What a form of `s` counts of its own in a measure (§4.4), besides its
+/// parts: the one table, for the check and for lowering.
+pub fn form_count(s: Shape) -> u32 {
+    match s {
+        Shape::Unit | Shape::Tuple | Shape::Fn => 1,
+        Shape::Array | Shape::Applied => 2,
+    }
+}
+
 /// The form of `ty` for its measure (§4.4): what it counts of its own and
 /// its parts; `None` for a leaf (a declared type with no arguments is one).
-/// The one table of the forms, for the interner and [`crate::infer::Infer::measure`].
+/// The one reading of the forms, for the interner and [`crate::infer::Infer::measure`].
 pub(crate) fn form_of(ty: &Ty) -> Option<(u32, Vec<TyId>)> {
     Some(match ty {
-        Ty::Unit => (1, Vec::new()),
-        Ty::Tuple(ts) => (1, ts.clone()),
-        Ty::Array(t, _) => (2, vec![*t]),
-        Ty::Named(_, ts) | Ty::Builtin(_, ts) if !ts.is_empty() => (2, ts.clone()),
-        Ty::Fn(f) => (1, f.params.iter().map(|&(_, t)| t).chain([f.ret]).collect()),
+        Ty::Unit => (form_count(Shape::Unit), Vec::new()),
+        Ty::Tuple(ts) => (form_count(Shape::Tuple), ts.clone()),
+        Ty::Array(t, _) => (form_count(Shape::Array), vec![*t]),
+        Ty::Named(_, ts) | Ty::Builtin(_, ts) if !ts.is_empty() => (form_count(Shape::Applied), ts.clone()),
+        Ty::Fn(f) => (form_count(Shape::Fn), f.params.iter().map(|&(_, t)| t).chain([f.ret]).collect()),
         _ => return None,
     })
 }

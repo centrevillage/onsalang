@@ -150,7 +150,7 @@ impl Types {
 
     /// The id of `k` if the table has it. A built-in type is at its fixed
     /// id, with no look-up (the most made of all).
-    fn find(&self, k: &TyKind) -> Option<CTy> {
+    pub(crate) fn find(&self, k: &TyKind) -> Option<CTy> {
         Some(match *k {
             TyKind::Int(k) => Types::int(k),
             TyKind::Float(k) => Types::float(k),
@@ -175,6 +175,11 @@ impl Types {
     /// The kinds of every type, in the order of their ids.
     pub fn kinds(&self) -> &[TyKind] {
         &self.kinds
+    }
+
+    /// Every type, in the order of the ids.
+    pub fn ids(&self) -> impl Iterator<Item = CTy> + use<> {
+        (0..self.kinds.len() as u32).map(CTy)
     }
 
     pub fn is_aggregate(&self, t: CTy) -> bool {
@@ -310,6 +315,9 @@ pub struct Module {
     pub flows: Vec<crate::lower::flow::FlowMeta>,
     /// Places where an aggregate value is copied (§12.7; `onsa audit --memory`, T4-9).
     pub moves: Vec<MoveSite>,
+    /// What is known of each type, at the pointer width of the target
+    /// ([`Module::facts`]): filled by lowering.
+    pub facts: crate::layout::Facts,
 }
 
 /// Why an aggregate is copied (§12.7).
@@ -325,7 +333,7 @@ pub enum MoveKind {
     MoveArg,
 }
 
-/// One copy of an aggregate value, with its size on the reference host.
+/// One copy of an aggregate value, with its size on the target.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MoveSite {
     pub fn_: FnId,

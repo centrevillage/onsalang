@@ -159,8 +159,6 @@ pub struct EmitOptions {
     pub panic_messages: bool,
     /// Maps a span to `(file, line)` for panic locations; absent → `("", 0)`.
     pub locate: Option<Locator>,
-    /// Pointer width of the target in bytes (the bulk slot, spans in states), T4-5.
-    pub ptr_size: u32,
     /// The compiler flags of the target (spec §13.4), for the first comment
     /// of the `.c`; [`FP_CFLAGS`] when nothing is chosen.
     pub cflags: Vec<String>,
@@ -178,7 +176,6 @@ impl Default for EmitOptions {
             provides_alloc: false,
             panic_messages: true,
             locate: None,
-            ptr_size: onsa_core::layout::PTR_SIZE,
             cflags: FP_CFLAGS.iter().map(|f| f.to_string()).collect(),
         }
     }
@@ -209,7 +206,6 @@ impl std::fmt::Debug for EmitOptions {
             .field("bulk_threshold", &self.bulk_threshold)
             .field("provides_alloc", &self.provides_alloc)
             .field("panic_messages", &self.panic_messages)
-            .field("ptr_size", &self.ptr_size)
             .field("cflags", &self.cflags)
             .finish()
     }

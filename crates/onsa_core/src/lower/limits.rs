@@ -20,7 +20,7 @@ use std::collections::{HashMap, HashSet};
 use onsa_diag::{Code, Diagnostic, Note, Span, Stage};
 use onsa_sema::DefId;
 use onsa_sema::def::DefKind;
-use onsa_sema::ty::Measure;
+use onsa_sema::ty::{Measure, Shape, form_count};
 
 use super::{Fail, FailKind, GenericArg, Lowerer, R, internal};
 use crate::ir::*;
@@ -33,6 +33,11 @@ const STACK_RESERVE: usize = 1 << 20;
 
 /// The notes of the path of an E0422.
 const MAX_PATH_NOTES: usize = 3;
+
+/// The measure of a form of `s` of no parts.
+pub(super) fn form(s: Shape) -> Measure {
+    Measure::form(form_count(s))
+}
 
 fn limit_fail(d: Diagnostic) -> Fail {
     let (span, msg) = (d.span, d.message.clone());
@@ -57,11 +62,12 @@ impl Lowerer<'_> {
             let of = |m: Measure, t: &CTy| m.with(self.measures[t.index()]);
             let m = match k {
                 TyKind::Int(_) | TyKind::Float(_) | TyKind::Bool | TyKind::Char => Measure::LEAF,
-                TyKind::Unit => Measure::form(1),
-                TyKind::Tuple(ts) => ts.iter().fold(Measure::form(1), of),
-                TyKind::Array(e, _) | TyKind::Span(e) | TyKind::Buf(e) => of(Measure::form(2), e),
+                TyKind::Unit => form(Shape::Unit),
+                TyKind::Tuple(ts) => ts.iter().fold(form(Shape::Tuple), of),
+                TyKind::Array(e, _) => of(form(Shape::Array), e),
+                TyKind::Span(e) | TyKind::Buf(e) => of(form(Shape::Applied), e),
                 TyKind::Struct(id) | TyKind::Enum(id) => self.type_measures.get(id).copied().unwrap_or(Measure::LEAF),
-                TyKind::FnPtr(f) => of(f.params.iter().map(|(_, t)| t).fold(Measure::form(1), of), &f.ret),
+                TyKind::FnPtr(f) => of(f.params.iter().map(|(_, t)| t).fold(form(Shape::Fn), of), &f.ret),
             };
             self.measures.push(m);
         }
@@ -73,7 +79,7 @@ impl Lowerer<'_> {
         if args.is_empty() {
             return Measure::LEAF;
         }
-        args.iter().fold(Measure::form(2), |m, a| match a {
+        args.iter().fold(form(Shape::Applied), |m, a| match a {
             GenericArg::Ty(t) => m.with(self.measure(*t)),
             GenericArg::Const(_) => m.with(Measure::LEAF),
         })

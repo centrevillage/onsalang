@@ -180,6 +180,7 @@ fn module(locals: &[(&str, CTy)], body: Block) -> Module {
 
 /// The hoisted names of the module's function, which then verifies.
 fn hoisted_by_hand(mut m: Module) -> Vec<String> {
+    m.fill_all_facts();
     m.fns[0].hoisted = super::hoisted(&m, &m.fns[0]);
     verify(&m).unwrap_or_else(|e| panic!("{e}\n{}", crate::dump(&m)));
     m.fns[0].hoisted.iter().map(|l| m.fns[0].locals[l.0 as usize].name.clone()).collect()

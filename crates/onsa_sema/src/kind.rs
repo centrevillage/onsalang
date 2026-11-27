@@ -47,6 +47,13 @@ pub(crate) fn facts_of(a: &Analysis, ty: TyId, generics: &[GenericDef]) -> Facts
     Read::new(a, params_in_body(a, generics)).of(ty)
 }
 
+/// The kind of `ty` when it is not Copy by the parts read (§18.1, S-1067):
+/// the one predicate of the value type of a signal, of a hoisted field
+/// (§11.3, S-1046 (a)) and of the fields of a type that is not `Copy`.
+pub(crate) fn not_copy(a: &Analysis, ty: TyId) -> Option<&'static str> {
+    facts_of(a, ty, &[]).not_copy()
+}
+
 /// The kind a value of `ty` in a body with the type parameters `generics` is
 /// taken for by the questions of the modes (R-30) and by the kind constraints
 /// of the types stage (R-176, [`Bounds::meets`]), by the facts of

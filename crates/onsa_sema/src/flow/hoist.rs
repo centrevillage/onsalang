@@ -299,7 +299,7 @@ impl Choose<'_> {
     }
 
     fn copy(&self, e: ExprId) -> bool {
-        self.body.expr_types.get(&e).is_some_and(|&ty| crate::signal::not_copy(self.a, ty).is_none())
+        self.body.expr_types.get(&e).is_some_and(|&ty| crate::kind::not_copy(self.a, ty).is_none())
     }
 }
 

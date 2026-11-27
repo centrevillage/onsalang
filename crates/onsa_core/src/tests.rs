@@ -534,10 +534,13 @@ fn a_planar_array_is_an_array_of_spans() {
 // ---------------------------------------------------------------- flows (T3-5, T3-6)
 
 fn core_with(src: &str, bulk_threshold: Option<u32>) -> Module {
+    core_opts(src, crate::LowerOptions { bulk_threshold, ..Default::default() })
+}
+
+fn core_opts(src: &str, opts: crate::LowerOptions) -> Module {
     let (sources, pkg) = package(src);
     let a = onsa_sema::analyze(&pkg);
     assert!(a.diagnostics.is_empty(), "check diagnostics:\n{}", onsa_diag::to_text(&sources, &a.diagnostics));
-    let opts = crate::LowerOptions { bulk_threshold, ..Default::default() };
     match crate::lower_with(&pkg, &a, &opts) {
         Ok(m) => {
             verify(&m).unwrap_or_else(|e| panic!("{e}\n{}", dump(&m)));
@@ -737,6 +740,13 @@ fn echo_bulk_layout() {
     );
     assert_eq!((f.layout.size, f.layout.align), (32, 8));
     assert!(dump(&m).contains("const t.echo.BULK_SIZE: U32 = 384004:U32"));
+    // On a target of 4-byte pointers (T4-5) the bulk pointer takes 4 bytes,
+    // and the module keeps the width its layout is of.
+    let m = core_opts(src, crate::LowerOptions { bulk_threshold: Some(4096), ptr_size: 4, ..Default::default() });
+    let f = &m.flows[0];
+    let fast: Vec<_> = f.layout.fast_fields.iter().map(|x| (x.name.as_str(), x.offset)).collect();
+    assert_eq!(fast[..3], [("_bulk", 0), ("_sample_rate", 4), ("feedback", 8)]);
+    assert_eq!((f.layout.size, f.layout.align, f.layout.bulk_size, m.facts.ptr()), (24, 4, 384004, 4));
     // Without a threshold everything is fast.
     let m = core_with(src, None);
     assert_eq!((m.flows[0].layout.size, m.flows[0].layout.bulk_size), (384024, 0));

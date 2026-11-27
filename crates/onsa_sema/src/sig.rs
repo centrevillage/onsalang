@@ -273,7 +273,7 @@ impl<'p> Sema<'p> {
             // Copy by the parts read is not Copy (§18.1, S-1067).
             let fails = |t: TyId| match dup {
                 true => crate::kind::kind_of(self.a, t) == Some(crate::kind::Kind::Affine),
-                false => crate::kind::facts_of(self.a, t, &[]).not_copy().is_some(),
+                false => crate::kind::not_copy(self.a, t).is_some(),
             };
             let shown = fields.into_iter().find(|(_, t, _)| fails(*t));
             if let Some((what, _, span)) = shown {

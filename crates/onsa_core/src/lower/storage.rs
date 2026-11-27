@@ -7,7 +7,7 @@
 //! argument). The C backend opens two more, the right operand of `&&`/`||`
 //! and the condition of a `while`; their value is a `Bool` and holds no view.
 
-use std::collections::{BTreeSet, HashMap};
+use std::collections::BTreeSet;
 
 use crate::ir::*;
 use crate::walk::{Child, for_each_child};
@@ -26,7 +26,6 @@ pub(crate) fn hoisted(m: &Module, f: &FnDef) -> Vec<LocalId> {
         f,
         defs: vec![Vec::new(); n],
         memo: vec![None; n],
-        types: HashMap::new(),
         depth: 0,
         declared: vec![0; n],
         exits: Vec::new(),
@@ -47,7 +46,6 @@ struct Storage<'a> {
     /// The values each local is given (its `let`, an assignment to it or a part of it).
     defs: Vec<Vec<&'a Expr>>,
     memo: Vec<Option<BTreeSet<LocalId>>>,
-    types: HashMap<TypeId, bool>,
     depth: u32,
     /// The depth of the scope of each local's `let` (0: the function's level).
     declared: Vec<u32>,
@@ -170,28 +168,9 @@ impl<'a> Storage<'a> {
         self.memo[i] = Some(set);
     }
 
-    /// Whether a value of `t` holds a view: a `Span`, or an aggregate with one
-    /// in an element, a field or a payload (the element of a `Buf` is not one).
-    /// It ends: no type holds itself by value.
-    fn views(&mut self, t: CTy) -> bool {
-        let m = self.m;
-        match m.tys.kind(t) {
-            TyKind::Span(_) => true,
-            TyKind::Array(el, _) => self.views(*el),
-            TyKind::Tuple(ts) => ts.iter().any(|&t| self.views(t)),
-            TyKind::Struct(id) | TyKind::Enum(id) => {
-                if let Some(&b) = self.types.get(id) {
-                    return b;
-                }
-                let b = match &m.ty(*id).kind {
-                    TypeDefKind::Struct { fields } => fields.iter().any(|&(_, t)| self.views(t)),
-                    TypeDefKind::Enum { variants } => variants.iter().flat_map(|(_, ts)| ts).any(|&t| self.views(t)),
-                    TypeDefKind::Opaque => false,
-                };
-                *self.types.entry(*id).or_insert(b)
-            }
-            _ => false,
-        }
+    /// Whether a value of `t` holds a view ([`crate::layout::TyFacts::views`]).
+    fn views(&self, t: CTy) -> bool {
+        self.m.facts(t).views
     }
 }
 

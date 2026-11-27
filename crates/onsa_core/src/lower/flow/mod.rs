@@ -94,7 +94,7 @@ use super::build::{
 };
 use super::{GenericArg, Lowerer, R, core_mode, internal, unsupported};
 use crate::ir::*;
-use crate::layout::{FlowLayout, flow_layout_for};
+use crate::layout::{FlowLayout, flow_layout};
 use crate::prim::Prim;
 
 mod boundary;
@@ -419,6 +419,19 @@ fn generated_type(a: &onsa_sema::Analysis, fd: &FlowDef, t: FlowTy) -> Option<De
 }
 
 impl Lowerer<'_> {
+    /// Write the fields of the state `id` of a flow, which `type_id` made
+    /// opaque (its def has none, §11.6): the one write of a type after it is
+    /// made, before its facts are read. The facts of the fields are filled
+    /// for the layout of the state.
+    fn set_state_fields(&mut self, id: TypeId, fields: Vec<(String, CTy)>, span: Span) -> R<()> {
+        if self.m.has_facts(&TyKind::Struct(id)) {
+            return Err(internal(span, format!("the fields of `{}` after its facts", self.m.ty(id).name)));
+        }
+        fields.iter().for_each(|&(_, t)| self.m.fill_facts(t));
+        self.m.types[id.0 as usize].kind = TypeDefKind::Struct { fields };
+        Ok(())
+    }
+
     /// The Core type of the type `t` of `flow` (§11.6): of its def, or of a
     /// flow with no `Config` or `Params` (S-112), an empty struct of the
     /// name, which its functions take ([`implicit_params`]).
@@ -508,7 +521,7 @@ fn lower_flow<'b>(lw: &mut Lowerer<'b>, flow: DefId, fd: FlowDef, span: Span) ->
     let inputs = inputs(info, &fd, span)?;
     // The fields of the state are the plan's (S-05, S-06, §12.4).
     let fields = state_fields(lw, flow, &state::decls(info, &inputs), info, &info.fields)?;
-    lw.m.types[state_ty.0 as usize].kind = TypeDefKind::Struct { fields };
+    lw.set_state_fields(state_ty, fields, span)?;
 
     let shape = FlowShape {
         def: flow,
@@ -601,7 +614,7 @@ fn lower_flow<'b>(lw: &mut Lowerer<'b>, flow: DefId, fd: FlowDef, span: Span) ->
     gen_params_default(lw, &shape, info, &fns, defaults)?;
 
     // Layout and the `SIZE` / `BULK_SIZE` consts (T3-6).
-    let layout = flow_layout_for(&lw.m, state_ty, lw.bulk_threshold, lw.ptr_size);
+    let layout = flow_layout(&lw.m, state_ty, lw.bulk_threshold);
     for (name, value) in [("SIZE", layout.size), ("BULK_SIZE", layout.bulk_size)] {
         let Some(d) = member(&fd, name) else { continue };
         let id = ConstId(lw.m.consts.len() as u32);

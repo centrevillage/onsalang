@@ -44,7 +44,7 @@ use std::collections::{HashMap, HashSet};
 use onsa_diag::unsupported::Feature;
 use onsa_diag::{Diagnostic, Span, Stage};
 use onsa_sema::def::{DefKind, DerivedFn, Fields, GenericKind};
-use onsa_sema::ty::{BuiltinTy, Len, Measure, Ty as STy, TyId};
+use onsa_sema::ty::{BuiltinTy, Len, Measure, Shape, Ty as STy, TyId};
 use onsa_sema::{Analysis, DefId, ModId, Package};
 use onsa_syntax::ast::{ExprId, PatId};
 
@@ -174,8 +174,6 @@ pub(crate) struct Lowerer<'a> {
     pub(crate) hoist_uses: Vec<flow::HoistUses>,
     /// [`LowerOptions::bulk_threshold`]; `None`: everything fast.
     pub bulk_threshold: Option<u32>,
-    /// Pointer width of the target in bytes (the bulk slot, `Span`s), T4-5.
-    pub ptr_size: u32,
     /// Expressions and arm patterns that use an unsupported feature:
     /// lowered as placeholders, so that lowering goes on to the next one (S-67).
     pub(crate) holes: HashSet<Hole>,
@@ -232,7 +230,7 @@ pub fn lower_with(pkg: &Package, a: &Analysis, opts: &LowerOptions) -> Result<Mo
     let mut lw = Lowerer {
         pkg,
         a,
-        m: Module::default(),
+        m: Module { facts: crate::layout::Facts::new(opts.ptr_size), ..Module::default() },
         fn_ids: HashMap::new(),
         worklist: Vec::new(),
         type_ids: HashMap::new(),
@@ -252,7 +250,6 @@ pub fn lower_with(pkg: &Package, a: &Analysis, opts: &LowerOptions) -> Result<Mo
         flows_in_progress: HashSet::new(),
         hoist_uses: Vec::new(),
         bulk_threshold: opts.bulk_threshold,
-        ptr_size: opts.ptr_size,
         holes: HashSet::new(),
         hole_spans: Vec::new(),
         stand_in_spans: Vec::new(),
@@ -294,6 +291,8 @@ pub fn lower_with(pkg: &Package, a: &Analysis, opts: &LowerOptions) -> Result<Mo
         return Err(LowerFailure::Diagnostics(diagnostics));
     }
     let mut module = lw.m;
+    // No type is made after lowering: what reads the module reads the facts.
+    module.fill_all_facts();
     // The comparisons the types decide and the assignments of a place to
     // itself (S-288), before the copies are counted.
     fold::fold_module(&mut module);
@@ -474,7 +473,7 @@ impl<'a> Lowerer<'a> {
             STy::Bool => TyKind::Bool,
             STy::Char => TyKind::Char,
             STy::Unit => {
-                m = Measure::form(1);
+                m = limits::form(Shape::Unit);
                 TyKind::Unit
             }
             STy::Array(e, len) => {
@@ -486,12 +485,12 @@ impl<'a> Lowerer<'a> {
                     },
                     Len::Var(_) => return Err(internal(span, "unresolved array length")),
                 };
-                let (e, own) = self.wrapped_ty(e, args, span)?;
+                let (e, own) = self.wrapped_ty(Shape::Array, e, args, span)?;
                 m = own;
                 TyKind::Array(e, n)
             }
             STy::Tuple(ts) => {
-                let (out, own) = self.form_of(&ts, args, span)?;
+                let (out, own) = self.form_of(Shape::Tuple, &ts, args, span)?;
                 m = own;
                 TyKind::Tuple(out.into())
             }
@@ -510,7 +509,7 @@ impl<'a> Lowerer<'a> {
             }
             STy::Builtin(b, targs) => match b {
                 BuiltinTy::Span | BuiltinTy::Buf => {
-                    let (e, own) = self.wrapped_ty(targs[0], args, span)?;
+                    let (e, own) = self.wrapped_ty(Shape::Applied, targs[0], args, span)?;
                     m = own;
                     if b == BuiltinTy::Span { TyKind::Span(e) } else { TyKind::Buf(e) }
                 }
@@ -521,7 +520,7 @@ impl<'a> Lowerer<'a> {
             },
             STy::Fn(f) => {
                 let parts: Vec<TyId> = f.params.iter().map(|&(_, t)| t).chain([f.ret]).collect();
-                let (mut tys, own) = self.form_of(&parts, args, span)?;
+                let (mut tys, own) = self.form_of(Shape::Fn, &parts, args, span)?;
                 m = own;
                 let Some(ret) = tys.pop() else { return Err(internal(span, "a function type with no result")) };
                 let params = f.params.iter().map(|(mode, _)| core_mode(*mode)).zip(tys).collect();
@@ -542,10 +541,10 @@ impl<'a> Lowerer<'a> {
         self.m.tys.intern(k)
     }
 
-    /// The parts of a tuple or a function type, which count one, and its
-    /// measure: judged at each part, so that a wide form stops at the limit.
-    fn form_of(&mut self, parts: &[TyId], args: &[GenericArg], span: Span) -> R<(Vec<CTy>, Measure)> {
-        let (mut out, mut m) = (Vec::with_capacity(parts.len()), Measure::form(1));
+    /// The parts of a tuple or a function type, and the measure of the form
+    /// `shape`: judged at each part, so that a wide form stops at the limit.
+    fn form_of(&mut self, shape: Shape, parts: &[TyId], args: &[GenericArg], span: Span) -> R<(Vec<CTy>, Measure)> {
+        let (mut out, mut m) = (Vec::with_capacity(parts.len()), limits::form(shape));
         for &t in parts {
             let (ty, part) = self.measured_ty(t, args, span)?;
             m = self.within(m.with(part), span)?;
@@ -555,10 +554,10 @@ impl<'a> Lowerer<'a> {
     }
 
     /// The element of an array, a `Span` or a `Buf`, and the measure of the
-    /// form, which counts the name or the length too.
-    fn wrapped_ty(&mut self, t: TyId, args: &[GenericArg], span: Span) -> R<(CTy, Measure)> {
+    /// form `shape`, which counts the name or the length too.
+    fn wrapped_ty(&mut self, shape: Shape, t: TyId, args: &[GenericArg], span: Span) -> R<(CTy, Measure)> {
         let (ty, part) = self.measured_ty(t, args, span)?;
-        Ok((ty, self.within(Measure::form(2).with(part), span)?))
+        Ok((ty, self.within(limits::form(shape).with(part), span)?))
     }
 
     pub(crate) fn generic_args(&mut self, targs: &[TyId], args: &[GenericArg], span: Span) -> R<Vec<GenericArg>> {

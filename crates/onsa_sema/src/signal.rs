@@ -15,15 +15,9 @@ use crate::{Analysis, DefId};
 /// ([`signal_type_error`]), of the `let`s of a flow body and of the elements
 /// of a `par~` (S-1047).
 pub(crate) fn not_copy_signal(a: &Analysis, ty: TyId, span: Span) -> Option<Diagnostic> {
-    let k = not_copy(a, ty)?;
+    let k = crate::kind::not_copy(a, ty)?;
     let msg = format!("the value type of a signal must be Copy; `{}` is {k} (§11.3)", a.display_type(ty));
     Some(Diagnostic::new(Stage::Flow, Code::E0810, span, msg))
-}
-
-/// The kind of `ty` when it is not Copy: the predicate of the value type
-/// of a signal and of a hoisted field (§11.3, S-1046 (a)).
-pub(crate) fn not_copy(a: &Analysis, ty: TyId) -> Option<&'static str> {
-    crate::kind::facts_of(a, ty, &[]).not_copy()
 }
 
 /// The E0816 at `span` of the value type `ty` of a signal that does not

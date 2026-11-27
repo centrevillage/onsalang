@@ -189,7 +189,6 @@ fn build_stages(loaded: &Loaded, analyzed: &Analyzed, resolved: &ResolvedTarget)
             let f = sources.file(span.file);
             (f.name().to_string(), f.line_col(span.start).line)
         })),
-        ptr_size: settings.platform.ptr_size,
         cflags: settings.platform.cflags.clone(),
     };
     // They stop the build before its own checks (E0610) and the C backend's (E0302), S-839.
@@ -403,6 +402,32 @@ fn check_exports(analyzed: &Analyzed, settings: &TargetSettings) -> Vec<Diagnost
 mod tests {
     use super::*;
     use crate::PackageInput;
+
+    /// §12.4: a flow state split into a bulk region is not held by another
+    /// type in this version, by a field, in a tuple or an array of one too
+    /// (an E0200 of each holder).
+    #[test]
+    fn a_bulk_state_in_a_tuple_or_an_array_of_a_field_is_an_e0200() {
+        let text = "pub flow d(x: F32 at sample) -> F32 at sample {\n  delay~(x, 4096)\n}\n\
+                    pub struct T {\n  s: (d.State, U8),\n}\npub struct A {\n  s: [d.State; 2],\n}\n\
+                    pub fn t(x: T) -> U8 {\n  x.s.1\n}\npub fn a(x: A) -> U32 {\n  x.s.len()\n}\n";
+        let files = vec![crate::SourceFile { path: "a.onsa".into(), text: text.into() }];
+        let mut loaded = Loaded::from_input(PackageInput { files, ..Default::default() }).unwrap();
+        let analyzed = crate::analyze_loaded(&mut loaded).unwrap_or_else(|e| panic!("{}", e.render(&loaded.sources)));
+        assert!(analyzed.diagnostics.is_empty(), "{:?}", analyzed.diagnostics);
+        let bulk_threshold = Some(1024);
+        let module = crate::lower_core_with(&analyzed, &LowerOptions { bulk_threshold, ..Default::default() });
+        let module = module.unwrap_or_else(|e| panic!("{}", e.render(&loaded.sources)));
+        let exports = vec![ExportFlow { flow: "d".into() }];
+        let opts = EmitOptions { prefix: Some("p_".into()), exports, bulk_threshold, ..Default::default() };
+        let diags = onsa_backend_c::emit(&module, &opts).expect_err("the E0200 of the holders");
+        let found: Vec<&str> = diags.iter().map(|d| d.message.as_str()).collect();
+        assert_eq!(found.len(), 2, "{found:?}");
+        assert!(found.iter().all(|m| m.contains("(`a.d.State`)")), "{found:?}");
+        for holder in ["(`a.T`)", "(`a.A`)"] {
+            assert!(found.iter().any(|m| m.contains(holder)), "{holder}: {found:?}");
+        }
+    }
 
     /// S-154, S-827, §18.1: the build of a target reports the manifest's
     /// diagnostics and the E0200 of that target's values together, before

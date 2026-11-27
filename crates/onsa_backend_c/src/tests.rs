@@ -72,6 +72,7 @@ fn one_fn(ty: CTy, body: Expr, extra_types: Vec<TypeDef>) -> Module {
         messages: Vec::new(),
         flows: Vec::new(),
         moves: Vec::new(),
+        facts: Default::default(),
     }
 }
 
@@ -484,6 +485,7 @@ fn narrow_from_unsigned_compares_the_upper_bound_alone() {
             messages: Vec::new(),
             flows: Vec::new(),
             moves: Vec::new(),
+            facts: Default::default(),
         };
         let c = emit_fn(&m);
         assert!(c.contains(fits), "{from:?}: {c}");
@@ -600,4 +602,16 @@ fn a_renamed_local_does_not_take_the_name_of_a_parameter() {
     let c = emit_fn(&m);
     assert!(c.contains("(float t_3, bool c) {\n  float t;\n  float t_3_1;\n"), "{c}");
     assert!(c.contains("t = t_3;") && c.contains("t_3_1 = t_3;"), "{c}");
+}
+
+/// The static initializer of a `const` of the negation of an integer literal
+/// is the negated literal (`const_init`): `-5`, not `5`.
+#[test]
+fn a_negated_integer_const_is_the_negated_literal() {
+    let i32t = Types::int(IntKind::I32);
+    let mut m = one_fn(i32t, e(i32t, ExprKind::Const(ConstId(0))), Vec::new());
+    let init = e(i32t, ExprKind::Unary(UnOp::Neg, Box::new(lit_i32(5))));
+    m.consts.push(ConstDef { name: "m.C".into(), ty: i32t, init });
+    let c = emit_fn(&m);
+    assert!(c.contains(&format!("= {};", int_lit(IntKind::I32, -5))), "{c}");
 }

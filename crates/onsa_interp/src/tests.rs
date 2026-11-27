@@ -1322,4 +1322,13 @@ fn the_zero_of_an_enum_and_a_span_and_the_show_of_a_tuple() {
     let Value::Array(root) = &*s.root.borrow() else { panic!("the root of a span") };
     assert_eq!((root.len(), s.start, s.len), (0, 0, 0));
     assert_eq!(show_as(&m, pair, &Value::Tuple(vec![Value::U32(1), Value::Bool(true)])), "(1, true)");
+    // The payload of a variant shows each value by its own type, in order:
+    // `B(X, 3)` of `enum F { B(D, U32) }` and `enum D { X }`.
+    let d = m.tys.intern(TyKind::Enum(TypeId(2)));
+    let variants = vec![("B".into(), vec![d, Types::U32])];
+    m.types.push(TypeDef { name: "F".into(), kind: TypeDefKind::Enum { variants } });
+    m.types.push(TypeDef { name: "D".into(), kind: TypeDefKind::Enum { variants: vec![("X".into(), Vec::new())] } });
+    let f = m.tys.intern(TyKind::Enum(TypeId(1)));
+    let b = Value::Enum { tag: 0, fields: vec![Value::Enum { tag: 0, fields: Vec::new() }, Value::U32(3)] };
+    assert_eq!(show_as(&m, f, &b), "B(X, 3)");
 }

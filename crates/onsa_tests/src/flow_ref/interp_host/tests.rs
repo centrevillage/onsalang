@@ -307,7 +307,18 @@ fn small_module() -> Module {
         messages: vec![],
         flows: vec![],
         moves: vec![],
+        facts: Default::default(),
     }
+}
+
+/// An array of `F32` goes to the interpreter as its array of samples
+/// (`ArrayData::F32`, the form the interpreter makes of one), not as values.
+#[test]
+fn an_array_of_f32_goes_as_samples() {
+    let mut m = small_module();
+    let ty = m.tys.intern(TyKind::Array(Types::float(FloatKind::F32), 2));
+    let v = to_interp(&m, ty, &f32s(&[1.0, -0.5]));
+    assert!(matches!(&v, Ok(IValue::Array(ArrayData::F32(xs))) if xs[..] == [1.0, -0.5]), "{v:?}");
 }
 
 #[test]
