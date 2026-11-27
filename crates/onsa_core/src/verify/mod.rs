@@ -8,6 +8,7 @@ use onsa_diag::Span;
 use crate::ir::*;
 
 mod ids;
+mod prims;
 mod scope;
 mod types;
 

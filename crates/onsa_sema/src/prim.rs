@@ -17,9 +17,9 @@ use crate::{Analysis, ModId};
 /// `is_nan`, `is_finite`): their rows' keys and [`math_module`] read it.
 const MATH: &str = "math";
 
-const FLOATS: [FloatKind; 2] = [FloatKind::F32, FloatKind::F64];
-/// Every integer type, in the order of §3.4's table.
-pub(crate) const INTS: [IntKind; 8] =
+/// Every float type, and every integer type in the order of §3.4's table.
+pub const FLOATS: [FloatKind; 2] = [FloatKind::F32, FloatKind::F64];
+pub const INTS: [IntKind; 8] =
     [IntKind::I8, IntKind::I16, IntKind::I32, IntKind::I64, IntKind::U8, IntKind::U16, IntKind::U32, IntKind::U64];
 
 /// `std.math` functions (`target rt fn`, generic over `Float`), and the
@@ -306,9 +306,23 @@ impl Prim {
     /// (`std.test.gen.u32`): the E0200 of a backend that does not provide it
     /// names the declaration (spec §15.2). `None` of a family with no row.
     pub fn std_name(&self) -> Option<String> {
+        Some(format!("std.{}", self.row()?.key))
+    }
+
+    /// Whether an `rt` function may use it (V-06): its declaration is `rt`.
+    /// Of the ones with no row only the float `%` is (the unit tests check
+    /// that it is the one).
+    pub fn rt(&self) -> bool {
+        match self.row() {
+            Some(r) => r.rt,
+            None => matches!(self, Prim::Math(MathFn::Fmod, _)),
+        }
+    }
+
+    /// The row of the declaration of [`Prim::row_prim`], if it has one.
+    fn row(&self) -> Option<&'static Row> {
         let prim = self.row_prim();
-        let found = rows().iter().find(|r| r.prim == prim)?;
-        Some(format!("std.{}", found.key))
+        rows().iter().find(|r| r.prim == prim)
     }
 }
 
@@ -340,11 +354,16 @@ impl Scalar {
         if types.open(t) || types.has_error(t) {
             return None;
         }
-        Some(match types.get(t) {
+        Some(Scalar::head(types.get(t)))
+    }
+
+    /// The type `t` by its head: a number, or another type.
+    pub fn head(t: &Ty) -> Scalar {
+        match t {
             Ty::Int(k) => Scalar::Int(*k),
             Ty::Float(k) => Scalar::Float(*k),
             _ => Scalar::Other,
-        })
+        }
     }
 
     /// The types a row reads at a use of the `std` declaration `def`
@@ -355,11 +374,7 @@ impl Scalar {
     /// The `Self` is read by its head: of `Span[T]`, its `T` is a type
     /// argument of the use.
     pub fn of_use(a: &Analysis, def: DefId, targs: &[TyId]) -> Option<Vec<Scalar>> {
-        let own = row_self(a, def).map(|t| match a.types.get(t) {
-            Ty::Int(k) => Scalar::Int(*k),
-            Ty::Float(k) => Scalar::Float(*k),
-            _ => Scalar::Other,
-        });
+        let own = row_self(a, def).map(|t| Scalar::head(a.types.get(t)));
         let args = targs.iter().map(|&t| Scalar::of(&a.types, t));
         own.map(Some).into_iter().chain(args).collect()
     }

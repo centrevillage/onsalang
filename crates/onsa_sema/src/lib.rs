@@ -109,6 +109,7 @@ use serde::{Deserialize, Serialize};
 
 pub use base::{Base, BaseError, analyze_on, fresh_std, read_std, std_bytes, std_files};
 pub use body::{BodyInfo, Instance, LocalId, LocalInfo, LocalKind, Target};
+pub use cast::widens;
 pub use clock::{Clock, ClockName, ClockStage};
 pub use consteval::ConstValue;
 pub use def::{Def, DefId, DefKind, ModId};

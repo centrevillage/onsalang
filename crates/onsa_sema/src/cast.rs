@@ -5,13 +5,19 @@
 
 use crate::bounds::Bounds;
 use crate::def::Bound;
-use crate::prim::{ROUND_FROM, TRUNC_FROM, TRUNC_SAT_FROM};
-use crate::ty::{FloatKind, Ty, TyId, Types};
+use crate::prim::{ROUND_FROM, Scalar, TRUNC_FROM, TRUNC_SAT_FROM};
+use crate::ty::{FloatKind, TyId, Types};
 
 /// Whether `from as to` is a lossless widening (§3.3). Both resolved scalars.
 pub fn cast_allowed(types: &Types, from: TyId, to: TyId) -> bool {
-    match (types.get(from), types.get(to)) {
-        (Ty::Int(a), Ty::Int(b)) => {
+    widens(Scalar::head(types.get(from)), Scalar::head(types.get(to)))
+}
+
+/// Whether `from as to` is a lossless widening (§3.3), of the kinds of the
+/// types: sema's [`cast_allowed`] and the verifier of Core (V-03) ask it.
+pub fn widens(from: Scalar, to: Scalar) -> bool {
+    match (from, to) {
+        (Scalar::Int(a), Scalar::Int(b)) => {
             if a == b {
                 return true;
             }
@@ -22,10 +28,10 @@ pub fn cast_allowed(types: &Types, from: TyId, to: TyId) -> bool {
                 (true, false) => false,
             }
         }
-        (Ty::Float(a), Ty::Float(b)) => a == b || *b == FloatKind::F64,
+        (Scalar::Float(a), Scalar::Float(b)) => a == b || b == FloatKind::F64,
         // Integers that fit the mantissa: F32 holds 24 bits, F64 holds 53.
-        (Ty::Int(a), Ty::Float(FloatKind::F32)) => a.bits() <= 16,
-        (Ty::Int(a), Ty::Float(FloatKind::F64)) => a.bits() <= 32,
+        (Scalar::Int(a), Scalar::Float(FloatKind::F32)) => a.bits() <= 16,
+        (Scalar::Int(a), Scalar::Float(FloatKind::F64)) => a.bits() <= 32,
         _ => false,
     }
 }

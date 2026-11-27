@@ -232,11 +232,7 @@ fn row_prim(lw: &mut Lowerer, def: DefId, row: PrimRow, gargs: &[GenericArg], sp
 /// sema's: by its head.
 fn scalar(g: &GenericArg, tys: &Types) -> Scalar {
     match g {
-        GenericArg::Ty(t) => match tys.kind(*t) {
-            TyKind::Int(k) => Scalar::Int(*k),
-            TyKind::Float(k) => Scalar::Float(*k),
-            _ => Scalar::Other,
-        },
+        GenericArg::Ty(t) => crate::prim::scalar(tys.kind(*t)),
         _ => Scalar::Other,
     }
 }

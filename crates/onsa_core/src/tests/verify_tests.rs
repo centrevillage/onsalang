@@ -10,7 +10,7 @@
 use onsa_diag::{FileId, Span};
 
 use crate::ir::*;
-use crate::prim::Prim;
+use crate::prim::{MathFn, Prim, Shape, sig};
 use crate::{Rule, VerifyError, verify};
 
 fn sp() -> Span {
@@ -175,7 +175,7 @@ fn each_rule_of_a_form_is_rejected_with_its_number() {
     m.fns[0].test = Some(TestMark { module: "m".into(), name: "t".into() });
     rejected(&m, Rule::V01, "a test function with parameters or a value");
     let cast = ExprKind::Cast(Box::new(lit(Types::BOOL, Lit::Bool(true))));
-    rejected(&with_g(base(), Expr::new(Types::U32, sp(), cast)), Rule::V03, "cast between non-numeric types");
+    rejected(&with_g(base(), Expr::new(Types::U32, sp(), cast)), Rule::V03, "`Bool` as `U32` is no widening");
     // `callee(inout x: U32)` given a literal; a primitive too.
     let mut m = base();
     m.fns.push(f("callee", vec![x()], Types::UNIT, xs(), vec![], unit()));
@@ -195,7 +195,7 @@ fn each_rule_of_a_form_is_rejected_with_its_number() {
     let call = ExprKind::Call { fn_: FnId(0), args: vec![Arg { mode: Mode::Borrow, expr: one() }] };
     rejected(&rt(with_stmt(m, Expr::new(Types::UNIT, sp(), call))), Rule::V06, "rt function calls non-rt `callee`");
     let zeroed = ExprKind::Prim { prim: Prim::BufZeroed, args: vec![Arg { mode: Mode::Borrow, expr: one() }] };
-    rejected(&rt(with_stmt(base(), Expr::new(Types::UNIT, sp(), zeroed))), Rule::V06, "rt function allocates");
+    rejected(&rt(with_stmt(base(), Expr::new(Types::UNIT, sp(), zeroed))), Rule::V06, "non-rt primitive `buf.zeroed`");
     let mut m = base();
     let stmts = vec![Stmt { span: sp(), kind: StmtKind::Break }];
     m.fns.push(f("g", vec![], Types::UNIT, vec![], stmts, unit()));
@@ -651,4 +651,239 @@ fn a_value_of_a_block_in_a_loop_is_checked() {
     let value = Expr::new(Types::U32, at(), ExprKind::Local(LocalId(0)));
     let s = st(sp(), StmtKind::While(yes(), block(vec![], value)));
     assert_eq!(rejected(&reads(1, vec![let_b(), s]), Rule::V04, "local `a` read before").span, Some(at()));
+}
+
+/// A type of the form `shape`, its element `F32`; `inv` gives another type,
+/// which is not of it.
+fn of_shape(m: &mut Module, shape: Shape, inv: bool) -> CTy {
+    let f32 = Types::float(FloatKind::F32);
+    if inv {
+        return if shape == Shape::Bool { Types::U32 } else { Types::BOOL };
+    }
+    match shape {
+        Shape::Int(k) => Types::int(k),
+        Shape::Float(k) => Types::float(k),
+        Shape::Bool => Types::BOOL,
+        Shape::Unit => Types::UNIT,
+        Shape::Parts(k) => m.tys.intern(TyKind::Tuple(vec![Types::BOOL, Types::int(k)].into())),
+        Shape::Seq | Shape::SpanOf | Shape::SpanOfNum => m.tys.intern(TyKind::Span(f32)),
+        Shape::BufOf => m.tys.intern(TyKind::Buf(f32)),
+        Shape::Elem => f32,
+        Shape::Any => Types::U32,
+    }
+}
+
+/// How a call of a primitive is broken (V-02).
+#[derive(Clone, Copy, PartialEq, Debug)]
+enum Break {
+    None,
+    Count,
+    Mode,
+    Operand,
+    Value,
+    Near(usize, bool),
+}
+
+/// `g`, an `rt` function when `rt`, whose value is a call of `prim` at
+/// `at()`, its operands the `inout` parameters of `g` of the forms of its
+/// row, broken by `how`.
+fn calls(prim: &Prim, how: Break, rt: bool) -> Module {
+    let mut m = base();
+    let sig = sig(prim);
+    // The first operand the table reads the type of, broken by `Operand`.
+    let read = sig.args.iter().position(|&(_, s)| s != Shape::Any);
+    let (mut params, mut locals, mut args) = (Vec::new(), Vec::new(), Vec::new());
+    for (i, &(mode, shape)) in sig.args.iter().enumerate() {
+        let ty = match how {
+            Break::Near(p, e) if p == i => near(&mut m, shape, e).expect("near"),
+            _ => of_shape(&mut m, shape, how == Break::Operand && read == Some(i)),
+        };
+        let mode = match mode {
+            _ if how != Break::Mode || i > 0 => mode,
+            Mode::Inout => Mode::Borrow,
+            _ => Mode::Inout,
+        };
+        params.push(Param { local: LocalId(i as u32), mode: Mode::Inout, ty });
+        locals.push(Local { name: format!("x{i}"), ty });
+        args.push(Arg { mode, expr: Expr::new(ty, sp(), ExprKind::Local(LocalId(i as u32))) });
+    }
+    if how == Break::Count && args.pop().is_none() {
+        args.push(Arg { mode: Mode::Borrow, expr: one() });
+    }
+    let ret = match how {
+        Break::Near(p, e) if p == sig.args.len() => near(&mut m, sig.ret, e).expect("near"),
+        _ => of_shape(&mut m, sig.ret, how == Break::Value),
+    };
+    let value = Expr::new(ret, at(), ExprKind::Prim { prim: prim.clone(), args });
+    m.fns.push(f("g", params, ret, locals, vec![], value));
+    let g = m.fns.last_mut().expect("g");
+    (g.sret, g.rt) = (m.tys.is_aggregate(ret), rt);
+    m
+}
+
+/// V-02: a call of each primitive of the forms of its row is of the table,
+/// and one with an operand too few (or too many), an operand of another
+/// mode, an operand or the value of another type is rejected at the call.
+#[test]
+fn the_operands_and_the_value_of_a_primitive_are_of_its_row() {
+    let prims = super::prim_tests::every_prim();
+    let mut broken = 0;
+    for prim in &prims {
+        let sig = sig(prim);
+        let mut m = calls(prim, Break::None, false);
+        m.fill_all_facts();
+        verify(&m).unwrap_or_else(|e| panic!("{}: {e}", prim.name()));
+        for (how, message) in [
+            (Break::Count, "operand(s), expected"),
+            (Break::Mode, "the mode of operand 0"),
+            (Break::Operand, "is not of the form"),
+            (Break::Value, "the value of"),
+        ] {
+            let none = sig.args.is_empty() && how != Break::Count;
+            if none
+                || (how == Break::Operand && sig.args.iter().all(|&(_, s)| s == Shape::Any))
+                || (how == Break::Value && sig.ret == Shape::Any)
+            {
+                continue;
+            }
+            let err = rejected(&calls(prim, how, false), Rule::V02, message);
+            assert_eq!(err.span, Some(at()), "{how:?} of {}: {err}", prim.name());
+            broken += 1;
+        }
+    }
+    assert!(prims.len() > 100 && broken > 3 * prims.len(), "{} primitives, {broken} broken", prims.len());
+}
+
+/// V-02: the element of the forms of a row is one type; `add_from` adds numbers.
+#[test]
+fn the_element_of_the_operands_of_a_primitive_is_one() {
+    let mut m = base();
+    let (f32, f64) = (Types::float(FloatKind::F32), Types::float(FloatKind::F64));
+    let (a, b) = (m.tys.intern(TyKind::Span(f32)), m.tys.intern(TyKind::Span(f64)));
+    let bools = m.tys.intern(TyKind::Span(Types::BOOL));
+    let call = |m: &Module, prim: Prim, tys: [CTy; 2]| {
+        let mut m = m.clone();
+        let params = (0..2).map(|i| Param { local: LocalId(i), mode: Mode::Inout, ty: tys[i as usize] }).collect();
+        let locals = tys.iter().map(|&ty| Local { name: "x".into(), ty }).collect();
+        let modes = [Mode::Inout, Mode::Borrow];
+        let args =
+            (0..2).map(|i| Arg { mode: modes[i], expr: Expr::new(tys[i], sp(), ExprKind::Local(LocalId(i as u32))) });
+        let value = Expr::new(Types::UNIT, at(), ExprKind::Prim { prim, args: args.collect() });
+        m.fns.push(f("g", params, Types::UNIT, locals, vec![], value));
+        m
+    };
+    let err =
+        rejected(&call(&m, Prim::CopyFrom, [a, b]), Rule::V02, "operand 1 of `Span[F64]` is not of the form SpanOf");
+    assert_eq!(err.span, Some(at()));
+    rejected(&call(&m, Prim::Fill, [a, f64]), Rule::V02, "operand 1 of `F64` is not of the form Elem");
+    rejected(
+        &call(&m, Prim::AddFrom, [bools, bools]),
+        Rule::V02,
+        "operand 0 of `Span[Bool]` is not of the form SpanOfNum",
+    );
+    let mut ok = call(&m, Prim::Fill, [bools, Types::BOOL]);
+    ok.fill_all_facts();
+    verify(&ok).expect("a span of Bool filled");
+    let mut ok = call(&m, Prim::AddFrom, [b, b]);
+    ok.fill_all_facts();
+    verify(&ok).expect("added");
+}
+
+/// V-03: a cast is a widening of §3.3, as sema judges it: not a narrowing,
+/// a signed integer to an unsigned one, an `F64` to an `F32` or an integer
+/// wider than the mantissa to a float.
+#[test]
+fn a_cast_is_a_widening() {
+    let (int, float) = (Types::int, Types::float);
+    let cast = |from: CTy, to: CTy| {
+        let x = match from {
+            t if t == float(FloatKind::F32) => lit(t, Lit::F32(1.0)),
+            t if t == float(FloatKind::F64) => lit(t, Lit::F64(1.0)),
+            t => lit(t, Lit::Int(1)),
+        };
+        with_g(base(), Expr::new(to, at(), ExprKind::Cast(Box::new(x))))
+    };
+    for (from, to, shown) in [
+        (int(IntKind::I32), int(IntKind::I16), "`I32` as `I16`"),
+        (int(IntKind::I8), int(IntKind::U16), "`I8` as `U16`"),
+        (float(FloatKind::F64), float(FloatKind::F32), "`F64` as `F32`"),
+        (int(IntKind::I32), float(FloatKind::F32), "`I32` as `F32`"),
+        (int(IntKind::U32), int(IntKind::I32), "`U32` as `I32`"),
+    ] {
+        let err = rejected(&cast(from, to), Rule::V03, &format!("{shown} is no widening"));
+        assert_eq!(err.span, Some(at()), "{err}");
+    }
+    for (from, to) in [
+        (int(IntKind::U8), int(IntKind::I16)),
+        (int(IntKind::I16), float(FloatKind::F32)),
+        (int(IntKind::U32), float(FloatKind::F64)),
+        (float(FloatKind::F32), float(FloatKind::F64)),
+        (int(IntKind::I8), int(IntKind::I64)),
+    ] {
+        let mut m = cast(from, to);
+        m.fill_all_facts();
+        verify(&m).unwrap_or_else(|e| panic!("{e}"));
+    }
+}
+
+/// V-06: an `rt` function calls the primitives of the `rt` declarations
+/// alone (`Buf.zeroed` allocates; `assert_near` and the functions of
+/// `std.test` are no `rt`), and the float `%`.
+#[test]
+fn an_rt_function_calls_rt_primitives_alone() {
+    let (mut kept, mut out) = (0, 0);
+    for prim in super::prim_tests::every_prim() {
+        let mut m = calls(&prim, Break::None, true);
+        m.fill_all_facts();
+        if prim.rt() {
+            verify(&m).unwrap_or_else(|e| panic!("{}: {e}", prim.name()));
+            kept += 1;
+        } else {
+            let err = rejected(&m, Rule::V06, &format!("non-rt primitive `{}`", prim.name()));
+            assert_eq!(err.span, Some(at()), "{err}");
+            out += 1;
+        }
+    }
+    assert!(!Prim::BufZeroed.rt() && !Prim::AssertNear.rt() && Prim::Math(MathFn::Fmod, FloatKind::F32).rt());
+    assert!(kept > 100 && out == 6, "{kept} rt, {out} not");
+}
+
+/// A type near the form `shape`: of the same family but another kind, or of
+/// the form with another element (`elem`).
+fn near(m: &mut Module, shape: Shape, elem: bool) -> Option<CTy> {
+    let (f32, f64) = (Types::float(FloatKind::F32), Types::float(FloatKind::F64));
+    let other = |k: IntKind| Types::int(if k == IntKind::U64 { IntKind::U32 } else { IntKind::U64 });
+    Some(match (shape, elem) {
+        (Shape::Int(k), false) => other(k),
+        (Shape::Float(k), false) => Types::float(if k == FloatKind::F64 { FloatKind::F32 } else { FloatKind::F64 }),
+        (Shape::Parts(k), false) => m.tys.intern(TyKind::Tuple(vec![Types::BOOL, other(k)].into())),
+        (Shape::SpanOf | Shape::SpanOfNum, false) => m.tys.intern(TyKind::Buf(f32)),
+        (Shape::BufOf, false) => m.tys.intern(TyKind::Span(f32)),
+        (Shape::SpanOf | Shape::SpanOfNum | Shape::Seq, true) => m.tys.intern(TyKind::Span(f64)),
+        (Shape::BufOf, true) => m.tys.intern(TyKind::Buf(f64)),
+        (Shape::Elem, true) => f64,
+        _ => return None,
+    })
+}
+
+#[test]
+fn a_near_miss_of_an_operand_or_the_value_is_rejected() {
+    let carries = |s: Shape| matches!(s, Shape::Seq | Shape::SpanOf | Shape::SpanOfNum | Shape::BufOf | Shape::Elem);
+    let mut n = 0;
+    for prim in super::prim_tests::every_prim() {
+        let sig = sig(&prim);
+        let shapes: Vec<Shape> = sig.args.iter().map(|&(_, s)| s).chain([sig.ret]).collect();
+        let linked = shapes.iter().filter(|&&s| carries(s)).count() >= 2;
+        for (pos, &shape) in shapes.iter().enumerate() {
+            for elem in [false, true] {
+                if (elem && !linked) || near(&mut base(), shape, elem).is_none() {
+                    continue;
+                }
+                let err = rejected(&calls(&prim, Break::Near(pos, elem), false), Rule::V02, "");
+                assert_eq!(err.span, Some(at()), "{} {pos} {elem}", prim.name());
+                n += 1;
+            }
+        }
+    }
+    assert!(n > 150, "{n}");
 }

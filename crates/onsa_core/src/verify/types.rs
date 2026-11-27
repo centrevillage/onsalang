@@ -1,10 +1,12 @@
-//! The checks of the verifier where a node is, form by form (V-01, V-05,
-//! V-07, V-08): the type of a child is the `ty` of the child, which the walk
+//! The checks of the verifier where a node is, form by form (V-01, V-03,
+//! V-05 to V-08): the type of a child is the `ty` of the child, which the walk
 //! (`scope.rs`) has checked.
+
+use onsa_sema::widens;
 
 use super::{R, Rule, V};
 use crate::ir::*;
-use crate::prim::Prim;
+use crate::prim::scalar;
 use crate::walk::written_places;
 
 impl<'a> V<'a> {
@@ -242,11 +244,11 @@ impl<'a> V<'a> {
                 self.same(rhs.ty, Types::BOOL, "logic rhs")?;
                 self.same(ty, Types::BOOL, "logic result")?;
             }
+            // The widenings of §3.3, as sema judges them.
             ExprKind::Cast(x) => {
-                let xt = x.ty;
-                let xs = self.tys_of(xt)?;
-                if !(xs.is_int(xt) || xs.is_float(xt)) || !(tys.is_int(ty) || tys.is_float(ty)) {
-                    return Err(self.err(Rule::V03, "cast between non-numeric types"));
+                if !widens(scalar(self.kind(x.ty)?), scalar(tys.kind(ty))) {
+                    let name = |t| crate::dump::type_name(self.m, t);
+                    return Err(self.err(Rule::V03, format!("`{}` as `{}` is no widening", name(x.ty), name(ty))));
                 }
             }
             ExprKind::Call { fn_, args } => {
@@ -264,9 +266,12 @@ impl<'a> V<'a> {
                         return Err(self.err(Rule::V05, "inout primitive argument is not a place"));
                     }
                 }
-                if self.f.is_some_and(|f| f.rt) && matches!(prim, Prim::BufZeroed) {
-                    return Err(self.err(Rule::V06, "rt function allocates (Buf.zeroed)"));
+                if self.f.is_some_and(|f| f.rt) && !prim.rt() {
+                    return Err(
+                        self.err(Rule::V06, format!("rt function calls the non-rt primitive `{}`", prim.name()))
+                    );
                 }
+                self.prim_sig(prim, args, ty)?;
             }
             ExprKind::Field { base, index } => {
                 let ft = self.field_ty(base.ty, *index)?;
