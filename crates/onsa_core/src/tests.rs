@@ -33,18 +33,13 @@ pub(crate) fn package(src: &str) -> (SourceMap, Package) {
     (sources, Package::new("t", vec![user], vec![std]))
 }
 
-/// Lower a one-module package; panics on check or lowering diagnostics.
+/// Lower a one-module package (lowering verifies it); panics on check or
+/// lowering diagnostics.
 pub(crate) fn core(src: &str) -> Module {
     let (sources, pkg) = package(src);
     let a = onsa_sema::analyze(&pkg);
     assert!(a.diagnostics.is_empty(), "check diagnostics:\n{}", onsa_diag::to_text(&sources, &a.diagnostics));
-    match lower(&pkg, &a) {
-        Ok(m) => {
-            verify(&m).unwrap_or_else(|e| panic!("{e}\n{}", dump(&m)));
-            m
-        }
-        Err(f) => panic!("lowering failed:\n{}", failure_text(&sources, &f)),
-    }
+    lower(&pkg, &a).unwrap_or_else(|f| panic!("lowering failed:\n{}", failure_text(&sources, &f)))
 }
 
 /// Lowering diagnostics of a source that checks cleanly.
@@ -78,6 +73,7 @@ fn failure_text(sources: &onsa_diag::SourceMap, f: &crate::LowerFailure) -> Stri
     match f {
         crate::LowerFailure::Diagnostics(d) => onsa_diag::to_text(sources, d),
         crate::LowerFailure::Internal { message, .. } => format!("internal: {message}"),
+        crate::LowerFailure::Verify { error, item_core } => format!("{error}\n{item_core}"),
     }
 }
 
@@ -534,13 +530,7 @@ fn core_opts(src: &str, opts: crate::LowerOptions) -> Module {
     let (sources, pkg) = package(src);
     let a = onsa_sema::analyze(&pkg);
     assert!(a.diagnostics.is_empty(), "check diagnostics:\n{}", onsa_diag::to_text(&sources, &a.diagnostics));
-    match crate::lower_with(&pkg, &a, &opts) {
-        Ok(m) => {
-            verify(&m).unwrap_or_else(|e| panic!("{e}\n{}", dump(&m)));
-            m
-        }
-        Err(f) => panic!("lowering failed:\n{}", failure_text(&sources, &f)),
-    }
+    crate::lower_with(&pkg, &a, &opts).unwrap_or_else(|f| panic!("lowering failed:\n{}", failure_text(&sources, &f)))
 }
 
 /// Byte offset of `needle` in `hay`, panicking with the dump when absent.

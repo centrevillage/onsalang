@@ -1,5 +1,7 @@
-//! Verifier (T3-2): type and structure invariants of a Core module. The
-//! driver runs it at every stage boundary (`onsa_driver::verify_core`, R-82).
+//! Verifier (T3-2): type and structure invariants of a Core module. It runs
+//! at every stage boundary (R-82): lowering verifies its own output
+//! (`lower::verified`), the driver the output of its stages
+//! (`onsa_driver::verify_core`).
 
 use std::fmt;
 
@@ -46,6 +48,15 @@ impl fmt::Display for VerifyError {
 }
 
 impl std::error::Error for VerifyError {}
+
+/// [`verify`], and on a failure the Core of its item (`dump_item`): what a
+/// stage that verifies its output reports (R-82).
+pub fn with_item(m: &Module) -> Result<(), (VerifyError, String)> {
+    verify(m).map_err(|e| {
+        let item_core = crate::dump_item(m, &e.fn_name);
+        (e, item_core)
+    })
+}
 
 pub fn verify(m: &Module) -> Result<(), VerifyError> {
     ids::table(m)?;

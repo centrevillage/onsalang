@@ -887,3 +887,23 @@ fn a_near_miss_of_an_operand_or_the_value_is_rejected() {
     }
     assert!(n > 150, "{n}");
 }
+
+// ---------------------------------------------------------------- lowering verifies its output
+
+/// Lowering verifies the Core it makes (R-82, W8-02 U5c): what it gives back
+/// passes, and a Core that breaks a rule at its end comes back as
+/// `LowerFailure::Verify` with the rule, the position of the node and the
+/// Core of the item, not as a module.
+#[test]
+fn lowering_gives_back_a_verified_core_or_the_failure() {
+    let src = "const K: I32 = 3\n\npub fn f(x: I32) -> I32 {\n  x + K\n}\n";
+    let mut m = crate::lower::verified(super::core(src)).expect("verified");
+    let f = m.fns.iter_mut().find(|f| f.name == "t.f").expect("t.f");
+    let span = f.span;
+    f.body = Some(Block { stmts: Vec::new(), value: Some(Box::new(lit(Types::BOOL, Lit::Bool(true)))) });
+    let Err(crate::LowerFailure::Verify { error, item_core }) = crate::lower::verified(m) else {
+        panic!("a broken Core is not a verify failure")
+    };
+    assert_eq!((error.rule, error.span, error.fn_name.as_str()), (Rule::V01, Some(span), "t.f"), "{error}");
+    assert!(item_core.starts_with("fn t.f(") && !item_core.contains("const t.K"), "{item_core}");
+}

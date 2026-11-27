@@ -15,11 +15,17 @@ use onsa_tests::run::{HostSteps, Problem, RunOptions, StageFailure, Stages, run_
 
 const SRC: &str = "const K: I32 = 3\n\npub fn f(x: I32) -> I32 {\n  x + K\n}\n";
 
-/// The lowered Core of [`SRC`]; `lower_core` verifies it.
-fn core() -> (onsa_driver::Loaded, onsa_core::Module) {
+/// [`SRC`] checked.
+fn analyzed() -> (onsa_driver::Loaded, onsa_driver::Analyzed) {
     let mut loaded = onsa_driver::Loaded::from_input(onsa_driver::PackageInput::single_file("t.onsa", SRC)).unwrap();
     let analyzed = onsa_driver::analyze_loaded(&mut loaded).unwrap_or_else(|e| panic!("{}", e.render(&loaded.sources)));
     assert!(analyzed.diagnostics.is_empty(), "{}", onsa_diag::to_text(&loaded.sources, &analyzed.diagnostics));
+    (loaded, analyzed)
+}
+
+/// The lowered Core of [`SRC`]; lowering verifies it.
+fn core() -> (onsa_driver::Loaded, onsa_core::Module) {
+    let (loaded, analyzed) = analyzed();
     let module = onsa_driver::lower_core(&analyzed).unwrap_or_else(|e| panic!("{}", e.render(&loaded.sources)));
     (loaded, module)
 }
@@ -70,6 +76,33 @@ fn a_broken_function_is_reported_with_its_stage_rule_and_core() {
     assert!(rendered.contains("a bug in the compiler"), "{rendered}");
     // The position of the node, from the verifier.
     assert!(rendered.contains("  --> t.onsa:3:"), "{rendered}");
+}
+
+/// Lowering verifies its own output (W8-02 U5c): its failure is the
+/// verifier's at the stage of lowering, with the rule and the position.
+#[test]
+fn the_verify_failure_of_lowering_is_reported_at_its_stage() {
+    let (loaded, v) = broken();
+    let (error, item_core) = (v.error.clone(), v.item_core.clone());
+    let lowered = LowerError::from(onsa_core::LowerFailure::Verify { error, item_core });
+    let LowerError::Internal(_) = &lowered else { panic!("not an internal error: {lowered:?}") };
+    let rendered = lowered.render(&loaded.sources);
+    assert!(rendered.starts_with(&v.report()), "{rendered}");
+    for part in ["the output of lowering", "V-01", "`t.f`", "  --> t.onsa:3:", "a bug in the compiler"] {
+        assert!(rendered.contains(part), "`{part}` missing from:\n{rendered}");
+    }
+}
+
+/// The one way of lowering, in every build (no flag turns the verifier
+/// off): the driver's stage enters the verifier once, inside lowering.
+#[test]
+fn lowering_runs_the_verifier_once() {
+    let (_, analyzed) = analyzed();
+    let (lowered, times) = onsa_diag::timing::record(|| onsa_driver::lower_core(&analyzed));
+    assert!(lowered.is_ok());
+    let entered = |p| times.phases.iter().find(|&&(q, _, _)| q == p).map(|&(_, _, n)| n);
+    use onsa_diag::timing::Phase;
+    assert_eq!((entered(Phase::Lower), entered(Phase::Verify)), (Some(1), Some(1)), "{times:?}");
 }
 
 #[test]

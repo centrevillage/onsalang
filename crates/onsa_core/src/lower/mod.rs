@@ -133,6 +133,9 @@ pub enum LowerFailure {
     /// An internal error (S-67): the command stops. `span` is the source
     /// lowering was at.
     Internal { span: Span, message: String },
+    /// The verifier rejected the Core lowering made (R-82): an internal
+    /// error, with the item's Core (`dump_item`) for the bug report.
+    Verify { error: crate::VerifyError, item_core: String },
 }
 
 /// Whether `outer` holds `inner` (the same file).
@@ -242,7 +245,7 @@ pub fn lower(pkg: &Package, a: &Analysis) -> Result<Module, LowerFailure> {
 /// (S-67): the innermost expression that uses it becomes a placeholder and
 /// the item is lowered again (see the module's documentation). The Core is
 /// then dropped, so no placeholder leaves this function. The first internal
-/// failure stops lowering.
+/// failure stops lowering. A Core that comes out is verified ([`verified`]).
 pub fn lower_with(pkg: &Package, a: &Analysis, opts: &LowerOptions) -> Result<Module, LowerFailure> {
     let flat = onsa_sema::flatten(pkg);
     let places: usize =
@@ -311,7 +314,12 @@ pub fn lower_with(pkg: &Package, a: &Analysis, opts: &LowerOptions) -> Result<Mo
     if !diagnostics.is_empty() {
         return Err(LowerFailure::Diagnostics(diagnostics));
     }
-    let mut module = lw.m;
+    finish(lw.m)
+}
+
+/// The passes after the items are lowered, in their one order, and the
+/// verifier last: it reads what they make (`hoisted`, V-18; `moves`, V-20).
+fn finish(mut module: Module) -> Result<Module, LowerFailure> {
     // No type is made after lowering: what reads the module reads the facts.
     module.fill_all_facts();
     // The comparisons the types decide and the assignments of a place to
@@ -322,9 +330,18 @@ pub fn lower_with(pkg: &Package, a: &Analysis, opts: &LowerOptions) -> Result<Mo
         module.fns[i].hoisted = storage::hoisted(&module, &module.fns[i]);
     }
     module.moves = moves::collect(&module);
-    // The verifier runs at the stage boundary in the driver (R-82,
-    // `onsa_driver::verify_core`), not here.
-    Ok(module)
+    verified(module)
+}
+
+/// The stage verifies its own output (R-82), so no caller of [`lower`]
+/// gets a Core the verifier has not seen, in release builds too. Its own
+/// phase, not counted in the lowering's.
+pub(crate) fn verified(module: Module) -> Result<Module, LowerFailure> {
+    let _verify = onsa_diag::timing::phase(onsa_diag::timing::Phase::Verify);
+    match crate::verify::with_item(&module) {
+        Ok(()) => Ok(module),
+        Err((error, item_core)) => Err(LowerFailure::Verify { error, item_core }),
+    }
 }
 
 impl<'a> Lowerer<'a> {

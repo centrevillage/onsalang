@@ -1,16 +1,16 @@
 //! The Core verifier at the stage boundaries (R-82, plan §3.4, D-15).
 //!
-//! [`verify_core`] is the one place the compiler runs `onsa_core::verify`.
-//! Every stage function that outputs Core calls it on its output (lowering
-//! in [`crate::lower_core_with`], the build-time `const` evaluation in
-//! [`crate::build_resolved`]), so no caller can skip it. A failure is an
-//! error of the compiler, not of the program: it comes back as a value
-//! ([`VerifyFailure`]) with the stage, the rule the verifier reports, the
-//! item and its Core, and the stage function returns it as the internal
-//! error of S-67 ([`crate::InternalError`], W1-04).
+//! Every stage that outputs Core verifies its output, in every build, so no
+//! caller can skip it. Lowering is a stage of `onsa_core` and verifies
+//! itself (`onsa_core::lower_with`, which fails with
+//! `onsa_core::LowerFailure::Verify`); the stages of the driver (the
+//! build-time `const` evaluation in [`crate::build_resolved`]) call
+//! [`verify_core`]. A failure is an error of the compiler, not of the
+//! program: it comes back as a value ([`VerifyFailure`]) with the stage, the
+//! rule the verifier reports, the item and its Core, and the stage function
+//! returns it as the internal error of S-67 ([`crate::InternalError`], W1-04).
 
 use std::fmt;
-use std::sync::atomic::{AtomicBool, Ordering};
 
 use onsa_diag::{Diagnostic, SourceMap};
 
@@ -108,24 +108,21 @@ impl From<InternalError> for LowerError {
     }
 }
 
-static DEBUG_ONLY: AtomicBool = AtomicBool::new(false);
-
-/// Run the verifier only in debug builds of the compiler, for the rest of
-/// the process. Only the CLI calls this, to keep its behavior until W8-02
-/// runs the verifier in release builds too. Without it (the tests, and
-/// every other user of the driver), the verifier always runs.
-pub fn verify_core_in_debug_only() {
-    DEBUG_ONLY.store(true, Ordering::Relaxed);
+/// Why lowering failed, as the driver reports it. The diagnostics are as
+/// lowering made them (the caller fills their sources first).
+impl From<onsa_core::LowerFailure> for LowerError {
+    fn from(f: onsa_core::LowerFailure) -> Self {
+        match f {
+            onsa_core::LowerFailure::Diagnostics(d) => LowerError::reported(d),
+            onsa_core::LowerFailure::Internal { span, message } => InternalError::lowering(span, message).into(),
+            onsa_core::LowerFailure::Verify { error, item_core } => {
+                VerifyFailure { stage: CoreStage::Lower, error, item_core }.into()
+            }
+        }
+    }
 }
 
-/// Verify the Core `stage` produced (R-82). The only caller of `onsa_core::verify`.
+/// Verify the Core a stage of the driver produced (R-82).
 pub fn verify_core(module: &onsa_core::Module, stage: CoreStage) -> Result<(), VerifyFailure> {
-    if DEBUG_ONLY.load(Ordering::Relaxed) && !cfg!(debug_assertions) {
-        return Ok(());
-    }
-    onsa_core::verify(module).map_err(|error| VerifyFailure {
-        stage,
-        item_core: onsa_core::dump_item(module, &error.fn_name),
-        error,
-    })
+    onsa_core::verify::with_item(module).map_err(|(error, item_core)| VerifyFailure { stage, error, item_core })
 }

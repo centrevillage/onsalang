@@ -34,7 +34,7 @@ pub use internal::{InternalError, Origin, guard, guard_on_stack};
 pub use manifest::{Manifest, ManifestExport, ManifestMemory, ManifestPackage, ManifestRead, ManifestTarget, Spanned};
 pub use platform::{Platform, host_triple, platform};
 pub use testing::{TestFailure, TestOptions, TestOutcome, TestReport, TestRun, TestStatus, run_tests};
-pub use verify::{CoreStage, LowerError, VerifyFailure, verify_core, verify_core_in_debug_only};
+pub use verify::{CoreStage, LowerError, VerifyFailure, verify_core};
 
 use std::sync::{Arc, Mutex, OnceLock};
 
@@ -225,7 +225,7 @@ pub fn lower_core(analyzed: &Analyzed) -> Result<onsa_core::Module, LowerError> 
 }
 
 /// [`lower_core`] with the target's memory settings (T4-5): the lowering
-/// stage, verified at its boundary.
+/// stage, which verifies its output (`onsa_core::lower_with`).
 pub fn lower_core_with(analyzed: &Analyzed, opts: &onsa_core::LowerOptions) -> Result<onsa_core::Module, LowerError> {
     let lowered = guard(|| {
         let _lower = phase(Phase::Lower);
@@ -236,17 +236,7 @@ pub fn lower_core_with(analyzed: &Analyzed, opts: &onsa_core::LowerOptions) -> R
         }
         r
     })?;
-    let module = match lowered {
-        Ok(m) => m,
-        Err(onsa_core::LowerFailure::Diagnostics(d)) => return Err(LowerError::reported(d)),
-        Err(onsa_core::LowerFailure::Internal { span, message }) => {
-            return Err(LowerError::Internal(InternalError::lowering(span, message)));
-        }
-    };
-    let verify = phase(Phase::Verify);
-    verify_core(&module, CoreStage::Lower)?;
-    drop(verify);
-    Ok(module)
+    Ok(lowered?)
 }
 
 /// In debug builds (the tests, the fuzzing), a diagnostic that breaks its

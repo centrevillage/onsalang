@@ -247,17 +247,13 @@ fn main() -> ExitCode {
             print!("{out}");
             if passed { ExitCode::SUCCESS } else { ExitCode::FAILURE }
         }
-        "--serve" => {
-            // As `onsa` does before its command.
-            onsa_driver::verify_core_in_debug_only();
-            match onsa_tests::serve::serve(&mut std::io::stdin().lock(), &mut std::io::stdout().lock()) {
-                Ok(()) => ExitCode::SUCCESS,
-                Err(e) => {
-                    eprintln!("onsa_cases --serve: {e}");
-                    ExitCode::from(2)
-                }
+        "--serve" => match onsa_tests::serve::serve(&mut std::io::stdin().lock(), &mut std::io::stdout().lock()) {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(e) => {
+                eprintln!("onsa_cases --serve: {e}");
+                ExitCode::from(2)
             }
-        }
+        },
         "--default-inits" => {
             print(&serde_json::json!(default_inits(rest)));
             ExitCode::SUCCESS
