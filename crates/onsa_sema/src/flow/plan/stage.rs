@@ -64,6 +64,14 @@ impl FlowInfo {
             }
     }
 
+    /// Whether the replica of the `par~` `par` holds a field that starts at
+    /// `T.default()` ([`FlowInfo::starts_default`]), in a replica inside it
+    /// too: the Core writes them in a loop of its replicas at `init` and
+    /// `reset`. Of the set made once with the fields (`fields::build`).
+    pub fn starts_default_in(&self, par: NodeId) -> bool {
+        self.default_pars.contains(&par)
+    }
+
     /// The field of the state that keeps the local `l` (an input or a local
     /// of a `let`), if there is one.
     pub fn kept_field(&self, l: LocalId) -> Option<FieldOf> {
@@ -181,6 +189,13 @@ impl PlanNode {
     /// stage with an entry of it: the one test of it (D-15).
     pub fn chained_delay(&self) -> bool {
         self.kind.delay().is_some() && !self.chain.is_empty()
+    }
+
+    /// It is a delay a guard of its chain stops, which stores of the ticks it
+    /// ran (§11.4, §11.10, S-1220): it has [`Part::Ran`], set by its run. The
+    /// one test of it, of the field and of its readers (D-15).
+    pub fn runs_guarded(&self) -> bool {
+        self.chained_delay() && !self.guards.is_empty()
     }
 
     /// Its entry of the stage `s` of this flow (§11.9, [`Entry`]): the one

@@ -302,6 +302,10 @@ pub struct FlowInfo {
     /// The place of each field in the struct that holds it, made once with
     /// the fields ([`FlowInfo::field_at`]).
     pub(crate) places: HashMap<FieldOf, u32>,
+    /// The `par~`s whose replica holds a field that starts at `T.default()`,
+    /// in a replica inside it too, made once with the fields
+    /// ([`FlowInfo::starts_default_in`]).
+    pub(crate) default_pars: HashSet<NodeId>,
     /// The first port of the flow of a derived clock (§11.9,
     /// [`crate::def::FlowDef::derived_port`]): the Core makes no `process`,
     /// `process_inplace` and `render` of it, whose uses the check stops

@@ -155,6 +155,29 @@ pub(super) fn build(info: &mut FlowInfo) {
         }
     }
     info.fields = top;
+    let mut pars = HashSet::default();
+    defaulting(info, &info.fields, &mut pars);
+    info.default_pars = pars;
+}
+
+/// Whether one of `fields` starts at `T.default()` ([`FlowInfo::starts_default`]),
+/// in a replica too, with the `par~`s among them whose replica has one put
+/// in `pars` ([`FlowInfo::starts_default_in`]). The field of a `par~` is in
+/// one struct, so the walk from the `State` is linear in the fields.
+fn defaulting(info: &FlowInfo, fields: &[Field], pars: &mut HashSet<NodeId>) -> bool {
+    let mut any = false;
+    for f in fields {
+        let inner = match f.of {
+            FieldOf::Node(id, Part::Own) => match &info.node(id).kind {
+                PlanKind::Par { fields, .. } => defaulting(info, fields, pars).then_some(id),
+                _ => None,
+            },
+            _ => None,
+        };
+        pars.extend(inner);
+        any |= info.starts_default(f.of) || inner.is_some();
+    }
+    any
 }
 
 /// Two fields of one struct of the state never have one name: the names
@@ -253,7 +276,7 @@ impl Structs<'_> {
         }
         chain.for_each(&mut push);
         // The store of a delay is of the ticks it ran (§11.10).
-        if n.chained_delay() && !n.guards.is_empty() {
+        if n.runs_guarded() {
             push(Part::Ran);
         }
         n.late_flags().into_iter().for_each(&mut push);

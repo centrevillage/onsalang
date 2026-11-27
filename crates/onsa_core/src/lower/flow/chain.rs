@@ -36,12 +36,13 @@ impl<'a> Walk<'a> {
         sfield(lw, self.info, self.state, FieldOf::Node(self.id, part), self.span)
     }
 
-    /// `_ran` of a delay a guard stops set to `on` (§11.10: its store is of the ticks it ran).
+    /// `_ran` of a delay a guard stops set to `on` (§11.10: its store is of
+    /// the ticks it ran, `PlanNode::runs_guarded`); none of another node.
     fn ran(&self, lw: &Lowerer, out: &mut Vec<Stmt>, on: bool) -> R<()> {
-        match self.info.field_at(FieldOf::Node(self.id, Part::Ran)) {
-            Some(_) => assign(out, &self.field(lw, Part::Ran)?, lit(Types::BOOL, self.span, Lit::Bool(on))),
-            None => Ok(()),
+        if !self.n.runs_guarded() {
+            return Ok(());
         }
+        assign(out, &self.field(lw, Part::Ran)?, lit(Types::BOOL, self.span, Lit::Bool(on)))
     }
 
     fn bound(&self, b: u32) -> R<&'a onsa_sema::flow::PlanBound> {

@@ -248,3 +248,41 @@ pub flow f(x: F32 at sample, p: F32 at block) -> F32 at sample {
     assert_eq!(names, ["v0", "v0.par_0", "m", "_poisoned", "_initialized"]);
     assert_eq!(whats(f, Owner::Output), ["let v0", "par", "par", "poisoned", "initialized"]);
 }
+
+/// What the Core asked before `FlowInfo::starts_default_in` (its
+/// `starts_default`): whether one of `fields` starts at `T.default()`, in a
+/// replica too, walked again at each question.
+fn defaults_walked(f: &FlowInfo, fields: &[super::Field]) -> bool {
+    fields.iter().any(|x| {
+        f.starts_default(x.of)
+            || matches!(x.of, FieldOf::Node(id, Part::Own)
+                if matches!(&f.node(id).kind, PlanKind::Par { fields, .. } if defaults_walked(f, fields)))
+    })
+}
+
+/// `FlowInfo::starts_default_in` answers as [`defaults_walked`] of the
+/// replica of every `par~` of every planned flow of the flow cases (3b of
+/// W8-17): the set made once with the fields is the same judgment.
+#[test]
+fn the_replicas_that_start_at_default_are_those_the_walk_of_their_fields_finds() {
+    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/spec");
+    let (mut cases, mut pars, mut yes) = (0, 0, 0);
+    for sub in ["flow", "flow_clock", "flow_semantics", "flow_syntax"] {
+        let paths = std::fs::read_dir(dir.join(sub)).expect("the cases").flatten().map(|d| d.path());
+        for path in paths.filter(|p| p.extension().is_some_and(|x| x == "onsa")) {
+            cases += 1;
+            let p = crate::tests::pkg(&[("main", &std::fs::read_to_string(&path).expect("a case"))]);
+            let a = crate::tests::analyze(&p);
+            for f in a.flows.values().filter(|f| f.planned()) {
+                for (k, n) in f.nodes.iter().enumerate() {
+                    let PlanKind::Par { fields, .. } = &n.kind else { continue };
+                    let want = defaults_walked(f, fields);
+                    let id = crate::flow::NodeId(k as u32);
+                    assert_eq!(f.starts_default_in(id), want, "{} at {:?}", path.display(), n.span);
+                    (pars, yes) = (pars + 1, yes + usize::from(want));
+                }
+            }
+        }
+    }
+    assert!(cases >= 100 && pars >= 20 && yes > 0, "{cases} cases, {pars} `par~`s, {yes} that start at default");
+}

@@ -110,7 +110,7 @@ pub(super) fn range(info: &FlowInfo, id: NodeId, span: Span) -> R<(onsa_sema::Lo
 
 /// The replicas of the `par~` `id`, with the locals of a loop over them in
 /// `cx`, and the state of the one of the iteration in `state` (or it, of none).
-pub(super) fn replicas(lw: &Lowerer, cx: &mut FnCx, id: NodeId, state: &Expr, span: Span) -> R<(Replicas, Expr)> {
+fn replicas(lw: &Lowerer, cx: &mut FnCx, id: NodeId, state: &Expr, span: Span) -> R<(Replicas, Expr)> {
     let f = cx.flow.as_ref().expect("flow context");
     let (info, pinned) = (f.info, f.now.pinned.contains(&id));
     let (var, from, count) = range(info, id, span)?;
@@ -156,6 +156,30 @@ fn var_index(cx: &FnCx, var: onsa_sema::LocalId, from: u32, span: Span) -> Expr 
 }
 
 impl Replicas {
+    /// The one way the work of the body of the `par~` `id` is lowered of each
+    /// of its replicas, in the scope of `state` (§11.5, S-1140): `body` of
+    /// the element of the replica of the iteration, in its scope, into the
+    /// statements of a loop over them ([`Replicas::each`]), none when it
+    /// makes none. The scope is popped whether `body` fails or not.
+    pub(super) fn scoped<T>(
+        lw: &mut Lowerer,
+        cx: &mut FnCx,
+        (id, state, span): (NodeId, &Expr, Span),
+        out: &mut Vec<Stmt>,
+        body: impl FnOnce(&mut Lowerer, &mut FnCx, &Replicas, &Expr, &mut Vec<Stmt>) -> R<T>,
+    ) -> R<T> {
+        let (r, elem) = replicas(lw, cx, id, state, span)?;
+        cx.flow.as_mut().expect("flow context").push_scope(elem.clone());
+        let mut stmts = Vec::new();
+        let done = body(lw, cx, &r, &elem, &mut stmts);
+        cx.flow.as_mut().expect("flow context").now.scopes.pop();
+        let v = done?;
+        if !stmts.is_empty() {
+            r.each(cx, out, span, stmts);
+        }
+        Ok(v)
+    }
+
     /// The index of the replica of the iteration (`var - from`, or `k`).
     pub(super) fn index(&self, cx: &FnCx, span: Span) -> Expr {
         match self.k {

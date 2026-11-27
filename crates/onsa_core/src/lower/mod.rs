@@ -250,36 +250,7 @@ pub fn lower_with(pkg: &Package, a: &Analysis, opts: &LowerOptions) -> Result<Mo
     let flat = onsa_sema::flatten(pkg);
     let places: usize =
         flat.iter().flat_map(|p| p.modules.iter()).map(|m| m.parsed.ast.exprs.len() + m.parsed.ast.pats.len()).sum();
-    let mut lw = Lowerer {
-        pkg,
-        a,
-        m: Module { facts: crate::layout::Facts::new(opts.ptr_size), ..Module::default() },
-        fn_ids: HashMap::new(),
-        worklist: Vec::new(),
-        type_ids: HashMap::new(),
-        type_defs: HashMap::new(),
-        const_ids: HashMap::new(),
-        type_measures: HashMap::new(),
-        measures: Vec::new(),
-        instances: 0,
-        instance_limit: opts.instance_limit,
-        made_by: HashMap::new(),
-        lowering: None,
-        fills: Vec::new(),
-        bad_types: HashMap::new(),
-        stopped: HashSet::new(),
-        eq_fns: HashMap::new(),
-        messages: HashMap::new(),
-        flow_fns: HashMap::new(),
-        implicit_tys: HashMap::new(),
-        flows_in_progress: HashSet::new(),
-        hoist_uses: Vec::new(),
-        bulk_threshold: opts.bulk_threshold,
-        holes: HashSet::new(),
-        attempts: Vec::new(),
-        max_attempts: places + 1,
-        unsupported: Vec::new(),
-    };
+    let mut lw = Lowerer::new(pkg, a, opts, places);
     // Roots: non-generic items of the user package, in definition order.
     for (i, def) in a.defs.iter().enumerate() {
         let id = DefId(i as u32);
@@ -345,6 +316,41 @@ pub(crate) fn verified(module: Module) -> Result<Module, LowerFailure> {
 }
 
 impl<'a> Lowerer<'a> {
+    /// A lowering of `pkg` of the analysis `a` with nothing lowered yet, of
+    /// `places` expressions and patterns in all its modules ([`lower_with`]).
+    fn new(pkg: &'a Package, a: &'a Analysis, opts: &LowerOptions, places: usize) -> Lowerer<'a> {
+        Lowerer {
+            pkg,
+            a,
+            m: Module { facts: crate::layout::Facts::new(opts.ptr_size), ..Module::default() },
+            fn_ids: HashMap::new(),
+            worklist: Vec::new(),
+            type_ids: HashMap::new(),
+            type_defs: HashMap::new(),
+            const_ids: HashMap::new(),
+            type_measures: HashMap::new(),
+            measures: Vec::new(),
+            instances: 0,
+            instance_limit: opts.instance_limit,
+            made_by: HashMap::new(),
+            lowering: None,
+            fills: Vec::new(),
+            bad_types: HashMap::new(),
+            stopped: HashSet::new(),
+            eq_fns: HashMap::new(),
+            messages: HashMap::new(),
+            flow_fns: HashMap::new(),
+            implicit_tys: HashMap::new(),
+            flows_in_progress: HashSet::new(),
+            hoist_uses: Vec::new(),
+            bulk_threshold: opts.bulk_threshold,
+            holes: HashSet::new(),
+            attempts: Vec::new(),
+            max_attempts: places + 1,
+            unsupported: Vec::new(),
+        }
+    }
+
     /// Lower one item (a function, a flow, a `const`) by `attempt`, again
     /// after each unsupported feature found in an expression or an arm
     /// pattern (S-67). `Err` is an internal error, which stops lowering.

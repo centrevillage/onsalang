@@ -581,3 +581,114 @@ fn the_time_of_an_event_in_an_up_is_of_its_run_0() {
     let places: Vec<usize> = parts.iter().map(|p| e.find(p).unwrap_or_else(|| panic!("{p}: {e}"))).collect();
     assert!(places.is_sorted(), "{e}");
 }
+
+/// The flow `name` of the package `pkg` and its plan in `a`.
+fn plan_of<'a>(
+    pkg: &onsa_sema::Package,
+    a: &'a onsa_sema::Analysis,
+    name: &str,
+) -> (onsa_sema::DefId, &'a onsa_sema::flow::FlowInfo) {
+    let file = pkg.modules[0].file;
+    let (&id, info) =
+        a.flows.iter().find(|(d, _)| a.def(**d).name == name && a.def(**d).name_span.file == file).expect("the flow");
+    (id, info)
+}
+
+/// The field `_ran` of a delay a guard stops is placed and read by the one
+/// test `PlanNode::runs_guarded` (3c of W8-17): a plan whose node says it
+/// runs guarded with no such field (the plan changed by hand, as the
+/// mutant M11 of the field) is an internal error of the lowering at the
+/// read, not a store of every tick.
+#[test]
+fn a_delay_a_guard_stops_with_no_field_of_its_run_is_an_internal_error() {
+    let src = "pub flow f(c: Bool at sample, x: F32 at sample) -> F32 at sample {
+  let a = prev~(x + 1.0).when~(c)
+  let b = prev~(x + 2.0).reset_if~(c)
+  a + b
+}";
+    let (sources, pkg) = crate::tests::package(src);
+    let mut a = onsa_sema::analyze(&pkg);
+    assert!(a.diagnostics.is_empty(), "{}", onsa_diag::to_text(&sources, &a.diagnostics));
+    let lowered = crate::dump::dump(&crate::lower::lower(&pkg, &a).expect("the lowering"));
+    assert!(lowered.contains("a._ran: Bool") && !lowered.contains("b._ran"), "{lowered}");
+    let (id, _) = plan_of(&pkg, &a, "f");
+    let info = a.flows.get_mut(&id).expect("the plan");
+    let guards = info.nodes.iter().find(|n| n.runs_guarded()).expect("the delay of `.when~`").guards.clone();
+    let reset = info.nodes.iter_mut().find(|n| n.chained_delay() && !n.runs_guarded()).expect("that of `.reset_if~`");
+    reset.guards = guards;
+    match crate::lower::lower(&pkg, &a) {
+        Err(crate::LowerFailure::Internal { message, .. }) => assert!(message.contains("Ran"), "{message}"),
+        Err(f) => panic!("another failure: {}", crate::tests::failure_text(&sources, &f)),
+        Ok(_) => panic!("a lowering of a node with no field of its run"),
+    }
+}
+
+/// The one way the body of a `par~` is lowered of each replica
+/// (`Replicas::scoped`, 5a of W8-17): the body runs in the scope of the
+/// element, which is popped after it, whether it fails or not; a body
+/// that makes no statement makes no loop, one that makes some a loop.
+#[test]
+fn the_scope_of_a_replica_is_popped_after_its_body_and_an_empty_body_makes_no_loop() {
+    use super::*;
+    let src = "pub flow f(x: F32 at sample) -> F32 at sample {
+  let a = par~ i in 0 ..< 2 { prev~(x) }
+  a[0] + a[1]
+}";
+    let (_, pkg) = crate::tests::package(src);
+    let a = onsa_sema::analyze(&pkg);
+    let (flow, info) = plan_of(&pkg, &a, "f");
+    let par = (0..info.nodes.len() as u32).map(NodeId).find(|&p| matches!(info.node(p).kind, PlanKind::Par { .. }));
+    let (par, span) = (par.expect("the `par~`"), a.def(flow).span);
+    let mut lw = Lowerer::new(&pkg, &a, &crate::lower::LowerOptions::default(), 1);
+    let Ok(fns) = lw.ensure_flow(flow) else { panic!("the flow lowered") };
+    let Ok(mut g) = Gen::of(&mut lw, (flow, span), info, ClockStage::SAMPLE, Types::UNIT) else { panic!("a function") };
+    let s = g.param("s", Mode::Inout, lw.ty(TyKind::Struct(fns.state)));
+    g.flow().push_scope(s.clone());
+    let depth = |g: &mut Gen| g.flow().now.scopes.len();
+    let mut out = Vec::new();
+    let failed: R<()> = Replicas::scoped(&mut lw, &mut g.cx, (par, &s, span), &mut out, |_, cx, _, _, body| {
+        assert_eq!(cx.flow.as_ref().expect("flow context").now.scopes.len(), 2, "the scope of the element");
+        body.push(stmt(span, StmtKind::Break));
+        Err(internal(span, "the body"))
+    });
+    assert!(failed.is_err() && out.is_empty() && depth(&mut g) == 1, "{out:?}");
+    let empty = Replicas::scoped(&mut lw, &mut g.cx, (par, &s, span), &mut out, |_, _, _, _, _| Ok(()));
+    assert!(empty.is_ok(), "an empty body");
+    assert!(out.is_empty() && depth(&mut g) == 1, "{out:?}");
+    let some = Replicas::scoped(&mut lw, &mut g.cx, (par, &s, span), &mut out, |_, _, _, _, body| {
+        body.push(stmt(span, StmtKind::Break));
+        Ok(())
+    });
+    assert!(some.is_ok(), "a body");
+    assert!(matches!(&out[..], [Stmt { kind: StmtKind::ForRange(..), .. }]) && depth(&mut g) == 1, "{out:?}");
+}
+
+/// `init` writes `T.default()` in a loop of the replicas of a `par~` whose
+/// replica has such a field (`FlowInfo::starts_default_in`) and of no other:
+/// one loop of it, and no counter `k` of a range past `U32` made for a
+/// loop of the defaults not made, before the one of the loop of its `init`.
+#[test]
+fn the_defaults_of_init_loop_over_the_replicas_that_have_one() {
+    let src = "flow g4(x: F32 at (sample * 4)) -> F32 at sample { x[0] + x[1] * 10.0 + x[2] * 100.0 + x[3] * 1000.0 }
+pub flow f(x: F32 at sample) -> F32 at sample {
+  let ys = par~ i in 4294967294 ..= 4294967295 {
+    prev~(x + F32.round_from(i))
+  }
+  let zs = par~ i in 0 ..< 2 {
+    (g4~(x + F32.round_from(i)).down~(4) at sample)
+  }
+  ys[0] + zs[1]
+}";
+    let m = crate::tests::core(src);
+    let init = crate::dump::dump_item(&m, "t.f.init");
+    assert_eq!(init.matches(".default()").count(), 2, "{init}");
+    let loops: Vec<&str> = init.lines().filter(|l| l.trim_start().starts_with("for ")).collect();
+    assert_eq!(loops.len(), 3, "{init}");
+    // The defaults are of the replicas of `zs` alone, in the first loop.
+    let (first, second) = (at(&init, "[std.core.num.F32.default(); 4]"), init.find("for k@").unwrap_or(0));
+    assert!(loops[0].contains("for i@") && first < second && !init[..first].contains("for k@"), "{init}");
+    // The first `k` of the function is the counter of the loop of `ys`: none made before it for no loop.
+    let f = m.fns.iter().find(|f| f.name == "t.f.init").expect("`init`");
+    let k = f.locals.iter().position(|l| l.name == "k").expect("a `k`");
+    assert!(loops[1].trim_start().starts_with(&format!("for k@{k} in")), "{init}");
+}

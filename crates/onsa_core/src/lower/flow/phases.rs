@@ -73,14 +73,9 @@ fn each_node(
         let span = cx.ast.expr(n.expr).span;
         f(lw, cx, out, id, state)?;
         let PlanKind::Par { children, state: true, .. } = &n.kind else { continue };
-        let (r, elem) = replicas(lw, cx, id, state, span)?;
-        let mut body = Vec::new();
-        cx.flow.as_mut().unwrap().push_scope(elem.clone());
-        each_node(lw, cx, &mut body, children, &elem, f)?;
-        cx.flow.as_mut().unwrap().now.scopes.pop();
-        if !body.is_empty() {
-            r.each(cx, out, span, body);
-        }
+        Replicas::scoped(lw, cx, (id, state, span), out, |lw, cx, _, elem, body| {
+            each_node(lw, cx, body, children, elem, f)
+        })?;
     }
     Ok(())
 }
@@ -168,7 +163,8 @@ fn restart(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, s: &Expr) -> R<
 /// The fields of `fields` of the struct `state` that start at
 /// `T.default()` (§11.3, S-1186, [`FlowInfo::starts_default`]) set to it,
 /// written so and not left to the zeroed state (a hand-written `Default`),
-/// and those of the replicas of a `par~` among them in a loop of them.
+/// and those of the replicas of a `par~` among them in a loop of them
+/// (`FlowInfo::starts_default_in`).
 fn defaults(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, fields: &[Field], state: &Expr) -> R<()> {
     let (info, span) = (plan(cx), state.span);
     for f in fields {
@@ -179,24 +175,12 @@ fn defaults(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, fields: &[Fiel
         }
         let FieldOf::Node(id, Part::Own) = f.of else { continue };
         let PlanKind::Par { fields: inner, .. } = &info.node(id).kind else { continue };
-        if !starts_default(info, inner) {
+        if !info.starts_default_in(id) {
             continue;
         }
-        let (r, elem) = replicas(lw, cx, id, state, span)?;
-        let mut body = Vec::new();
-        defaults(lw, cx, &mut body, inner, &elem)?;
-        r.each(cx, out, span, body);
+        Replicas::scoped(lw, cx, (id, state, span), out, |lw, cx, _, elem, body| defaults(lw, cx, body, inner, elem))?;
     }
     Ok(())
-}
-
-/// Whether one of `fields` starts at `T.default()`, in a replica too.
-fn starts_default(info: &FlowInfo, fields: &[Field]) -> bool {
-    fields.iter().any(|f| {
-        info.starts_default(f.of)
-            || matches!(f.of, FieldOf::Node(id, Part::Own)
-                if matches!(&info.node(id).kind, PlanKind::Par { fields, .. } if starts_default(info, fields)))
-    })
 }
 
 /// `reset(inout s)`.
@@ -534,7 +518,7 @@ fn store_node(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, id: NodeId, 
         PlanKind::Instance { .. } | PlanKind::Par { .. } => return Err(internal(span, "a store of no delay")),
     };
     // Evaluated while a guard stops it too (§11.10), stored of a tick it ran (its `_ran`).
-    let ran = info.field_at(at(Part::Ran)).map(|_| sfield(lw, info, state, at(Part::Ran), span)).transpose()?;
+    let ran = n.runs_guarded().then(|| sfield(lw, info, state, at(Part::Ran), span)).transpose()?;
     let v = lower_expr(lw, cx, arg)?;
     let v = if ran.is_some() { materialize(cx, v, out, "__store") } else { v };
     let mut store = Vec::new();

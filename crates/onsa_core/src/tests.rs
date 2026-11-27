@@ -69,7 +69,7 @@ fn an_rt_function_value_at_a_function_type_is_not_supported_yet() {
     }
 }
 
-fn failure_text(sources: &onsa_diag::SourceMap, f: &crate::LowerFailure) -> String {
+pub(crate) fn failure_text(sources: &onsa_diag::SourceMap, f: &crate::LowerFailure) -> String {
     match f {
         crate::LowerFailure::Diagnostics(d) => onsa_diag::to_text(sources, d),
         crate::LowerFailure::Internal { message, .. } => format!("internal: {message}"),

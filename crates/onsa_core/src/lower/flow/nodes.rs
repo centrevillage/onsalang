@@ -71,19 +71,20 @@ pub(crate) fn lower_flow_expr(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId) -> R<O
             return Ok(Some(after(stmts, v)));
         }
         PlanKind::Par { body, .. } => {
-            let (r, elem_state) = replicas(lw, cx, id, &state, span)?;
-            let ty = lw.core_ty(cx.info.expr_types[&e], &[], span)?;
-            let arr = cx.temp(name, ty);
-            stmts.push(stmt(span, StmtKind::Let(arr, Expr::new(ty, span, ExprKind::Zeroed))));
-            let arr_e = local_expr(cx, arr, span);
-            let idx = r.index(cx, span);
-            cx.flow.as_mut().unwrap().push_scope(elem_state);
-            let mut loop_body = Vec::new();
-            let v = lower_expr(lw, cx, *body)?;
-            assign(&mut loop_body, &index(arr_e.clone(), idx, &lw.m.tys)?, v)?;
-            cx.flow.as_mut().unwrap().now.scopes.pop();
-            r.each(cx, &mut stmts, span, loop_body);
-            arr_e
+            // The array of the values, made before the loop that writes its elements.
+            let mut each = Vec::new();
+            let (made, arr) = Replicas::scoped(lw, cx, (id, &state, span), &mut each, |lw, cx, r, _, out| {
+                let ty = lw.core_ty(cx.info.expr_types[&e], &[], span)?;
+                let arr = cx.temp(name, ty);
+                let made = stmt(span, StmtKind::Let(arr, Expr::new(ty, span, ExprKind::Zeroed)));
+                let (arr, idx) = (local_expr(cx, arr, span), r.index(cx, span));
+                let v = lower_expr(lw, cx, *body)?;
+                assign(out, &index(arr.clone(), idx, &lw.m.tys)?, v)?;
+                Ok((made, arr))
+            })?;
+            stmts.push(made);
+            stmts.append(&mut each);
+            arr
         }
     };
     // Memoise in a temporary: later references (end-of-tick stores) read the
@@ -159,8 +160,7 @@ pub(super) fn delay_work(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, i
     let now = &cx.flow.as_ref().expect("flow context").now;
     let (info, stage, saving) = (cx.flow.as_ref().expect("flow context").info, now.stage, now.saving);
     let n = info.node(id);
-    // Its store at the end of the stage does the rest of its first argument.
-    if let Some(arg) = n.kind.stored().filter(|_| !saving) {
+    if let Some(arg) = n.kind.stored() {
         super::hoist::walk(lw, cx, arg, out)?;
         if info.node_stage(id) == Some(stage) {
             saved_reads(lw, cx, out, &n.saved, (&n.path, n.owner))?;
@@ -213,27 +213,32 @@ pub(super) fn saved_reads(
         if cx.flow.as_ref().expect("flow context").now.expr_override.contains_key(&e) {
             continue;
         }
-        let (info, span) = (cx.flow.as_ref().expect("flow context").info, cx.ast.expr(e).span);
+        let info = cx.flow.as_ref().expect("flow context").info;
         let owner = info.hoist_of(e).map_or(of.1, |h| info.hoist(h).owner);
-        let mut loops = Vec::new();
-        for p in info.around(owner).into_iter().skip(info.around(of.1).len()) {
-            let state = super::branches::here(cx, span)?.1;
-            let (r, elem) = replicas(lw, cx, p, &state, span)?;
-            cx.flow.as_mut().unwrap().push_scope(elem);
-            loops.push(r);
-        }
-        let mut body = Vec::new();
-        let v = lower_expr(lw, cx, e)?;
-        let v = keep(cx, &mut body, (of.0, owner), v, &mut lw.m.tys)?;
-        for r in loops.into_iter().rev() {
-            cx.flow.as_mut().unwrap().now.scopes.pop();
-            let inner = std::mem::take(&mut body);
-            r.each(cx, &mut body, span, inner);
-        }
-        out.append(&mut body);
+        let pars = info.around(owner).into_iter().skip(info.around(of.1).len()).collect::<Vec<_>>();
+        let v = saved_read(lw, cx, out, e, &pars, (of.0, owner))?;
         cx.flow.as_mut().unwrap().now.expr_override.insert(e, v);
     }
     Ok(())
+}
+
+/// The read `e` of [`saved_reads`] in the `par~`s `pars` (the outermost
+/// first) of the scope it is lowered in, each a loop of its replicas.
+fn saved_read(
+    lw: &mut Lowerer,
+    cx: &mut FnCx,
+    out: &mut Vec<Stmt>,
+    e: ExprId,
+    pars: &[NodeId],
+    of: (&str, Owner),
+) -> R<Expr> {
+    let span = cx.ast.expr(e).span;
+    let Some((&p, inner)) = pars.split_first() else {
+        let v = lower_expr(lw, cx, e)?;
+        return keep(cx, out, of, v, &mut lw.m.tys);
+    };
+    let state = super::branches::here(cx, span)?.1;
+    Replicas::scoped(lw, cx, (p, &state, span), out, |lw, cx, _, _, body| saved_read(lw, cx, body, e, inner, of))
 }
 
 /// `v`, made in the scope of `owner` for `name`, as a value the end of the

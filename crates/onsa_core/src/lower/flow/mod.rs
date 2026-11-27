@@ -111,7 +111,7 @@ mod tests;
 use boundary::{gen_params_default, gen_process, gen_process_inplace, gen_render};
 pub(crate) use branches::{tilde_if, tilde_match};
 pub(crate) use generated::burst_ty;
-use generated::{Gen, init_value, range, replicas, replicas_place, ring_len, sfield, spread};
+use generated::{Gen, Replicas, init_value, range, replicas_place, ring_len, sfield, spread};
 pub(crate) use hoist::HoistUses;
 pub(crate) use nodes::lower_flow_expr;
 use phases::{StageRun, call_stage, drive, gen_ctl, gen_init, gen_reset, gen_stage};
@@ -185,6 +185,11 @@ impl FlowFns {
     }
 }
 
+/// A `block` input of a flow: its name, its Core type and its `@param` values (§11.7).
+pub type BlockParam = (String, CTy, Option<ParamInfo>);
+/// A `Sig` input of a flow: its name and its Core type.
+pub type SigInput = (String, CTy);
+
 /// Per-flow metadata kept on the [`Module`] for `onsa interface`, the
 /// backends and the conformance tools.
 #[derive(Debug, Clone)]
@@ -194,9 +199,9 @@ pub struct FlowMeta {
     pub fns: FlowFns,
     pub layout: FlowLayout,
     /// `Ctl` inputs with their `@param` metadata, in input order.
-    pub params: Vec<(String, CTy, Option<ParamInfo>)>,
+    pub params: Vec<BlockParam>,
     /// `Sig` inputs: name and value type.
-    pub sig_inputs: Vec<(String, CTy)>,
+    pub sig_inputs: Vec<SigInput>,
     /// Outputs: name, element type, planar channel count (§11.6).
     pub outputs: Vec<(String, CTy, Option<u32>)>,
     /// The flow's name in its heading: where a diagnostic of its API goes.
@@ -479,6 +484,10 @@ pub(crate) fn implicit_params(lw: &mut Lowerer, member: DefId, span: Span) -> R<
     lacking.into_iter().map(|(at, t)| Ok((at, param(t)?, lw.flow_ty(flow, t, span)?))).collect()
 }
 
+/// The Core items of the flow `flow` (§11.4–§11.6): its types, the ids of
+/// its functions in their one order ([`flow_fns`], then `params_default`), the
+/// functions ([`generate`]), its `SIZE` consts ([`layout_consts`]) and its
+/// [`FlowMeta`].
 fn lower_flow<'b>(lw: &mut Lowerer<'b>, flow: DefId, fd: FlowDef, span: Span) -> R<FlowFns> {
     let a: &'b onsa_sema::Analysis = lw.a;
     let Some(info) = a.flows.get(&flow) else { return Err(internal(span, "flow body was not checked")) };
@@ -488,7 +497,6 @@ fn lower_flow<'b>(lw: &mut Lowerer<'b>, flow: DefId, fd: FlowDef, span: Span) ->
     // The binding stage (S-67): the inputs are locals of the body, and the output.
     let locals = info.body.locals.iter().map(|l| Binding { ty: l.ty, at: l.span, decl: l.span });
     bind_tys(lw, std::iter::once(Binding { ty: fd.out, at: span, decl: span }).chain(locals), &[], span)?;
-    let need = |f: FlowFn| generated_fn(a, &fd, f).ok_or_else(|| internal(span, format!("flow without {f:?}")));
     let state_ty = lw.flow_ty(flow, FlowTy::State, span)?;
     let config_ty = lw.flow_ty(flow, FlowTy::Config, span)?;
     let params_ty = lw.flow_ty(flow, FlowTy::Params, span)?;
@@ -504,24 +512,7 @@ fn lower_flow<'b>(lw: &mut Lowerer<'b>, flow: DefId, fd: FlowDef, span: Span) ->
         }
         (None, None) => out_val,
     };
-
-    // Boundary outputs from the `Rendered` struct (`Buf[T]` / `[Buf[T]; N]` fields, §11.6).
-    let mut outputs = Vec::new();
-    if let DefKind::Struct(s) = &a.def(out_def).kind
-        && let Fields::Named(fs) = &s.fields
-    {
-        for f in fs {
-            let (elem, n) = match a.types.get(f.ty).clone() {
-                STy::Builtin(BuiltinTy::Buf, args) => (args[0], None),
-                STy::Array(buf, Len::Const(n)) => match a.types.get(buf).clone() {
-                    STy::Builtin(BuiltinTy::Buf, args) => (args[0], Some(n)),
-                    _ => return Err(internal(span, "Rendered field shape")),
-                },
-                _ => return Err(internal(span, "Rendered field shape")),
-            };
-            outputs.push((f.name.clone(), lw.core_ty(elem, &[], span)?, n));
-        }
-    }
+    let outputs = rendered_outputs(lw, out_def, span)?;
     let out_is_struct = matches!(lw.m.tys.kind(out_val), TyKind::Struct(_));
 
     check_stages(info, span)?;
@@ -542,8 +533,58 @@ fn lower_flow<'b>(lw: &mut Lowerer<'b>, flow: DefId, fd: FlowDef, span: Span) ->
         outputs,
         out_is_struct,
     };
-
     let base = lw.qual_name(flow);
+    let mut fns = flow_fns(lw, &shape, info, config_ty, &base)?;
+    let (params, sig_inputs) = param_values(lw, &shape)?;
+    // Of the C API alone, when every `block` input has a `default` (§11.7, §14.2, S-625).
+    let defaults: Option<Vec<(CTy, ParamNumber)>> =
+        params.iter().map(|(_, t, p)| Some((*t, p.as_ref()?.number(ParamKey::Default)?))).collect();
+    fns.params_default = defaults.is_some().then(|| push_fn(lw, format!("{base}.params_default"), false, span));
+    generate(lw, &shape, info, &fns, defaults)?;
+    let layout = layout_consts(lw, &fd, state_ty, span);
+    lw.m.flows.push(FlowMeta {
+        name: base,
+        fns: fns.clone(),
+        layout,
+        params,
+        sig_inputs,
+        outputs: shape.outputs.clone(),
+        name_span: a.def(flow).name_span,
+    });
+    Ok(fns)
+}
+
+/// The boundary outputs of a flow, of the fields of its `Rendered` struct
+/// `out_def` (`Buf[T]` / `[Buf[T]; N]`, §11.6): name, element type, planar count.
+fn rendered_outputs(lw: &mut Lowerer, out_def: DefId, span: Span) -> R<Vec<(String, CTy, Option<u32>)>> {
+    let a = lw.a;
+    let mut outputs = Vec::new();
+    if let DefKind::Struct(s) = &a.def(out_def).kind
+        && let Fields::Named(fs) = &s.fields
+    {
+        for f in fs {
+            let (elem, n) = match a.types.get(f.ty).clone() {
+                STy::Builtin(BuiltinTy::Buf, args) => (args[0], None),
+                STy::Array(buf, Len::Const(n)) => match a.types.get(buf).clone() {
+                    STy::Builtin(BuiltinTy::Buf, args) => (args[0], Some(n)),
+                    _ => return Err(internal(span, "Rendered field shape")),
+                },
+                _ => return Err(internal(span, "Rendered field shape")),
+            };
+            outputs.push((f.name.clone(), lw.core_ty(elem, &[], span)?, n));
+        }
+    }
+    Ok(outputs)
+}
+
+/// The ids of the functions of the flow of `shape` (§11.6) in the order
+/// they are made, the order of the Core and of the C (`ctl`, `tick`, those
+/// of the slower ticks and of the events, then those of the members), in its
+/// [`FlowFns`], of the names after `base`: `params_default` made after
+/// the values of [`param_values`], no `_reset_kept` yet.
+fn flow_fns(lw: &mut Lowerer, shape: &FlowShape, info: &FlowInfo, config_ty: TypeId, base: &str) -> R<FlowFns> {
+    let (a, fd, span) = (lw.a, &shape.flow, shape.span);
+    let need = |f: FlowFn| generated_fn(a, fd, f).ok_or_else(|| internal(span, format!("flow without {f:?}")));
     let ctl = push_fn(lw, format!("{base}.ctl"), true, span);
     let tick = push_fn(lw, format!("{base}.tick"), true, span);
     let mut stages = Vec::new();
@@ -568,8 +609,33 @@ fn lower_flow<'b>(lw: &mut Lowerer<'b>, flow: DefId, fd: FlowDef, span: Span) ->
     };
     let mut id = |d: Option<DefId>| d.map(|d| lw.fn_id(d, Vec::new(), span)).transpose();
     let process = id(made(FlowFn::Process)?)?;
-    let process_inplace = id(generated_fn(a, &fd, FlowFn::ProcessInplace).filter(|_| process.is_some()))?;
+    let process_inplace = id(generated_fn(a, fd, FlowFn::ProcessInplace).filter(|_| process.is_some()))?;
     let render = id(made(FlowFn::Render)?)?;
+    Ok(FlowFns {
+        flow: shape.def,
+        state: shape.state_ty,
+        config: config_ty,
+        params: shape.params_ty,
+        out: shape.out_ty,
+        init,
+        reset,
+        ctl,
+        tick,
+        stages,
+        events,
+        process,
+        process_inplace,
+        render,
+        params_default: None,
+        reset_kept: None,
+    })
+}
+
+/// The `block` inputs of the flow of `shape` with their `@param` values,
+/// and its `Sig` inputs, by name and Core type, made after the ids of
+/// [`flow_fns`] ([`FlowMeta`]).
+fn param_values(lw: &mut Lowerer, shape: &FlowShape) -> R<(Vec<BlockParam>, Vec<SigInput>)> {
+    let a = lw.a;
     // The values of `@param`, read from the analysis in this one place (§11.7).
     let (mut params, mut sig_inputs) = (Vec::new(), Vec::new());
     for Input { decl: i, stage, .. } in &shape.inputs {
@@ -580,50 +646,44 @@ fn lower_flow<'b>(lw: &mut Lowerer<'b>, flow: DefId, fd: FlowDef, span: Span) ->
             ClockStage::Init | ClockStage::Event(_) | ClockStage::Tick(_) => {}
         }
     }
-    // Of the C API alone, when every `block` input has a `default` (§11.7, §14.2, S-625).
-    let defaults: Option<Vec<(CTy, ParamNumber)>> =
-        params.iter().map(|(_, t, p)| Some((*t, p.as_ref()?.number(ParamKey::Default)?))).collect();
-    let params_default = defaults.is_some().then(|| push_fn(lw, format!("{base}.params_default"), false, span));
-    let fns = FlowFns {
-        flow,
-        state: state_ty,
-        config: config_ty,
-        params: params_ty,
-        out: out_ty,
-        init,
-        reset,
-        ctl,
-        tick,
-        stages,
-        events,
-        process,
-        process_inplace,
-        render,
-        params_default,
-        reset_kept: None,
-    };
+    Ok((params, sig_inputs))
+}
 
+/// The functions of the flow of `shape` (§11.4, §11.6): those of the phases
+/// and the stages, with the check of the hoisted fields they write and read
+/// ([`hoist::checked`]); `process`, `process_inplace` and `render`; and
+/// `params_default` of `defaults`.
+fn generate<'b>(
+    lw: &mut Lowerer<'b>,
+    shape: &FlowShape,
+    info: &'b FlowInfo,
+    fns: &FlowFns,
+    defaults: Option<Vec<(CTy, ParamNumber)>>,
+) -> R<()> {
     hoist::checked(lw, info, |lw| {
-        gen_init(lw, &shape, info, &fns)?;
-        gen_reset(lw, &shape, info, &fns)?;
-        gen_ctl(lw, &shape, info, &fns)?;
+        gen_init(lw, shape, info, fns)?;
+        gen_reset(lw, shape, info, fns)?;
+        gen_ctl(lw, shape, info, fns)?;
         let events = info.events.iter().map(|p| ClockStage::Event(p.src));
         for s in [ClockStage::SAMPLE].into_iter().chain(info.stages.iter().copied()).chain(events) {
-            gen_stage(lw, &shape, info, &fns, s)?;
+            gen_stage(lw, shape, info, fns, s)?;
         }
         Ok(())
     })?;
     if fns.process.is_some() {
-        gen_process(lw, &shape, info, &fns)?;
-        gen_process_inplace(lw, &shape, info, &fns)?;
-        gen_render(lw, &shape, info, &fns)?;
+        gen_process(lw, shape, info, fns)?;
+        gen_process_inplace(lw, shape, info, fns)?;
+        gen_render(lw, shape, info, fns)?;
     }
-    gen_params_default(lw, &shape, info, &fns, defaults)?;
+    gen_params_default(lw, shape, info, fns, defaults)
+}
 
-    // Layout and the `SIZE` / `BULK_SIZE` consts (T3-6).
+/// The layout of the state `state_ty` of the flow `fd` and its `SIZE` /
+/// `BULK_SIZE` consts (T3-6), those of its members.
+fn layout_consts(lw: &mut Lowerer, fd: &FlowDef, state_ty: TypeId, span: Span) -> FlowLayout {
     let layout = flow_layout(&lw.m, state_ty, lw.bulk_threshold);
     for (name, value) in [("SIZE", layout.size), ("BULK_SIZE", layout.bulk_size)] {
-        let Some(d) = member(&fd, name) else { continue };
+        let Some(d) = member(fd, name) else { continue };
         let id = ConstId(lw.m.consts.len() as u32);
         let cname = lw.qual_name(d);
         lw.m.consts.push(ConstDef {
@@ -633,16 +693,7 @@ fn lower_flow<'b>(lw: &mut Lowerer<'b>, flow: DefId, fd: FlowDef, span: Span) ->
         });
         lw.const_ids.insert((d, Vec::new()), id);
     }
-    lw.m.flows.push(FlowMeta {
-        name: base,
-        fns: fns.clone(),
-        layout,
-        params,
-        sig_inputs,
-        outputs: shape.outputs.clone(),
-        name_span: a.def(flow).name_span,
-    });
-    Ok(fns)
+    layout
 }
 
 /// The `Option` of an event given out or none (§11.11).

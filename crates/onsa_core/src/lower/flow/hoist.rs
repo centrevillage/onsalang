@@ -181,15 +181,9 @@ fn work_of(
         AK::Match { tilde: Some(_), .. } => tilde_match_work(lw, cx, info, e, s, state, out)?,
         AK::Par { body, .. } => {
             let Some(&id) = info.node_of.get(&e) else { return Err(internal(span, "a `par~` of no node")) };
-            let (r, elem) = replicas(lw, cx, id, state, span)?;
-            cx.flow.as_mut().unwrap().push_scope(elem.clone());
-            let mut b = Vec::new();
-            let done = work(lw, cx, info, *body, s, &elem, &mut b);
-            cx.flow.as_mut().unwrap().now.scopes.pop();
-            done?;
-            if !b.is_empty() {
-                r.each(cx, out, span, b);
-            }
+            Replicas::scoped(lw, cx, (id, state, span), out, |lw, cx, _, elem, b| {
+                work(lw, cx, info, *body, s, elem, b)
+            })?;
         }
         _ => {
             for x in ast.sub_exprs(e) {
