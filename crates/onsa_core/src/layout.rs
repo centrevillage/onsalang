@@ -112,6 +112,12 @@ impl Module {
         }
     }
 
+    /// Whether every type of the table has its facts (the verifier, V-20).
+    pub(crate) fn has_all_facts(&self) -> bool {
+        let of = &self.facts.of;
+        of.len() == self.tys.kinds().len() && of.iter().all(|s| matches!(s, Slot::Done(_)))
+    }
+
     /// Whether the module has the type `k` and its facts, making no type.
     pub(crate) fn has_facts(&self, k: &TyKind) -> bool {
         self.tys.find(k).is_some_and(|t| matches!(self.facts.of.get(t.index()), Some(Slot::Done(_))))

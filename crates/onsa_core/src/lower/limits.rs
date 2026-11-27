@@ -64,17 +64,6 @@ pub(super) fn part_mut(k: &mut TyKind, i: usize) -> Option<&mut CTy> {
     }
 }
 
-/// The parts of a form, in the order of [`part_mut`].
-fn parts(k: &TyKind) -> impl Iterator<Item = CTy> + '_ {
-    let (one, many, params, ret): (_, &[CTy], &[(Mode, CTy)], _) = match k {
-        TyKind::Array(e, _) | TyKind::Span(e) | TyKind::Buf(e) => (Some(*e), &[], &[], None),
-        TyKind::Tuple(ts) => (None, ts, &[], None),
-        TyKind::FnPtr(f) => (None, &[], &f.params, Some(f.ret)),
-        _ => (None, &[], &[], None),
-    };
-    one.into_iter().chain(many.iter().copied()).chain(params.iter().map(|&(_, t)| t)).chain(ret)
-}
-
 fn limit_fail(d: Diagnostic) -> Fail {
     let (span, msg) = (d.span, d.message.clone());
     Fail { kind: FailKind::Limit, span, msg, hole: None, report: Some(Box::new(d)) }
@@ -97,7 +86,7 @@ impl Lowerer<'_> {
         for k in self.m.tys.kinds().get(start..=ty.index()).unwrap_or_default() {
             let m = match k {
                 TyKind::Struct(id) | TyKind::Enum(id) => self.type_measures.get(id).copied().unwrap_or(Measure::LEAF),
-                k => parts(k).fold(shape(k).map_or(Measure::LEAF, form), |m, t| m.with(self.measures[t.index()])),
+                k => k.parts().fold(shape(k).map_or(Measure::LEAF, form), |m, t| m.with(self.measures[t.index()])),
             };
             self.measures.push(m);
         }

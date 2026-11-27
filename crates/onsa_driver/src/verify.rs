@@ -48,8 +48,9 @@ impl fmt::Display for VerifyFailure {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "internal error: the Core verifier rejected the output of {}: in `{}`: {}",
+            "internal error: the Core verifier rejected the output of {}: {}: in `{}`: {}",
             self.stage.name(),
+            self.error.rule,
             self.error.fn_name,
             self.error.message
         )

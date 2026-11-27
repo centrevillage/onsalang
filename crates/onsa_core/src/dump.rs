@@ -7,7 +7,7 @@ use std::fmt::Write;
 use crate::ir::*;
 
 pub fn dump(m: &Module) -> String {
-    let mut d = Dumper { m, out: String::new(), indent: 0, locals: &[], dups: HashSet::new() };
+    let mut d = Dumper::new(m);
     for t in &m.types {
         d.type_def(t);
     }
@@ -23,7 +23,7 @@ pub fn dump(m: &Module) -> String {
 /// The `const`s and functions named `name`, as in the dump (the part of a
 /// module a verifier error names, R-82).
 pub fn dump_item(m: &Module, name: &str) -> String {
-    let mut d = Dumper { m, out: String::new(), indent: 0, locals: &[], dups: HashSet::new() };
+    let mut d = Dumper::new(m);
     for c in m.consts.iter().filter(|c| c.name == name) {
         d.const_def(c);
     }
@@ -35,12 +35,14 @@ pub fn dump_item(m: &Module, name: &str) -> String {
 
 /// One type, as in the dump.
 pub fn type_name(m: &Module, ty: CTy) -> String {
-    kind_name(m, m.tys.kind(ty))
+    let mut d = Dumper::new(m);
+    d.ty(ty);
+    d.out
 }
 
 /// A type of the kind `k`, as in the dump, whether `m` has it or not.
 pub fn kind_name(m: &Module, k: &TyKind) -> String {
-    let mut d = Dumper { m, out: String::new(), indent: 0, locals: &[], dups: HashSet::new() };
+    let mut d = Dumper::new(m);
     d.kind(k);
     d.out
 }
@@ -52,9 +54,15 @@ struct Dumper<'a> {
     locals: &'a [Local],
     /// The names of more than one of `locals`, made once for the function (R-498).
     dups: HashSet<&'a str>,
+    /// The id of the type whose part is being written: a part is before it.
+    below: usize,
 }
 
 impl<'a> Dumper<'a> {
+    fn new(m: &'a Module) -> Self {
+        Dumper { m, out: String::new(), indent: 0, locals: &[], dups: HashSet::new(), below: usize::MAX }
+    }
+
     fn nl(&mut self) {
         self.out.push('\n');
         for _ in 0..self.indent {
@@ -62,9 +70,17 @@ impl<'a> Dumper<'a> {
         }
     }
 
+    /// A type out of range, or a part not before its type (a broken table,
+    /// V-20), is marked, so the dump ends on any table.
     fn ty(&mut self, t: CTy) {
         let m = self.m;
-        self.kind(m.tys.kind(t));
+        let Some(k) = m.tys.kinds().get(t.index()).filter(|_| t.index() < self.below) else {
+            let _ = write!(self.out, "<bad ty {}>", t.index());
+            return;
+        };
+        let outer = std::mem::replace(&mut self.below, t.index());
+        self.kind(k);
+        self.below = outer;
     }
 
     fn kind(&mut self, k: &TyKind) {
@@ -546,8 +562,8 @@ impl<'a> Dumper<'a> {
                 self.out.push(')');
             }
             ExprKind::Payload { base, tag, index } => {
-                let vname = match self.m.tys.kind(base.ty) {
-                    TyKind::Enum(id) => Self::variant_name(self.type_def_of(*id), *tag),
+                let vname = match self.m.tys.kinds().get(base.ty.index()) {
+                    Some(TyKind::Enum(id)) => Self::variant_name(self.type_def_of(*id), *tag),
                     _ => tag.to_string(),
                 };
                 self.out.push_str("payload(");
@@ -563,8 +579,8 @@ impl<'a> Dumper<'a> {
                 self.block(else_);
             }
             ExprKind::Switch { scrutinee, arms, default } => {
-                let names: Vec<String> = match self.m.tys.kind(scrutinee.ty) {
-                    TyKind::Enum(id) => match self.type_def_of(*id).map(|d| &d.kind) {
+                let names: Vec<String> = match self.m.tys.kinds().get(scrutinee.ty.index()) {
+                    Some(TyKind::Enum(id)) => match self.type_def_of(*id).map(|d| &d.kind) {
                         Some(TypeDefKind::Enum { variants }) => variants.iter().map(|(n, _)| n.clone()).collect(),
                         _ => Vec::new(),
                     },

@@ -280,7 +280,9 @@ fn the_verifier_rejects_a_hoisted_local_without_a_let_in_a_scope() {
     for (h, body) in [(0, Block::default()), (3, top)] {
         let mut m = module(&[("t", arr())], body);
         m.fns[0].hoisted = vec![LocalId(h)];
+        m.fill_all_facts();
         let err = verify(&m).unwrap_err();
         assert!(err.message.contains("has no `let` below the top of the body"), "{err}");
+        assert_eq!(err.rule, crate::Rule::V18, "{err}");
     }
 }

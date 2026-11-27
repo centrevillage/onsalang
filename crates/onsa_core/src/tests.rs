@@ -413,6 +413,7 @@ fn a_cycle_of_what_lowering_makes_is_not_reported() {
 fn verifier_rejects_bad_modules() {
     let span = onsa_diag::Span::new(FileId(0), 0, 0);
     let mut m = Module::default();
+    m.fill_all_facts();
     m.fns.push(FnDef {
         name: "bad".into(),
         params: Vec::new(),
@@ -432,6 +433,7 @@ fn verifier_rejects_bad_modules() {
     });
     let err = verify(&m).unwrap_err();
     assert!(err.message.contains("read before definition"), "{err}");
+    assert_eq!(err.rule, crate::Rule::V04, "{err}");
     // Type mismatch: a Bool body for an I32 function.
     m.fns[0].body = Some(Block {
         stmts: Vec::new(),
@@ -439,6 +441,7 @@ fn verifier_rejects_bad_modules() {
     });
     let err = verify(&m).unwrap_err();
     assert!(err.message.contains("mismatch"), "{err}");
+    assert_eq!(err.rule, crate::Rule::V01, "{err}");
 }
 
 /// V-19 (S-196): an index known in range is in the sample loop of a generated `process` only. The same
@@ -448,6 +451,7 @@ fn the_verifier_rejects_an_index_known_in_range_outside_the_sample_loop() {
     let mut m = core("pub flow f(x: F32 at sample) -> F32 at sample {\n  x\n}\n");
     let span = onsa_diag::Span::new(FileId(0), 0, 0);
     let one = m.tys.intern(TyKind::Array(Types::U32, 1));
+    m.fill_all_facts();
     let index = |bounds: Bounds| {
         let zero = Expr::new(Types::U32, span, ExprKind::Lit(Lit::Int(0)));
         let base = Expr::new(one, span, ExprKind::Array(vec![zero.clone()]));
@@ -463,6 +467,7 @@ fn the_verifier_rejects_an_index_known_in_range_outside_the_sample_loop() {
     body(&mut m, process)[0] = index(Bounds::Known);
     let err = verify(&m).unwrap_err();
     assert!(err.message.contains("outside the sample loop") && err.fn_name.ends_with(".process"), "{err}");
+    assert_eq!(err.rule, crate::Rule::V19, "{err}");
     body(&mut m, process).remove(0);
     verify(&m).unwrap_or_else(|e| panic!("{e}"));
     let i = LocalId(0);

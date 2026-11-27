@@ -6,8 +6,8 @@
 use std::path::Path;
 
 use onsa_core::{
-    Block, ConstId, Expr, ExprKind, FnId, Lit, LocalId, MsgId, PanicOrigin, Stmt, StmtKind, TyKind, TypeId, Types,
-    VerifyError,
+    Block, ConstId, Expr, ExprKind, FnId, Lit, LocalId, MsgId, PanicOrigin, Rule, Stmt, StmtKind, TyKind, TypeId,
+    Types, VerifyError,
 };
 use onsa_driver::{BuildError, CoreStage, LowerError, VerifyFailure};
 use onsa_tests::case::{Case, CaseKind, Setup};
@@ -55,18 +55,21 @@ fn a_broken_function_is_reported_with_its_stage_rule_and_core() {
     assert_eq!(v.stage, CoreStage::Lower);
     assert_eq!(v.error.fn_name, "t.f");
     assert!(v.error.message.contains("type mismatch"), "{v}");
+    assert_eq!((v.error.rule, v.error.span), (Rule::V01, Some(span_of_f(&core().1))), "{v}");
     // The Core of the item, and only of it.
     assert!(v.item_core.starts_with("fn t.f("), "{}", v.item_core);
     assert!(v.item_core.contains("true"), "{}", v.item_core);
     assert!(!v.item_core.contains("const t.K"), "{}", v.item_core);
     let report = v.report();
-    for part in ["internal error", "lowering", "`t.f`", "type mismatch", "fn t.f("] {
+    for part in ["internal error", "lowering", "V-01", "`t.f`", "type mismatch", "fn t.f("] {
         assert!(report.contains(part), "`{part}` missing from:\n{report}");
     }
     // The same report through the lowering error: the internal error of S-67.
     let rendered = LowerError::Internal(v.clone().into()).render(&loaded.sources);
     assert!(rendered.starts_with(&report), "{rendered}");
     assert!(rendered.contains("a bug in the compiler"), "{rendered}");
+    // The position of the node, from the verifier.
+    assert!(rendered.contains("  --> t.onsa:3:"), "{rendered}");
 }
 
 #[test]
@@ -100,12 +103,16 @@ fn a_local_out_of_range_is_reported_without_a_panic() {
 }
 
 /// The dump marks every id out of range instead of panicking (the verifier
-/// itself is not run here: its own checks of these ids are W8-02).
+/// itself is not run here: its own checks of these ids, V-20, are
+/// `onsa_core`'s tests).
 #[test]
 fn the_dump_marks_ids_out_of_range() {
     let (_, mut m) = core();
     let span = span_of_f(&m);
     let unit = |kind| Stmt { span, kind: StmtKind::Expr(Expr::new(Types::UNIT, span, kind)) };
+    let mut other = Types::default();
+    let n = m.tys.kinds().len();
+    let far = (0..).map(|i| other.intern(TyKind::Array(Types::U32, i))).find(|t| t.index() > n).expect("a type");
     let stmts = vec![
         Stmt { span, kind: StmtKind::Let(LocalId(998), Expr::new(Types::BOOL, span, ExprKind::Lit(Lit::Bool(true)))) },
         unit(ExprKind::Call { fn_: FnId(999), args: Vec::new() }),
@@ -113,6 +120,8 @@ fn the_dump_marks_ids_out_of_range() {
         unit(ExprKind::Struct { ty: TypeId(999), fields: Vec::new() }),
         unit(ExprKind::Variant { ty: TypeId(997), tag: 0, fields: Vec::new() }),
         unit(ExprKind::Zeroed),
+        // A type of another table, out of this one.
+        Stmt { span, kind: StmtKind::Expr(Expr::new(far, span, ExprKind::Zeroed)) },
     ];
     let value = Expr::new(
         m.tys.intern(TyKind::Struct(TypeId(996))),
@@ -128,6 +137,7 @@ fn the_dump_marks_ids_out_of_range() {
         "<bad type 999> {}",
         "<bad type 997>.0",
         "panic(<bad message 999>)",
+        &format!("zeroed:<bad ty {}>", far.index()),
     ] {
         assert!(text.contains(part), "`{part}` missing from:\n{text}");
     }
@@ -164,7 +174,12 @@ fn every_kind_of_stage_failure_is_an_internal_error() {
 fn injected(what: &str) -> VerifyFailure {
     VerifyFailure {
         stage: CoreStage::Lower,
-        error: VerifyError { fn_name: "m.f".into(), message: format!("injected at {what}") },
+        error: VerifyError {
+            rule: Rule::V01,
+            fn_name: "m.f".into(),
+            span: None,
+            message: format!("injected at {what}"),
+        },
         item_core: String::new(),
     }
 }

@@ -32,7 +32,7 @@ pub enum Origin {
     /// Lowering reached a state it cannot be in (`internal(...)`).
     Lowering,
     /// The Core verifier rejected the output of a stage (R-82).
-    Verify(VerifyFailure),
+    Verify(Box<VerifyFailure>),
     /// The C compiler rejected the generated C.
     GeneratedC,
     /// The output of `onsa fmt` is not the program of its input
@@ -93,7 +93,7 @@ impl InternalError {
 
 impl From<VerifyFailure> for InternalError {
     fn from(v: VerifyFailure) -> Self {
-        InternalError { message: v.to_string(), origin: Origin::Verify(v), span: None }
+        InternalError { message: v.to_string(), span: v.error.span, origin: Origin::Verify(Box::new(v)) }
     }
 }
 

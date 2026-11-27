@@ -182,6 +182,29 @@ fn a_type_that_holds_itself_or_has_no_facts_is_an_internal_error() {
     assert_eq!(m.facts(pair), TyFacts { size: 8, align: 4, views: false });
 }
 
+/// The verifier holds the facts to cover the type table (V-20): a slot
+/// empty or open, the table of facts shorter, or longer by a filled slot,
+/// is rejected.
+#[test]
+fn the_verifier_rejects_facts_that_do_not_cover_the_types() {
+    let m = crate::tests::core("pub flow f(x: F32 at sample) -> F32 at sample {\n  x\n}\n");
+    assert!(m.has_all_facts());
+    let last = m.facts.of.len() - 1;
+    for i in 0..5 {
+        let mut m = m.clone();
+        let of = &mut m.facts.of;
+        match i {
+            0 => of[0] = Slot::Empty,
+            1 => of[3] = Slot::Open,
+            2 => of[last] = Slot::Empty,
+            3 => assert!(of.pop().is_some()),
+            _ => of.push(of[0]),
+        }
+        let err = crate::verify(&m).expect_err("facts");
+        assert!(err.rule == crate::Rule::V20 && err.message.contains("the facts do not cover"), "{i}: {err}");
+    }
+}
+
 /// The tag of an enum is the smallest of U8, U16, U32 for its number of variants.
 #[test]
 fn the_tag_of_an_enum_by_its_variants() {

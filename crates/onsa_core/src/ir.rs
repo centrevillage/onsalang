@@ -83,6 +83,19 @@ pub enum TyKind {
     Buf(CTy),
 }
 
+impl TyKind {
+    /// The parts of a form, in the order of `lower::limits::part_mut`.
+    pub fn parts(&self) -> impl Iterator<Item = CTy> + '_ {
+        let (one, many, params, ret): (_, &[CTy], &[(Mode, CTy)], _) = match self {
+            TyKind::Array(e, _) | TyKind::Span(e) | TyKind::Buf(e) => (Some(*e), &[], &[], None),
+            TyKind::Tuple(ts) => (None, ts, &[], None),
+            TyKind::FnPtr(f) => (None, &[], &f.params, Some(f.ret)),
+            _ => (None, &[], &[], None),
+        };
+        one.into_iter().chain(many.iter().copied()).chain(params.iter().map(|&(_, t)| t)).chain(ret)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct FnSig {
     pub rt: bool,
