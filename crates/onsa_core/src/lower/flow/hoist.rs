@@ -157,7 +157,7 @@ fn work_of(
             if !r.stmts.is_empty() {
                 let mut c = cond_value(lw, cx, info, *lhs, s, state)?;
                 if *op == BinOp::Or {
-                    c = Expr::new(Ty::Bool, span, ExprKind::Unary(UnOp::Not, Box::new(c)));
+                    c = Expr::new(Types::BOOL, span, ExprKind::Unary(UnOp::Not, Box::new(c)));
                 }
                 out.push(stmt(span, StmtKind::If(c, r, Block::default())));
             }
@@ -176,7 +176,7 @@ fn work_of(
                 return Err(unsupported(span, Feature::ValueMatch, &[]));
             }
             let v = cond_value(lw, cx, info, *scrutinee, s, state)?;
-            let m = lower_match_with(lw, cx, e, v, arms, Ty::Unit, bind_read, &mut |lw, cx, i| {
+            let m = lower_match_with(lw, cx, e, v, arms, Types::UNIT, bind_read, &mut |lw, cx, i| {
                 under(lw, cx, arms[i].body)
             })?;
             push_expr_stmt(m, out);
@@ -254,7 +254,7 @@ fn tilde_if_work(
     for (c, mut b) in conds.into_iter().rev() {
         if !later.is_empty() {
             let v = cond_value(lw, cx, info, c, s, state)?;
-            let not = Expr::new(Ty::Bool, v.span, ExprKind::Unary(UnOp::Not, Box::new(v)));
+            let not = Expr::new(Types::BOOL, v.span, ExprKind::Unary(UnOp::Not, Box::new(v)));
             let then = Block { stmts: std::mem::take(&mut later), value: None };
             b.push(stmt(cx.ast.expr(c).span, StmtKind::If(not, then, Block::default())));
         }

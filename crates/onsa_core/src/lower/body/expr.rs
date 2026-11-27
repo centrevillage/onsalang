@@ -27,7 +27,7 @@ pub(crate) fn lower_expr(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId) -> R<Expr> 
     match cx.info.views.get(&e) {
         Some(v) if v.tail => {
             let to = lw.core_ty(v.to, &cx.args, x.span)?;
-            super::call::coerce(lw, cx, x, &to, core_mode(v.mode))
+            super::call::coerce(lw, cx, x, to, core_mode(v.mode))
         }
         _ => Ok(x),
     }
@@ -35,9 +35,9 @@ pub(crate) fn lower_expr(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId) -> R<Expr> 
 
 /// The Core type of a placeholder, and whether it stands in for a type
 /// lowering does not support (then it is `()`).
-pub(super) fn placeholder_ty(lw: &mut Lowerer, t: TyId, args: &[GenericArg], span: Span) -> R<(Ty, bool)> {
+pub(super) fn placeholder_ty(lw: &mut Lowerer, t: TyId, args: &[GenericArg], span: Span) -> R<(CTy, bool)> {
     match lw.core_ty(t, args, span) {
-        Err(f) if f.kind == FailKind::Unsupported => Ok((Ty::Unit, true)),
+        Err(f) if f.kind == FailKind::Unsupported => Ok((Types::UNIT, true)),
         r => r.map(|t| (t, false)),
     }
 }
@@ -52,7 +52,7 @@ fn lower_expr_at(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId) -> R<Expr> {
         return Ok(v);
     }
     let clock = cx.flow.as_ref().and_then(|f| f.info.clocks.exprs.get(&e).copied());
-    let ty = super::flow::burst_ty(clock, lw.core_ty(cx.value_ty(e)?, &cx.args, span)?);
+    let ty = super::flow::burst_ty(clock, lw.core_ty(cx.value_ty(e)?, &cx.args, span)?, &mut lw.m.tys);
     match cx.expr(e).kind {
         AK::If { tilde: Some(_), .. } => return super::flow::tilde_if(lw, cx, e, ty),
         AK::Match { tilde: Some(_), .. } => return super::flow::tilde_match(lw, cx, e, ty),
@@ -67,14 +67,14 @@ fn lower_expr_at(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId) -> R<Expr> {
     let kind = match &cx.expr(e).kind {
         AK::Lit(l) => match l {
             ALit::Int { value, .. } => ExprKind::Lit(Lit::Int(*value as i128)),
-            ALit::Float { text } => match ty {
-                Ty::Float(k) => ExprKind::Lit(float_text(text, k, span)?),
+            ALit::Float { text } => match *lw.m.tys.kind(ty) {
+                TyKind::Float(k) => ExprKind::Lit(float_text(text, k, span)?),
                 _ => return Err(internal(span, "float literal type")),
             },
             ALit::Char(c) => ExprKind::Lit(Lit::Char(*c)),
             ALit::Bool(b) => ExprKind::Lit(Lit::Bool(*b)),
-            ALit::Str(s) => match &ty {
-                Ty::Struct(id) => crate::lower::fixed_str::value(lw, cx, s, *id, span)?,
+            ALit::Str(s) => match *lw.m.tys.kind(ty) {
+                TyKind::Struct(id) => crate::lower::fixed_str::value(lw, cx, s, id, span)?,
                 _ => return Err(unsupported(span, Feature::StrValues, &[])),
             },
         },
@@ -105,13 +105,11 @@ fn lower_expr_at(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId) -> R<Expr> {
             ExprKind::Array(out)
         }
         AK::Repeat { elem, .. } => {
-            let Ty::Array(_, n) = &ty else { return Err(internal(span, "repeat type")) };
-            let n = *n;
+            let TyKind::Array(_, n) = *lw.m.tys.kind(ty) else { return Err(internal(span, "repeat type")) };
             ExprKind::Repeat { elem: Box::new(lower_expr(lw, cx, *elem)?), n }
         }
         AK::Struct { fields, .. } => {
-            let Ty::Struct(id) = &ty else { return Err(internal(span, "struct literal type")) };
-            let id = *id;
+            let TyKind::Struct(id) = *lw.m.tys.kind(ty) else { return Err(internal(span, "struct literal type")) };
             let defs = lw.struct_fields(id);
             let mut out = Vec::new();
             for (name, _) in &defs {
@@ -123,8 +121,8 @@ fn lower_expr_at(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId) -> R<Expr> {
             ExprKind::Struct { ty: id, fields: out }
         }
         AK::Block(b) => {
-            let blk = lower_block(lw, cx, b, &ty)?;
-            if ty == Ty::Unit && blk.stmts.is_empty() { ExprKind::Lit(Lit::Unit) } else { ExprKind::Block(blk) }
+            let blk = lower_block(lw, cx, b, ty)?;
+            if ty == Types::UNIT && blk.stmts.is_empty() { ExprKind::Lit(Lit::Unit) } else { ExprKind::Block(blk) }
         }
         AK::If { cond, then, else_, .. } => {
             let c = lower_expr(lw, cx, *cond)?;
@@ -133,7 +131,7 @@ fn lower_expr_at(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId) -> R<Expr> {
                 Some(el) => lower_block_expr(lw, cx, *el)?,
                 None => Block::default(),
             };
-            if ty == Ty::Unit {
+            if ty == Types::UNIT {
                 let s = stmt(span, StmtKind::If(c, drop_value(t), drop_value(el)));
                 ExprKind::Block(Block { stmts: vec![s], value: None })
             } else {
@@ -189,7 +187,7 @@ fn lower_expr_at(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId) -> R<Expr> {
             let i = lower_expr(lw, cx, *i)?;
             // The whole `xs[i]`, not its base: the position of its panic
             // (§18.1, S-233).
-            let mut x = index(b, i)?;
+            let mut x = index(b, i, &lw.m.tys)?;
             x.span = span;
             return Ok(x);
         }
@@ -199,7 +197,7 @@ fn lower_expr_at(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId) -> R<Expr> {
     Ok(Expr::new(ty, span, kind))
 }
 
-fn lower_target_value(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId, t: Target, ty: Ty) -> R<Expr> {
+fn lower_target_value(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId, t: Target, ty: CTy) -> R<Expr> {
     let span = cx.expr(e).span;
     if let Target::Local(l) = t
         && let Some(f) = &cx.flow
@@ -218,8 +216,10 @@ fn lower_target_value(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId, t: Target, ty:
             ExprKind::Const(lw.const_id(def, gargs, span)?)
         }
         Target::Variant { index, .. } => {
-            let Ty::Enum(id) = &ty else { return Err(unsupported(span, Feature::VariantCtorValues, &[])) };
-            ExprKind::Variant { ty: *id, tag: index, fields: Vec::new() }
+            let TyKind::Enum(id) = *lw.m.tys.kind(ty) else {
+                return Err(unsupported(span, Feature::VariantCtorValues, &[]));
+            };
+            ExprKind::Variant { ty: id, tag: index, fields: Vec::new() }
         }
         Target::Fn { .. } | Target::Panic => return Err(unsupported(span, Feature::FnValues, &[])),
         Target::Method { .. } | Target::Value => {
@@ -236,7 +236,7 @@ fn lower_binary(
     (op, op_span): (ABinOp, Span),
     lhs: ExprId,
     rhs: ExprId,
-    ty: Ty,
+    ty: CTy,
 ) -> R<Expr> {
     let sp = cx.expr(e).span;
     let l = lower_expr(lw, cx, lhs)?;
@@ -247,7 +247,7 @@ fn lower_binary(
     let out = match op.group() {
         OpGroup::And | OpGroup::Or => {
             let lop = if op.group() == OpGroup::And { LogicOp::And } else { LogicOp::Or };
-            Expr::new(Ty::Bool, sp, ExprKind::Logic { op: lop, lhs: Box::new(l), rhs: Box::new(r) })
+            Expr::new(Types::BOOL, sp, ExprKind::Logic { op: lop, lhs: Box::new(l), rhs: Box::new(r) })
         }
         OpGroup::Comparison => comparison(lw, (op, op_span), l, r, sp)?,
         OpGroup::Additive | OpGroup::Multiplicative | OpGroup::Remainder | OpGroup::Bitwise => {
@@ -277,11 +277,12 @@ fn lower_binary(
                 | ABinOp::And
                 | ABinOp::Or => return Err(not_in_group()),
             };
-            let t = l.ty.clone();
-            if bop == BinOp::Rem && t.is_float() {
-                let Ty::Float(k) = t else { unreachable!() };
+            let t = l.ty;
+            if let TyKind::Float(k) = *lw.m.tys.kind(t)
+                && bop == BinOp::Rem
+            {
                 Expr::new(
-                    Ty::Float(k),
+                    t,
                     sp,
                     ExprKind::Prim {
                         prim: Prim::Math(MathFn::Fmod, k),
@@ -330,27 +331,27 @@ pub(super) fn comparison(lw: &mut Lowerer, (op, op_span): (ABinOp, Span), l: Exp
         | ABinOp::Shl
         | ABinOp::Shr => return Err(not_in_group()),
     };
-    if super::eq::compared_directly(&l.ty) {
+    if super::eq::compared_directly(l.ty, &lw.m.tys) {
         super::eq::compare(cop, l, r, sp)
     } else if matches!(cop, CmpOp::Eq | CmpOp::Ne) {
         let call = super::eq::eq_expr(lw, l, r, sp, op_span)?;
-        Ok(if cop == CmpOp::Eq { call } else { Expr::new(Ty::Bool, sp, ExprKind::Unary(UnOp::Not, Box::new(call))) })
+        Ok(if cop == CmpOp::Eq { call } else { Expr::new(Types::BOOL, sp, ExprKind::Unary(UnOp::Not, Box::new(call))) })
     } else {
         Err(unsupported(op_span, Feature::OrderingAggregates, &[]))
     }
 }
 
-fn lower_try(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId, inner: ExprId, ty: Ty, span: Span) -> R<Expr> {
+fn lower_try(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId, inner: ExprId, ty: CTy, span: Span) -> R<Expr> {
     let v = lower_expr(lw, cx, inner)?;
     // `?` leaves the innermost function (S-192), as `return` does.
     if cx.inline_depth > 0 {
         return Err(unsupported(span, Feature::TryInFromFn, &[]));
     }
-    let Ty::Enum(id) = v.ty.clone() else { return Err(internal(span, "`?` on a non-enum")) };
+    let TyKind::Enum(id) = *lw.m.tys.kind(v.ty) else { return Err(internal(span, "`?` on a non-enum")) };
     let Some(&TryArms { keep, exit }) = cx.info.tries.get(&e) else {
         return Err(internal(span, "a `?` the check did not record"));
     };
-    let Ty::Enum(ret_id) = cx.ret.clone() else {
+    let TyKind::Enum(ret_id) = *lw.m.tys.kind(cx.ret) else {
         return Err(internal(span, "`?` in a function without Option / Result"));
     };
     let mut stmts = Vec::new();
@@ -358,7 +359,7 @@ fn lower_try(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId, inner: ExprId, ty: Ty, 
     // `exit` returns itself, with its elements; `keep` gives its element.
     let n = lw.enum_variants(id)[exit as usize].1.len() as u32;
     let fields = (0..n).map(|i| payload(lw, tmp.clone(), exit, i)).collect::<R<Vec<_>>>()?;
-    let early = Expr::new(cx.ret.clone(), span, ExprKind::Variant { ty: ret_id, tag: exit, fields });
+    let early = Expr::new(cx.ret, span, ExprKind::Variant { ty: ret_id, tag: exit, fields });
     let bad_block = Block { stmts: vec![stmt(span, StmtKind::Return(Some(early)))], value: None };
     let good_block = Block { stmts: Vec::new(), value: Some(Box::new(payload(lw, tmp.clone(), keep, 0)?)) };
     let mut arms = vec![(keep, good_block), (exit, bad_block)];

@@ -35,7 +35,7 @@ pub(crate) fn bind_irrefutable(lw: &mut Lowerer, cx: &mut FnCx, pat: PatId, valu
             Ok(())
         }
         PatKind::TupleStruct { elems, .. } => {
-            let (tag, _) = ctor_of(lw, cx, pat, &value.ty)?;
+            let (tag, _) = ctor_of(lw, cx, pat, value.ty)?;
             let base = materialize(cx, value, out, "__variant");
             for (i, &el) in elems.iter().enumerate() {
                 let f = payload(lw, base.clone(), tag, i as u32)?;
@@ -55,11 +55,11 @@ pub(crate) fn bind_irrefutable(lw: &mut Lowerer, cx: &mut FnCx, pat: PatId, valu
 
 /// Constructor tag (and arity) of the ctor pattern `pat` against an enum
 /// type: the tag the check recorded (`BodyInfo::pat_ctors`).
-fn ctor_of(lw: &mut Lowerer, cx: &FnCx, pat: PatId, ty: &Ty) -> R<(u32, usize)> {
+fn ctor_of(lw: &mut Lowerer, cx: &FnCx, pat: PatId, ty: CTy) -> R<(u32, usize)> {
     let span = cx.ast.pat(pat).span;
     let Some(&tag) = cx.info.pat_ctors.get(&pat) else { return Err(internal(span, "pattern without a constructor")) };
-    let Ty::Enum(id) = ty else { return Err(internal(span, "constructor pattern on a non-enum")) };
-    let arity = lw.enum_variants(*id).get(tag as usize).map(|(_, f)| f.len()).unwrap_or(0);
+    let TyKind::Enum(id) = *lw.m.tys.kind(ty) else { return Err(internal(span, "constructor pattern on a non-enum")) };
+    let arity = lw.enum_variants(id).get(tag as usize).map(|(_, f)| f.len()).unwrap_or(0);
     Ok((tag, arity))
 }
 
@@ -103,30 +103,30 @@ pub(crate) fn pat_test(lw: &mut Lowerer, cx: &mut FnCx, pat: PatId, place: &Expr
     let and = |a: Option<Expr>, b: Option<Expr>| match (a, b) {
         (None, x) | (x, None) => x,
         (Some(a), Some(b)) => {
-            Some(Expr::new(Ty::Bool, span, ExprKind::Logic { op: LogicOp::And, lhs: Box::new(a), rhs: Box::new(b) }))
+            Some(Expr::new(Types::BOOL, span, ExprKind::Logic { op: LogicOp::And, lhs: Box::new(a), rhs: Box::new(b) }))
         }
     };
     match &p.kind {
         PatKind::Wild | PatKind::Bind(_) => Ok(None),
         PatKind::Lit(l) | PatKind::Neg(l) => {
             let neg = matches!(p.kind, PatKind::Neg(_));
-            let v = match (l, &place.ty) {
-                (ALit::Int { value, .. }, Ty::Int(_)) => Lit::Int(if neg { -(*value as i128) } else { *value as i128 }),
-                (ALit::Char(c), Ty::Char) => Lit::Char(*c),
-                (ALit::Bool(b), Ty::Bool) => Lit::Bool(*b),
+            let v = match (l, lw.m.tys.kind(place.ty).clone()) {
+                (ALit::Int { value, .. }, TyKind::Int(_)) => {
+                    Lit::Int(if neg { -(*value as i128) } else { *value as i128 })
+                }
+                (ALit::Char(c), TyKind::Char) => Lit::Char(*c),
+                (ALit::Bool(b), TyKind::Bool) => Lit::Bool(*b),
                 // Of a `FixedStr[N]`, `==` to the value of the literal (§7, §4.2).
-                (ALit::Str(text), Ty::Struct(id)) => {
-                    let id = *id;
-                    let rhs =
-                        Expr::new(place.ty.clone(), span, crate::lower::fixed_str::value(lw, cx, text, id, span)?);
+                (ALit::Str(text), TyKind::Struct(id)) => {
+                    let rhs = Expr::new(place.ty, span, crate::lower::fixed_str::value(lw, cx, text, id, span)?);
                     return crate::lower::eq::eq_expr(lw, place.clone(), rhs, span, span).map(Some);
                 }
                 (ALit::Str(_), _) => return Err(unsupported(span, Feature::StrPatterns, &[])),
                 _ => return Err(internal(span, "literal pattern type")),
             };
-            let rhs = lit(place.ty.clone(), span, v);
+            let rhs = lit(place.ty, span, v);
             Ok(Some(Expr::new(
-                Ty::Bool,
+                Types::BOOL,
                 span,
                 ExprKind::Cmp { op: CmpOp::Eq, lhs: Box::new(place.clone()), rhs: Box::new(rhs) },
             )))
@@ -134,12 +134,12 @@ pub(crate) fn pat_test(lw: &mut Lowerer, cx: &mut FnCx, pat: PatId, place: &Expr
         PatKind::Path(_) => match cx.info.pat_consts.get(&pat).cloned() {
             Some(target) => const_test(lw, cx, target, place, span).map(Some),
             None => {
-                let (tag, _) = ctor_of(lw, cx, pat, &place.ty)?;
+                let (tag, _) = ctor_of(lw, cx, pat, place.ty)?;
                 Ok(Some(tag_test(lw, place, tag)?))
             }
         },
         PatKind::TupleStruct { elems, .. } => {
-            let (tag, _) = ctor_of(lw, cx, pat, &place.ty)?;
+            let (tag, _) = ctor_of(lw, cx, pat, place.ty)?;
             let mut t = Some(tag_test(lw, place, tag)?);
             for (i, &el) in elems.iter().enumerate() {
                 let sub = payload(lw, place.clone(), tag, i as u32)?;
@@ -176,7 +176,7 @@ pub(crate) fn pat_test(lw: &mut Lowerer, cx: &mut FnCx, pat: PatId, place: &Expr
                 t = Some(match t {
                     None => st,
                     Some(prev) => Expr::new(
-                        Ty::Bool,
+                        Types::BOOL,
                         span,
                         ExprKind::Logic { op: LogicOp::Or, lhs: Box::new(prev), rhs: Box::new(st) },
                     ),
@@ -192,15 +192,15 @@ pub(crate) fn pat_test(lw: &mut Lowerer, cx: &mut FnCx, pat: PatId, place: &Expr
 fn const_test(lw: &mut Lowerer, cx: &mut FnCx, target: Target, place: &Expr, span: Span) -> R<Expr> {
     let Target::Const { def, of, inst } = target else { return Err(internal(span, "pattern of no constant")) };
     let (def, gargs) = lw.instance_target(def, of, inst, cx, span)?;
-    let rhs = Expr::new(place.ty.clone(), span, ExprKind::Const(lw.const_id(def, gargs, span)?));
-    Ok(Expr::new(Ty::Bool, span, ExprKind::Cmp { op: CmpOp::Eq, lhs: Box::new(place.clone()), rhs: Box::new(rhs) }))
+    let rhs = Expr::new(place.ty, span, ExprKind::Const(lw.const_id(def, gargs, span)?));
+    Ok(Expr::new(Types::BOOL, span, ExprKind::Cmp { op: CmpOp::Eq, lhs: Box::new(place.clone()), rhs: Box::new(rhs) }))
 }
 
 pub(super) fn tag_test(lw: &Lowerer, place: &Expr, tag: u32) -> R<Expr> {
     let t = tag_of(lw, place.clone())?;
     let span = place.span;
-    let rhs = lit(t.ty.clone(), span, Lit::Int(tag as i128));
-    Ok(Expr::new(Ty::Bool, span, ExprKind::Cmp { op: CmpOp::Eq, lhs: Box::new(t), rhs: Box::new(rhs) }))
+    let rhs = lit(t.ty, span, Lit::Int(tag as i128));
+    Ok(Expr::new(Types::BOOL, span, ExprKind::Cmp { op: CmpOp::Eq, lhs: Box::new(t), rhs: Box::new(rhs) }))
 }
 
 /// Bindings of a (possibly refutable) pattern once it is known to match.
@@ -215,7 +215,7 @@ pub(crate) fn pat_bind(lw: &mut Lowerer, cx: &mut FnCx, pat: PatId, place: &Expr
         }
         PatKind::Wild | PatKind::Lit(_) | PatKind::Neg(_) | PatKind::Path(_) | PatKind::Or(_) => Ok(()),
         PatKind::TupleStruct { elems, .. } => {
-            let (tag, _) = ctor_of(lw, cx, pat, &place.ty)?;
+            let (tag, _) = ctor_of(lw, cx, pat, place.ty)?;
             for (i, &el) in elems.iter().enumerate() {
                 let sub = payload(lw, place.clone(), tag, i as u32)?;
                 pat_bind(lw, cx, el, &sub, out)?;
@@ -247,7 +247,7 @@ pub(super) fn lower_match(
     e: ExprId,
     scrutinee: ExprId,
     arms: &[ast::MatchArm],
-    ty: Ty,
+    ty: CTy,
 ) -> R<Expr> {
     let scrut_ast = match &cx.expr(scrutinee).kind {
         AK::Move(inner) => *inner,
@@ -264,7 +264,7 @@ pub(super) fn lower_match(
 /// and the body; a string literal against a stand-in is the E0200 of one
 /// at the head (R-434).
 pub(crate) fn arm_test(lw: &mut Lowerer, cx: &mut FnCx, pat: PatId, place: &Expr) -> R<(Option<Expr>, bool)> {
-    let stand_in = place.ty == Ty::Unit && lw.stand_in_spans.contains(&place.span);
+    let stand_in = place.ty == Types::UNIT && lw.stand_in_spans.contains(&place.span);
     let hole = Hole::Pat(cx.module, pat);
     let placeholder = lw.holes.contains(&hole);
     if !placeholder && !stand_in {
@@ -288,17 +288,17 @@ pub(crate) fn lower_match_with(
     e: ExprId,
     s: Expr,
     arms: &[ast::MatchArm],
-    ty: Ty,
+    ty: CTy,
     bind: fn(&mut Lowerer, &mut FnCx, PatId, &Expr, &mut Vec<Stmt>) -> R<()>,
     body: &mut dyn FnMut(&mut Lowerer, &mut FnCx, usize) -> R<Block>,
 ) -> R<Expr> {
     let span = cx.expr(e).span;
     let mut stmts = Vec::new();
     let place = materialize(cx, s, &mut stmts, "__match");
-    let want = ty != Ty::Unit;
+    let want = ty != Types::UNIT;
     // Fast path: every arm is a constructor (or a final catch-all) with
     // irrefutable sub-patterns and no guard -> `Switch`.
-    let simple = matches!(place.ty, Ty::Enum(_))
+    let simple = matches!(lw.m.tys.kind(place.ty), TyKind::Enum(_))
         && arms.iter().all(|a| a.guard.is_none())
         && arms.iter().enumerate().all(|(i, a)| match &cx.ast.pat(a.pat).kind {
             PatKind::Path(_) => true,
@@ -319,7 +319,7 @@ pub(crate) fn lower_match_with(
                     default = Some(Block { stmts: b, value: if want { body.value } else { None } });
                 }
                 _ => {
-                    let (tag, _) = ctor_of(lw, cx, arm.pat, &place.ty)?;
+                    let (tag, _) = ctor_of(lw, cx, arm.pat, place.ty)?;
                     bind(lw, cx, arm.pat, &place, &mut b)?;
                     let body = body(lw, cx, i)?;
                     b.extend(body.stmts);
@@ -332,7 +332,7 @@ pub(crate) fn lower_match_with(
                 }
             }
         }
-        let sw = Expr::new(ty.clone(), span, ExprKind::Switch { scrutinee: Box::new(place), arms: sw_arms, default });
+        let sw = Expr::new(ty, span, ExprKind::Switch { scrutinee: Box::new(place), arms: sw_arms, default });
         return Ok(if stmts.is_empty() {
             sw
         } else {
@@ -340,16 +340,16 @@ pub(crate) fn lower_match_with(
         });
     }
     // General path: `if` chain with a `done` flag (guards may fall through).
-    let done = cx.temp("__done", Ty::Bool);
+    let done = cx.temp("__done", Types::BOOL);
     stmts.push(stmt(span, StmtKind::Let(done, bool_lit(span, false))));
-    let result = if want { Some(cx.temp("__result", ty.clone())) } else { None };
+    let result = if want { Some(cx.temp("__result", ty)) } else { None };
     for (i, arm) in arms.iter().enumerate() {
-        let not_done = Expr::new(Ty::Bool, span, ExprKind::Unary(UnOp::Not, Box::new(local_expr(cx, done, span))));
+        let not_done = Expr::new(Types::BOOL, span, ExprKind::Unary(UnOp::Not, Box::new(local_expr(cx, done, span))));
         let (test, binds) = arm_test(lw, cx, arm.pat, &place)?;
         let cond = match test {
             None => not_done,
             Some(t) => Expr::new(
-                Ty::Bool,
+                Types::BOOL,
                 span,
                 ExprKind::Logic { op: LogicOp::And, lhs: Box::new(not_done), rhs: Box::new(t) },
             ),

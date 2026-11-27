@@ -7,24 +7,21 @@ use onsa_sema::flow::EventFrom;
 
 /// `init(cfg, sample_rate) -> State`.
 pub(super) fn gen_init<'b>(lw: &mut Lowerer<'b>, shape: &FlowShape, info: &'b FlowInfo, fns: &FlowFns) -> R<()> {
-    let state_ty = Ty::Struct(shape.state_ty);
-    let mut g = Gen::new(lw, shape, info, ClockStage::Init, state_ty.clone())?;
+    let state_ty = lw.ty(TyKind::Struct(shape.state_ty));
+    let mut g = Gen::new(lw, shape, info, ClockStage::Init, state_ty)?;
     let [cfg, sr] = &g.member_params(lw, shape, FlowFn::Init)?[..] else {
         return Err(internal(g.span, "`init` with another number of parameters"));
     };
     let (cfg, sr) = (cfg.clone(), sr.clone());
-    let s = g.temp("s", state_ty.clone());
+    let s = g.temp("s", state_ty);
     let span = g.span;
     g.stmts.push(stmt(
         span,
-        StmtKind::Let(
-            LocalId(s.as_place().map(|p| p.root()).unwrap().0),
-            Expr::new(state_ty.clone(), span, ExprKind::Zeroed),
-        ),
+        StmtKind::Let(LocalId(s.as_place().map(|p| p.root()).unwrap().0), Expr::new(state_ty, span, ExprKind::Zeroed)),
     ));
     g.flow().now.sample_rate = sr.clone();
     g.flow().push_scope(s.clone());
-    g.slots(info)?;
+    g.slots(info, &mut lw.m.tys)?;
     if info.stored(Kept::SampleRate) {
         let f = sfield(lw, info, &s, FieldOf::SampleRate, span)?;
         assign(&mut g.stmts, &f, sr.clone())?;
@@ -36,10 +33,10 @@ pub(super) fn gen_init<'b>(lw: &mut Lowerer<'b>, shape: &FlowShape, info: &'b Fl
     g.stage_lets(lw, info, &s)?;
     end(lw, &mut g, info, &s)?;
     let poisoned = sfield(lw, info, &s, FieldOf::Poisoned, span)?;
-    assign(&mut g.stmts, &poisoned, lit(Ty::Bool, span, Lit::Bool(false)))?;
+    assign(&mut g.stmts, &poisoned, lit(Types::BOOL, span, Lit::Bool(false)))?;
     // S-27: the last store of `init`; a panic before it leaves the instance uninitialized.
     let initialized = sfield(lw, info, &s, FieldOf::Initialized, span)?;
-    assign(&mut g.stmts, &initialized, lit(Ty::Bool, span, Lit::Bool(true)))?;
+    assign(&mut g.stmts, &initialized, lit(Types::BOOL, span, Lit::Bool(true)))?;
     g.finish(lw, fns.init, state_ty, false, Some(s));
     Ok(())
 }
@@ -101,7 +98,7 @@ pub(super) fn init_delay(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, i
             if late(init) != cx.flow.as_ref().expect("flow context").now.saving => {}
         PlanKind::Prev { init, ty, .. } => {
             let t = lw.core_ty(*ty, &[], span)?;
-            let v = init_value(lw, init, &t, span, |lw, e| lower_expr(lw, cx, e))?;
+            let v = init_value(lw, init, t, span, |lw, e| lower_expr(lw, cx, e))?;
             let v = materialize(cx, v, out, &format!("{name}.init"));
             if info.field(at(Part::Init)).is_some() {
                 assign(out, &sfield(lw, info, state, at(Part::Init), span)?, v.clone())?;
@@ -111,13 +108,13 @@ pub(super) fn init_delay(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, i
         PlanKind::Delay { init, ty, .. } | PlanKind::Vdelay { init, ty, .. } => {
             let t = lw.core_ty(*ty, &[], span)?;
             let len = ring_len(&n.kind, span)?;
-            let v = init_value(lw, init, &t, span, |lw, e| lower_expr(lw, cx, e))?;
+            let v = init_value(lw, init, t, span, |lw, e| lower_expr(lw, cx, e))?;
             let v = materialize(cx, v, out, &format!("{name}.init"));
             if info.field(at(Part::Init)).is_some() {
                 assign(out, &sfield(lw, info, state, at(Part::Init), span)?, v.clone())?;
             }
             let buf = sfield(lw, info, state, at(Part::Buf), span)?;
-            let fill = Expr::new(buf.ty.clone(), span, ExprKind::Repeat { elem: Box::new(v), n: len });
+            let fill = Expr::new(buf.ty, span, ExprKind::Repeat { elem: Box::new(v), n: len });
             assign(out, &buf, fill)?;
             assign(out, &sfield(lw, info, state, at(Part::W), span)?, u32_lit(span, 0))?;
         }
@@ -141,13 +138,14 @@ pub(super) fn own_stage(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, id
     let sub = lw.ensure_flow(callee)?;
     let fields = super::chain::inputs_of(lw, cx, out, id, state)?;
     let st = sfield(lw, info, state, FieldOf::Node(id, Part::Own), span)?;
-    let arg = |ty| Expr::new(Ty::Struct(ty), span, ExprKind::Struct { ty, fields });
+    let arg = |lw: &mut Lowerer, ty| Expr::new(lw.ty(TyKind::Struct(ty)), span, ExprKind::Struct { ty, fields });
     if stage(cx) == ClockStage::Block {
-        expr_stmt(out, call(sub.ctl, Ty::Unit, span, vec![inout(st), borrow(arg(sub.params))]));
+        expr_stmt(out, call(sub.ctl, Types::UNIT, span, vec![inout(st), borrow(arg(lw, sub.params))]));
         return Ok(());
     }
-    let sr = super::child_rate(&cx.flow.as_ref().expect("flow context").now.sample_rate, n, span)?;
-    let c = call(sub.init, Ty::Struct(sub.state), span, vec![borrow(arg(sub.config)), borrow(sr)]);
+    let sr = super::child_rate(&cx.flow.as_ref().expect("flow context").now.sample_rate, n, span, &lw.m.tys)?;
+    let config = arg(lw, sub.config);
+    let c = call(sub.init, lw.ty(TyKind::Struct(sub.state)), span, vec![borrow(config), borrow(sr)]);
     assign(out, &st, c)
 }
 
@@ -176,7 +174,7 @@ fn defaults(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, fields: &[Fiel
     for f in fields {
         if info.starts_default(f.of) {
             let place = sfield(lw, info, state, f.of, span)?;
-            let v = crate::lower::derived::default_value(lw, &place.ty, span)?;
+            let v = crate::lower::derived::default_value(lw, place.ty, span)?;
             assign(out, &place, v)?;
         }
         let FieldOf::Node(id, Part::Own) = f.of else { continue };
@@ -203,7 +201,7 @@ fn starts_default(info: &FlowInfo, fields: &[Field]) -> bool {
 
 /// `reset(inout s)`.
 pub(super) fn gen_reset<'b>(lw: &mut Lowerer<'b>, shape: &FlowShape, info: &'b FlowInfo, fns: &FlowFns) -> R<()> {
-    let mut g = Gen::new(lw, shape, info, ClockStage::Init, Ty::Unit)?;
+    let mut g = Gen::new(lw, shape, info, ClockStage::Init, Types::UNIT)?;
     let span = g.span;
     let [s] = &g.member_params(lw, shape, FlowFn::Reset)?[..] else {
         return Err(internal(span, "`reset` with another number of parameters"));
@@ -217,8 +215,8 @@ pub(super) fn gen_reset<'b>(lw: &mut Lowerer<'b>, shape: &FlowShape, info: &'b F
     };
     each_node(lw, &mut g.cx, &mut g.stmts, &nodes, &s, work)?;
     let poisoned = sfield(lw, info, &s, FieldOf::Poisoned, span)?;
-    assign(&mut g.stmts, &poisoned, lit(Ty::Bool, span, Lit::Bool(false)))?;
-    g.finish(lw, fns.reset, Ty::Unit, true, None);
+    assign(&mut g.stmts, &poisoned, lit(Types::BOOL, span, Lit::Bool(false)))?;
+    g.finish(lw, fns.reset, Types::UNIT, true, None);
     Ok(())
 }
 
@@ -247,8 +245,8 @@ pub(super) fn ensure_reset_kept(lw: &mut Lowerer, flow: DefId, span: Span) -> R<
     let f = super::push_fn(lw, format!("{}._reset_kept", lw.qual_name(flow)), true, at);
     lw.flow_fns.get_mut(&flow).into_iter().for_each(|x| x.reset_kept = Some(f));
     lw.m.flows.iter_mut().filter(|m| m.fns.flow == flow).for_each(|m| m.fns.reset_kept = Some(f));
-    let mut g = Gen::of(lw, (flow, at), info, ClockStage::Init, Ty::Unit)?;
-    let s = g.param("s", Mode::Inout, Ty::Struct(fns.state));
+    let mut g = Gen::of(lw, (flow, at), info, ClockStage::Init, Types::UNIT)?;
+    let s = g.param("s", Mode::Inout, lw.ty(TyKind::Struct(fns.state)));
     g.flow().push_scope(s.clone());
     defaults(lw, &mut g.cx, &mut g.stmts, &info.fields, &s)?;
     let nodes: Vec<NodeId> = info.top().collect();
@@ -256,7 +254,7 @@ pub(super) fn ensure_reset_kept(lw: &mut Lowerer, flow: DefId, span: Span) -> R<
         reset_node(lw, cx, out, id, s, Keep::Kept)
     };
     each_node(lw, &mut g.cx, &mut g.stmts, &nodes, &s, work)?;
-    g.finish(lw, f, Ty::Unit, true, None);
+    g.finish(lw, f, Types::UNIT, true, None);
     Ok(f)
 }
 
@@ -270,15 +268,15 @@ pub(super) fn reset_node(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, i
     match &n.kind {
         PlanKind::Prev { init, ty, .. } => {
             let t = lw.core_ty(*ty, &[], span)?;
-            let v = init_value(lw, init, &t, span, |lw, _| sfield(lw, info, s, at(Part::Init), span))?;
+            let v = init_value(lw, init, t, span, |lw, _| sfield(lw, info, s, at(Part::Init), span))?;
             assign(out, &sfield(lw, info, s, at(Part::Own), span)?, v)?;
         }
         PlanKind::Delay { init, ty, .. } | PlanKind::Vdelay { init, ty, .. } => {
             let t = lw.core_ty(*ty, &[], span)?;
             let len = ring_len(&n.kind, span)?;
-            let v = init_value(lw, init, &t, span, |lw, _| sfield(lw, info, s, at(Part::Init), span))?;
+            let v = init_value(lw, init, t, span, |lw, _| sfield(lw, info, s, at(Part::Init), span))?;
             let buf = sfield(lw, info, s, at(Part::Buf), span)?;
-            let fill = Expr::new(buf.ty.clone(), span, ExprKind::Repeat { elem: Box::new(v), n: len });
+            let fill = Expr::new(buf.ty, span, ExprKind::Repeat { elem: Box::new(v), n: len });
             assign(out, &buf, fill)?;
             assign(out, &sfield(lw, info, s, at(Part::W), span)?, u32_lit(span, 0))?;
         }
@@ -288,13 +286,13 @@ pub(super) fn reset_node(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, i
                 Keep::Kept => ensure_reset_kept(lw, *callee, span)?,
                 Keep::Hard => lw.ensure_flow(*callee)?.reset,
             };
-            expr_stmt(out, call(f, Ty::Unit, span, vec![inout(st)]));
+            expr_stmt(out, call(f, Types::UNIT, span, vec![inout(st)]));
         }
         PlanKind::Par { .. } => {}
     }
     // The condition and the count of each guard of its chain (§11.9: `reset`, not `reset_if~`).
     for g in (0..n.guards.len() as u32).filter(|_| k == Keep::Hard) {
-        for (part, v) in [(Part::On(g), lit(Ty::Bool, span, Lit::Bool(false))), (Part::Count(g), u32_lit(span, 0))] {
+        for (part, v) in [(Part::On(g), lit(Types::BOOL, span, Lit::Bool(false))), (Part::Count(g), u32_lit(span, 0))] {
             if info.field_at(at(part)).is_some() {
                 assign(out, &sfield(lw, info, s, at(part), span)?, v)?;
             }
@@ -302,24 +300,24 @@ pub(super) fn reset_node(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, i
     }
     // Up after a panic between its place and its store (S-1250).
     for part in n.late_flags().into_iter().filter(|_| k == Keep::Hard) {
-        assign(out, &sfield(lw, info, s, at(part), span)?, lit(Ty::Bool, span, Lit::Bool(false)))?;
+        assign(out, &sfield(lw, info, s, at(part), span)?, lit(Types::BOOL, span, Lit::Bool(false)))?;
     }
     Ok(())
 }
 
 /// `ctl(inout s, p: Params)`.
 pub(super) fn gen_ctl<'b>(lw: &mut Lowerer<'b>, shape: &FlowShape, info: &'b FlowInfo, fns: &FlowFns) -> R<()> {
-    let mut g = Gen::new(lw, shape, info, ClockStage::Block, Ty::Unit)?;
-    let s = g.param("s", Mode::Inout, Ty::Struct(shape.state_ty));
-    let p = g.param("p", Mode::Borrow, Ty::Struct(shape.params_ty));
+    let mut g = Gen::new(lw, shape, info, ClockStage::Block, Types::UNIT)?;
+    let s = g.param("s", Mode::Inout, lw.ty(TyKind::Struct(shape.state_ty)));
+    let p = g.param("p", Mode::Borrow, lw.ty(TyKind::Struct(shape.params_ty)));
     g.flow().push_scope(s.clone());
-    g.slots(info)?;
+    g.slots(info, &mut lw.m.tys)?;
     g.inputs_from(lw, shape, info, &p, &s)?;
     g.state_overrides(lw, info, &s)?;
     g.const_lets(lw, info)?;
     g.stage_lets(lw, info, &s)?;
     end(lw, &mut g, info, &s)?;
-    g.finish(lw, fns.ctl, Ty::Unit, true, None);
+    g.finish(lw, fns.ctl, Types::UNIT, true, None);
     Ok(())
 }
 
@@ -350,14 +348,14 @@ pub(super) fn gen_stage<'b>(
     // Several of a tick, which runs the stage of an `.up~` (an event ticks a stage once).
     let many = Some(info.burst).filter(|&n| gives && n > 1 && !matches!(stage, ClockStage::Event(_)));
     let out_ty = match many {
-        Some(n) => Ty::Array(Box::new(shape.out_val.clone()), n),
-        None if makes_out || gives => shape.out_val.clone(),
-        None => Ty::Unit,
+        Some(n) => lw.ty(TyKind::Array(shape.out_val, n)),
+        None if makes_out || gives => shape.out_val,
+        None => Types::UNIT,
     };
-    let mut g = Gen::new(lw, shape, info, stage, out_ty.clone())?;
-    let s = g.param("s", Mode::Inout, Ty::Struct(shape.state_ty));
+    let mut g = Gen::new(lw, shape, info, stage, out_ty)?;
+    let s = g.param("s", Mode::Inout, lw.ty(TyKind::Struct(shape.state_ty)));
     for name in ["t", "t_hi"].into_iter().take(info.time_words(stage)) {
-        let t = g.param(name, Mode::Borrow, Ty::u32());
+        let t = g.param(name, Mode::Borrow, Types::U32);
         g.flow().now.time.push(t);
     }
     let inputs: Vec<&Input> = shape.inputs.iter().filter(|i| i.stage == stage).collect();
@@ -387,15 +385,17 @@ pub(super) fn gen_stage<'b>(
             assign(&mut g.stmts, &sfield(lw, info, &s, of, i.decl.span)?, v)?;
         }
     }
-    g.slots(info)?;
+    g.slots(info, &mut lw.m.tys)?;
     g.state_overrides(lw, info, &s)?;
     let mut out = None;
     if gives {
-        let Ty::Enum(ty) = shape.out_val else { return Err(internal(span, "an event given out in no `Option`")) };
+        let TyKind::Enum(ty) = *lw.m.tys.kind(shape.out_val) else {
+            return Err(internal(span, "an event given out in no `Option`"));
+        };
         let none = ExprKind::Variant { ty, tag: super::event_option(lw.a, span)?.exit, fields: Vec::new() };
-        let mut none = Expr::new(shape.out_val.clone(), span, none);
+        let mut none = Expr::new(shape.out_val, span, none);
         if let Some(n) = many {
-            none = Expr::new(out_ty.clone(), span, ExprKind::Repeat { elem: Box::new(none), n });
+            none = Expr::new(out_ty, span, ExprKind::Repeat { elem: Box::new(none), n });
         }
         let gave = g.let_("__out", none);
         let next = many.map(|_| g.let_("__n", u32_lit(span, 0)));
@@ -407,7 +407,7 @@ pub(super) fn gen_stage<'b>(
     if makes_out {
         let output = info.output.ok_or_else(|| internal(span, "flow without an output expression"))?;
         let v = lower_expr(lw, &mut g.cx, output)?;
-        let v = of_type(v, &out_ty)?;
+        let v = of_type(v, out_ty, &lw.m.tys)?;
         // Materialised before the stores so a `prev` inside the output reads first (§11.4).
         out = Some(g.let_("__out", v));
     }
@@ -438,7 +438,7 @@ fn end<'b>(lw: &mut Lowerer<'b>, g: &mut Gen<'b>, info: &'b FlowInfo, s: &Expr) 
 pub(super) struct StageRun<'g> {
     pub g: &'g FlowInfo,
     pub f: FnId,
-    pub ret: Ty,
+    pub ret: CTy,
     pub x: ClockStage,
     pub state: Expr,
     pub time: Vec<Expr>,
@@ -502,7 +502,7 @@ pub(super) fn advance(lw: &Lowerer, info: &FlowInfo, s: &Expr, span: Span, out: 
 /// `x +% 1` of a `U32`.
 pub(super) fn wrap_add(x: Expr, span: Span) -> Expr {
     let (lhs, rhs) = (Box::new(x), Box::new(u32_lit(span, 1)));
-    Expr::new(Ty::u32(), span, ExprKind::Binary { op: BinOp::Add, overflow: Overflow::Wrap, lhs, rhs })
+    Expr::new(Types::U32, span, ExprKind::Binary { op: BinOp::Add, overflow: Overflow::Wrap, lhs, rhs })
 }
 
 /// The end-of-tick store of a node (§11.4) in node order (S-1126, S-1154):
@@ -543,7 +543,7 @@ fn store_node(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, id: NodeId, 
         Some(len) => {
             let buf = sfield(lw, info, state, at(Part::Buf), span)?;
             let w = sfield(lw, info, state, at(Part::W), span)?;
-            assign(&mut store, &index(buf, w.clone())?, v)?;
+            assign(&mut store, &index(buf, w.clone(), &lw.m.tys)?, v)?;
             let one = checked_binary(BinOp::Add, w.clone(), u32_lit(span, 1));
             assign(&mut store, &w, checked_binary(BinOp::Rem, one, u32_lit(span, len)))?;
         }

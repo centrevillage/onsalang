@@ -7,7 +7,7 @@
 //! payloads, a function value, and these nested.
 
 use onsa_core::layout::size_align;
-use onsa_core::{Ty, TypeDefKind};
+use onsa_core::{TyKind, TypeDefKind};
 use onsa_sema::def::DefKind;
 use onsa_sema::layout::layout_of_def;
 
@@ -44,7 +44,7 @@ fn the_sizes_interface_shows_are_those_of_the_core_types() {
     let mut loaded = Loaded::from_input(PackageInput::single_file("m.onsa", &text)).expect("the input loads");
     let analyzed = crate::analyze_loaded(&mut loaded).expect("no internal error");
     assert!(analyzed.diagnostics.is_empty(), "{}", onsa_diag::to_text(&loaded.sources, &analyzed.diagnostics));
-    let module = crate::lower_core(&analyzed).expect("the package lowers");
+    let mut module = crate::lower_core(&analyzed).expect("the package lowers");
     let a = &analyzed.analysis;
     let mut compared = Vec::new();
     for (i, d) in a.defs.iter().enumerate() {
@@ -56,8 +56,9 @@ fn the_sizes_interface_shows_are_those_of_the_core_types() {
         let name = a.qualified_name(id);
         let (at, core) = module.types.iter().enumerate().find(|(_, t)| t.name == name).expect("a Core type of it");
         let at = onsa_core::TypeId(at as u32);
-        let ty = if matches!(core.kind, TypeDefKind::Enum { .. }) { Ty::Enum(at) } else { Ty::Struct(at) };
-        assert_eq!((sema.size, sema.align), size_align(&module, &ty), "`{name}`: sema, Core");
+        let ty = if matches!(core.kind, TypeDefKind::Enum { .. }) { TyKind::Enum(at) } else { TyKind::Struct(at) };
+        let ty = module.tys.intern(ty);
+        assert_eq!((sema.size, sema.align), size_align(&module, ty), "`{name}`: sema, Core");
         compared.push(d.name.clone());
     }
     compared.sort();

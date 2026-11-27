@@ -130,10 +130,11 @@ struct Shape {
     outputs: Vec<Signal>,
 }
 
-fn struct_fields(m: &Module, id: TypeId) -> &[(String, Ty)] {
+// A1b: the trees of the fields, read through the bridge.
+fn struct_fields(m: &Module, id: TypeId) -> Vec<(String, Ty)> {
     match &m.ty(id).kind {
-        TypeDefKind::Struct { fields } => fields,
-        _ => &[],
+        TypeDefKind::Struct { fields } => fields.iter().map(|(n, t)| (n.clone(), m.tys.tree(*t))).collect(),
+        _ => Vec::new(),
     }
 }
 
@@ -168,9 +169,16 @@ impl Shape {
                 Ok((n.clone(), s, s.param_value(pm.as_ref().and_then(|p| p.number(onsa_core::ParamKey::Default)))))
             })
             .collect::<Result<_, String>>()?;
-        let inputs =
-            meta.sig_inputs.iter().map(|(n, t)| signal(n, t, None, "the `sample` input")).collect::<Result<_, _>>()?;
-        let outputs = meta.outputs.iter().map(|(n, t, p)| signal(n, t, *p, "the output")).collect::<Result<_, _>>()?;
+        let inputs = meta
+            .sig_inputs
+            .iter()
+            .map(|(n, t)| signal(n, &m.tys.tree(*t), None, "the `sample` input"))
+            .collect::<Result<_, _>>()?;
+        let outputs = meta
+            .outputs
+            .iter()
+            .map(|(n, t, p)| signal(n, &m.tys.tree(*t), *p, "the output"))
+            .collect::<Result<_, _>>()?;
         Ok(Shape { config, params, inputs, outputs })
     }
 
@@ -343,7 +351,7 @@ fn interp_run(module: &Module, meta: &FlowMeta, shape: &Shape, stimuli: Vec<Vec<
         .collect();
     // The number of the signals of each `In` or `Out` the Core `process` takes.
     let groups: Vec<Option<usize>> = (module.fn_(process).params.iter().skip(2))
-        .map(|p| match &p.ty {
+        .map(|p| match &module.tys.tree(p.ty) {
             Ty::Struct(id) => match &module.ty(*id).kind {
                 TypeDefKind::Struct { fields } => Some(fields.len()),
                 _ => None,
@@ -720,7 +728,7 @@ fn compare_flow(
 mod tests {
     use super::*;
     use crate::c::Runner;
-    use onsa_core::{FloatKind, IntKind};
+    use onsa_core::{FloatKind, IntKind, TyKind, Types};
 
     /// The build of `src` (package `m`, every flow exported) for a host target.
     fn build(src: &str, flows: &[&str]) -> BuildOutput {
@@ -760,14 +768,14 @@ mod tests {
         assert_eq!(shape.inputs.len(), 1);
         // A type the harness cannot feed: the flow is skipped with the reason, never dropped.
         let mut odd = meta.clone();
-        odd.sig_inputs[0].1 = Ty::Tuple(Vec::new());
+        odd.sig_inputs[0].1 = out.module.tys.intern(TyKind::Tuple(Box::new([])));
         let why = Shape::of(&out.module, &odd).unwrap_err();
         assert!(why.contains("the `sample` input `x`") && why.contains("is not a scalar"), "{why}");
         let mut odd = meta.clone();
-        odd.params.push(("k".into(), Ty::Float(FloatKind::F32), None));
+        odd.params.push(("k".into(), Types::float(FloatKind::F32), None));
         assert!(Shape::of(&out.module, &odd).unwrap_err().contains("1 `block` inputs but 0 fields"));
         // Through `run`: counted in `skipped`, nothing compiled.
-        out.module.flows[0].outputs[0].1 = Ty::Unit;
+        out.module.flows[0].outputs[0].1 = Types::UNIT;
         let t = Toolchain { cc: "onsa-no-such-cc", flags: &[], off: &[], runner: Runner::Native };
         let o = run(&out, &t, Path::new("/nonexistent"));
         assert_eq!(o.compared, 0);

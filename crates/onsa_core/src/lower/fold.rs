@@ -33,8 +33,8 @@ use crate::prim::Prim;
 
 /// Fold every function body of `m`.
 pub fn fold_module(m: &mut Module) {
-    let consts = &m.consts;
-    let f = Folder { consts };
+    let (consts, tys) = (&m.consts, &m.tys);
+    let f = Folder { consts, tys };
     for def in &mut m.fns {
         if let Some(b) = &mut def.body {
             f.block(b);
@@ -44,6 +44,7 @@ pub fn fold_module(m: &mut Module) {
 
 struct Folder<'m> {
     consts: &'m [ConstDef],
+    tys: &'m Types,
 }
 
 impl Folder<'_> {
@@ -65,7 +66,7 @@ impl Folder<'_> {
     /// A `for` whose upper bound `hi` is at or below the smallest value of
     /// the loop variable's type never runs.
     fn never_runs(&self, hi: &Expr) -> bool {
-        matches!((self.constant(hi), limits(&hi.ty)), (Some(k), Some((lo, _))) if k <= lo)
+        matches!((self.constant(hi), limits(hi.ty)), (Some(k), Some((lo, _))) if k <= lo)
     }
 
     /// The expressions as statements, in order, but those without an effect
@@ -84,7 +85,7 @@ impl Folder<'_> {
                 self.place(p);
                 self.expr(e);
                 if e.as_place().is_some_and(|q| same_path(p, &q)) {
-                    let e = std::mem::replace(e, Expr::new(Ty::Unit, s.span, ExprKind::Lit(Lit::Unit)));
+                    let e = std::mem::replace(e, Expr::new(Types::UNIT, s.span, ExprKind::Lit(Lit::Unit)));
                     s.kind = StmtKind::Expr(e);
                 }
             }
@@ -170,7 +171,7 @@ impl Folder<'_> {
             };
             let operands = if same_binding(&lhs, &rhs) { vec![*lhs] } else { vec![*lhs, *rhs] };
             let stmts = self.effects(operands);
-            let lit = Expr::new(Ty::Bool, e.span, ExprKind::Lit(Lit::Bool(value)));
+            let lit = Expr::new(Types::BOOL, e.span, ExprKind::Lit(Lit::Bool(value)));
             e.kind =
                 if stmts.is_empty() { lit.kind } else { ExprKind::Block(Block { stmts, value: Some(Box::new(lit)) }) };
         }
@@ -179,7 +180,7 @@ impl Folder<'_> {
     /// The result of `lhs op rhs` when the types or the identity of the
     /// operands decide it; `None` otherwise.
     fn decided(&self, op: CmpOp, lhs: &Expr, rhs: &Expr) -> Option<bool> {
-        limits(&lhs.ty)?;
+        limits(lhs.ty)?;
         if same_binding(lhs, rhs) {
             return Some(matches!(op, CmpOp::Eq | CmpOp::Le | CmpOp::Ge));
         }
@@ -222,11 +223,13 @@ impl Folder<'_> {
             ExprKind::Lit(Lit::Bool(b)) => Some(i128::from(*b)),
             ExprKind::Lit(Lit::Char(c)) => Some(i128::from(u32::from(*c))),
             ExprKind::Const(c) => self.constant_at(&self.consts.get(c.0 as usize)?.init, depth + 1),
-            ExprKind::Cast(x) if limits(&x.ty).is_some() => self.constant_at(x, depth + 1),
-            ExprKind::Prim { prim: Prim::Len, args } => match (&args.first()?.expr.ty, args[0].expr.as_place()) {
-                (Ty::Array(_, n), Some(p)) if without_element(&p) => Some(i128::from(*n)),
-                _ => None,
-            },
+            ExprKind::Cast(x) if limits(x.ty).is_some() => self.constant_at(x, depth + 1),
+            ExprKind::Prim { prim: Prim::Len, args } => {
+                match (self.tys.kind(args.first()?.expr.ty), args[0].expr.as_place()) {
+                    (TyKind::Array(_, n), Some(p)) if without_element(&p) => Some(i128::from(*n)),
+                    _ => None,
+                }
+            }
             _ => None,
         }
     }
@@ -246,11 +249,11 @@ fn mirror(op: CmpOp) -> CmpOp {
 
 /// The values an exact type has (§3.1, §4.1); `None` for a float and the
 /// other types. A `Char` is a scalar value of Unicode, at most U+10FFFF.
-fn limits(ty: &Ty) -> Option<(i128, i128)> {
-    match ty {
-        Ty::Int(k) => Some(k.range()),
-        Ty::Bool => Some((0, 1)),
-        Ty::Char => Some((0, 0x10FFFF)),
+fn limits(ty: CTy) -> Option<(i128, i128)> {
+    match Types::builtin(ty)? {
+        TyKind::Int(k) => Some(k.range()),
+        TyKind::Bool => Some((0, 1)),
+        TyKind::Char => Some((0, 0x10FFFF)),
         _ => None,
     }
 }
@@ -259,8 +262,8 @@ fn limits(ty: &Ty) -> Option<(i128, i128)> {
 /// (§3.3), or of its own type.
 fn values(x: &Expr) -> Option<(i128, i128)> {
     match &x.kind {
-        ExprKind::Cast(inner) if limits(&inner.ty).is_some() => values(inner),
-        _ => limits(&x.ty),
+        ExprKind::Cast(inner) if limits(inner.ty).is_some() => values(inner),
+        _ => limits(x.ty),
     }
 }
 

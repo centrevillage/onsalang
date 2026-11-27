@@ -16,14 +16,14 @@
 //! §12.7 "集成体を返す式はその置き場所に直接構築される"), and the tail local of an
 //! `sret` function (NRVO).
 
-use crate::ir::{Block, Expr, ExprKind, FnDef, LocalId, Mode, Module, MoveKind, MoveSite, Stmt, StmtKind};
+use crate::ir::{Block, Expr, ExprKind, FnId, LocalId, Mode, Module, MoveKind, MoveSite, Stmt, StmtKind};
 use crate::layout::size_align;
 
 pub fn collect(m: &Module) -> Vec<MoveSite> {
     let mut out = Vec::new();
-    for f in &m.fns {
+    for (i, f) in m.fns.iter().enumerate() {
         let Some(body) = &f.body else { continue };
-        let mut cx = Cx { m, f, out: &mut out };
+        let mut cx = Cx { m, f: FnId(i as u32), out: &mut out };
         cx.block(body, true);
     }
     out
@@ -31,17 +31,17 @@ pub fn collect(m: &Module) -> Vec<MoveSite> {
 
 struct Cx<'a> {
     m: &'a Module,
-    f: &'a FnDef,
+    f: FnId,
     out: &'a mut Vec<MoveSite>,
 }
 
 impl Cx<'_> {
     fn record(&mut self, e: &Expr, kind: MoveKind) {
-        if !e.ty.is_aggregate() {
+        if !self.m.tys.is_aggregate(e.ty) {
             return;
         }
-        let bytes = size_align(self.m, &e.ty).0;
-        self.out.push(MoveSite { fn_name: self.f.name.clone(), span: e.span, ty: e.ty.clone(), bytes, kind });
+        let bytes = size_align(self.m, e.ty).0;
+        self.out.push(MoveSite { fn_: self.f, span: e.span, ty: e.ty, bytes, kind });
     }
 
     /// An expression whose value is stored somewhere (`let`, assignment,
@@ -125,7 +125,7 @@ impl Cx<'_> {
             ExprKind::Repeat { elem, .. } => self.stored(elem, None),
             ExprKind::Call { args, .. } | ExprKind::Prim { args, .. } => {
                 for a in args {
-                    if a.mode == Mode::Move && a.expr.ty.is_aggregate() {
+                    if a.mode == Mode::Move && self.m.tys.is_aggregate(a.expr.ty) {
                         match &a.expr.kind {
                             ExprKind::Local(_) | ExprKind::Field { .. } | ExprKind::Index { .. } => {
                                 self.record(&a.expr, MoveKind::MoveArg)
@@ -179,7 +179,7 @@ impl Cx<'_> {
             self.stmt(s);
         }
         if let Some(v) = &b.value {
-            let nrvo = if top && self.f.sret {
+            let nrvo = if top && self.m.fn_(self.f).sret {
                 match &v.kind {
                     ExprKind::Local(l) if declares(b, *l) => Some(*l),
                     _ => None,

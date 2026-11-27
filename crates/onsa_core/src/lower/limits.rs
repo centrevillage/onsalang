@@ -48,26 +48,33 @@ impl Lowerer<'_> {
     }
 
     /// The measure of a Core type, as the check reads its type (§4.4): a
-    /// struct or an enum is the form of its arguments, not a leaf.
-    pub(super) fn measure(&self, ty: &Ty) -> Measure {
-        let of = |m: Measure, t: &Ty| m.with(self.measure(t));
-        match ty {
-            Ty::Int(_) | Ty::Float(_) | Ty::Bool | Ty::Char => Measure::LEAF,
-            Ty::Unit => Measure::form(1),
-            Ty::Tuple(ts) => ts.iter().fold(Measure::form(1), of),
-            Ty::Array(e, _) | Ty::Span(e) | Ty::Buf(e) => of(Measure::form(2), e),
-            Ty::Struct(id) | Ty::Enum(id) => self.type_measure(*id),
-            Ty::FnPtr(f) => of(f.params.iter().map(|(_, t)| t).fold(Measure::form(1), of), &f.ret),
+    /// struct or an enum is the form of its arguments, not a leaf. Made once
+    /// for each type, in the order of the ids, so that the parts of a type
+    /// have theirs: O(1) for each type.
+    pub(super) fn measure(&mut self, ty: CTy) -> Measure {
+        let start = self.measures.len();
+        for k in self.m.tys.kinds().get(start..=ty.index()).unwrap_or_default() {
+            let of = |m: Measure, t: &CTy| m.with(self.measures[t.index()]);
+            let m = match k {
+                TyKind::Int(_) | TyKind::Float(_) | TyKind::Bool | TyKind::Char => Measure::LEAF,
+                TyKind::Unit => Measure::form(1),
+                TyKind::Tuple(ts) => ts.iter().fold(Measure::form(1), of),
+                TyKind::Array(e, _) | TyKind::Span(e) | TyKind::Buf(e) => of(Measure::form(2), e),
+                TyKind::Struct(id) | TyKind::Enum(id) => self.type_measures.get(id).copied().unwrap_or(Measure::LEAF),
+                TyKind::FnPtr(f) => of(f.params.iter().map(|(_, t)| t).fold(Measure::form(1), of), &f.ret),
+            };
+            self.measures.push(m);
         }
+        self.measures[ty.index()]
     }
 
     /// The measure of a type of the arguments `args`.
-    pub(super) fn args_measure(&self, args: &[GenericArg]) -> Measure {
+    pub(super) fn args_measure(&mut self, args: &[GenericArg]) -> Measure {
         if args.is_empty() {
             return Measure::LEAF;
         }
         args.iter().fold(Measure::form(2), |m, a| match a {
-            GenericArg::Ty(t) => m.with(self.measure(t)),
+            GenericArg::Ty(t) => m.with(self.measure(*t)),
             GenericArg::Const(_) => m.with(Measure::LEAF),
         })
     }

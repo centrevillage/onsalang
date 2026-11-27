@@ -7,12 +7,12 @@ use super::*;
 /// A C constant expression (static initializer) for a `const` initializer.
 pub(super) fn const_init(cx: &mut Cx, e: &Expr) -> R<String> {
     match &e.kind {
-        ExprKind::Lit(l) => Ok(lit(l, &e.ty)),
+        ExprKind::Lit(l) => Ok(lit(l, &cx.m.tys.tree(e.ty))),
         ExprKind::Const(c) => {
             let init = cx.m.const_(*c).init.clone();
             const_init(cx, &init)
         }
-        ExprKind::Unary(UnOp::Neg, x) => match (&x.kind, &e.ty) {
+        ExprKind::Unary(UnOp::Neg, x) => match (&x.kind, &cx.m.tys.tree(e.ty)) {
             (ExprKind::Lit(Lit::Int(v)), Ty::Int(k)) => Ok(int_lit(*k, -*v)),
             (ExprKind::Lit(Lit::F32(v)), _) => Ok(f32_lit(-*v)),
             (ExprKind::Lit(Lit::F64(v)), _) => Ok(f64_lit(-*v)),
@@ -20,16 +20,16 @@ pub(super) fn const_init(cx: &mut Cx, e: &Expr) -> R<String> {
         },
         ExprKind::Cast(x) => {
             let inner = const_init(cx, x)?;
-            let ty = cx.names.name(&e.ty);
+            let ty = cx.names.name(&cx.m.tys.tree(e.ty));
             Ok(format!("(({ty}){inner})"))
         }
         ExprKind::Array(xs) => {
             let parts: Vec<String> = xs.iter().map(|x| const_init(cx, x)).collect::<R<_>>()?;
-            Ok(array_init(cx, &e.ty, &parts))
+            Ok(array_init(cx, &cx.m.tys.tree(e.ty), &parts))
         }
         ExprKind::Repeat { elem, n } => {
             let v = const_init(cx, elem)?;
-            Ok(array_init(cx, &e.ty, &vec![v; *n as usize]))
+            Ok(array_init(cx, &cx.m.tys.tree(e.ty), &vec![v; *n as usize]))
         }
         ExprKind::Tuple(xs) => {
             let parts: Vec<String> =

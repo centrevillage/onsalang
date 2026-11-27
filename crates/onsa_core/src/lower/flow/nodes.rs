@@ -73,14 +73,14 @@ pub(crate) fn lower_flow_expr(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId) -> R<O
         PlanKind::Par { body, .. } => {
             let (r, elem_state) = replicas(lw, cx, id, &state, span)?;
             let ty = lw.core_ty(cx.info.expr_types[&e], &[], span)?;
-            let arr = cx.temp(name, ty.clone());
-            stmts.push(stmt(span, StmtKind::Let(arr, Expr::new(ty.clone(), span, ExprKind::Zeroed))));
+            let arr = cx.temp(name, ty);
+            stmts.push(stmt(span, StmtKind::Let(arr, Expr::new(ty, span, ExprKind::Zeroed))));
             let arr_e = local_expr(cx, arr, span);
             let idx = r.index(cx, span);
             cx.flow.as_mut().unwrap().push_scope(elem_state);
             let mut loop_body = Vec::new();
             let v = lower_expr(lw, cx, *body)?;
-            assign(&mut loop_body, &index(arr_e.clone(), idx)?, v)?;
+            assign(&mut loop_body, &index(arr_e.clone(), idx, &lw.m.tys)?, v)?;
             cx.flow.as_mut().unwrap().now.scopes.pop();
             r.each(cx, &mut stmts, span, loop_body);
             arr_e
@@ -91,12 +91,12 @@ pub(crate) fn lower_flow_expr(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId) -> R<O
     let result = if matches!(value.kind, ExprKind::Local(_)) {
         value
     } else {
-        let tmp = cx.temp(name, value.ty.clone());
+        let tmp = cx.temp(name, value.ty);
         stmts.push(stmt(span, StmtKind::Let(tmp, value)));
         local_expr(cx, tmp, span)
     };
     cx.flow.as_mut().unwrap().now.expr_override.insert(e, result.clone());
-    let ty = result.ty.clone();
+    let ty = result.ty;
     Ok(Some(Expr::new(ty, span, ExprKind::Block(Block { stmts, value: Some(Box::new(result)) }))))
 }
 
@@ -139,9 +139,9 @@ pub(super) fn instance(
         }
     };
     let value = match value {
-        Some(v) if early => Some(keep(cx, out, (&n.path, n.owner), v)?),
+        Some(v) if early => Some(keep(cx, out, (&n.path, n.owner), v, &mut lw.m.tys)?),
         Some(v) if !matches!(v.kind, ExprKind::Local(_)) => {
-            let tmp = cx.temp(&n.path, v.ty.clone());
+            let tmp = cx.temp(&n.path, v.ty);
             out.push(stmt(span, StmtKind::Let(tmp, v)));
             Some(local_expr(cx, tmp, span))
         }
@@ -191,7 +191,7 @@ pub(super) fn delay_work(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, i
             continue;
         }
         let v = lower_expr(lw, cx, cond)?;
-        let v = keep(cx, out, (&n.path, n.owner), v)?;
+        let v = keep(cx, out, (&n.path, n.owner), v, &mut lw.m.tys)?;
         cx.flow.as_mut().unwrap().now.expr_override.insert(cond, v);
     }
     super::chain::opened(lw, cx, out, id)
@@ -224,7 +224,7 @@ pub(super) fn saved_reads(
         }
         let mut body = Vec::new();
         let v = lower_expr(lw, cx, e)?;
-        let v = keep(cx, &mut body, (of.0, owner), v)?;
+        let v = keep(cx, &mut body, (of.0, owner), v, &mut lw.m.tys)?;
         for r in loops.into_iter().rev() {
             cx.flow.as_mut().unwrap().now.scopes.pop();
             let inner = std::mem::take(&mut body);
@@ -239,13 +239,13 @@ pub(super) fn saved_reads(
 /// `v`, made in the scope of `owner` for `name`, as a value the end of the
 /// stage reads: a `let` ([`super::chain::hold`]); in a `par~`, whose loop ends
 /// before, the element of the replica of a local of the function.
-fn keep(cx: &mut FnCx, out: &mut Vec<Stmt>, (name, owner): (&str, Owner), v: Expr) -> R<Expr> {
+fn keep(cx: &mut FnCx, out: &mut Vec<Stmt>, (name, owner): (&str, Owner), v: Expr, tys: &mut Types) -> R<Expr> {
     let pars = cx.flow.as_ref().expect("flow context").info.around(owner);
     if pars.is_empty() {
         return Ok(super::chain::hold(cx, out, v, name));
     }
     let mut head = Vec::new();
-    let place = replicas_place(cx, &mut head, &format!("__early.{name}"), v.ty.clone(), &pars, v.span)?;
+    let place = replicas_place(cx, &mut head, (&format!("__early.{name}"), v.ty), &pars, v.span, tys)?;
     cx.flow.as_mut().unwrap().now.heads.append(&mut head);
     assign(out, &place, v)?;
     Ok(place)
@@ -261,7 +261,7 @@ pub(super) fn delay_value(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, 
         PlanKind::Prev { .. } => sfield(lw, info, s, at(Part::Own), span),
         PlanKind::Delay { .. } => {
             let buf = sfield(lw, info, s, at(Part::Buf), span)?;
-            index(buf, sfield(lw, info, s, at(Part::W), span)?)
+            index(buf, sfield(lw, info, s, at(Part::W), span)?, &lw.m.tys)
         }
         PlanKind::Vdelay { d, max, ty, .. } => vdelay_read(lw, cx, out, s, id, *d, *max, *ty, span),
         PlanKind::Instance { .. } | PlanKind::Par { .. } => Err(internal(span, "the value of no delay")),
@@ -284,20 +284,20 @@ fn vdelay_read(
     let info = cx.flow.as_ref().expect("flow context").info;
     let name = &info.node(id).path;
     let t = lw.core_ty(ty, &[], span)?;
-    let Ty::Float(kind) = t else { return Err(internal(span, "vdelay on a non-float")) };
+    let TyKind::Float(kind) = *lw.m.tys.kind(t) else { return Err(internal(span, "vdelay on a non-float")) };
     let len = ring_len(&info.node(id).kind, span)?;
     let mut let_ = |cx: &mut FnCx, n: &str, v: Expr| -> Expr {
-        let l = cx.temp(&format!("{name}.{n}"), v.ty.clone());
+        let l = cx.temp(&format!("{name}.{n}"), v.ty);
         stmts.push(stmt(span, StmtKind::Let(l, v)));
         local_expr(cx, l, span)
     };
     let d_e = lower_expr(lw, cx, d)?;
     let d_e = let_(cx, "d", d_e);
-    let one = float_lit(&t, 1.0, span)?;
-    let maxf = float_lit(&t, max as f64, span)?;
+    let one = float_lit(t, 1.0, span, &lw.m.tys)?;
+    let maxf = float_lit(t, max as f64, span, &lw.m.tys)?;
     // dc = if d >= 1.0 { if d <= MAX { d } else { MAX } } else { 1.0 }   (NaN -> 1.0)
     let inner = Expr::new(
-        t.clone(),
+        t,
         span,
         ExprKind::IfExpr {
             cond: Box::new(cmp(CmpOp::Le, d_e.clone(), maxf.clone())),
@@ -306,7 +306,7 @@ fn vdelay_read(
         },
     );
     let dc = Expr::new(
-        t.clone(),
+        t,
         span,
         ExprKind::IfExpr {
             cond: Box::new(cmp(CmpOp::Ge, d_e.clone(), one.clone())),
@@ -317,7 +317,7 @@ fn vdelay_read(
     let dc = let_(cx, "dc", dc);
     // k = U32.trunc_from(dc)
     let k = Expr::new(
-        Ty::u32(),
+        Types::U32,
         span,
         ExprKind::Prim {
             prim: Prim::TruncToInt { from: kind, to: IntKind::U32, sat: false },
@@ -327,7 +327,7 @@ fn vdelay_read(
     let k = let_(cx, "k", k);
     // f = dc - T.round_from(k)
     let kf = Expr::new(
-        t.clone(),
+        t,
         span,
         ExprKind::Prim { prim: Prim::IntToFloat { from: IntKind::U32, to: kind }, args: vec![borrow(k.clone())] },
     );
@@ -337,10 +337,13 @@ fn vdelay_read(
     // a = buf[(w + L - k) % L]; b = buf[(w + L - k - 1) % L]
     let wlk = checked_binary(BinOp::Sub, checked_binary(BinOp::Add, w, u32_lit(span, len)), k);
     let wlk = let_(cx, "wlk", wlk);
-    let a = index(buf.clone(), checked_binary(BinOp::Rem, wlk.clone(), u32_lit(span, len)))?;
+    let a = index(buf.clone(), checked_binary(BinOp::Rem, wlk.clone(), u32_lit(span, len)), &lw.m.tys)?;
     let a = let_(cx, "a", a);
-    let b =
-        index(buf, checked_binary(BinOp::Rem, checked_binary(BinOp::Sub, wlk, u32_lit(span, 1)), u32_lit(span, len)))?;
+    let b = index(
+        buf,
+        checked_binary(BinOp::Rem, checked_binary(BinOp::Sub, wlk, u32_lit(span, 1)), u32_lit(span, len)),
+        &lw.m.tys,
+    )?;
     let b = let_(cx, "b", b);
     // y = ((1.0 - f) * a) + (f * b)
     let y = checked_binary(

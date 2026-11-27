@@ -3,7 +3,7 @@
 
 use std::collections::BTreeSet;
 
-use onsa_core::{ConstId, Expr, ExprKind, Lit, Module, Ty, TypeDefKind, UnOp};
+use onsa_core::{CTy, ConstId, Expr, ExprKind, Lit, Module, TyKind, TypeDefKind, UnOp};
 use onsa_interp::{ArrayData, Interp, Value};
 
 use crate::{CoreStage, InternalError};
@@ -53,7 +53,7 @@ fn inline_consts(module: &Module, reached: &BTreeSet<ConstId>) -> Vec<(usize, Ex
                 Ok(v) => v,
                 Err(onsa_interp::Failure::Panic(_) | onsa_interp::Failure::Unsupported(_)) => continue,
             };
-            if let Some(e) = value_to_expr(module, &v, &c.ty, c.init.span) {
+            if let Some(e) = value_to_expr(module, &v, c.ty, c.init.span) {
                 replacements.push((i, e));
             }
         }
@@ -75,9 +75,9 @@ fn is_static_init(e: &Expr) -> bool {
 }
 
 /// A literal / aggregate expression with the value `v`.
-pub fn value_to_expr(m: &Module, v: &Value, ty: &Ty, span: onsa_diag::Span) -> Option<Expr> {
-    let lit = |l: Lit| Some(Expr::new(ty.clone(), span, ExprKind::Lit(l)));
-    match (v, ty) {
+pub fn value_to_expr(m: &Module, v: &Value, ty: CTy, span: onsa_diag::Span) -> Option<Expr> {
+    let lit = |l: Lit| Some(Expr::new(ty, span, ExprKind::Lit(l)));
+    match (v, m.tys.kind(ty)) {
         (Value::I8(x), _) => lit(Lit::Int(*x as i128)),
         (Value::I16(x), _) => lit(Lit::Int(*x as i128)),
         (Value::I32(x), _) => lit(Lit::Int(*x as i128)),
@@ -91,30 +91,28 @@ pub fn value_to_expr(m: &Module, v: &Value, ty: &Ty, span: onsa_diag::Span) -> O
         (Value::Bool(x), _) => lit(Lit::Bool(*x)),
         (Value::Char(x), _) => lit(Lit::Char(*x)),
         (Value::Unit, _) => lit(Lit::Unit),
-        (Value::Array(data), Ty::Array(elem, _)) => {
+        (Value::Array(data), &TyKind::Array(elem, _)) => {
             let xs: Vec<Expr> = match data {
-                ArrayData::F32(xs) => {
-                    xs.iter().map(|x| Expr::new((**elem).clone(), span, ExprKind::Lit(Lit::F32(*x)))).collect()
-                }
+                ArrayData::F32(xs) => xs.iter().map(|x| Expr::new(elem, span, ExprKind::Lit(Lit::F32(*x)))).collect(),
                 ArrayData::Any(vs) => vs.iter().map(|x| value_to_expr(m, x, elem, span)).collect::<Option<Vec<_>>>()?,
             };
-            Some(Expr::new(ty.clone(), span, ExprKind::Array(xs)))
+            Some(Expr::new(ty, span, ExprKind::Array(xs)))
         }
-        (Value::Tuple(vs), Ty::Tuple(ts)) => {
-            let xs = vs.iter().zip(ts).map(|(x, t)| value_to_expr(m, x, t, span)).collect::<Option<Vec<_>>>()?;
-            Some(Expr::new(ty.clone(), span, ExprKind::Tuple(xs)))
+        (Value::Tuple(vs), TyKind::Tuple(ts)) => {
+            let xs = vs.iter().zip(ts).map(|(x, &t)| value_to_expr(m, x, t, span)).collect::<Option<Vec<_>>>()?;
+            Some(Expr::new(ty, span, ExprKind::Tuple(xs)))
         }
-        (Value::Struct(vs), Ty::Struct(id)) => {
+        (Value::Struct(vs), TyKind::Struct(id)) => {
             let TypeDefKind::Struct { fields } = &m.ty(*id).kind else { return None };
             let xs =
-                vs.iter().zip(fields).map(|(x, (_, t))| value_to_expr(m, x, t, span)).collect::<Option<Vec<_>>>()?;
-            Some(Expr::new(ty.clone(), span, ExprKind::Struct { ty: *id, fields: xs }))
+                vs.iter().zip(fields).map(|(x, &(_, t))| value_to_expr(m, x, t, span)).collect::<Option<Vec<_>>>()?;
+            Some(Expr::new(ty, span, ExprKind::Struct { ty: *id, fields: xs }))
         }
-        (Value::Enum { tag, fields: vs }, Ty::Enum(id)) => {
+        (Value::Enum { tag, fields: vs }, TyKind::Enum(id)) => {
             let TypeDefKind::Enum { variants } = &m.ty(*id).kind else { return None };
             let (_, tys) = variants.get(*tag as usize)?;
-            let xs = vs.iter().zip(tys).map(|(x, t)| value_to_expr(m, x, t, span)).collect::<Option<Vec<_>>>()?;
-            Some(Expr::new(ty.clone(), span, ExprKind::Variant { ty: *id, tag: *tag, fields: xs }))
+            let xs = vs.iter().zip(tys).map(|(x, &t)| value_to_expr(m, x, t, span)).collect::<Option<Vec<_>>>()?;
+            Some(Expr::new(ty, span, ExprKind::Variant { ty: *id, tag: *tag, fields: xs }))
         }
         _ => None,
     }

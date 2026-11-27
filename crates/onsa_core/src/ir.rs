@@ -10,6 +10,8 @@
 //! - Flows are lowered to ordinary functions (`lower::flow`, D-03); the
 //!   module keeps per-flow metadata in [`Module::flows`].
 
+use std::collections::HashMap;
+
 use onsa_diag::Span;
 use onsa_sema::DefId;
 pub use onsa_sema::ty::{FloatKind, IntKind};
@@ -46,7 +48,191 @@ impl PanicOrigin {
     }
 }
 
-/// A concrete type. Structs and enums refer to `Module::types`.
+/// A concrete type: an index into the table of its module ([`Module::tys`]).
+/// Two types of one module are the same exactly when their ids are, so that
+/// comparing, hashing and copying one is O(1). Only [`Types`] makes one.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct CTy(u32);
+
+impl CTy {
+    /// The position in the table: the ids of the parts of a type are smaller.
+    pub fn index(self) -> usize {
+        self.0 as usize
+    }
+}
+
+/// What a type is, one level deep: the parts are ids. Structs and enums
+/// refer to `Module::types`.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum TyKind {
+    Int(IntKind),
+    Float(FloatKind),
+    Bool,
+    Char,
+    Unit,
+    Array(CTy, u32),
+    Tuple(Box<[CTy]>),
+    Struct(TypeId),
+    Enum(TypeId),
+    /// Second-class view (§5.3); only in parameters and temporaries.
+    Span(CTy),
+    /// Function pointer (captureless function value, §5.3).
+    FnPtr(Box<FnSig>),
+    /// Heap buffer; interpreter only in phase 1 (D-08).
+    Buf(CTy),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct FnSig {
+    pub rt: bool,
+    pub params: Vec<(Mode, CTy)>,
+    pub ret: CTy,
+}
+
+/// The built-in types, at the ids of their positions (the constants of [`Types`]).
+static BUILTINS: [TyKind; 13] = [
+    TyKind::Int(IntKind::I8),
+    TyKind::Int(IntKind::I16),
+    TyKind::Int(IntKind::I32),
+    TyKind::Int(IntKind::I64),
+    TyKind::Int(IntKind::U8),
+    TyKind::Int(IntKind::U16),
+    TyKind::Int(IntKind::U32),
+    TyKind::Int(IntKind::U64),
+    TyKind::Float(FloatKind::F32),
+    TyKind::Float(FloatKind::F64),
+    TyKind::Bool,
+    TyKind::Char,
+    TyKind::Unit,
+];
+
+/// The types of a module, each kind once (interned). Lowering adds to it;
+/// what reads a module after lowering only reads it.
+#[derive(Debug, Clone)]
+pub struct Types {
+    kinds: Vec<TyKind>,
+    ids: HashMap<TyKind, CTy>,
+}
+
+impl Default for Types {
+    /// The table of the built-in types alone.
+    fn default() -> Self {
+        let mut t = Types { kinds: Vec::new(), ids: HashMap::new() };
+        for k in &BUILTINS {
+            t.intern(k.clone());
+        }
+        t
+    }
+}
+
+impl Types {
+    pub const U32: CTy = Types::int(IntKind::U32);
+    pub const BOOL: CTy = CTy(10);
+    pub const CHAR: CTy = CTy(11);
+    pub const UNIT: CTy = CTy(12);
+
+    /// The built-in integer type of `k`.
+    pub const fn int(k: IntKind) -> CTy {
+        CTy(k as u32)
+    }
+
+    /// The built-in floating-point type of `k`.
+    pub const fn float(k: FloatKind) -> CTy {
+        CTy(8 + k as u32)
+    }
+
+    /// The kind of `t` if it is a built-in type, which every table has at
+    /// the same id.
+    pub fn builtin(t: CTy) -> Option<&'static TyKind> {
+        BUILTINS.get(t.index())
+    }
+
+    pub fn kind(&self, t: CTy) -> &TyKind {
+        &self.kinds[t.index()]
+    }
+
+    /// The id of `k`: the one it has, or a new one at the end.
+    pub fn intern(&mut self, k: TyKind) -> CTy {
+        if let Some(&t) = self.ids.get(&k) {
+            return t;
+        }
+        let t = CTy(self.kinds.len() as u32);
+        self.kinds.push(k.clone());
+        self.ids.insert(k, t);
+        t
+    }
+
+    /// The kinds of every type, in the order of their ids.
+    pub fn kinds(&self) -> &[TyKind] {
+        &self.kinds
+    }
+
+    pub fn is_aggregate(&self, t: CTy) -> bool {
+        matches!(self.kind(t), TyKind::Array(..) | TyKind::Tuple(_) | TyKind::Struct(_) | TyKind::Enum(_))
+    }
+
+    pub fn is_int(&self, t: CTy) -> bool {
+        matches!(self.kind(t), TyKind::Int(_))
+    }
+
+    pub fn is_float(&self, t: CTy) -> bool {
+        matches!(self.kind(t), TyKind::Float(_))
+    }
+
+    pub fn is_scalar(&self, t: CTy) -> bool {
+        matches!(self.kind(t), TyKind::Int(_) | TyKind::Float(_) | TyKind::Bool | TyKind::Char)
+    }
+
+    // A1b: the bridge to the tree of the stages after Core, removed with `Ty`.
+    /// The type `t` as a tree (as deep as the type, §4.4).
+    pub fn tree(&self, t: CTy) -> Ty {
+        match self.kind(t) {
+            TyKind::Int(k) => Ty::Int(*k),
+            TyKind::Float(k) => Ty::Float(*k),
+            TyKind::Bool => Ty::Bool,
+            TyKind::Char => Ty::Char,
+            TyKind::Unit => Ty::Unit,
+            TyKind::Array(e, n) => Ty::Array(Box::new(self.tree(*e)), *n),
+            TyKind::Tuple(ts) => Ty::Tuple(ts.iter().map(|&t| self.tree(t)).collect()),
+            TyKind::Struct(id) => Ty::Struct(*id),
+            TyKind::Enum(id) => Ty::Enum(*id),
+            TyKind::Span(e) => Ty::Span(Box::new(self.tree(*e))),
+            TyKind::FnPtr(f) => Ty::FnPtr(Box::new(TreeSig {
+                rt: f.rt,
+                params: f.params.iter().map(|&(m, t)| (m, self.tree(t))).collect(),
+                ret: self.tree(f.ret),
+            })),
+            TyKind::Buf(e) => Ty::Buf(Box::new(self.tree(*e))),
+        }
+    }
+
+    // A1b: the bridge to the tree of the stages after Core, removed with `Ty`.
+    /// The id of the tree `t`, interned.
+    pub fn of(&mut self, t: &Ty) -> CTy {
+        let k = match t {
+            Ty::Int(k) => TyKind::Int(*k),
+            Ty::Float(k) => TyKind::Float(*k),
+            Ty::Bool => TyKind::Bool,
+            Ty::Char => TyKind::Char,
+            Ty::Unit => TyKind::Unit,
+            Ty::Array(e, n) => TyKind::Array(self.of(e), *n),
+            Ty::Tuple(ts) => TyKind::Tuple(ts.iter().map(|t| self.of(t)).collect()),
+            Ty::Struct(id) => TyKind::Struct(*id),
+            Ty::Enum(id) => TyKind::Enum(*id),
+            Ty::Span(e) => TyKind::Span(self.of(e)),
+            Ty::FnPtr(f) => {
+                let params = f.params.iter().map(|(m, t)| (*m, self.of(t))).collect();
+                TyKind::FnPtr(Box::new(FnSig { rt: f.rt, params, ret: self.of(&f.ret) }))
+            }
+            Ty::Buf(e) => TyKind::Buf(self.of(e)),
+        };
+        self.intern(k)
+    }
+}
+
+// A1b: the tree of a type, which the stages after Core read through
+// [`Types::tree`] until they read [`CTy`]; removed then.
+/// A concrete type as a tree. Structs and enums refer to `Module::types`.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Ty {
     Int(IntKind),
@@ -58,11 +244,8 @@ pub enum Ty {
     Tuple(Vec<Ty>),
     Struct(TypeId),
     Enum(TypeId),
-    /// Second-class view (§5.3); only in parameters and temporaries.
     Span(Box<Ty>),
-    /// Function pointer (captureless function value, §5.3).
-    FnPtr(Box<FnSig>),
-    /// Heap buffer; interpreter only in phase 1 (D-08).
+    FnPtr(Box<TreeSig>),
     Buf(Box<Ty>),
 }
 
@@ -88,8 +271,10 @@ impl Ty {
     }
 }
 
+// A1b: removed with `Ty`.
+/// The signature of a function pointer of [`Ty`].
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct FnSig {
+pub struct TreeSig {
     pub rt: bool,
     pub params: Vec<(Mode, Ty)>,
     pub ret: Ty,
@@ -113,10 +298,10 @@ pub struct TypeDef {
 #[derive(Debug, Clone)]
 pub enum TypeDefKind {
     Struct {
-        fields: Vec<(String, Ty)>,
+        fields: Vec<(String, CTy)>,
     },
     Enum {
-        variants: Vec<(String, Vec<Ty>)>,
+        variants: Vec<(String, Vec<CTy>)>,
     },
     /// Fields not known (`target` / `extern` opaque types).
     Opaque,
@@ -125,7 +310,7 @@ pub enum TypeDefKind {
 #[derive(Debug, Clone)]
 pub struct ConstDef {
     pub name: String,
-    pub ty: Ty,
+    pub ty: CTy,
     /// Literal / aggregate initializer, or an expression the interpreter
     /// evaluates at build time (T3-9).
     pub init: Expr,
@@ -134,14 +319,14 @@ pub struct ConstDef {
 #[derive(Debug, Clone)]
 pub struct Local {
     pub name: String,
-    pub ty: Ty,
+    pub ty: CTy,
 }
 
 #[derive(Debug, Clone)]
 pub struct Param {
     pub local: LocalId,
     pub mode: Mode,
-    pub ty: Ty,
+    pub ty: CTy,
 }
 
 #[derive(Debug, Clone)]
@@ -149,7 +334,7 @@ pub struct FnDef {
     /// `dsp.voice.wrap01`, `test.gcd`, `clamp__F32`.
     pub name: String,
     pub params: Vec<Param>,
-    pub ret: Ty,
+    pub ret: CTy,
     /// The result is an aggregate built in the caller's slot (§12.7).
     pub sret: bool,
     pub rt: bool,
@@ -195,6 +380,8 @@ impl TestMark {
 
 #[derive(Debug, Clone, Default)]
 pub struct Module {
+    /// The types every id of the module refers to.
+    pub tys: Types,
     pub types: Vec<TypeDef>,
     pub consts: Vec<ConstDef>,
     pub fns: Vec<FnDef>,
@@ -222,9 +409,9 @@ pub enum MoveKind {
 /// One copy of an aggregate value, with its size on the reference host.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MoveSite {
-    pub fn_name: String,
+    pub fn_: FnId,
     pub span: onsa_diag::Span,
-    pub ty: Ty,
+    pub ty: CTy,
     pub bytes: u32,
     pub kind: MoveKind,
 }
@@ -380,7 +567,7 @@ pub struct Arg {
 
 #[derive(Debug, Clone)]
 pub struct Expr {
-    pub ty: Ty,
+    pub ty: CTy,
     pub span: Span,
     pub kind: ExprKind,
 }
@@ -483,7 +670,7 @@ pub enum ExprKind {
 }
 
 impl Expr {
-    pub fn new(ty: Ty, span: Span, kind: ExprKind) -> Expr {
+    pub fn new(ty: CTy, span: Span, kind: ExprKind) -> Expr {
         Expr { ty, span, kind }
     }
 

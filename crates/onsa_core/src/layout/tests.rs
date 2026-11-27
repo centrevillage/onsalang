@@ -1,14 +1,12 @@
 //! Unit tests of the Core layout (§12.4).
 
 use super::*;
-use crate::ir::TypeDef;
+use crate::ir::{TypeDef, Types};
 
-fn f32() -> Ty {
-    Ty::Float(FloatKind::F32)
-}
+const F32: CTy = Types::float(FloatKind::F32);
 
-fn arr(e: Ty, n: u32) -> Ty {
-    Ty::Array(Box::new(e), n)
+fn arr(m: &mut Module, e: CTy, n: u32) -> CTy {
+    m.tys.intern(TyKind::Array(e, n))
 }
 
 /// A value of no elements or no fields takes the bytes its C takes (R-504): an
@@ -17,31 +15,42 @@ fn arr(e: Ty, n: u32) -> Ty {
 #[test]
 fn no_value_is_of_no_bytes() {
     let mut m = Module::default();
+    let none = arr(&mut m, F32, 0);
     m.types.push(TypeDef { name: "t.Nothing".into(), kind: TypeDefKind::Struct { fields: Vec::new() } });
     m.types.push(TypeDef {
         name: "t.Fields".into(),
-        kind: TypeDefKind::Struct { fields: vec![("none".into(), arr(f32(), 0)), ("v".into(), f32())] },
+        kind: TypeDefKind::Struct { fields: vec![("none".into(), none), ("v".into(), F32)] },
     });
     m.types.push(TypeDef {
         name: "t.Opt".into(),
-        kind: TypeDefKind::Enum { variants: vec![("None".into(), Vec::new()), ("Some".into(), vec![arr(f32(), 0)])] },
+        kind: TypeDefKind::Enum { variants: vec![("None".into(), Vec::new()), ("Some".into(), vec![none])] },
     });
+    let (four, f64s) = (arr(&mut m, F32, 4), arr(&mut m, Types::float(FloatKind::F64), 0));
+    let kinds = [
+        TyKind::Tuple(Box::new([])),
+        TyKind::Tuple(Box::new([Types::UNIT, F32])),
+        TyKind::Tuple(Box::new([none, F32])),
+        TyKind::Struct(TypeId(0)),
+        TyKind::Struct(TypeId(1)),
+        TyKind::Enum(TypeId(2)),
+    ]
+    .map(|k| m.tys.intern(k));
     let cases = [
-        (arr(f32(), 0), (4, 4)),
-        (arr(Ty::Float(FloatKind::F64), 0), (8, 8)),
-        (arr(arr(f32(), 0), 4), (16, 4)),
-        (arr(arr(f32(), 4), 0), (16, 4)),
-        (Ty::Unit, (1, 1)),
-        (Ty::Tuple(Vec::new()), (1, 1)),
-        (Ty::Tuple(vec![Ty::Unit, f32()]), (8, 4)),
-        (Ty::Tuple(vec![arr(f32(), 0), f32()]), (8, 4)),
-        (Ty::Struct(TypeId(0)), (1, 1)),
-        (Ty::Struct(TypeId(1)), (8, 4)),
-        (Ty::Enum(TypeId(2)), (8, 4)),
-        (arr(f32(), 3), (12, 4)),
+        (none, (4, 4)),
+        (f64s, (8, 8)),
+        (arr(&mut m, none, 4), (16, 4)),
+        (arr(&mut m, four, 0), (16, 4)),
+        (Types::UNIT, (1, 1)),
+        (kinds[0], (1, 1)),
+        (kinds[1], (8, 4)),
+        (kinds[2], (8, 4)),
+        (kinds[3], (1, 1)),
+        (kinds[4], (8, 4)),
+        (kinds[5], (8, 4)),
+        (arr(&mut m, F32, 3), (12, 4)),
     ];
     for (ty, want) in cases {
-        assert_eq!(size_align(&m, &ty), want, "{ty:?}");
+        assert_eq!(size_align(&m, ty), want, "{:?}", m.tys.kind(ty));
     }
 }
 

@@ -128,7 +128,7 @@ impl<'a> Storage<'a> {
     /// roots of the values it is given; of an `if`, a `match` or a block, the
     /// roots of their values; of anything else, of its parts.
     fn roots(&mut self, e: &'a Expr, out: &mut BTreeSet<LocalId>) {
-        if !self.views(&e.ty) {
+        if !self.views(e.ty) {
             return;
         }
         match &e.kind {
@@ -155,7 +155,7 @@ impl<'a> Storage<'a> {
     /// (§5.3): the chain has no cycle, and no partial result is kept.
     fn local(&mut self, l: LocalId, out: &mut BTreeSet<LocalId>) {
         let (i, f) = (l.0 as usize, self.f);
-        if !self.views(&f.locals[i].ty) {
+        if !self.views(f.locals[i].ty) {
             return;
         }
         if let Some(set) = &self.memo[i] {
@@ -173,19 +173,19 @@ impl<'a> Storage<'a> {
     /// Whether a value of `t` holds a view: a `Span`, or an aggregate with one
     /// in an element, a field or a payload (the element of a `Buf` is not one).
     /// It ends: no type holds itself by value.
-    fn views(&mut self, t: &Ty) -> bool {
+    fn views(&mut self, t: CTy) -> bool {
         let m = self.m;
-        match t {
-            Ty::Span(_) => true,
-            Ty::Array(el, _) => self.views(el),
-            Ty::Tuple(ts) => ts.iter().any(|t| self.views(t)),
-            Ty::Struct(id) | Ty::Enum(id) => {
+        match m.tys.kind(t) {
+            TyKind::Span(_) => true,
+            TyKind::Array(el, _) => self.views(*el),
+            TyKind::Tuple(ts) => ts.iter().any(|&t| self.views(t)),
+            TyKind::Struct(id) | TyKind::Enum(id) => {
                 if let Some(&b) = self.types.get(id) {
                     return b;
                 }
                 let b = match &m.ty(*id).kind {
-                    TypeDefKind::Struct { fields } => fields.iter().any(|(_, t)| self.views(t)),
-                    TypeDefKind::Enum { variants } => variants.iter().flat_map(|(_, ts)| ts).any(|t| self.views(t)),
+                    TypeDefKind::Struct { fields } => fields.iter().any(|&(_, t)| self.views(t)),
+                    TypeDefKind::Enum { variants } => variants.iter().flat_map(|(_, ts)| ts).any(|&t| self.views(t)),
                     TypeDefKind::Opaque => false,
                 };
                 *self.types.entry(*id).or_insert(b)

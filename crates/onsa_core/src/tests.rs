@@ -397,11 +397,11 @@ fn a_cycle_of_what_lowering_makes_is_not_reported() {
     let a = onsa_sema::analyze(&pkg);
     let flat = onsa_sema::flatten(&pkg);
     let span = onsa_diag::Span::new(FileId(0), 0, 0);
-    let call = |to: u32| Expr::new(Ty::u32(), span, ExprKind::Call { fn_: FnId(to), args: Vec::new() });
+    let call = |to: u32| Expr::new(Types::U32, span, ExprKind::Call { fn_: FnId(to), args: Vec::new() });
     let generated = FnDef {
         name: "__eq.L".into(),
         params: Vec::new(),
-        ret: Ty::u32(),
+        ret: Types::U32,
         sret: false,
         rt: true,
         locals: Vec::new(),
@@ -428,13 +428,13 @@ fn verifier_rejects_bad_modules() {
     m.fns.push(FnDef {
         name: "bad".into(),
         params: Vec::new(),
-        ret: Ty::Int(IntKind::I32),
+        ret: Types::int(IntKind::I32),
         sret: false,
         rt: false,
-        locals: vec![Local { name: "x".into(), ty: Ty::Int(IntKind::I32) }],
+        locals: vec![Local { name: "x".into(), ty: Types::int(IntKind::I32) }],
         body: Some(Block {
             stmts: Vec::new(),
-            value: Some(Box::new(Expr::new(Ty::Int(IntKind::I32), span, ExprKind::Local(LocalId(0))))),
+            value: Some(Box::new(Expr::new(Types::int(IntKind::I32), span, ExprKind::Local(LocalId(0))))),
         }),
         span,
         fp_relaxed: false,
@@ -447,7 +447,7 @@ fn verifier_rejects_bad_modules() {
     // Type mismatch: a Bool body for an I32 function.
     m.fns[0].body = Some(Block {
         stmts: Vec::new(),
-        value: Some(Box::new(Expr::new(Ty::Bool, span, ExprKind::Lit(Lit::Bool(true))))),
+        value: Some(Box::new(Expr::new(Types::BOOL, span, ExprKind::Lit(Lit::Bool(true))))),
     });
     let err = verify(&m).unwrap_err();
     assert!(err.message.contains("mismatch"), "{err}");
@@ -459,10 +459,11 @@ fn verifier_rejects_bad_modules() {
 fn the_verifier_rejects_an_index_known_in_range_outside_the_sample_loop() {
     let mut m = core("pub flow f(x: F32 at sample) -> F32 at sample {\n  x\n}\n");
     let span = onsa_diag::Span::new(FileId(0), 0, 0);
+    let one = m.tys.intern(TyKind::Array(Types::U32, 1));
     let index = |bounds: Bounds| {
-        let zero = Expr::new(Ty::u32(), span, ExprKind::Lit(Lit::Int(0)));
-        let base = Expr::new(Ty::Array(Box::new(Ty::u32()), 1), span, ExprKind::Array(vec![zero.clone()]));
-        let e = Expr::new(Ty::u32(), span, ExprKind::Index { base: Box::new(base), index: Box::new(zero), bounds });
+        let zero = Expr::new(Types::U32, span, ExprKind::Lit(Lit::Int(0)));
+        let base = Expr::new(one, span, ExprKind::Array(vec![zero.clone()]));
+        let e = Expr::new(Types::U32, span, ExprKind::Index { base: Box::new(base), index: Box::new(zero), bounds });
         Stmt { span, kind: StmtKind::Expr(e) }
     };
     let process = m.flows[0].fns.process.expect("a `process`").0 as usize;
@@ -477,15 +478,15 @@ fn the_verifier_rejects_an_index_known_in_range_outside_the_sample_loop() {
     body(&mut m, process).remove(0);
     verify(&m).unwrap_or_else(|e| panic!("{e}"));
     let i = LocalId(0);
-    let lit0 = Expr::new(Ty::u32(), span, ExprKind::Lit(Lit::Int(0)));
+    let lit0 = Expr::new(Types::U32, span, ExprKind::Lit(Lit::Int(0)));
     let looped = StmtKind::ForRange(i, lit0.clone(), lit0, Block { stmts: vec![index(Bounds::Known)], value: None });
     m.fns.push(FnDef {
         name: "other".into(),
         params: Vec::new(),
-        ret: Ty::Unit,
+        ret: Types::UNIT,
         sret: false,
         rt: true,
-        locals: vec![Local { name: "i".into(), ty: Ty::u32() }],
+        locals: vec![Local { name: "i".into(), ty: Types::U32 }],
         body: Some(Block { stmts: vec![Stmt { span, kind: looped }], value: None }),
         span,
         fp_relaxed: false,
@@ -495,6 +496,25 @@ fn the_verifier_rejects_an_index_known_in_range_outside_the_sample_loop() {
     });
     let err = verify(&m).unwrap_err();
     assert!(err.message.contains("outside the sample loop") && err.fn_name == "other", "{err}");
+}
+
+/// Every table has the built-in types at the ids of their constants
+/// (`ir::BUILTINS`), and no kind twice: interning one gives its id again.
+#[test]
+fn the_built_in_types_are_at_the_ids_of_their_constants() {
+    let mut t = Types::default();
+    let n = t.kinds().len();
+    use IntKind::*;
+    let ints = [I8, I16, I32, I64, U8, U16, U32, U64].map(|k| (TyKind::Int(k), Types::int(k)));
+    let floats = [FloatKind::F32, FloatKind::F64].map(|k| (TyKind::Float(k), Types::float(k)));
+    let others = [(TyKind::Bool, Types::BOOL), (TyKind::Char, Types::CHAR), (TyKind::Unit, Types::UNIT)];
+    for (k, id) in ints.into_iter().chain(floats).chain(others).chain([(TyKind::Int(U32), Types::U32)]) {
+        assert_eq!(t.intern(k.clone()), id, "{k:?}");
+        assert_eq!((t.kind(id), Types::builtin(id)), (&k, Some(&k)));
+    }
+    assert_eq!(t.kinds().len(), n, "no built-in type is made again");
+    let arr = t.intern(TyKind::Array(Types::U32, 2));
+    assert_eq!((arr.index(), t.intern(TyKind::Array(Types::U32, 2)), Types::builtin(arr)), (n, arr, None));
 }
 
 // ---------------------------------------------------------------- flows (T3-5, T3-6)
@@ -1115,24 +1135,23 @@ fn a_fixed_str_literal_is_of_the_size_of_its_text() {
 #[test]
 fn has_return_walks_a_deep_nesting_once() {
     let sp = onsa_diag::Span::new(FileId(0), 0, 0);
-    let int = Ty::Int(IntKind::I32);
-    let zero = || Expr::new(Ty::Int(IntKind::I32), sp, ExprKind::Lit(Lit::Int(0)));
-    let local = |l: u32| Expr::new(Ty::Int(IntKind::I32), sp, ExprKind::Local(LocalId(l)));
+    let int = Types::int(IntKind::I32);
+    let zero = || Expr::new(Types::int(IntKind::I32), sp, ExprKind::Lit(Lit::Int(0)));
+    let local = |l: u32| Expr::new(Types::int(IntKind::I32), sp, ExprKind::Local(LocalId(l)));
     let st = |kind: StmtKind| Stmt { span: sp, kind };
     let nested = |bottom: Stmt| {
-        let mut e =
-            Expr::new(int.clone(), sp, ExprKind::Block(Block { stmts: vec![bottom], value: Some(Box::new(zero())) }));
+        let mut e = Expr::new(int, sp, ExprKind::Block(Block { stmts: vec![bottom], value: Some(Box::new(zero())) }));
         for _ in 0..64 {
             let b = Block { stmts: vec![st(StmtKind::Let(LocalId(0), e))], value: Some(Box::new(local(0))) };
-            e = Expr::new(int.clone(), sp, ExprKind::Block(b));
+            e = Expr::new(int, sp, ExprKind::Block(b));
         }
         FnDef {
             name: "f".into(),
             params: Vec::new(),
-            ret: int.clone(),
+            ret: int,
             sret: false,
             rt: false,
-            locals: vec![Local { name: "v".into(), ty: int.clone() }],
+            locals: vec![Local { name: "v".into(), ty: int }],
             body: Some(Block { stmts: Vec::new(), value: Some(Box::new(e)) }),
             span: sp,
             fp_relaxed: false,
@@ -1142,8 +1161,7 @@ fn has_return_walks_a_deep_nesting_once() {
         }
     };
     let ret = || st(StmtKind::Return(Some(zero())));
-    let in_index =
-        Expr::new(int.clone(), sp, ExprKind::Block(Block { stmts: vec![ret()], value: Some(Box::new(zero())) }));
+    let in_index = Expr::new(int, sp, ExprKind::Block(Block { stmts: vec![ret()], value: Some(Box::new(zero())) }));
     let place = Place::Index(Box::new(Place::Local(LocalId(0))), Box::new(in_index), sp, Bounds::Checked);
     assert!(!crate::walk::has_return(&nested(st(StmtKind::Expr(zero())))));
     assert!(crate::walk::has_return(&nested(ret())));
@@ -1165,8 +1183,8 @@ fn a_flow_with_a_port_at_sample_over_n_has_no_process() {
     assert_eq!((sl.process, sl.process_inplace, sl.render), (None, None, None));
     assert!(!m.fns.iter().any(|f| f.name.ends_with("sl.process") || f.name.ends_with("sl.render")), "{}", dump(&m));
     let tick4 = m.fn_(sl.stages[0].1);
-    assert_eq!((tick4.params.len(), &tick4.ret), (2, &Ty::Float(FloatKind::F32)));
-    assert_eq!(m.fn_(sl.tick).ret, Ty::Unit);
+    assert_eq!((tick4.params.len(), &tick4.ret), (2, &Types::float(FloatKind::F32)));
+    assert_eq!(m.fn_(sl.tick).ret, Types::UNIT);
     assert!(fl(".k").fns.process.is_some() && fl(".k").fns.render.is_some());
 }
 
@@ -1182,11 +1200,14 @@ fn the_time_is_a_parameter_of_the_stages_of_a_flow_that_reads_it() {
          pub flow plain(x: F32 at sample) -> F32 at sample {\n  x\n}\n",
     );
     let fl = |name: &str| m.flows.iter().find(|f| f.name.ends_with(name)).expect("the flow");
-    let params = |name: &str| m.fn_(fl(name).fns.tick).params.iter().map(|p| p.ty.clone()).collect::<Vec<_>>();
-    let st = |name: &str| Ty::Struct(fl(name).fns.state);
-    let f32 = Ty::Float(FloatKind::F32);
-    assert_eq!(params(".tk"), [st(".tk"), Ty::u32(), f32.clone()]);
-    assert_eq!(params(".top"), [st(".top"), Ty::u32(), f32.clone()]);
+    let params = |name: &str| {
+        let tys = m.fn_(fl(name).fns.tick).params.iter().map(|p| m.tys.kind(p.ty).clone());
+        tys.collect::<Vec<_>>()
+    };
+    let st = |name: &str| TyKind::Struct(fl(name).fns.state);
+    let (f32, u32) = (TyKind::Float(FloatKind::F32), TyKind::Int(IntKind::U32));
+    assert_eq!(params(".tk"), [st(".tk"), u32.clone(), f32.clone()]);
+    assert_eq!(params(".top"), [st(".top"), u32, f32.clone()]);
     assert_eq!(params(".plain"), [st(".plain"), f32]);
 }
 

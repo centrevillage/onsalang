@@ -114,7 +114,9 @@ fn run(interp: &Interp, f: FnId, args: Vec<IValue>) -> (Result<Value, Fault>, bo
 }
 
 fn to_interp_args(m: &Module, f: &FnDef, args: &[Value]) -> Result<Vec<IValue>, Fault> {
-    each(m, f.params.iter().map(|p| &p.ty), args)
+    // A1b: the trees of the types, read through the bridge.
+    let tys: Vec<Ty> = f.params.iter().map(|p| m.tys.tree(p.ty)).collect();
+    each(m, tys.iter(), args)
 }
 
 fn each<'t>(m: &Module, tys: impl ExactSizeIterator<Item = &'t Ty>, vs: &[Value]) -> Result<Vec<IValue>, Fault> {
@@ -140,13 +142,17 @@ fn to_interp(m: &Module, ty: &Ty, v: &Value) -> Result<IValue, Fault> {
         }
         (Ty::Tuple(ts), Value::Tuple(vs, _)) => IValue::Tuple(each(m, ts.iter(), vs)?),
         (Ty::Struct(id), Value::Struct(vs)) => match kind(m, *id) {
-            TypeDefKind::Struct { fields } => IValue::Struct(each(m, fields.iter().map(|(_, t)| t), vs)?),
+            TypeDefKind::Struct { fields } => {
+                let tys: Vec<Ty> = fields.iter().map(|(_, t)| m.tys.tree(*t)).collect();
+                IValue::Struct(each(m, tys.iter(), vs)?)
+            }
             _ => return Err(bad),
         },
         (Ty::Enum(id), Value::Enum { tag, fields }) => match kind(m, *id) {
             TypeDefKind::Enum { variants } => {
                 let (_, ts) = variants.get(*tag as usize).ok_or(bad)?;
-                IValue::Enum { tag: *tag, fields: each(m, ts.iter(), fields)? }
+                let tys: Vec<Ty> = ts.iter().map(|t| m.tys.tree(*t)).collect();
+                IValue::Enum { tag: *tag, fields: each(m, tys.iter(), fields)? }
             }
             _ => return Err(bad),
         },

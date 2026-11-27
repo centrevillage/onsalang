@@ -105,23 +105,34 @@ fn sp() -> Span {
     Span::new(FileId(0), 0, 0)
 }
 
-fn x(ty: Ty, kind: ExprKind) -> Expr {
+fn x(ty: CTy, kind: ExprKind) -> Expr {
     Expr::new(ty, sp(), kind)
 }
 
-fn f32t() -> Ty {
-    Ty::Float(FloatKind::F32)
+fn f32t() -> CTy {
+    Types::float(FloatKind::F32)
 }
 
-fn arr() -> Ty {
-    Ty::Array(Box::new(f32t()), 4)
+/// The types of these modules, in one table each of them starts from:
+/// `[F32; 4]`, `Span[F32]`, `[Span[F32]; 2]`, `E`.
+fn tys() -> (Types, [CTy; 4]) {
+    let mut t = Types::default();
+    let arr = t.intern(TyKind::Array(f32t(), 4));
+    let span = t.intern(TyKind::Span(f32t()));
+    let planar = t.intern(TyKind::Array(span, 2));
+    let e = t.intern(TyKind::Enum(TypeId(0)));
+    (t, [arr, span, planar, e])
 }
 
-fn span_ty() -> Ty {
-    Ty::Span(Box::new(f32t()))
+fn arr() -> CTy {
+    tys().1[0]
 }
 
-fn local(l: u32, ty: Ty) -> Expr {
+fn span_ty() -> CTy {
+    tys().1[1]
+}
+
+fn local(l: u32, ty: CTy) -> Expr {
     x(ty, ExprKind::Local(LocalId(l)))
 }
 
@@ -143,20 +154,17 @@ fn block(stmts: Vec<Stmt>, value: Option<Expr>) -> Block {
 
 /// `fn f(c: Bool, y: [F32; 4], o: E)` with the extra `locals` (from 3 on)
 /// and `body`; `E` is `enum E { A, B([F32; 4]) }`.
-fn module(locals: &[(&str, Ty)], body: Block) -> Module {
+fn module(locals: &[(&str, CTy)], body: Block) -> Module {
     let e = TypeDef {
         name: "E".into(),
         kind: TypeDefKind::Enum { variants: vec![("A".into(), Vec::new()), ("B".into(), vec![arr()])] },
     };
-    let params = [("c", Ty::Bool), ("y", arr()), ("o", Ty::Enum(TypeId(0)))];
-    let all: Vec<Local> =
-        params.iter().chain(locals).map(|(n, t)| Local { name: n.to_string(), ty: t.clone() }).collect();
+    let params = [("c", Types::BOOL), ("y", arr()), ("o", tys().1[3])];
+    let all: Vec<Local> = params.iter().chain(locals).map(|&(n, ty)| Local { name: n.to_string(), ty }).collect();
     let f = FnDef {
         name: "f".into(),
-        params: (0..3)
-            .map(|i| Param { local: LocalId(i), mode: Mode::Borrow, ty: all[i as usize].ty.clone() })
-            .collect(),
-        ret: Ty::Unit,
+        params: (0..3).map(|i| Param { local: LocalId(i), mode: Mode::Borrow, ty: all[i as usize].ty }).collect(),
+        ret: Types::UNIT,
         sret: false,
         rt: true,
         locals: all,
@@ -167,7 +175,7 @@ fn module(locals: &[(&str, Ty)], body: Block) -> Module {
         decl: None,
         hoisted: Vec::new(),
     };
-    Module { types: vec![e], fns: vec![f], ..Module::default() }
+    Module { tys: tys().0, types: vec![e], fns: vec![f], ..Module::default() }
 }
 
 /// The hoisted names of the module's function, which then verifies.
@@ -187,7 +195,7 @@ fn the_forms_of_the_tails_by_hand_hoist_the_binding() {
     let arm_copy = x(
         span_ty(),
         ExprKind::IfExpr {
-            cond: Box::new(local(0, Ty::Bool)),
+            cond: Box::new(local(0, Types::BOOL)),
             then: block(vec![st(StmtKind::Let(LocalId(3), ones()))], Some(span_of(3))),
             else_: block(Vec::new(), Some(span_of(1))),
         },
@@ -195,11 +203,11 @@ fn the_forms_of_the_tails_by_hand_hoist_the_binding() {
     let m = module(&[("t", arr()), ("s", span_ty())], block(vec![use_(arm_copy)], None));
     assert_eq!(hoisted_by_hand(m), ["t"]);
     // let s = match o { B(h) => span(h), _ => span(y) }
-    let payload = x(arr(), ExprKind::Payload { base: Box::new(local(2, Ty::Enum(TypeId(0)))), tag: 1, index: 0 });
+    let payload = x(arr(), ExprKind::Payload { base: Box::new(local(2, tys().1[3])), tag: 1, index: 0 });
     let switch = x(
         span_ty(),
         ExprKind::Switch {
-            scrutinee: Box::new(local(2, Ty::Enum(TypeId(0)))),
+            scrutinee: Box::new(local(2, tys().1[3])),
             arms: vec![(1, block(vec![st(StmtKind::Let(LocalId(3), payload))], Some(span_of(3))))],
             default: Some(block(Vec::new(), Some(span_of(1)))),
         },
@@ -207,32 +215,32 @@ fn the_forms_of_the_tails_by_hand_hoist_the_binding() {
     let m = module(&[("h", arr()), ("s", span_ty())], block(vec![use_(switch)], None));
     assert_eq!(hoisted_by_hand(m), ["h"]);
     // let p = if c { let t = [1.0; 4]; [span(t), span(y)] } else { [span(y), span(y)] }
-    let planar = Ty::Array(Box::new(span_ty()), 2);
+    let planar = tys().1[2];
     let tail = x(
-        planar.clone(),
+        planar,
         ExprKind::IfExpr {
-            cond: Box::new(local(0, Ty::Bool)),
+            cond: Box::new(local(0, Types::BOOL)),
             then: block(
                 vec![st(StmtKind::Let(LocalId(3), ones()))],
-                Some(x(planar.clone(), ExprKind::Array(vec![span_of(3), span_of(1)]))),
+                Some(x(planar, ExprKind::Array(vec![span_of(3), span_of(1)]))),
             ),
-            else_: block(Vec::new(), Some(x(planar.clone(), ExprKind::Array(vec![span_of(1), span_of(1)])))),
+            else_: block(Vec::new(), Some(x(planar, ExprKind::Array(vec![span_of(1), span_of(1)])))),
         },
     );
-    let m = module(&[("t", arr()), ("p", planar.clone())], block(vec![use_(tail)], None));
+    let m = module(&[("t", arr()), ("p", planar)], block(vec![use_(tail)], None));
     assert_eq!(hoisted_by_hand(m), ["t"]);
     // let p = [span(y), span(y)]; if c { let t = [1.0; 4]; p[0] = span(t) }
     let first = Place::Index(
         Box::new(Place::Local(LocalId(4))),
-        Box::new(x(Ty::u32(), ExprKind::Lit(Lit::Int(0)))),
+        Box::new(x(Types::U32, ExprKind::Lit(Lit::Int(0)))),
         sp(),
         Bounds::Checked,
     );
     let body = block(
         vec![
-            use_(x(planar.clone(), ExprKind::Array(vec![span_of(1), span_of(1)]))),
+            use_(x(planar, ExprKind::Array(vec![span_of(1), span_of(1)]))),
             st(StmtKind::If(
-                local(0, Ty::Bool),
+                local(0, Types::BOOL),
                 block(vec![st(StmtKind::Let(LocalId(3), ones())), st(StmtKind::Assign(first, span_of(3)))], None),
                 Block::default(),
             )),

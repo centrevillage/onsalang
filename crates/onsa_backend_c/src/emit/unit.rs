@@ -77,7 +77,7 @@ pub(crate) fn emit_unit(m: &Module, opts: &EmitOptions) -> Result<CUnit, Vec<Dia
     for (i, t) in m.types.iter().enumerate() {
         if let TypeDefKind::Struct { fields } = &t.kind {
             for (_, fty) in fields {
-                if let Some(id) = contains_bulk(&cx, fty) {
+                if let Some(id) = contains_bulk(&cx, &cx.m.tys.tree(*fty)) {
                     diags.push(unsupported(no_span(), Feature::BulkInType, &[&m.ty(id).name, &m.types[i].name]));
                 }
             }
@@ -130,22 +130,22 @@ pub(crate) fn emit_unit(m: &Module, opts: &EmitOptions) -> Result<CUnit, Vec<Dia
     // 4. Register every type the unit needs (dependency order falls out),
     //    and the pairs of `narrow_from` the runtime instantiates.
     for c in &consts {
-        cx.names.name(&m.const_(*c).ty);
+        cx.names.name(&cx.m.tys.tree(m.const_(*c).ty));
     }
     let mut narrows: Vec<(IntKind, IntKind)> = Vec::new();
     for f in &reach.fns {
         let def = m.fn_(*f);
         for p in &def.params {
-            cx.names.name(&p.ty);
+            cx.names.name(&cx.m.tys.tree(p.ty));
         }
-        cx.names.name(&def.ret);
+        cx.names.name(&cx.m.tys.tree(def.ret));
         for l in &def.locals {
-            cx.names.name(&l.ty);
+            cx.names.name(&cx.m.tys.tree(l.ty));
         }
         if let Some(b) = &def.body {
             let mut tys = Vec::new();
             walk_block(b, &mut |e| {
-                tys.push(e.ty.clone());
+                tys.push(e.ty);
                 if let ExprKind::Prim { prim: Prim::NarrowParts { from, to }, .. } = &e.kind
                     && !narrows.contains(&(*from, *to))
                 {
@@ -153,7 +153,7 @@ pub(crate) fn emit_unit(m: &Module, opts: &EmitOptions) -> Result<CUnit, Vec<Dia
                 }
             });
             for t in tys {
-                cx.names.name(&t);
+                cx.names.name(&cx.m.tys.tree(t));
             }
         }
     }
@@ -291,7 +291,7 @@ pub(crate) fn emit_unit(m: &Module, opts: &EmitOptions) -> Result<CUnit, Vec<Dia
         let _ = writeln!(out, "/* ---- constants ---- */");
         for c in &consts {
             let def = m.const_(*c);
-            let ty = cx.names.name(&def.ty);
+            let ty = cx.names.name(&cx.m.tys.tree(def.ty));
             match const_init(&mut cx, &def.init) {
                 Ok(init) => {
                     let _ = writeln!(out, "static const {ty} {} = {init};", cx.const_names[c]);

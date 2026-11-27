@@ -194,11 +194,11 @@ pub struct FlowMeta {
     pub fns: FlowFns,
     pub layout: FlowLayout,
     /// `Ctl` inputs with their `@param` metadata, in input order.
-    pub params: Vec<(String, Ty, Option<ParamInfo>)>,
+    pub params: Vec<(String, CTy, Option<ParamInfo>)>,
     /// `Sig` inputs: name and value type.
-    pub sig_inputs: Vec<(String, Ty)>,
+    pub sig_inputs: Vec<(String, CTy)>,
     /// Outputs: name, element type, planar channel count (§11.6).
-    pub outputs: Vec<(String, Ty, Option<u32>)>,
+    pub outputs: Vec<(String, CTy, Option<u32>)>,
     /// The flow's name in its heading: where a diagnostic of its API goes.
     pub name_span: Span,
 }
@@ -336,8 +336,8 @@ struct Gave {
 
 impl Gave {
     /// Where the next is put: past the array of no run, as it has one of each ([`FlowInfo::burst`]).
-    fn place(&self) -> R<Expr> {
-        self.next.as_ref().map_or(Ok(self.out.clone()), |n| index(self.out.clone(), n.clone()))
+    fn place(&self, tys: &Types) -> R<Expr> {
+        self.next.as_ref().map_or(Ok(self.out.clone()), |n| index(self.out.clone(), n.clone(), tys))
     }
 }
 
@@ -357,9 +357,9 @@ struct FlowShape {
     params_ty: TypeId,
     out_ty: TypeId,
     /// Core type of the value the body makes for the output: the `Option` of an event (§11.11).
-    out_val: Ty,
+    out_val: CTy,
     /// Boundary outputs: name, element type, planar count (§11.6).
-    outputs: Vec<(String, Ty, Option<u32>)>,
+    outputs: Vec<(String, CTy, Option<u32>)>,
     out_is_struct: bool,
 }
 
@@ -390,14 +390,14 @@ impl<'a> Lowerer<'a> {
 /// as each part runs the one it wraps, so that a rate below the normal
 /// floats rounds at each (once by the product it would not). The one place
 /// of it.
-fn child_rate(sr: &Expr, n: &PlanNode, span: Span) -> R<Expr> {
+fn child_rate(sr: &Expr, n: &PlanNode, span: Span, tys: &Types) -> R<Expr> {
     let mut rate = sr.clone();
     for b in n.bounds.iter().rev() {
         let Some(big) = b.ratio.n() else {
             return Err(internal(span, format!("the rate of a callee under a boundary of the ratio {:?}", b.ratio)));
         };
         let op = if b.ratio.slower_than_body() { BinOp::Div } else { BinOp::Mul };
-        rate = checked_binary(op, rate, float_lit(&sr.ty, big as f64, span)?);
+        rate = checked_binary(op, rate, float_lit(sr.ty, big as f64, span, tys)?);
     }
     Ok(rate)
 }
@@ -477,8 +477,11 @@ fn lower_flow<'b>(lw: &mut Lowerer<'b>, flow: DefId, fd: FlowDef, span: Span) ->
     // The body makes an output at `sample * N` in an array of N (§11.9), one at `event` in an `Option` (§11.11).
     let out_val = lw.core_ty(fd.out, &[], span)?;
     let out_val = match (fd.out_len(), info.emit) {
-        (Some(n), _) => Ty::Array(Box::new(out_val), n),
-        (None, Some(_)) => Ty::Enum(lw.type_id(event_option(a, span)?.def, vec![GenericArg::Ty(out_val)], span)?),
+        (Some(n), _) => lw.ty(TyKind::Array(out_val, n)),
+        (None, Some(_)) => {
+            let option = lw.type_id(event_option(a, span)?.def, vec![GenericArg::Ty(out_val)], span)?;
+            lw.ty(TyKind::Enum(option))
+        }
         (None, None) => out_val,
     };
 
@@ -499,7 +502,7 @@ fn lower_flow<'b>(lw: &mut Lowerer<'b>, flow: DefId, fd: FlowDef, span: Span) ->
             outputs.push((f.name.clone(), lw.core_ty(elem, &[], span)?, n));
         }
     }
-    let out_is_struct = matches!(out_val, Ty::Struct(_));
+    let out_is_struct = matches!(lw.m.tys.kind(out_val), TyKind::Struct(_));
 
     check_stages(info, span)?;
     let inputs = inputs(info, &fd, span)?;
@@ -558,8 +561,8 @@ fn lower_flow<'b>(lw: &mut Lowerer<'b>, flow: DefId, fd: FlowDef, span: Span) ->
         }
     }
     // Of the C API alone, when every `block` input has a `default` (§11.7, §14.2, S-625).
-    let defaults: Option<Vec<(Ty, ParamNumber)>> =
-        params.iter().map(|(_, t, p)| Some((t.clone(), p.as_ref()?.number(ParamKey::Default)?))).collect();
+    let defaults: Option<Vec<(CTy, ParamNumber)>> =
+        params.iter().map(|(_, t, p)| Some((*t, p.as_ref()?.number(ParamKey::Default)?))).collect();
     let params_default = defaults.is_some().then(|| push_fn(lw, format!("{base}.params_default"), false, span));
     let fns = FlowFns {
         flow,
@@ -603,7 +606,11 @@ fn lower_flow<'b>(lw: &mut Lowerer<'b>, flow: DefId, fd: FlowDef, span: Span) ->
         let Some(d) = member(&fd, name) else { continue };
         let id = ConstId(lw.m.consts.len() as u32);
         let cname = lw.qual_name(d);
-        lw.m.consts.push(ConstDef { name: cname, ty: Ty::u32(), init: lit(Ty::u32(), span, Lit::Int(value as i128)) });
+        lw.m.consts.push(ConstDef {
+            name: cname,
+            ty: Types::U32,
+            init: lit(Types::U32, span, Lit::Int(value as i128)),
+        });
         lw.const_ids.insert((d, Vec::new()), id);
     }
     lw.m.flows.push(FlowMeta {
@@ -629,7 +636,7 @@ fn push_fn(lw: &mut Lowerer, name: String, rt: bool, span: Span) -> FnId {
     lw.m.fns.push(FnDef {
         name,
         params: Vec::new(),
-        ret: Ty::Unit,
+        ret: Types::UNIT,
         sret: false,
         rt,
         locals: Vec::new(),

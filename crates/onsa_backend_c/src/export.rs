@@ -3,7 +3,7 @@
 
 use std::fmt::Write as _;
 
-use onsa_core::{FixedField, FnId, Mode, ParamKey, ParamKind, ParamNumber, Ty};
+use onsa_core::{FixedField, FnId, Mode, ParamKey, ParamKind, ParamNumber, Ty, TyKind, Types};
 
 use crate::emit::{Cx, Export, R, f32_lit};
 use crate::names::ident;
@@ -242,7 +242,7 @@ fn process_io(cx: &mut Cx, e: &Export) -> R<ProcessIo> {
     let (mut params, mut groups, mut decls) = (Vec::new(), Vec::new(), String::new());
     for p in def.params.iter().skip(2) {
         let output = matches!(p.mode, Mode::Inout);
-        let (of, tys) = match &p.ty {
+        let (of, tys) = match &cx.m.tys.tree(p.ty) {
             Ty::Struct(id) => (Some(*id), cx.fields(*id).iter().map(|(_, t)| t.clone()).collect()),
             t => (None, vec![t.clone()]),
         };
@@ -462,8 +462,8 @@ pub(crate) fn wrappers(cx: &mut Cx, e: &Export) -> R<String> {
         else {
             continue;
         };
-        match ty {
-            Ty::Float(onsa_core::FloatKind::F32) => {
+        match cx.m.tys.kind(*ty) {
+            TyKind::Float(onsa_core::FloatKind::F32) => {
                 let _ = writeln!(
                     s,
                     "  q.{} = onsa_clamp_f32(q.{}, {}, {});",
@@ -473,7 +473,7 @@ pub(crate) fn wrappers(cx: &mut Cx, e: &Export) -> R<String> {
                     f32_lit(max as f32)
                 );
             }
-            Ty::Float(onsa_core::FloatKind::F64) => {
+            TyKind::Float(onsa_core::FloatKind::F64) => {
                 let _ = writeln!(
                     s,
                     "  q.{} = onsa_clamp_f64(q.{}, {}, {});",
@@ -697,12 +697,12 @@ struct FnSignature {
 /// The prototype, the argument forwarding and the API of an exported function.
 fn fn_signature(cx: &mut Cx, f: FnId) -> R<FnSignature> {
     let def = cx.m.fn_(f);
-    if def.sret || !(def.ret.is_scalar() || def.ret == Ty::Unit) {
+    if def.sret || !(cx.m.tys.is_scalar(def.ret) || def.ret == Types::UNIT) {
         return Err(unsupported(def.span, Feature::ExportAggregateReturn, &[]));
     }
     let short = def.name.rsplit('.').next().unwrap_or(&def.name).to_string();
     let sym = format!("{}{}", cx.opts.prefix(), ident(&short));
-    let ret = if def.ret == Ty::Unit { "void".to_string() } else { cx.names.name(&def.ret) };
+    let ret = if def.ret == Types::UNIT { "void".to_string() } else { cx.names.name(&cx.m.tys.tree(def.ret)) };
     let mut decls = Vec::new();
     let mut fwd = Vec::new();
     let mut params = Vec::new();
@@ -710,7 +710,7 @@ fn fn_signature(cx: &mut Cx, f: FnId) -> R<FnSignature> {
         let onsa = def.locals[p.local.0 as usize].name.clone();
         let name = ident(&onsa);
         let field = |c_type: String| crate::ApiField { name: onsa.clone(), c_name: name.clone(), c_type };
-        match (&p.ty, p.mode) {
+        match (&cx.m.tys.tree(p.ty), p.mode) {
             (t, Mode::Inout) if t.is_scalar() => {
                 decls.push(format!("{}* {name}", cx.names.name(t)));
                 params.push(crate::FnParam { field: field(cx.names.name(t)), kind: crate::FnParamKind::InoutScalar });
@@ -737,7 +737,7 @@ fn fn_signature(cx: &mut Cx, f: FnId) -> R<FnSignature> {
     }
     let plist = if decls.is_empty() { "void".into() } else { decls.join(", ") };
     let proto = format!("{ret} {sym}({plist})");
-    let ret = if def.ret == Ty::Unit { None } else { Some(ret) };
+    let ret = if def.ret == Types::UNIT { None } else { Some(ret) };
     Ok(FnSignature { proto, fwd, symbol: sym, params, ret })
 }
 
@@ -751,7 +751,7 @@ pub(crate) fn fn_wrapper(cx: &mut Cx, f: FnId) -> R<String> {
     if cx.opts.panic == PanicMode::Poison {
         // T4-4 (spec §9.2): panics do not cross the FFI boundary; the call
         // returns a zero value and `<prefix>take_panic()` reports it.
-        let ret = if def.ret == Ty::Unit { None } else { Some(cx.names.name(&def.ret)) };
+        let ret = if def.ret == Types::UNIT { None } else { Some(cx.names.name(&cx.m.tys.tree(def.ret))) };
         // The previous slot is restored on every exit so that a wrapper entered from an
         // interrupt (or a nested host call) does not clear the outer wrapper's target (S-26).
         let _ = writeln!(s, "  jmp_buf onsa_jb;");
@@ -783,7 +783,7 @@ pub(crate) fn fn_wrapper(cx: &mut Cx, f: FnId) -> R<String> {
                 let _ = writeln!(s, "  onsa_current_jmp = onsa_prev;");
             }
         }
-    } else if def.ret == Ty::Unit {
+    } else if def.ret == Types::UNIT {
         let _ = writeln!(s, "  {inner}({});", fwd.join(", "));
     } else {
         let _ = writeln!(s, "  return {inner}({});", fwd.join(", "));

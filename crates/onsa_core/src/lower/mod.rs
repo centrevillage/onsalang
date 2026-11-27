@@ -53,7 +53,7 @@ use crate::ir::*;
 /// A generic argument after monomorphization.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum GenericArg {
-    Ty(Ty),
+    Ty(CTy),
     Const(u32),
 }
 
@@ -150,6 +150,9 @@ pub(crate) struct Lowerer<'a> {
     const_ids: HashMap<(DefId, Vec<GenericArg>), ConstId>,
     /// The measure (§4.4) of each instance of a type with arguments.
     type_measures: HashMap<TypeId, Measure>,
+    /// The measure of each type of `m.tys`, by id, filled up to the one read
+    /// ([`Lowerer::measure`]).
+    measures: Vec<Measure>,
     /// The instances §4.5 counts so far, and [`LowerOptions::instance_limit`].
     instances: u32,
     instance_limit: u32,
@@ -161,7 +164,7 @@ pub(crate) struct Lowerer<'a> {
     /// Where a type over the limits is reported, the innermost last
     /// ([`Lowerer::at_place`]).
     places: Vec<Span>,
-    pub(crate) eq_fns: HashMap<Ty, FnId>,
+    pub(crate) eq_fns: HashMap<CTy, FnId>,
     messages: HashMap<String, MsgId>,
     pub(crate) flow_fns: HashMap<DefId, flow::FlowFns>,
     /// The empty `Config` and `Params` of the flows with none ([`Lowerer::flow_ty`]).
@@ -236,6 +239,7 @@ pub fn lower_with(pkg: &Package, a: &Analysis, opts: &LowerOptions) -> Result<Mo
         type_defs: HashMap::new(),
         const_ids: HashMap::new(),
         type_measures: HashMap::new(),
+        measures: Vec::new(),
         instances: 0,
         instance_limit: opts.instance_limit,
         made_by: HashMap::new(),
@@ -425,28 +429,28 @@ impl<'a> Lowerer<'a> {
         }
     }
 
-    pub(crate) fn mangle(&self, t: &Ty) -> String {
-        match t {
-            Ty::Int(k) => k.name().to_string(),
-            Ty::Float(k) => k.name().to_string(),
-            Ty::Bool => "Bool".into(),
-            Ty::Char => "Char".into(),
-            Ty::Unit => "Unit".into(),
-            Ty::Array(e, n) => format!("A{n}_{}", self.mangle(e)),
-            Ty::Tuple(ts) => {
-                format!("T{}_{}", ts.len(), ts.iter().map(|t| self.mangle(t)).collect::<Vec<_>>().join("_"))
+    pub(crate) fn mangle(&self, t: CTy) -> String {
+        match self.m.tys.kind(t) {
+            TyKind::Int(k) => k.name().to_string(),
+            TyKind::Float(k) => k.name().to_string(),
+            TyKind::Bool => "Bool".into(),
+            TyKind::Char => "Char".into(),
+            TyKind::Unit => "Unit".into(),
+            TyKind::Array(e, n) => format!("A{n}_{}", self.mangle(*e)),
+            TyKind::Tuple(ts) => {
+                format!("T{}_{}", ts.len(), ts.iter().map(|&t| self.mangle(t)).collect::<Vec<_>>().join("_"))
             }
-            Ty::Struct(id) | Ty::Enum(id) => self.m.ty(*id).name.replace('.', "_"),
-            Ty::Span(e) => format!("Span_{}", self.mangle(e)),
-            Ty::Buf(e) => format!("Buf_{}", self.mangle(e)),
-            Ty::FnPtr(_) => "Fn".into(),
+            TyKind::Struct(id) | TyKind::Enum(id) => self.m.ty(*id).name.replace('.', "_"),
+            TyKind::Span(e) => format!("Span_{}", self.mangle(*e)),
+            TyKind::Buf(e) => format!("Buf_{}", self.mangle(*e)),
+            TyKind::FnPtr(_) => "Fn".into(),
         }
     }
 
     fn mangle_args(&self, args: &[GenericArg]) -> String {
         args.iter()
             .map(|a| match a {
-                GenericArg::Ty(t) => format!("__{}", self.mangle(t)),
+                GenericArg::Ty(t) => format!("__{}", self.mangle(*t)),
                 GenericArg::Const(n) => format!("__{n}"),
             })
             .collect()
@@ -455,23 +459,23 @@ impl<'a> Lowerer<'a> {
     // ------------------------------------------------------------ types
 
     /// Convert a sema type under the generic arguments of the enclosing instance.
-    pub(crate) fn core_ty(&mut self, t: TyId, args: &[GenericArg], span: Span) -> R<Ty> {
+    pub(crate) fn core_ty(&mut self, t: TyId, args: &[GenericArg], span: Span) -> R<CTy> {
         self.measured_ty(t, args, span).map(|(ty, _)| ty)
     }
 
     /// [`Self::core_ty`] and the measure of the type, judged at each form
     /// (`limits`).
-    fn measured_ty(&mut self, t: TyId, args: &[GenericArg], span: Span) -> R<(Ty, Measure)> {
+    fn measured_ty(&mut self, t: TyId, args: &[GenericArg], span: Span) -> R<(CTy, Measure)> {
         let st = self.a.types.get(t).clone();
         let mut m = Measure::LEAF;
         let ty = match st {
-            STy::Int(k) => Ty::Int(k),
-            STy::Float(k) => Ty::Float(k),
-            STy::Bool => Ty::Bool,
-            STy::Char => Ty::Char,
+            STy::Int(k) => TyKind::Int(k),
+            STy::Float(k) => TyKind::Float(k),
+            STy::Bool => TyKind::Bool,
+            STy::Char => TyKind::Char,
             STy::Unit => {
                 m = Measure::form(1);
-                Ty::Unit
+                TyKind::Unit
             }
             STy::Array(e, len) => {
                 let n = match len {
@@ -484,12 +488,12 @@ impl<'a> Lowerer<'a> {
                 };
                 let (e, own) = self.wrapped_ty(e, args, span)?;
                 m = own;
-                Ty::Array(e, n)
+                TyKind::Array(e, n)
             }
             STy::Tuple(ts) => {
                 let (out, own) = self.form_of(&ts, args, span)?;
                 m = own;
-                Ty::Tuple(out)
+                TyKind::Tuple(out.into())
             }
             STy::Named(d, targs) => {
                 let def = self.a.def(d);
@@ -499,7 +503,7 @@ impl<'a> Lowerer<'a> {
                         let gargs = self.generic_args(&targs, args, span)?;
                         let id = self.type_id(d, gargs, span)?;
                         m = self.type_measure(id);
-                        if matches!(def.kind, DefKind::Struct(_)) { Ty::Struct(id) } else { Ty::Enum(id) }
+                        if matches!(def.kind, DefKind::Struct(_)) { TyKind::Struct(id) } else { TyKind::Enum(id) }
                     }
                     _ => return Err(internal(span, "type refers to a non-type def")),
                 }
@@ -508,7 +512,7 @@ impl<'a> Lowerer<'a> {
                 BuiltinTy::Span | BuiltinTy::Buf => {
                     let (e, own) = self.wrapped_ty(targs[0], args, span)?;
                     m = own;
-                    if b == BuiltinTy::Span { Ty::Span(e) } else { Ty::Buf(e) }
+                    if b == BuiltinTy::Span { TyKind::Span(e) } else { TyKind::Buf(e) }
                 }
                 BuiltinTy::Ptr => return Err(unsupported(span, Feature::Ptr, &[])),
                 BuiltinTy::Str | BuiltinTy::Bytes | BuiltinTy::Array | BuiltinTy::Map | BuiltinTy::Set => {
@@ -521,24 +525,26 @@ impl<'a> Lowerer<'a> {
                 m = own;
                 let Some(ret) = tys.pop() else { return Err(internal(span, "a function type with no result")) };
                 let params = f.params.iter().map(|(mode, _)| core_mode(*mode)).zip(tys).collect();
-                Ty::FnPtr(Box::new(FnSig { rt: f.rt, params, ret }))
+                TyKind::FnPtr(Box::new(FnSig { rt: f.rt, params, ret }))
             }
             STy::Param(i) => match args.get(i as usize) {
-                Some(GenericArg::Ty(t)) => {
-                    m = self.measure(t);
-                    t.clone()
-                }
+                Some(&GenericArg::Ty(t)) => return Ok((t, self.measure(t))),
                 _ => return Err(internal(span, "unbound type parameter")),
             },
             STy::ConstVal(_) => return Err(internal(span, "const argument in type position")),
             STy::Var(_) | STy::Error => return Err(internal(span, "unresolved type")),
         };
-        Ok((ty, m))
+        Ok((self.ty(ty), m))
+    }
+
+    /// The id of the type `k` (the one intern of lowering).
+    pub(crate) fn ty(&mut self, k: TyKind) -> CTy {
+        self.m.tys.intern(k)
     }
 
     /// The parts of a tuple or a function type, which count one, and its
     /// measure: judged at each part, so that a wide form stops at the limit.
-    fn form_of(&mut self, parts: &[TyId], args: &[GenericArg], span: Span) -> R<(Vec<Ty>, Measure)> {
+    fn form_of(&mut self, parts: &[TyId], args: &[GenericArg], span: Span) -> R<(Vec<CTy>, Measure)> {
         let (mut out, mut m) = (Vec::with_capacity(parts.len()), Measure::form(1));
         for &t in parts {
             let (ty, part) = self.measured_ty(t, args, span)?;
@@ -550,9 +556,9 @@ impl<'a> Lowerer<'a> {
 
     /// The element of an array, a `Span` or a `Buf`, and the measure of the
     /// form, which counts the name or the length too.
-    fn wrapped_ty(&mut self, t: TyId, args: &[GenericArg], span: Span) -> R<(Box<Ty>, Measure)> {
+    fn wrapped_ty(&mut self, t: TyId, args: &[GenericArg], span: Span) -> R<(CTy, Measure)> {
         let (ty, part) = self.measured_ty(t, args, span)?;
-        Ok((Box::new(ty), self.within(Measure::form(2).with(part), span)?))
+        Ok((ty, self.within(Measure::form(2).with(part), span)?))
     }
 
     pub(crate) fn generic_args(&mut self, targs: &[TyId], args: &[GenericArg], span: Span) -> R<Vec<GenericArg>> {
@@ -577,7 +583,8 @@ impl<'a> Lowerer<'a> {
         }
         self.stack_left(span)?;
         // Before the fields are read: they are where a type grows.
-        let measure = self.within(self.args_measure(&gargs), span)?;
+        let args = self.args_measure(&gargs);
+        let measure = self.within(args, span)?;
         self.count_instance(d, span)?;
         let name = format!("{}{}", self.qual_name(d), self.mangle_args(&gargs));
         let id = TypeId(self.m.types.len() as u32);
@@ -617,14 +624,14 @@ impl<'a> Lowerer<'a> {
         Ok(id)
     }
 
-    pub(crate) fn enum_variants(&self, id: TypeId) -> Vec<(String, Vec<Ty>)> {
+    pub(crate) fn enum_variants(&self, id: TypeId) -> Vec<(String, Vec<CTy>)> {
         match &self.m.ty(id).kind {
             TypeDefKind::Enum { variants } => variants.clone(),
             _ => Vec::new(),
         }
     }
 
-    pub(crate) fn struct_fields(&self, id: TypeId) -> Vec<(String, Ty)> {
+    pub(crate) fn struct_fields(&self, id: TypeId) -> Vec<(String, CTy)> {
         match &self.m.ty(id).kind {
             TypeDefKind::Struct { fields } => fields.clone(),
             _ => Vec::new(),
@@ -647,7 +654,7 @@ impl<'a> Lowerer<'a> {
         self.m.fns.push(FnDef {
             name,
             params: Vec::new(),
-            ret: Ty::Unit,
+            ret: Types::UNIT,
             sret: false,
             rt: false,
             locals: Vec::new(),
@@ -670,14 +677,15 @@ impl<'a> Lowerer<'a> {
         &mut self,
         fid: FnId,
         params: Vec<Param>,
-        ret: Ty,
+        ret: CTy,
         rt: bool,
         locals: Vec<Local>,
         body: Option<Block>,
     ) -> &mut FnDef {
+        let sret = self.m.tys.is_aggregate(ret);
         let fd = &mut self.m.fns[fid.0 as usize];
         fd.params = params;
-        fd.sret = ret.is_aggregate();
+        fd.sret = sret;
         fd.ret = ret;
         fd.rt = rt;
         fd.locals = locals;
@@ -701,14 +709,14 @@ impl<'a> Lowerer<'a> {
         let DefKind::Const(c) = &def.kind else { return Err(internal(def.span, "not a const")) };
         let ty = self.core_ty(c.ty, &gargs, def.span)?;
         let init = match self.a.const_values.get(&d) {
-            Some(v) => self.const_value_expr(v, &ty, def.span)?,
+            Some(v) => self.const_value_expr(v, ty, def.span)?,
             None => {
                 // Evaluated by the interpreter at build time (T3-9): lower the initializer.
                 let Some(body) = self.a.bodies.get(&d) else {
                     return Err(internal(def.span, "a `const` whose initializer was not checked"));
                 };
                 let Some(v) = c.value else { return Err(internal(def.span, "const without initializer")) };
-                let mut cx = body::FnCx::new(self, d, gargs.clone(), body, ty.clone())?;
+                let mut cx = body::FnCx::new(self, d, gargs.clone(), body, ty)?;
                 cx.constant = true;
                 let e = body::lower_expr(self, &mut cx, v)?;
                 // A placeholder is a local of its own (S-67): not one of the initializer.
@@ -726,43 +734,43 @@ impl<'a> Lowerer<'a> {
         Ok(id)
     }
 
-    fn const_value_expr(&mut self, v: &onsa_sema::ConstValue, ty: &Ty, span: Span) -> R<Expr> {
+    fn const_value_expr(&mut self, v: &onsa_sema::ConstValue, ty: CTy, span: Span) -> R<Expr> {
         use onsa_sema::ConstValue as C;
-        let kind = match (v, ty) {
-            (C::Int(n), Ty::Int(_)) => ExprKind::Lit(Lit::Int(*n)),
+        let kind = match (v, self.m.tys.kind(ty).clone()) {
+            (C::Int(n), TyKind::Int(_)) => ExprKind::Lit(Lit::Int(*n)),
             // Exact: the evaluation rounded the literal to `F32` once (R-20).
-            (C::Float(f), Ty::Float(FloatKind::F32)) => ExprKind::Lit(Lit::F32(*f as f32)),
-            (C::Float(f), Ty::Float(FloatKind::F64)) => ExprKind::Lit(Lit::F64(*f)),
+            (C::Float(f), TyKind::Float(FloatKind::F32)) => ExprKind::Lit(Lit::F32(*f as f32)),
+            (C::Float(f), TyKind::Float(FloatKind::F64)) => ExprKind::Lit(Lit::F64(*f)),
             // Rounded once, now that the type is decided.
-            (C::FloatText(t), Ty::Float(k)) => ExprKind::Lit(build::float_text(t, *k, span)?),
-            (C::Bool(b), Ty::Bool) => ExprKind::Lit(Lit::Bool(*b)),
-            (C::Char(c), Ty::Char) => ExprKind::Lit(Lit::Char(*c)),
-            (C::Unit, Ty::Unit) => ExprKind::Lit(Lit::Unit),
-            (C::Array(xs), Ty::Array(et, _)) => {
+            (C::FloatText(t), TyKind::Float(k)) => ExprKind::Lit(build::float_text(t, k, span)?),
+            (C::Bool(b), TyKind::Bool) => ExprKind::Lit(Lit::Bool(*b)),
+            (C::Char(c), TyKind::Char) => ExprKind::Lit(Lit::Char(*c)),
+            (C::Unit, TyKind::Unit) => ExprKind::Lit(Lit::Unit),
+            (C::Array(xs), TyKind::Array(et, _)) => {
                 let mut out = Vec::new();
                 for x in xs {
                     out.push(self.const_value_expr(x, et, span)?);
                 }
                 ExprKind::Array(out)
             }
-            (C::Tuple(xs), Ty::Tuple(ts)) => {
+            (C::Tuple(xs), TyKind::Tuple(ts)) => {
                 let mut out = Vec::new();
-                for (x, t) in xs.iter().zip(ts) {
+                for (x, &t) in xs.iter().zip(&ts) {
                     out.push(self.const_value_expr(x, t, span)?);
                 }
                 ExprKind::Tuple(out)
             }
-            (C::Struct(xs), Ty::Struct(id)) => {
-                let fields = self.struct_fields(*id);
+            (C::Struct(xs), TyKind::Struct(id)) => {
+                let fields = self.struct_fields(id);
                 let mut out = Vec::new();
-                for (x, (_, t)) in xs.iter().zip(&fields) {
+                for (x, &(_, t)) in xs.iter().zip(&fields) {
                     out.push(self.const_value_expr(x, t, span)?);
                 }
-                ExprKind::Struct { ty: *id, fields: out }
+                ExprKind::Struct { ty: id, fields: out }
             }
             _ => return Err(internal(span, "const value does not match its type")),
         };
-        Ok(Expr::new(ty.clone(), span, kind))
+        Ok(Expr::new(ty, span, kind))
     }
 
     fn lower_fn(&mut self, d: DefId, args: &[GenericArg], fid: FnId) -> R<()> {
@@ -793,7 +801,7 @@ impl<'a> Lowerer<'a> {
                     for p in &f.params {
                         let ty = self.core_ty(p.ty, args, p.span)?;
                         let local = LocalId(locals.len() as u32);
-                        locals.push(Local { name: p.name.clone(), ty: ty.clone() });
+                        locals.push(Local { name: p.name.clone(), ty });
                         params.push(Param { local, mode: core_mode(p.mode), ty });
                     }
                     self.fill_fn(fid, params, ret, f.rt, locals, None);
@@ -805,7 +813,7 @@ impl<'a> Lowerer<'a> {
                 if !info.complete {
                     return Err(internal(def.span, "function body has errors"));
                 }
-                let mut cx = body::FnCx::new(self, d, args.to_vec(), info, ret.clone())?;
+                let mut cx = body::FnCx::new(self, d, args.to_vec(), info, ret)?;
                 let params = body::bind_params(self, &mut cx, d, f)?;
                 let block = body::lower_fn_body(self, &mut cx, f.body.unwrap())?;
                 self.fill_fn(fid, params, ret, f.rt, cx.locals, Some(block));
@@ -818,11 +826,11 @@ impl<'a> Lowerer<'a> {
                 if !info.complete {
                     return Err(internal(def.span, "test body has errors"));
                 }
-                let mut cx = body::FnCx::new(self, d, Vec::new(), info, Ty::Unit)?;
+                let mut cx = body::FnCx::new(self, d, Vec::new(), info, Types::UNIT)?;
                 let block = body::lower_fn_body(self, &mut cx, *body)?;
                 // The mark that identifies the test (§11.8, S-55).
                 let module = self.a.modules.get(def.module).path.clone();
-                self.fill_fn(fid, Vec::new(), Ty::Unit, false, cx.locals, Some(block)).test =
+                self.fill_fn(fid, Vec::new(), Types::UNIT, false, cx.locals, Some(block)).test =
                     Some(TestMark { module, name: name.clone() });
                 Ok(())
             }

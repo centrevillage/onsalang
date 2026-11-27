@@ -59,7 +59,7 @@ pub(super) fn type_def(cx: &mut Cx, entry: &Entry) -> R<String> {
                         let _ = write!(s, "typedef struct {} {{", b.struct_name);
                         for (i, (fname, fty)) in fields.iter().enumerate() {
                             if b.fields.contains(&(i as u32)) {
-                                let tn = cx.names.name(fty);
+                                let tn = cx.names.name(&cx.m.tys.tree(*fty));
                                 let _ = write!(s, " {tn} {};", ident(fname));
                             }
                         }
@@ -67,7 +67,7 @@ pub(super) fn type_def(cx: &mut Cx, entry: &Entry) -> R<String> {
                         let _ = write!(s, "struct {tag} {{ void* bulk;");
                         for (i, (fname, fty)) in fields.iter().enumerate() {
                             if !b.fields.contains(&(i as u32)) {
-                                let tn = cx.names.name(fty);
+                                let tn = cx.names.name(&cx.m.tys.tree(*fty));
                                 let _ = write!(s, " {tn} {};", ident(fname));
                             }
                         }
@@ -78,7 +78,7 @@ pub(super) fn type_def(cx: &mut Cx, entry: &Entry) -> R<String> {
                             let _ = write!(s, " uint8_t onsa_empty;");
                         }
                         for (fname, fty) in &fields {
-                            let tn = cx.names.name(fty);
+                            let tn = cx.names.name(&cx.m.tys.tree(*fty));
                             let _ = write!(s, " {tn} {};", ident(fname));
                         }
                         let _ = writeln!(s, " }};");
@@ -97,7 +97,7 @@ pub(super) fn type_def(cx: &mut Cx, entry: &Entry) -> R<String> {
                             }
                             let _ = write!(s, " struct {{");
                             for (i, t) in ts.iter().enumerate() {
-                                let tn = cx.names.name(t);
+                                let tn = cx.names.name(&cx.m.tys.tree(*t));
                                 let _ = write!(s, " {tn} f{i};");
                             }
                             let _ = write!(s, " }} v_{};", ident(vname));

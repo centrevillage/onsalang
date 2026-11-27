@@ -42,7 +42,7 @@ pub(crate) struct FnCx<'b> {
     pub text: &'b str,
     pub module: ModId,
     pub locals: Vec<Local>,
-    pub ret: Ty,
+    pub ret: CTy,
     /// Depth of inlined closure bodies (`return` and `?` inside them are
     /// unsupported until W8-09: they leave the closure, S-192).
     pub inline_depth: u32,
@@ -60,7 +60,7 @@ impl<'b> FnCx<'b> {
         def: DefId,
         args: Vec<GenericArg>,
         info: &'b BodyInfo,
-        ret: Ty,
+        ret: CTy,
     ) -> R<FnCx<'b>> {
         let d = lw.a.def(def);
         let module = d.module;
@@ -76,7 +76,7 @@ impl<'b> FnCx<'b> {
         Ok(FnCx { args, info, ast, text, module, locals, ret, inline_depth: 0, flow: None, constant: false })
     }
 
-    pub(crate) fn temp(&mut self, name: &str, ty: Ty) -> LocalId {
+    pub(crate) fn temp(&mut self, name: &str, ty: CTy) -> LocalId {
         let id = LocalId(self.locals.len() as u32);
         self.locals.push(Local { name: name.to_string(), ty });
         id
@@ -142,7 +142,7 @@ impl Lowerer<'_> {
         let Some(of) = of else { return Ok((def, args)) };
         let ty = self.core_ty(of, &cx.args, span)?;
         // The arguments of its `impl`, then its own.
-        let (member, mut gargs) = self.member_of(&ty, &self.a.def(def).name, span)?;
+        let (member, mut gargs) = self.member_of(ty, &self.a.def(def).name, span)?;
         gargs.extend(args);
         Ok((member, gargs))
     }
@@ -172,7 +172,7 @@ pub(crate) fn bind_params(lw: &mut Lowerer, cx: &mut FnCx, d: DefId, f: &SFnDef)
                 next_local += 1;
                 let Some(local) = cx.locals.get(l.0 as usize) else { return Err(internal(span, "missing self local")) };
                 let mode = core_mode(f.self_mode.unwrap_or(ast::Mode::Borrow));
-                params.push(Param { local: l, mode, ty: local.ty.clone() });
+                params.push(Param { local: l, mode, ty: local.ty });
             }
             ast::ParamName::Ident(_) => {
                 let Some(ps) = sig.next() else { return Err(internal(span, "parameter count")) };
@@ -181,12 +181,12 @@ pub(crate) fn bind_params(lw: &mut Lowerer, cx: &mut FnCx, d: DefId, f: &SFnDef)
                 let Some(local) = cx.locals.get(l.0 as usize) else {
                     return Err(internal(span, "missing param local"));
                 };
-                params.push(Param { local: l, mode: core_mode(ps.mode), ty: local.ty.clone() });
+                params.push(Param { local: l, mode: core_mode(ps.mode), ty: local.ty });
             }
             ast::ParamName::Wild(_) => {
                 let Some(ps) = sig.next() else { return Err(internal(span, "parameter count")) };
                 let ty = lw.core_ty(ps.ty, &cx.args, ps.span)?;
-                let l = cx.temp("_", ty.clone());
+                let l = cx.temp("_", ty);
                 params.push(Param { local: l, mode: core_mode(ps.mode), ty });
             }
         }
@@ -202,16 +202,16 @@ pub(crate) fn lower_fn_body(lw: &mut Lowerer, cx: &mut FnCx, body: ExprId) -> R<
     let AK::Block(b) = &cx.expr(body).kind else {
         return Err(internal(cx.expr(body).span, "function body is not a block"));
     };
-    let want = cx.ret.clone();
-    lower_block(lw, cx, b, &want)
+    let want = cx.ret;
+    lower_block(lw, cx, b, want)
 }
 
 /// Lower a block of the type `want`; a type other than `()` keeps the tail
 /// expression as the block value. A block that wants one and ends in a
 /// diverging statement that Core does not see as one ([`Block::diverges`]: a
 /// `while` of §7) has a value no path reaches, so that Core has one form.
-fn lower_block(lw: &mut Lowerer, cx: &mut FnCx, b: &ast::Block, want: &Ty) -> R<Block> {
-    let want_value = *want != Ty::Unit;
+fn lower_block(lw: &mut Lowerer, cx: &mut FnCx, b: &ast::Block, want: CTy) -> R<Block> {
+    let want_value = want != Types::UNIT;
     let mut stmts = Vec::new();
     for &s in &b.stmts {
         lower_stmt(lw, cx, s, &mut stmts)?;
@@ -230,7 +230,7 @@ fn lower_block(lw: &mut Lowerer, cx: &mut FnCx, b: &ast::Block, want: &Ty) -> R<
         Some(&s) if b.tail.is_none() && !block.diverges() => {
             let msg = lw.msg("unreachable");
             let panic = ExprKind::Panic { msg, origin: PanicOrigin::Panic, shown: Vec::new() };
-            let value = Some(Box::new(Expr::new(want.clone(), cx.ast.stmt(s).span, panic)));
+            let value = Some(Box::new(Expr::new(want, cx.ast.stmt(s).span, panic)));
             Ok(Block { value, ..block })
         }
         _ => Ok(block),
@@ -241,10 +241,10 @@ fn lower_block(lw: &mut Lowerer, cx: &mut FnCx, b: &ast::Block, want: &Ty) -> R<
 pub(super) fn lower_block_expr(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId) -> R<Block> {
     let ty = lw.core_ty(cx.value_ty(e)?, &cx.args, cx.expr(e).span)?;
     match &cx.expr(e).kind {
-        AK::Block(b) => lower_block(lw, cx, b, &ty),
+        AK::Block(b) => lower_block(lw, cx, b, ty),
         _ => {
             let v = lower_expr(lw, cx, e)?;
-            if ty == Ty::Unit {
+            if ty == Types::UNIT {
                 let mut stmts = Vec::new();
                 push_expr_stmt(v, &mut stmts);
                 Ok(Block { stmts, value: None })
@@ -323,7 +323,7 @@ fn lower_stmt(lw: &mut Lowerer, cx: &mut FnCx, s: StmtId, out: &mut Vec<Stmt>) -
             match e {
                 // `return e` with `e: ()` evaluates `e`, then leaves (R-07):
                 // the value is nothing, the effects are not.
-                Some(e) if e.ty == Ty::Unit => {
+                Some(e) if e.ty == Types::UNIT => {
                     push_expr_stmt(e, out);
                     out.push(stmt(span, StmtKind::Return(None)));
                 }
@@ -346,12 +346,12 @@ fn lower_stmt(lw: &mut Lowerer, cx: &mut FnCx, s: StmtId, out: &mut Vec<Stmt>) -
             // W3-04; until then one can stay in the message as written.
             let src = cx.src(cx.expr(*e).span).replace("\r\n", "\n");
             let msg = lw.msg(&format!("assert {src}"));
-            let not = Expr::new(Ty::Bool, span, ExprKind::Unary(UnOp::Not, Box::new(c)));
+            let not = Expr::new(Types::BOOL, span, ExprKind::Unary(UnOp::Not, Box::new(c)));
             let then = Block {
                 stmts: vec![stmt(
                     span,
                     StmtKind::Expr(Expr::new(
-                        Ty::Unit,
+                        Types::UNIT,
                         span,
                         ExprKind::Panic { msg, origin: PanicOrigin::Assert, shown },
                     )),
@@ -382,7 +382,7 @@ fn assert_comparison(lw: &mut Lowerer, cx: &mut FnCx, cmp: ExprId, out: &mut Vec
     // `assert` of its initializer with an operand of an effect shows no values.
     let shows = !(cx.constant && (effect.0 || effect.1));
     let mut bind = |cx: &mut FnCx, x: Expr| {
-        let (span, t) = (x.span, cx.temp("__shown", x.ty.clone()));
+        let (span, t) = (x.span, cx.temp("__shown", x.ty));
         out.push(stmt(span, StmtKind::Let(t, x)));
         local_expr(cx, t, span)
     };
@@ -414,7 +414,7 @@ fn lower_expr_stmt(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId, out: &mut Vec<Stm
             Ok(())
         }
         AK::Block(b) => {
-            let blk = lower_block(lw, cx, b, &Ty::Unit)?;
+            let blk = lower_block(lw, cx, b, Types::UNIT)?;
             out.extend(blk.stmts);
             Ok(())
         }
@@ -453,7 +453,7 @@ fn lower_for(
         let hi = lower_expr(lw, cx, r.hi)?;
         let var = match &cx.ast.pat(pat).kind {
             PatKind::Bind(_) => cx.pat_local(pat)?,
-            PatKind::Wild => cx.temp("_", lo.ty.clone()),
+            PatKind::Wild => cx.temp("_", lo.ty),
             _ => return Err(internal(span, "range loop pattern")),
         };
         let b = lower_block_expr(lw, cx, body)?;
@@ -463,18 +463,18 @@ fn lower_for(
     // Sequence: index loop over a place (or a temporary holding the value).
     let seq = lower_expr(lw, cx, iter)?;
     let seq = materialize(cx, seq, out, "__seq");
-    let len = match &seq.ty {
-        Ty::Array(_, n) => u32_lit(span, *n),
-        Ty::Span(_) | Ty::Buf(_) => Expr::new(
-            Ty::u32(),
+    let len = match *lw.m.tys.kind(seq.ty) {
+        TyKind::Array(_, n) => u32_lit(span, n),
+        TyKind::Span(_) | TyKind::Buf(_) => Expr::new(
+            Types::U32,
             span,
             ExprKind::Prim { prim: Prim::Len, args: vec![Arg { mode: Mode::Borrow, expr: seq.clone() }] },
         ),
         _ => return Err(unsupported(span, Feature::Iteration, &[])),
     };
-    let i = cx.temp("__i", Ty::u32());
+    let i = cx.temp("__i", Types::U32);
     let mut stmts = Vec::new();
-    let elem = index(seq, local_expr(cx, i, span))?;
+    let elem = index(seq, local_expr(cx, i, span), &lw.m.tys)?;
     bind_irrefutable(lw, cx, pat, elem, &mut stmts)?;
     let b = lower_block_expr(lw, cx, body)?;
     let b = drop_value(b);

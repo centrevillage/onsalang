@@ -15,7 +15,7 @@ pub(super) fn sfield(lw: &Lowerer, info: &FlowInfo, state: &Expr, of: FieldOf, s
 
 /// Parameters of a generated member as declared by sema (§11.6), with
 /// those Core keeps ([`implicit_params`]).
-pub(super) fn member_params(lw: &mut Lowerer, fd: &FlowDef, f: FlowFn, span: Span) -> R<Vec<(String, Mode, Ty)>> {
+pub(super) fn member_params(lw: &mut Lowerer, fd: &FlowDef, f: FlowFn, span: Span) -> R<Vec<(String, Mode, CTy)>> {
     let d = generated_fn(lw.a, fd, f).ok_or_else(|| internal(span, format!("flow without {f:?}")))?;
     let def = lw.a.def(d).clone();
     let DefKind::Fn(f) = &def.kind else { return Err(internal(span, "member is not a function")) };
@@ -24,7 +24,7 @@ pub(super) fn member_params(lw: &mut Lowerer, fd: &FlowDef, f: FlowFn, span: Spa
         out.push((p.name.clone(), core_mode(p.mode), lw.core_ty(p.ty, &[], p.span)?));
     }
     for (at, name, ty) in implicit_params(lw, d, span)? {
-        out.insert(at, (name.to_string(), Mode::Borrow, Ty::Struct(ty)));
+        out.insert(at, (name.to_string(), Mode::Borrow, lw.ty(TyKind::Struct(ty))));
     }
     Ok(out)
 }
@@ -36,7 +36,7 @@ pub(super) fn member_params(lw: &mut Lowerer, fd: &FlowDef, f: FlowFn, span: Spa
 pub(super) fn init_value(
     lw: &mut Lowerer,
     init: &InitArg,
-    ty: &Ty,
+    ty: CTy,
     span: Span,
     of: impl FnOnce(&mut Lowerer, ExprId) -> R<Expr>,
 ) -> R<Expr> {
@@ -51,9 +51,9 @@ pub(super) fn init_value(
 /// flow body: `[ty; N]` of a burst of the caller (§11.9,
 /// [`Clock::burst_len`]), else `ty`. The one place of it: the locals, the
 /// expressions and the arguments of a port of a burst.
-pub(crate) fn burst_ty(c: Option<Clock>, ty: Ty) -> Ty {
+pub(crate) fn burst_ty(c: Option<Clock>, ty: CTy, tys: &mut Types) -> CTy {
     match c.and_then(Clock::burst_len) {
-        Some(n) => Ty::Array(Box::new(ty), n),
+        Some(n) => tys.intern(TyKind::Array(ty, n)),
         None => ty,
     }
 }
@@ -63,11 +63,11 @@ pub(crate) fn burst_ty(c: Option<Clock>, ty: Ty) -> Ty {
 /// of none (of `block`, `init`, a constant), its N copies, each element the
 /// value read (§11.9, S-1214 (3)); else `v`. The one place of it: the
 /// inputs of a head and the rings of a chain.
-pub(super) fn spread(cx: &FnCx, arg: ExprId, port: Clock, v: Expr) -> Expr {
+pub(super) fn spread(cx: &FnCx, arg: ExprId, port: Clock, v: Expr, tys: &mut Types) -> Expr {
     let clocks = &cx.flow.as_ref().expect("flow context").info.clocks;
     match (port.burst_len(), clocks.exprs.get(&arg).copied().and_then(Clock::burst_len)) {
         (Some(n), None) => {
-            Expr::new(burst_ty(Some(port), v.ty.clone()), v.span, ExprKind::Repeat { elem: Box::new(v), n })
+            Expr::new(burst_ty(Some(port), v.ty, tys), v.span, ExprKind::Repeat { elem: Box::new(v), n })
         }
         _ => v,
     }
@@ -114,11 +114,11 @@ pub(super) fn replicas(lw: &Lowerer, cx: &mut FnCx, id: NodeId, state: &Expr, sp
     let f = cx.flow.as_ref().expect("flow context");
     let (info, pinned) = (f.info, f.now.pinned.contains(&id));
     let (var, from, count) = range(info, id, span)?;
-    let k = (!pinned && from.checked_add(count).is_none()).then(|| cx.temp("k", Ty::u32()));
+    let k = (!pinned && from.checked_add(count).is_none()).then(|| cx.temp("k", Types::U32));
     let r = Replicas { var, from, count, k, pinned };
     let own = FieldOf::Node(id, Part::Own);
     let elem = match info.field_at(own) {
-        Some(_) => index(sfield(lw, info, state, own, span)?, r.index(cx, span))?,
+        Some(_) => index(sfield(lw, info, state, own, span)?, r.index(cx, span), &lw.m.tys)?,
         None => state.clone(),
     };
     Ok((r, elem))
@@ -130,20 +130,20 @@ pub(super) fn replicas(lw: &Lowerer, cx: &mut FnCx, id: NodeId, state: &Expr, sp
 pub(super) fn replicas_place(
     cx: &mut FnCx,
     out: &mut Vec<Stmt>,
-    name: &str,
-    ty: Ty,
+    (name, ty): (&str, CTy),
     pars: &[NodeId],
     span: Span,
+    tys: &mut Types,
 ) -> R<Expr> {
     let f = cx.flow.as_ref().expect("flow context");
     let pars = pars.iter().filter(|p| !f.now.pinned.contains(p));
     let each = pars.map(|&p| range(f.info, p, span)).collect::<R<Vec<_>>>()?;
-    let ty = each.iter().rev().fold(ty, |t, &(_, _, n)| Ty::Array(Box::new(t), n));
-    let l = cx.temp(name, ty.clone());
+    let ty = each.iter().rev().fold(ty, |t, &(_, _, n)| tys.intern(TyKind::Array(t, n)));
+    let l = cx.temp(name, ty);
     out.push(stmt(span, StmtKind::Let(l, Expr::new(ty, span, ExprKind::Zeroed))));
     let mut place = local_expr(cx, l, span);
     for (var, from, _) in each {
-        place = index(place, var_index(cx, var, from, span))?;
+        place = index(place, var_index(cx, var, from, span), tys)?;
     }
     Ok(place)
 }
@@ -199,7 +199,7 @@ impl<'b> Gen<'b> {
         shape: &FlowShape,
         info: &'b FlowInfo,
         stage: ClockStage,
-        ret: Ty,
+        ret: CTy,
     ) -> R<Gen<'b>> {
         Gen::of(lw, (shape.def, shape.span), info, stage, ret)
     }
@@ -210,12 +210,12 @@ impl<'b> Gen<'b> {
         (def, span): (DefId, Span),
         info: &'b FlowInfo,
         stage: ClockStage,
-        ret: Ty,
+        ret: CTy,
     ) -> R<Gen<'b>> {
         let mut cx = FnCx::new(lw, def, Vec::new(), &info.body, ret)?;
         for (l, &c) in &info.clocks.locals {
             let local = cx.locals.get_mut(l.0 as usize).ok_or_else(|| internal(span, "a clock of no local"))?;
-            local.ty = burst_ty(Some(c), local.ty.clone());
+            local.ty = burst_ty(Some(c), local.ty, &mut lw.m.tys);
         }
         cx.flow = Some(FlowLowerCx {
             info,
@@ -230,7 +230,7 @@ impl<'b> Gen<'b> {
                 saving: false,
                 guards: None,
                 heads: Vec::new(),
-                sample_rate: lit(Ty::Float(FloatKind::F32), span, Lit::F32(0.0)),
+                sample_rate: lit(Types::float(FloatKind::F32), span, Lit::F32(0.0)),
                 source: None,
                 pinned: Vec::new(),
                 gave: None,
@@ -245,15 +245,15 @@ impl<'b> Gen<'b> {
         self.cx.flow.as_mut().expect("flow context")
     }
 
-    pub(super) fn param(&mut self, name: &str, mode: Mode, ty: Ty) -> Expr {
-        let l = self.cx.temp(name, ty.clone());
+    pub(super) fn param(&mut self, name: &str, mode: Mode, ty: CTy) -> Expr {
+        let l = self.cx.temp(name, ty);
         self.params.push(Param { local: l, mode, ty });
         local_expr(&self.cx, l, self.span)
     }
 
     /// Bind a sema local as a parameter (its Core local already exists).
     pub(super) fn param_local(&mut self, l: LocalId, mode: Mode) {
-        let ty = self.cx.locals[l.0 as usize].ty.clone();
+        let ty = self.cx.locals[l.0 as usize].ty;
         self.params.push(Param { local: l, mode, ty });
     }
 
@@ -264,13 +264,13 @@ impl<'b> Gen<'b> {
         Ok(ps.into_iter().map(|(n, mode, ty)| self.param(&n, mode, ty)).collect())
     }
 
-    pub(super) fn temp(&mut self, name: &str, ty: Ty) -> Expr {
+    pub(super) fn temp(&mut self, name: &str, ty: CTy) -> Expr {
         let l = self.cx.temp(name, ty);
         local_expr(&self.cx, l, self.span)
     }
 
     pub(super) fn let_(&mut self, name: &str, value: Expr) -> Expr {
-        let l = self.cx.temp(name, value.ty.clone());
+        let l = self.cx.temp(name, value.ty);
         self.stmts.push(stmt(self.span, StmtKind::Let(l, value)));
         local_expr(&self.cx, l, self.span)
     }
@@ -322,7 +322,7 @@ impl<'b> Gen<'b> {
     /// binding reads and [`super::branches::choose`] writes: of one the end
     /// of `tick` reads (`FlowInfo::store_bindings`), an element for each
     /// replica of the `par~`s around it.
-    pub(super) fn slots(&mut self, info: &FlowInfo) -> R<()> {
+    pub(super) fn slots(&mut self, info: &FlowInfo, tys: &mut Types) -> R<()> {
         let (stage, span) = (self.flow().now.stage, self.span);
         for t in info.tilde_matches.values() {
             let here = |b: &&onsa_sema::LocalId| {
@@ -331,8 +331,8 @@ impl<'b> Gen<'b> {
             for &b in t.arms.iter().flatten().filter(here) {
                 let pars = if info.store_bindings.contains(&b) { info.around(t.owner) } else { Vec::new() };
                 let local = &self.cx.locals[b.0 as usize];
-                let (name, ty) = (format!("__bind.{}", local.name), local.ty.clone());
-                let place = replicas_place(&mut self.cx, &mut self.stmts, &name, ty, &pars, span)?;
+                let (name, ty) = (format!("__bind.{}", local.name), local.ty);
+                let place = replicas_place(&mut self.cx, &mut self.stmts, (&name, ty), &pars, span, tys)?;
                 self.flow().now.local_override.insert(b.0, place);
             }
         }
@@ -379,7 +379,7 @@ impl<'b> Gen<'b> {
         Ok(())
     }
 
-    pub(super) fn finish(self, lw: &mut Lowerer, fid: FnId, ret: Ty, rt: bool, value: Option<Expr>) {
+    pub(super) fn finish(self, lw: &mut Lowerer, fid: FnId, ret: CTy, rt: bool, value: Option<Expr>) {
         let body = Block { stmts: self.stmts, value: value.map(Box::new) };
         lw.fill_fn(fid, self.params, ret, rt, self.cx.locals, Some(body));
     }

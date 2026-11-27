@@ -8,24 +8,55 @@ use onsa_diag::{FileId, Span};
 
 use crate::{Failure, Interp, Panic, Value};
 
+/// The table of the types of the modules of these tests, which every one of
+/// them starts from: a type of it has the same id in each.
+fn tys() -> Types {
+    let mut t = Types::default();
+    let (u32t, i32t) = (Types::U32, Types::int(IntKind::I32));
+    let kinds = [
+        TyKind::Enum(TypeId(0)),
+        TyKind::Array(u32t, 1),
+        TyKind::Tuple(Box::new([u32t, u32t])),
+        TyKind::Array(i32t, 1),
+    ];
+    for k in kinds {
+        t.intern(k);
+    }
+    for k in
+        [IntKind::I8, IntKind::I16, IntKind::I32, IntKind::I64, IntKind::U8, IntKind::U16, IntKind::U32, IntKind::U64]
+    {
+        t.intern(TyKind::Tuple(Box::new([Types::BOOL, Types::int(k)])));
+    }
+    t
+}
+
+/// The id of `k`, one of the types of [`tys`].
+fn ty(k: TyKind) -> CTy {
+    let mut t = tys();
+    let n = t.kinds().len();
+    let id = t.intern(k);
+    assert_eq!(t.kinds().len(), n, "a type of `tys`");
+    id
+}
+
 fn sp() -> Span {
     Span::new(FileId(0), 0, 0)
 }
 
 fn int(k: IntKind, n: i128) -> Expr {
-    Expr::new(Ty::Int(k), sp(), ExprKind::Lit(Lit::Int(n)))
+    Expr::new(Types::int(k), sp(), ExprKind::Lit(Lit::Int(n)))
 }
 
 fn f32_(x: f32) -> Expr {
-    Expr::new(Ty::Float(FloatKind::F32), sp(), ExprKind::Lit(Lit::F32(x)))
+    Expr::new(Types::float(FloatKind::F32), sp(), ExprKind::Lit(Lit::F32(x)))
 }
 
 fn bin(op: BinOp, overflow: Overflow, a: Expr, b: Expr) -> Expr {
-    let ty = a.ty.clone();
+    let ty = a.ty;
     Expr::new(ty, sp(), ExprKind::Binary { op, overflow, lhs: Box::new(a), rhs: Box::new(b) })
 }
 
-fn prim(p: Prim, ty: Ty, args: Vec<Expr>) -> Expr {
+fn prim(p: Prim, ty: CTy, args: Vec<Expr>) -> Expr {
     Expr::new(
         ty,
         sp(),
@@ -36,10 +67,11 @@ fn prim(p: Prim, ty: Ty, args: Vec<Expr>) -> Expr {
 /// Run `e` as the body of a function with no parameters.
 fn eval(e: Expr) -> Result<Value, Panic> {
     let m = Module {
+        tys: tys(),
         fns: vec![FnDef {
             name: "f".into(),
             params: Vec::new(),
-            ret: e.ty.clone(),
+            ret: e.ty,
             sret: false,
             rt: false,
             locals: Vec::new(),
@@ -143,7 +175,7 @@ fn division_rules() {
         // `div_euclid` / `rem_euclid`.
         let v = eval(prim(
             Prim::RemEuclid(IntKind::I32),
-            Ty::Int(IntKind::I32),
+            Types::int(IntKind::I32),
             vec![int(IntKind::I32, -7), int(IntKind::I32, 2)],
         ))
         .unwrap();
@@ -187,7 +219,7 @@ fn trunc_to_int_panics_or_saturates() {
         let p = |sat: bool, x: f32| {
             eval(prim(
                 Prim::TruncToInt { from: FloatKind::F32, to: IntKind::I32, sat },
-                Ty::Int(IntKind::I32),
+                Types::int(IntKind::I32),
                 vec![f32_(x)],
             ))
         };
@@ -205,7 +237,7 @@ fn round_is_half_to_even_and_min_max_propagate_nan() {
     on_stack(|| {
         let math = |f: MathFn, x: f32, y: f32| {
             let args = if f.arity() == 2 { vec![f32_(x), f32_(y)] } else { vec![f32_(x)] };
-            eval(prim(Prim::Math(f, FloatKind::F32), Ty::Float(FloatKind::F32), args)).unwrap().as_f32().unwrap()
+            eval(prim(Prim::Math(f, FloatKind::F32), Types::float(FloatKind::F32), args)).unwrap().as_f32().unwrap()
         };
         assert_eq!(math(MathFn::Round, 0.5, 0.0), 0.0);
         assert_eq!(math(MathFn::Round, 1.5, 0.0), 2.0);
@@ -226,7 +258,7 @@ fn int_to_float_rounds_to_nearest_even() {
         // 16777217 is halfway between two f32 values; nearest-even picks 16777216.
         let v = eval(prim(
             Prim::IntToFloat { from: IntKind::I32, to: FloatKind::F32 },
-            Ty::Float(FloatKind::F32),
+            Types::float(FloatKind::F32),
             vec![int(IntKind::I32, 16_777_217)],
         ))
         .unwrap();
@@ -242,8 +274,8 @@ fn parts_of(v: Value) -> (bool, i128) {
     (*ok, as_i128(x.clone()))
 }
 
-fn parts_ty(k: IntKind) -> Ty {
-    Ty::Tuple(vec![Ty::Bool, Ty::Int(k)])
+fn parts_ty(k: IntKind) -> CTy {
+    ty(TyKind::Tuple(Box::new([Types::BOOL, Types::int(k)])))
 }
 
 #[test]
@@ -270,13 +302,13 @@ fn the_parts_of_narrow_and_checked_say_whether_the_value_is_defined() {
 #[test]
 fn bits_round_trip() {
     on_stack(|| {
-        let v = eval(prim(Prim::ToBits(FloatKind::F32), Ty::Int(IntKind::U32), vec![f32_(1.0)])).unwrap();
+        let v = eval(prim(Prim::ToBits(FloatKind::F32), Types::int(IntKind::U32), vec![f32_(1.0)])).unwrap();
         assert_eq!(as_i128(v), 0x3f80_0000);
     })
 }
 
-fn u32_() -> Ty {
-    Ty::Int(IntKind::U32)
+fn u32_() -> CTy {
+    Types::int(IntKind::U32)
 }
 
 fn u32_local(i: u32) -> Expr {
@@ -301,9 +333,9 @@ fn value_block(stmts: Vec<Stmt>, e: Expr) -> Block {
 
 /// `fn <name>(n: U32) -> U32 { if n == 0 { <zero> } else { <deeper> } }`, with
 /// `extra` locals of type `ty` after `n`.
-fn recursive_fn(name: &str, zero: Expr, deeper: Expr, extra: Vec<Ty>) -> FnDef {
+fn recursive_fn(name: &str, zero: Expr, deeper: Expr, extra: Vec<CTy>) -> FnDef {
     let cond = Expr::new(
-        Ty::Bool,
+        Types::BOOL,
         sp(),
         ExprKind::Cmp { op: CmpOp::Eq, lhs: Box::new(u32_local(0)), rhs: Box::new(int(IntKind::U32, 0)) },
     );
@@ -361,12 +393,12 @@ const LEVELS: [Level; 4] = [Level::Add, Level::ArrayIndex, Level::TupleField, Le
 fn recursion_under(level: Level, levels: usize) -> Module {
     let mut deep = call(0, vec![n_minus_1()]);
     let mut extra = Vec::new();
-    let enum_ty = Ty::Enum(TypeId(0));
+    let enum_ty = ty(TyKind::Enum(TypeId(0)));
     for i in 0..levels {
         deep = match level {
             Level::Add => bin(BinOp::Add, Overflow::Checked, int(IntKind::U32, 0), deep),
             Level::ArrayIndex => {
-                let arr = Expr::new(Ty::Array(Box::new(u32_()), 1), sp(), ExprKind::Array(vec![deep]));
+                let arr = Expr::new(ty(TyKind::Array(u32_(), 1)), sp(), ExprKind::Array(vec![deep]));
                 Expr::new(
                     u32_(),
                     sp(),
@@ -378,16 +410,18 @@ fn recursion_under(level: Level, levels: usize) -> Module {
                 )
             }
             Level::TupleField => {
-                let t =
-                    Expr::new(Ty::Tuple(vec![u32_(), u32_()]), sp(), ExprKind::Tuple(vec![deep, int(IntKind::U32, 0)]));
+                let t = Expr::new(
+                    ty(TyKind::Tuple(Box::new([u32_(), u32_()]))),
+                    sp(),
+                    ExprKind::Tuple(vec![deep, int(IntKind::U32, 0)]),
+                );
                 Expr::new(u32_(), sp(), ExprKind::Field { base: Box::new(t), index: 0 })
             }
             Level::Match => {
                 let k = LocalId(1 + i as u32);
-                extra.push(enum_ty.clone());
-                let v =
-                    Expr::new(enum_ty.clone(), sp(), ExprKind::Variant { ty: TypeId(0), tag: 0, fields: vec![deep] });
-                let local = Expr::new(enum_ty.clone(), sp(), ExprKind::Local(k));
+                extra.push(enum_ty);
+                let v = Expr::new(enum_ty, sp(), ExprKind::Variant { ty: TypeId(0), tag: 0, fields: vec![deep] });
+                let local = Expr::new(enum_ty, sp(), ExprKind::Local(k));
                 let payload =
                     Expr::new(u32_(), sp(), ExprKind::Payload { base: Box::new(local.clone()), tag: 0, index: 0 });
                 let switch = Expr::new(
@@ -405,6 +439,7 @@ fn recursion_under(level: Level, levels: usize) -> Module {
         };
     }
     Module {
+        tys: tys(),
         types: vec![TypeDef {
             name: "E".into(),
             kind: TypeDefKind::Enum { variants: vec![("A".into(), vec![u32_()])] },
@@ -540,7 +575,7 @@ fn const_chain(n: u32) -> Module {
             init: bin(BinOp::Add, Overflow::Checked, read_const(i - 1), int(IntKind::U32, 1)),
         });
     }
-    Module { consts, ..Default::default() }
+    Module { tys: tys(), consts, ..Default::default() }
 }
 
 /// S-222: a chain of `const`s is not counted as calls; every `const` it
@@ -648,7 +683,7 @@ fn an_entry_off_the_stack_of_a_command_is_an_internal_error() {
 // ------------------------------------------------- W2-03: the numeric edges
 
 fn f64_(x: f64) -> Expr {
-    Expr::new(Ty::Float(FloatKind::F64), sp(), ExprKind::Lit(Lit::F64(x)))
+    Expr::new(Types::float(FloatKind::F64), sp(), ExprKind::Lit(Lit::F64(x)))
 }
 
 /// R-04: the products of two `U64`s whose exact value is beyond `i128`
@@ -700,9 +735,9 @@ fn min_rem_minus_one_is_zero() {
             assert_eq!(as_i128(rem), 0, "{k:?}");
             let e = eval(bin(BinOp::Div, Overflow::Checked, int(k, min), int(k, -1))).unwrap_err();
             assert!(e.message.contains("overflow") && e.message.contains('/'), "{}", e.message);
-            let re = eval(prim(Prim::RemEuclid(k), Ty::Int(k), vec![int(k, min), int(k, -1)])).unwrap();
+            let re = eval(prim(Prim::RemEuclid(k), Types::int(k), vec![int(k, min), int(k, -1)])).unwrap();
             assert_eq!(as_i128(re), 0, "{k:?}");
-            assert!(eval(prim(Prim::DivEuclid(k), Ty::Int(k), vec![int(k, min), int(k, -1)])).is_err());
+            assert!(eval(prim(Prim::DivEuclid(k), Types::int(k), vec![int(k, min), int(k, -1)])).is_err());
             let e = eval(bin(BinOp::Rem, Overflow::Checked, int(k, min), int(k, 0))).unwrap_err();
             assert!(e.message.contains("division by zero"), "{}", e.message);
         }
@@ -720,7 +755,7 @@ fn trunc_to_64_bits_at_the_powers_of_two() {
                 FloatKind::F32 => f32_(x as f32),
                 FloatKind::F64 => f64_(x),
             };
-            eval(prim(Prim::TruncToInt { from, to, sat }, Ty::Int(to), vec![arg]))
+            eval(prim(Prim::TruncToInt { from, to, sat }, Types::int(to), vec![arg]))
         };
         let p63 = 9_223_372_036_854_775_808.0;
         let p64 = 18_446_744_073_709_551_616.0;
@@ -753,10 +788,12 @@ fn trunc_to_64_bits_at_the_powers_of_two() {
 #[test]
 fn to_bits_of_a_nan_is_the_positive_quiet_nan() {
     on_stack(|| {
-        let b32 =
-            |x: f32| as_i128(eval(prim(Prim::ToBits(FloatKind::F32), Ty::Int(IntKind::U32), vec![f32_(x)])).unwrap());
-        let b64 =
-            |x: f64| as_i128(eval(prim(Prim::ToBits(FloatKind::F64), Ty::Int(IntKind::U64), vec![f64_(x)])).unwrap());
+        let b32 = |x: f32| {
+            as_i128(eval(prim(Prim::ToBits(FloatKind::F32), Types::int(IntKind::U32), vec![f32_(x)])).unwrap())
+        };
+        let b64 = |x: f64| {
+            as_i128(eval(prim(Prim::ToBits(FloatKind::F64), Types::int(IntKind::U64), vec![f64_(x)])).unwrap())
+        };
         for x in [f32::NAN, -f32::NAN, f32::from_bits(0x7F80_0001), f32::from_bits(0xFFC0_1234)] {
             assert_eq!(b32(x), 0x7FC0_0000, "{:#x}", x.to_bits());
         }
@@ -783,7 +820,7 @@ fn values_of_the_wrong_type_are_internal_errors() {
         // An `I64` value under an expression whose type says `I32`.
         let lying = || {
             Expr::new(
-                Ty::Int(IntKind::I32),
+                Types::int(IntKind::I32),
                 sp(),
                 ExprKind::Binary {
                     op: BinOp::Add,
@@ -807,16 +844,16 @@ fn values_of_the_wrong_type_are_internal_errors() {
                 "a negation of a Bool",
                 "an integer expected, found a `Bool`".into(),
                 Expr::new(
-                    Ty::Bool,
+                    Types::BOOL,
                     sp(),
-                    ExprKind::Unary(UnOp::Neg, Box::new(Expr::new(Ty::Bool, sp(), ExprKind::Lit(Lit::Bool(true))))),
+                    ExprKind::Unary(UnOp::Neg, Box::new(Expr::new(Types::BOOL, sp(), ExprKind::Lit(Lit::Bool(true))))),
                 ),
             ),
             (
                 "a comparison of two integer types",
                 int_("I32", i64_found),
                 Expr::new(
-                    Ty::Bool,
+                    Types::BOOL,
                     sp(),
                     ExprKind::Cmp { op: CmpOp::Lt, lhs: Box::new(i32_(1)), rhs: Box::new(i64_(2)) },
                 ),
@@ -825,7 +862,7 @@ fn values_of_the_wrong_type_are_internal_errors() {
                 "a comparison of two float types",
                 "an integer expected, found an `F32`".into(),
                 Expr::new(
-                    Ty::Bool,
+                    Types::BOOL,
                     sp(),
                     ExprKind::Cmp { op: CmpOp::Lt, lhs: Box::new(f32_(1.0)), rhs: Box::new(f64_(2.0)) },
                 ),
@@ -833,18 +870,18 @@ fn values_of_the_wrong_type_are_internal_errors() {
             (
                 "a cast of a value of another type than the operand's",
                 int_("I32", i64_found),
-                Expr::new(Ty::Float(FloatKind::F64), sp(), ExprKind::Cast(Box::new(lying()))),
+                Expr::new(Types::float(FloatKind::F64), sp(), ExprKind::Cast(Box::new(lying()))),
             ),
             (
                 "a cast that narrows",
                 "loses information".into(),
-                Expr::new(Ty::Int(IntKind::I8), sp(), ExprKind::Cast(Box::new(i32_(300)))),
+                Expr::new(Types::int(IntKind::I8), sp(), ExprKind::Cast(Box::new(i32_(300)))),
             ),
             (
                 "a condition that is not a Bool",
                 "a `Bool` expected, found an integer of `I32`".into(),
                 Expr::new(
-                    Ty::Int(IntKind::I32),
+                    Types::int(IntKind::I32),
                     sp(),
                     ExprKind::IfExpr { cond: Box::new(i32_(1)), then: block(i32_(1)), else_: block(i32_(2)) },
                 ),
@@ -852,12 +889,12 @@ fn values_of_the_wrong_type_are_internal_errors() {
             (
                 "abs of a float",
                 int_("I32", "an `F32`"),
-                prim(Prim::IntAbs(IntKind::I32), Ty::Int(IntKind::I32), vec![f32_(1.0)]),
+                prim(Prim::IntAbs(IntKind::I32), Types::int(IntKind::I32), vec![f32_(1.0)]),
             ),
             (
                 "min of another width",
                 int_("I32", i64_found),
-                prim(Prim::IntMin(IntKind::I32), Ty::Int(IntKind::I32), vec![i32_(1), i64_(2)]),
+                prim(Prim::IntMin(IntKind::I32), Types::int(IntKind::I32), vec![i32_(1), i64_(2)]),
             ),
             (
                 "narrow from another width",
@@ -867,51 +904,51 @@ fn values_of_the_wrong_type_are_internal_errors() {
             (
                 "is_nan of an integer",
                 "an `F32` expected, found an integer of `I32`".into(),
-                prim(Prim::IsNan(FloatKind::F32), Ty::Bool, vec![i32_(1)]),
+                prim(Prim::IsNan(FloatKind::F32), Types::BOOL, vec![i32_(1)]),
             ),
             (
                 "is_nan of the other float",
                 "an `F32` expected, found an `F64`".into(),
-                prim(Prim::IsNan(FloatKind::F32), Ty::Bool, vec![f64_(1.0)]),
+                prim(Prim::IsNan(FloatKind::F32), Types::BOOL, vec![f64_(1.0)]),
             ),
             (
                 "to_bits of the other float",
                 "an `F64` expected, found an `F32`".into(),
-                prim(Prim::ToBits(FloatKind::F64), Ty::Int(IntKind::U64), vec![f32_(1.0)]),
+                prim(Prim::ToBits(FloatKind::F64), Types::int(IntKind::U64), vec![f32_(1.0)]),
             ),
             (
                 "trunc of the other float",
                 "an `F64` expected, found an `F32`".into(),
                 prim(
                     Prim::TruncToInt { from: FloatKind::F64, to: IntKind::I32, sat: false },
-                    Ty::Int(IntKind::I32),
+                    Types::int(IntKind::I32),
                     vec![f32_(1.0)],
                 ),
             ),
             (
                 "the second operand of pow",
                 "an `F32` expected, found an `F64`".into(),
-                prim(Prim::Math(MathFn::Pow, FloatKind::F32), Ty::Float(FloatKind::F32), vec![f32_(1.0), f64_(1.0)]),
+                prim(Prim::Math(MathFn::Pow, FloatKind::F32), Types::float(FloatKind::F32), vec![f32_(1.0), f64_(1.0)]),
             ),
             (
                 "pow with one operand",
                 "given 1 operands, not 2".into(),
-                prim(Prim::Math(MathFn::Pow, FloatKind::F32), Ty::Float(FloatKind::F32), vec![f32_(1.0)]),
+                prim(Prim::Math(MathFn::Pow, FloatKind::F32), Types::float(FloatKind::F32), vec![f32_(1.0)]),
             ),
             (
                 "assert_near of F32s",
                 "an `F64` expected, found an `F32`".into(),
-                prim(Prim::AssertNear, Ty::Unit, vec![f32_(1.0), f32_(5.0), f32_(0.0)]),
+                prim(Prim::AssertNear, Types::UNIT, vec![f32_(1.0), f32_(5.0), f32_(0.0)]),
             ),
             (
                 "an index of I32",
                 int_("U32", "an integer of `I32`"),
                 Expr::new(
-                    Ty::Int(IntKind::I32),
+                    Types::int(IntKind::I32),
                     sp(),
                     ExprKind::Index {
                         base: Box::new(Expr::new(
-                            Ty::Array(Box::new(Ty::Int(IntKind::I32)), 1),
+                            ty(TyKind::Array(Types::int(IntKind::I32), 1)),
                             sp(),
                             ExprKind::Array(vec![i32_(7)]),
                         )),
@@ -931,13 +968,14 @@ fn values_of_the_wrong_type_are_internal_errors() {
             span: sp(),
         };
         let m = Module {
+            tys: tys(),
             fns: vec![FnDef {
                 name: "f".into(),
                 params: Vec::new(),
-                ret: Ty::Unit,
+                ret: Types::UNIT,
                 sret: false,
                 rt: false,
-                locals: vec![Local { name: "i".into(), ty: Ty::Int(IntKind::I32) }],
+                locals: vec![Local { name: "i".into(), ty: Types::int(IntKind::I32) }],
                 body: Some(Block { stmts: vec![for_], value: None }),
                 span: sp(),
                 fp_relaxed: false,
@@ -959,15 +997,16 @@ fn values_of_the_wrong_type_are_internal_errors() {
 fn an_internal_failure_is_not_a_panic() {
     on_stack(|| {
         // A local read before it is written.
-        let read = Expr::new(Ty::Int(IntKind::I32), sp(), ExprKind::Local(LocalId(0)));
+        let read = Expr::new(Types::int(IntKind::I32), sp(), ExprKind::Local(LocalId(0)));
         let m = Module {
+            tys: tys(),
             fns: vec![FnDef {
                 name: "f".into(),
                 params: Vec::new(),
-                ret: Ty::Int(IntKind::I32),
+                ret: Types::int(IntKind::I32),
                 sret: false,
                 rt: false,
-                locals: vec![Local { name: "x".into(), ty: Ty::Int(IntKind::I32) }],
+                locals: vec![Local { name: "x".into(), ty: Types::int(IntKind::I32) }],
                 body: Some(Block { stmts: Vec::new(), value: Some(Box::new(read)) }),
                 span: sp(),
                 fp_relaxed: false,
@@ -986,19 +1025,20 @@ fn an_internal_failure_is_not_a_panic() {
 /// `[7][1]` with `bounds`, of the array literal or of the local `a` it is
 /// bound to first.
 fn index_out_of_range(bounds: Bounds, of_local: bool) -> Module {
-    let i32t = Ty::Int(IntKind::I32);
-    let arr_ty = Ty::Array(Box::new(i32t.clone()), 1);
-    let arr = Expr::new(arr_ty.clone(), sp(), ExprKind::Array(vec![int(IntKind::I32, 7)]));
+    let i32t = Types::int(IntKind::I32);
+    let arr_ty = ty(TyKind::Array(i32t, 1));
+    let arr = Expr::new(arr_ty, sp(), ExprKind::Array(vec![int(IntKind::I32, 7)]));
     let (stmts, base) = match of_local {
         false => (Vec::new(), arr),
         true => {
             let let_ = Stmt { kind: StmtKind::Let(LocalId(0), arr), span: sp() };
-            (vec![let_], Expr::new(arr_ty.clone(), sp(), ExprKind::Local(LocalId(0))))
+            (vec![let_], Expr::new(arr_ty, sp(), ExprKind::Local(LocalId(0))))
         }
     };
     let index = Box::new(int(IntKind::U32, 1));
-    let read = Expr::new(i32t.clone(), sp(), ExprKind::Index { base: Box::new(base), index, bounds });
+    let read = Expr::new(i32t, sp(), ExprKind::Index { base: Box::new(base), index, bounds });
     Module {
+        tys: tys(),
         fns: vec![FnDef {
             name: "f".into(),
             params: Vec::new(),
@@ -1040,10 +1080,11 @@ fn an_index_known_in_range_out_of_range_is_an_internal_error() {
 fn a_call_of_a_function_without_a_body_is_an_internal_error() {
     on_stack(|| {
         let m = Module {
+            tys: tys(),
             fns: vec![FnDef {
                 name: "t".into(),
                 params: Vec::new(),
-                ret: Ty::Unit,
+                ret: Types::UNIT,
                 sret: false,
                 rt: false,
                 locals: Vec::new(),
@@ -1071,14 +1112,15 @@ fn a_call_of_a_function_without_a_body_is_an_internal_error() {
 #[test]
 fn an_unimplemented_std_function_is_unsupported() {
     on_stack(|| {
-        let gen_ = || prim(Prim::Pending(onsa_core::prim::PendingPrim::GenF32), Ty::Unit, vec![f32_(0.0), f32_(1.0)]);
-        let near = prim(Prim::AssertNear, Ty::Unit, vec![f64_(1.0), f64_(1.0), f64_(0.0)]);
-        let read_g = Expr::new(Ty::Unit, sp(), ExprKind::Const(ConstId(0)));
-        let call = |f: u32| Expr::new(Ty::Unit, sp(), ExprKind::Call { fn_: FnId(f), args: Vec::new() });
+        let gen_ =
+            || prim(Prim::Pending(onsa_core::prim::PendingPrim::GenF32), Types::UNIT, vec![f32_(0.0), f32_(1.0)]);
+        let near = prim(Prim::AssertNear, Types::UNIT, vec![f64_(1.0), f64_(1.0), f64_(0.0)]);
+        let read_g = Expr::new(Types::UNIT, sp(), ExprKind::Const(ConstId(0)));
+        let call = |f: u32| Expr::new(Types::UNIT, sp(), ExprKind::Call { fn_: FnId(f), args: Vec::new() });
         let fn_ = |name: &str, value: Expr| FnDef {
             name: name.into(),
             params: Vec::new(),
-            ret: Ty::Unit,
+            ret: Types::UNIT,
             sret: false,
             rt: false,
             locals: Vec::new(),
@@ -1090,6 +1132,7 @@ fn an_unimplemented_std_function_is_unsupported() {
             hoisted: Vec::new(),
         };
         let m = Module {
+            tys: tys(),
             fns: vec![
                 fn_("f", gen_()),
                 fn_("g", near),
@@ -1098,7 +1141,7 @@ fn an_unimplemented_std_function_is_unsupported() {
                 // Calls `h`.
                 fn_("k", call(2)),
             ],
-            consts: vec![ConstDef { name: "G".into(), ty: Ty::Unit, init: gen_() }],
+            consts: vec![ConstDef { name: "G".into(), ty: Types::UNIT, init: gen_() }],
             ..Default::default()
         };
         let found = |roots: &[u32]| {
@@ -1180,7 +1223,8 @@ fn show_of_floats_is_the_form_of_spec_6_3() {
 #[test]
 fn assert_near_follows_spec_11_8() {
     on_stack(|| {
-        let near = |a: f64, b: f64, tol: f64| eval(prim(Prim::AssertNear, Ty::Unit, vec![f64_(a), f64_(b), f64_(tol)]));
+        let near =
+            |a: f64, b: f64, tol: f64| eval(prim(Prim::AssertNear, Types::UNIT, vec![f64_(a), f64_(b), f64_(tol)]));
         let inf = f64::INFINITY;
         for (a, b, tol) in [(1.0, 1.0, 0.0), (inf, inf, 0.0), (0.0, -0.0, -0.0), (1.0, 1.25, 0.5), (1.0, 2.0, f64::MAX)]
         {
@@ -1213,18 +1257,18 @@ fn assert_near_follows_spec_11_8() {
 fn a_panic_carries_its_origin() {
     on_stack(|| {
         for origin in [PanicOrigin::Assert, PanicOrigin::Panic] {
-            let mut m = Module { messages: vec!["boom".into()], ..Default::default() };
+            let mut m = Module { tys: tys(), messages: vec!["boom".into()], ..Default::default() };
             m.fns.push(FnDef {
                 name: "f".into(),
                 params: Vec::new(),
-                ret: Ty::Unit,
+                ret: Types::UNIT,
                 sret: false,
                 rt: false,
                 locals: Vec::new(),
                 body: Some(Block {
                     stmts: Vec::new(),
                     value: Some(Box::new(Expr::new(
-                        Ty::Unit,
+                        Types::UNIT,
                         sp(),
                         ExprKind::Panic { msg: MsgId(0), origin, shown: Vec::new() },
                     ))),
@@ -1254,7 +1298,8 @@ fn a_panic_lists_the_calls_it_went_out_of() {
         assert_eq!(e.calls.len(), crate::MAX_CALL_DEPTH as usize);
         assert!(e.calls.iter().all(|c| c.callee == FnId(0)), "{:?}", e.calls);
         // A panic in the entry itself went out of no call.
-        let e = eval(prim(Prim::AssertNear, Ty::Unit, vec![f64_(1.0), f64_(2.0), f64_(0.0)])).expect_err("a failure");
+        let e =
+            eval(prim(Prim::AssertNear, Types::UNIT, vec![f64_(1.0), f64_(2.0), f64_(0.0)])).expect_err("a failure");
         assert!(e.calls.is_empty(), "{:?}", e.calls);
     })
 }

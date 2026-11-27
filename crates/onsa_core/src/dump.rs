@@ -34,9 +34,14 @@ pub fn dump_item(m: &Module, name: &str) -> String {
 }
 
 /// One type, as in the dump.
-pub fn type_name(m: &Module, ty: &Ty) -> String {
+pub fn type_name(m: &Module, ty: CTy) -> String {
+    kind_name(m, m.tys.kind(ty))
+}
+
+/// A type of the kind `k`, as in the dump, whether `m` has it or not.
+pub fn kind_name(m: &Module, k: &TyKind) -> String {
     let mut d = Dumper { m, out: String::new(), indent: 0, locals: &[], dups: HashSet::new() };
-    d.ty(ty);
+    d.kind(k);
     d.out
 }
 
@@ -57,53 +62,58 @@ impl<'a> Dumper<'a> {
         }
     }
 
-    fn ty(&mut self, t: &Ty) {
-        match t {
-            Ty::Int(k) => self.out.push_str(k.name()),
-            Ty::Float(k) => self.out.push_str(k.name()),
-            Ty::Bool => self.out.push_str("Bool"),
-            Ty::Char => self.out.push_str("Char"),
-            Ty::Unit => self.out.push_str("()"),
-            Ty::Array(e, n) => {
+    fn ty(&mut self, t: CTy) {
+        let m = self.m;
+        self.kind(m.tys.kind(t));
+    }
+
+    fn kind(&mut self, k: &TyKind) {
+        match k {
+            TyKind::Int(k) => self.out.push_str(k.name()),
+            TyKind::Float(k) => self.out.push_str(k.name()),
+            TyKind::Bool => self.out.push_str("Bool"),
+            TyKind::Char => self.out.push_str("Char"),
+            TyKind::Unit => self.out.push_str("()"),
+            TyKind::Array(e, n) => {
                 self.out.push('[');
-                self.ty(e);
+                self.ty(*e);
                 let _ = write!(self.out, "; {n}]");
             }
-            Ty::Tuple(ts) => {
+            TyKind::Tuple(ts) => {
                 self.out.push('(');
                 for (i, t) in ts.iter().enumerate() {
                     if i > 0 {
                         self.out.push_str(", ");
                     }
-                    self.ty(t);
+                    self.ty(*t);
                 }
                 self.out.push(')');
             }
-            Ty::Struct(id) | Ty::Enum(id) => {
+            TyKind::Struct(id) | TyKind::Enum(id) => {
                 let name = self.type_ref_name(*id);
                 self.out.push_str(&name);
             }
-            Ty::Span(e) => {
+            TyKind::Span(e) => {
                 self.out.push_str("Span[");
-                self.ty(e);
+                self.ty(*e);
                 self.out.push(']');
             }
-            Ty::Buf(e) => {
+            TyKind::Buf(e) => {
                 self.out.push_str("Buf[");
-                self.ty(e);
+                self.ty(*e);
                 self.out.push(']');
             }
-            Ty::FnPtr(sig) => {
+            TyKind::FnPtr(sig) => {
                 self.out.push_str(if sig.rt { "rt fn(" } else { "fn(" });
                 for (i, (m, t)) in sig.params.iter().enumerate() {
                     if i > 0 {
                         self.out.push_str(", ");
                     }
                     self.mode(*m);
-                    self.ty(t);
+                    self.ty(*t);
                 }
                 self.out.push_str(") -> ");
-                self.ty(&sig.ret);
+                self.ty(sig.ret);
             }
         }
     }
@@ -124,7 +134,7 @@ impl<'a> Dumper<'a> {
                 for (i, (n, ty)) in fields.iter().enumerate() {
                     self.out.push_str(if i > 0 { ", " } else { " " });
                     let _ = write!(self.out, "{n}: ");
-                    self.ty(ty);
+                    self.ty(*ty);
                 }
                 self.out.push_str(if fields.is_empty() { "}" } else { " }" });
             }
@@ -139,7 +149,7 @@ impl<'a> Dumper<'a> {
                             if j > 0 {
                                 self.out.push_str(", ");
                             }
-                            self.ty(t);
+                            self.ty(*t);
                         }
                         self.out.push(')');
                     }
@@ -192,7 +202,7 @@ impl<'a> Dumper<'a> {
         self.out.push_str("const ");
         self.out.push_str(&c.name);
         self.out.push_str(": ");
-        self.ty(&c.ty);
+        self.ty(c.ty);
         self.out.push_str(" = ");
         self.expr(&c.init);
         self.out.push('\n');
@@ -212,10 +222,10 @@ impl<'a> Dumper<'a> {
             self.mode(p.mode);
             self.local(p.local);
             self.out.push_str(": ");
-            self.ty(&p.ty);
+            self.ty(p.ty);
         }
         self.out.push_str(") -> ");
-        self.ty(&f.ret);
+        self.ty(f.ret);
         if f.sret {
             self.out.push_str(" sret");
         }
@@ -268,8 +278,7 @@ impl<'a> Dumper<'a> {
                 self.out.push_str(": ");
                 match self.locals.get(l.0 as usize) {
                     Some(local) => {
-                        let t = local.ty.clone();
-                        self.ty(&t);
+                        self.ty(local.ty);
                     }
                     None => {
                         let _ = write!(self.out, "<bad local {}>", l.0);
@@ -372,8 +381,7 @@ impl<'a> Dumper<'a> {
             ExprKind::Lit(l) => match l {
                 Lit::Int(v) => {
                     let _ = write!(self.out, "{v}:");
-                    let t = e.ty.clone();
-                    self.ty(&t);
+                    self.ty(e.ty);
                 }
                 Lit::F32(v) => {
                     let _ = write!(self.out, "{v:?}:F32");
@@ -400,8 +408,7 @@ impl<'a> Dumper<'a> {
             },
             ExprKind::Zeroed => {
                 self.out.push_str("zeroed:");
-                let t = e.ty.clone();
-                self.ty(&t);
+                self.ty(e.ty);
             }
             ExprKind::Unary(op, x) => {
                 self.out.push('(');
@@ -465,8 +472,7 @@ impl<'a> Dumper<'a> {
                 self.out.push('(');
                 self.expr(x);
                 self.out.push_str(" as ");
-                let t = e.ty.clone();
-                self.ty(&t);
+                self.ty(e.ty);
                 self.out.push(')');
             }
             ExprKind::Call { fn_, args } => {
@@ -540,8 +546,8 @@ impl<'a> Dumper<'a> {
                 self.out.push(')');
             }
             ExprKind::Payload { base, tag, index } => {
-                let vname = match &base.ty {
-                    Ty::Enum(id) => Self::variant_name(self.type_def_of(*id), *tag),
+                let vname = match self.m.tys.kind(base.ty) {
+                    TyKind::Enum(id) => Self::variant_name(self.type_def_of(*id), *tag),
                     _ => tag.to_string(),
                 };
                 self.out.push_str("payload(");
@@ -557,8 +563,8 @@ impl<'a> Dumper<'a> {
                 self.block(else_);
             }
             ExprKind::Switch { scrutinee, arms, default } => {
-                let names: Vec<String> = match &scrutinee.ty {
-                    Ty::Enum(id) => match self.type_def_of(*id).map(|d| &d.kind) {
+                let names: Vec<String> = match self.m.tys.kind(scrutinee.ty) {
+                    TyKind::Enum(id) => match self.type_def_of(*id).map(|d| &d.kind) {
                         Some(TypeDefKind::Enum { variants }) => variants.iter().map(|(n, _)| n.clone()).collect(),
                         _ => Vec::new(),
                     },

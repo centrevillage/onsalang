@@ -212,13 +212,13 @@ impl<'m> TypeNames<'m> {
         match &def.kind {
             TypeDefKind::Struct { fields } => {
                 for (_, t) in fields.clone() {
-                    self.name(&t);
+                    self.name(&self.m.tys.tree(t));
                 }
             }
             TypeDefKind::Enum { variants } => {
                 for (_, ts) in variants.clone() {
                     for t in ts {
-                        self.name(&t);
+                        self.name(&self.m.tys.tree(t));
                     }
                 }
             }

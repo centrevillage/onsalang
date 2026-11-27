@@ -291,10 +291,15 @@ fn what_the_interpreter_cannot_be_given_or_found_is_unavailable() {
 /// The module of the test: a struct, an enum and a type with no fields known.
 fn small_module() -> Module {
     let ty = |name: &str, kind| TypeDef { name: name.into(), kind };
+    let fields = vec![("a".into(), onsa_core::Types::int(IntKind::U8)), ("b".into(), onsa_core::Types::BOOL)];
     Module {
+        tys: onsa_core::Types::default(),
         types: vec![
-            ty("S", TypeDefKind::Struct { fields: vec![("a".into(), Ty::Int(IntKind::U8)), ("b".into(), Ty::Bool)] }),
-            ty("E", TypeDefKind::Enum { variants: vec![("A".into(), vec![]), ("B".into(), vec![Ty::Char])] }),
+            ty("S", TypeDefKind::Struct { fields }),
+            ty(
+                "E",
+                TypeDefKind::Enum { variants: vec![("A".into(), vec![]), ("B".into(), vec![onsa_core::Types::CHAR])] },
+            ),
             ty("O", TypeDefKind::Opaque),
         ],
         consts: vec![],

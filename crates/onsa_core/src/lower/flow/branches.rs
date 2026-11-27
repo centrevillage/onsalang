@@ -14,7 +14,7 @@ use super::*;
 /// the first to the one that holds (S-1094), giving the number of its link
 /// (the number of links of none); then every branch ([`every`]). One loop
 /// over the chain.
-pub(crate) fn tilde_if(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId, ty: Ty) -> R<Expr> {
+pub(crate) fn tilde_if(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId, ty: CTy) -> R<Expr> {
     let span = cx.ast.expr(e).span;
     let chain = chain(cx.ast, e);
     let Some(last) = chain.last else { return Err(internal(span, "an `if~` with no `else`")) };
@@ -25,7 +25,7 @@ pub(crate) fn tilde_if(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId, ty: Ty) -> R<
     let mut taken = u32_lit(span, conds.len() as u32);
     for (k, c) in conds.into_iter().enumerate().rev() {
         let then = value(u32_lit(span, k as u32));
-        taken = Expr::new(Ty::u32(), span, ExprKind::IfExpr { cond: Box::new(c), then, else_: value(taken) });
+        taken = Expr::new(Types::U32, span, ExprKind::IfExpr { cond: Box::new(c), then, else_: value(taken) });
     }
     let mut stmts = Vec::new();
     let taken = materialize(cx, taken, &mut stmts, "__taken");
@@ -35,7 +35,7 @@ pub(crate) fn tilde_if(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId, ty: Ty) -> R<
 
 /// The `match~` `e` of the type `ty`, in one block: the choice of its arm
 /// among all ([`choose`]), then every arm body ([`every`]).
-pub(crate) fn tilde_match(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId, ty: Ty) -> R<Expr> {
+pub(crate) fn tilde_match(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId, ty: CTy) -> R<Expr> {
     let span = cx.ast.expr(e).span;
     let AK::Match { arms, .. } = &cx.ast.expr(e).kind else { return Err(internal(span, "no `match~`")) };
     let (s, state) = here(cx, span)?;
@@ -65,18 +65,18 @@ fn every(
     cx: &mut FnCx,
     bodies: &[ExprId],
     taken: Expr,
-    ty: Ty,
+    ty: CTy,
     mut stmts: Vec<Stmt>,
     span: Span,
 ) -> R<Expr> {
     let mut values = Vec::with_capacity(bodies.len());
     for &x in bodies {
         let b = lower_block_expr(lw, cx, x)?;
-        if ty == Ty::Unit {
-            push_expr_stmt(Expr::new(Ty::Unit, span, ExprKind::Block(drop_value(b))), &mut stmts);
+        if ty == Types::UNIT {
+            push_expr_stmt(Expr::new(Types::UNIT, span, ExprKind::Block(drop_value(b))), &mut stmts);
             continue;
         }
-        let Some(t) = b.value.as_ref().map(|v| v.ty.clone()) else {
+        let Some(t) = b.value.as_ref().map(|v| v.ty) else {
             return Err(internal(cx.ast.expr(x).span, "a branch of an `if~` or `match~` with no value"));
         };
         values.push(materialize(cx, Expr::new(t, span, ExprKind::Block(b)), &mut stmts, "__branch"));
@@ -85,7 +85,7 @@ fn every(
     for (k, v) in values.into_iter().enumerate().rev() {
         let cond = Box::new(cmp(CmpOp::Eq, taken.clone(), u32_lit(span, k as u32)));
         let else_ = chosen.map(value).unwrap_or_default();
-        chosen = Some(Expr::new(ty.clone(), span, ExprKind::IfExpr { cond, then: value(v), else_ }));
+        chosen = Some(Expr::new(ty, span, ExprKind::IfExpr { cond, then: value(v), else_ }));
     }
     Ok(Expr::new(ty, span, ExprKind::Block(Block { stmts, value: chosen.map(Box::new) })))
 }
@@ -129,7 +129,7 @@ pub(super) fn choose(
     let v = cond_value(lw, cx, info, *scrutinee, s, state)?;
     let place = materialize(cx, v, out, "__match");
     let none = u32_lit(span, arms.len() as u32);
-    let taken = cx.temp("__arm", Ty::u32());
+    let taken = cx.temp("__arm", Types::U32);
     out.push(stmt(span, StmtKind::Let(taken, none.clone())));
     let taken = local_expr(cx, taken, span);
     let mut binds = vec![false; arms.len()];
@@ -144,9 +144,11 @@ pub(super) fn choose(
         let open = cmp(CmpOp::Eq, taken.clone(), none.clone());
         let cond = match test {
             None => open,
-            Some(t) => {
-                Expr::new(Ty::Bool, span, ExprKind::Logic { op: LogicOp::And, lhs: Box::new(open), rhs: Box::new(t) })
-            }
+            Some(t) => Expr::new(
+                Types::BOOL,
+                span,
+                ExprKind::Logic { op: LogicOp::And, lhs: Box::new(open), rhs: Box::new(t) },
+            ),
         };
         out.push(stmt(span, StmtKind::If(cond, then, Block::default())));
     }
@@ -160,9 +162,9 @@ pub(super) fn choose(
         let (mut then, mut else_) = (Vec::new(), Vec::new());
         bind_read(lw, cx, arm.pat, &place, &mut then)?;
         for (b, slot) in slots {
-            let ty = cx.locals[b.0 as usize].ty.clone();
+            let ty = cx.locals[b.0 as usize].ty;
             assign(&mut then, &slot, local_expr(cx, b, span))?;
-            assign(&mut else_, &slot, crate::lower::derived::default_value(lw, &ty, span)?)?;
+            assign(&mut else_, &slot, crate::lower::derived::default_value(lw, ty, span)?)?;
         }
         let is = cmp(CmpOp::Eq, taken.clone(), u32_lit(span, i as u32));
         out.push(stmt(span, StmtKind::If(is, Block { stmts: then, value: None }, Block { stmts: else_, value: None })));

@@ -16,7 +16,8 @@ fn lower(mut loaded: onsa_driver::Loaded) -> onsa_core::Module {
 fn poly_new_builds_states_in_place() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let module = lower(onsa_driver::load(Some(&root.join("tests/spec/examples/voice.onsa"))).unwrap());
-    let big: Vec<_> = module.moves.iter().filter(|m| m.fn_name.ends_with("Poly.new") && m.bytes >= 48).collect();
+    let big: Vec<_> =
+        module.moves.iter().filter(|m| module.fn_(m.fn_).name.ends_with("Poly.new") && m.bytes >= 48).collect();
     assert!(big.is_empty(), "unexpected copies in Poly.new: {big:?}");
 }
 
@@ -47,10 +48,10 @@ pub fn keep() -> v.State {
         ..Default::default()
     };
     let module = lower(onsa_driver::Loaded::from_input(input).unwrap());
-    let pick: Vec<_> = module.moves.iter().filter(|m| m.fn_name.ends_with("pick")).collect();
+    let pick: Vec<_> = module.moves.iter().filter(|m| module.fn_(m.fn_).name.ends_with("pick")).collect();
     assert_eq!(pick.len(), 1, "{pick:?}");
     assert_eq!(pick[0].kind, MoveKind::Branch);
     assert!(pick[0].bytes >= 48, "{:?}", pick[0]);
-    let keep: Vec<_> = module.moves.iter().filter(|m| m.fn_name.ends_with("keep")).collect();
+    let keep: Vec<_> = module.moves.iter().filter(|m| module.fn_(m.fn_).name.ends_with("keep")).collect();
     assert!(keep.is_empty(), "NRVO: {keep:?}");
 }

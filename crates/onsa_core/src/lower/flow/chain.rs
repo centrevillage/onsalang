@@ -39,7 +39,7 @@ impl<'a> Walk<'a> {
     /// `_ran` of a delay a guard stops set to `on` (§11.10: its store is of the ticks it ran).
     fn ran(&self, lw: &Lowerer, out: &mut Vec<Stmt>, on: bool) -> R<()> {
         match self.info.field_at(FieldOf::Node(self.id, Part::Ran)) {
-            Some(_) => assign(out, &self.field(lw, Part::Ran)?, lit(Ty::Bool, self.span, Lit::Bool(on))),
+            Some(_) => assign(out, &self.field(lw, Part::Ran)?, lit(Types::BOOL, self.span, Lit::Bool(on))),
             None => Ok(()),
         }
     }
@@ -62,8 +62,8 @@ impl<'a> Walk<'a> {
         let (part, f, span) = (Part::Gather { bound: o, port: Port::Cond(place) }, self.frame(place), self.span);
         let x = self.n.chain.get(place as usize).and_then(|m| m.port);
         let (x, e) = (x.ok_or_else(|| internal(span, "a ring of a condition of no port"))?, exp(self.n, part, span)?);
-        let v = index(self.field(lw, part)?, at(lw, cx, self, (f, o as usize), x, e)?)?;
-        let l = cx.temp("__on", Ty::Bool);
+        let v = index(self.field(lw, part)?, at(lw, cx, self, (f, o as usize), x, e)?, &lw.m.tys)?;
+        let l = cx.temp("__on", Types::BOOL);
         out.push(stmt(span, StmtKind::Let(l, v)));
         Ok(local_expr(cx, l, span))
     }
@@ -258,7 +258,7 @@ pub(super) fn entry(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, id: No
     }
     if looped {
         let t = cx.info.expr_types.get(&w.n.expr).ok_or_else(|| internal(w.span, "an instance of no type"))?;
-        let ty = burst_ty(Some(w.n.clock), lw.core_ty(*t, &[], w.span)?);
+        let ty = burst_ty(Some(w.n.clock), lw.core_ty(*t, &[], w.span)?, &mut lw.m.tys);
         w.value = Some(zeroed(cx, out, "__value", ty, w.span));
     }
     // A delay that a guard stops has not run until its run says so (§11.10, its store).
@@ -317,7 +317,7 @@ fn ops(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, w: &mut Walk, list:
                         Src::At(w.field(lw, part)?, at(lw, cx, w, (f, o as usize), x, q)?, q)
                     }
                 };
-                copy(cx, out, (dst, k), pos, src, x, span)?;
+                copy(cx, out, (dst, k), pos, src, (x, span), &lw.m.tys)?;
             }
             Op::Run { body, out: Out::Event } => {
                 let v = run(lw, cx, w, body)?;
@@ -346,10 +346,10 @@ fn ops(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, w: &mut Walk, list:
                     checked_binary(BinOp::Add, pos.clone(), u32_lit(span, n - 1))
                 };
                 let (mut ran, mut not) = (Vec::new(), Vec::new());
-                assign(&mut ran, &held, index(v.clone(), last)?)?;
-                let ty = Ty::Array(Box::new(held.ty.clone()), n);
+                assign(&mut ran, &held, index(v.clone(), last, &lw.m.tys)?)?;
+                let ty = lw.ty(TyKind::Array(held.ty, n));
                 let all = Expr::new(ty, span, ExprKind::Repeat { elem: Box::new(held), n });
-                copy(cx, &mut not, (v, e), pos, Src::Value(all), o, span)?;
+                copy(cx, &mut not, (v, e), pos, Src::Value(all), (o, span), &lw.m.tys)?;
                 let (ran, not) = (Block { stmts: ran, value: None }, Block { stmts: not, value: None });
                 out.push(stmt(span, StmtKind::If(on, ran, not)));
             }
@@ -395,7 +395,7 @@ fn ops(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, w: &mut Walk, list:
                 reset(lw, cx, &mut body, w, at)?;
                 if w.info.field_at(FieldOf::Node(w.id, Part::Back(at))).is_some() {
                     let mut late = Vec::new();
-                    assign(&mut late, &w.field(lw, Part::Back(at))?, lit(Ty::Bool, span, Lit::Bool(true)))?;
+                    assign(&mut late, &w.field(lw, Part::Back(at))?, lit(Types::BOOL, span, Lit::Bool(true)))?;
                     let (late, now) = (Block { stmts: late, value: None }, Block { stmts: body, value: None });
                     body = vec![stmt(span, StmtKind::If(w.field(lw, Part::Open)?, late, now))];
                 }
@@ -412,10 +412,10 @@ fn ops(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, w: &mut Walk, list:
                 let (array, (dst, e, own)) = (Part::Deal(from), target(lw, w, to)?);
                 let (pos, q) = (at(lw, cx, w, (by as usize, own), x, e)?, exp(n, array, span)?);
                 let src = Src::At(w.field(lw, array)?, at(lw, cx, w, (by as usize, from as usize), x, q)?, q);
-                copy(cx, out, (dst, e), pos, src, x, span)?;
+                copy(cx, out, (dst, e), pos, src, (x, span), &lw.m.tys)?;
             }
             Op::Each { bound: u, once, ref groups } => {
-                let l = (!once).then(|| cx.temp("__j", Ty::u32()));
+                let l = (!once).then(|| cx.temp("__j", Types::U32));
                 let j = l.map_or_else(|| u32_lit(span, 0), |l| local_expr(cx, l, span));
                 w.js.push((u as usize, j.clone()));
                 let mut runs = Vec::new();
@@ -452,7 +452,7 @@ fn reset(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, w: &Walk, at: u32
     let kept = |p: &Part| !matches!(p, Part::Held(_)) || w.info.field_at(FieldOf::Node(w.id, *p)).is_some();
     for part in n.reset_parts(at).into_iter().filter(kept) {
         let place = w.field(lw, part)?;
-        let v = crate::lower::derived::default_value(lw, &place.ty, span)?;
+        let v = crate::lower::derived::default_value(lw, place.ty, span)?;
         assign(out, &place, v)?;
     }
     Ok(())
@@ -466,7 +466,7 @@ pub(super) fn opened(lw: &Lowerer, cx: &FnCx, out: &mut Vec<Stmt>, id: NodeId) -
         return Ok(());
     }
     let (span, (_, state)) = (f.info.node(id).span, super::branches::here(cx, f.info.node(id).span)?);
-    assign(out, &sfield(lw, f.info, &state, open, span)?, lit(Ty::Bool, span, Lit::Bool(true)))
+    assign(out, &sfield(lw, f.info, &state, open, span)?, lit(Types::BOOL, span, Lit::Bool(true)))
 }
 
 /// The resets that waited for the store of the delay `id` ([`opened`]), after it.
@@ -475,7 +475,7 @@ pub(super) fn stored(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, id: N
     let w = Walk::new(info, id, state, info.node(id).span);
     for flag in w.n.late_flags() {
         let (on, mut body) = (w.field(lw, flag)?, Vec::new());
-        assign(&mut body, &on, lit(Ty::Bool, w.span, Lit::Bool(false)))?;
+        assign(&mut body, &on, lit(Types::BOOL, w.span, Lit::Bool(false)))?;
         if let Part::Back(at) = flag {
             reset(lw, cx, &mut body, &w, at)?;
             body = vec![stmt(w.span, StmtKind::If(on, Block { stmts: body, value: None }, Block::default()))];
@@ -501,10 +501,10 @@ fn give(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, w: &Walk, v: Expr)
     let (time, gave) = (f.now.time.clone(), f.now.gave.clone().filter(|_| f.info.gives(x)));
     let mut arm = Vec::new();
     let mut one = Vec::new();
-    let (v, each) = match v.ty {
-        Ty::Array(_, n) => {
-            let (all, i) = (materialize(cx, v, out, "__events"), cx.temp("__i", Ty::u32()));
-            (hold(cx, &mut one, index(all, local_expr(cx, i, span))?, "__event"), Some((i, n)))
+    let (v, each) = match *lw.m.tys.kind(v.ty) {
+        TyKind::Array(_, n) => {
+            let (all, i) = (materialize(cx, v, out, "__events"), cx.temp("__i", Types::U32));
+            (hold(cx, &mut one, index(all, local_expr(cx, i, span), &lw.m.tys)?, "__event"), Some((i, n)))
         }
         _ => (materialize(cx, v, out, "__event"), None),
     };
@@ -513,8 +513,8 @@ fn give(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, w: &Walk, v: Expr)
     let vars = w.info.around(w.n.owner).into_iter().map(|p| range(w.info, p, span));
     let vars = vars.map(|r| Ok(local_expr(cx, LocalId(r?.0.0), span)));
     let inputs = vars.chain([Ok(event)]).collect::<R<Vec<_>>>()?;
-    let gave = gave.map(|g| Ok((g.place()?, g.next))).transpose()?;
-    let ret = gave.as_ref().map_or(Ty::Unit, |g| g.0.ty.clone());
+    let gave = gave.map(|g| Ok((g.place(&lw.m.tys)?, g.next))).transpose()?;
+    let ret = gave.as_ref().map_or(Types::UNIT, |g| g.0.ty);
     let stage = StageRun { g: w.info, f: f_id, ret, x, state, time, lets: Vec::new(), inputs };
     let call = call_stage(stage, span)?;
     match gave {
@@ -528,7 +528,7 @@ fn give(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, w: &Walk, v: Expr)
     }
     let arms = vec![(some, Block { stmts: arm, value: None })];
     let default = Some(Block::default());
-    expr_stmt(&mut one, Expr::new(Ty::Unit, span, ExprKind::Switch { scrutinee: Box::new(v), arms, default }));
+    expr_stmt(&mut one, Expr::new(Types::UNIT, span, ExprKind::Switch { scrutinee: Box::new(v), arms, default }));
     match each {
         None => out.append(&mut one),
         Some((i, n)) => {
@@ -569,7 +569,7 @@ fn put(
     // Of the value of a tick of the caller made once in a loop, e ≤ 0 (the memo of U6b 2.5).
     let (dst, e, own) = target(lw, w, to)?;
     let pos = at(lw, cx, w, (from, own), m, e)?;
-    copy(cx, out, (dst, e), pos, Src::Value(v), m, w.span)?;
+    copy(cx, out, (dst, e), pos, Src::Value(v), (m, w.span), &lw.m.tys)?;
     Ok(None)
 }
 
@@ -648,7 +648,7 @@ fn ports(
         }
         let v = lower_expr(lw, cx, e)?;
         let (v, q) = match (port, w.n.args.iter().find(|a| a.expr == e).map(|a| a.at)) {
-            (Port::Input(_), Some(p @ Clock::Tick(q))) if p.burst() => (spread(cx, e, p, v), Some(q)),
+            (Port::Input(_), Some(p @ Clock::Tick(q))) if p.burst() => (spread(cx, e, p, v, &mut lw.m.tys), Some(q)),
             (_, Some(_)) => (v, None),
             (_, None) => return Err(internal(w.span, "an argument read at no clock")),
         };
@@ -689,7 +689,7 @@ pub(super) fn hold(cx: &mut FnCx, out: &mut Vec<Stmt>, v: Expr, name: &str) -> E
     if matches!(place.kind, ExprKind::Lit(_) | ExprKind::Local(_)) && !(events && field) {
         return v;
     }
-    let (l, span) = (cx.temp(name, v.ty.clone()), v.span);
+    let (l, span) = (cx.temp(name, v.ty), v.span);
     out.push(stmt(span, StmtKind::Let(l, v)));
     local_expr(cx, l, span)
 }
@@ -732,25 +732,25 @@ fn copy(
     (dst, e): (Expr, Ratio),
     pos: Expr,
     src: Src,
-    x: Ratio,
-    span: Span,
+    (x, span): (Ratio, Span),
+    tys: &Types,
 ) -> R<()> {
     let count = count(x, span)?;
     let (a, at) = match src {
         Src::Value(v) if whole(x, e) || count == 1 => {
-            let place = if whole(x, e) { dst } else { index(dst, pos)? };
-            return assign(out, &place, of_type(v, &place.ty)?);
+            let place = if whole(x, e) { dst } else { index(dst, pos, tys)? };
+            return assign(out, &place, of_type(v, place.ty, tys)?);
         }
         Src::At(a, _, q) if whole(x, e) && whole(x, q) => return assign(out, &dst, a),
-        Src::At(a, at, _) if whole(x, e) && count == 1 => return assign(out, &dst, index(a, at)?),
-        Src::At(a, at, _) if count == 1 => return assign(out, &index(dst, pos)?, index(a, at)?),
+        Src::At(a, at, _) if whole(x, e) && count == 1 => return assign(out, &dst, index(a, at, tys)?),
+        Src::At(a, at, _) if count == 1 => return assign(out, &index(dst, pos, tys)?, index(a, at, tys)?),
         Src::Value(v) => (materialize(cx, v, out, "__chunk"), u32_lit(span, 0)),
         Src::At(a, at, _) => (a, at),
     };
-    let i = cx.temp("__i", Ty::u32());
-    let place = index(dst, checked_binary(BinOp::Add, pos, local_expr(cx, i, span)))?;
+    let i = cx.temp("__i", Types::U32);
+    let place = index(dst, checked_binary(BinOp::Add, pos, local_expr(cx, i, span)), tys)?;
     let mut body = Vec::new();
-    assign(&mut body, &place, index(a, checked_binary(BinOp::Add, at, local_expr(cx, i, span)))?)?;
+    assign(&mut body, &place, index(a, checked_binary(BinOp::Add, at, local_expr(cx, i, span)), tys)?)?;
     let block = Block { stmts: body, value: None };
     out.push(stmt(span, StmtKind::ForRange(i, u32_lit(span, 0), u32_lit(span, count), block)));
     Ok(())
@@ -758,8 +758,8 @@ fn copy(
 
 /// A local `name` of the type `ty` made `Zeroed`, whose elements are all
 /// written before it is read (the memo of U6b 3.3).
-fn zeroed(cx: &mut FnCx, out: &mut Vec<Stmt>, name: &str, ty: Ty, span: Span) -> Expr {
-    let l = cx.temp(name, ty.clone());
+fn zeroed(cx: &mut FnCx, out: &mut Vec<Stmt>, name: &str, ty: CTy, span: Span) -> Expr {
+    let l = cx.temp(name, ty);
     out.push(stmt(span, StmtKind::Let(l, Expr::new(ty, span, ExprKind::Zeroed))));
     local_expr(cx, l, span)
 }
@@ -770,23 +770,24 @@ fn zeroed(cx: &mut FnCx, out: &mut Vec<Stmt>, name: &str, ty: Ty, span: Span) ->
 /// The one read of a part of a window: of a value from the array of a
 /// boundary ([`dealt`]) and of an input of a head ([`run`]).
 fn window(
+    lw: &mut Lowerer,
     cx: &mut FnCx,
     out: &mut Vec<Stmt>,
     src: Expr,
     (k, e): (Ratio, Ratio),
-    at: impl FnOnce(&FnCx) -> R<Expr>,
-    name: &str,
-    span: Span,
+    at: impl FnOnce(&Lowerer, &FnCx) -> R<Expr>,
+    (name, span): (&str, Span),
 ) -> R<Expr> {
     if whole(k, e) {
         return Ok(src);
     }
-    let (at, count) = (at(cx)?, count(k, span)?);
-    match src.ty.clone() {
-        _ if count == 1 => index(src, at),
-        Ty::Array(t, _) => {
-            let l = zeroed(cx, out, name, Ty::Array(t, count), span);
-            copy(cx, out, (l.clone(), k), u32_lit(span, 0), Src::At(src, at, e), k, span)?;
+    let (at, count) = (at(lw, cx)?, count(k, span)?);
+    match lw.m.tys.kind(src.ty) {
+        _ if count == 1 => index(src, at, &lw.m.tys),
+        &TyKind::Array(t, _) => {
+            let ty = lw.ty(TyKind::Array(t, count));
+            let l = zeroed(cx, out, name, ty, span);
+            copy(cx, out, (l.clone(), k), u32_lit(span, 0), Src::At(src, at, e), (k, span), &lw.m.tys)?;
             Ok(l)
         }
         t => Err(internal(span, format!("a window of the type {t:?}"))),
@@ -830,12 +831,14 @@ fn run(lw: &mut Lowerer, cx: &mut FnCx, w: &Walk, body: ClockStage) -> R<Expr> {
             }
         };
         let v = match n.bounds.first().and_then(|b| *b.ins.get(input as usize)?) {
-            Some(k) => window(cx, &mut lets, src, (k, e), |cx| at(lw, cx, w, (0, owner), k, e), "__in", span)?,
+            Some(k) => {
+                window(lw, cx, &mut lets, src, (k, e), |lw, cx| at(lw, cx, w, (0, owner), k, e), ("__in", span))?
+            }
             None => src,
         };
         inputs.push(v);
     }
-    let ret = lw.m.fn_(f).ret.clone();
+    let ret = lw.m.fn_(f).ret;
     call_stage(StageRun { g, f, ret, x: body, state: own, time, lets, inputs }, span)
 }
 
@@ -844,7 +847,7 @@ fn run(lw: &mut Lowerer, cx: &mut FnCx, w: &Walk, body: ClockStage) -> R<Expr> {
 /// place of the frame of this flow, the elements of the tick of its output
 /// ([`window`]).
 pub(super) fn dealt(
-    lw: &Lowerer,
+    lw: &mut Lowerer,
     cx: &mut FnCx,
     out: &mut Vec<Stmt>,
     id: NodeId,
@@ -856,13 +859,6 @@ pub(super) fn dealt(
     let (n, part) = (w.n, Part::Deal(b));
     let o = n.bounds.last().and_then(|l| l.out.map(|e| l.outside(e)));
     let (o, e) = (o.ok_or_else(|| internal(span, "a value of no output"))?, exp(n, part, span)?);
-    window(
-        cx,
-        out,
-        w.field(lw, part)?,
-        (o, e),
-        |cx| at(lw, cx, &w, (n.bounds.len(), b as usize), o, e),
-        "__dealt",
-        span,
-    )
+    let field = w.field(lw, part)?;
+    window(lw, cx, out, field, (o, e), |lw, cx| at(lw, cx, &w, (n.bounds.len(), b as usize), o, e), ("__dealt", span))
 }

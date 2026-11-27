@@ -6,7 +6,8 @@
 use std::path::Path;
 
 use onsa_core::{
-    Block, ConstId, Expr, ExprKind, FnId, Lit, LocalId, MsgId, PanicOrigin, Stmt, StmtKind, Ty, TypeId, VerifyError,
+    Block, ConstId, Expr, ExprKind, FnId, Lit, LocalId, MsgId, PanicOrigin, Stmt, StmtKind, TyKind, TypeId, Types,
+    VerifyError,
 };
 use onsa_driver::{BuildError, CoreStage, LowerError, VerifyFailure};
 use onsa_tests::case::{Case, CaseKind, Setup};
@@ -34,7 +35,7 @@ fn span_of_f(m: &onsa_core::Module) -> onsa_diag::Span {
 }
 
 fn bool_lit(span: onsa_diag::Span) -> Expr {
-    Expr::new(Ty::Bool, span, ExprKind::Lit(Lit::Bool(true)))
+    Expr::new(Types::BOOL, span, ExprKind::Lit(Lit::Bool(true)))
 }
 
 /// The Core of [`SRC`] with `t.f` returning a `Bool`, and the verifier's failure.
@@ -87,7 +88,7 @@ fn a_broken_const_is_reported_at_the_const_stage() {
 fn a_local_out_of_range_is_reported_without_a_panic() {
     let (_, mut m) = core();
     let span = span_of_f(&m);
-    set_body(&mut m, Vec::new(), Expr::new(Ty::Int(onsa_core::IntKind::I32), span, ExprKind::Local(LocalId(999))));
+    set_body(&mut m, Vec::new(), Expr::new(Types::int(onsa_core::IntKind::I32), span, ExprKind::Local(LocalId(999))));
     let v = onsa_driver::verify_core(&m, CoreStage::Lower).expect_err("the verifier accepts a local out of range");
     assert_eq!(v.error.fn_name, "t.f");
     assert!(v.error.message.contains("local out of range"), "{v}");
@@ -104,9 +105,9 @@ fn a_local_out_of_range_is_reported_without_a_panic() {
 fn the_dump_marks_ids_out_of_range() {
     let (_, mut m) = core();
     let span = span_of_f(&m);
-    let unit = |kind| Stmt { span, kind: StmtKind::Expr(Expr::new(Ty::Unit, span, kind)) };
+    let unit = |kind| Stmt { span, kind: StmtKind::Expr(Expr::new(Types::UNIT, span, kind)) };
     let stmts = vec![
-        Stmt { span, kind: StmtKind::Let(LocalId(998), Expr::new(Ty::Bool, span, ExprKind::Lit(Lit::Bool(true)))) },
+        Stmt { span, kind: StmtKind::Let(LocalId(998), Expr::new(Types::BOOL, span, ExprKind::Lit(Lit::Bool(true)))) },
         unit(ExprKind::Call { fn_: FnId(999), args: Vec::new() }),
         unit(ExprKind::Const(ConstId(999))),
         unit(ExprKind::Struct { ty: TypeId(999), fields: Vec::new() }),
@@ -114,7 +115,7 @@ fn the_dump_marks_ids_out_of_range() {
         unit(ExprKind::Zeroed),
     ];
     let value = Expr::new(
-        Ty::Struct(TypeId(996)),
+        m.tys.intern(TyKind::Struct(TypeId(996))),
         span,
         ExprKind::Panic { msg: MsgId(999), origin: PanicOrigin::Panic, shown: Vec::new() },
     );

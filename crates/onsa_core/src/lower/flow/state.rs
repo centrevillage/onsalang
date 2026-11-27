@@ -35,15 +35,15 @@ pub(super) fn state_fields(
     decls: &Decls,
     info: &FlowInfo,
     fs: &[Field],
-) -> R<Vec<(String, Ty)>> {
+) -> R<Vec<(String, CTy)>> {
     fs.iter().map(|f| Ok((f.name.clone(), field_ty(lw, flow, decls, info, f.of)?))).collect()
 }
 
-fn field_ty(lw: &mut Lowerer, flow: DefId, decls: &Decls, info: &FlowInfo, of: FieldOf) -> R<Ty> {
+fn field_ty(lw: &mut Lowerer, flow: DefId, decls: &Decls, info: &FlowInfo, of: FieldOf) -> R<CTy> {
     match of {
-        FieldOf::SampleRate => Ok(Ty::Float(FloatKind::F32)),
-        FieldOf::Tick | FieldOf::TickHi => Ok(Ty::u32()),
-        FieldOf::Poisoned | FieldOf::Initialized => Ok(Ty::Bool),
+        FieldOf::SampleRate => Ok(Types::float(FloatKind::F32)),
+        FieldOf::Tick | FieldOf::TickHi => Ok(Types::U32),
+        FieldOf::Poisoned | FieldOf::Initialized => Ok(Types::BOOL),
         FieldOf::Input(l) | FieldOf::Let(l) => {
             let decl =
                 decls.get(&l).ok_or_else(|| internal(lw.a.def(flow).span, "a stored local of no declaration"))?;
@@ -59,17 +59,21 @@ fn field_ty(lw: &mut Lowerer, flow: DefId, decls: &Decls, info: &FlowInfo, of: F
 }
 
 /// The Core type of the field `part` of the node `id` (S-06).
-fn node_field_ty(lw: &mut Lowerer, flow: DefId, decls: &Decls, info: &FlowInfo, id: NodeId, part: Part) -> R<Ty> {
+fn node_field_ty(lw: &mut Lowerer, flow: DefId, decls: &Decls, info: &FlowInfo, id: NodeId, part: Part) -> R<CTy> {
     let n = info.node(id);
     let span = ast_span(lw, flow, n.expr)?;
     match (&n.kind, part) {
         (PlanKind::Prev { ty, .. }, Part::Own | Part::Init)
         | (PlanKind::Delay { ty, .. } | PlanKind::Vdelay { ty, .. }, Part::Init) => lw.core_ty(*ty, &[], span),
         (PlanKind::Delay { ty, .. } | PlanKind::Vdelay { ty, .. }, Part::Buf) => {
-            Ok(Ty::Array(Box::new(lw.core_ty(*ty, &[], span)?), ring_len(&n.kind, span)?))
+            let elem = lw.core_ty(*ty, &[], span)?;
+            Ok(lw.ty(TyKind::Array(elem, ring_len(&n.kind, span)?)))
         }
-        (PlanKind::Delay { .. } | PlanKind::Vdelay { .. }, Part::W) => Ok(Ty::u32()),
-        (PlanKind::Instance { callee, .. }, Part::Own) => Ok(Ty::Struct(lw.ensure_flow(*callee)?.state)),
+        (PlanKind::Delay { .. } | PlanKind::Vdelay { .. }, Part::W) => Ok(Types::U32),
+        (PlanKind::Instance { callee, .. }, Part::Own) => {
+            let state = lw.ensure_flow(*callee)?.state;
+            Ok(lw.ty(TyKind::Struct(state)))
+        }
         // The ring of an input of the head and the array of its output (§11.9, S-1208).
         (PlanKind::Instance { callee, .. }, Part::Gather { .. } | Part::Deal(_)) => {
             let fd = lw.a.def(*callee).as_flow();
@@ -82,16 +86,16 @@ fn node_field_ty(lw: &mut Lowerer, flow: DefId, decls: &Decls, info: &FlowInfo, 
             let ty = ty.ok_or_else(|| internal(span, format!("a ring or an array {part:?} of no port")));
             // The ring of a condition (§11.10).
             let ty = if let Part::Gather { port: Port::Cond(_), .. } = part {
-                Ty::Bool
+                Types::BOOL
             } else {
                 lw.core_ty(ty?, &[], span)?
             };
-            Ok(Ty::Array(Box::new(ty), super::chain::len(n, part, span)?))
+            Ok(lw.ty(TyKind::Array(ty, super::chain::len(n, part, span)?)))
         }
         // Of a guard (§11.10, S-1220): its condition, its count, its held output; of a
         // delay whether it ran.
-        (_, Part::On(_) | Part::Ran | Part::Open | Part::Back(_)) => Ok(Ty::Bool),
-        (_, Part::Count(_)) => Ok(Ty::u32()),
+        (_, Part::On(_) | Part::Ran | Part::Open | Part::Back(_)) => Ok(Types::BOOL),
+        (_, Part::Count(_)) => Ok(Types::U32),
         (PlanKind::Prev { ty, .. } | PlanKind::Delay { ty, .. } | PlanKind::Vdelay { ty, .. }, Part::Held(_)) => {
             lw.core_ty(*ty, &[], span)
         }
@@ -105,7 +109,8 @@ fn node_field_ty(lw: &mut Lowerer, flow: DefId, decls: &Decls, info: &FlowInfo, 
             let tid = TypeId(lw.m.types.len() as u32);
             lw.m.types.push(TypeDef { name: tname, kind: TypeDefKind::Struct { fields: inner } });
             // The array of the states of the replicas (§11.5).
-            Ok(Ty::Array(Box::new(Ty::Struct(tid)), *count))
+            let state = lw.ty(TyKind::Struct(tid));
+            Ok(lw.ty(TyKind::Array(state, *count)))
         }
         _ => Err(internal(span, format!("no field {part:?} of the node {}", n.path))),
     }

@@ -14,7 +14,7 @@
 //! build ([`PlanError::Harness`]).
 
 use onsa_backend_c::{ApiField, FlowApi, FnApi, FnParam, FnParamKind};
-use onsa_core::{FlowMeta, Module, Ty, TypeDefKind, TypeId};
+use onsa_core::{CTy, FlowMeta, Module, TyKind, TypeDefKind, TypeId, Types};
 use onsa_driver::BuildOutput;
 use onsa_interp::Value;
 use onsa_interp::value::int_value;
@@ -220,23 +220,24 @@ struct FlowTypes {
     inplace: bool,
 }
 
-fn struct_fields(m: &Module, id: TypeId) -> &[(String, Ty)] {
+fn struct_fields(m: &Module, id: TypeId) -> &[(String, CTy)] {
     match &m.ty(id).kind {
         TypeDefKind::Struct { fields } => fields,
         _ => &[],
     }
 }
 
-fn scalar_of(m: &Module, ty: &Ty, what: &str) -> Result<Scalar, String> {
-    Scalar::of(ty).ok_or_else(|| {
+fn scalar_of(m: &Module, ty: CTy, what: &str) -> Result<Scalar, String> {
+    // A1b: the tree of the type, read through the bridge.
+    Scalar::of(&m.tys.tree(ty)).ok_or_else(|| {
         let name = onsa_core::dump::type_name(m, ty);
         format!("{what} has the type {name}, which the host steps cannot drive (not a scalar)")
     })
 }
 
 fn flow_types(m: &Module, meta: &FlowMeta) -> Result<FlowTypes, String> {
-    let named = |fields: &[(String, Ty)], what: &str| -> Result<Vec<(String, Scalar)>, String> {
-        fields.iter().map(|(n, t)| Ok((n.clone(), scalar_of(m, t, &format!("the {what} `{n}`"))?))).collect()
+    let named = |fields: &[(String, CTy)], what: &str| -> Result<Vec<(String, Scalar)>, String> {
+        fields.iter().map(|&(ref n, t)| Ok((n.clone(), scalar_of(m, t, &format!("the {what} `{n}`"))?))).collect()
     };
     let config = named(struct_fields(m, meta.fns.config), "`init` input")?;
     let params = named(struct_fields(m, meta.fns.params), "`block` input")?;
@@ -244,9 +245,9 @@ fn flow_types(m: &Module, meta: &FlowMeta) -> Result<FlowTypes, String> {
         .sig_inputs
         .iter()
         .map(|(n, t)| {
-            let (e, planar) = match t {
-                Ty::Array(e, k) => (&**e, Some(*k)),
-                t => (t, None),
+            let (e, planar) = match *m.tys.kind(*t) {
+                TyKind::Array(e, k) => (e, Some(k)),
+                _ => (*t, None),
             };
             Ok((n.clone(), scalar_of(m, e, &format!("the `sample` input `{n}`"))?, planar))
         })
@@ -254,9 +255,9 @@ fn flow_types(m: &Module, meta: &FlowMeta) -> Result<FlowTypes, String> {
     let outputs = meta
         .outputs
         .iter()
-        .map(|(n, t, p)| Ok((n.clone(), scalar_of(m, t, &format!("the output `{n}`"))?, *p)))
+        .map(|&(ref n, t, p)| Ok((n.clone(), scalar_of(m, t, &format!("the output `{n}`"))?, p)))
         .collect::<Result<_, String>>()?;
-    let out_struct = matches!(m.fn_(meta.fns.tick).ret, Ty::Struct(_));
+    let out_struct = matches!(m.tys.kind(m.fn_(meta.fns.tick).ret), TyKind::Struct(_));
     let inplace = meta.fns.process_inplace.is_some();
     Ok(FlowTypes { config, params, inputs, outputs, out_struct, inplace })
 }
@@ -610,12 +611,12 @@ fn fn_step(st: &Step, api: &FnApi, m: &Module) -> Result<Op, PlanError> {
         let name = &p.field.name;
         let v = table.get(name).ok_or_else(|| format!("`args` has no `{name}` (write every parameter)"))?;
         let what = format!("`args.{name}`");
-        let (scalar, values) = match (p.kind, &cp.ty) {
-            (FnParamKind::Scalar, t) => {
-                let s = scalar_of(m, t, &what)?;
+        let (scalar, values) = match (p.kind, m.tys.kind(cp.ty)) {
+            (FnParamKind::Scalar, _) => {
+                let s = scalar_of(m, cp.ty, &what)?;
                 (s, vec![scalar_value(v, s).map_err(|e| format!("{what}: {e}"))?])
             }
-            (FnParamKind::Span { inout: false }, Ty::Span(e)) => {
+            (FnParamKind::Span { inout: false }, &TyKind::Span(e)) => {
                 let s = scalar_of(m, e, &what)?;
                 let a = v.as_array().ok_or_else(|| format!("{what} is an array (a `Span`)"))?;
                 let vals = a
@@ -631,7 +632,9 @@ fn fn_step(st: &Step, api: &FnApi, m: &Module) -> Result<Op, PlanError> {
                 )
                 .into());
             }
-            (_, t) => {
+            (_, _) => {
+                // A1b: the tree of the type, as the message showed it.
+                let t = m.tys.tree(cp.ty);
                 return Err(PlanError::Harness(format!(
                     "the parameter `{name}` of type {t:?}: its C API does not match"
                 )));
@@ -641,9 +644,9 @@ fn fn_step(st: &Step, api: &FnApi, m: &Module) -> Result<Op, PlanError> {
         args.push(Arg { param: p.clone(), scalar, values });
     }
     let status = status(st)?;
-    let ret = match (&def.ret, &api.ret) {
-        (Ty::Unit, None) => None,
-        (t, Some(c)) if *t != Ty::Unit => {
+    let ret = match (def.ret, &api.ret) {
+        (Types::UNIT, None) => None,
+        (t, Some(c)) if t != Types::UNIT => {
             let s = scalar_of(m, t, "the returned value")?;
             Some((s, recorded(c, s, "the returned value")?))
         }

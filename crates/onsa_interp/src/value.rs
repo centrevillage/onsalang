@@ -239,13 +239,18 @@ pub fn zero(m: &Module, ty: &Ty) -> Value {
         Ty::Array(e, n) => Value::Array(zero_array(m, e, *n)),
         Ty::Tuple(ts) => Value::Tuple(ts.iter().map(|t| zero(m, t)).collect()),
         Ty::Struct(id) => match &m.ty(*id).kind {
-            TypeDefKind::Struct { fields } => Value::Struct(fields.iter().map(|(_, t)| zero(m, t)).collect()),
+            TypeDefKind::Struct { fields } => {
+                Value::Struct(fields.iter().map(|(_, t)| zero(m, &m.tys.tree(*t))).collect())
+            }
             _ => onsa_diag::internal::bug(None, "the zero value of a struct type whose definition is not a struct"),
         },
         Ty::Enum(id) => match &m.ty(*id).kind {
             TypeDefKind::Enum { variants } => Value::Enum {
                 tag: 0,
-                fields: variants.first().map(|(_, ts)| ts.iter().map(|t| zero(m, t)).collect()).unwrap_or_default(),
+                fields: variants
+                    .first()
+                    .map(|(_, ts)| ts.iter().map(|t| zero(m, &m.tys.tree(*t))).collect())
+                    .unwrap_or_default(),
             },
             _ => onsa_diag::internal::bug(None, "the zero value of an enum type whose definition is not an enum"),
         },
@@ -359,7 +364,10 @@ pub fn show_as(m: &Module, ty: &Ty, v: &Value) -> String {
                 let (name, tys) = &variants[*tag as usize];
                 match fields.is_empty() {
                     true => name.clone(),
-                    false => format!("{name}({})", all(&mut tys.iter().zip(fields).map(|(t, x)| show_as(m, t, x)))),
+                    false => format!(
+                        "{name}({})",
+                        all(&mut tys.iter().zip(fields).map(|(t, x)| show_as(m, &m.tys.tree(*t), x)))
+                    ),
                 }
             }
             _ => show(v),

@@ -70,7 +70,10 @@ impl Scalar {
 
     /// The Onsa name (`F32`, `U8`), for messages: as Core prints the type.
     pub fn name(self) -> String {
-        onsa_core::dump::type_name(&onsa_core::Module::default(), &self.ty())
+        let mut m = onsa_core::Module::default();
+        // A1b: through the bridge.
+        let t = m.tys.of(&self.ty());
+        onsa_core::dump::type_name(&m, t)
     }
 
     pub fn size(self) -> usize {

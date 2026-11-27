@@ -64,8 +64,8 @@ pub fn bind(data: &Data, pkg: &str, module: &Module, exported: &[String]) -> Res
         let ty = |t: &onsa_core::Ty| {
             Scalar::of(t).ok_or_else(|| format!("{pkg}: `{q}` has a type that is not a scalar of the boundary"))
         };
-        let params: Result<Vec<Scalar>, String> = f.params.iter().map(|p| ty(&p.ty)).collect();
-        match (params, ty(&f.ret)) {
+        let params: Result<Vec<Scalar>, String> = f.params.iter().map(|p| ty(&module.tys.tree(p.ty))).collect();
+        match (params, ty(&module.tys.tree(f.ret))) {
             (Ok(params), Ok(ret)) => {
                 b.callees.push(Callee { name: q.to_string(), params, ret });
                 Some(b.callees.len() - 1)

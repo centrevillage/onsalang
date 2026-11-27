@@ -6,11 +6,11 @@ use super::*;
 
 /// Lower call arguments against parameter types: an argument passed as a
 /// view (§5.3) is converted at its tails ([`lower_expr`]).
-fn lower_args(lw: &mut Lowerer, cx: &mut FnCx, args: &[ast::Arg], params: &[(Mode, Ty)]) -> R<Vec<Arg>> {
+fn lower_args(lw: &mut Lowerer, cx: &mut FnCx, args: &[ast::Arg], params: &[(Mode, CTy)]) -> R<Vec<Arg>> {
     let mut out = Vec::new();
-    for (a, (pm, pt)) in args.iter().zip(params) {
+    for (a, &(pm, pt)) in args.iter().zip(params) {
         let e = lower_expr(lw, cx, a.expr)?;
-        out.push(Arg { mode: *pm, expr: of_type(e, pt)? });
+        out.push(Arg { mode: pm, expr: of_type(e, pt, &lw.m.tys)? });
     }
     Ok(out)
 }
@@ -18,31 +18,30 @@ fn lower_args(lw: &mut Lowerer, cx: &mut FnCx, args: &[ast::Arg], params: &[(Mod
 /// `e` where a value of `want` goes and no view is recorded (an argument,
 /// the input of an instance, the output of a flow): of that type, as the
 /// types stage checked it, with no conversion.
-pub(crate) fn of_type(e: Expr, want: &Ty) -> R<Expr> {
-    match (want, &e.ty) {
-        _ if e.ty == *want => Ok(e),
+pub(crate) fn of_type(e: Expr, want: CTy, tys: &Types) -> R<Expr> {
+    match (tys.kind(want), tys.kind(e.ty)) {
+        _ if e.ty == want => Ok(e),
         // An `rt fn` value where a `fn` is wanted (§8.1): W8-09 lowers function values.
-        (Ty::FnPtr(_), Ty::FnPtr(_)) => Err(unsupported(e.span, Feature::FnValues, &[])),
+        (TyKind::FnPtr(_), TyKind::FnPtr(_)) => Err(unsupported(e.span, Feature::FnValues, &[])),
         _ => Err(internal(e.span, "a value of another type than where it goes, with no view recorded")),
     }
 }
 
 /// Whether `t` is a planar array `[Span[T]; N]` (§5.3).
-fn planar(t: &Ty) -> bool {
-    matches!(t, Ty::Array(el, _) if matches!(**el, Ty::Span(_)))
+fn planar(t: CTy, tys: &Types) -> bool {
+    matches!(*tys.kind(t), TyKind::Array(el, _) if matches!(tys.kind(el), TyKind::Span(_)))
 }
 
-pub(super) fn coerce(lw: &mut Lowerer, cx: &mut FnCx, e: Expr, want: &Ty, mode: Mode) -> R<Expr> {
-    if e.ty == *want {
+pub(super) fn coerce(lw: &mut Lowerer, cx: &mut FnCx, e: Expr, want: CTy, mode: Mode) -> R<Expr> {
+    if e.ty == want {
         return Ok(e);
     }
     let span = e.span;
-    match (want, &e.ty) {
-        (Ty::Span(_), Ty::Array(..) | Ty::Buf(_)) => span_of(cx, e, mode),
+    match (lw.m.tys.kind(want), lw.m.tys.kind(e.ty)) {
+        (TyKind::Span(_), TyKind::Array(..) | TyKind::Buf(_)) => span_of(lw, cx, e, mode),
         // A `FixedStr[N]` at a `Span[U8]`: its used part (§4.2).
-        (Ty::Span(_), Ty::Struct(_)) => crate::lower::fixed_str::view(lw, cx, e),
-        (Ty::Array(elem, n), Ty::Array(_, m)) if planar(want) && n == m => {
-            let n = *n;
+        (TyKind::Span(_), TyKind::Struct(_)) => crate::lower::fixed_str::view(lw, cx, e),
+        (&TyKind::Array(elem, n), &TyKind::Array(_, m)) if planar(want, &lw.m.tys) && n == m => {
             // Planar: an array of arrays / Bufs (a literal is converted by its elements, S-196),
             // a value that is no place bound to a temporary first, and the
             // indices of a place evaluated once (R-433); an `inout` argument
@@ -54,30 +53,31 @@ pub(super) fn coerce(lw: &mut Lowerer, cx: &mut FnCx, e: Expr, want: &Ty, mode: 
             }
             let mut out = Vec::new();
             for i in 0..n {
-                let el = index(base.clone(), u32_lit(span, i))?;
+                let el = index(base.clone(), u32_lit(span, i), &lw.m.tys)?;
                 out.push(coerce(lw, cx, el, elem, mode)?);
             }
-            Ok(after(stmts, Expr::new(want.clone(), span, ExprKind::Array(out))))
+            Ok(after(stmts, Expr::new(want, span, ExprKind::Array(out))))
         }
         // A view the types stage recorded: of these types alone.
         _ => Err(internal(
             span,
             format!(
                 "cannot convert `{}` to `{}`",
-                crate::dump::type_name(&lw.m, &e.ty),
+                crate::dump::type_name(&lw.m, e.ty),
                 crate::dump::type_name(&lw.m, want)
             ),
         )),
     }
 }
 
-pub(crate) fn span_of(cx: &mut FnCx, e: Expr, mode: Mode) -> R<Expr> {
+pub(crate) fn span_of(lw: &mut Lowerer, cx: &mut FnCx, e: Expr, mode: Mode) -> R<Expr> {
     let span = e.span;
-    let elem = match &e.ty {
-        Ty::Array(t, _) | Ty::Buf(t) => (**t).clone(),
-        Ty::Span(_) => return Ok(e),
+    let elem = match *lw.m.tys.kind(e.ty) {
+        TyKind::Array(t, _) | TyKind::Buf(t) => t,
+        TyKind::Span(_) => return Ok(e),
         _ => return Err(internal(span, "span of a non-sequence")),
     };
+    let view = lw.ty(TyKind::Span(elem));
     let base = if e.as_place().is_some() {
         e
     } else {
@@ -85,17 +85,13 @@ pub(crate) fn span_of(cx: &mut FnCx, e: Expr, mode: Mode) -> R<Expr> {
             return Err(internal(span, "inout span of a temporary"));
         }
         // A temporary: bind it so the span has a place to point at.
-        let t = cx.temp("__arr", e.ty.clone());
+        let t = cx.temp("__arr", e.ty);
         let let_ = stmt(span, StmtKind::Let(t, e));
         let local = local_expr(cx, t, span);
-        let sp = Expr::new(Ty::Span(Box::new(elem)), span, ExprKind::SpanOf(Box::new(local)));
-        return Ok(Expr::new(
-            sp.ty.clone(),
-            span,
-            ExprKind::Block(Block { stmts: vec![let_], value: Some(Box::new(sp)) }),
-        ));
+        let sp = Expr::new(view, span, ExprKind::SpanOf(Box::new(local)));
+        return Ok(Expr::new(sp.ty, span, ExprKind::Block(Block { stmts: vec![let_], value: Some(Box::new(sp)) })));
     };
-    Ok(Expr::new(Ty::Span(Box::new(elem)), span, ExprKind::SpanOf(Box::new(base))))
+    Ok(Expr::new(view, span, ExprKind::SpanOf(Box::new(base))))
 }
 
 pub(super) fn lower_call(
@@ -104,7 +100,7 @@ pub(super) fn lower_call(
     e: ExprId,
     callee: ExprId,
     args: &[ast::Arg],
-    ty: Ty,
+    ty: CTy,
 ) -> R<Expr> {
     let span = cx.expr(e).span;
     let Some(target) = cx.info.targets.get(&e).cloned() else { return Err(internal(span, "call without a target")) };
@@ -113,7 +109,7 @@ pub(super) fn lower_call(
             // `T.default()` at a type with no declaration (§6.3): no other
             // bound with members holds of it.
             if let Some(of) = of.map(|t| lw.core_ty(t, &cx.args, span)).transpose()?
-                && let Some(value) = derived::structural_default(lw, &of, span)
+                && let Some(value) = derived::structural_default(lw, of, span)
             {
                 return value;
             }
@@ -127,7 +123,7 @@ pub(super) fn lower_call(
             let params = sig_params(lw, f, &gargs, span)?;
             let mut cargs = lower_args(lw, cx, args, &params)?;
             for (at, _, id) in implicit {
-                let empty = Expr::new(Ty::Struct(id), span, ExprKind::Struct { ty: id, fields: Vec::new() });
+                let empty = Expr::new(lw.ty(TyKind::Struct(id)), span, ExprKind::Struct { ty: id, fields: Vec::new() });
                 cargs.insert(at, Arg { mode: Mode::Borrow, expr: empty });
             }
             let fid = lw.fn_id(def, gargs, span)?;
@@ -154,10 +150,9 @@ pub(super) fn lower_call(
             Ok(Expr::new(ty, span, ExprKind::Call { fn_: fid, args: cargs }))
         }
         Target::Variant { index, .. } => {
-            let Ty::Enum(id) = &ty else { return Err(internal(span, "variant call type")) };
-            let id = *id;
+            let TyKind::Enum(id) = *lw.m.tys.kind(ty) else { return Err(internal(span, "variant call type")) };
             let fields = lw.enum_variants(id)[index as usize].1.clone();
-            let params: Vec<(Mode, Ty)> = fields.into_iter().map(|t| (Mode::Borrow, t)).collect();
+            let params: Vec<(Mode, CTy)> = fields.into_iter().map(|t| (Mode::Borrow, t)).collect();
             let cargs = lower_args(lw, cx, args, &params)?;
             Ok(Expr::new(
                 ty,
@@ -176,7 +171,7 @@ pub(super) fn lower_call(
     }
 }
 
-fn sig_params(lw: &mut Lowerer, f: &SFnDef, gargs: &[GenericArg], span: Span) -> R<Vec<(Mode, Ty)>> {
+fn sig_params(lw: &mut Lowerer, f: &SFnDef, gargs: &[GenericArg], span: Span) -> R<Vec<(Mode, CTy)>> {
     let mut out = Vec::new();
     for p in &f.params {
         out.push((core_mode(p.mode), lw.core_ty(p.ty, gargs, span)?));
@@ -197,7 +192,7 @@ fn lower_target_call(
     gargs: &[GenericArg],
     recv: Option<(Expr, Mode)>,
     args: &[ast::Arg],
-    ty: Ty,
+    ty: CTy,
 ) -> R<Expr> {
     let span = cx.expr(e).span;
     // Sema stops a `target` declaration outside `std` (`UserTargets` of the
@@ -227,7 +222,7 @@ fn row_prim(lw: &mut Lowerer, def: DefId, row: PrimRow, gargs: &[GenericArg], sp
         Some(t) => Some(GenericArg::Ty(lw.core_ty(t, gargs, span)?)),
         None => None,
     };
-    let scalars: Vec<Scalar> = own.iter().chain(gargs).map(scalar).collect();
+    let scalars: Vec<Scalar> = own.iter().chain(gargs).map(|g| scalar(g, &lw.m.tys)).collect();
     // Sema reports the closed uses without a primitive (E0200). A use through
     // a generic body at such a type needs a user's number type, which this
     // version has not (`impl Num` is an E0200): the `else` bodies are not
@@ -240,22 +235,24 @@ fn row_prim(lw: &mut Lowerer, def: DefId, row: PrimRow, gargs: &[GenericArg], sp
 
 /// A type argument of a row as Core has it, read as [`Scalar::of`] reads
 /// sema's: by its head.
-fn scalar(g: &GenericArg) -> Scalar {
+fn scalar(g: &GenericArg, tys: &Types) -> Scalar {
     match g {
-        GenericArg::Ty(Ty::Int(k)) => Scalar::Int(*k),
-        GenericArg::Ty(Ty::Float(k)) => Scalar::Float(*k),
+        GenericArg::Ty(t) => match tys.kind(*t) {
+            TyKind::Int(k) => Scalar::Int(*k),
+            TyKind::Float(k) => Scalar::Float(*k),
+            _ => Scalar::Other,
+        },
         _ => Scalar::Other,
     }
 }
 
 /// `array.from_fn(f)`: an array local filled by a loop; a closure argument is
 /// inlined with its parameter bound to the index, a function item is called.
-fn lower_from_fn(lw: &mut Lowerer, cx: &mut FnCx, args: &[ast::Arg], ty: Ty, span: Span) -> R<Expr> {
-    let Ty::Array(elem, n) = &ty else { return Err(internal(span, "from_fn type")) };
-    let (elem, n) = ((**elem).clone(), *n);
+fn lower_from_fn(lw: &mut Lowerer, cx: &mut FnCx, args: &[ast::Arg], ty: CTy, span: Span) -> R<Expr> {
+    let TyKind::Array(elem, n) = *lw.m.tys.kind(ty) else { return Err(internal(span, "from_fn type")) };
     let [farg] = args else { return Err(internal(span, "from_fn arity")) };
-    let arr = cx.temp("__arr", ty.clone());
-    let i = cx.temp("__i", Ty::u32());
+    let arr = cx.temp("__arr", ty);
+    let i = cx.temp("__i", Types::U32);
     let mut body = Vec::new();
     let value = match &cx.expr(farg.expr).kind {
         AK::Closure { params, body: cbody, .. } => {
@@ -285,7 +282,7 @@ fn lower_from_fn(lw: &mut Lowerer, cx: &mut FnCx, args: &[ast::Arg], ty: Ty, spa
                 Some(row) => ExprKind::Prim { prim: row_prim(lw, def, row, &gargs, span)?, args },
                 None => ExprKind::Call { fn_: lw.fn_id(def, gargs, span)?, args },
             };
-            Expr::new(elem.clone(), span, kind)
+            Expr::new(elem, span, kind)
         }
     };
     body.push(stmt(
@@ -296,7 +293,7 @@ fn lower_from_fn(lw: &mut Lowerer, cx: &mut FnCx, args: &[ast::Arg], ty: Ty, spa
         ),
     ));
     let stmts = vec![
-        stmt(span, StmtKind::Let(arr, Expr::new(ty.clone(), span, ExprKind::Zeroed))),
+        stmt(span, StmtKind::Let(arr, Expr::new(ty, span, ExprKind::Zeroed))),
         stmt(span, StmtKind::ForRange(i, u32_lit(span, 0), u32_lit(span, n), Block { stmts: body, value: None })),
     ];
     Ok(Expr::new(ty, span, ExprKind::Block(Block { stmts, value: Some(Box::new(local_expr(cx, arr, span))) })))

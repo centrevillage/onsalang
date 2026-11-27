@@ -3,7 +3,7 @@
 //! then the largest variant. The same rules as `onsa_sema::layout`, applied
 //! to Core types so that generated flow states can be laid out.
 
-use crate::ir::{FloatKind, IntKind, Module, Ty, TypeDefKind, TypeId};
+use crate::ir::{CTy, FloatKind, IntKind, Module, TyKind, TypeDefKind, TypeId};
 
 /// Pointer width of the reference host (`Span` = pointer + length). Targets
 /// with 32-bit pointers pass their width through [`size_align_for`] /
@@ -17,14 +17,14 @@ fn round_up(x: u32, align: u32) -> u32 {
 }
 
 /// `(size, align)` of a type on the reference host (8-byte pointers).
-pub fn size_align(m: &Module, ty: &Ty) -> (u32, u32) {
+pub fn size_align(m: &Module, ty: CTy) -> (u32, u32) {
     size_align_for(m, ty, PTR_SIZE)
 }
 
 /// `(size, align)` of a type for a target whose pointers are `ptr` bytes wide.
-pub fn size_align_for(m: &Module, ty: &Ty, ptr: u32) -> (u32, u32) {
-    match ty {
-        Ty::Int(k) => {
+pub fn size_align_for(m: &Module, ty: CTy, ptr: u32) -> (u32, u32) {
+    match m.tys.kind(ty) {
+        TyKind::Int(k) => {
             let n = match k {
                 IntKind::I8 | IntKind::U8 => 1,
                 IntKind::I16 | IntKind::U16 => 2,
@@ -33,31 +33,31 @@ pub fn size_align_for(m: &Module, ty: &Ty, ptr: u32) -> (u32, u32) {
             };
             (n, n)
         }
-        Ty::Float(FloatKind::F32) => (4, 4),
-        Ty::Float(FloatKind::F64) => (8, 8),
-        Ty::Bool => (1, 1),
-        Ty::Char => (4, 4),
+        TyKind::Float(FloatKind::F32) => (4, 4),
+        TyKind::Float(FloatKind::F64) => (8, 8),
+        TyKind::Bool => (1, 1),
+        TyKind::Char => (4, 4),
         // No value is of no bytes, as in C (R-504): `()`, a tuple or struct of
         // no fields hold one byte, an array of none one element.
         // S-1156: a value of no elements or no fields takes the bytes its C takes
         // (one byte, aligned to one).
-        Ty::Unit => (1, 1),
-        Ty::Array(e, n) => {
-            let (s, a) = size_align_for(m, e, ptr);
+        TyKind::Unit => (1, 1),
+        TyKind::Array(e, n) => {
+            let (s, a) = size_align_for(m, *e, ptr);
             (s.saturating_mul((*n).max(1)), a)
         }
-        Ty::Tuple(ts) => {
-            let r = record_for(m, ts.iter().map(|t| ("".to_string(), t.clone())).collect::<Vec<_>>().as_slice(), ptr);
+        TyKind::Tuple(ts) => {
+            let r = record_for(m, ts.iter().map(|t| ("".to_string(), *t)).collect::<Vec<_>>().as_slice(), ptr);
             (r.size.max(1), r.align)
         }
-        Ty::Struct(id) => match &m.ty(*id).kind {
+        TyKind::Struct(id) => match &m.ty(*id).kind {
             TypeDefKind::Struct { fields } => {
                 let r = record_for(m, fields, ptr);
                 (r.size.max(1), r.align)
             }
             _ => (0, 1),
         },
-        Ty::Enum(id) => match &m.ty(*id).kind {
+        TyKind::Enum(id) => match &m.ty(*id).kind {
             TypeDefKind::Enum { variants } => {
                 let tag = match variants.len() {
                     0..=256 => 1,
@@ -67,11 +67,7 @@ pub fn size_align_for(m: &Module, ty: &Ty, ptr: u32) -> (u32, u32) {
                 let mut payload_size = 0;
                 let mut payload_align = 1;
                 for (_, tys) in variants {
-                    let r = record_for(
-                        m,
-                        tys.iter().map(|t| ("".to_string(), t.clone())).collect::<Vec<_>>().as_slice(),
-                        ptr,
-                    );
+                    let r = record_for(m, tys.iter().map(|t| ("".to_string(), *t)).collect::<Vec<_>>().as_slice(), ptr);
                     payload_size = payload_size.max(r.size);
                     payload_align = payload_align.max(r.align);
                 }
@@ -80,8 +76,8 @@ pub fn size_align_for(m: &Module, ty: &Ty, ptr: u32) -> (u32, u32) {
             }
             _ => (0, 1),
         },
-        Ty::Span(_) => (2 * ptr, ptr),
-        Ty::FnPtr(_) | Ty::Buf(_) => (ptr, ptr),
+        TyKind::Span(_) => (2 * ptr, ptr),
+        TyKind::FnPtr(_) | TyKind::Buf(_) => (ptr, ptr),
     }
 }
 
@@ -102,18 +98,22 @@ pub struct RecordLayout {
     pub align: u32,
 }
 
-pub fn record(m: &Module, fields: &[(String, Ty)]) -> RecordLayout {
+pub fn record(m: &Module, fields: &[(String, CTy)]) -> RecordLayout {
     record_for(m, fields, PTR_SIZE)
 }
 
-pub fn record_for(m: &Module, fields: &[(String, Ty)], ptr: u32) -> RecordLayout {
+pub fn record_for(m: &Module, fields: &[(String, CTy)], ptr: u32) -> RecordLayout {
+    place(fields.iter().map(|(name, ty)| (name.clone(), size_align_for(m, *ty, ptr))))
+}
+
+/// The record of fields of the sizes and alignments given, in their order.
+fn place(fields: impl Iterator<Item = (String, (u32, u32))>) -> RecordLayout {
     let mut size = 0u32;
     let mut align = 1u32;
     let mut out = Vec::new();
-    for (name, ty) in fields {
-        let (s, a) = size_align_for(m, ty, ptr);
+    for (name, (s, a)) in fields {
         size = round_up(size, a);
-        out.push(FieldLayout { name: name.clone(), offset: size, size: s, align: a });
+        out.push(FieldLayout { name, offset: size, size: s, align: a });
         size = size.saturating_add(s);
         align = align.max(a);
     }
@@ -155,20 +155,22 @@ pub fn flow_layout_for(m: &Module, state: TypeId, bulk_threshold: Option<u32>, p
         TypeDefKind::Struct { fields } => fields.clone(),
         _ => Vec::new(),
     };
-    let is_bulk = |ty: &Ty| -> bool {
-        match (bulk_threshold, ty) {
-            (Some(t), Ty::Array(..)) => size_align_for(m, ty, ptr).0 >= t,
+    let is_bulk = |ty: CTy| -> bool {
+        match (bulk_threshold, m.tys.kind(ty)) {
+            (Some(t), TyKind::Array(..)) => size_align_for(m, ty, ptr).0 >= t,
             _ => false,
         }
     };
-    let bulk: Vec<(String, Ty)> = fields.iter().filter(|(_, t)| is_bulk(t)).cloned().collect();
-    let mut fast: Vec<(String, Ty)> = Vec::new();
+    let bulk: Vec<(String, CTy)> = fields.iter().filter(|(_, t)| is_bulk(*t)).cloned().collect();
+    let mut fast: Vec<(String, (u32, u32))> = Vec::new();
     if !bulk.is_empty() {
-        // The bulk pointer: modelled as a pointer-sized, pointer-aligned slot.
-        fast.push((onsa_sema::flow_names::FixedField::Bulk.name().into(), Ty::Buf(Box::new(Ty::Int(IntKind::U8)))));
+        // The bulk pointer: modelled as a pointer-sized, pointer-aligned slot
+        // (the size and alignment of a `Buf`).
+        fast.push((onsa_sema::flow_names::FixedField::Bulk.name().into(), (ptr, ptr)));
     }
-    fast.extend(fields.iter().filter(|(_, t)| !is_bulk(t)).cloned());
-    let f = record_for(m, &fast, ptr);
+    let rest = fields.iter().filter(|(_, t)| !is_bulk(*t));
+    fast.extend(rest.map(|(name, t)| (name.clone(), size_align_for(m, *t, ptr))));
+    let f = place(fast.into_iter());
     let b = record_for(m, &bulk, ptr);
     FlowLayout {
         fast_fields: f.fields,

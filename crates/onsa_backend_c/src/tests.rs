@@ -7,45 +7,61 @@ use crate::emit::{c_string, f32_lit, f64_lit, int_lit};
 use crate::names::{ident, qualified};
 use crate::{EmitOptions, emit};
 
+/// The types of these modules, in one table each of them starts from: `E`
+/// (`TypeId(0)`), `(Bool, I32)`, `[F32; 4]`, `Buf[F32]`.
+fn tys() -> (Types, [CTy; 4]) {
+    let mut t = Types::default();
+    let f32t = Types::float(FloatKind::F32);
+    let kinds = [
+        TyKind::Enum(TypeId(0)),
+        TyKind::Tuple(Box::new([Types::BOOL, Types::int(IntKind::I32)])),
+        TyKind::Array(f32t, 4),
+        TyKind::Buf(f32t),
+    ];
+    let ids = kinds.map(|k| t.intern(k));
+    (t, ids)
+}
+
 fn sp() -> Span {
     Span::new(FileId(0), 0, 0)
 }
 
-fn e(ty: Ty, kind: ExprKind) -> Expr {
+fn e(ty: CTy, kind: ExprKind) -> Expr {
     Expr::new(ty, sp(), kind)
 }
 
 fn lit_f32(x: f32) -> Expr {
-    e(Ty::Float(FloatKind::F32), ExprKind::Lit(Lit::F32(x)))
+    e(Types::float(FloatKind::F32), ExprKind::Lit(Lit::F32(x)))
 }
 
 fn lit_i32(x: i128) -> Expr {
-    e(Ty::Int(IntKind::I32), ExprKind::Lit(Lit::Int(x)))
+    e(Types::int(IntKind::I32), ExprKind::Lit(Lit::Int(x)))
 }
 
-fn local(l: u32, ty: Ty) -> Expr {
+fn local(l: u32, ty: CTy) -> Expr {
     e(ty, ExprKind::Local(LocalId(l)))
 }
 
-fn binary(op: BinOp, overflow: Overflow, ty: Ty, a: Expr, b: Expr) -> Expr {
+fn binary(op: BinOp, overflow: Overflow, ty: CTy, a: Expr, b: Expr) -> Expr {
     e(ty, ExprKind::Binary { op, overflow, lhs: Box::new(a), rhs: Box::new(b) })
 }
 
 /// A module with one exported function `m.f(x: T, y: T) -> T { body }`.
-fn one_fn(ty: Ty, body: Expr, extra_types: Vec<TypeDef>) -> Module {
+fn one_fn(ty: CTy, body: Expr, extra_types: Vec<TypeDef>) -> Module {
     Module {
+        tys: tys().0,
         types: extra_types,
         consts: Vec::new(),
         fns: vec![FnDef {
             name: "m.f".into(),
             params: vec![
-                Param { local: LocalId(0), mode: Mode::Borrow, ty: ty.clone() },
-                Param { local: LocalId(1), mode: Mode::Borrow, ty: ty.clone() },
+                Param { local: LocalId(0), mode: Mode::Borrow, ty },
+                Param { local: LocalId(1), mode: Mode::Borrow, ty },
             ],
-            ret: ty.clone(),
+            ret: ty,
             sret: false,
             rt: true,
-            locals: vec![Local { name: "x".into(), ty: ty.clone() }, Local { name: "y".into(), ty }],
+            locals: vec![Local { name: "x".into(), ty }, Local { name: "y".into(), ty }],
             body: Some(Block { stmts: Vec::new(), value: Some(Box::new(body)) }),
             span: sp(),
             fp_relaxed: false,
@@ -108,44 +124,38 @@ fn a_string_holds_no_trigraph() {
 
 #[test]
 fn f32_ops_are_wrapped_and_f64_are_not() {
-    let f32t = Ty::Float(FloatKind::F32);
+    let f32t = Types::float(FloatKind::F32);
     let body = binary(
         BinOp::Mul,
         Overflow::Checked,
-        f32t.clone(),
-        binary(BinOp::Add, Overflow::Checked, f32t.clone(), local(0, f32t.clone()), local(1, f32t.clone())),
+        f32t,
+        binary(BinOp::Add, Overflow::Checked, f32t, local(0, f32t), local(1, f32t)),
         lit_f32(2.0),
     );
     let c = emit_fn(&one_fn(f32t, body, vec![]));
     assert!(c.contains("return (float)((float)(x + y) * 2.0f);"), "{c}");
-    let f64t = Ty::Float(FloatKind::F64);
-    let body = binary(BinOp::Add, Overflow::Checked, f64t.clone(), local(0, f64t.clone()), local(1, f64t.clone()));
+    let f64t = Types::float(FloatKind::F64);
+    let body = binary(BinOp::Add, Overflow::Checked, f64t, local(0, f64t), local(1, f64t));
     let c = emit_fn(&one_fn(f64t, body, vec![]));
     assert!(c.contains("return (x + y);"), "{c}");
 }
 
 #[test]
 fn integer_overflow_modes_pick_helpers() {
-    let i32t = Ty::Int(IntKind::I32);
+    let i32t = Types::int(IntKind::I32);
     for (ov, helper) in [
         (Overflow::Checked, "onsa_add_i32(x, y, \"\", 0)"),
         (Overflow::Wrap, "onsa_wadd_i32(x, y)"),
         (Overflow::Sat, "onsa_sadd_i32(x, y)"),
     ] {
-        let body = binary(BinOp::Add, ov, i32t.clone(), local(0, i32t.clone()), local(1, i32t.clone()));
-        let c = emit_fn(&one_fn(i32t.clone(), body, vec![]));
+        let body = binary(BinOp::Add, ov, i32t, local(0, i32t), local(1, i32t));
+        let c = emit_fn(&one_fn(i32t, body, vec![]));
         assert!(c.contains(helper), "{ov:?}: {c}");
     }
-    let body = binary(
-        BinOp::Shl,
-        Overflow::Checked,
-        i32t.clone(),
-        local(0, i32t.clone()),
-        e(Ty::u32(), ExprKind::Lit(Lit::Int(3))),
-    );
-    let c = emit_fn(&one_fn(i32t.clone(), body, vec![]));
+    let body = binary(BinOp::Shl, Overflow::Checked, i32t, local(0, i32t), e(Types::U32, ExprKind::Lit(Lit::Int(3))));
+    let c = emit_fn(&one_fn(i32t, body, vec![]));
     assert!(c.contains("onsa_shl_i32(x, UINT32_C(3), \"\", 0)"), "{c}");
-    let body = binary(BinOp::Div, Overflow::Checked, i32t.clone(), local(0, i32t.clone()), lit_i32(2));
+    let body = binary(BinOp::Div, Overflow::Checked, i32t, local(0, i32t), lit_i32(2));
     let c = emit_fn(&one_fn(i32t, body, vec![]));
     assert!(c.contains("onsa_div_i32(x, INT32_C(2), \"\", 0)"), "{c}");
 }
@@ -155,23 +165,22 @@ fn array_wrappers_are_shared_and_enums_switch() {
     // enum E { A, B(I32) }; fn f(x: E, y: E) -> E { switch x { A => y, B => E.B(payload) } }
     let et = TypeDef {
         name: "m.E".into(),
-        kind: TypeDefKind::Enum { variants: vec![("A".into(), vec![]), ("B".into(), vec![Ty::Int(IntKind::I32)])] },
+        kind: TypeDefKind::Enum { variants: vec![("A".into(), vec![]), ("B".into(), vec![Types::int(IntKind::I32)])] },
     };
-    let ety = Ty::Enum(TypeId(0));
-    let payload =
-        e(Ty::Int(IntKind::I32), ExprKind::Payload { base: Box::new(local(0, ety.clone())), tag: 1, index: 0 });
+    let ety = tys().1[0];
+    let payload = e(Types::int(IntKind::I32), ExprKind::Payload { base: Box::new(local(0, ety)), tag: 1, index: 0 });
     let body = e(
-        ety.clone(),
+        ety,
         ExprKind::Switch {
-            scrutinee: Box::new(local(0, ety.clone())),
+            scrutinee: Box::new(local(0, ety)),
             arms: vec![
-                (0, Block { stmts: vec![], value: Some(Box::new(local(1, ety.clone()))) }),
+                (0, Block { stmts: vec![], value: Some(Box::new(local(1, ety))) }),
                 (
                     1,
                     Block {
                         stmts: vec![],
                         value: Some(Box::new(e(
-                            ety.clone(),
+                            ety,
                             ExprKind::Variant { ty: TypeId(0), tag: 1, fields: vec![payload] },
                         ))),
                     },
@@ -191,31 +200,28 @@ fn array_wrappers_are_shared_and_enums_switch() {
     m2.fns.push(FnDef {
         name: "m.g".into(),
         params: vec![],
-        ret: Ty::Int(IntKind::I32),
+        ret: Types::int(IntKind::I32),
         sret: false,
         rt: true,
-        locals: vec![Local { name: "v".into(), ty: Ty::Enum(TypeId(0)) }],
+        locals: vec![Local { name: "v".into(), ty: tys().1[0] }],
         body: Some(Block {
             stmts: vec![Stmt {
                 span: sp(),
                 kind: StmtKind::Let(
                     LocalId(0),
                     e(
-                        Ty::Enum(TypeId(0)),
+                        tys().1[0],
                         ExprKind::Call {
                             fn_: FnId(0),
                             args: vec![
                                 Arg {
                                     mode: Mode::Borrow,
-                                    expr: e(
-                                        Ty::Enum(TypeId(0)),
-                                        ExprKind::Variant { ty: TypeId(0), tag: 0, fields: vec![] },
-                                    ),
+                                    expr: e(tys().1[0], ExprKind::Variant { ty: TypeId(0), tag: 0, fields: vec![] }),
                                 },
                                 Arg {
                                     mode: Mode::Borrow,
                                     expr: e(
-                                        Ty::Enum(TypeId(0)),
+                                        tys().1[0],
                                         ExprKind::Variant { ty: TypeId(0), tag: 1, fields: vec![lit_i32(4)] },
                                     ),
                                 },
@@ -224,7 +230,7 @@ fn array_wrappers_are_shared_and_enums_switch() {
                     ),
                 ),
             }],
-            value: Some(Box::new(e(Ty::Int(IntKind::I32), ExprKind::Tag(Box::new(local(0, Ty::Enum(TypeId(0)))))))),
+            value: Some(Box::new(e(Types::int(IntKind::I32), ExprKind::Tag(Box::new(local(0, tys().1[0])))))),
         }),
         span: sp(),
         fp_relaxed: false,
@@ -246,7 +252,7 @@ fn array_wrappers_are_shared_and_enums_switch() {
 /// (`CUnit::fns`, plan D-15): the tools that call it read the names here.
 #[test]
 fn exported_functions_are_recorded() {
-    let m = one_fn(Ty::Int(IntKind::I32), local(0, Ty::Int(IntKind::I32)), Vec::new());
+    let m = one_fn(Types::int(IntKind::I32), local(0, Types::int(IntKind::I32)), Vec::new());
     let opts = EmitOptions {
         package: "pk".into(),
         prefix: Some("vc_".into()),
@@ -280,7 +286,7 @@ fn exported_functions_are_recorded() {
 /// no header of an export and no `<prefix>take_panic`, under `poison` too.
 #[test]
 fn a_unit_without_exports_reads_no_prefix() {
-    let m = one_fn(Ty::Int(IntKind::I32), local(0, Ty::Int(IntKind::I32)), Vec::new());
+    let m = one_fn(Types::int(IntKind::I32), local(0, Types::int(IntKind::I32)), Vec::new());
     let opts = EmitOptions { panic: crate::PanicMode::Poison, ..Default::default() };
     assert_eq!(opts.prefix, None);
     let unit = emit(&m, &opts).unwrap_or_else(|d| panic!("{d:?}"));
@@ -330,13 +336,13 @@ fn panic_branch(header: &str, mode: crate::PanicMode) -> &str {
 /// `+ - *` are the compiler's overflow builtins followed by that branch.
 #[test]
 fn checks_under_trap_and_reset_are_a_compare_and_a_branch() {
-    let i32t = Ty::Int(IntKind::I32);
+    let i32t = Types::int(IntKind::I32);
     let body = binary(
         BinOp::Mul,
         Overflow::Checked,
-        i32t.clone(),
-        binary(BinOp::Add, Overflow::Checked, i32t.clone(), local(0, i32t.clone()), local(1, i32t.clone())),
-        local(1, i32t.clone()),
+        i32t,
+        binary(BinOp::Add, Overflow::Checked, i32t, local(0, i32t), local(1, i32t)),
+        local(1, i32t),
     );
     let m = one_fn(i32t, body, vec![]);
     let header = crate::internal_header();
@@ -426,7 +432,7 @@ fn the_runtime_header_takes_the_nan_bits_from_core() {
 /// (no `-Wsign-compare` or `-Wtype-limits`, R-145).
 #[test]
 fn narrow_from_unsigned_compares_the_upper_bound_alone() {
-    let parts = Ty::Tuple(vec![Ty::Bool, Ty::Int(IntKind::I32)]);
+    let parts = tys().1[1];
     for (from, fits, define) in [
         (
             IntKind::U32,
@@ -445,30 +451,28 @@ fn narrow_from_unsigned_compares_the_upper_bound_alone() {
         ),
     ] {
         let narrow = e(
-            parts.clone(),
+            parts,
             ExprKind::Prim {
                 prim: onsa_core::prim::Prim::NarrowParts { from, to: IntKind::I32 },
-                args: vec![Arg { mode: Mode::Borrow, expr: local(0, Ty::Int(from)) }],
+                args: vec![Arg { mode: Mode::Borrow, expr: local(0, Types::int(from)) }],
             },
         );
         let m = Module {
+            tys: tys().0,
             types: Vec::new(),
             consts: Vec::new(),
             fns: vec![FnDef {
                 name: "m.f".into(),
-                params: vec![Param { local: LocalId(0), mode: Mode::Borrow, ty: Ty::Int(from) }],
-                ret: Ty::Int(IntKind::I32),
+                params: vec![Param { local: LocalId(0), mode: Mode::Borrow, ty: Types::int(from) }],
+                ret: Types::int(IntKind::I32),
                 sret: false,
                 rt: true,
-                locals: vec![
-                    Local { name: "x".into(), ty: Ty::Int(from) },
-                    Local { name: "v".into(), ty: parts.clone() },
-                ],
+                locals: vec![Local { name: "x".into(), ty: Types::int(from) }, Local { name: "v".into(), ty: parts }],
                 body: Some(Block {
                     stmts: vec![Stmt { span: sp(), kind: StmtKind::Let(LocalId(1), narrow) }],
                     value: Some(Box::new(e(
-                        Ty::Int(IntKind::I32),
-                        ExprKind::Field { base: Box::new(local(1, parts.clone())), index: 1 },
+                        Types::int(IntKind::I32),
+                        ExprKind::Field { base: Box::new(local(1, parts)), index: 1 },
                     ))),
                 }),
                 span: sp(),
@@ -497,47 +501,41 @@ fn narrow_from_unsigned_compares_the_upper_bound_alone() {
 /// same function is still built in `*out`.
 #[test]
 fn a_hoisted_local_is_declared_at_the_head_and_its_let_assigns_it() {
-    let f32t = Ty::Float(FloatKind::F32);
-    let arr = Ty::Array(Box::new(f32t.clone()), 4);
+    let f32t = Types::float(FloatKind::F32);
+    let arr = tys().1[2];
     let st = |kind: StmtKind| Stmt { span: sp(), kind };
     // g(c, y) -> [F32; 4] { let r = [y; 4]; if c { let t = y; r[0] = t }; r }
     let first = Place::Index(
         Box::new(Place::Local(LocalId(2))),
-        Box::new(e(Ty::u32(), ExprKind::Lit(Lit::Int(0)))),
+        Box::new(e(Types::U32, ExprKind::Lit(Lit::Int(0)))),
         sp(),
         Bounds::Checked,
     );
     let arm = Block {
-        stmts: vec![
-            st(StmtKind::Let(LocalId(3), local(1, f32t.clone()))),
-            st(StmtKind::Assign(first, local(3, f32t.clone()))),
-        ],
+        stmts: vec![st(StmtKind::Let(LocalId(3), local(1, f32t))), st(StmtKind::Assign(first, local(3, f32t)))],
         value: None,
     };
     let g = FnDef {
         name: "m.g".into(),
         params: vec![
-            Param { local: LocalId(0), mode: Mode::Borrow, ty: Ty::Bool },
-            Param { local: LocalId(1), mode: Mode::Borrow, ty: f32t.clone() },
+            Param { local: LocalId(0), mode: Mode::Borrow, ty: Types::BOOL },
+            Param { local: LocalId(1), mode: Mode::Borrow, ty: f32t },
         ],
-        ret: arr.clone(),
+        ret: arr,
         sret: true,
         rt: true,
         locals: vec![
-            Local { name: "c".into(), ty: Ty::Bool },
-            Local { name: "y".into(), ty: f32t.clone() },
-            Local { name: "r".into(), ty: arr.clone() },
-            Local { name: "t".into(), ty: f32t.clone() },
+            Local { name: "c".into(), ty: Types::BOOL },
+            Local { name: "y".into(), ty: f32t },
+            Local { name: "r".into(), ty: arr },
+            Local { name: "t".into(), ty: f32t },
         ],
         body: Some(Block {
             stmts: vec![
-                st(StmtKind::Let(
-                    LocalId(2),
-                    e(arr.clone(), ExprKind::Repeat { elem: Box::new(local(1, f32t.clone())), n: 4 }),
-                )),
-                st(StmtKind::If(local(0, Ty::Bool), arm, Block::default())),
+                st(StmtKind::Let(LocalId(2), e(arr, ExprKind::Repeat { elem: Box::new(local(1, f32t)), n: 4 }))),
+                st(StmtKind::If(local(0, Types::BOOL), arm, Block::default())),
             ],
-            value: Some(Box::new(local(2, arr.clone()))),
+            value: Some(Box::new(local(2, arr))),
         }),
         span: sp(),
         fp_relaxed: false,
@@ -549,27 +547,25 @@ fn a_hoisted_local_is_declared_at_the_head_and_its_let_assigns_it() {
     let call = ExprKind::Call {
         fn_: FnId(1),
         args: vec![
-            Arg { mode: Mode::Borrow, expr: local(0, Ty::Bool) },
-            Arg { mode: Mode::Borrow, expr: local(1, f32t.clone()) },
+            Arg { mode: Mode::Borrow, expr: local(0, Types::BOOL) },
+            Arg { mode: Mode::Borrow, expr: local(1, f32t) },
         ],
     };
     let index = ExprKind::Index {
-        base: Box::new(local(2, arr.clone())),
-        index: Box::new(e(Ty::u32(), ExprKind::Lit(Lit::Int(0)))),
+        base: Box::new(local(2, arr)),
+        index: Box::new(e(Types::U32, ExprKind::Lit(Lit::Int(0)))),
         bounds: Bounds::Checked,
     };
     let mut f = g.clone();
     f.name = "m.f".into();
-    f.ret = f32t.clone();
+    f.ret = f32t;
     f.sret = false;
     f.locals.truncate(2);
-    f.locals.push(Local { name: "a".into(), ty: arr.clone() });
-    f.body = Some(Block {
-        stmts: vec![st(StmtKind::Let(LocalId(2), e(arr.clone(), call)))],
-        value: Some(Box::new(e(f32t, index))),
-    });
+    f.locals.push(Local { name: "a".into(), ty: arr });
+    f.body =
+        Some(Block { stmts: vec![st(StmtKind::Let(LocalId(2), e(arr, call)))], value: Some(Box::new(e(f32t, index))) });
     f.hoisted = Vec::new();
-    let m = Module { fns: vec![f, g], ..Module::default() };
+    let m = Module { tys: tys().0, fns: vec![f, g], ..Module::default() };
     let c = emit_fn(&m);
     let head = c.lines().find(|l| l.contains("void m__g(") && l.ends_with('{')).expect("g");
     let body = &c[c.find(head).unwrap() + head.len() - 1..];
@@ -580,7 +576,7 @@ fn a_hoisted_local_is_declared_at_the_head_and_its_let_assigns_it() {
     assert!(body.contains("(*out).a[") && !body.contains("onsa_arr_f32_4 r"), "the NRVO local is `*out`: {body}");
     // A hoisted `Buf` is not supported at the head either (D-08).
     let mut m = m;
-    m.fns[1].locals[3].ty = Ty::Buf(Box::new(Ty::Float(FloatKind::F32)));
+    m.fns[1].locals[3].ty = tys().1[3];
     let opts = EmitOptions { prefix: Some("t_".into()), export_fns: vec!["m.f".into()], ..Default::default() };
     let Err(d) = emit(&m, &opts) else { panic!("a hoisted Buf is unsupported") };
     assert!(d.iter().any(|d| d.code == onsa_diag::Code::E0200), "{d:?}");
@@ -590,16 +586,16 @@ fn a_hoisted_local_is_declared_at_the_head_and_its_let_assigns_it() {
 /// second hoisted `t` (local 3) is not `t_3`.
 #[test]
 fn a_renamed_local_does_not_take_the_name_of_a_parameter() {
-    let f32t = Ty::Float(FloatKind::F32);
+    let f32t = Types::float(FloatKind::F32);
     let st = |kind: StmtKind| Stmt { span: sp(), kind };
-    let arm = |l: u32| Block { stmts: vec![st(StmtKind::Let(LocalId(l), local(0, f32t.clone())))], value: None };
+    let arm = |l: u32| Block { stmts: vec![st(StmtKind::Let(LocalId(l), local(0, f32t)))], value: None };
     let names = ["t_3", "c", "t", "t"];
-    let tys = [f32t.clone(), Ty::Bool, f32t.clone(), f32t.clone()];
-    let mut m = one_fn(f32t.clone(), local(0, f32t.clone()), Vec::new());
+    let tys = [f32t, Types::BOOL, f32t, f32t];
+    let mut m = one_fn(f32t, local(0, f32t), Vec::new());
     let f = &mut m.fns[0];
-    f.params[1] = Param { local: LocalId(1), mode: Mode::Borrow, ty: Ty::Bool };
-    f.locals = names.iter().zip(&tys).map(|(n, t)| Local { name: n.to_string(), ty: t.clone() }).collect();
-    f.body.as_mut().unwrap().stmts = vec![st(StmtKind::If(local(1, Ty::Bool), arm(2), arm(3)))];
+    f.params[1] = Param { local: LocalId(1), mode: Mode::Borrow, ty: Types::BOOL };
+    f.locals = names.iter().zip(&tys).map(|(n, t)| Local { name: n.to_string(), ty: *t }).collect();
+    f.body.as_mut().unwrap().stmts = vec![st(StmtKind::If(local(1, Types::BOOL), arm(2), arm(3)))];
     f.hoisted = vec![LocalId(2), LocalId(3)];
     let c = emit_fn(&m);
     assert!(c.contains("(float t_3, bool c) {\n  float t;\n  float t_3_1;\n"), "{c}");

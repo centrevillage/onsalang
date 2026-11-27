@@ -18,8 +18,8 @@ use std::fmt::Write as _;
 use onsa_core::prim::{MathFn, Prim};
 use onsa_core::walk::{has_return, walk_block};
 use onsa_core::{
-    BinOp, Block, Bounds, CmpOp, ConstId, Expr, ExprKind, FloatKind, FnDef, FnId, IntKind, Lit, LocalId, LogicOp, Mode,
-    Module, Overflow, Place, Stmt, StmtKind, Ty, TypeDefKind, TypeId, UnOp,
+    BinOp, Block, Bounds, CTy, CmpOp, ConstId, Expr, ExprKind, FloatKind, FnDef, FnId, IntKind, Lit, LocalId, LogicOp,
+    Mode, Module, Overflow, Place, Stmt, StmtKind, Ty, TyKind, TypeDefKind, TypeId, Types, UnOp,
 };
 use onsa_diag::unsupported::Feature;
 use onsa_diag::{Code, Diagnostic, Span, Stage};
@@ -100,17 +100,20 @@ impl Cx<'_> {
     }
 
     /// Fields of a struct type.
-    pub fn fields(&self, id: TypeId) -> &[(String, Ty)] {
+    // A1b: the trees of the fields, read through the bridge.
+    pub fn fields(&self, id: TypeId) -> Vec<(String, Ty)> {
         match &self.m.ty(id).kind {
-            TypeDefKind::Struct { fields } => fields,
-            _ => &[],
+            TypeDefKind::Struct { fields } => fields.iter().map(|(n, t)| (n.clone(), self.m.tys.tree(*t))).collect(),
+            _ => Vec::new(),
         }
     }
 
-    pub fn variants(&self, id: TypeId) -> &[(String, Vec<Ty>)] {
+    // A1b: the trees of the payloads, read through the bridge.
+    pub fn variants(&self, id: TypeId) -> Vec<(String, Vec<Ty>)> {
+        let tree = |ts: &[CTy]| ts.iter().map(|t| self.m.tys.tree(*t)).collect();
         match &self.m.ty(id).kind {
-            TypeDefKind::Enum { variants } => variants,
-            _ => &[],
+            TypeDefKind::Enum { variants } => variants.iter().map(|(n, ts)| (n.clone(), tree(ts))).collect(),
+            _ => Vec::new(),
         }
     }
 
