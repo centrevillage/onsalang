@@ -5,8 +5,8 @@
 //! written under its conditions (S-1157). The plan chose and ordered them;
 //! the lowering finds them by `FlowInfo::hoist_of` and judges nothing (D-15).
 
-use onsa_sema::flow::{Hoist, HoistId};
-use onsa_syntax::ast::{Ast, BinOp, ExprKind as AK};
+use onsa_sema::flow::{Hoist, HoistId, Pos, positions};
+use onsa_syntax::ast::{BinOp, ExprKind as AK};
 
 use super::super::body::{arm_test, lower_match_with, push_expr_stmt};
 use super::branches::{Pick, bind_read, choose};
@@ -137,37 +137,33 @@ fn work_of(
             ast.sub_exprs(e).into_iter().try_for_each(|x| work(lw, cx, info, x, s, state, out))?;
             return if matches!(k, AK::Match { .. }) { arm_writes(lw, cx, info, e, at, out) } else { Ok(()) };
         }
-        AK::If { cond, then, else_, tilde: None } => {
-            placed(lw, cx, false, [*then].into_iter().chain(*else_), at, out)?;
-            work(lw, cx, info, *cond, s, state, out)?;
-            let t = under(lw, cx, *then)?;
-            let f = match else_ {
-                Some(x) => under(lw, cx, *x)?,
-                None => Block::default(),
+        // A condition and the positions it chooses: of an `if`, its branches
+        // (the later `if` of a chain is the one in its `else`); of `&&` / `||`, its right.
+        AK::If { tilde: None, .. } | AK::Binary { op: BinOp::And | BinOp::Or, .. } => {
+            let mut parts = positions(ast, e);
+            let Some((cond, Pos::Cond)) = parts.next() else {
+                return Err(internal(span, "a choice with no condition"));
             };
-            if !t.stmts.is_empty() || !f.stmts.is_empty() {
-                let c = cond_value(lw, cx, info, *cond, s, state)?;
+            let chosen: Vec<ExprId> = parts.of_node().map(|(x, _)| x).collect();
+            placed(lw, cx, false, chosen.iter().copied(), at, out)?;
+            work(lw, cx, info, cond, s, state, out)?;
+            let blocks = chosen.iter().map(|&x| under(lw, cx, x)).collect::<R<Vec<Block>>>()?;
+            if blocks.iter().any(|b| !b.stmts.is_empty()) {
+                let mut c = cond_value(lw, cx, info, cond, s, state)?;
+                if matches!(ast.expr(e).kind, AK::Binary { op: BinOp::Or, .. }) {
+                    c = Expr::new(Types::BOOL, span, ExprKind::Unary(UnOp::Not, Box::new(c)));
+                }
+                let mut blocks = blocks.into_iter();
+                let (t, f) = (blocks.next().unwrap_or_default(), blocks.next().unwrap_or_default());
                 out.push(stmt(span, StmtKind::If(c, t, f)));
             }
         }
-        AK::Binary { op: op @ (BinOp::And | BinOp::Or), lhs, rhs, .. } => {
-            placed(lw, cx, false, [*rhs], at, out)?;
-            work(lw, cx, info, *lhs, s, state, out)?;
-            let r = under(lw, cx, *rhs)?;
-            if !r.stmts.is_empty() {
-                let mut c = cond_value(lw, cx, info, *lhs, s, state)?;
-                if *op == BinOp::Or {
-                    c = Expr::new(Types::BOOL, span, ExprKind::Unary(UnOp::Not, Box::new(c)));
-                }
-                out.push(stmt(span, StmtKind::If(c, r, Block::default())));
-            }
-        }
         AK::Match { scrutinee, arms, tilde: None } => {
-            let mut places = arms.iter().flat_map(|a| a.guard.into_iter().chain([a.body]));
-            placed(lw, cx, false, places.clone(), at, out)?;
+            let places: Vec<ExprId> = positions(ast, e).skip(1).map(|(x, _)| x).collect();
+            placed(lw, cx, false, places.iter().copied(), at, out)?;
             work(lw, cx, info, *scrutinee, s, state, out)?;
             arm_writes(lw, cx, info, e, at, out)?;
-            if !places.any(|x| has_writes(info, ast, x, s, saving)) {
+            if !places.iter().any(|&x| info.writes_under(ast, x, s, saving)) {
                 return Ok(());
             }
             // The arms with a guard take the general path of a `match`,
@@ -239,16 +235,17 @@ fn tilde_if_work(
     state: &Expr,
     out: &mut Vec<Stmt>,
 ) -> R<()> {
-    let chain = onsa_sema::flow::chain(cx.ast, e);
-    placed(lw, cx, false, chain.links.iter().skip(1).map(|l| l.cond), (s, state), out)?;
-    let mut conds = Vec::with_capacity(chain.links.len());
-    for (k, l) in chain.links.iter().enumerate() {
+    let parts: Vec<(ExprId, Pos)> = positions(cx.ast, e).collect();
+    let of = |q: Pos| parts.iter().filter(move |&&(_, p)| p == q).map(|&(x, _)| x);
+    placed(lw, cx, false, of(Pos::Choose), (s, state), out)?;
+    let mut conds = Vec::with_capacity(parts.len() / 2);
+    for &(c, p) in parts.iter().filter(|&&(_, p)| p != Pos::Always) {
         let mut b = Vec::new();
-        match k {
-            0 => work(lw, cx, info, l.cond, s, state, &mut b)?,
-            _ => placed(lw, cx, true, [l.cond], (s, state), &mut b)?,
+        match p {
+            Pos::Cond => work(lw, cx, info, c, s, state, &mut b)?,
+            _ => placed(lw, cx, true, [c], (s, state), &mut b)?,
         }
-        conds.push((l.cond, b));
+        conds.push((c, b));
     }
     let mut later = Vec::new();
     for (c, mut b) in conds.into_iter().rev() {
@@ -261,7 +258,7 @@ fn tilde_if_work(
         later = b;
     }
     out.extend(later);
-    for x in chain.links.iter().map(|l| l.then).chain(chain.last) {
+    for x in of(Pos::Always) {
         work(lw, cx, info, x, s, state, out)?;
     }
     Ok(())
@@ -288,12 +285,14 @@ fn tilde_match_work(
         return Err(internal(span, "a `match~` the plan did not record"));
     };
     let saving = cx.flow.as_ref().unwrap().now.saving;
-    placed(lw, cx, false, arms.iter().filter_map(|a| a.guard), (s, state), out)?;
+    let parts: Vec<(ExprId, Pos)> = positions(ast, e).collect();
+    let of = |q: Pos| parts.iter().filter(move |&&(_, p)| p == q).map(|&(x, _)| x);
+    placed(lw, cx, false, of(Pos::Choose), (s, state), out)?;
     let mut bodies = Vec::new();
-    for a in arms {
-        work(lw, cx, info, a.body, s, state, &mut bodies)?;
+    for x in of(Pos::Always) {
+        work(lw, cx, info, x, s, state, &mut bodies)?;
     }
-    let guards = arms.iter().rposition(|a| a.guard.is_some_and(|g| has_writes(info, ast, g, s, saving)));
+    let guards = arms.iter().rposition(|a| a.guard.is_some_and(|g| info.writes_under(ast, g, s, saving)));
     let guards = guards.map_or(0, |w| w + 1);
     let slots = &cx.flow.as_ref().unwrap().now.local_override;
     let bound = t.arms.iter().rposition(|b| b.iter().any(|b| slots.contains_key(&b.0))).map_or(0, |b| b + 1);
@@ -382,16 +381,6 @@ fn arm_write(
         body = before;
     }
     Ok(body)
-}
-
-/// Whether `e` holds a guarded field or a check of the stage `s`, of the
-/// work of `FlowInfo::late` or not (a field of [`arm_writes`] is written at
-/// its `match`).
-fn has_writes(info: &FlowInfo, ast: &Ast, e: ExprId, s: ClockStage, late: bool) -> bool {
-    let guarded = info.hoist_of(e).map(|h| info.hoist(h)).filter(|h| h.guarded && h.arms.is_empty());
-    let here = guarded.map(|h| h.stage).or(info.check_of(e));
-    (here == Some(s) && info.late.contains(&e) == late)
-        || ast.sub_exprs(e).into_iter().any(|x| has_writes(info, ast, x, s, late))
 }
 
 /// The value at the stage `s` of the condition `c` that guards fields of

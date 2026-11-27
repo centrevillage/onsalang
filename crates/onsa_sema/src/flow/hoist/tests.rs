@@ -5,6 +5,10 @@
 //! the stages its parts are read at, the checked constants (S-888 (c′)),
 //! and the numbers and the order of the fields (§11.6, §12.4).
 
+use std::collections::BTreeSet;
+
+use onsa_syntax::ast::ExprId;
+
 use crate::Analysis;
 use crate::clock::ClockStage;
 use crate::flow::{FieldOf, FlowInfo, Kept, Owner};
@@ -472,4 +476,75 @@ pub flow f(m: M at event, x: F32 at sample, g: Bool at sample, k: I32 at init) -
     assert_eq!(of("match~ m { n if n.q > x => lp~(x), _ => lp~(x) }"), held);
     assert_eq!(of("if g { match m { n => x + n.q } } else { x }"), held);
     assert_eq!(of("match m { n if g => x + n.q, n => n.p.a + x }"), [free(0, "n.q"), free(1, "n.p.a")]);
+}
+
+/// What the lowering asked before `FlowInfo::writes_under` (the Core's
+/// `has_writes`): a guarded field of no arm or a check of the stage `s` in
+/// the subtree of `e`, of `late` or not, walked again at each question.
+fn writes_walked(f: &FlowInfo, ast: &onsa_syntax::ast::Ast, e: ExprId, s: ClockStage, late: bool) -> bool {
+    let guarded = f.hoist_of(e).map(|h| f.hoist(h)).filter(|h| h.guarded && h.arms.is_empty());
+    let here = guarded.map(|h| h.stage).or(f.check_of(e));
+    (here == Some(s) && f.late.contains(&e) == late)
+        || ast.sub_exprs(e).into_iter().any(|x| writes_walked(f, ast, x, s, late))
+}
+
+/// That `FlowInfo::writes_under` answers as [`writes_walked`] of every
+/// expression of the `let`s and the output of each complete flow of the
+/// module `text`, at each stage of their fields and checks, of `late` and
+/// not: the number of the flows and that of the true answers.
+fn writes_agree(name: &str, text: &str) -> (usize, usize) {
+    let p = crate::tests::pkg(&[("main", text)]);
+    let a = crate::tests::analyze(&p);
+    let ast = &p.modules[0].parsed.ast;
+    let (mut flows, mut yes) = (0, 0);
+    for (_, f) in a.flows.iter().filter(|(id, f)| f.complete && a.def(**id).name_span.file == p.modules[0].file) {
+        flows += 1;
+        let stages: BTreeSet<ClockStage> = f.hoists.iter().map(|h| h.stage).chain(f.checks.values().copied()).collect();
+        let mut todo: Vec<ExprId> = f.lets.iter().map(|l| l.init).chain(f.output).collect();
+        while let Some(e) = todo.pop() {
+            for (&s, late) in stages.iter().flat_map(|s| [(s, false), (s, true)]) {
+                let want = writes_walked(f, ast, e, s, late);
+                assert_eq!(f.writes_under(ast, e, s, late), want, "{name} at {:?}", ast.expr(e).span);
+                yes += usize::from(want);
+            }
+            todo.extend(ast.sub_exprs(e));
+        }
+    }
+    (flows, yes)
+}
+
+/// `FlowInfo::writes_under` answers as the walk of the subtree did, in
+/// every flow case: the set made once is the same judgment.
+#[test]
+fn writes_under_answers_as_the_walk_of_the_subtree() {
+    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/spec");
+    let mut files = Vec::new();
+    for sub in ["flow", "flow_clock", "flow_semantics", "flow_syntax"] {
+        let paths = std::fs::read_dir(dir.join(sub)).expect("the cases").flatten().map(|d| d.path());
+        files.extend(paths.filter(|p| p.extension().is_some_and(|x| x == "onsa")));
+    }
+    let (mut flows, mut yes) = (0, 0);
+    for path in &files {
+        let (f, y) = writes_agree(&path.display().to_string(), &std::fs::read_to_string(path).expect("a case"));
+        (flows, yes) = (flows + f, yes + y);
+    }
+    assert!(files.len() >= 100 && flows >= 100 && yes > 0, "{} cases, {flows} flows, {yes} writes", files.len());
+}
+
+/// One part holds a guarded field of `block` of the end of the stage (it
+/// reads `^m`, S-1244) and one that is not: both are under the `let`.
+#[test]
+fn a_part_with_a_late_write_and_an_early_one_of_one_stage_has_both() {
+    let text = "pub flow f(x: F32 at sample, n: I32 at block) -> F32 at sample {
+  let q = prev~(x + (if n != 0 { x * F32.round_from(100 / (n + ^m)) } else { x }) + (if n != 0 { x * F32.round_from(100 / n) } else { x }))
+  let m = n - n
+  q
+}";
+    assert_eq!(writes_agree("late and early", text).0, 1);
+    let p = crate::tests::pkg(&[("main", text)]);
+    let a = crate::tests::analyze(&p);
+    let mine = a.flows.iter().find(|(id, f)| f.complete && a.def(**id).name_span.file == p.modules[0].file);
+    let f = mine.expect("the flow").1;
+    let (ast, q) = (&p.modules[0].parsed.ast, f.lets[0].init);
+    assert!(f.writes_under(ast, q, B, true) && f.writes_under(ast, q, B, false));
 }

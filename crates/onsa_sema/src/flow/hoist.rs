@@ -378,4 +378,45 @@ impl FlowInfo {
     pub fn check_of(&self, e: ExprId) -> Option<ClockStage> {
         self.checks.get(&e).copied()
     }
+
+    /// Whether `e` holds a guarded field (of no arm, S-1157) or a check of
+    /// the stage `s`, of the work of [`FlowInfo::late`] or not (`late`): the
+    /// writes under a conditional position the lowering puts under its
+    /// conditions ([`writes`], made of the body in `ast` when first asked).
+    pub fn writes_under(&self, ast: &Ast, e: ExprId, s: ClockStage, late: bool) -> bool {
+        self.writes.get_or_init(|| writes(self, ast)).contains(&(e, s, late))
+    }
+}
+
+/// [`FlowInfo::writes`]: from the `let`s and the output, after the
+/// expression, the stages of the writes in its subtree, its own ([`write`])
+/// and its parts'; none of a body with no write. Linear in the body times
+/// the stages.
+fn writes(info: &FlowInfo, ast: &Ast) -> HashSet<(ExprId, ClockStage, bool)> {
+    type Writes = HashSet<(ExprId, ClockStage, bool)>;
+    fn under(info: &FlowInfo, ast: &Ast, e: ExprId, out: &mut Writes) -> Vec<(ClockStage, bool)> {
+        let mut here: Vec<_> = write(info, e).into_iter().collect();
+        for x in ast.sub_exprs(e) {
+            here.extend(under(info, ast, x, out));
+        }
+        here.sort_unstable();
+        here.dedup();
+        out.extend(here.iter().map(|&(s, late)| (e, s, late)));
+        here
+    }
+    let mut out = HashSet::default();
+    if info.hoists.iter().map(|h| h.expr).chain(info.checks.keys().copied()).any(|e| write(info, e).is_some()) {
+        for e in info.lets.iter().map(|l| l.init).chain(info.output) {
+            under(info, ast, e, &mut out);
+        }
+    }
+    out
+}
+
+/// The write of `e` under its conditions: of a guarded field of no arm
+/// (S-1157) its stage, else of a check (S-888 (c′)); and whether it is of
+/// [`FlowInfo::late`].
+fn write(info: &FlowInfo, e: ExprId) -> Option<(ClockStage, bool)> {
+    let guarded = info.hoist_of(e).map(|h| info.hoist(h)).filter(|h| h.guarded && h.arms.is_empty());
+    guarded.map(|h| h.stage).or(info.check_of(e)).map(|s| (s, info.late.contains(&e)))
 }

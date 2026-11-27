@@ -561,6 +561,19 @@ impl Walk<'_> {
         r
     }
 
+    /// `x` walked in its position `p` of the expression it is a part of
+    /// ([`super::positions`], §11.5): of a conditional one, in its place.
+    fn placed(&mut self, x: ExprId, p: Pos) -> Option<Clock> {
+        let site = match p {
+            Pos::Always | Pos::Cond => return self.expr(x),
+            Pos::Branch { head } => Site::Branch { head },
+            Pos::Choose => Site::Choose,
+            Pos::Right => Site::Right,
+            Pos::Link => onsa_diag::internal::bug(self.span(x), "a later `if` of a chain walked as a part"),
+        };
+        self.at(site, |w| w.expr(x))
+    }
+
     /// The candidate that lifts the thing with state `e` of the kind `kind`
     /// in the frame `frame` (none of a delay: its tick is not named) into a
     /// `let` before its statement ([`lift::lift`]).
@@ -637,13 +650,12 @@ impl Walk<'_> {
             },
             ExprKind::If { tilde, .. } => self.if_chain(e, *tilde),
             ExprKind::Match { scrutinee, arms, tilde } => self.match_arms(e, *scrutinee, arms, *tilde),
-            ExprKind::Binary { op, lhs, rhs, .. } => {
-                let l = self.expr(*lhs);
-                let r = match op {
-                    BinOp::And | BinOp::Or => self.at(Site::Right, |w| w.expr(*rhs)),
-                    _ => self.expr(*rhs),
-                };
-                self.join(e, &[(Some(*lhs), l), (Some(*rhs), r)])
+            ExprKind::Binary { .. } => {
+                let mut ops: [Op; 2] = [(None, None); 2];
+                for (o, (x, p)) in ops.iter_mut().zip(super::positions(ast, e)) {
+                    *o = (Some(x), self.placed(x, p));
+                }
+                self.join(e, &ops)
             }
             ExprKind::Index { base, index } => self.join_of(e, [*base, *index]),
             ExprKind::Par { tilde, body, .. } => self.par(e, *tilde, *body),
@@ -715,25 +727,15 @@ impl Walk<'_> {
         if let (Some(t), Some(first)) = (tilde.filter(|_| self.checking()), chain.links.first()) {
             self.check_tilde(t, Branching::If, chain.links.iter().map(|l| l.then).chain(chain.last), first.cond);
         }
-        let branch = |w: &mut Self, x| match tilde {
-            None => w.at(Site::Branch { head: e }, |w| w.expr(x)),
-            Some(_) => w.expr(x),
-        };
-        let mut ops: Vec<Op> = Vec::with_capacity(2 * chain.links.len() + 1);
-        for (k, l) in chain.links.iter().enumerate() {
-            let c = if k == 0 { self.expr(l.cond) } else { self.at(Site::Choose, |w| w.expr(l.cond)) };
-            ops.push((Some(l.cond), c));
-            ops.push((Some(l.then), branch(self, l.then)));
-        }
-        let last = chain.last.map(|x| (Some(x), branch(self, x)));
-        let (mut c, mut rest) = (last.and_then(|o| o.1), chain.last);
+        let parts = super::positions(self.ast, e).filter(|&(_, p)| p != Pos::Link);
+        let ops: Vec<Op> = parts.map(|(x, p)| (Some(x), self.placed(x, p))).collect();
+        let (mut c, mut rest) = (chain.last.and_then(|_| ops.last()?.1), chain.last);
         let later = if self.checking() { chain.links.len() } else { 1 };
         for (k, l) in chain.links.iter().enumerate().take(later).skip(1).rev() {
             c = self.join(l.at, &[(rest, c), ops[2 * k], ops[2 * k + 1]]);
             rest = Some(l.at);
             self.out.exprs.insert(l.at, c.unwrap_or(Clock::Const));
         }
-        ops.extend(last);
         self.join(e, &ops)
     }
 
@@ -750,24 +752,24 @@ impl Walk<'_> {
         if let Some(t) = tilde.filter(|_| self.checking()) {
             self.check_tilde(t, Branching::Match, arms.iter().map(|a| a.body), scrutinee);
         }
-        let s = self.expr(scrutinee);
+        // The scrutinee, then of each arm its guard and its body.
+        let mut parts = super::positions(self.ast, e);
+        let s = parts.next().and_then(|(x, p)| self.placed(x, p));
         let (mut ops, mut chosen, mut bound) = (vec![(Some(scrutinee), s)], s, Vec::new());
         for arm in arms {
             self.bind_pat(arm.pat, s);
-            if let Some(g) = arm.guard {
-                let c = self.at(Site::Choose, |w| w.expr(g));
-                chosen = self.join(e, &[(Some(scrutinee), chosen), (Some(g), c)]);
-                ops.push((Some(g), c));
-            }
-            let body = match tilde {
-                None => self.at(Site::Branch { head: e }, |w| w.expr(arm.body)),
-                Some(_) => {
+            for (x, p) in parts.by_ref() {
+                if p == Pos::Always {
                     self.bind_pat(arm.pat, chosen);
                     bound.push(self.check_arm_bindings(arm.pat));
-                    self.expr(arm.body)
                 }
-            };
-            ops.push((Some(arm.body), body));
+                let c = self.placed(x, p);
+                ops.push((Some(x), c));
+                if x == arm.body {
+                    break;
+                }
+                chosen = self.join(e, &[(Some(scrutinee), chosen), (Some(x), c)]);
+            }
         }
         if record {
             self.tilde.insert(e, TildeMatch { arms: bound, owner: self.recorder.owner_now() });

@@ -135,7 +135,7 @@ mod reads;
 #[cfg(test)]
 mod tests;
 
-pub use branching::{Chain, Link, chain};
+pub use branching::{Chain, Link, Pos, Positions, chain, positions};
 pub use hoist::{Cond, Hoist, HoistId};
 pub use plan::{
     CondRead, Edge, Entry, EventFrom, EventPlan, Feed, Field, FieldOf, Kept, NodeId, Op, Out, Owner, Part, PlanBound,
@@ -293,6 +293,11 @@ pub struct FlowInfo {
     /// evaluates at compile time those under `Const` and evaluates no
     /// branch that is not taken (S-888 (c′)).
     pub const_conds: HashMap<ExprId, Cond>,
+    /// Of each expression, the stages of the guarded fields and the checks
+    /// in it, by whether they are of `late` ([`FlowInfo::writes_under`]):
+    /// made when first asked, by the lowering of a `match` alone.
+    #[serde(skip)]
+    pub(crate) writes: std::sync::OnceLock<HashSet<(ExprId, ClockStage, bool)>>,
     pub fields: Vec<Field>,
     /// The place of each field in the struct that holds it, made once with
     /// the fields ([`FlowInfo::field_at`]).

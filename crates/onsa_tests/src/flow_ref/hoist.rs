@@ -249,7 +249,7 @@ pub(super) fn made_at(body: &Body, e: ExprId, (clock, guard): (Clock, Clock)) ->
 
 /// Does this stage decide the condition of `e` (an `if`, `&&` / `||` or `match`; the clock `cc`, the guard `g` counted in)? One that is not
 /// after the stage is decided here. A constant condition is decided before `init` (S-888 (c')), but this evaluator reads its value where a
-/// stage needs it: when a part that this stage makes is under it, in any branch, arm or right side (as the `has_writes` of the Core, which
+/// stage needs it: when a part that this stage makes is under it, in any branch, arm or right side (as the plan's `writes_under`, which
 /// does not look at which one is taken), and else it is evaluated where it is reached. Until W9-03 takes it at compile time (E0419 when it
 /// panics), so a constant condition that panics does so at the stage where such a part is made, else where it is read.
 fn decides(

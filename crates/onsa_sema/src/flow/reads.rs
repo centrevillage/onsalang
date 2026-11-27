@@ -9,7 +9,7 @@
 //! the body again (R-91 (1), D-15).
 
 use onsa_diag::hash::HashSet;
-use onsa_syntax::ast::{Ast, BinOp};
+use onsa_syntax::ast::Ast;
 
 use super::clocks::Walked;
 use super::hoist::{Choose, Cond, Place};
@@ -414,43 +414,18 @@ impl Marker<'_> {
                 None if self.partial => self.mark(*body, at, g),
                 None => onsa_diag::internal::bug(Some(expr.span), "a `par~` the walk of the clocks did not reach"),
             },
-            // `if~` (§11.3, S-1094): a later condition of its chain under
-            // the ones before it, its branches under no more than it.
-            ExprKind::If { tilde: Some(_), .. } => {
-                let chain = super::branching::chain(ast, e);
-                let (depth, mut inner) = (self.conds.len(), g);
-                for l in &chain.links {
-                    self.mark(l.cond, at, inner);
-                    inner = self.enter(l.cond, at, inner);
-                }
-                self.conds.truncate(depth);
-                for x in chain.links.iter().map(|l| l.then).chain(chain.last) {
-                    self.mark(x, at, g);
-                }
-            }
-            // The conditional positions (§11.3) under the conditions that
-            // select them.
-            ExprKind::If { cond, then, else_, tilde: None } => {
-                self.mark(*cond, at, g);
-                let inner = self.enter(*cond, at, g);
-                for x in [Some(*then), *else_].into_iter().flatten() {
-                    self.mark(x, at, inner);
-                }
-                self.conds.pop();
-            }
-            // A guard under the scrutinee and the guards before it; the arm
-            // bodies of `match~` (S-1094) under no more than it.
+            // The bindings of the arms of a `match` / `match~`, then its positions.
             ExprKind::Match { scrutinee, arms, tilde } => {
                 if arms.iter().filter_map(|a| a.guard).chain([*scrutinee]).any(|x| self.back(x)) {
                     let (body, past) = (self.body, &mut self.past);
                     let mut bind = |q, _: &_| past.extend(body.pat_locals.get(&q));
                     arms.iter().for_each(|a| crate::pat::each_bind(ast, a.pat, true, &mut bind));
                 }
-                let depth = self.conds.len();
                 let arms_of = self.clocks.tilde.get(&e).filter(|_| tilde.is_some());
                 if arms_of.is_some_and(|t| t.arms.iter().flatten().any(|b| self.past.contains(b))) {
                     self.out.late.insert(e);
                 }
+                let depth = self.conds.len();
                 for (arm, bound) in arms_of.into_iter().flat_map(|t| t.arms.iter().enumerate()) {
                     let b = Bound { m: e, arm, at, g, depth };
                     self.binding_of.extend(bound.iter().map(|&l| (l, b)));
@@ -460,33 +435,38 @@ impl Marker<'_> {
                     let mut bind = |q, _: &_| arm_of.extend(body.pat_locals.get(&q).map(|&l| (l, (e, i as u32))));
                     crate::pat::each_bind(ast, a.pat, true, &mut bind);
                 }
-                self.mark(*scrutinee, at, g);
-                let mut inner = self.enter(*scrutinee, at, g);
-                for arm in arms {
-                    if let Some(x) = arm.guard {
-                        self.mark_guard(e, x, at, inner);
-                        inner = self.enter(x, at, inner);
+                self.mark_positions(e, at, g);
+            }
+            _ => self.mark_positions(e, at, g),
+        }
+    }
+
+    /// The parts of `e`, read at `at` under `g`, in their positions
+    /// ([`super::positions`], §11.3): a condition marked under the ones
+    /// before it (a guard of the `match` `e` by [`Self::mark_guard`]), and
+    /// entered; a branch and the right of `&&` / `||` under the conditions
+    /// entered; after the conditions, a branch of `if~` / `match~` (S-1094)
+    /// under no more than `g`, once they are marked. A walk of the nodes:
+    /// the later `if` of a chain is a branch of the one before it.
+    fn mark_positions(&mut self, e: ExprId, at: ClockStage, g: Cond) {
+        let (depth, mut inner, mut after) = (self.conds.len(), g, Vec::new());
+        for (x, p) in super::positions(self.ast, e).of_node() {
+            match p {
+                Pos::Always if self.conds.len() == depth => self.mark(x, at, g),
+                Pos::Always => after.push(x),
+                Pos::Cond | Pos::Choose => {
+                    match self.ast.expr(e).kind {
+                        ExprKind::Match { .. } if p == Pos::Choose => self.mark_guard(e, x, at, inner),
+                        _ => self.mark(x, at, inner),
                     }
-                    if tilde.is_none() {
-                        self.mark(arm.body, at, inner);
-                    }
+                    inner = self.enter(x, at, inner);
                 }
-                self.conds.truncate(depth);
-                for arm in arms.iter().filter(|_| tilde.is_some()) {
-                    self.mark(arm.body, at, g);
-                }
+                Pos::Branch { .. } | Pos::Right | Pos::Link => self.mark(x, at, inner),
             }
-            ExprKind::Binary { op: BinOp::And | BinOp::Or, lhs, rhs, .. } => {
-                self.mark(*lhs, at, g);
-                let inner = self.enter(*lhs, at, g);
-                self.mark(*rhs, at, inner);
-                self.conds.pop();
-            }
-            _ => {
-                for child in ast.sub_exprs(e) {
-                    self.mark(child, at, g);
-                }
-            }
+        }
+        self.conds.truncate(depth);
+        for x in after {
+            self.mark(x, at, g);
         }
     }
 
