@@ -1,0 +1,75 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§18.1"]
+// fixes = 0
+
+// W8-14 A3/t, §4.4: the boundary of the size limit 4096 for each form of a written type, on both sides. The size counts
+// the names (built-in types including `()`, declared types, type parameters), the shapes and the const arguments, one
+// each. `A(k)` and `Z(k)` below are `2^(k+1) - 1` (a chain of tuples of two over the leaf `I32` and over the leaf `()`,
+// so a `()` is one name), and `X` in each line is a tuple of such aliases (and `U8`) whose size is 4096 minus the cost
+// of the form around it, so the form is exactly 4096 (no diagnostic) in the `fine` and one more in the `over`. The cost
+// of a form: a type with arguments is its name and its shape (`Option[X]`, `Span[X]`, `Buf[X]` are `X + 2`, `Result[X,
+// ()]` is `X + 3`), an array is the shape, the element and the const argument (`[X; 3]` and `[X; K]` with a named
+// constant are `X + 2`), a tuple is the shape and its elements (`((X, U8), U8)` is `X + 4`) and a function type is the
+// shape, the parameters and the result (`fn(X) -> U8` is `X + 2`, `fn() -> X` is `X + 1`). A written type that is over
+// is E0422 at the written type (a parameter of the function or the alias declaration, one error per declaration); an
+// alias that is over uses no other diagnostic.
+
+type A0 = I32
+type Z0 = ()
+type A1 = (A0, A0)
+type Z1 = (Z0, Z0)
+type A2 = (A1, A1)
+type Z2 = (Z1, Z1)
+type A3 = (A2, A2)
+type Z3 = (Z2, Z2)
+type A4 = (A3, A3)
+type Z4 = (Z3, Z3)
+type A5 = (A4, A4)
+type Z5 = (Z4, Z4)
+type A6 = (A5, A5)
+type Z6 = (Z5, Z5)
+type A7 = (A6, A6)
+type Z7 = (Z6, Z6)
+type A8 = (A7, A7)
+type Z8 = (Z7, Z7)
+type A9 = (A8, A8)
+type Z9 = (Z8, Z8)
+type A10 = (A9, A9)
+type Z10 = (Z9, Z9)
+type A11 = (A10, A10)
+type Z11 = (Z10, Z10)
+const K: U32 = 3
+
+pub fn fnparam_fine(x: fn((A10, Z9, A9)) -> U8) -> U32 { 0 }
+pub fn fnparam_over(x: fn((Z10, A10)) -> U8) -> U32 { 0 }  //~ E0422
+pub fn fnret_fine(x: fn() -> (A10, Z10)) -> U32 { 0 }
+pub fn fnret_over(x: fn() -> (Z10, A10, Z0)) -> U32 { 0 }  //~ E0422
+pub fn span_fine(x: Span[(A10, Z9, A9)]) -> U32 { 0 }
+pub fn span_over(x: Span[(Z10, A10)]) -> U32 { 0 }  //~ E0422
+type BufFine = Buf[(A10, Z9, A9)]
+type BufOver = Buf[(Z10, A10)]  //~ E0422
+type ArrayFine = [(A10, Z9, A9); 3]
+type ArrayOver = [(Z10, A10); 3]  //~ E0422
+type OptionFine = Option[(A10, Z9, A9)]
+type OptionOver = Option[(Z10, A10)]  //~ E0422
+pub fn option2_fine(x: Option[Option[(A10, Z9, A8, Z7, A7)]]) -> U32 { 0 }
+pub fn option2_over(x: Option[Option[(Z10, A9, Z8, A8)]]) -> U32 { 0 }  //~ E0422
+type Array2Fine = [[(A10, Z9, A8, Z7, A7); 2]; 2]
+type Array2Over = [[(Z10, A9, Z8, A8); 2]; 2]  //~ E0422
+pub fn tuple2_fine(x: (((A10, Z9, A8, Z7, A7), U8), U8)) -> U32 { 0 }
+pub fn tuple2_over(x: (((Z10, A9, Z8, A8), U8), U8)) -> U32 { 0 }  //~ E0422
+type OptionBufFine = Option[Buf[(A10, Z9, A8, Z7, A7)]]
+type OptionBufOver = Option[Buf[(Z10, A9, Z8, A8)]]  //~ E0422
+pub fn result_fine(x: Result[(A10, Z9, A8, Z8), ()]) -> U32 { 0 }
+pub fn result_over(x: Result[(Z10, A9, Z9), ()]) -> U32 { 0 }  //~ E0422
+pub fn arrayspan_fine(x: [Span[(A10, Z9, A8, Z7, A7)]; 2]) -> U32 { 0 }
+pub fn arrayspan_over(x: [Span[(Z10, A9, Z8, A8)]; 2]) -> U32 { 0 }  //~ E0422
+pub fn arrayconst_fine(x: [(A10, Z9, A9); K]) -> U32 { 0 }
+pub fn arrayconst_over(x: [(Z10, A10); K]) -> U32 { 0 }  //~ E0422
+pub fn fn_two_fine(x: fn((A9, Z9), (Z9, A9)) -> ()) -> U32 { 0 }
+pub fn fn_two_over(x: fn((A9, Z9), (Z9, A9, Z0)) -> ()) -> U32 { 0 }  //~ E0422
+pub fn fn_three_fine(x: fn((A9, Z7, A5, Z3, A2), (Z9, A7, Z5, A3, Z2, A0), (A9, Z7, A5, Z3, A2, Z0)) -> ()) -> U32 { 0 }
+pub fn fn_three_over(x: fn((A9, Z7, A5, Z3, A2), (Z9, A7, Z5, A3, Z2, A0), (Z9, A7, Z5, A3, Z2, A0, Z0)) -> ()) -> U32 { 0 }  //~ E0422
+pub fn uses_over(x: OptionOver, y: BufOver, z: (OptionOver, ArrayOver)) -> U32 { 0 }
+pub fn uses_fine(x: OptionFine, y: BufFine) -> U32 { 0 }

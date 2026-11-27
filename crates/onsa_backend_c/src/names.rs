@@ -1,6 +1,6 @@
 //! C identifiers and type names (D-10).
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 use onsa_core::{CTy, FloatKind, IntKind, Module, TyKind, TypeDefKind, TypeId};
 
@@ -111,13 +111,12 @@ pub struct TypeNames<'m> {
     pub m: &'m Module,
     /// C names of arrays, tuples, spans.
     synthetic: HashMap<CTy, String>,
-    /// Struct / enum typedef names.
+    /// Struct / enum typedef names, of those registered or being registered.
     pub defs: HashMap<TypeId, String>,
     /// Struct tags that differ from the typedef name (exported flow states).
     pub tags: HashMap<TypeId, String>,
     /// Every type definition the unit needs, dependencies first.
     pub order: Vec<Entry>,
-    def_seen: HashSet<TypeId>,
 }
 
 /// One type definition to emit.
@@ -128,105 +127,134 @@ pub enum Entry {
     Synth(CTy, String),
 }
 
+/// A struct or an enum not registered yet: the name being made stops at it,
+/// and is made again once it is ([`TypeNames::register_def`]).
+struct Unregistered(TypeId);
+
+type N<T> = Result<T, Unregistered>;
+
 impl<'m> TypeNames<'m> {
     pub fn new(m: &'m Module) -> Self {
-        TypeNames {
-            m,
-            synthetic: HashMap::new(),
-            defs: HashMap::new(),
-            tags: HashMap::new(),
-            order: Vec::new(),
-            def_seen: HashSet::new(),
-        }
+        TypeNames { m, synthetic: HashMap::new(), defs: HashMap::new(), tags: HashMap::new(), order: Vec::new() }
     }
 
     /// The C type name of `ty`, registering synthetic types on first use.
     pub fn name(&mut self, ty: CTy) -> String {
-        match self.m.tys.kind(ty) {
+        self.registered(|n| n.name_in(ty))
+    }
+
+    /// The C typedef name of the struct or enum `id`, registering it.
+    pub fn def(&mut self, id: TypeId) -> String {
+        self.registered(|n| n.def_in(id))
+    }
+
+    /// A short mangled tag for use inside synthetic names.
+    pub fn tag(&mut self, ty: CTy) -> String {
+        self.registered(|n| n.tag_in(ty))
+    }
+
+    /// `make`, again after registering each definition it stops at.
+    fn registered<T>(&mut self, mut make: impl FnMut(&mut Self) -> N<T>) -> T {
+        loop {
+            match make(self) {
+                Ok(v) => return v,
+                Err(Unregistered(id)) => self.register_def(id),
+            }
+        }
+    }
+
+    fn def_in(&mut self, id: TypeId) -> N<String> {
+        self.defs.get(&id).cloned().ok_or(Unregistered(id))
+    }
+
+    fn name_in(&mut self, ty: CTy) -> N<String> {
+        Ok(match self.m.tys.kind(ty) {
             TyKind::Unit => "onsa_unit".into(),
-            TyKind::Struct(id) | TyKind::Enum(id) => self.def(*id),
+            TyKind::Struct(id) | TyKind::Enum(id) => self.def_in(*id)?,
             TyKind::Array(..) | TyKind::Tuple(_) | TyKind::Span(_) | TyKind::FnPtr(_) | TyKind::Buf(_) => {
                 if let Some(n) = self.synthetic.get(&ty) {
-                    return n.clone();
+                    return Ok(n.clone());
                 }
-                let n = self.synthetic_name(ty);
+                let n = self.synthetic_name(ty)?;
                 self.synthetic.insert(ty, n.clone());
                 self.order.push(Entry::Synth(ty, n.clone()));
                 n
             }
             // The scalars, named in one place.
             scalar => scalar_c(scalar).expect("every other type is a scalar").into(),
-        }
+        })
     }
 
-    /// The C typedef name of the struct or enum `id`, registering it.
-    pub fn def(&mut self, id: TypeId) -> String {
-        self.register_def(id);
-        self.defs[&id].clone()
-    }
-
-    /// A short mangled tag for use inside synthetic names.
-    pub fn tag(&mut self, ty: CTy) -> String {
+    fn tag_in(&mut self, ty: CTy) -> N<String> {
         let m = self.m;
-        match m.tys.kind(ty) {
+        Ok(match m.tys.kind(ty) {
             TyKind::Int(k) => int_tag(*k).into(),
             TyKind::Float(k) => float_tag(*k).into(),
             TyKind::Bool => "bool".into(),
             TyKind::Char => "char".into(),
             TyKind::Unit => "unit".into(),
-            TyKind::Struct(id) | TyKind::Enum(id) => self.def(*id),
-            TyKind::Array(e, n) => format!("arr_{}_{}", self.tag(*e), n),
+            TyKind::Struct(id) | TyKind::Enum(id) => self.def_in(*id)?,
+            TyKind::Array(e, n) => format!("arr_{}_{}", self.tag_in(*e)?, n),
             TyKind::Tuple(ts) => {
-                let parts: Vec<String> = ts.iter().map(|t| self.tag(*t)).collect();
+                let parts: Vec<String> = ts.iter().map(|t| self.tag_in(*t)).collect::<N<_>>()?;
                 format!("tup_{}", parts.join("_"))
             }
-            TyKind::Span(e) => format!("span_{}", self.tag(*e)),
+            TyKind::Span(e) => format!("span_{}", self.tag_in(*e)?),
             TyKind::FnPtr(_) => "fnptr".into(),
-            TyKind::Buf(e) => format!("buf_{}", self.tag(*e)),
-        }
+            TyKind::Buf(e) => format!("buf_{}", self.tag_in(*e)?),
+        })
     }
 
-    fn synthetic_name(&mut self, ty: CTy) -> String {
+    fn synthetic_name(&mut self, ty: CTy) -> N<String> {
         // Register the element types first so definitions come out in order.
         let m = self.m;
         match m.tys.kind(ty) {
             TyKind::Array(e, _) | TyKind::Span(e) | TyKind::Buf(e) => {
-                self.name(*e);
+                self.name_in(*e)?;
             }
             TyKind::Tuple(ts) => {
                 for t in ts {
-                    self.name(*t);
+                    self.name_in(*t)?;
                 }
             }
             _ => {}
         }
-        format!("onsa_{}", self.tag(ty))
+        Ok(format!("onsa_{}", self.tag_in(ty)?))
     }
 
-    fn register_def(&mut self, id: TypeId) {
-        if self.def_seen.contains(&id) {
-            return;
+    /// Register `root` and the definitions its fields need, on a stack of
+    /// its own (a chain of declarations takes no stack of Rust, R-319): the
+    /// field types first (dependency order), then each definition. A field
+    /// that stops at a definition not registered is named again after it.
+    fn register_def(&mut self, root: TypeId) {
+        let mut stack = vec![self.open(root)];
+        while let Some((id, parts, next)) = stack.last_mut() {
+            let Some(&t) = parts.get(*next) else {
+                self.order.push(Entry::Def(*id));
+                stack.pop();
+                continue;
+            };
+            match self.name_in(t) {
+                Ok(_) => *next += 1,
+                Err(Unregistered(d)) => {
+                    let open = self.open(d);
+                    stack.push(open);
+                }
+            }
         }
-        self.def_seen.insert(id);
+    }
+
+    /// Name the definition `id`, and the types of its fields to name, from
+    /// the first.
+    fn open(&mut self, id: TypeId) -> (TypeId, Vec<CTy>, usize) {
         let m = self.m;
         let def = m.ty(id);
         self.defs.insert(id, qualified(&def.name));
-        // Field types first (dependency order), then this definition.
-        match &def.kind {
-            TypeDefKind::Struct { fields } => {
-                for (_, t) in fields {
-                    self.name(*t);
-                }
-            }
-            TypeDefKind::Enum { variants } => {
-                for (_, ts) in variants {
-                    for t in ts {
-                        self.name(*t);
-                    }
-                }
-            }
-            TypeDefKind::Opaque => {}
-        }
-        self.order.push(Entry::Def(id));
+        let parts = match &def.kind {
+            TypeDefKind::Struct { fields } => fields.iter().map(|(_, t)| *t).collect(),
+            TypeDefKind::Enum { variants } => variants.iter().flat_map(|(_, ts)| ts.iter().copied()).collect(),
+            TypeDefKind::Opaque => Vec::new(),
+        };
+        (id, parts, 0)
     }
 }

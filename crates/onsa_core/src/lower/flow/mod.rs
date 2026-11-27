@@ -438,7 +438,7 @@ impl Lowerer<'_> {
     pub(crate) fn flow_ty(&mut self, flow: DefId, t: FlowTy, span: Span) -> R<TypeId> {
         let Some(fd) = self.a.def(flow).as_flow() else { return Err(internal(span, "not a flow")) };
         if let Some(d) = generated_type(self.a, fd, t) {
-            return self.type_id(d, Vec::new(), span);
+            return self.named_ty(d, Vec::new(), span);
         }
         if t.input_clock().is_none() {
             return Err(internal(span, format!("flow without `{}`", t.name())));
@@ -446,9 +446,8 @@ impl Lowerer<'_> {
         if let Some(&id) = self.implicit_tys.get(&(flow, t)) {
             return Ok(id);
         }
-        let id = TypeId(self.m.types.len() as u32);
         let name = format!("{}.{}", self.qual_name(flow), t.name());
-        self.m.types.push(TypeDef { name, kind: TypeDefKind::Struct { fields: Vec::new() } });
+        let id = self.new_type(name, TypeDefKind::Struct { fields: Vec::new() });
         self.implicit_tys.insert((flow, t), id);
         Ok(id)
     }
@@ -492,7 +491,7 @@ fn lower_flow<'b>(lw: &mut Lowerer<'b>, flow: DefId, fd: FlowDef, span: Span) ->
     let out_val = match (fd.out_len(), info.emit) {
         (Some(n), _) => lw.ty(TyKind::Array(out_val, n)),
         (None, Some(_)) => {
-            let option = lw.type_id(event_option(a, span)?.def, vec![GenericArg::Ty(out_val)], span)?;
+            let option = lw.named_ty(event_option(a, span)?.def, vec![GenericArg::Ty(out_val)], span)?;
             lw.ty(TyKind::Enum(option))
         }
         (None, None) => out_val,

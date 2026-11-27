@@ -7,6 +7,8 @@ use crate::emit::{c_string, f32_lit, f64_lit, int_lit};
 use crate::names::{ident, qualified};
 use crate::{EmitOptions, emit};
 
+mod names_tests;
+
 /// The types of these modules, in one table each of them starts from: `E`
 /// (`TypeId(0)`), `(Bool, I32)`, `[F32; 4]`, `Buf[F32]`.
 fn tys() -> (Types, [CTy; 4]) {

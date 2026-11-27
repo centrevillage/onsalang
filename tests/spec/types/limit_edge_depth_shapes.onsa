@@ -1,0 +1,62 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§18.1"]
+// fixes = 0
+
+// W8-14 A3/t, §4.4: the boundary of the depth limit 256 for each shape that counts a level (a type with arguments, a
+// tuple, an array, a function type), on both sides; a name (`I32`) is none. In each chain `Op(k)` (`Option[..]`),
+// `Tp(k)` (`(.., U8)`), `Ar(k)` (`[..; 1]`), `Fu(k)` (`fn(..) -> U8`) and the mixed chain `M(k)` (the four in turn) has
+// the depth `k`: the first line of a chain makes 64 levels at once (so no line is nested near 256, §2.5) and the next
+// ones add 64 and 62 (to 254), then 1 each: `Xx255` and `Xx256` are within the limit and `Xx257` is E0422 at its
+// declaration, and `Xx258`, which uses it, is the error type and has none. `Buf[Op255]` and `Span[Op255]` are 256 and
+// one more is 257: `Buf` and `Span` are a type with arguments, a level too. A written type that is made of an alias is
+// the same: `Option[(Op254, U8)]` is 256 and `Option[(Op255, U8)]` is 257, E0422 at the written type. The sizes are
+// small (about 2 per level).
+
+// the chains of one shape
+type Op64 = Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[I32]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]
+type Op128 = Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Op64]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]
+type Op192 = Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Op128]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]
+type Op254 = Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Op192]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]
+type Op255 = Option[Op254]
+type Op256 = Option[Op255]
+type Op257 = Option[Op256]  //~ E0422
+type Op258 = Option[Op257]
+type Tp64 = ((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((I32, U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8)
+type Tp128 = ((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((Tp64, U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8)
+type Tp192 = ((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((Tp128, U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8)
+type Tp254 = ((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((Tp192, U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8), U8)
+type Tp255 = (Tp254, U8)
+type Tp256 = (Tp255, U8)
+type Tp257 = (Tp256, U8)  //~ E0422
+type Tp258 = (Tp257, U8)
+type Ar64 = [[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[I32; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]
+type Ar128 = [[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[Ar64; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]
+type Ar192 = [[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[Ar128; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]
+type Ar254 = [[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[Ar192; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]
+type Ar255 = [Ar254; 1]
+type Ar256 = [Ar255; 1]
+type Ar257 = [Ar256; 1]  //~ E0422
+type Ar258 = [Ar257; 1]
+type Fu64 = fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(I32) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8
+type Fu128 = fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(Fu64) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8
+type Fu192 = fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(Fu128) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8
+type Fu254 = fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(Fu192) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8) -> U8
+type Fu255 = fn(Fu254) -> U8
+type Fu256 = fn(Fu255) -> U8
+type Fu257 = fn(Fu256) -> U8  //~ E0422
+type Fu258 = fn(Fu257) -> U8
+// the four shapes in turn
+type M64 = fn([(Option[fn([(Option[fn([(Option[fn([(Option[fn([(Option[fn([(Option[fn([(Option[fn([(Option[fn([(Option[fn([(Option[fn([(Option[fn([(Option[fn([(Option[fn([(Option[fn([(Option[fn([(Option[I32], U8); 1]) -> U8], U8); 1]) -> U8], U8); 1]) -> U8], U8); 1]) -> U8], U8); 1]) -> U8], U8); 1]) -> U8], U8); 1]) -> U8], U8); 1]) -> U8], U8); 1]) -> U8], U8); 1]) -> U8], U8); 1]) -> U8], U8); 1]) -> U8], U8); 1]) -> U8], U8); 1]) -> U8], U8); 1]) -> U8], U8); 1]) -> U8
+type M128 = fn([(Option[fn([(Option[fn([(Option[fn([(Option[fn([(Option[fn([(Option[fn([(Option[fn([(Option[fn([(Option[fn([(Option[fn([(Option[fn([(Option[fn([(Option[fn([(Option[fn([(Option[fn([(Option[M64], U8); 1]) -> U8], U8); 1]) -> U8], U8); 1]) -> U8], U8); 1]) -> U8], U8); 1]) -> U8], U8); 1]) -> U8], U8); 1]) -> U8], U8); 1]) -> U8], U8); 1]) -> U8], U8); 1]) -> U8], U8); 1]) -> U8], U8); 1]) -> U8], U8); 1]) -> U8], U8); 1]) -> U8], U8); 1]) -> U8], U8); 1]) -> U8
+type M192 = fn([(Option[fn([(Option[fn([(Option[fn([(Option[fn([(Option[fn([(Option[fn([(Option[fn([(Option[fn([(Option[fn([(Option[fn([(Option[fn([(Option[fn([(Option[fn([(Option[fn([(Option[fn([(Option[M128], U8); 1]) -> U8], U8); 1]) -> U8], U8); 1]) -> U8], U8); 1]) -> U8], U8); 1]) -> U8], U8); 1]) -> U8], U8); 1]) -> U8], U8); 1]) -> U8], U8); 1]) -> U8], U8); 1]) -> U8], U8); 1]) -> U8], U8); 1]) -> U8], U8); 1]) -> U8], U8); 1]) -> U8], U8); 1]) -> U8], U8); 1]) -> U8
+type M256 = fn([(Option[fn([(Option[fn([(Option[fn([(Option[fn([(Option[fn([(Option[fn([(Option[fn([(Option[fn([(Option[fn([(Option[fn([(Option[fn([(Option[fn([(Option[fn([(Option[fn([(Option[fn([(Option[M192], U8); 1]) -> U8], U8); 1]) -> U8], U8); 1]) -> U8], U8); 1]) -> U8], U8); 1]) -> U8], U8); 1]) -> U8], U8); 1]) -> U8], U8); 1]) -> U8], U8); 1]) -> U8], U8); 1]) -> U8], U8); 1]) -> U8], U8); 1]) -> U8], U8); 1]) -> U8], U8); 1]) -> U8], U8); 1]) -> U8], U8); 1]) -> U8
+type M257 = Option[M256]  //~ E0422
+// the views and the written types
+type BufFine = Buf[Op255]
+type BufOver = Buf[Op256]  //~ E0422
+pub fn span_fine(x: Span[Op255]) -> U32 { 0 }
+pub fn span_over(x: Span[Op256]) -> U32 { 0 }  //~ E0422
+pub fn written_fine(x: Option[(Op254, U8)]) -> U32 { 0 }
+pub fn written_over(x: Option[(Op255, U8)]) -> U32 { 0 }  //~ E0422
+pub fn uses_over(x: Op257, y: BufOver, z: (Op256, M257)) -> U32 { 0 }

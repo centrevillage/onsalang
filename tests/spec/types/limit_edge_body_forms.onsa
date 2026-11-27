@@ -1,0 +1,86 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§4.7", "§18.1"]
+// fixes = 0
+
+// W8-14 A3/t, §4.4, §4.7: the boundary of the size limit 4096 in a type that the body of a function makes with each form
+// (an enum literal, an array literal, a tuple, a function value). The parameter `x` has a written type of exactly the
+// size that makes the form 4096: the cost of the form is `Some(x)` +2, `Some(Some(x))` +4, `[x; 3]` +2, `[[x; 2]; 2]`
+// +4, `((x, k), k)` with `k: U8` +4, and the type of an anonymous function `fn(a: X) -> U8 { 0 }` is `X + 2`. A function
+// `*_fine` makes a type of 4096 and has no diagnostic and a function `*_over` makes one of 4097: E0422 at the expression
+// that made it (§4.4: "本体は型を作った式"), one error in a function. `X` is a tuple of the chain aliases `A(k)` (and `Z(k)` with
+// the leaf `()`), `2^(k+1) - 1` each.
+
+type A0 = I32
+type Z0 = ()
+type A1 = (A0, A0)
+type Z1 = (Z0, Z0)
+type A2 = (A1, A1)
+type Z2 = (Z1, Z1)
+type A3 = (A2, A2)
+type Z3 = (Z2, Z2)
+type A4 = (A3, A3)
+type Z4 = (Z3, Z3)
+type A5 = (A4, A4)
+type Z5 = (Z4, Z4)
+type A6 = (A5, A5)
+type Z6 = (Z5, Z5)
+type A7 = (A6, A6)
+type Z7 = (Z6, Z6)
+type A8 = (A7, A7)
+type Z8 = (Z7, Z7)
+type A9 = (A8, A8)
+type Z9 = (Z8, Z8)
+type A10 = (A9, A9)
+type Z10 = (Z9, Z9)
+type A11 = (A10, A10)
+type Z11 = (Z10, Z10)
+
+pub fn some_fine(x: (A10, Z9, A9), k: U8) -> U32 {
+  let _ = Some(x)
+  0
+}
+pub fn some_over(x: (Z10, A10), k: U8) -> U32 {
+  let _ = Some(x)  //~ E0422
+  0
+}
+pub fn some2_fine(x: (A10, Z9, A8, Z7, A7), k: U8) -> U32 {
+  let _ = Some(Some(x))
+  0
+}
+pub fn some2_over(x: (Z10, A9, Z8, A8), k: U8) -> U32 {
+  let _ = Some(Some(x))  //~ E0422
+  0
+}
+pub fn array_fine(x: (A10, Z9, A9), k: U8) -> U32 {
+  let _ = [x; 3]
+  0
+}
+pub fn array_over(x: (Z10, A10), k: U8) -> U32 {
+  let _ = [x; 3]  //~ E0422
+  0
+}
+pub fn array2_fine(x: (A10, Z9, A8, Z7, A7), k: U8) -> U32 {
+  let _ = [[x; 2]; 2]
+  0
+}
+pub fn array2_over(x: (Z10, A9, Z8, A8), k: U8) -> U32 {
+  let _ = [[x; 2]; 2]  //~ E0422
+  0
+}
+pub fn tuple_fine(x: (A10, Z9, A8, Z7, A7), k: U8) -> U32 {
+  let _ = ((x, k), k)
+  0
+}
+pub fn tuple_over(x: (Z10, A9, Z8, A8), k: U8) -> U32 {
+  let _ = ((x, k), k)  //~ E0422
+  0
+}
+pub fn closure_fine(x: (A10, Z9, A9), k: U8) -> U32 {
+  let _ = fn(a: (A10, Z9, A9)) -> U8 { 0 }
+  0
+}
+pub fn closure_over(x: (Z10, A10), k: U8) -> U32 {
+  let _ = fn(a: (Z10, A10)) -> U8 { 0 }  //~ E0422
+  0
+}

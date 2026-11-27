@@ -1,0 +1,43 @@
+// onsa.toml
+// [package]
+// name = "limit_edge_inst_depth_over"
+// edition = "2026"
+//
+// [export]
+// prefix = "leio_"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [test]
+// spec = ["§4.4", "§4.5", "§18.1"]
+// fixes = 0
+
+// W8-14 A3/t, §4.4, §4.5: one past `limit_edge_inst_depth_fine.onsa`: `D1[O255]` written is 256 (within the limit, no
+// diagnostic in the check), and the type of the field `Option[Option[O255]]` that the instantiation makes is 257. E0422
+// at the field `a` of `D1` (§4.4), the one error of the lowering (§18.1). `O(k)` is `Option[..]` k times over `I32`, so
+// its depth is `k`. A type with arguments, a tuple, an array and a function type are a level; a declared struct or enum
+// is a leaf with one level for its arguments (`D1[O254]` written is 255). The field of the struct holds the argument
+// below more shapes: `Option[Option[T]]`, `[[T; 1]; 1]`, `fn(fn(T) -> U8) -> U8` and `((T, U8), U8)` are two levels over
+// `T`.
+
+type O64 = Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[I32]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]
+type O128 = Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[O64]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]
+type O192 = Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[O128]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]
+type O255 = Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[O192]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]
+pub struct D1[T] {
+  a: Option[Option[T]],  //~ E0422
+}
+
+pub fn h(x: D1[O255]) -> U32 {
+  0
+}
+
+@export
+pub fn anchor() -> U32 {
+  1
+}

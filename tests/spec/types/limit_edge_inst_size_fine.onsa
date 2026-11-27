@@ -1,0 +1,92 @@
+// onsa.toml
+// [package]
+// name = "limit_edge_inst_size_fine"
+// edition = "2026"
+//
+// [export]
+// prefix = "leis_"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [test]
+// spec = ["§4.4", "§4.5", "§18.1"]
+
+// W8-14 A3/t, §4.4, §4.5: the boundary of the size limit in the type that an instantiation makes, in the field of a
+// struct and in the content of a variant of an enum, for the type arguments `Buf[X]`, `[X; 3]` and `fn(X) -> U8`, with
+// `X` of size 4090 so that each field type is exactly 4096: no diagnostic, and the build of the target passes. `X` is a
+// tuple of the chain aliases of size 4090. The field of a generic struct holds a form around the type argument, and the
+// instantiation makes the type of the field, which is a type of the lowering (§4.5), with the limit 4096 (§4.4); a
+// declared struct or enum is a leaf, so the argument `W[Buf[X]]` written in the signature is small (4094: the name, the
+// shape, `Buf`'s name and shape, and `X`). The cost of each field: `Option[Option[T]]` is `T + 4` and `Buf[X]` is `X +
+// 2`, so the field of `W[Buf[X]]` is `X + 6`; `[[T; 2]; 2]` is `T + 4` and `[X; 3]` is `X + 2` (`X + 6`); `((T, U8),
+// U8)` is `T + 4` and `fn(X) -> U8` is `X + 2` (`X + 6`). Each of the three forms is instantiated with each of the three
+// arguments (`h`, `h2`, `h3`) and with `()` (`h4`, small). One past it is in `limit_edge_inst_size_over_buf.onsa`,
+// `_over_array.onsa` and `_over_fn.onsa`.
+
+type A0 = I32
+type Z0 = ()
+type A1 = (A0, A0)
+type Z1 = (Z0, Z0)
+type A2 = (A1, A1)
+type Z2 = (Z1, Z1)
+type A3 = (A2, A2)
+type Z3 = (Z2, Z2)
+type A4 = (A3, A3)
+type Z4 = (Z3, Z3)
+type A5 = (A4, A4)
+type Z5 = (Z4, Z4)
+type A6 = (A5, A5)
+type Z6 = (Z5, Z5)
+type A7 = (A6, A6)
+type Z7 = (Z6, Z6)
+type A8 = (A7, A7)
+type Z8 = (Z7, Z7)
+type A9 = (A8, A8)
+type Z9 = (Z8, Z8)
+type A10 = (A9, A9)
+type Z10 = (Z9, Z9)
+type X = (A10, Z9, A8, Z7, A6, Z5, A5)
+pub struct W[T: ?Dup] {
+  a: Option[Option[T]],
+}
+pub struct V[T: ?Dup] {
+  a: [[T; 2]; 2],
+}
+pub enum U[T: ?Dup] {
+  N,
+  C(((T, U8), U8)),
+}
+
+pub fn h(w: W[Buf[X]]) -> U32 {
+  0
+}
+
+pub fn g(v: V[[X; 3]]) -> U32 {
+  0
+}
+
+pub fn e(u: U[fn(X) -> U8]) -> U32 {
+  0
+}
+
+pub fn h2(w: W[[X; 3]], v: V[Buf[X]], u: U[Buf[X]]) -> U32 {
+  0
+}
+
+pub fn h3(w: W[fn(X) -> U8], v: V[fn(X) -> U8], u: U[[X; 3]]) -> U32 {
+  0
+}
+
+pub fn h4(w: W[()], v: V[()], u: U[()]) -> U32 {
+  0
+}
+
+@export
+pub fn anchor() -> U32 {
+  1
+}

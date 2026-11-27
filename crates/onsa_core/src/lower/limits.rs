@@ -22,14 +22,11 @@ use onsa_sema::DefId;
 use onsa_sema::def::DefKind;
 use onsa_sema::ty::{Measure, Shape, form_count};
 
-use super::{Fail, FailKind, GenericArg, Lowerer, R, internal};
+use super::{Fail, FailKind, GenericArg, Lowerer, R};
 use crate::ir::*;
 
 /// The instances a package may have (§4.5): the one place.
 pub const INSTANCE_LIMIT: u32 = 65536;
-
-/// The stack `type_id` leaves unused, as `onsa_sema::walk` does.
-const STACK_RESERVE: usize = 1 << 20;
 
 /// The notes of the path of an E0422.
 const MAX_PATH_NOTES: usize = 3;
@@ -39,9 +36,48 @@ pub(super) fn form(s: Shape) -> Measure {
     Measure::form(form_count(s))
 }
 
+/// The form of a Core type for its measure (§4.4), `None` for a leaf (a
+/// struct or an enum is measured where it is made): the one reading of the
+/// forms of Core, for the types lowering converts and those it measures.
+pub(super) fn shape(k: &TyKind) -> Option<Shape> {
+    match k {
+        TyKind::Unit => Some(Shape::Unit),
+        TyKind::Tuple(_) => Some(Shape::Tuple),
+        TyKind::Array(..) => Some(Shape::Array),
+        TyKind::Span(_) | TyKind::Buf(_) => Some(Shape::Applied),
+        TyKind::FnPtr(_) => Some(Shape::Fn),
+        TyKind::Int(_) | TyKind::Float(_) | TyKind::Bool | TyKind::Char | TyKind::Struct(_) | TyKind::Enum(_) => None,
+    }
+}
+
+/// The part `i` of a form, in the order of its measure: the element, the
+/// members, the parameters and then the result of a function type.
+pub(super) fn part_mut(k: &mut TyKind, i: usize) -> Option<&mut CTy> {
+    match k {
+        TyKind::Array(e, _) | TyKind::Span(e) | TyKind::Buf(e) => (i == 0).then_some(e),
+        TyKind::Tuple(ts) => ts.get_mut(i),
+        TyKind::FnPtr(f) => {
+            let FnSig { params, ret, .. } = &mut **f;
+            if i < params.len() { Some(&mut params[i].1) } else { (i == params.len()).then_some(ret) }
+        }
+        _ => None,
+    }
+}
+
+/// The parts of a form, in the order of [`part_mut`].
+fn parts(k: &TyKind) -> impl Iterator<Item = CTy> + '_ {
+    let (one, many, params, ret): (_, &[CTy], &[(Mode, CTy)], _) = match k {
+        TyKind::Array(e, _) | TyKind::Span(e) | TyKind::Buf(e) => (Some(*e), &[], &[], None),
+        TyKind::Tuple(ts) => (None, ts, &[], None),
+        TyKind::FnPtr(f) => (None, &[], &f.params, Some(f.ret)),
+        _ => (None, &[], &[], None),
+    };
+    one.into_iter().chain(many.iter().copied()).chain(params.iter().map(|&(_, t)| t)).chain(ret)
+}
+
 fn limit_fail(d: Diagnostic) -> Fail {
     let (span, msg) = (d.span, d.message.clone());
-    Fail { kind: FailKind::Limit, span, msg, hole: None, report: Some(Box::new(d)) }
+    Fail { kind: FailKind::Limit, span, msg, hole: None, report: Some(Box::new(d)), bad: None }
 }
 
 impl Lowerer<'_> {
@@ -59,15 +95,9 @@ impl Lowerer<'_> {
     pub(super) fn measure(&mut self, ty: CTy) -> Measure {
         let start = self.measures.len();
         for k in self.m.tys.kinds().get(start..=ty.index()).unwrap_or_default() {
-            let of = |m: Measure, t: &CTy| m.with(self.measures[t.index()]);
             let m = match k {
-                TyKind::Int(_) | TyKind::Float(_) | TyKind::Bool | TyKind::Char => Measure::LEAF,
-                TyKind::Unit => form(Shape::Unit),
-                TyKind::Tuple(ts) => ts.iter().fold(form(Shape::Tuple), of),
-                TyKind::Array(e, _) => of(form(Shape::Array), e),
-                TyKind::Span(e) | TyKind::Buf(e) => of(form(Shape::Applied), e),
                 TyKind::Struct(id) | TyKind::Enum(id) => self.type_measures.get(id).copied().unwrap_or(Measure::LEAF),
-                TyKind::FnPtr(f) => of(f.params.iter().map(|(_, t)| t).fold(form(Shape::Fn), of), &f.ret),
+                k => parts(k).fold(shape(k).map_or(Measure::LEAF, form), |m, t| m.with(self.measures[t.index()])),
             };
             self.measures.push(m);
         }
@@ -83,18 +113,6 @@ impl Lowerer<'_> {
             GenericArg::Ty(t) => m.with(self.measure(*t)),
             GenericArg::Const(_) => m.with(Measure::LEAF),
         })
-    }
-
-    /// The safety net of the recursion of `type_id` through the fields: types
-    /// that only turn their arguments around do not grow, so that only the
-    /// number of instances bounds it. An internal error, not a diagnostic, as
-    /// the deep chains of declarations (R-319; W8-01 ends the recursion).
-    pub(super) fn stack_left(&self, span: Span) -> R<()> {
-        if onsa_diag::stack::remaining().is_some_and(|left| left < STACK_RESERVE) {
-            let levels = self.places.len();
-            return Err(internal(span, format!("instances of types {levels} levels deep, more than the stack holds")));
-        }
-        Ok(())
     }
 
     /// `m`, unless it is over the limits of §4.4 (E0422): at the field being
@@ -132,17 +150,10 @@ impl Lowerer<'_> {
         Err(limit_fail(report))
     }
 
-    /// `read`, with a type over the limits reported at the field `at`, not at
-    /// the position it is given, which an E0200 keeps.
-    pub(super) fn at_place<T>(&mut self, at: Span, read: impl FnOnce(&mut Self) -> R<T>) -> R<T> {
-        self.places.push(at);
-        let r = read(self);
-        self.places.pop();
-        r
-    }
-
-    fn place(&self, span: Span) -> Span {
-        self.places.last().copied().unwrap_or(span)
+    /// Where a type over the limits is reported: at the field of a type being
+    /// converted, not at the position `span` it is given, which an E0200 keeps.
+    pub(super) fn place(&self, span: Span) -> Span {
+        self.fills.iter().rev().find_map(|f| f.at).unwrap_or(span)
     }
 
     /// Whether `d` is one that §4.5 counts: not what a flow generates or a
@@ -172,7 +183,7 @@ impl Lowerer<'_> {
     /// instances up to a root. A position is one note, so a recursion is one,
     /// however long it ran, and `at` none.
     fn path_notes(&self, at: Span) -> Vec<Note> {
-        let mut path: Vec<Span> = self.places.iter().rev().copied().collect();
+        let mut path: Vec<Span> = self.fills.iter().rev().filter_map(|f| f.at).collect();
         let mut lowering = self.lowering;
         while let Some(f) = lowering {
             let (call, parent) = self.made_by[&f];

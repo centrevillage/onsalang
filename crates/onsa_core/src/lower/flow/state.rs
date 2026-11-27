@@ -106,8 +106,7 @@ fn node_field_ty(lw: &mut Lowerer, flow: DefId, decls: &Decls, info: &FlowInfo, 
         (PlanKind::Par { fields, count, .. }, Part::Own) => {
             let inner = state_fields(lw, flow, decls, info, fields)?;
             let tname = format!("{}.{}.State", lw.qual_name(flow), n.path);
-            let tid = TypeId(lw.m.types.len() as u32);
-            lw.m.types.push(TypeDef { name: tname, kind: TypeDefKind::Struct { fields: inner } });
+            let tid = lw.new_type(tname, TypeDefKind::Struct { fields: inner });
             // The array of the states of the replicas (§11.5).
             let state = lw.ty(TyKind::Struct(tid));
             Ok(lw.ty(TyKind::Array(state, *count)))

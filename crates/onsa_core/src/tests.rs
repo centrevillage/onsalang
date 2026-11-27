@@ -6,6 +6,7 @@ use onsa_sema::{Module as SModule, Package};
 use crate::ir::*;
 use crate::{dump, lower, verify};
 
+mod types_tests;
 mod verify_tests;
 
 pub(crate) fn package(src: &str) -> (SourceMap, Package) {

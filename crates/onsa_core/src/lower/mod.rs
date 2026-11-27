@@ -38,13 +38,14 @@ pub mod fold;
 mod limits;
 pub mod moves;
 mod storage;
+mod types;
 
 use std::collections::{HashMap, HashSet};
 
 use onsa_diag::unsupported::Feature;
 use onsa_diag::{Diagnostic, Span, Stage};
-use onsa_sema::def::{DefKind, DerivedFn, Fields, GenericKind};
-use onsa_sema::ty::{BuiltinTy, Len, Measure, Shape, Ty as STy, TyId};
+use onsa_sema::def::{DefKind, DerivedFn, GenericKind};
+use onsa_sema::ty::{BuiltinTy, Len, Measure, Ty as STy, TyId};
 use onsa_sema::{Analysis, DefId, ModId, Package};
 use onsa_syntax::ast::{ExprId, PatId};
 
@@ -68,6 +69,9 @@ pub(crate) enum FailKind {
     /// An instance over a limit (§4.4 E0422, §4.5 E0423): lowering stops, and
     /// this is the one diagnostic (§18.1).
     Limit,
+    /// A field of a type met an instance not made yet (`types`): inside the
+    /// maker of the types only, and an internal error out of it.
+    Pending,
 }
 
 /// Where an unsupported feature was found: an expression, or the pattern
@@ -88,6 +92,8 @@ pub(crate) struct Fail {
     /// The E0200 of an unsupported feature, made by the list of what this
     /// version does not support (`onsa_diag::unsupported`, S-224).
     pub report: Option<Box<Diagnostic>>,
+    /// Of a type lowering does not lower, why (`types`).
+    pub bad: Option<Box<types::BadTy>>,
 }
 
 pub(crate) type R<T> = Result<T, Fail>;
@@ -100,7 +106,14 @@ pub(crate) fn unsupported(span: Span, feature: Feature, details: &[&str]) -> Fai
 
 /// The unsupported feature of the E0200 `d`.
 pub(crate) fn gated(d: Diagnostic) -> Fail {
-    Fail { kind: FailKind::Unsupported, span: d.span, msg: d.message.clone(), hole: None, report: Some(Box::new(d)) }
+    Fail {
+        kind: FailKind::Unsupported,
+        span: d.span,
+        msg: d.message.clone(),
+        hole: None,
+        report: Some(Box::new(d)),
+        bad: None,
+    }
 }
 
 /// Why [`lower`] produced no Core.
@@ -161,9 +174,12 @@ pub(crate) struct Lowerer<'a> {
     made_by: HashMap<FnId, (Span, Option<FnId>)>,
     /// The function of the worklist being lowered.
     lowering: Option<FnId>,
-    /// Where a type over the limits is reported, the innermost last
-    /// ([`Lowerer::at_place`]).
-    places: Vec<Span>,
+    /// The instances of types being filled, the innermost last (`types`).
+    fills: Vec<types::Fill>,
+    /// The instances of types lowering does not lower, and those an internal
+    /// error or a limit stopped (`types`).
+    bad_types: HashMap<TypeId, types::BadTy>,
+    broken_types: HashSet<TypeId>,
     pub(crate) eq_fns: HashMap<CTy, FnId>,
     messages: HashMap<String, MsgId>,
     pub(crate) flow_fns: HashMap<DefId, flow::FlowFns>,
@@ -242,7 +258,9 @@ pub fn lower_with(pkg: &Package, a: &Analysis, opts: &LowerOptions) -> Result<Mo
         instance_limit: opts.instance_limit,
         made_by: HashMap::new(),
         lowering: None,
-        places: Vec::new(),
+        fills: Vec::new(),
+        bad_types: HashMap::new(),
+        broken_types: HashSet::new(),
         eq_fns: HashMap::new(),
         messages: HashMap::new(),
         flow_fns: HashMap::new(),
@@ -325,7 +343,9 @@ impl<'a> Lowerer<'a> {
             let Err(fail) = attempt(self) else { return Ok(()) };
             match fail.kind {
                 FailKind::Internal if from_placeholder(&self.hole_spans, fail.span, span) => return Ok(()),
-                FailKind::Internal => return Err(LowerFailure::Internal { span: fail.span, message: fail.msg }),
+                FailKind::Internal | FailKind::Pending => {
+                    return Err(LowerFailure::Internal { span: fail.span, message: fail.msg });
+                }
                 FailKind::Limit => {
                     let Some(d) = fail.report else {
                         return Err(LowerFailure::Internal { span: fail.span, message: fail.msg });
@@ -462,22 +482,21 @@ impl<'a> Lowerer<'a> {
         self.measured_ty(t, args, span).map(|(ty, _)| ty)
     }
 
-    /// [`Self::core_ty`] and the measure of the type, judged at each form
-    /// (`limits`).
+    /// [`Self::core_ty`] and the measure of the type, judged at each part
+    /// of a form (`limits`), so that a wide form stops at the limit.
     fn measured_ty(&mut self, t: TyId, args: &[GenericArg], span: Span) -> R<(CTy, Measure)> {
-        let st = self.a.types.get(t).clone();
-        let mut m = Measure::LEAF;
-        let ty = match st {
-            STy::Int(k) => TyKind::Int(k),
-            STy::Float(k) => TyKind::Float(k),
-            STy::Bool => TyKind::Bool,
-            STy::Char => TyKind::Char,
-            STy::Unit => {
-                m = limits::form(Shape::Unit);
-                TyKind::Unit
-            }
+        let a = self.a;
+        // A form is made with its parts `()`, then each converted in its
+        // place. A scalar is a leaf, at its fixed id.
+        let fn_parts: Vec<TyId>;
+        let (mut ty, parts): (TyKind, &[TyId]) = match a.types.get(t) {
+            STy::Int(k) => return Ok((Types::int(*k), Measure::LEAF)),
+            STy::Float(k) => return Ok((Types::float(*k), Measure::LEAF)),
+            STy::Bool => return Ok((Types::BOOL, Measure::LEAF)),
+            STy::Char => return Ok((Types::CHAR, Measure::LEAF)),
+            STy::Unit => (TyKind::Unit, &[]),
             STy::Array(e, len) => {
-                let n = match len {
+                let n = match *len {
                     Len::Const(n) => n,
                     Len::Param(i) => match args.get(i as usize) {
                         Some(GenericArg::Const(n)) => *n,
@@ -485,79 +504,57 @@ impl<'a> Lowerer<'a> {
                     },
                     Len::Var(_) => return Err(internal(span, "unresolved array length")),
                 };
-                let (e, own) = self.wrapped_ty(Shape::Array, e, args, span)?;
-                m = own;
-                TyKind::Array(e, n)
+                (TyKind::Array(Types::UNIT, n), std::slice::from_ref(e))
             }
-            STy::Tuple(ts) => {
-                let (out, own) = self.form_of(Shape::Tuple, &ts, args, span)?;
-                m = own;
-                TyKind::Tuple(out.into())
-            }
+            STy::Tuple(ts) => (TyKind::Tuple(vec![Types::UNIT; ts.len()].into()), ts),
             STy::Named(d, targs) => {
-                let def = self.a.def(d);
-                match &def.kind {
+                let def = a.def(*d);
+                let is_struct = match &def.kind {
                     DefKind::Alias(inner) => return self.measured_ty(*inner, args, span),
-                    DefKind::Struct(_) | DefKind::Enum(_) => {
-                        let gargs = self.generic_args(&targs, args, span)?;
-                        let id = self.type_id(d, gargs, span)?;
-                        m = self.type_measure(id);
-                        if matches!(def.kind, DefKind::Struct(_)) { TyKind::Struct(id) } else { TyKind::Enum(id) }
-                    }
+                    DefKind::Struct(_) => true,
+                    DefKind::Enum(_) => false,
                     _ => return Err(internal(span, "type refers to a non-type def")),
-                }
+                };
+                let gargs = self.generic_args(targs, args, span)?;
+                let id = self.named_ty(*d, gargs, span)?;
+                let ty = self.ty(if is_struct { TyKind::Struct(id) } else { TyKind::Enum(id) });
+                return Ok((ty, self.type_measure(id)));
             }
             STy::Builtin(b, targs) => match b {
-                BuiltinTy::Span | BuiltinTy::Buf => {
-                    let (e, own) = self.wrapped_ty(Shape::Applied, targs[0], args, span)?;
-                    m = own;
-                    if b == BuiltinTy::Span { TyKind::Span(e) } else { TyKind::Buf(e) }
-                }
-                BuiltinTy::Ptr => return Err(unsupported(span, Feature::Ptr, &[])),
+                BuiltinTy::Span => (TyKind::Span(Types::UNIT), &targs[..1]),
+                BuiltinTy::Buf => (TyKind::Buf(Types::UNIT), &targs[..1]),
+                BuiltinTy::Ptr => return Err(self.bad_type(span, Feature::Ptr, None)),
                 BuiltinTy::Str | BuiltinTy::Bytes | BuiltinTy::Array | BuiltinTy::Map | BuiltinTy::Set => {
-                    return Err(unsupported(span, Feature::SharedTypes, &[b.name()]));
+                    return Err(self.bad_type(span, Feature::SharedTypes, Some(b.name())));
                 }
             },
             STy::Fn(f) => {
-                let parts: Vec<TyId> = f.params.iter().map(|&(_, t)| t).chain([f.ret]).collect();
-                let (mut tys, own) = self.form_of(Shape::Fn, &parts, args, span)?;
-                m = own;
-                let Some(ret) = tys.pop() else { return Err(internal(span, "a function type with no result")) };
-                let params = f.params.iter().map(|(mode, _)| core_mode(*mode)).zip(tys).collect();
-                TyKind::FnPtr(Box::new(FnSig { rt: f.rt, params, ret }))
+                fn_parts = f.params.iter().map(|&(_, t)| t).chain([f.ret]).collect();
+                let params = f.params.iter().map(|(mode, _)| (core_mode(*mode), Types::UNIT)).collect();
+                (TyKind::FnPtr(Box::new(FnSig { rt: f.rt, params, ret: Types::UNIT })), &fn_parts)
             }
-            STy::Param(i) => match args.get(i as usize) {
+            STy::Param(i) => match args.get(*i as usize) {
                 Some(&GenericArg::Ty(t)) => return Ok((t, self.measure(t))),
                 _ => return Err(internal(span, "unbound type parameter")),
             },
             STy::ConstVal(_) => return Err(internal(span, "const argument in type position")),
             STy::Var(_) | STy::Error => return Err(internal(span, "unresolved type")),
         };
+        let mut m = limits::shape(&ty).map_or(Measure::LEAF, limits::form);
+        if parts.is_empty() {
+            return Ok((self.ty(ty), m));
+        }
+        for (i, &t) in parts.iter().enumerate() {
+            let (part, own) = self.measured_ty(t, args, span)?;
+            m = self.within(m.with(own), span)?;
+            *limits::part_mut(&mut ty, i).ok_or_else(|| internal(span, "a part of no form"))? = part;
+        }
         Ok((self.ty(ty), m))
     }
 
     /// The id of the type `k` (the one intern of lowering).
     pub(crate) fn ty(&mut self, k: TyKind) -> CTy {
         self.m.tys.intern(k)
-    }
-
-    /// The parts of a tuple or a function type, and the measure of the form
-    /// `shape`: judged at each part, so that a wide form stops at the limit.
-    fn form_of(&mut self, shape: Shape, parts: &[TyId], args: &[GenericArg], span: Span) -> R<(Vec<CTy>, Measure)> {
-        let (mut out, mut m) = (Vec::with_capacity(parts.len()), limits::form(shape));
-        for &t in parts {
-            let (ty, part) = self.measured_ty(t, args, span)?;
-            m = self.within(m.with(part), span)?;
-            out.push(ty);
-        }
-        Ok((out, m))
-    }
-
-    /// The element of an array, a `Span` or a `Buf`, and the measure of the
-    /// form `shape`, which counts the name or the length too.
-    fn wrapped_ty(&mut self, shape: Shape, t: TyId, args: &[GenericArg], span: Span) -> R<(CTy, Measure)> {
-        let (ty, part) = self.measured_ty(t, args, span)?;
-        Ok((ty, self.within(limits::form(shape).with(part), span)?))
     }
 
     pub(crate) fn generic_args(&mut self, targs: &[TyId], args: &[GenericArg], span: Span) -> R<Vec<GenericArg>> {
@@ -573,54 +570,6 @@ impl<'a> Lowerer<'a> {
             }
         }
         Ok(out)
-    }
-
-    /// Core type of a struct / enum def instance.
-    pub(crate) fn type_id(&mut self, d: DefId, gargs: Vec<GenericArg>, span: Span) -> R<TypeId> {
-        if let Some(&id) = self.type_ids.get(&(d, gargs.clone())) {
-            return Ok(id);
-        }
-        self.stack_left(span)?;
-        // Before the fields are read: they are where a type grows.
-        let args = self.args_measure(&gargs);
-        let measure = self.within(args, span)?;
-        self.count_instance(d, span)?;
-        let name = format!("{}{}", self.qual_name(d), self.mangle_args(&gargs));
-        let id = TypeId(self.m.types.len() as u32);
-        self.m.types.push(TypeDef { name, kind: TypeDefKind::Opaque });
-        if measure != Measure::LEAF {
-            self.type_measures.insert(id, measure);
-        }
-        self.type_ids.insert((d, gargs.clone()), id);
-        self.type_defs.insert(id, (d, gargs.clone()));
-        let def = self.a.def(d).clone();
-        let kind = match &def.kind {
-            DefKind::Struct(s) => match &s.fields {
-                Fields::Named(fs) => {
-                    let mut fields = Vec::new();
-                    for f in fs {
-                        let ty = self.at_place(f.ty_span, |lw| lw.core_ty(f.ty, &gargs, span))?;
-                        fields.push((f.name.clone(), ty));
-                    }
-                    TypeDefKind::Struct { fields }
-                }
-                Fields::Opaque => TypeDefKind::Opaque,
-            },
-            DefKind::Enum(e) => {
-                let mut variants = Vec::new();
-                for v in &e.variants {
-                    let mut tys = Vec::new();
-                    for (&t, &at) in v.fields.iter().zip(&v.field_spans) {
-                        tys.push(self.at_place(at, |lw| lw.core_ty(t, &gargs, span))?);
-                    }
-                    variants.push((v.name.clone(), tys));
-                }
-                TypeDefKind::Enum { variants }
-            }
-            _ => return Err(internal(span, "not a type def")),
-        };
-        self.m.types[id.0 as usize].kind = kind;
-        Ok(id)
     }
 
     pub(crate) fn enum_variants(&self, id: TypeId) -> Vec<(String, Vec<CTy>)> {
@@ -854,5 +803,6 @@ pub(crate) fn internal(span: Span, msg: impl Into<String>) -> Fail {
         msg: format!("internal lowering error: {}", msg.into()),
         hole: None,
         report: None,
+        bad: None,
     }
 }
