@@ -49,7 +49,17 @@ impl<'a> Checker<'a> {
             return Err(self.never_carried_out(span, part));
         }
         let t = match self.viewing {
-            Some(v) => self.check_viewed(e, expected, v)?,
+            Some(v) if self.view_tail(e) => return self.check_view_tail(e, v),
+            Some(v) => {
+                self.view_marks.push((e, false));
+                let t = self.check_expr_inner(e, expected)?;
+                // What diverges has the view's type, as a node has: a later
+                // branch has no undecided type to join (§4.7).
+                if self.info.diverging.expr(e) && self.undecided(Some(t)) {
+                    self.unify_at(span, t, v.to)?;
+                }
+                t
+            }
             None => self.check_expr_inner(e, expected)?,
         };
         let Some(exp) = expected else { return self.record_within(e, t) };
@@ -66,29 +76,33 @@ impl<'a> Checker<'a> {
         Ok(if fns && self.joining.is_none() { exp } else { found })
     }
 
-    /// `e` at a position that passes the view `v` ([`BodyInfo::views`]),
-    /// each part as `tails::tails` reads it: a node (a parenthesis, a block,
-    /// an `if` with an `else`, a `match`) and what diverges have the view's
-    /// type and pass it on; a tail is converted, a planar literal there
-    /// opened ([`Self::planar_literal`]), and what is in them is checked
-    /// with no view.
-    // SPEC-GAP(S-1116): the branches of a node are of one type first (§4.7),
-    // so a literal of channels and a planar array variable in two arms is E0401.
-    fn check_viewed(&mut self, e: ExprId, expected: Option<TyId>, v: Viewing) -> R<TyId> {
-        let node = matches!(
-            self.expr(e).kind,
-            ExprKind::Paren(_) | ExprKind::Block(_) | ExprKind::If { else_: Some(_), .. } | ExprKind::Match { .. }
-        );
-        let tail = !node && !self.info.diverging.expr(e);
-        self.view_marks.push((e, tail));
-        if !tail {
-            return self.check_expr_inner(e, expected);
-        }
+    /// Whether `e`, at a position that passes a view ([`BodyInfo::views`]),
+    /// is a tail of it, as `tails::tails` reads it: no node (a parenthesis,
+    /// a block with a last expression, an `if` with an `else`, a `match`,
+    /// which pass the view on) and nothing that diverges (which has the
+    /// view's type). A block with no value is a tail, of `()`.
+    fn view_tail(&self, e: ExprId) -> bool {
+        let node = match &self.expr(e).kind {
+            ExprKind::Block(b) => b.tail.is_some(),
+            kind => matches!(kind, ExprKind::Paren(_) | ExprKind::If { else_: Some(_), .. } | ExprKind::Match { .. }),
+        };
+        !node && !self.info.diverging.expr(e)
+    }
+
+    /// The tail `e` at the view `v`, checked as the value written at the
+    /// position itself (§5.3), with no view and no expected type (not that
+    /// of an earlier branch, §4.7), a planar literal opened
+    /// ([`Self::planar_literal`]): of its own type, and converted to the
+    /// view, which the nodes above it have.
+    fn check_view_tail(&mut self, e: ExprId, v: Viewing) -> R<TyId> {
+        self.view_marks.push((e, true));
         self.viewing = None;
-        match (&self.expr(e).kind, v.planar) {
-            (ExprKind::Array(parts), Some(_)) => self.planar_literal(e, parts, v.elem, v.mode),
-            _ => self.check_expr_inner(e, expected),
-        }
+        let t = match (&self.expr(e).kind, v.planar) {
+            (ExprKind::Array(parts), Some(_)) => self.planar_literal(e, parts, v.elem, v.mode)?,
+            _ => self.check_expr_inner(e, None)?,
+        };
+        let t = self.record_within(e, t)?;
+        self.passed_as_view(self.expr(e).span, t, v)
     }
 
     /// Whether a merge (`if`, `match`, an array) with the expected type
@@ -140,6 +154,15 @@ impl<'a> Checker<'a> {
         let ret_s = self.shallow(ret);
         let r = match self.ty(ret_s) {
             Ty::Named(r, args) if r == d => args,
+            // Of an anonymous function with no return type (that of a named
+            // function is known): `Result[_, E]` / `Option[_]` (§9.1), the
+            // `E` as kept below.
+            _ if self.undecided(Some(ret_s)) => {
+                let args: Vec<TyId> = a.iter().map(|_| self.fresh()).collect();
+                let t = self.a.types.intern(Ty::Named(d, args.clone()));
+                self.unify_at(span, ret_s, t)?;
+                args
+            }
             _ => {
                 let (shown, rs) = (self.display(it), self.display(ret));
                 return Err(self.err(

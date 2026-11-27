@@ -6,12 +6,10 @@
 // W7-12 U2c2b, S-1113, S-1116 (§4.7, §5.3): the tail of an `if`, a `match` or a block at a planar argument (`xs: [Span[F32]; 2]`)
 // that is a literal of channels is what the literal written at the argument is: an element that is not a channel of the
 // argument, in the type of the element or in the number of the channels, is E0401 at the element, in the tail as
-// in the literal written at the argument itself (the functions `direct_…`). A literal of channels in one arm and an array of arrays in the
-// other (`if c { [x, y] } else { ps }`, `ps: [[F32; 4]; 2]`) is E0401 too: this version sets the type of the arms to
-// the type that the first arm has, as for any other `if` ("`if` の後の枝と `match` の二つ目以降の腕には前の枝の型", §4.7), the
-// literal of channels at the argument is an array of views, and `ps` is not (S-1116, open: the other reading turns each tail to the views on its own and
-// passes it). The array of views in the other arm that is one (`ps: [Span[F32]; 2]`) passes
-// (values/view_tail_planar_ok.onsa). The error is at the element or the arm, no repair candidate (`fixes = 0`). One error per function (P-01).
+// in the literal written at the argument itself (the functions `direct_…`). The tails need not be of one kind: a literal of channels
+// in one arm and an array of arrays, an array of buffers or an array of views in the other (`if c { [x, y] } else { ps }`) pass, each tail
+// converted on its own (S-1116; values/view_tail_planar_ok.onsa). The error is at the element or the arm, no repair candidate
+// (`fixes = 0`). One error per function (P-01).
 
 pub fn planes(xs: [Span[F32]; 2]) -> F32 {
   xs[0][0] + xs[1][0]
@@ -62,25 +60,6 @@ pub fn tail_one_channel(c: Bool, x: [F32; 4], y: [F32; 4]) -> F32 {
 pub fn tail_three_channels_with_an_inout(c: Bool, x: [F32; 4], y: [F32; 4]) {
   var z: [F32; 4] = [0.0; 4]
   planes_inout(match c { true => [x, y, y], false => [y, y] }, inout z) //~ E0401
-}
-
-// -------------------------------------------------------------- a literal of channels and an array of arrays (S-1116)
-
-pub fn tail_the_other_arm_is_an_array_of_arrays(c: Bool, x: [F32; 4], y: [F32; 4], ps: [[F32; 4]; 2]) -> F32 {
-  planes(if c { [x, y] } else { ps }) //~ E0401
-}
-
-pub fn tail_the_other_arm_is_an_array_of_arrays_in_a_match(c: Bool, x: [F32; 4], y: [F32; 4], ps: [[F32; 4]; 2]) -> F32 {
-  planes(match c { true => [x, y], false => ps }) //~ E0401
-}
-
-pub fn tail_the_other_arm_is_an_array_of_arrays_with_an_inout(c: Bool, x: [F32; 4], y: [F32; 4], ps: [[F32; 4]; 2]) {
-  var z: [F32; 4] = [0.0; 4]
-  planes_inout(if c { [x, y] } else { ps }, inout z) //~ E0401
-}
-
-pub fn tail_the_other_arm_is_an_array_of_buffers(c: Bool, x: [F32; 4], y: [F32; 4], ps: [Buf[F32]; 2]) -> F32 {
-  planes(if c { [x, y] } else { ps }) //~ E0401
 }
 
 // ------------------------------------------------------------------ an element that diverges (§7)

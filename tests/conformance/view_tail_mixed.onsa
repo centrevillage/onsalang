@@ -1,0 +1,250 @@
+// onsa.toml
+// [package]
+// name = "view_tail_mixed"
+// edition = "2026"
+//
+// [export]
+// prefix = "vtm_"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [test]
+// spec = ["§4.7", "§5.2", "§5.3", "§11.6", "§13.4"]
+// conformance = true
+
+// Conformance (W8-15, S-1116): the tails of an `if`, a `match` or a block at the position of a `Span` argument, at a planar
+// argument and at a field of the generated `In`, whose kinds and lengths differ (an array and a part, arrays of two lengths, a
+// `FixedStr` and an array of bytes, arrays of arrays of two widths, a literal of channels and an array of arrays), are each
+// converted on their own, so the value of the call is what the tail that is run names, and the interpreter and the C program agree
+// on it (§13.4). The planar argument that is not a place (the result of a call, a `const`, a repeat `[a; 2]`, an `if` that has one
+// as a tail) is a temporary of the call. The condition is a comparison of the inputs, so both tails are run; the index is made from
+// an input, so a read of a storage after the arm is not optimised away. A `Buf` is not here (an `rt` function cannot make one);
+// the tails with a `Buf` and the arm that panics are run in values/view_tail_mixed_span.onsa.
+
+use std.text.FixedStr
+
+const N: U32 = 16
+
+const CS: [[F32; N]; 2] = [[0.5; N], [1.5; N]]
+
+pub enum Pick {
+  A,
+  B,
+  C,
+}
+
+pub struct Gauge {
+  gain: F32,
+}
+
+pub struct Holder {
+  ps: [[F32; N]; 2],
+}
+
+pub rt fn pick(x: F32, y: F32) -> Pick {
+  if x > y { Pick.A } else if y > 0.0 { Pick.B } else { Pick.C }
+}
+
+pub rt fn ramp(v: F32, k: F32) -> [F32; N] {
+  var a: [F32; N] = [0.0; N]
+  for j in 0 ..< N {
+    a[j] = v + (k * F32.round_from(j))
+  }
+  a
+}
+
+pub rt fn ramp8(v: F32, k: F32) -> [F32; 8] {
+  var a: [F32; 8] = [0.0; 8]
+  for j in 0 ..< 8 {
+    a[j] = v + (k * F32.round_from(j))
+  }
+  a
+}
+
+pub rt fn mk2(v: F32) -> [[F32; N]; 2] {
+  [ramp(v, 1.0), ramp(v, 2.0)]
+}
+
+pub rt fn index(x: F32) -> U32 {
+  U32.trunc_sat_from((x * 8.0) + 8.0) % N
+}
+
+pub rt fn probe(s: Span[F32], i: U32) -> F32 {
+  s[i % s.len()] + F32.round_from(s.len())
+}
+
+pub rt fn two(xs: [Span[F32]; 2], i: U32) -> F32 {
+  xs[0][i % xs[0].len()] + (xs[1][i % xs[1].len()] * 3.0) + F32.round_from(xs[0].len() + (xs[1].len() * 100))
+}
+
+pub rt fn count_gen[T: Copy](s: Span[T]) -> F32 {
+  F32.round_from(s.len())
+}
+
+pub rt fn byte_view(s: Span[U8], i: U32) -> F32 {
+  (s[i % s.len()] as F32) + F32.round_from(s.len())
+}
+
+impl Gauge {
+  pub rt fn read(self, s: Span[F32], i: U32) -> F32 {
+    self.gain * probe(s, i)
+  }
+}
+
+pub rt fn views_or_arrays(c: Bool, vs: [Span[F32]; 2], ps: [[F32; N]; 2], i: U32) -> F32 {
+  two(if c { ps } else { vs }, i)
+}
+
+// ------------------------------------------------------------------------------------------------- one Span
+
+pub rt fn span_kinds(c: Bool, x: F32, y: F32) -> F32 {
+  let a = ramp(x, 1.0)
+  let b = ramp(y, 2.0)
+  let w = ramp8(x, 3.0)
+  probe(if c { a } else { b.slice(2, 10) }, index(x)) +
+    probe(if c { b.slice(0, 8) } else { a }, index(y)) +
+    probe(if c { a } else { w }, index(x + y))
+}
+
+pub rt fn span_shapes(p: Pick, d: Bool, x: F32, y: F32) -> F32 {
+  let a = ramp(x, 1.0)
+  let b = ramp(y, 2.0)
+  let w = ramp8(y, 3.0)
+  probe(match p { Pick.A => a, Pick.B => b.slice(1, 5), Pick.C => w }, index(x)) +
+    probe(if d { a } else if x > 0.0 { b.slice(4, 12) } else { w }, index(y)) +
+    probe({
+      let n: U32 = 5
+      if d { w } else { a.slice(0, n) }
+    }, index(x)) +
+    probe(if d { if x > y { a } else { b.slice(0, 7) } } else { w }, index(y))
+}
+
+pub rt fn span_return(c: Bool, d: Bool, x: F32, y: F32) -> F32 {
+  let a = ramp(x, 1.0)
+  let b = ramp(y, 2.0)
+  let r = probe(if c { a } else if d { return -1.0 } else { b.slice(2, 10) }, index(x))
+  r + 0.5
+}
+
+// A Copy array that the arm declares is the tail: its value is copied for the call (§5.2).
+pub rt fn span_binding(c: Bool, x: F32, y: F32) -> F32 {
+  let b = ramp(y, 2.0)
+  probe(if c {
+    var t = ramp(x, 1.0)
+    t[3] = y
+    t
+  } else { b.slice(0, 5) }, index(x)) +
+    probe(if c { b.slice(4, 8) } else {
+      var t = ramp(y, 3.0)
+      t[5] = x
+      t
+    }, index(y))
+}
+
+pub rt fn span_other_types(c: Bool, x: F32, y: F32) -> F32 {
+  let a = ramp(x, 1.0)
+  let w = ramp8(y, 1.0)
+  let ia: [I32; 4] = [1, 2, 3, 4]
+  let ib: [I32; 16] = [0; 16]
+  let t: FixedStr[8] = "abc"
+  let z: [U8; 3] = [1, 2, 3]
+  let g = Gauge { gain: y }
+  let q: [F32; 4] = [x, y, x, y]
+  var o: [F32; 4] = [0.0; 4]
+  o.copy_from!(if c { q } else { w.slice(2, 6) })
+  count_gen(if c { ia } else { ib.slice(0, 7) }) + count_gen(if c { a } else { w.slice(1, 4) }) +
+    byte_view(if c { t } else { z }, index(x)) + byte_view(if c { z } else { t }, index(y)) +
+    g.read(if c { a } else { w }, index(x + y)) + o[index(y) % 4]
+}
+
+// ---------------------------------------------------------------------------------------- a planar argument
+
+pub rt fn planar_kinds(c: Bool, x: F32, y: F32) -> F32 {
+  let a = ramp(x, 1.0)
+  let b = ramp(y, 2.0)
+  let w = ramp8(x, 3.0)
+  let ps: [[F32; N]; 2] = [a, b]
+  let ws: [[F32; 8]; 2] = [w, w]
+  let h = Holder { ps: [b, a] }
+  two(if c { [a, w] } else { ps }, index(x)) +
+    two(if c { ps } else { [b, w] }, index(y)) +
+    two(if c { ps } else { ws }, index(x + y)) +
+    two(if c { [w, b] } else { h.ps }, index(x)) +
+    two([if c { a } else { w }, if c { b.slice(1, 9) } else { b }], index(y)) +
+    views_or_arrays(c, ws, ps, index(x))
+}
+
+pub rt fn planar_shapes(p: Pick, d: Bool, x: F32, y: F32) -> F32 {
+  let a = ramp(x, 1.0)
+  let b = ramp(y, 2.0)
+  let w = ramp8(y, 3.0)
+  let ps: [[F32; N]; 2] = [a, b]
+  let ws: [[F32; 8]; 2] = [w, w]
+  two(match p { Pick.A => [a, b.slice(0, 8)], Pick.B => ps, Pick.C => ws }, index(x)) +
+    two(if d {
+      var t: [[F32; N]; 2] = [a, b]
+      t[0][3] = y
+      t
+    } else { [b, w] }, index(y))
+}
+
+pub rt fn planar_temporaries(c: Bool, x: F32, y: F32) -> F32 {
+  let a = ramp(x, 1.0)
+  let ps: [[F32; N]; 2] = [a, a]
+  probe(ramp(x, 1.0), index(y)) +
+    two(mk2(x), index(y)) + two(CS, index(x)) + two([a; 2], index(x + y)) +
+    two(if c { ps } else { mk2(y) }, index(x)) +
+    two(if c { [a, a.slice(1, 9)] } else { mk2(x) }, index(y)) +
+    two(if c {
+      let t = mk2(y)
+      t
+    } else { ps }, index(x))
+}
+
+// ---------------------------------------------------------------------------------------- a field of In
+
+@export
+pub flow pair(l: F32 at sample, r: F32 at sample) -> F32 at sample {
+  l + r
+}
+
+pub rt fn take_in(i: pair.In, k: U32) -> F32 {
+  (i.l[k] * 2.0) + i.r[k]
+}
+
+pub rt fn field_mixed(c: Bool, x: F32, y: F32) -> F32 {
+  let a = ramp(x, 1.0)
+  let b = ramp(y, 2.0)
+  let w = ramp8(x, 3.0)
+  take_in(pair.In { l: if c { a } else { b.slice(2, 10) }, r: if c { w } else { b.slice(0, 8) } }, index(x) % 8)
+}
+
+@export
+pub flow span_flow(x: F32 at sample, y: F32 at sample) -> F32 at sample {
+  span_kinds(x > 0.0, x, y) + span_shapes(pick(x, y), y > 0.0, x, y) + span_return(x > y, y > 0.0, x, y)
+}
+
+@export
+pub flow span_arms_flow(x: F32 at sample, y: F32 at sample) -> F32 at sample {
+  span_binding(x > 0.0, x, y) + span_other_types(y > 0.0, x, y)
+}
+
+@export
+pub flow planar_flow(x: F32 at sample, y: F32 at sample) -> F32 at sample {
+  planar_kinds(x > 0.0, x, y) + planar_shapes(pick(x, y), y > 0.0, x, y)
+}
+
+@export
+pub flow temporary_flow(x: F32 at sample, y: F32 at sample) -> F32 at sample {
+  planar_temporaries(x > y, x, y)
+}
+
+@export
+pub flow field_flow(x: F32 at sample, y: F32 at sample) -> F32 at sample {
+  field_mixed(y > 0.0, x, y)
+}

@@ -1,0 +1,8 @@
+const BIG: [F32; 4096] = [0.5; 4096]
+const BIG2: [[F32; 4096]; 2] = [[0.25; 4096]; 2]
+pub fn take(s: Span[F32]) -> F32 { s[3] }
+pub fn two(xs: [Span[F32]; 2]) -> F32 { xs[0][1] + xs[1][2] }
+@export
+pub fn a() -> F32 { take(BIG) }
+@export
+pub fn b() -> F32 { two(BIG2) }

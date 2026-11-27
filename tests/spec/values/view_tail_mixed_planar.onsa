@@ -1,0 +1,178 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§4.7", "§5.2", "§5.3"]
+
+// S-1116 (§5.3, §4.7), run in the interpreter: an `if`, a `match` or a block at the position of a planar argument
+// (`xs: [Span[F32]; 2]`), and an `if` or a `match` as an element of the literal of channels `[x, y]` there, is checked and
+// converted tail by tail, as the value written at the argument. A literal of channels (`[x, y]`), an array of arrays
+// (`[[F32; 4]; 2]`, `[[F32; 8]; 2]`), an array of buffers, an array of views and a field of a struct may be the tails of one
+// `if`, in either order ("`[[T; M]; N]`、`[Buf[T]; N]`、`[Span[T]; N]` の値をそのまま渡せる", §5.3; negative/view_tail_planar_kinds.onsa
+// had them as E0401 while this was open). `two` reads the first element and the length of each channel, so the value says
+// which tail was chosen: the channels 1 4 5 4 is 1454. A planar argument that is not a place is in planar_temporary_run.onsa.
+
+const X: [F32; 4] = [1.0, 2.0, 3.0, 4.0]
+
+const Y: [F32; 4] = [5.0, 6.0, 7.0, 8.0]
+
+const PS: [[F32; 4]; 2] = [[1.0, 2.0, 3.0, 4.0], [5.0, 6.0, 7.0, 8.0]]
+
+const QS: [[F32; 4]; 2] = [[9.0, 9.0, 9.0, 9.0], [8.0, 8.0, 8.0, 8.0]]
+
+const WS: [[F32; 8]; 2] = [[2.0; 8], [3.0; 8]]
+
+// The first element and the length of each channel: 1000 a0 + 100 n0 + 10 a1 + n1.
+pub fn two(xs: [Span[F32]; 2]) -> F32 {
+  ((xs[0][0] * 1000.0) + (F32.round_from(xs[0].len()) * 100.0)) + ((xs[1][0] * 10.0) + F32.round_from(xs[1].len()))
+}
+
+pub fn two_inout(xs: [Span[F32]; 2], inout t: Span[F32]) {
+  t[0] = two(xs)
+}
+
+pub enum Which {
+  First,
+  Second,
+  Third,
+}
+
+pub struct Holder {
+  ps: [[F32; 4]; 2],
+}
+
+// -------------------------------------------------------------------- a literal of channels and a value of another kind
+
+pub fn literal_then_arrays(c: Bool, x: [F32; 4], y: [F32; 4], ps: [[F32; 4]; 2]) -> F32 {
+  two(if c { [x, y] } else { ps })
+}
+
+pub fn arrays_then_literal(c: Bool, x: [F32; 4], y: [F32; 4], ps: [[F32; 4]; 2]) -> F32 {
+  two(if c { ps } else { [x, y] })
+}
+
+pub fn literal_then_wide(c: Bool, x: [F32; 4], y: [F32; 4], ws: [[F32; 8]; 2]) -> F32 {
+  two(if c { [x, y] } else { ws })
+}
+
+pub fn arrays_then_wide(c: Bool, ps: [[F32; 4]; 2], ws: [[F32; 8]; 2]) -> F32 {
+  two(if c { ps } else { ws })
+}
+
+pub fn arrays_then_buffers(c: Bool, ps: [[F32; 4]; 2], bs: [Buf[F32]; 2]) -> F32 {
+  two(if c { ps } else { bs })
+}
+
+pub fn literal_then_buffers(c: Bool, x: [F32; 4], y: [F32; 4], bs: [Buf[F32]; 2]) -> F32 {
+  two(if c { [x, y] } else { bs })
+}
+
+pub fn arrays_then_views(c: Bool, ps: [[F32; 4]; 2], vs: [Span[F32]; 2]) -> F32 {
+  two(if c { ps } else { vs })
+}
+
+pub fn literal_then_field(c: Bool, x: [F32; 4], y: [F32; 4], h: Holder) -> F32 {
+  two(if c { [x, y] } else { h.ps })
+}
+
+test "the tail that is run is the channels, whatever the kind of the tails" {
+  assert literal_then_arrays(true, X, Y, QS) == 1454.0
+  assert literal_then_arrays(false, X, Y, QS) == 9484.0
+  assert arrays_then_literal(true, X, Y, QS) == 9484.0
+  assert arrays_then_literal(false, X, Y, QS) == 1454.0
+  assert literal_then_wide(true, X, Y, WS) == 1454.0
+  assert literal_then_wide(false, X, Y, WS) == 2838.0
+  assert arrays_then_wide(true, PS, WS) == 1454.0
+  assert arrays_then_wide(false, PS, WS) == 2838.0
+  var bs: [Buf[F32]; 2] = [Buf.zeroed(3), Buf.zeroed(5)]
+  bs[0][0] = 6.0
+  bs[1][0] = 4.0
+  assert arrays_then_buffers(true, PS, bs) == 1454.0
+  assert arrays_then_buffers(false, PS, bs) == 6345.0
+  assert literal_then_buffers(true, X, Y, bs) == 1454.0
+  assert literal_then_buffers(false, X, Y, bs) == 6345.0
+  let qs: [[F32; 4]; 2] = QS
+  assert arrays_then_views(true, PS, qs) == 1454.0
+  assert arrays_then_views(false, PS, qs) == 9484.0
+  assert literal_then_field(true, X, Y, Holder { ps: QS }) == 1454.0
+  assert literal_then_field(false, X, Y, Holder { ps: QS }) == 9484.0
+}
+
+// -------------------------------------------------------------------------------------- the shape of the tail
+
+pub fn three_arms(w: Which, x: [F32; 4], y: [F32; 4], ps: [[F32; 4]; 2]) -> F32 {
+  two(match w {
+    Which.First => [x, y],
+    Which.Second => [y, x],
+    Which.Third => ps,
+  })
+}
+
+// The array that the arm declares is the tail: its value is copied for the call (§5.2).
+pub fn binding_then_literal(c: Bool, x: [F32; 4], y: [F32; 4]) -> F32 {
+  two(if c {
+    var t: [[F32; 4]; 2] = [[0.0; 4]; 2]
+    t[0][0] = 7.0
+    t
+  } else { [x, y] })
+}
+
+pub fn views_with_an_inout(c: Bool, ps: [[F32; 4]; 2], x: [F32; 4], y: [F32; 4]) -> F32 {
+  var z: [F32; 4] = [0.0; 4]
+  two_inout(if c { [x, y] } else { ps }, inout z)
+  z[0]
+}
+
+test "a match of three arms, an array that the arm declares, and an argument that is an inout of a variable" {
+  assert three_arms(Which.First, X, Y, QS) == 1454.0
+  assert three_arms(Which.Second, X, Y, QS) == 5414.0
+  assert three_arms(Which.Third, X, Y, QS) == 9484.0
+  assert binding_then_literal(true, X, Y) == 7404.0
+  assert binding_then_literal(false, X, Y) == 1454.0
+  assert views_with_an_inout(true, QS, X, Y) == 1454.0
+  assert views_with_an_inout(false, QS, X, Y) == 9484.0
+}
+
+// -------------------------------------------------------------------- an element of the literal of channels
+
+pub fn element_if(c: Bool, x: [F32; 4], y: [F32; 4], b: Buf[F32]) -> F32 {
+  two([if c { x } else { b }, y])
+}
+
+pub fn element_match(w: Which, x: [F32; 4], y: [F32; 4], b: Buf[F32]) -> F32 {
+  two([y, match w { Which.First => x, Which.Second => b, Which.Third => y.slice(0, 2) }])
+}
+
+pub fn elements_of_two_tails(c: Bool, d: Bool, x: [F32; 4], y: [F32; 4], b: Buf[F32]) -> F32 {
+  two([if c { x } else { y.slice(0, 2) }, if d { y } else { b }])
+}
+
+test "an if or a match as an element of a literal of channels is converted tail by tail" {
+  var b: Buf[F32] = Buf.zeroed(3)
+  b[0] = 6.0
+  assert element_if(true, X, Y, b) == 1454.0
+  assert element_if(false, X, Y, b) == 6354.0
+  assert element_match(Which.First, X, Y, b) == 5414.0
+  assert element_match(Which.Second, X, Y, b) == 5463.0
+  assert element_match(Which.Third, X, Y, b) == 5452.0
+  assert elements_of_two_tails(true, true, X, Y, b) == 1454.0
+  assert elements_of_two_tails(false, true, X, Y, b) == 5254.0
+  assert elements_of_two_tails(true, false, X, Y, b) == 1463.0
+  assert elements_of_two_tails(false, false, X, Y, b) == 5263.0
+}
+
+// The first arm diverges (§7): it has the type of the view as a node has, and the arm that is run is read.
+pub fn first_arm_panics(w: Which, x: [F32; 4], y: [F32; 4]) -> F32 {
+  two(match w { Which.First => panic("not run"), Which.Second => [x, y], Which.Third => QS })
+}
+
+pub fn first_arm_returns(w: Which, x: [F32; 4], ps: [[F32; 4]; 2]) -> F32 {
+  two(match w { Which.First => { return -1.0 }, Which.Second => ps, Which.Third => [x, ps[1]] })
+}
+
+test "a first arm that diverges leaves the arm that is run to be read" {
+  assert first_arm_panics(Which.Second, X, Y) == 1454.0
+  assert first_arm_panics(Which.Third, X, Y) == 9484.0
+  assert first_arm_returns(Which.First, X, PS) == -1.0
+  assert first_arm_returns(Which.Second, X, PS) == 1454.0
+  assert first_arm_returns(Which.Third, X, QS) == 1484.0
+}

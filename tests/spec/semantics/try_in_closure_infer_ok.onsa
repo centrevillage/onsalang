@@ -1,0 +1,130 @@
+// onsa.toml
+// [test]
+// spec = ["§9.1", "§6.1", "§8.1", "§4.7"]
+
+// W8-15 (§9.1): "注釈の無い無名関数では、`?` が返り値の型を `Result[_, E]` / `Option[_]` に決める". An anonymous function that
+// has no return type to take (it is bound by a `let`, passed to a type parameter, or to the parameter `fn(I32) -> T` with `T` that the
+// function gives) has the return type that its `?` decides: `Result[_, E]` with the `E` of the operand, or `Option[_]`; the
+// tail and the `return` are checked against it, and the anonymous function leaves for its own result ("最も内側の関数（無名関数を含む）").
+// The case is a `check`: a function value is lowered from W8-09, so `onsa test` reports E0200 until then, and the values are run in
+// semantics/try_in_closure.onsa. The forms that are errors are in negative/try_closure_infer.onsa.
+
+pub enum ParseError {
+  Negative,
+  TooBig(I32),
+}
+
+fn parse(n: I32) -> Result[I32, ParseError] {
+  if n < 0 {
+    return Err(ParseError.Negative)
+  }
+  Ok(n)
+}
+
+fn find(n: I32) -> Option[I32] {
+  if n < 0 {
+    return None
+  }
+  Some(n)
+}
+
+fn apply_gen[T](f: fn(I32) -> T, n: I32) -> T {
+  f.(n)
+}
+
+fn keep[F](f: F, n: I32) -> I32 {
+  n
+}
+
+// ---------------------------------------------------------------------------------- bound by a let
+
+pub fn bound_result(n: I32) -> Result[I32, ParseError] {
+  let f = fn(m: I32) {
+    let v = parse(m)?
+    Ok(v + 1)
+  }
+  f.(n)
+}
+
+pub fn bound_option(n: I32) -> Option[I32] {
+  let f = fn(m: I32) {
+    let v = find(m)?
+    Some(v + 1)
+  }
+  f.(n)
+}
+
+pub fn bound_with_an_early_return(n: I32) -> Result[I32, ParseError] {
+  let f = fn(m: I32) {
+    let v = parse(m)?
+    if v > 5 {
+      return Err(ParseError.TooBig(v))
+    }
+    Ok(v)
+  }
+  f.(n)
+}
+
+pub fn bound_option_with_an_early_return(n: I32) -> Option[I32] {
+  let f = fn(m: I32) {
+    let v = find(m)?
+    if v > 100 {
+      return None
+    }
+    Some(v * 2)
+  }
+  f.(n)
+}
+
+// ------------------------------------------------------- passed to a type parameter, or to `fn(I32) -> T`
+
+pub fn to_a_type_parameter(n: I32) -> I32 {
+  keep(fn(m: I32) {
+    let v = parse(m)?
+    Ok(v + 1)
+  }, n)
+}
+
+pub fn to_a_generic_result(n: I32) -> Result[I32, ParseError] {
+  let r = apply_gen(fn(m) {
+    let v = parse(m)?
+    Ok(v + 1)
+  }, n)
+  r
+}
+
+pub fn to_a_generic_option(n: I32) -> Option[I32] {
+  let r = apply_gen(fn(m) {
+    let v = find(m)?
+    Some(v + 1)
+  }, n)
+  r
+}
+
+// -------------------------------------------------------------------------- the enclosing function is not left
+
+pub fn enclosing_is_an_option(n: I32) -> Option[I32] {
+  let f = fn(m: I32) {
+    let v = parse(m)?
+    Ok(v)
+  }
+  match f.(n) {
+    Ok(v) => Some(v),
+    Err(_) => None,
+  }
+}
+
+pub fn nested_decides_each(n: I32) -> Option[I32] {
+  let outer = fn(k: I32) {
+    let inner = fn(m: I32) {
+      let v = parse(m)?
+      Ok(v)
+    }
+    let a = find(k)?
+    match inner.(k) {
+      Ok(v) => Some(a + v),
+      Err(_) => None,
+    }
+  }
+  outer.(n)
+}

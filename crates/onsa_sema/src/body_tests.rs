@@ -569,6 +569,157 @@ fn span_parameters_accept_arrays_and_bufs() {
     );
 }
 
+/// S-1116 (§5.3, §4.7): each tail of an `if`, a `match` or a block at a view is checked as the
+/// value written there and converted on its own, of any kind and length, with the type of no
+/// other branch: each keeps its type and is a converted tail of the view, the node has the view.
+#[test]
+fn view_tails_of_other_kinds_are_converted_each() {
+    let decls = "use std.text.FixedStr\npub fn take(s: Span[F32]) -> U32 { s.len() }\npub fn bytes(s: Span[U8]) -> U32 { s.len() }\n\
+        pub fn two(xs: [Span[F32]; 2]) -> U32 { xs[0].len() }\npub fn gen[T: Copy](s: Span[T]) -> U32 { s.len() }\n\
+        pub fn ins[const N: U32](xs: [Span[F32]; N]) -> U32 { xs[0].len() }\nconst PS: [[F32; 4]; 2] = [[1.0; 4]; 2]\n\
+        fn mk2() -> [[F32; 4]; 2] { PS }\n";
+    let params = "c: Bool, x: [F32; 4], y: [F32; 8], b: Buf[F32], s: Span[F32], ps: [[F32; 4]; 2], bs: [Buf[F32]; 2], vs: [Span[F32]; 2], f: FixedStr[8]";
+    for call in [
+        "take(if c { x } else { y.slice(0, 2) })",
+        "take(if c { y.slice(0, 2) } else { x })",
+        "take(if c { x } else { b })",
+        "take(if c { x } else { y })",
+        "take(if c { s } else { b })",
+        "take(if c { x } else if !c { y } else { y.slice(0, 2) })",
+        "take(if c { if !c { x } else { y.slice(0, 2) } } else { y.slice(1, 3) })",
+        "take({\n    let k = 2\n    if c { x } else { y.slice(0, k) }\n  })",
+        "take(if c {\n    var t: [F32; 4] = x\n    t[0] = 1.0\n    t\n  } else { y.slice(0, 2) })",
+        "take(if c { x } else { panic(\"no\") })",
+        "take(if c { x } else { [] })",
+        "gen(if c { x } else { b })",
+        "bytes(if c { f } else { [1, 2, 3] })",
+        "two(if c { [x, y] } else { ps })",
+        "two(if c { ps } else { [x, b] })",
+        "two(match c { true => [x, y], false => PS })",
+        "two(if c { [x, y] } else { mk2() })",
+        "two(if c { [x, y] } else { [x; 2] })",
+        "two(if c { ps } else { bs })",
+        "two(if c { ps } else { vs })",
+        "two(if c {\n    var t: [[F32; 4]; 2] = ps\n    t[0][0] = 1.0\n    t\n  } else { [x, y] })",
+        "two([if c { x } else { y.slice(0, 2) }, b])",
+        "ins(if c { ps } else { [x, b] })",
+    ] {
+        let src = format!("{decls}pub fn g({params}) -> U32 {{\n  {call}\n}}\n");
+        let p = crate::tests::pkg(&[("main", &src)]);
+        let a = crate::tests::analyze(&p);
+        assert!(a.diagnostics.is_empty(), "{call}: {:?}", a.diagnostics);
+        let body = &a.bodies[&def(&a, "g")];
+        let (tails, nodes): (Vec<_>, Vec<_>) = body.views.iter().partition(|(_, v)| v.tail);
+        assert!(!tails.is_empty() && !nodes.is_empty(), "{call}");
+        assert_eq!(body.unconverted_view_tail(&p.modules[0].parsed.ast), None, "{call}");
+        for (e, v) in nodes {
+            assert_eq!(body.expr_types[e], v.to, "{call}: a node has the view");
+        }
+    }
+}
+
+/// S-1116 (§7): a branch that diverges at a view has the view's type, as a node has, wherever it
+/// is among the branches (first, middle, last) of an `if`, an `else if`, a `match`, and of a
+/// `match` in a block or in parentheses, and whatever its form (`panic`, in a block, `return`,
+/// `continue`): the forms of one kind in the other branches, which passed before, pass.
+#[test]
+fn a_diverging_branch_at_a_view_has_its_type() {
+    let forms = ["panic(\"x\")", "{ panic(\"x\") }", "{ return 1.0 }", "{ continue }"];
+    let mut calls = Vec::new();
+    for d in forms {
+        let arms = |k: usize, n: usize| (0..n).map(move |i| if i == k { d } else { "xs" });
+        for k in 0..2 {
+            let a: Vec<_> = arms(k, 2).collect();
+            calls.push(format!("if c {{ {} }} else {{ {} }}", a[0], a[1]));
+        }
+        for k in 0..3 {
+            let a: Vec<_> = arms(k, 3).collect();
+            calls.push(format!("if c {{ {} }} else if i > 0 {{ {} }} else {{ {} }}", a[0], a[1], a[2]));
+            let m = format!("match w {{ W.A => {}, W.B => {}, W.C => {} }}", a[0], a[1], a[2]);
+            calls.push(format!("{{\n      let q = i + 1\n      {m}\n    }}"));
+            calls.push(format!("({m})"));
+            calls.push(m);
+        }
+    }
+    let decls = "pub enum W { A, B, C }\npub fn take(s: Span[F32]) -> F32 { s[0] }\n";
+    for call in &calls {
+        let src = format!(
+            "{decls}pub fn g(c: Bool, w: W, xs: [F32; 4]) -> F32 {{\n  var acc = 0.0\n  for i in 0..<2 {{\n    acc = acc + take({call})\n  }}\n  acc\n}}\n"
+        );
+        // The parameters that a form does not read are unused (E0309), no error.
+        let errors: Vec<_> = codes(&src).into_iter().filter(|&c| c != Code::E0309).collect();
+        assert_eq!(errors, vec![], "{call}");
+    }
+    assert_eq!(calls.len(), 56);
+}
+
+/// S-1116 (§5.3, §4.7): a tail whose type was borrowed from another arm is the error of the value
+/// written at the position itself: E0420 for a generic return alone, E0406 for `array.from_fn`
+/// with no length, E0401 for a string literal at `Span[U8]` and for an element of another type.
+/// The positions that are no view are as they were (an annotation of `let`, a receiver, `for`).
+#[test]
+fn view_tails_are_the_values_written_there() {
+    let decls = "use std.array\nuse std.text.FixedStr\npub fn take(s: Span[F32]) -> U32 { s.len() }\n\
+        pub fn bytes(s: Span[U8]) -> U32 { s.len() }\npub fn mk[T: Default]() -> T { T.default() }\n";
+    let params = "c: Bool, x: [F32; 4], y: [F32; 8], f: FixedStr[8], z: [F64; 4]";
+    for (call, code) in [
+        ("take(if c { x } else { mk() })", Code::E0420),
+        ("take(mk())", Code::E0420),
+        ("take(if c { mk() } else { x })", Code::E0420),
+        ("take(if c { x } else { array.from_fn(fn(i) { 1.0 }) })", Code::E0406),
+        ("take(array.from_fn(fn(i) { 1.0 }))", Code::E0406),
+        ("bytes(if c { f } else { \"abc\" })", Code::E0401),
+        ("bytes(\"abc\")", Code::E0401),
+        ("take(if c { x } else { z.slice(0, 2) })", Code::E0401),
+        ("take(if c { x } else { 1.0 })", Code::E0401),
+        ("take({\n    let _ = 1\n  })", Code::E0401),
+        ("{\n    let s: Span[F32] = if c { x } else { y.slice(0, 2) }\n    s.len()\n  }", Code::E0401),
+        ("(if c { x } else { y.slice(0, 2) }).len()", Code::E0401),
+        ("{\n    for v in if c { x } else { y.slice(0, 2) } {\n      let _ = v\n    }\n    0\n  }", Code::E0401),
+    ] {
+        let src = format!("{decls}pub fn g({params}) -> U32 {{\n  {call}\n}}\n");
+        assert_eq!(codes(&src), vec![code], "{call}");
+    }
+    // A block with no value is a tail of `()`, as written at the argument: the E0401 is there.
+    let src = format!("{decls}pub fn g({params}) -> U32 {{\n  take(if c {{ {{ }} }} else {{ x }})\n}}\n");
+    let a = check(&src);
+    let d = &a.diagnostics[0];
+    assert_eq!((d.code, &src[d.span.start as usize..d.span.end as usize]), (Code::E0401, "{ }"), "{}", d.message);
+}
+
+/// §9.1: in an anonymous function with no return type, `?` decides it, `Result[_, E]` with the
+/// error of its operand or `Option[_]`, before or after the tail that decides the rest; a second
+/// `?` of another kind or error is E0414 as in a function with the type written.
+#[test]
+fn try_decides_the_return_of_an_anonymous_function_with_none() {
+    let decls =
+        "pub fn apply_gen[T](f: fn(I32) -> T, n: I32) -> T { f.(n) }\nfn parse(n: I32) -> Result[I32, U8] { Ok(n) }\n";
+    for (body, ret) in [
+        ("let f = fn(r: Result[U32, U8]) { let v = r?\n Ok(v + 1) }\n  f.(Ok(1))", "Result[U32, U8]"),
+        ("let f = fn(o: Option[U32]) { let v = o?\n Some(v) }\n  f.(None)", "Option[U32]"),
+        ("let f = fn(r: Result[U32, U8]) { Ok(r? + 1) }\n  f.(Ok(1))", "Result[U32, U8]"),
+        ("let f = fn(r: Result[U32, U8]) { if r? > 1 { return Err(0) }\n Ok(true) }\n  f.(Ok(1))", "Result[Bool, U8]"),
+        ("apply_gen(fn(n) { let v = parse(n)?\n Ok(v + 1) }, 5)", "Result[I32, U8]"),
+    ] {
+        let a = ok(&format!("{decls}pub fn g() -> {ret} {{\n  {body}\n}}\n"));
+        assert!(a.bodies[&def(&a, "g")].complete, "{body}");
+    }
+    for (body, code) in [
+        (
+            "let f = fn(r: Result[U32, U8], o: Option[U32]) { let v = r?\n let w = o?\n Ok(v + w) }\n  f.(Ok(1), None)",
+            Code::E0414,
+        ),
+        (
+            "let f = fn(r: Result[U32, U8], q: Result[U32, U16]) { let v = r?\n let w = q?\n Ok(v + w) }\n  f.(Ok(1), Ok(2))",
+            Code::E0414,
+        ),
+        // The tail of another kind than the one `?` decided, as of a type written.
+        ("let f = fn(r: Result[U32, U8]) { let v = r?\n Some(v) }\n  f.(Ok(1))", Code::E0401),
+    ] {
+        assert_eq!(codes(&format!("{decls}pub fn g() -> U32 {{\n  {body}\n}}\n")), vec![code], "{body}");
+    }
+}
+
 #[test]
 fn enums_options_results_and_try() {
     ok(

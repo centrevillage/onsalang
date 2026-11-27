@@ -514,31 +514,42 @@ impl<'a> Checker<'a> {
     /// The value `x` passed as the view `(elem, planar)` of `pt`
     /// ([`Self::view_param`]) by the mode `mode`: an argument, a field of a
     /// literal of a generated `In` or `Out` (§11.6).
-    /// Each of its tails is converted to `pt` ([`BodyInfo::views`]).
+    /// Each of its tails is converted to `pt` on its own ([`BodyInfo::views`],
+    /// [`Self::passed_as_view`]), so that `x` has the type `pt`. The type of
+    /// `x` is checked against the view once more for a node with no tail to
+    /// convert (a `match` with no arms, `()`).
     pub(super) fn view_arg(&mut self, x: ExprId, pt: TyId, (elem, planar): (TyId, Option<Len>), mode: Mode) -> R<()> {
         let (aspan, mark) = (self.expr(x).span, self.view_marks.len());
-        let at = self.check_passed(x, None, None, Some(Viewing { elem, planar, mode }));
+        let v = Viewing { to: pt, elem, planar, mode };
+        let at = self.check_passed(x, None, None, Some(v));
         let marks = self.view_marks.split_off(mark);
-        let at = at?;
-        // A literal variable is passed as no `Span` (S-860).
-        let at_s = self.known_shape(at, aspan, "argument")?;
-        let ok = match (planar, self.ty(at_s)) {
-            // A length unified, as of any array (a const parameter `N`).
-            (Some(n), Ty::Array(ch, m)) => {
-                let cause = self.cause(aspan, None);
-                self.infer.unify_len(&mut self.a.types, n, m, &cause).is_ok() && self.views(ch, elem, aspan, mode)?
-            }
-            (Some(_), Ty::Error) => true,
-            (Some(_), _) => false,
-            (None, _) => self.views(at_s, elem, aspan, mode)?,
-        };
-        if !ok {
-            return Err(self.not_a_view(aspan, pt, at));
-        }
+        self.passed_as_view(aspan, at?, v)?;
         for (e, tail) in marks {
             self.info.views.insert(e, View { to: pt, mode, tail });
         }
         Ok(())
+    }
+
+    /// The type `v.to` of a value of the type `at`, written at `aspan`,
+    /// that is passed as the view `v` (§5.3); else E0401.
+    pub(super) fn passed_as_view(&mut self, aspan: Span, at: TyId, v: Viewing) -> R<TyId> {
+        // A literal variable is passed as no `Span` (S-860).
+        let at_s = self.known_shape(at, aspan, "argument")?;
+        let ok = match (v.planar, self.ty(at_s)) {
+            // A length unified, as of any array (a const parameter `N`).
+            (Some(n), Ty::Array(ch, m)) => {
+                let cause = self.cause(aspan, None);
+                self.infer.unify_len(&mut self.a.types, n, m, &cause).is_ok()
+                    && self.views(ch, v.elem, aspan, v.mode)?
+            }
+            (Some(_), Ty::Error) => true,
+            (Some(_), _) => false,
+            (None, _) => self.views(at_s, v.elem, aspan, v.mode)?,
+        };
+        if !ok {
+            return Err(self.not_a_view(aspan, v.to, at));
+        }
+        Ok(v.to)
     }
 
     /// Whether a value of the type `t` is passed as a `Span[elem]` (§5.3):

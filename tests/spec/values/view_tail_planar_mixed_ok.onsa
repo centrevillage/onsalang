@@ -1,0 +1,33 @@
+// onsa.toml
+// [test]
+// spec = ["§4.7", "§5.2", "§5.3"]
+
+// S-1116 (§5.3, §4.7): the tail of an `if` or a `match` at a planar argument (`xs: [Span[F32]; 2]`) that is a literal of channels
+// (`[x, y]`) and the tail in the other arm that is an array of arrays (`[[F32; 4]; 2]`) or of buffers (`[Buf[F32]; 2]`) are each checked
+// and converted on their own, as the value written at the argument ("`[[T; M]; N]`、`[Buf[T]; N]`、`[Span[T]; N]` の値をそのまま渡せる",
+// §5.3), so the kinds of the tails need not agree. One function has an `inout` argument of another variable (`inout z`) next to the planar
+// argument. The values of such a call are run in values/view_tail_mixed_planar.onsa, the literal and an array of views are in
+// values/view_tail_planar_ok.onsa.
+
+pub fn planes(xs: [Span[F32]; 2]) -> F32 {
+  xs[0][0] + xs[1][0]
+}
+
+pub fn planes_inout(xs: [Span[F32]; 2], inout t: Span[F32]) {}
+
+pub fn tail_the_other_arm_is_an_array_of_arrays(c: Bool, x: [F32; 4], y: [F32; 4], ps: [[F32; 4]; 2]) -> F32 {
+  planes(if c { [x, y] } else { ps })
+}
+
+pub fn tail_the_other_arm_is_an_array_of_arrays_in_a_match(c: Bool, x: [F32; 4], y: [F32; 4], ps: [[F32; 4]; 2]) -> F32 {
+  planes(match c { true => [x, y], false => ps })
+}
+
+pub fn tail_the_other_arm_is_an_array_of_arrays_with_an_inout(c: Bool, x: [F32; 4], y: [F32; 4], ps: [[F32; 4]; 2]) {
+  var z: [F32; 4] = [0.0; 4]
+  planes_inout(if c { [x, y] } else { ps }, inout z)
+}
+
+pub fn tail_the_other_arm_is_an_array_of_buffers(c: Bool, x: [F32; 4], y: [F32; 4], ps: [Buf[F32]; 2]) -> F32 {
+  planes(if c { [x, y] } else { ps })
+}

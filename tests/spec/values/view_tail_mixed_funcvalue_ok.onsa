@@ -1,0 +1,27 @@
+// onsa.toml
+// [test]
+// spec = ["§4.7", "§5.2", "§5.3"]
+
+// S-1116 (§5.3): the argument of a call of a function value (`f.(…)`, "関数値の呼び出しの引数") is a position of a view
+// when the type of the function takes a `Span` or the channels `[Span[F32]; 2]`: an `if` or a `match` there is converted tail by tail,
+// whatever the kinds and the lengths of the tails. The case is a `check`, since a function value is lowered from W8-09
+// and `onsa test` reports E0200 until then. The values are run for the call of a function by name in view_tail_mixed_span.onsa.
+
+pub fn call_span(f: fn(Span[F32]) -> F32, c: Bool, x: [F32; 4], b: Buf[F32]) -> F32 {
+  f.(if c { x } else { b })
+}
+
+pub fn call_part(f: fn(Span[F32]) -> F32, c: Bool, x: [F32; 4], z: [F32; 8]) -> F32 {
+  f.(if c { x } else { z.slice(0, 2) })
+}
+
+pub fn call_match(f: fn(Span[F32]) -> F32, w: Bool, x: [F32; 4], z: [F32; 8], b: Buf[F32]) -> F32 {
+  f.(match w {
+    true => x,
+    false => if x[0] > 0.0 { z.slice(1, 3) } else { b },
+  })
+}
+
+pub fn call_planar(f: fn([Span[F32]; 2]) -> F32, c: Bool, x: [F32; 4], y: [F32; 4], ps: [[F32; 8]; 2]) -> F32 {
+  f.(if c { [x, y] } else { ps })
+}

@@ -1,0 +1,109 @@
+// onsa.toml
+// [test]
+// spec = ["§9.1", "§6.1", "§4.7", "§18.1"]
+// fixes = 0
+
+// W8-15 (§9.1): an anonymous function with no return type annotation gets `Result[_, E]` or `Option[_]` from its `?`, and the rest of
+// the function is checked against it as if the type were written. A `?` of the other kind (`Result` and `Option` in one anonymous function, in
+// either order) and a `?` of the same kind with another error type are E0414 at the later `?` ("混在、エラーの型の違い"). The tail
+// and the `return` of the other kind or of another error type are E0401 at the tail, as in the anonymous function that has the type
+// written (the same functions with `-> Result[I32, ParseError]`). The forms that pass are in semantics/try_in_closure_infer_ok.onsa.
+// One error per function (P-01).
+
+pub enum ParseError {
+  Negative,
+}
+
+pub enum OtherError {
+  Bad,
+}
+
+fn parse(n: I32) -> Result[I32, ParseError] {
+  Ok(n)
+}
+
+fn other(n: I32) -> Result[I32, OtherError] {
+  Ok(n)
+}
+
+fn find(n: I32) -> Option[I32] {
+  Some(n)
+}
+
+// ------------------------------------------------------------------------------------- the `?` that decides, and a later `?`
+
+pub fn result_then_option(n: I32) -> I32 {
+  let f = fn(m: I32) {
+    let v = parse(m)?
+    let w = find(m)? //~ E0414
+    Ok(v + w)
+  }
+  n
+}
+
+pub fn option_then_result(n: I32) -> I32 {
+  let f = fn(m: I32) {
+    let v = find(m)?
+    let w = parse(m)? //~ E0414
+    Some(v + w)
+  }
+  n
+}
+
+pub fn result_then_another_error_type(n: I32) -> I32 {
+  let f = fn(m: I32) {
+    let v = parse(m)?
+    let w = other(m)? //~ E0414
+    Ok(v + w)
+  }
+  n
+}
+
+pub fn result_then_another_error_type_in_a_branch(n: I32) -> I32 {
+  let f = fn(m: I32) {
+    let v = parse(m)?
+    if v > 0 {
+      let w = other(m)? //~ E0414
+      return Ok(w)
+    }
+    Ok(v)
+  }
+  n
+}
+
+// ----------------------------------------------------------------- the tail and the `return` after the `?` that decided
+
+pub fn option_at_the_tail_after_a_result(n: I32) -> I32 {
+  let f = fn(m: I32) {
+    let v = parse(m)?
+    Some(v) //~ E0401
+  }
+  n
+}
+
+pub fn result_at_the_tail_after_an_option(n: I32) -> I32 {
+  let f = fn(m: I32) {
+    let v = find(m)?
+    Ok(v) //~ E0401
+  }
+  n
+}
+
+pub fn another_error_at_the_tail(n: I32) -> I32 {
+  let f = fn(m: I32) {
+    let v = parse(m)?
+    Err(OtherError.Bad) //~ E0401
+  }
+  n
+}
+
+pub fn another_error_at_a_return(n: I32) -> I32 {
+  let f = fn(m: I32) {
+    let v = parse(m)?
+    if v > 0 {
+      return Err(OtherError.Bad) //~ E0401
+    }
+    Ok(v)
+  }
+  n
+}

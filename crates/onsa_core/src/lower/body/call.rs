@@ -43,12 +43,10 @@ pub(super) fn coerce(lw: &mut Lowerer, cx: &mut FnCx, e: Expr, want: &Ty, mode: 
         (Ty::Span(_), Ty::Struct(_)) => crate::lower::fixed_str::view(lw, cx, e),
         (Ty::Array(elem, n), Ty::Array(_, m)) if planar(want) && n == m => {
             let n = *n;
-            // Planar: an array of arrays / Bufs (a literal is converted by its elements, S-196).
-            if e.as_place().is_none() {
-                return Err(unsupported(span, Feature::PlanarTemporary, &[]));
-            }
-            // Its indices evaluated once (R-433); an `inout` argument is a
-            // place, with no statements before it.
+            // Planar: an array of arrays / Bufs (a literal is converted by its elements, S-196),
+            // a value that is no place bound to a temporary first, and the
+            // indices of a place evaluated once (R-433); an `inout` argument
+            // is a place, with no statements before it.
             let mut stmts = Vec::new();
             let base = materialize(cx, e, &mut stmts, "__planar");
             if mode == Mode::Inout && !stmts.is_empty() {

@@ -166,10 +166,12 @@ pub(crate) struct Checker<'a> {
     bound: &'a mut HashMap<ModId, HashSet<String>>,
 }
 
-/// A view passed at a position (§5.3): of the element `elem`, planar of
-/// the length `planar` or a `Span`, by `mode` ([`BodyInfo::views`]).
+/// A view passed at a position (§5.3): the type `to` of the position, of
+/// the element `elem`, planar of the length `planar` or a `Span`, by
+/// `mode` ([`BodyInfo::views`]).
 #[derive(Clone, Copy)]
 pub(crate) struct Viewing {
+    pub to: TyId,
     pub elem: TyId,
     pub planar: Option<Len>,
     pub mode: Mode,

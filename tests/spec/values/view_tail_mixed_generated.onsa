@@ -1,0 +1,117 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§5.2", "§5.3", "§11.6"]
+
+// S-1116 (§5.3, §11.6), run in the interpreter: an `if` or a `match` at a field of the generated `In` (`pair.In { l: …, r: … }`),
+// and at the input of `process` and `render` (a `Span` for one input, the channels `[Span[F32]; 2]` for an input of `[F32; 2]`),
+// is checked and converted tail by tail, as the value written there. The kinds and the lengths of the tails need not agree
+// (the lengths of the `Span`s of one call are equal, so the tails here are four frames long).
+// The case is out of flow_semantics, which the reference evaluator reads (tests/flow_ref/FORMAT.md).
+
+const X: [F32; 4] = [1.0, 2.0, 3.0, 4.0]
+
+const Z: [F32; 8] = [10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0, 17.0]
+
+const QS: [[F32; 4]; 2] = [[9.0; 4], [8.0; 4]]
+
+pub flow pair(l: F32 at sample, r: F32 at sample) -> F32 at sample {
+  (l * 10.0) - r
+}
+
+pub flow mono(x: F32 at sample) -> F32 at sample {
+  x * 2.0
+}
+
+pub flow wide(x: [F32; 2] at sample) -> F32 at sample {
+  x[0] + x[1]
+}
+
+pub enum Which {
+  First,
+  Second,
+  Third,
+}
+
+pub fn field_if(c: Bool, x: [F32; 4], z: [F32; 8], r: [F32; 4]) -> [F32; 4] {
+  var out: [F32; 4] = [0.0; 4]
+  var st = pair.init(8.0)
+  pair.process(inout st, pair.In { l: if c { x } else { z.slice(0, 4) }, r: r }, inout out)
+  out
+}
+
+pub fn field_buffer(c: Bool, x: [F32; 4], b: Buf[F32], r: [F32; 4]) -> [F32; 4] {
+  var out: [F32; 4] = [0.0; 4]
+  var st = pair.init(8.0)
+  pair.process(inout st, pair.In { l: x, r: if c { r } else { b } }, inout out)
+  out
+}
+
+pub fn field_match(w: Which, x: [F32; 4], z: [F32; 8], b: Buf[F32]) -> [F32; 4] {
+  var out: [F32; 4] = [0.0; 4]
+  var st = pair.init(8.0)
+  pair.process(inout st, pair.In { l: x, r: match w { Which.First => x, Which.Second => z.slice(4, 8), Which.Third => b } }, inout out)
+  out
+}
+
+pub fn input_of_process(c: Bool, x: [F32; 4], z: [F32; 8]) -> [F32; 4] {
+  var out: [F32; 4] = [0.0; 4]
+  var st = mono.init(8.0)
+  mono.process(inout st, if c { x } else { z.slice(2, 6) }, inout out)
+  out
+}
+
+pub fn channels_of_process(c: Bool, x: [F32; 4], y: [F32; 4], ps: [[F32; 4]; 2]) -> [F32; 4] {
+  var out: [F32; 4] = [0.0; 4]
+  var st = wide.init(8.0)
+  wide.process(inout st, if c { [x, y] } else { ps }, inout out)
+  out
+}
+
+test "an if or a match at a field of In reads the field that is run" {
+  var b: Buf[F32] = Buf.zeroed(4)
+  b[1] = 7.0
+  assert field_if(true, X, Z, [1.0; 4]) == [9.0, 19.0, 29.0, 39.0]
+  assert field_if(false, X, Z, [1.0; 4]) == [99.0, 109.0, 119.0, 129.0]
+  assert field_buffer(true, X, b, [1.0; 4]) == [9.0, 19.0, 29.0, 39.0]
+  assert field_buffer(false, X, b, [1.0; 4]) == [10.0, 13.0, 30.0, 40.0]
+  assert field_match(Which.First, X, Z, b) == [9.0, 18.0, 27.0, 36.0]
+  assert field_match(Which.Second, X, Z, b) == [-4.0, 5.0, 14.0, 23.0]
+  assert field_match(Which.Third, X, Z, b) == [10.0, 13.0, 30.0, 40.0]
+}
+
+test "an if at the input of process reads the input that is run" {
+  assert input_of_process(true, X, Z) == [2.0, 4.0, 6.0, 8.0]
+  assert input_of_process(false, X, Z) == [24.0, 26.0, 28.0, 30.0]
+  assert channels_of_process(true, X, [5.0, 6.0, 7.0, 8.0], QS) == [6.0, 8.0, 10.0, 12.0]
+  assert channels_of_process(false, X, [5.0, 6.0, 7.0, 8.0], QS) == [17.0, 17.0, 17.0, 17.0]
+}
+
+test "an if at the input of render reads the input that is run" {
+  var b: Buf[F32] = Buf.zeroed(4)
+  b[1] = 5.0
+  let o = mono.render(if true { X } else { b }, 8.0)
+  let p = mono.render(if false { X } else { b }, 8.0)
+  let y: [F32; 4] = [5.0, 6.0, 7.0, 8.0]
+  let qs: [[F32; 4]; 2] = QS
+  let q = wide.render(if true { [X, y] } else { qs }, 8.0)
+  let s = wide.render(if false { [X, y] } else { qs }, 8.0)
+  assert o.out[1] == 4.0
+  assert p.out[1] == 10.0
+  assert q.out[3] == 12.0
+  assert s.out[3] == 17.0
+}
+
+// The first arm at a field diverges (§7): it has the type of the view as a node has, and the arm that is run is read.
+pub fn field_first_arm_panics(w: Which, x: [F32; 4], z: [F32; 8], r: [F32; 4]) -> [F32; 4] {
+  var out: [F32; 4] = [0.0; 4]
+  var st = pair.init(8.0)
+  pair.process(inout st, pair.In { l: match w { Which.First => panic("not run"), Which.Second => x, Which.Third => z.slice(0, 4) }, r: r }, inout out)
+  out
+}
+
+test "a first arm at a field that diverges leaves the arm that is run to be read" {
+  let r: [F32; 4] = [1.0; 4]
+  assert field_first_arm_panics(Which.Second, X, Z, r)[0] == 9.0
+  assert field_first_arm_panics(Which.Third, X, Z, r)[0] == 99.0
+}

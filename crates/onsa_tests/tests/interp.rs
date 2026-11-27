@@ -107,6 +107,52 @@ test "span writes reach the array" {
     );
 }
 
+/// S-1116 (§5.3): the tails of an `if` at a view, of other kinds and lengths, each converted on its
+/// own (an array, a partial view, a `Buf`, the whole of a longer array; a planar literal, an array
+/// of arrays and of `Buf`s, a `const`, a call and a repetition bound to a temporary, a binding of
+/// the arm), and a planar argument that is no place written at the argument itself.
+#[test]
+fn view_tails_of_other_kinds_run() {
+    all_pass(
+        r#"
+pub fn take(s: Span[F32]) -> F32 { s[0] + F32.round_from(s.len()) }
+pub fn two(xs: [Span[F32]; 2]) -> F32 { xs[0][0] + xs[1][0] + F32.round_from(xs[0].len() + xs[1].len()) }
+const PS: [[F32; 4]; 2] = [[1.0; 4], [2.0; 4]]
+fn mk2(v: F32) -> [[F32; 4]; 2] { [[v; 4], [v + 1.0; 4]] }
+pub fn span_mixed(k: U32, x: [F32; 4], y: [F32; 8], b: Buf[F32]) -> F32 {
+  take(if k == 0 { x } else if k == 1 { y.slice(2, 4) } else if k == 2 { b } else { y })
+}
+pub fn planar_mixed(k: U32, x: [F32; 4], y: [F32; 8], ps: [[F32; 4]; 2], bs: [Buf[F32]; 2]) -> F32 {
+  two(if k == 0 { [x, y.slice(1, 3)] } else if k == 1 { ps } else if k == 2 { bs } else if k == 3 { PS } else if k == 4 { mk2(5.0) } else if k == 5 { [x; 2] } else {
+    let t = mk2(7.0)
+    t
+  })
+}
+pub fn planar_temp(v: F32) -> F32 { two(mk2(v)) + two(PS) + two([[v; 2]; 2]) }
+test "each tail is passed as the view" {
+  let x = [1.0; 4]
+  var y = [0.0; 8]
+  for i in 0..<8 { y[i] = F32.round_from(i) }
+  let b = Buf.zeroed(3)
+  assert span_mixed(0, x, y, b) == 5.0
+  assert span_mixed(1, x, y, b) == 4.0
+  assert span_mixed(2, x, y, b) == 3.0
+  assert span_mixed(3, x, y, b) == 8.0
+  let ps = [[3.0; 4], [4.0; 4]]
+  let bs = [Buf.zeroed(1), Buf.zeroed(2)]
+  assert planar_mixed(0, x, y, ps, bs) == 8.0
+  assert planar_mixed(1, x, y, ps, bs) == 15.0
+  assert planar_mixed(2, x, y, ps, bs) == 3.0
+  assert planar_mixed(3, x, y, ps, bs) == 11.0
+  assert planar_mixed(4, x, y, ps, bs) == 19.0
+  assert planar_mixed(5, x, y, ps, bs) == 10.0
+  assert planar_mixed(6, x, y, ps, bs) == 23.0
+  assert planar_temp(5.0) == 44.0
+}
+"#,
+    );
+}
+
 #[test]
 fn const_initializers_run_through_the_interpreter() {
     all_pass(

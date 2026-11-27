@@ -23,8 +23,8 @@
 // The call reads the channels of the arm that is run, and the interpreter and the C program agree on the value
 // (§13.4). The condition is a comparison of an input with zero, so both arms are run; the arrays are 16 elements
 // long and read at an index made from an input, so a read of the storage of an arm after the arm is not optimised
-// away (the sanitizer finds it). They are in a file of their own: the build of this version stops with E0200
-// (planar spans of a temporary) at the tails until W7-12 U2c2b.
+// away (the sanitizer finds it). They were put in a file of their own while the build stopped at such tails with an
+// E0200 (planar spans of a temporary, before W7-12 U2c2b); now each tail is converted on its own (S-1116, W8-15).
 
 const N: U32 = 16
 

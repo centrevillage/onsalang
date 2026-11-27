@@ -79,6 +79,26 @@ rt fn dropped_loop(c: Bool, v: F32, y: [F32; 4]) -> F32 {{\n  var acc = 0.0\n  f
     assert_eq!(hoisted_in(&m, "nrvo"), ["__arr"], "only the temporary of the arm\n{}", crate::dump(&m));
 }
 
+/// S-1116: tails of other kinds at a view, each converted on its own: a planar value that is no
+/// place (a call, a `const`, a repetition) is bound to a temporary `__planar` first, which an arm
+/// declares and the views leave, so hoisted; written at the argument itself, it is not.
+#[test]
+fn a_planar_temporary_of_an_arm_is_hoisted() {
+    let src = format!(
+        "{COMMON}\
+rt fn two(xs: [Span[F32]; 2]) -> F32 {{\n  xs[0][0] + xs[1][0]\n}}\nconst PS: [[F32; 4]; 2] = [[1.0; 4]; 2]\n\
+rt fn arms(k: U32, v: F32, x: [F32; 4], y: [F32; 8], ps: [[F32; 4]; 2]) -> F32 {{\n  two(if k == 0 {{ [mk(v), y.slice(0, 2)] }} \
+else if k == 1 {{ ps }} else if k == 2 {{ PS }} else if k == 3 {{ [x; 2] }} else {{ [mk(v), mk(v)] }})\n}}\n\
+rt fn direct(v: F32) -> F32 {{\n  two([mk(v), mk(v)]) + two(PS)\n}}\n\
+rt fn span_arms(c: Bool, v: F32, x: [F32; 4], y: [F32; 8]) -> F32 {{\n  take(if c {{ mk(v) }} else if !c {{ x }} else {{ y.slice(1, 3) }})\n}}\n"
+    );
+    let m = core(&src);
+    let d = crate::dump(&m);
+    assert_eq!(hoisted_in(&m, "arms"), ["__arr", "__planar", "__planar", "__arr", "__arr"], "{d}");
+    assert!(hoisted_in(&m, "direct").is_empty(), "{d}");
+    assert_eq!(hoisted_in(&m, "span_arms"), ["__arr"], "{d}");
+}
+
 // ---------------------------------------------------------------- Core by hand
 
 fn sp() -> Span {

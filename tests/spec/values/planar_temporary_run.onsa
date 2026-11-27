@@ -1,0 +1,122 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§5.2", "§5.3"]
+
+// W8-15 (§5.3): a planar argument (`xs: [Span[F32]; 2]`) is given "`[[T; M]; N]` の値をそのまま渡せる（要素ごとに `Span` へ
+// 変換）", and the value need not be a place: the result of a call, a `const`, a repeat `[x; 2]`, and an `if` or a `match`
+// whose tails are such values are the channels of the argument as well. `two` reads the first element and the length of each
+// channel (1000 a0 + 100 n0 + 10 a1 + n1), so the value says which value was passed. A temporary for a `Span` (`take(mk())`
+// with `fn mk() -> [F32; 4]`) stays as it is.
+
+const X: [F32; 4] = [1.0, 2.0, 3.0, 4.0]
+
+const PS: [[F32; 4]; 2] = [[1.0, 2.0, 3.0, 4.0], [5.0, 6.0, 7.0, 8.0]]
+
+pub fn two(xs: [Span[F32]; 2]) -> F32 {
+  ((xs[0][0] * 1000.0) + (F32.round_from(xs[0].len()) * 100.0)) + ((xs[1][0] * 10.0) + F32.round_from(xs[1].len()))
+}
+
+pub fn take(s: Span[F32]) -> F32 {
+  (s[0] * 10.0) + F32.round_from(s.len())
+}
+
+pub fn mk(a: F32) -> [F32; 4] {
+  [a, a + 1.0, a + 2.0, a + 3.0]
+}
+
+pub fn mk2(a: F32) -> [[F32; 4]; 2] {
+  [[a; 4], [a + 1.0; 4]]
+}
+
+pub enum Which {
+  First,
+  Second,
+}
+
+// ------------------------------------------------------------------------------------ a value that is not a place
+
+pub fn from_a_call(a: F32) -> F32 {
+  two(mk2(a))
+}
+
+pub fn from_a_constant() -> F32 {
+  two(PS)
+}
+
+pub fn from_a_repeat(x: [F32; 4]) -> F32 {
+  two([x; 2])
+}
+
+pub fn from_a_span_temporary(a: F32) -> F32 {
+  take(mk(a))
+}
+
+test "the result of a call, a constant and a repeat are the channels, and a temporary of a Span still passes" {
+  assert from_a_call(2.0) == 2434.0
+  assert from_a_constant() == 1454.0
+  assert from_a_repeat(X) == 1414.0
+  assert from_a_span_temporary(3.0) == 34.0
+}
+
+// ------------------------------------------------------------------------------- the tails of an if and a match
+
+pub fn place_then_call(c: Bool, ps: [[F32; 4]; 2], a: F32) -> F32 {
+  two(if c { ps } else { mk2(a) })
+}
+
+pub fn call_then_place(c: Bool, ps: [[F32; 4]; 2], a: F32) -> F32 {
+  two(if c { mk2(a) } else { ps })
+}
+
+pub fn literal_then_call(c: Bool, x: [F32; 4], y: [F32; 4], a: F32) -> F32 {
+  two(if c { [x, y] } else { mk2(a) })
+}
+
+pub fn call_then_literal(c: Bool, x: [F32; 4], y: [F32; 4], a: F32) -> F32 {
+  two(if c { mk2(a) } else { [x, y] })
+}
+
+pub fn constant_then_call(c: Bool, a: F32) -> F32 {
+  two(if c { PS } else { mk2(a) })
+}
+
+pub fn two_calls(c: Bool, a: F32, b: F32) -> F32 {
+  two(if c { mk2(a) } else { mk2(b) })
+}
+
+pub fn arm_declares_then_place(c: Bool, ps: [[F32; 4]; 2], a: F32) -> F32 {
+  two(if c {
+    let t = mk2(a)
+    t
+  } else { ps })
+}
+
+pub fn three_arms(w: Which, ps: [[F32; 4]; 2], x: [F32; 4], a: F32) -> F32 {
+  two(match w {
+    Which.First => mk2(a),
+    Which.Second => if a > 0.0 { [x; 2] } else { ps },
+  })
+}
+
+test "a temporary in a tail of an if or a match is the channels when that tail is run" {
+  let y: [F32; 4] = [5.0, 6.0, 7.0, 8.0]
+  let qs: [[F32; 4]; 2] = [[9.0; 4], [8.0; 4]]
+  assert place_then_call(true, qs, 2.0) == 9484.0
+  assert place_then_call(false, qs, 2.0) == 2434.0
+  assert call_then_place(true, qs, 2.0) == 2434.0
+  assert call_then_place(false, qs, 2.0) == 9484.0
+  assert literal_then_call(true, X, y, 3.0) == 1454.0
+  assert literal_then_call(false, X, y, 3.0) == 3444.0
+  assert call_then_literal(true, X, y, 3.0) == 3444.0
+  assert call_then_literal(false, X, y, 3.0) == 1454.0
+  assert constant_then_call(true, 4.0) == 1454.0
+  assert constant_then_call(false, 4.0) == 4454.0
+  assert two_calls(true, 4.0, 6.0) == 4454.0
+  assert two_calls(false, 4.0, 6.0) == 6474.0
+  assert arm_declares_then_place(true, qs, 3.0) == 3444.0
+  assert arm_declares_then_place(false, qs, 3.0) == 9484.0
+  assert three_arms(Which.First, qs, X, 5.0) == 5464.0
+  assert three_arms(Which.Second, qs, X, 1.0) == 1414.0
+  assert three_arms(Which.Second, qs, X, -1.0) == 9484.0
+}

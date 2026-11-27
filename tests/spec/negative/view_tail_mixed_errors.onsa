@@ -1,0 +1,136 @@
+// onsa.toml
+// [test]
+// spec = ["§4.7", "§5.1", "§5.3"]
+// fixes = 0
+
+// S-1116 (§5.3, §4.7): the forms that stay errors when the tails of an `if` or a `match` at the position of a view are checked
+// one by one as the value written there. A tail is the element type of the view or it is not (`[F64; 4]` at a `Span[F32]`,
+// E0401); an `inout` argument must be a place, and an `if`, a `match` and a block are not (E0415, §5.1); the positions
+// that are not positions of a view ("メソッドの受け手、添字の左辺、`for` の反復元は当たらない", the annotation of a `let`,
+// the value that a function returns) check the arms against one type, so the tails of two kinds are E0401 there. The functions
+// `direct_…` are the value written at the position itself, the contrast: its error is the error that a tail has.
+// One error per function (P-01). The forms whose error is new with S-1116 (a tail that took its type from the arm before it, an `inout`
+// of two kinds) are in negative/view_tail_mixed_borrowed_types.onsa.
+
+use std.array
+use std.text.FixedStr
+
+pub fn take(s: Span[F32]) -> F32 {
+  s[0]
+}
+
+pub fn take_bytes(s: Span[U8]) -> U32 {
+  s.len()
+}
+
+pub fn take_inout(inout s: Span[F32]) {}
+
+pub fn two_pl(xs: [Span[F32]; 2]) -> F32 {
+  xs[0][0]
+}
+
+pub fn mk[T: Default]() -> T {
+  T.default()
+}
+
+// ---------------------------------------------------------------------------------- the element type of the tail
+
+pub fn tail_of_another_element_type(c: Bool, x: [F32; 4], y64: [F64; 4]) -> F32 {
+  take(if c { x } else { y64.slice(0, 2) }) //~ E0401
+}
+
+pub fn tail_of_another_element_type_first(c: Bool, x: [F32; 4], y64: [F64; 4]) -> F32 {
+  take(if c { y64.slice(0, 2) } else { x }) //~ E0401
+}
+
+pub fn tail_of_another_element_type_in_a_match(c: Bool, x: [F32; 4], y64: [F64; 4]) -> F32 {
+  take(match c { true => x, false => y64.slice(0, 2) }) //~ E0401
+}
+
+pub fn direct_of_another_element_type(y64: [F64; 4]) -> F32 {
+  take(y64.slice(0, 2)) //~ E0401
+}
+
+// -------------------------------------------------------------------------------- an inout argument is a place
+
+pub fn inout_of_one_kind(c: Bool) {
+  var a: [F32; 4] = [0.0; 4]
+  var b: [F32; 4] = [0.0; 4]
+  take_inout(inout if c { a } else { b }) //~ E0415
+}
+
+pub fn inout_of_a_block() {
+  var a: [F32; 4] = [0.0; 4]
+  take_inout(inout { a }) //~ E0415
+}
+
+pub fn inout_of_a_match(c: Bool) {
+  var a: [F32; 4] = [0.0; 4]
+  var b: [F32; 4] = [0.0; 4]
+  take_inout(inout match c { true => a, false => b }) //~ E0415
+}
+
+// ---------------------------------------------- a position that is not a position of a view (the arms have one type)
+
+pub fn annotation_of_a_let(c: Bool, x: [F32; 4], b: Buf[F32]) {
+  let s: Span[F32] = if c { x } else { b } //~ E0401
+}
+
+pub fn annotation_of_a_let_with_a_match(c: Bool, x: [F32; 4]) -> F32 {
+  let s: Span[F32] = match c { true => x, false => x } //~ E0401
+  s[0]
+}
+
+pub fn direct_annotation_of_a_let(x: [F32; 4]) {
+  let s: Span[F32] = x //~ E0401
+}
+
+pub fn receiver_of_a_method(c: Bool, x: [F32; 4], b: Buf[F32]) -> U32 {
+  (if c { x } else { b }).len() //~ E0401
+}
+
+pub fn base_of_a_part(c: Bool, x: [F32; 4], b: Buf[F32]) -> U32 {
+  (if c { x } else { b }).slice(0, 2).len() //~ E0401
+}
+
+pub fn base_of_an_index(c: Bool, x: [F32; 4], b: Buf[F32]) -> F32 {
+  (if c { x } else { b })[1] //~ E0401
+}
+
+pub fn iterated_by_a_for(c: Bool, x: [F32; 4], z: [F32; 8]) -> F32 {
+  var acc: F32 = 0.0
+  for v in if c { x } else { z.slice(0, 2) } { //~ E0401
+    acc = acc + v
+  }
+  acc
+}
+
+pub fn returned_array_of_two_lengths(c: Bool, x: [F32; 4], z: [F32; 8]) -> [F32; 4] {
+  if c { x } else { z } //~ E0401
+}
+
+pub fn returned_array_and_a_part(c: Bool, x: [F32; 4], z: [F32; 8]) -> [F32; 4] {
+  if c { x } else { z.slice(0, 4) } //~ E0401
+}
+
+pub fn returned_array_in_a_match(c: Bool, x: [F32; 4], z: [F32; 8]) -> [F32; 4] {
+  match c { true => x, false => z } //~ E0401
+}
+
+// ----------------------------------- the value written at the argument, whose type is not known there (the tails are the same)
+
+pub fn direct_result_of_a_generic() -> F32 {
+  take(mk()) //~ E0420
+}
+
+pub fn direct_result_of_a_generic_at_the_channels() -> F32 {
+  two_pl(mk()) //~ E0420
+}
+
+pub fn direct_result_of_from_fn() -> F32 {
+  take(array.from_fn(fn(i) { 2.0 })) //~ E0406
+}
+
+pub fn direct_string_at_bytes() -> U32 {
+  take_bytes("abc") //~ E0401
+}

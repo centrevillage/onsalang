@@ -7,10 +7,12 @@
 // element of it is what an element of a literal written at the argument itself is: "要素の種類と長さは揃っていなくてよい" (§5.3).
 // The elements are arrays of different lengths, `Span`s, `Buf`s, parts, and several kinds in one literal, whatever the shape of the
 // tail (an `if`, a `match`, a block, a parenthesis, a tail in a tail, an arm that is never run, an arm after a diverging arm).
-// The functions `direct_…` are the literal written at the argument, the contrast that passes. The other arm may be an array of
-// views too (the type of the arms is the type of the argument, §4.7). A tail whose elements are all arrays of one kind
-// and one length, and the calls with an `inout` that they do not overlap, are in values/view_tail_planar_apart_ok.onsa.
-// The kinds that do not fit are in negative/view_tail_planar_kinds.onsa.
+// The functions `direct_…` are the literal written at the argument, the contrast that passes. The other arm may be a value of another
+// kind too: each tail is checked and converted on its own, as the value written at the argument (S-1116, §5.3, §4.7). An array of
+// views in the other arm is below, an array of arrays or of buffers is in values/view_tail_planar_mixed_ok.onsa, and the values of
+// such a call are run in values/view_tail_mixed_planar.onsa. A tail whose elements are all arrays of one kind and one length, and the
+// calls with an `inout` that they do not overlap, are in values/view_tail_planar_apart_ok.onsa. The kinds that do not fit are in
+// negative/view_tail_planar_kinds.onsa.
 
 pub fn planes(xs: [Span[F32]; 2]) -> F32 {
   xs[0][0] + xs[1][0]
@@ -111,7 +113,7 @@ pub fn tail_an_arm_after_a_diverging_arm(c: Bool, x: [F32; 4], y: [F32; 2]) -> F
   planes(if c { [x, y] } else { panic("unreachable") })
 }
 
-// ------------------------------------------------------- the literal against the array of views of the other arm (S-1116)
+// ------------------------------------- a literal of channels and an array of views in the other arm: each tail on its own (S-1116)
 
 pub fn tail_the_other_arm_is_an_array_of_views(c: Bool, x: [F32; 4], y: [F32; 4], ps: [Span[F32]; 2]) -> F32 {
   planes(if c { [x, y] } else { ps })

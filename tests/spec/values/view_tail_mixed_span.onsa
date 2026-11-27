@@ -1,0 +1,272 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§4.7", "§5.2", "§5.3"]
+
+// S-1116 (§5.3, §4.7), run in the interpreter: an `if`, a `match` or a block at the position of a `Span` argument is
+// checked and converted tail by tail, as the value written at the argument ("発散しない末尾ごとに、そこへ直に書いた値と
+// 同じに検査して変換する"), so the kinds and the lengths of the tails need not agree and the call reads the tail that is
+// run (`take(if c { xs } else { b.slice(0, 2) })` passes for `xs: [F32; 4]` and `b: Buf[F32]`). The call reads the first
+// element and the length (`probe`), so the value says which tail was chosen and how long it is. The same tails at a planar
+// argument are in view_tail_mixed_planar.onsa, the tails that fail in negative/view_tail_mixed_errors.onsa.
+
+use std.text.FixedStr
+
+const X: [F32; 4] = [1.0, 2.0, 3.0, 4.0]
+
+const Y: [F32; 4] = [5.0, 6.0, 7.0, 8.0]
+
+const Z: [F32; 8] = [10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0, 17.0]
+
+// The first element times ten, and the length.
+pub fn probe(s: Span[F32]) -> F32 {
+  (s[0] * 10.0) + F32.round_from(s.len())
+}
+
+pub fn count(s: Span[F32]) -> F32 {
+  F32.round_from(s.len())
+}
+
+pub fn count_gen[T: Copy](s: Span[T]) -> F32 {
+  F32.round_from(s.len())
+}
+
+pub fn byte_view(s: Span[U8]) -> F32 {
+  ((s[0] as F32) * 1000.0) + F32.round_from(s.len())
+}
+
+pub enum Which {
+  First,
+  Second,
+  Third,
+}
+
+pub struct Gauge {
+  gain: F32,
+}
+
+impl Gauge {
+  pub fn read(self, s: Span[F32]) -> F32 {
+    self.gain * probe(s)
+  }
+}
+
+// ------------------------------------------------------------------------ two tails of two kinds
+
+pub fn array_then_part(c: Bool, x: [F32; 4], y: [F32; 4]) -> F32 {
+  probe(if c { x } else { y.slice(0, 2) })
+}
+
+pub fn part_then_array(c: Bool, x: [F32; 4], y: [F32; 4]) -> F32 {
+  probe(if c { y.slice(0, 2) } else { x })
+}
+
+pub fn array_then_buffer(c: Bool, x: [F32; 4], b: Buf[F32]) -> F32 {
+  probe(if c { x } else { b })
+}
+
+pub fn span_then_buffer(c: Bool, s: Span[F32], b: Buf[F32]) -> F32 {
+  probe(if c { s } else { b })
+}
+
+pub fn buffer_then_span(c: Bool, s: Span[F32], b: Buf[F32]) -> F32 {
+  probe(if c { b } else { s })
+}
+
+pub fn arrays_of_two_lengths(c: Bool, x: [F32; 4], z: [F32; 8]) -> F32 {
+  probe(if c { x } else { z })
+}
+
+pub fn empty_then_array(c: Bool, x: [F32; 4]) -> F32 {
+  count(if c { [] } else { x })
+}
+
+pub fn array_then_empty(c: Bool, x: [F32; 4]) -> F32 {
+  count(if c { x } else { [] })
+}
+
+test "the tail that is run is the view, whatever the kinds and the lengths of the tails" {
+  var b: Buf[F32] = Buf.zeroed(3)
+  b[0] = 9.0
+  assert array_then_part(true, X, Y) == 14.0
+  assert array_then_part(false, X, Y) == 52.0
+  assert part_then_array(true, X, Y) == 52.0
+  assert part_then_array(false, X, Y) == 14.0
+  assert array_then_buffer(true, X, b) == 14.0
+  assert array_then_buffer(false, X, b) == 93.0
+  assert span_then_buffer(true, X, b) == 14.0
+  assert span_then_buffer(false, X, b) == 93.0
+  assert buffer_then_span(true, X, b) == 93.0
+  assert buffer_then_span(false, Y, b) == 54.0
+  assert arrays_of_two_lengths(true, X, Z) == 14.0
+  assert arrays_of_two_lengths(false, X, Z) == 108.0
+  assert empty_then_array(true, X) == 0.0
+  assert empty_then_array(false, X) == 4.0
+  assert array_then_empty(true, X) == 4.0
+  assert array_then_empty(false, X) == 0.0
+}
+
+// ----------------------------------------------------------------------------- the shape of the tail
+
+pub fn three_arms(w: Which, x: [F32; 4], y: [F32; 4], b: Buf[F32]) -> F32 {
+  probe(match w {
+    Which.First => x,
+    Which.Second => y.slice(1, 3),
+    Which.Third => b,
+  })
+}
+
+pub fn else_if_chain(c: Bool, d: Bool, x: [F32; 4], y: [F32; 4], b: Buf[F32]) -> F32 {
+  probe(if c { x } else if d { y.slice(0, 2) } else { b })
+}
+
+pub fn block_tail(c: Bool, x: [F32; 4], y: [F32; 4]) -> F32 {
+  probe({
+    let n: U32 = 3
+    if c { x } else { y.slice(0, n) }
+  })
+}
+
+pub fn nested_if(c: Bool, d: Bool, x: [F32; 4], y: [F32; 4], b: Buf[F32]) -> F32 {
+  probe(if c { if d { x } else { y.slice(0, 2) } } else { b })
+}
+
+test "a match of three arms, an else-if chain, a block and a nested if choose a tail of their own" {
+  var b: Buf[F32] = Buf.zeroed(3)
+  b[0] = 9.0
+  assert three_arms(Which.First, X, Y, b) == 14.0
+  assert three_arms(Which.Second, X, Y, b) == 62.0
+  assert three_arms(Which.Third, X, Y, b) == 93.0
+  assert else_if_chain(true, false, X, Y, b) == 14.0
+  assert else_if_chain(false, true, X, Y, b) == 52.0
+  assert else_if_chain(false, false, X, Y, b) == 93.0
+  assert block_tail(true, X, Y) == 14.0
+  assert block_tail(false, X, Y) == 53.0
+  assert nested_if(true, true, X, Y, b) == 14.0
+  assert nested_if(true, false, X, Y, b) == 52.0
+  assert nested_if(false, true, X, Y, b) == 93.0
+  assert nested_if(false, false, X, Y, b) == 93.0
+}
+
+// ----------------------------------------------------------------------- an arm that does not give a view
+
+// A diverging tail is not counted (§5.3: "発散しない末尾ごとに"): the other tails are of two kinds.
+pub fn panic_arm(c: Bool, d: Bool, x: [F32; 4], y: [F32; 4]) -> F32 {
+  probe(if c { x } else if d { panic("unreachable") } else { y.slice(0, 2) })
+}
+
+pub fn return_arm(c: Bool, d: Bool, x: [F32; 4], y: [F32; 4]) -> F32 {
+  let r = probe(if c { x } else if d { return -1.0 } else { y.slice(0, 2) })
+  r + 0.5
+}
+
+test "a tail that panics or returns is not a view, and the others are of two kinds" {
+  assert panic_arm(true, false, X, Y) == 14.0
+  assert panic_arm(false, false, X, Y) == 52.0
+  assert return_arm(true, false, X, Y) == 14.5
+  assert return_arm(false, false, X, Y) == 52.5
+  assert return_arm(false, true, X, Y) == -1.0
+}
+
+// ----------------------------------------------------- a Copy array that the arm declares is the tail (§5.2)
+
+pub fn binding_first(c: Bool, y: [F32; 4]) -> F32 {
+  probe(if c {
+    var t: [F32; 4] = [0.0; 4]
+    t[0] = 7.0
+    t
+  } else { y.slice(0, 2) })
+}
+
+pub fn binding_second(c: Bool, x: [F32; 4]) -> F32 {
+  probe(if c { x.slice(1, 4) } else {
+    var t: [F32; 4] = [0.0; 4]
+    t[0] = 8.0
+    t
+  })
+}
+
+test "an array that the arm declares is read as the tail, and the other tail is a part" {
+  assert binding_first(true, Y) == 74.0
+  assert binding_first(false, Y) == 52.0
+  assert binding_second(true, X) == 23.0
+  assert binding_second(false, X) == 84.0
+}
+
+// -------------------------------------------------------------- a generic Span, FixedStr, a method
+
+pub fn generic_from_the_tails(c: Bool, x: [F32; 4], b: Buf[F32]) -> F32 {
+  count_gen(if c { x } else { b })
+}
+
+pub fn generic_of_integers(c: Bool, x: [I32; 4], z: [I32; 8]) -> F32 {
+  count_gen(if c { x } else { z.slice(0, 2) })
+}
+
+pub fn text_then_bytes(c: Bool, a: FixedStr[8], z: [U8; 3]) -> F32 {
+  byte_view(if c { a } else { z })
+}
+
+pub fn bytes_then_text(c: Bool, a: FixedStr[8], z: [U8; 3]) -> F32 {
+  byte_view(if c { z } else { a })
+}
+
+pub fn user_method(c: Bool, g: Gauge, x: [F32; 4], y: [F32; 4]) -> F32 {
+  g.read(if c { x } else { y.slice(0, 2) })
+}
+
+pub fn std_method(c: Bool, x: [F32; 2], y: [F32; 4]) -> [F32; 2] {
+  var o: [F32; 2] = [0.0; 2]
+  o.copy_from!(if c { x } else { y.slice(2, 4) })
+  o
+}
+
+test "T of a generic Span comes from the tails, one by one" {
+  let b: Buf[F32] = Buf.zeroed(3)
+  assert generic_from_the_tails(true, X, b) == 4.0
+  assert generic_from_the_tails(false, X, b) == 3.0
+  assert generic_of_integers(true, [1, 2, 3, 4], [0, 0, 0, 0, 0, 0, 0, 0]) == 4.0
+  assert generic_of_integers(false, [1, 2, 3, 4], [0, 0, 0, 0, 0, 0, 0, 0]) == 2.0
+}
+
+test "a FixedStr and an array of bytes at a Span[U8]: a FixedStr gives the bytes in use" {
+  let a: FixedStr[8] = "abc"
+  let z: [U8; 3] = [1, 2, 3]
+  assert text_then_bytes(true, a, z) == 97003.0
+  assert text_then_bytes(false, a, z) == 1003.0
+  assert bytes_then_text(true, a, z) == 1003.0
+  assert bytes_then_text(false, a, z) == 97003.0
+}
+
+test "the argument of a method of the user, and of a method of std, is a position of a view" {
+  let g = Gauge { gain: 2.0 }
+  assert user_method(true, g, X, Y) == 28.0
+  assert user_method(false, g, X, Y) == 104.0
+  assert std_method(true, [1.5, 2.5], Y) == [1.5, 2.5]
+  assert std_method(false, [1.5, 2.5], Y) == [7.0, 8.0]
+}
+
+// The first arm diverges (§7): it has the type of the view as a node has, so the later arms are each converted on
+// their own as in any other position, and the arm that is run is read.
+pub fn first_arm_panics(w: Which, x: [F32; 4], z: [F32; 8]) -> F32 {
+  probe(match w { Which.First => panic("not run"), Which.Second => x, Which.Third => z.slice(2, 4) })
+}
+
+pub fn first_arm_returns(w: Which, x: [F32; 4], b: Buf[F32]) -> F32 {
+  probe(match w { Which.First => { return -1.0 }, Which.Second => b, Which.Third => x })
+}
+
+pub fn first_arm_panics_generic(w: Which, x: [F32; 4], b: Buf[F32]) -> F32 {
+  count_gen(match w { Which.First => panic("not run"), Which.Second => x, Which.Third => b })
+}
+
+test "a first arm that diverges leaves the arm that is run to be read" {
+  let b: Buf[F32] = Buf.zeroed(3)
+  assert first_arm_panics(Which.Second, X, Z) == 14.0
+  assert first_arm_panics(Which.Third, X, Z) == 122.0
+  assert first_arm_returns(Which.First, X, b) == -1.0
+  assert first_arm_returns(Which.Second, X, b) == 3.0
+  assert first_arm_returns(Which.Third, X, b) == 14.0
+  assert first_arm_panics_generic(Which.Second, X, b) == 4.0
+  assert first_arm_panics_generic(Which.Third, X, b) == 3.0
+}

@@ -183,7 +183,6 @@ features! {
     TakenFields: Language, "taking a field out of a value (the rest is dropped)", None;
     FromFnValue: Language, "`array.from_fn` with a non-literal function value",
         Some("pass an anonymous function, or a function by its name");
-    PlanarTemporary: Language, "planar spans of a temporary", Some("bind the value to a name with `let` first");
     /// R-433: the index, evaluated once, is bound before the argument,
     /// which is a place.
     PlanarInoutIndex: Language, "an `inout` planar span of an element whose index has an effect",

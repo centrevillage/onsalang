@@ -1,0 +1,120 @@
+// onsa.toml
+// [test]
+// spec = ["§4.7", "§5.1", "§5.3"]
+// fixes = 0
+
+// S-1116 (§5.3, §4.7): a tail of an `if` or a `match` at the position of a view is what the value written at the argument is,
+// and it does not borrow the type of another arm. A tail that took its type from the arm before it (`take(if c { x } else { mk() })`,
+// `mk` as `fn mk[T: Default]() -> T`; an `array.from_fn` with no length; a string literal after a `FixedStr`) is the error that the
+// value written at the argument has, in either order of the arms: E0420 for the result of a generic function ("`Span` と `Span` の配列の引数"
+// is an operation that needs the type there, §4.7), E0406 for the length of `array.from_fn`, E0401 for the string literal at a `Span[U8]`
+// (§4.2). The `inout` argument that is an `if` or a `match` of two kinds, and a field of the generated `Out` that is one, is E0415, as
+// the one of one kind: it is not a place (§5.1). The direct forms, whose errors are these, are in negative/view_tail_mixed_errors.onsa.
+// One error per function (P-01).
+
+use std.array
+use std.text.FixedStr
+
+pub fn take(s: Span[F32]) -> F32 {
+  s[0]
+}
+
+pub fn take_bytes(s: Span[U8]) -> U32 {
+  s.len()
+}
+
+pub fn take_inout(inout s: Span[F32]) {}
+
+pub fn two_pl(xs: [Span[F32]; 2]) -> F32 {
+  xs[0][0]
+}
+
+pub fn mk[T: Default]() -> T {
+  T.default()
+}
+
+pub struct Pair {
+  l: F32,
+  r: F32,
+}
+
+pub flow split(x: F32 at sample) -> Pair at sample {
+  Pair { l: x, r: x }
+}
+
+// ---------------------------------------------------------------------- the result of a generic function (E0420)
+
+pub fn generic_after_an_array(c: Bool, x: [F32; 4]) -> F32 {
+  take(if c { x } else { mk() }) //~ E0420
+}
+
+pub fn generic_before_an_array(c: Bool, x: [F32; 4]) -> F32 {
+  take(if c { mk() } else { x }) //~ E0420
+}
+
+pub fn generic_in_a_match(c: Bool, x: [F32; 4]) -> F32 {
+  take(match c { true => x, false => mk() }) //~ E0420
+}
+
+pub fn generic_after_the_channels(c: Bool, x: [F32; 4], y: [F32; 4]) -> F32 {
+  two_pl(if c { [x, y] } else { mk() }) //~ E0420
+}
+
+pub fn generic_before_an_array_of_arrays(c: Bool, ps: [[F32; 4]; 2]) -> F32 {
+  two_pl(if c { mk() } else { ps }) //~ E0420
+}
+
+// ----------------------------------------------------------------------------- `array.from_fn` with no length (E0406)
+
+pub fn from_fn_after_an_array(c: Bool, x: [F32; 4]) -> F32 {
+  take(if c { x } else { array.from_fn(fn(i) { 2.0 }) }) //~ E0406
+}
+
+pub fn from_fn_before_an_array(c: Bool, x: [F32; 4]) -> F32 {
+  take(if c { array.from_fn(fn(i) { 2.0 }) } else { x }) //~ E0406
+}
+
+pub fn from_fn_in_a_match(c: Bool, x: [F32; 4]) -> F32 {
+  take(match c { true => x, false => array.from_fn(fn(i) { 2.0 }) }) //~ E0406
+}
+
+// ----------------------------------------------------------------- a string literal next to a `FixedStr` (E0401)
+
+pub fn string_after_a_fixed_string(c: Bool, a: FixedStr[8]) -> U32 {
+  take_bytes(if c { a } else { "xyz" }) //~ E0401
+}
+
+pub fn string_before_a_fixed_string(c: Bool, a: FixedStr[8]) -> U32 {
+  take_bytes(if c { "xyz" } else { a }) //~ E0401
+}
+
+pub fn string_in_a_match(c: Bool, a: FixedStr[8]) -> U32 {
+  take_bytes(match c { true => a, false => "xyz" }) //~ E0401
+}
+
+// ----------------------------------------------------------- an inout argument of two kinds is not a place (E0415)
+
+pub fn inout_of_an_array_and_a_part(c: Bool) {
+  var a: [F32; 4] = [0.0; 4]
+  var b: [F32; 8] = [0.0; 8]
+  take_inout(inout if c { a } else { b.slice(0, 2) }) //~ E0415
+}
+
+pub fn inout_of_a_match_of_two_kinds(c: Bool) {
+  var a: [F32; 4] = [0.0; 4]
+  var b: [F32; 8] = [0.0; 8]
+  take_inout(inout match c { true => a, false => b.slice(0, 2) }) //~ E0415
+}
+
+pub fn inout_of_an_else_if_of_two_kinds(c: Bool, d: Bool) {
+  var a: [F32; 4] = [0.0; 4]
+  var b: [F32; 8] = [0.0; 8]
+  take_inout(inout if c { a } else if d { b.slice(0, 2) } else { a }) //~ E0415
+}
+
+pub fn inout_field_of_the_generated_out(c: Bool, x: [F32; 4]) {
+  var a: [F32; 4] = [0.0; 4]
+  var b: [F32; 8] = [0.0; 8]
+  var st = split.init(8.0)
+  split.process(inout st, x, inout split.Out { l: if c { a } else { b.slice(0, 4) }, r: a }) //~ E0415
+}
