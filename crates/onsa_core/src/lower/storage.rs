@@ -1,16 +1,15 @@
 //! The height of the storage of a local (§5.2, R-481, R-484, S-1118 (2)).
 //!
-//! The scopes are the blocks a backend opens: an arm of an `IfExpr` or a
-//! `Switch`, the block of an `If`, a `While` or a `ForRange`. A block
-//! expression does not end the life of the locals it declares (a Core
-//! promise: `span_of` places `{ let __arr = …; span(__arr) }` at an
-//! argument). The C backend opens two more, the right operand of `&&`/`||`
-//! and the condition of a `while`; their value is a `Bool` and holds no view.
+//! The scopes are the blocks a backend opens ([`Scope::Opens`]); a block
+//! expression does not end the life of the locals it declares
+//! ([`Scope::Inline`]). The C backend opens two more, the right operand of
+//! `&&`/`||` and the condition of a `while`; their value is a `Bool` and holds
+//! no view.
 
 use std::collections::BTreeSet;
 
 use crate::ir::*;
-use crate::walk::{Child, for_each_child};
+use crate::walk::{Child, Part, Role, Scope, block_children, expr_children, place_children, stmt_children};
 
 /// The locals of `f` a view out of a scope reads, stored at the function's
 /// level, ascending: a value leaves a scope as the value of an arm, or
@@ -53,71 +52,54 @@ struct Storage<'a> {
     exits: Vec<(&'a Expr, u32)>,
 }
 
-// The walk keeps its own list of the parts of a statement: `walk.rs` has no
-// list of them that marks where a block of a scope opens and closes.
 impl<'a> Storage<'a> {
     fn block(&mut self, b: &'a Block, scope: bool) {
         self.depth += u32::from(scope);
-        b.stmts.iter().for_each(|s| self.stmt(s));
-        if let Some(v) = &b.value {
-            self.expr(v);
-            if scope {
-                self.exits.push((v, self.depth));
+        block_children(b, Role::Read, &mut |p| match p {
+            Part::Stmt(s) => self.stmt(s),
+            Part::Value(v, _) => {
+                self.expr(v);
+                if scope {
+                    self.exits.push((v, self.depth));
+                }
             }
-        }
+        });
         self.depth -= u32::from(scope);
     }
 
+    /// The parts of `s`, then what it gives a local.
     fn stmt(&mut self, s: &'a Stmt) {
+        stmt_children(s, &mut |c| self.child(c));
         match &s.kind {
             StmtKind::Let(l, e) => {
-                self.expr(e);
                 self.declared[l.0 as usize] = self.depth;
                 self.defs[l.0 as usize].push(e);
             }
             StmtKind::Assign(p, e) => {
-                self.place(p);
-                self.expr(e);
                 let root = p.root().0 as usize;
                 self.defs[root].push(e);
                 self.exits.push((e, self.declared[root] + 1));
             }
-            StmtKind::Expr(e) | StmtKind::Return(Some(e)) => self.expr(e),
-            StmtKind::If(c, a, b) => {
-                self.expr(c);
-                self.block(a, true);
-                self.block(b, true);
-            }
-            StmtKind::While(c, b) => {
-                self.expr(c);
-                self.block(b, true);
-            }
-            StmtKind::ForRange(_, lo, hi, b) => {
-                self.expr(lo);
-                self.expr(hi);
-                self.block(b, true);
-            }
-            StmtKind::Break | StmtKind::Continue | StmtKind::Return(None) => {}
+            StmtKind::Expr(_)
+            | StmtKind::If(..)
+            | StmtKind::While(..)
+            | StmtKind::ForRange(..)
+            | StmtKind::Break
+            | StmtKind::Continue
+            | StmtKind::Return(_) => {}
         }
     }
 
-    fn place(&mut self, p: &'a Place) {
-        match p {
-            Place::Local(_) => {}
-            Place::Field(b, _) => self.place(b),
-            Place::Index(b, i, ..) => {
-                self.place(b);
-                self.expr(i);
-            }
+    fn child(&mut self, c: Child<'a>) {
+        match c {
+            Child::Expr(x, ..) => self.expr(x),
+            Child::Block(b, scope, _) => self.block(b, scope == Scope::Opens),
+            Child::Place(p, role) => place_children(p, role, &mut |c| self.child(c)),
         }
     }
 
     fn expr(&mut self, e: &'a Expr) {
-        let arms = matches!(e.kind, ExprKind::IfExpr { .. } | ExprKind::Switch { .. });
-        for_each_child(e, &mut |c| match c {
-            Child::Expr(x) => self.expr(x),
-            Child::Block(b) => self.block(b, arms),
-        });
+        expr_children(e, &mut |c| self.child(c));
     }
 
     /// The locals whose storage the value of `e` may view: none when its type
@@ -139,10 +121,10 @@ impl<'a> Storage<'a> {
             ExprKind::Local(l) => self.local(*l, out),
             _ => {
                 let values_only = matches!(e.kind, ExprKind::IfExpr { .. } | ExprKind::Switch { .. });
-                for_each_child(e, &mut |c| match c {
-                    Child::Expr(x) if !values_only => self.roots(x, out),
-                    Child::Expr(_) => {}
-                    Child::Block(b) => b.value.iter().for_each(|v| self.roots(v, out)),
+                expr_children(e, &mut |c| match c {
+                    Child::Expr(x, ..) if !values_only => self.roots(x, out),
+                    Child::Expr(..) | Child::Place(..) => {}
+                    Child::Block(b, ..) => b.value.iter().for_each(|v| self.roots(v, out)),
                 });
             }
         }

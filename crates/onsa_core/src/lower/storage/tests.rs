@@ -251,6 +251,27 @@ fn the_forms_of_the_tails_by_hand_hoist_the_binding() {
     assert_eq!(hoisted_by_hand(module(&[("t", arr()), ("p", planar)], body)), ["t"]);
 }
 
+/// A view assigned to a place of the scope of its target holds no local of a
+/// deeper scope: `if c { let p2 = [span(y), span(y)]; let t = [1.0; 4];
+/// p2[0] = span(t) }` hoists nothing (`t` and `p2` are of one scope).
+#[test]
+fn a_view_assigned_at_the_level_of_its_target_hoists_nothing() {
+    let planar = tys().1[2];
+    let first = Place::Index(
+        Box::new(Place::Local(LocalId(4))),
+        Box::new(x(Types::U32, ExprKind::Lit(Lit::Int(0)))),
+        sp(),
+        Bounds::Checked,
+    );
+    let arm = vec![
+        st(StmtKind::Let(LocalId(4), x(planar, ExprKind::Array(vec![span_of(1), span_of(1)])))),
+        st(StmtKind::Let(LocalId(3), ones())),
+        st(StmtKind::Assign(first, span_of(3))),
+    ];
+    let body = block(vec![st(StmtKind::If(local(0, Types::BOOL), block(arm, None), Block::default()))], None);
+    assert!(hoisted_by_hand(module(&[("t", arr()), ("p2", planar)], body)).is_empty());
+}
+
 /// The verifier holds `hoisted` to locals with a `let` below the top of the
 /// body: not a parameter, not a local of the top (the NRVO local is one).
 #[test]

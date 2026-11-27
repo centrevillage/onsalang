@@ -5,6 +5,7 @@ use std::fmt;
 
 use crate::ir::*;
 use crate::prim::Prim;
+use crate::walk::written_places;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct VerifyError {
@@ -295,18 +296,6 @@ impl<'a> V<'a> {
         }
     }
 
-    /// A place, a span over a place, a slice of one (a partial view, R-31),
-    /// or (planar channels, §5.3) an array literal of those, and a literal
-    /// of a generated `Out` of those (§11.6).
-    fn is_place_expr(e: &Expr) -> bool {
-        match &e.kind {
-            ExprKind::SpanOf(inner) => inner.as_place().is_some(),
-            ExprKind::Prim { prim: Prim::Slice, args } => args.first().is_some_and(|a| Self::is_place_expr(&a.expr)),
-            ExprKind::Array(items) | ExprKind::Struct { fields: items, .. } => items.iter().all(Self::is_place_expr),
-            _ => e.as_place().is_some(),
-        }
-    }
-
     fn args(&mut self, args: &[Arg], params: &[(Mode, CTy)]) -> R<()> {
         if args.len() != params.len() {
             return Err(self.err(format!("call with {} argument(s), expected {}", args.len(), params.len())));
@@ -317,7 +306,7 @@ impl<'a> V<'a> {
             }
             let at = self.expr(&a.expr)?;
             self.same(at, *pt, "argument")?;
-            if a.mode == Mode::Inout && !Self::is_place_expr(&a.expr) {
+            if a.mode == Mode::Inout && !written_places(&a.expr, &mut |_| {}) {
                 return Err(self.err("inout argument is not a place"));
             }
         }
@@ -430,7 +419,7 @@ impl<'a> V<'a> {
             ExprKind::Prim { prim, args } => {
                 for a in args {
                     self.expr(&a.expr)?;
-                    if a.mode == Mode::Inout && !Self::is_place_expr(&a.expr) {
+                    if a.mode == Mode::Inout && !written_places(&a.expr, &mut |_| {}) {
                         return Err(self.err("inout primitive argument is not a place"));
                     }
                 }

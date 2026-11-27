@@ -8,6 +8,7 @@ use crate::{dump, lower, verify};
 
 mod types_tests;
 mod verify_tests;
+mod walk_tests;
 
 pub(crate) fn package(src: &str) -> (SourceMap, Package) {
     let mut sources = SourceMap::default();

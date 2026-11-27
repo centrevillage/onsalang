@@ -141,8 +141,8 @@ impl Cx<'_> {
             ExprKind::IfExpr { .. } | ExprKind::Switch { .. } | ExprKind::Block(_) => self.stored(e, None),
             _ => {
                 // Other expressions: look for nested blocks' statements and stores.
-                crate::walk::for_each_child(e, &mut |c| {
-                    if let crate::walk::Child::Expr(x) = c {
+                crate::walk::expr_children(e, &mut |c| {
+                    if let crate::walk::Child::Expr(x, ..) = c {
                         self.inner(x);
                     }
                 });

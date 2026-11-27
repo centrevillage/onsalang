@@ -1,0 +1,87 @@
+// onsa.toml
+// [package]
+// name = "hand_default_cycle_assign"
+// edition = "2026"
+//
+// [export]
+// prefix = "hdca_"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [test]
+// spec = ["§10", "§3.5", "§18.1"]
+
+// W8-02 U1 (spec §10 rule 5: a cycle through a bound (`T.default()`) is an E0903 of the lowering; §18.1: on "循環の中の手で書いた呼び出しのうちソースの順で最初のもの"; §3.5: "代入は右辺を先に評価し、その後に代入先の場所（添字の式）を
+// 評価する"). An assignment whose place has a call in its index and whose value has a call, both of the cycle: the place is evaluated after the value, and the E0903 is still on the call first in the order of the
+// source, the call in the index. In the second cycle, the assignment is in a function the first call of the cycle reaches, so its two calls are two ways back of one length; the E0903 is on the first call.
+// `onsa check` has no diagnostic in this file (the call of `mk` does not name the `default`).
+
+@export
+pub fn anchor() -> U32 {
+  1
+}
+
+// ---------------------------------------------------------------- the assignment is in the default: the call in the index is the first in the source
+
+pub struct Q1 {
+  n: U32,
+}
+
+impl Default for Q1 {
+  rt fn default() -> Q1 {
+    var xs = [0, 0]
+    xs[at1()] = val1()                              //~ E0903 @8
+    Q1 { n: xs[0] }
+  }
+}
+
+rt fn at1() -> U32 {
+  let q: Q1 = mk1()
+  q.n
+}
+
+rt fn val1() -> U32 {
+  let q: Q1 = mk1()
+  q.n
+}
+
+rt fn mk1[T: Default]() -> T {
+  T.default()
+}
+
+// ---------------------------------------------------------------- the assignment is in a function the first call reaches
+
+pub struct Q2 {
+  n: U32,
+}
+
+impl Default for Q2 {
+  rt fn default() -> Q2 {
+    step2()                                         //~ E0903
+  }
+}
+
+rt fn step2() -> Q2 {
+  var xs = [0, 0]
+  xs[at2()] = val2()
+  Q2 { n: xs[0] }
+}
+
+rt fn at2() -> U32 {
+  let q: Q2 = mk2()
+  q.n
+}
+
+rt fn val2() -> U32 {
+  let q: Q2 = mk2()
+  q.n
+}
+
+rt fn mk2[T: Default]() -> T {
+  T.default()
+}
