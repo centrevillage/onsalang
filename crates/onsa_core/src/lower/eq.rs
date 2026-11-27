@@ -4,6 +4,7 @@
 use onsa_diag::Span;
 
 use super::body::push_expr_stmt;
+use super::build::balanced;
 use super::{Lowerer, R, internal};
 use crate::ir::*;
 
@@ -80,15 +81,8 @@ pub(super) fn eq_expr(lw: &mut Lowerer, a: Expr, b: Expr, span: Span, at: Span) 
     ))
 }
 
-fn and_all(mut xs: Vec<Expr>, span: Span) -> Expr {
-    if xs.is_empty() {
-        return Expr::new(Types::BOOL, span, ExprKind::Lit(Lit::Bool(true)));
-    }
-    let mut acc = xs.remove(0);
-    for x in xs {
-        acc = Expr::new(Types::BOOL, span, ExprKind::Logic { op: LogicOp::And, lhs: Box::new(acc), rhs: Box::new(x) });
-    }
-    acc
+fn and_all(xs: Vec<Expr>, span: Span) -> Expr {
+    balanced(LogicOp::And, xs, span).unwrap_or_else(|| Expr::new(Types::BOOL, span, ExprKind::Lit(Lit::Bool(true))))
 }
 
 fn eq_body(lw: &mut Lowerer, locals: &mut Vec<Local>, ty: CTy, a: Expr, b: Expr, span: Span) -> R<Block> {

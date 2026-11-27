@@ -87,12 +87,8 @@ fn pat_binds(cx: &FnCx, pat: PatId) -> bool {
 pub(crate) fn pat_test(lw: &mut Lowerer, cx: &mut FnCx, pat: PatId, place: &Expr) -> R<Option<Expr>> {
     let p = cx.ast.pat(pat);
     let span = p.span;
-    let and = |a: Option<Expr>, b: Option<Expr>| match (a, b) {
-        (None, x) | (x, None) => x,
-        (Some(a), Some(b)) => {
-            Some(Expr::new(Types::BOOL, span, ExprKind::Logic { op: LogicOp::And, lhs: Box::new(a), rhs: Box::new(b) }))
-        }
-    };
+    // The tests of the parts that may fail, in the order of the text.
+    let mut parts = Vec::new();
     match &p.kind {
         PatKind::Wild | PatKind::Bind(_) => Ok(None),
         PatKind::Lit(l) | PatKind::Neg(l) => {
@@ -128,49 +124,35 @@ pub(crate) fn pat_test(lw: &mut Lowerer, cx: &mut FnCx, pat: PatId, place: &Expr
         },
         PatKind::TupleStruct { elems, .. } => {
             let (tag, _) = ctor_of(lw, cx, pat, place.ty)?;
-            let mut t = Some(tag_test(lw, place, tag)?);
+            parts.push(tag_test(lw, place, tag)?);
             for (i, &el) in elems.iter().enumerate() {
                 let sub = payload(lw, place.clone(), tag, i as u32)?;
-                let st = pat_test(lw, cx, el, &sub)?;
-                t = and(t, st);
+                parts.extend(pat_test(lw, cx, el, &sub)?);
             }
-            Ok(t)
+            Ok(balanced(LogicOp::And, parts, span))
         }
         PatKind::Tuple(elems) => {
-            let mut t = None;
             for (i, &el) in elems.iter().enumerate() {
                 let sub = field(lw, place.clone(), i as u32)?;
-                let st = pat_test(lw, cx, el, &sub)?;
-                t = and(t, st);
+                parts.extend(pat_test(lw, cx, el, &sub)?);
             }
-            Ok(t)
+            Ok(balanced(LogicOp::And, parts, span))
         }
         PatKind::Struct { fields, .. } => {
-            let mut t = None;
             for (name, fp) in fields {
                 let sub = field_by_name(lw, place.clone(), &name.name, name.span)?;
-                let st = pat_test(lw, cx, *fp, &sub)?;
-                t = and(t, st);
+                parts.extend(pat_test(lw, cx, *fp, &sub)?);
             }
-            Ok(t)
+            Ok(balanced(LogicOp::And, parts, span))
         }
         PatKind::Or(alts) => {
             if alts.iter().any(|&a| pat_binds(cx, a)) {
                 return Err(unsupported(span, Feature::OrPatternBindings, &[]));
             }
-            let mut t: Option<Expr> = None;
             for &alt in alts {
-                let st = pat_test(lw, cx, alt, place)?.unwrap_or_else(|| bool_lit(span, true));
-                t = Some(match t {
-                    None => st,
-                    Some(prev) => Expr::new(
-                        Types::BOOL,
-                        span,
-                        ExprKind::Logic { op: LogicOp::Or, lhs: Box::new(prev), rhs: Box::new(st) },
-                    ),
-                });
+                parts.push(pat_test(lw, cx, alt, place)?.unwrap_or_else(|| bool_lit(span, true)));
             }
-            Ok(t)
+            Ok(balanced(LogicOp::Or, parts, span))
         }
     }
 }

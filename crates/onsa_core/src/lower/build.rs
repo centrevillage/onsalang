@@ -185,6 +185,25 @@ pub(super) fn cmp(op: CmpOp, lhs: Expr, rhs: Expr) -> Expr {
     Expr::new(Types::BOOL, span, ExprKind::Cmp { op, lhs: Box::new(lhs), rhs: Box::new(rhs) })
 }
 
+/// The parts `xs` joined by the short-circuit `op` in a balanced tree (none
+/// of none), ⌈n/2⌉ of them on the left: up to three it is the chain
+/// `(a op b) op c`. Of any tree the parts are evaluated from the left and
+/// stop at the same one, so the value and the panics are those of the
+/// chain, and the depth is ⌈log2 n⌉ (V-22). For a list the lowering joins;
+/// a chain the source writes stays as written (§2.5 counts its depth).
+pub(super) fn balanced(op: LogicOp, xs: Vec<Expr>, span: Span) -> Option<Expr> {
+    fn join(op: LogicOp, xs: &mut std::vec::IntoIter<Expr>, n: usize, span: Span) -> Option<Expr> {
+        if n <= 1 {
+            return xs.next();
+        }
+        let lhs = Box::new(join(op, xs, n.div_ceil(2), span)?);
+        let rhs = Box::new(join(op, xs, n / 2, span)?);
+        Some(Expr::new(Types::BOOL, span, ExprKind::Logic { op, lhs, rhs }))
+    }
+    let n = xs.len();
+    join(op, &mut xs.into_iter(), n, span)
+}
+
 pub(super) fn place_of(e: &Expr) -> R<Place> {
     e.as_place().ok_or_else(|| internal(e.span, "expected a place"))
 }

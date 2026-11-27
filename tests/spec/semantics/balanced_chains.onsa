@@ -1,0 +1,417 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§6.4", "§6.3", "§7"]
+
+// W8-02 U5a/i (spec §6.4: "`PartialEq` / `Eq` は、全てのフィールド（enum は列挙子と中身）が等しいとき等しい"; §6.3: tuples are equal when the elements are; §7: a
+// pattern matches when each of its parts does, and `p | q` when one of the alternatives does). The tests the lowering joins from a list: the fields of a
+// derived `==` (a struct, a tuple, the payload of a variant), the parts of a tuple, struct and variant pattern, and the alternatives of a `|` that binds
+// nothing, each of 4, 5 and 8 parts. Each part is tried at each position: two values that differ there only are not equal and the pattern fails there
+// only (a `|` holds there only), and the value that holds at every position (a `|`: none). The values are worked out by hand: a test of the parts is a
+// pure compare, so the result is the conjunction (a `|`: the disjunction) of the parts, whatever the order the lowering joins them in.
+
+pub struct P4: PartialEq {
+  a0: I32,
+  a1: I32,
+  a2: I32,
+  a3: I32,
+}
+
+pub enum E4: PartialEq {
+  V(I32, I32, I32, I32),
+  W,
+}
+
+pub struct P5: PartialEq {
+  a0: I32,
+  a1: I32,
+  a2: I32,
+  a3: I32,
+  a4: I32,
+}
+
+pub enum E5: PartialEq {
+  V(I32, I32, I32, I32, I32),
+  W,
+}
+
+pub struct P8: PartialEq {
+  a0: I32,
+  a1: I32,
+  a2: I32,
+  a3: I32,
+  a4: I32,
+  a5: I32,
+  a6: I32,
+  a7: I32,
+}
+
+pub enum E8: PartialEq {
+  V(I32, I32, I32, I32, I32, I32, I32, I32),
+  W,
+}
+
+fn same_struct4(x: P4, y: P4) -> Bool {
+  x == y
+}
+
+fn same_tuple4(x: (I32, I32, I32, I32), y: (I32, I32, I32, I32)) -> Bool {
+  x == y
+}
+
+fn same_variant4(x: E4, y: E4) -> Bool {
+  x == y
+}
+
+fn tuple_pattern4(t: (I32, I32, I32, I32)) -> I32 {
+  var r = 0
+  match t {
+    (1, 2, 3, 4) => { r = 1 },
+    _ => { r = 2 },
+  }
+  r
+}
+
+fn struct_pattern4(p: P4) -> I32 {
+  var r = 0
+  match p {
+    P4 { a0: 1, a1: 2, a2: 3, a3: 4 } => { r = 1 },
+    _ => { r = 2 },
+  }
+  r
+}
+
+fn variant_pattern4(e: E4) -> I32 {
+  var r = 0
+  match e {
+    E4.V(1, 2, 3, 4) => { r = 1 },
+    E4.V(_, _, _, _) => { r = 2 },
+    E4.W => { r = 3 },
+  }
+  r
+}
+
+fn alternatives4(x: I32) -> I32 {
+  var r = 0
+  match x {
+    10 | 20 | 30 | 40 => { r = 1 },
+    _ => { r = 2 },
+  }
+  r
+}
+
+fn same_struct5(x: P5, y: P5) -> Bool {
+  x == y
+}
+
+fn same_tuple5(x: (I32, I32, I32, I32, I32), y: (I32, I32, I32, I32, I32)) -> Bool {
+  x == y
+}
+
+fn same_variant5(x: E5, y: E5) -> Bool {
+  x == y
+}
+
+fn tuple_pattern5(t: (I32, I32, I32, I32, I32)) -> I32 {
+  var r = 0
+  match t {
+    (1, 2, 3, 4, 5) => { r = 1 },
+    _ => { r = 2 },
+  }
+  r
+}
+
+fn struct_pattern5(p: P5) -> I32 {
+  var r = 0
+  match p {
+    P5 { a0: 1, a1: 2, a2: 3, a3: 4, a4: 5 } => { r = 1 },
+    _ => { r = 2 },
+  }
+  r
+}
+
+fn variant_pattern5(e: E5) -> I32 {
+  var r = 0
+  match e {
+    E5.V(1, 2, 3, 4, 5) => { r = 1 },
+    E5.V(_, _, _, _, _) => { r = 2 },
+    E5.W => { r = 3 },
+  }
+  r
+}
+
+fn alternatives5(x: I32) -> I32 {
+  var r = 0
+  match x {
+    10 | 20 | 30 | 40 | 50 => { r = 1 },
+    _ => { r = 2 },
+  }
+  r
+}
+
+fn same_struct8(x: P8, y: P8) -> Bool {
+  x == y
+}
+
+fn same_tuple8(x: (I32, I32, I32, I32, I32, I32, I32, I32), y: (I32, I32, I32, I32, I32, I32, I32, I32)) -> Bool {
+  x == y
+}
+
+fn same_variant8(x: E8, y: E8) -> Bool {
+  x == y
+}
+
+fn tuple_pattern8(t: (I32, I32, I32, I32, I32, I32, I32, I32)) -> I32 {
+  var r = 0
+  match t {
+    (1, 2, 3, 4, 5, 6, 7, 8) => { r = 1 },
+    _ => { r = 2 },
+  }
+  r
+}
+
+fn struct_pattern8(p: P8) -> I32 {
+  var r = 0
+  match p {
+    P8 { a0: 1, a1: 2, a2: 3, a3: 4, a4: 5, a5: 6, a6: 7, a7: 8 } => { r = 1 },
+    _ => { r = 2 },
+  }
+  r
+}
+
+fn variant_pattern8(e: E8) -> I32 {
+  var r = 0
+  match e {
+    E8.V(1, 2, 3, 4, 5, 6, 7, 8) => { r = 1 },
+    E8.V(_, _, _, _, _, _, _, _) => { r = 2 },
+    E8.W => { r = 3 },
+  }
+  r
+}
+
+fn alternatives8(x: I32) -> I32 {
+  var r = 0
+  match x {
+    10 | 20 | 30 | 40 | 50 | 60 | 70 | 80 => { r = 1 },
+    _ => { r = 2 },
+  }
+  r
+}
+
+test "the derived == of 4 fields fails at each field" {
+  assert same_struct4(P4 { a0: 0, a1: 0, a2: 0, a3: 0 }, P4 { a0: 0, a1: 0, a2: 0, a3: 0 })
+  assert !same_struct4(P4 { a0: 0, a1: 0, a2: 0, a3: 0 }, P4 { a0: 1, a1: 0, a2: 0, a3: 0 })
+  assert !same_struct4(P4 { a0: 0, a1: 0, a2: 0, a3: 0 }, P4 { a0: 0, a1: 1, a2: 0, a3: 0 })
+  assert !same_struct4(P4 { a0: 0, a1: 0, a2: 0, a3: 0 }, P4 { a0: 0, a1: 0, a2: 1, a3: 0 })
+  assert !same_struct4(P4 { a0: 0, a1: 0, a2: 0, a3: 0 }, P4 { a0: 0, a1: 0, a2: 0, a3: 1 })
+  assert same_tuple4((0, 0, 0, 0), (0, 0, 0, 0))
+  assert !same_tuple4((0, 0, 0, 0), (1, 0, 0, 0))
+  assert !same_tuple4((0, 0, 0, 0), (0, 1, 0, 0))
+  assert !same_tuple4((0, 0, 0, 0), (0, 0, 1, 0))
+  assert !same_tuple4((0, 0, 0, 0), (0, 0, 0, 1))
+  assert same_variant4(E4.V(0, 0, 0, 0), E4.V(0, 0, 0, 0))
+  assert !same_variant4(E4.V(0, 0, 0, 0), E4.W)
+  assert !same_variant4(E4.V(0, 0, 0, 0), E4.V(1, 0, 0, 0))
+  assert !same_variant4(E4.V(0, 0, 0, 0), E4.V(0, 1, 0, 0))
+  assert !same_variant4(E4.V(0, 0, 0, 0), E4.V(0, 0, 1, 0))
+  assert !same_variant4(E4.V(0, 0, 0, 0), E4.V(0, 0, 0, 1))
+}
+
+test "a pattern of 4 parts fails at each part" {
+  assert tuple_pattern4((1, 2, 3, 4)) == 1
+  assert tuple_pattern4((90, 2, 3, 4)) == 2
+  assert tuple_pattern4((1, 91, 3, 4)) == 2
+  assert tuple_pattern4((1, 2, 92, 4)) == 2
+  assert tuple_pattern4((1, 2, 3, 93)) == 2
+  assert struct_pattern4(P4 { a0: 1, a1: 2, a2: 3, a3: 4 }) == 1
+  assert struct_pattern4(P4 { a0: 90, a1: 2, a2: 3, a3: 4 }) == 2
+  assert struct_pattern4(P4 { a0: 1, a1: 91, a2: 3, a3: 4 }) == 2
+  assert struct_pattern4(P4 { a0: 1, a1: 2, a2: 92, a3: 4 }) == 2
+  assert struct_pattern4(P4 { a0: 1, a1: 2, a2: 3, a3: 93 }) == 2
+  assert variant_pattern4(E4.V(1, 2, 3, 4)) == 1
+  assert variant_pattern4(E4.V(90, 2, 3, 4)) == 2
+  assert variant_pattern4(E4.V(1, 91, 3, 4)) == 2
+  assert variant_pattern4(E4.V(1, 2, 92, 4)) == 2
+  assert variant_pattern4(E4.V(1, 2, 3, 93)) == 2
+  assert variant_pattern4(E4.W) == 3
+}
+
+test "an alternative of 4 holds at each alternative" {
+  assert alternatives4(10) == 1
+  assert alternatives4(20) == 1
+  assert alternatives4(30) == 1
+  assert alternatives4(40) == 1
+  assert alternatives4(0) == 2
+  assert alternatives4(5) == 2
+  assert alternatives4(15) == 2
+  assert alternatives4(50) == 2
+}
+
+test "the derived == of 5 fields fails at each field" {
+  assert same_struct5(P5 { a0: 0, a1: 0, a2: 0, a3: 0, a4: 0 }, P5 { a0: 0, a1: 0, a2: 0, a3: 0, a4: 0 })
+  assert !same_struct5(P5 { a0: 0, a1: 0, a2: 0, a3: 0, a4: 0 }, P5 { a0: 1, a1: 0, a2: 0, a3: 0, a4: 0 })
+  assert !same_struct5(P5 { a0: 0, a1: 0, a2: 0, a3: 0, a4: 0 }, P5 { a0: 0, a1: 1, a2: 0, a3: 0, a4: 0 })
+  assert !same_struct5(P5 { a0: 0, a1: 0, a2: 0, a3: 0, a4: 0 }, P5 { a0: 0, a1: 0, a2: 1, a3: 0, a4: 0 })
+  assert !same_struct5(P5 { a0: 0, a1: 0, a2: 0, a3: 0, a4: 0 }, P5 { a0: 0, a1: 0, a2: 0, a3: 1, a4: 0 })
+  assert !same_struct5(P5 { a0: 0, a1: 0, a2: 0, a3: 0, a4: 0 }, P5 { a0: 0, a1: 0, a2: 0, a3: 0, a4: 1 })
+  assert same_tuple5((0, 0, 0, 0, 0), (0, 0, 0, 0, 0))
+  assert !same_tuple5((0, 0, 0, 0, 0), (1, 0, 0, 0, 0))
+  assert !same_tuple5((0, 0, 0, 0, 0), (0, 1, 0, 0, 0))
+  assert !same_tuple5((0, 0, 0, 0, 0), (0, 0, 1, 0, 0))
+  assert !same_tuple5((0, 0, 0, 0, 0), (0, 0, 0, 1, 0))
+  assert !same_tuple5((0, 0, 0, 0, 0), (0, 0, 0, 0, 1))
+  assert same_variant5(E5.V(0, 0, 0, 0, 0), E5.V(0, 0, 0, 0, 0))
+  assert !same_variant5(E5.V(0, 0, 0, 0, 0), E5.W)
+  assert !same_variant5(E5.V(0, 0, 0, 0, 0), E5.V(1, 0, 0, 0, 0))
+  assert !same_variant5(E5.V(0, 0, 0, 0, 0), E5.V(0, 1, 0, 0, 0))
+  assert !same_variant5(E5.V(0, 0, 0, 0, 0), E5.V(0, 0, 1, 0, 0))
+  assert !same_variant5(E5.V(0, 0, 0, 0, 0), E5.V(0, 0, 0, 1, 0))
+  assert !same_variant5(E5.V(0, 0, 0, 0, 0), E5.V(0, 0, 0, 0, 1))
+}
+
+test "a pattern of 5 parts fails at each part" {
+  assert tuple_pattern5((1, 2, 3, 4, 5)) == 1
+  assert tuple_pattern5((90, 2, 3, 4, 5)) == 2
+  assert tuple_pattern5((1, 91, 3, 4, 5)) == 2
+  assert tuple_pattern5((1, 2, 92, 4, 5)) == 2
+  assert tuple_pattern5((1, 2, 3, 93, 5)) == 2
+  assert tuple_pattern5((1, 2, 3, 4, 94)) == 2
+  assert struct_pattern5(P5 { a0: 1, a1: 2, a2: 3, a3: 4, a4: 5 }) == 1
+  assert struct_pattern5(P5 { a0: 90, a1: 2, a2: 3, a3: 4, a4: 5 }) == 2
+  assert struct_pattern5(P5 { a0: 1, a1: 91, a2: 3, a3: 4, a4: 5 }) == 2
+  assert struct_pattern5(P5 { a0: 1, a1: 2, a2: 92, a3: 4, a4: 5 }) == 2
+  assert struct_pattern5(P5 { a0: 1, a1: 2, a2: 3, a3: 93, a4: 5 }) == 2
+  assert struct_pattern5(P5 { a0: 1, a1: 2, a2: 3, a3: 4, a4: 94 }) == 2
+  assert variant_pattern5(E5.V(1, 2, 3, 4, 5)) == 1
+  assert variant_pattern5(E5.V(90, 2, 3, 4, 5)) == 2
+  assert variant_pattern5(E5.V(1, 91, 3, 4, 5)) == 2
+  assert variant_pattern5(E5.V(1, 2, 92, 4, 5)) == 2
+  assert variant_pattern5(E5.V(1, 2, 3, 93, 5)) == 2
+  assert variant_pattern5(E5.V(1, 2, 3, 4, 94)) == 2
+  assert variant_pattern5(E5.W) == 3
+}
+
+test "an alternative of 5 holds at each alternative" {
+  assert alternatives5(10) == 1
+  assert alternatives5(20) == 1
+  assert alternatives5(30) == 1
+  assert alternatives5(40) == 1
+  assert alternatives5(50) == 1
+  assert alternatives5(0) == 2
+  assert alternatives5(5) == 2
+  assert alternatives5(15) == 2
+  assert alternatives5(60) == 2
+}
+
+test "the derived == of 8 fields fails at each field" {
+  assert same_struct8(P8 { a0: 0, a1: 0, a2: 0, a3: 0, a4: 0, a5: 0, a6: 0, a7: 0 }, P8 { a0: 0, a1: 0, a2: 0, a3: 0, a4: 0, a5: 0, a6: 0, a7: 0 })
+  assert !same_struct8(P8 { a0: 0, a1: 0, a2: 0, a3: 0, a4: 0, a5: 0, a6: 0, a7: 0 }, P8 { a0: 1, a1: 0, a2: 0, a3: 0, a4: 0, a5: 0, a6: 0, a7: 0 })
+  assert !same_struct8(P8 { a0: 0, a1: 0, a2: 0, a3: 0, a4: 0, a5: 0, a6: 0, a7: 0 }, P8 { a0: 0, a1: 1, a2: 0, a3: 0, a4: 0, a5: 0, a6: 0, a7: 0 })
+  assert !same_struct8(P8 { a0: 0, a1: 0, a2: 0, a3: 0, a4: 0, a5: 0, a6: 0, a7: 0 }, P8 { a0: 0, a1: 0, a2: 1, a3: 0, a4: 0, a5: 0, a6: 0, a7: 0 })
+  assert !same_struct8(P8 { a0: 0, a1: 0, a2: 0, a3: 0, a4: 0, a5: 0, a6: 0, a7: 0 }, P8 { a0: 0, a1: 0, a2: 0, a3: 1, a4: 0, a5: 0, a6: 0, a7: 0 })
+  assert !same_struct8(P8 { a0: 0, a1: 0, a2: 0, a3: 0, a4: 0, a5: 0, a6: 0, a7: 0 }, P8 { a0: 0, a1: 0, a2: 0, a3: 0, a4: 1, a5: 0, a6: 0, a7: 0 })
+  assert !same_struct8(P8 { a0: 0, a1: 0, a2: 0, a3: 0, a4: 0, a5: 0, a6: 0, a7: 0 }, P8 { a0: 0, a1: 0, a2: 0, a3: 0, a4: 0, a5: 1, a6: 0, a7: 0 })
+  assert !same_struct8(P8 { a0: 0, a1: 0, a2: 0, a3: 0, a4: 0, a5: 0, a6: 0, a7: 0 }, P8 { a0: 0, a1: 0, a2: 0, a3: 0, a4: 0, a5: 0, a6: 1, a7: 0 })
+  assert !same_struct8(P8 { a0: 0, a1: 0, a2: 0, a3: 0, a4: 0, a5: 0, a6: 0, a7: 0 }, P8 { a0: 0, a1: 0, a2: 0, a3: 0, a4: 0, a5: 0, a6: 0, a7: 1 })
+  assert same_tuple8((0, 0, 0, 0, 0, 0, 0, 0), (0, 0, 0, 0, 0, 0, 0, 0))
+  assert !same_tuple8((0, 0, 0, 0, 0, 0, 0, 0), (1, 0, 0, 0, 0, 0, 0, 0))
+  assert !same_tuple8((0, 0, 0, 0, 0, 0, 0, 0), (0, 1, 0, 0, 0, 0, 0, 0))
+  assert !same_tuple8((0, 0, 0, 0, 0, 0, 0, 0), (0, 0, 1, 0, 0, 0, 0, 0))
+  assert !same_tuple8((0, 0, 0, 0, 0, 0, 0, 0), (0, 0, 0, 1, 0, 0, 0, 0))
+  assert !same_tuple8((0, 0, 0, 0, 0, 0, 0, 0), (0, 0, 0, 0, 1, 0, 0, 0))
+  assert !same_tuple8((0, 0, 0, 0, 0, 0, 0, 0), (0, 0, 0, 0, 0, 1, 0, 0))
+  assert !same_tuple8((0, 0, 0, 0, 0, 0, 0, 0), (0, 0, 0, 0, 0, 0, 1, 0))
+  assert !same_tuple8((0, 0, 0, 0, 0, 0, 0, 0), (0, 0, 0, 0, 0, 0, 0, 1))
+  assert same_variant8(E8.V(0, 0, 0, 0, 0, 0, 0, 0), E8.V(0, 0, 0, 0, 0, 0, 0, 0))
+  assert !same_variant8(E8.V(0, 0, 0, 0, 0, 0, 0, 0), E8.W)
+  assert !same_variant8(E8.V(0, 0, 0, 0, 0, 0, 0, 0), E8.V(1, 0, 0, 0, 0, 0, 0, 0))
+  assert !same_variant8(E8.V(0, 0, 0, 0, 0, 0, 0, 0), E8.V(0, 1, 0, 0, 0, 0, 0, 0))
+  assert !same_variant8(E8.V(0, 0, 0, 0, 0, 0, 0, 0), E8.V(0, 0, 1, 0, 0, 0, 0, 0))
+  assert !same_variant8(E8.V(0, 0, 0, 0, 0, 0, 0, 0), E8.V(0, 0, 0, 1, 0, 0, 0, 0))
+  assert !same_variant8(E8.V(0, 0, 0, 0, 0, 0, 0, 0), E8.V(0, 0, 0, 0, 1, 0, 0, 0))
+  assert !same_variant8(E8.V(0, 0, 0, 0, 0, 0, 0, 0), E8.V(0, 0, 0, 0, 0, 1, 0, 0))
+  assert !same_variant8(E8.V(0, 0, 0, 0, 0, 0, 0, 0), E8.V(0, 0, 0, 0, 0, 0, 1, 0))
+  assert !same_variant8(E8.V(0, 0, 0, 0, 0, 0, 0, 0), E8.V(0, 0, 0, 0, 0, 0, 0, 1))
+}
+
+test "a pattern of 8 parts fails at each part" {
+  assert tuple_pattern8((1, 2, 3, 4, 5, 6, 7, 8)) == 1
+  assert tuple_pattern8((90, 2, 3, 4, 5, 6, 7, 8)) == 2
+  assert tuple_pattern8((1, 91, 3, 4, 5, 6, 7, 8)) == 2
+  assert tuple_pattern8((1, 2, 92, 4, 5, 6, 7, 8)) == 2
+  assert tuple_pattern8((1, 2, 3, 93, 5, 6, 7, 8)) == 2
+  assert tuple_pattern8((1, 2, 3, 4, 94, 6, 7, 8)) == 2
+  assert tuple_pattern8((1, 2, 3, 4, 5, 95, 7, 8)) == 2
+  assert tuple_pattern8((1, 2, 3, 4, 5, 6, 96, 8)) == 2
+  assert tuple_pattern8((1, 2, 3, 4, 5, 6, 7, 97)) == 2
+  assert struct_pattern8(P8 { a0: 1, a1: 2, a2: 3, a3: 4, a4: 5, a5: 6, a6: 7, a7: 8 }) == 1
+  assert struct_pattern8(P8 { a0: 90, a1: 2, a2: 3, a3: 4, a4: 5, a5: 6, a6: 7, a7: 8 }) == 2
+  assert struct_pattern8(P8 { a0: 1, a1: 91, a2: 3, a3: 4, a4: 5, a5: 6, a6: 7, a7: 8 }) == 2
+  assert struct_pattern8(P8 { a0: 1, a1: 2, a2: 92, a3: 4, a4: 5, a5: 6, a6: 7, a7: 8 }) == 2
+  assert struct_pattern8(P8 { a0: 1, a1: 2, a2: 3, a3: 93, a4: 5, a5: 6, a6: 7, a7: 8 }) == 2
+  assert struct_pattern8(P8 { a0: 1, a1: 2, a2: 3, a3: 4, a4: 94, a5: 6, a6: 7, a7: 8 }) == 2
+  assert struct_pattern8(P8 { a0: 1, a1: 2, a2: 3, a3: 4, a4: 5, a5: 95, a6: 7, a7: 8 }) == 2
+  assert struct_pattern8(P8 { a0: 1, a1: 2, a2: 3, a3: 4, a4: 5, a5: 6, a6: 96, a7: 8 }) == 2
+  assert struct_pattern8(P8 { a0: 1, a1: 2, a2: 3, a3: 4, a4: 5, a5: 6, a6: 7, a7: 97 }) == 2
+  assert variant_pattern8(E8.V(1, 2, 3, 4, 5, 6, 7, 8)) == 1
+  assert variant_pattern8(E8.V(90, 2, 3, 4, 5, 6, 7, 8)) == 2
+  assert variant_pattern8(E8.V(1, 91, 3, 4, 5, 6, 7, 8)) == 2
+  assert variant_pattern8(E8.V(1, 2, 92, 4, 5, 6, 7, 8)) == 2
+  assert variant_pattern8(E8.V(1, 2, 3, 93, 5, 6, 7, 8)) == 2
+  assert variant_pattern8(E8.V(1, 2, 3, 4, 94, 6, 7, 8)) == 2
+  assert variant_pattern8(E8.V(1, 2, 3, 4, 5, 95, 7, 8)) == 2
+  assert variant_pattern8(E8.V(1, 2, 3, 4, 5, 6, 96, 8)) == 2
+  assert variant_pattern8(E8.V(1, 2, 3, 4, 5, 6, 7, 97)) == 2
+  assert variant_pattern8(E8.W) == 3
+}
+
+test "an alternative of 8 holds at each alternative" {
+  assert alternatives8(10) == 1
+  assert alternatives8(20) == 1
+  assert alternatives8(30) == 1
+  assert alternatives8(40) == 1
+  assert alternatives8(50) == 1
+  assert alternatives8(60) == 1
+  assert alternatives8(70) == 1
+  assert alternatives8(80) == 1
+  assert alternatives8(0) == 2
+  assert alternatives8(5) == 2
+  assert alternatives8(15) == 2
+  assert alternatives8(90) == 2
+}
+
+// An alternative with no test that may fail (`(_, _)`, `None` against an `Option` of `None`) always holds: it is `true` among the others.
+fn wild_last(t: (I32, I32)) -> I32 {
+  var r = 0
+  match t {
+    (1, 2) | (_, _) => { r = 1 },
+  }
+  r
+}
+
+fn wild_third(t: (I32, I32)) -> I32 {
+  var r = 0
+  match t {
+    (1, _) | (_, 2) | (_, _) => { r = 1 },
+  }
+  r
+}
+
+fn some_or_none(o: Option[I32]) -> I32 {
+  var r = 0
+  match o {
+    Some(1) | Some(_) | None => { r = 1 },
+  }
+  r
+}
+
+test "an alternative with nothing to test holds" {
+  assert wild_last((5, 5)) == 1
+  assert wild_last((1, 2)) == 1
+  assert wild_third((5, 5)) == 1
+  assert wild_third((1, 5)) == 1
+  assert wild_third((5, 2)) == 1
+  assert some_or_none(Some(7)) == 1
+  assert some_or_none(Some(1)) == 1
+  assert some_or_none(None) == 1
+}

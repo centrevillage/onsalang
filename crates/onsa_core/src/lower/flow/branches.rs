@@ -3,6 +3,8 @@
 //! which writes the places of its bindings (S-1131). Their parts of a
 //! slower stage are written by [`super::hoist`].
 
+use std::vec::IntoIter;
+
 use onsa_sema::flow::chain;
 use onsa_syntax::ast::{ExprKind as AK, MatchArm, PatId};
 
@@ -81,13 +83,27 @@ fn every(
         };
         values.push(materialize(cx, Expr::new(t, span, ExprKind::Block(b)), &mut stmts, "__branch"));
     }
-    let mut chosen = values.pop();
-    for (k, v) in values.into_iter().enumerate().rev() {
-        let cond = Box::new(cmp(CmpOp::Eq, taken.clone(), u32_lit(span, k as u32)));
-        let else_ = chosen.map(value).unwrap_or_default();
-        chosen = Some(Expr::new(ty, span, ExprKind::IfExpr { cond, then: value(v), else_ }));
-    }
+    let n = values.len() as u32;
+    let chosen = pick(&taken, &mut values.into_iter(), (0, n), ty, span);
     Ok(Expr::new(ty, span, ExprKind::Block(Block { stmts, value: chosen.map(Box::new) })))
+}
+
+/// The value of the number `taken` among those of `lo ..< hi`, read from
+/// `values` in order, where `taken` is at least `lo` (the last of a number
+/// past them): a tree of compares on `taken` split at the middle, a left
+/// of one by `==`, ⌈log2⌉ deep (V-22). Up to three it is the chain of `==`.
+fn pick(taken: &Expr, values: &mut IntoIter<Expr>, (lo, hi): (u32, u32), ty: CTy, span: Span) -> Option<Expr> {
+    if hi - lo <= 1 {
+        return values.next();
+    }
+    let mid = lo + (hi - lo) / 2;
+    let cond = match mid == lo + 1 {
+        true => cmp(CmpOp::Eq, taken.clone(), u32_lit(span, lo)),
+        false => cmp(CmpOp::Lt, taken.clone(), u32_lit(span, mid)),
+    };
+    let then = value(pick(taken, values, (lo, mid), ty, span)?);
+    let else_ = value(pick(taken, values, (mid, hi), ty, span)?);
+    Some(Expr::new(ty, span, ExprKind::IfExpr { cond: Box::new(cond), then, else_ }))
 }
 
 /// What a [`choose`] looks at: the patterns of the arms before `upto`, the

@@ -124,6 +124,7 @@ file match_tilde_all_arms.tsv rows=39 tests=12 evaluated=12 unavailable=0 skippe
 file match_tilde_binding_stage.tsv rows=86 tests=19 evaluated=19 unavailable=0 skipped=0 waiting=0
 file match_tilde_default_bindings.tsv rows=37 tests=12 evaluated=12 unavailable=0 skipped=0 waiting=0
 file match_tilde_guard_reads_binding.tsv rows=259 tests=6 evaluated=6 unavailable=0 skipped=0 waiting=0
+file match_tilde_many_arms.tsv rows=16 tests=5 evaluated=5 unavailable=0 skipped=0 waiting=0
 file match_tilde_par_store.tsv rows=24 tests=5 evaluated=5 unavailable=0 skipped=0 waiting=0
 file match_tilde_select_order.tsv rows=62 tests=18 evaluated=18 unavailable=0 skipped=0 waiting=0
 file modifier_block_regress.tsv rows=70 tests=5 evaluated=5 unavailable=0 skipped=0 waiting=0
@@ -217,4 +218,4 @@ file when_identity_regressions.tsv rows=78 tests=5 evaluated=5 unavailable=0 ski
 file when_slow_head_values.tsv rows=47 tests=5 evaluated=5 unavailable=0 skipped=0 waiting=0
 file when_slow_values.tsv rows=86 tests=9 evaluated=9 unavailable=0 skipped=0 waiting=0
 file when_values.tsv rows=77 tests=10 evaluated=10 unavailable=0 skipped=0 waiting=0
-total files=218 rows=9489 tests=1626 evaluated=1564 unavailable=1 skipped=61 waiting=6
+total files=219 rows=9505 tests=1631 evaluated=1569 unavailable=1 skipped=61 waiting=6

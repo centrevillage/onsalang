@@ -1,0 +1,138 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.5", "§7"]
+
+// W8-02 U5a/i (spec §11.5: "`if~ c { a } else { b }` と `match~ x { ... }` は、全ての枝を評価してから一つを選ぶ"): a `match~` of 4, 5 and 8 arms and
+// an `if~` of 4 and 5 branches take the value of each of their arms in turn, and the counter in every arm runs on every sample. The forms of 2 and 3 arms
+// are in match_tilde_all_arms.onsa and if_tilde_all_branches.onsa. `acc~(c)` adds `c` on each sample, so after the sample t (from 1) the counter of the arm
+// k holds (k + 1) * t: the value taken on the sample t is (k + 1) * t for the arm k taken. The values are worked out by hand.
+
+pub flow acc(x: F32 at sample) -> F32 at sample {
+  let y = x + prev~(^y)
+  y
+}
+
+pub flow arms4(k: U32 at sample) -> F32 at sample {
+  match~ k {
+    0 => acc~(1.0),
+    1 => acc~(2.0),
+    2 => acc~(3.0),
+    _ => acc~(4.0),
+  }
+}
+
+pub flow arms5(k: U32 at sample) -> F32 at sample {
+  match~ k {
+    0 => acc~(1.0),
+    1 => acc~(2.0),
+    2 => acc~(3.0),
+    3 => acc~(4.0),
+    _ => acc~(5.0),
+  }
+}
+
+pub flow arms8(k: U32 at sample) -> F32 at sample {
+  match~ k {
+    0 => acc~(1.0),
+    1 => acc~(2.0),
+    2 => acc~(3.0),
+    3 => acc~(4.0),
+    4 => acc~(5.0),
+    5 => acc~(6.0),
+    6 => acc~(7.0),
+    _ => acc~(8.0),
+  }
+}
+
+pub flow branches4(k: U32 at sample) -> F32 at sample {
+  if~ k == 0 {
+    acc~(1.0)
+  } else if k == 1 {
+    acc~(2.0)
+  } else if k == 2 {
+    acc~(3.0)
+  } else {
+    acc~(4.0)
+  }
+}
+
+pub flow branches5(k: U32 at sample) -> F32 at sample {
+  if~ k == 0 {
+    acc~(1.0)
+  } else if k == 1 {
+    acc~(2.0)
+  } else if k == 2 {
+    acc~(3.0)
+  } else if k == 3 {
+    acc~(4.0)
+  } else {
+    acc~(5.0)
+  }
+}
+
+test "a match~ of 4 arms takes each arm" {
+  // k = 0 1 2 3 7 0: the arm taken on the sample t (from 1) is min(k, 3) and its value is (arm + 1) * t.
+  let ks: [U32; 6] = [0, 1, 2, 3, 7, 0]
+  let o = arms4.render(ks, 8.0)
+  assert o.out[0] == 1.0
+  assert o.out[1] == 4.0
+  assert o.out[2] == 9.0
+  assert o.out[3] == 16.0
+  assert o.out[4] == 20.0
+  assert o.out[5] == 6.0
+}
+
+test "a match~ of 5 arms takes each arm" {
+  // k = 0 1 2 3 4 8 0: the arm taken on the sample t (from 1) is min(k, 4) and its value is (arm + 1) * t.
+  let ks: [U32; 7] = [0, 1, 2, 3, 4, 8, 0]
+  let o = arms5.render(ks, 8.0)
+  assert o.out[0] == 1.0
+  assert o.out[1] == 4.0
+  assert o.out[2] == 9.0
+  assert o.out[3] == 16.0
+  assert o.out[4] == 25.0
+  assert o.out[5] == 30.0
+  assert o.out[6] == 7.0
+}
+
+test "a match~ of 8 arms takes each arm" {
+  // k = 0 1 2 3 4 5 6 7 11 0: the arm taken on the sample t (from 1) is min(k, 7) and its value is (arm + 1) * t.
+  let ks: [U32; 10] = [0, 1, 2, 3, 4, 5, 6, 7, 11, 0]
+  let o = arms8.render(ks, 8.0)
+  assert o.out[0] == 1.0
+  assert o.out[1] == 4.0
+  assert o.out[2] == 9.0
+  assert o.out[3] == 16.0
+  assert o.out[4] == 25.0
+  assert o.out[5] == 36.0
+  assert o.out[6] == 49.0
+  assert o.out[7] == 64.0
+  assert o.out[8] == 72.0
+  assert o.out[9] == 10.0
+}
+
+test "an if~ of 4 branches takes each branch" {
+  // k = 0 1 2 3 7 0: the branch taken on the sample t (from 1) is min(k, 3) and its value is (branch + 1) * t.
+  let ks: [U32; 6] = [0, 1, 2, 3, 7, 0]
+  let o = branches4.render(ks, 8.0)
+  assert o.out[0] == 1.0
+  assert o.out[1] == 4.0
+  assert o.out[2] == 9.0
+  assert o.out[3] == 16.0
+  assert o.out[4] == 20.0
+  assert o.out[5] == 6.0
+}
+
+test "an if~ of 5 branches takes each branch" {
+  // k = 0 1 2 3 4 8 0: the branch taken on the sample t (from 1) is min(k, 4) and its value is (branch + 1) * t.
+  let ks: [U32; 7] = [0, 1, 2, 3, 4, 8, 0]
+  let o = branches5.render(ks, 8.0)
+  assert o.out[0] == 1.0
+  assert o.out[1] == 4.0
+  assert o.out[2] == 9.0
+  assert o.out[3] == 16.0
+  assert o.out[4] == 25.0
+  assert o.out[5] == 30.0
+  assert o.out[6] == 7.0
+}
