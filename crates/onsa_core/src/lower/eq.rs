@@ -2,10 +2,9 @@
 //! function per type, so backends only compare scalars.
 
 use onsa_diag::Span;
-use onsa_diag::unsupported::Feature;
 
 use super::body::push_expr_stmt;
-use super::{Lowerer, R, internal, unsupported};
+use super::{Lowerer, R, internal};
 use crate::ir::*;
 
 pub(crate) fn eq_fn(lw: &mut Lowerer, ty: CTy, span: Span) -> R<FnId> {
@@ -181,6 +180,7 @@ fn eq_body(lw: &mut Lowerer, locals: &mut Vec<Local>, ty: CTy, a: Expr, b: Expr,
                 value: Some(Box::new(sw)),
             })
         }
-        _ => Err(unsupported(span, Feature::Equality, &[])),
+        // `Span`, `Buf` and a function type are not `PartialEq` (E0401, E0416).
+        _ => Err(internal(span, "equality on a type of no `PartialEq`")),
     }
 }

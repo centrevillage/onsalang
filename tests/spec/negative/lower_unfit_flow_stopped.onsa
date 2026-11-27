@@ -1,0 +1,38 @@
+// onsa.toml
+// [package]
+// name = "lower_unfit_flow_stopped"
+// edition = "2026"
+//
+// [targets.c]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [test]
+// spec = ["§18.1", "§11.5", "§4.2"]
+
+// W8-16 B, S-67 (the decision of 2026-11-27): a flow with a type this version does not lower (the `"abc"` of `"abc".len()`
+// is an expression of the type `Str`; a `Str` as a signal is stopped by the checks, so the type is in an expression) is
+// stopped like a function: one E0200 for the flow, and it is not lowered. A flow that makes an instance of it
+// (`g~(x)`) is not lowered either, and reports nothing: the E0200 of `g` is the only diagnostic, however many flows make
+// an instance of `g`, directly or through other flows.
+
+pub flow g(x: F32 at sample) -> F32 at sample {
+  let n = "abc".len()   //~ E0200
+  x * F32.round_from(n)
+}
+
+pub flow f(x: F32 at sample) -> F32 at sample {
+  g~(x)
+}
+
+pub flow h(x: F32 at sample) -> F32 at sample {
+  f~(x) + g~(x)
+}
+
+// A flow that makes no instance of `g` is lowered.
+pub flow k(x: F32 at sample) -> F32 at sample {
+  x * 0.5
+}

@@ -15,12 +15,17 @@
 //! Unsupported features (E0200, S-67): lowering reports every one, not only
 //! the first of an item. The innermost expression (or `match` arm pattern)
 //! that uses one becomes a placeholder, and the item is lowered again
-//! ([`Lowerer::lower_item`]). A value of a type lowering does not support
-//! is a placeholder too, so its uses are reported where they are. The
-//! limits (W8-01 takes them over):
-//! - A feature outside an expression and an arm pattern (a parameter or
-//!   return type, a `let` pattern, a `const` initializer with bindings)
-//!   stops its item: the rest of that item is not reported.
+//! ([`Lowerer::lower_item`]). A type lowering does not lower (§18.1) is no
+//! placeholder: it stops its unit (a function's instance, a `test`, a
+//! constant, a flow) with one E0200 for each unsupported part, at the first
+//! binding of it ([`Lowerer::bind_tys`]) or at the first expression of it,
+//! and no other E0200 of the unit; a unit that relies on a stopped constant
+//! or flow by an expression goes on with that expression a placeholder and
+//! no report, and a flow that makes an instance of a stopped flow stops with
+//! none. The limits (W8-01 takes them over):
+//! - A feature outside an expression and an arm pattern (a `let` pattern, a
+//!   `const` initializer with bindings) stops its item: the rest of that item
+//!   is not reported.
 //! - A generic function lowered for several types reports an expression
 //!   once: the later instances find it a placeholder already, so another
 //!   unsupported feature at the same expression of a later instance is not
@@ -63,6 +68,11 @@ pub enum GenericArg {
 pub(crate) enum FailKind {
     /// The program uses a feature this version does not lower (E0200, Q-09).
     Unsupported,
+    /// A type of a feature this version does not lower (E0200), with its
+    /// report ([`types::BadTy::fail`]): no placeholder, it stops the unit.
+    UnsupportedType(types::BadTy),
+    /// The unit relies on one a type stopped, which reported it ([`stopped`]).
+    Stopped,
     /// Lowering reached a state it cannot be in: an internal error (S-67),
     /// never a diagnostic.
     Internal,
@@ -92,8 +102,6 @@ pub(crate) struct Fail {
     /// The E0200 of an unsupported feature, made by the list of what this
     /// version does not support (`onsa_diag::unsupported`, S-224).
     pub report: Option<Box<Diagnostic>>,
-    /// Of a type lowering does not lower, why (`types`).
-    pub bad: Option<Box<types::BadTy>>,
 }
 
 pub(crate) type R<T> = Result<T, Fail>;
@@ -106,14 +114,13 @@ pub(crate) fn unsupported(span: Span, feature: Feature, details: &[&str]) -> Fai
 
 /// The unsupported feature of the E0200 `d`.
 pub(crate) fn gated(d: Diagnostic) -> Fail {
-    Fail {
-        kind: FailKind::Unsupported,
-        span: d.span,
-        msg: d.message.clone(),
-        hole: None,
-        report: Some(Box::new(d)),
-        bad: None,
-    }
+    Fail { kind: FailKind::Unsupported, span: d.span, msg: d.message.clone(), hole: None, report: Some(Box::new(d)) }
+}
+
+/// The unit at `span` relies on one a type stopped: the one way to a
+/// [`FailKind::Stopped`], which has no report (the stopped one has it).
+pub(crate) fn stopped(span: Span) -> Fail {
+    Fail { kind: FailKind::Stopped, ..internal(span, "a unit stopped by a type, out of lowering") }
 }
 
 /// Why [`lower`] produced no Core.
@@ -142,13 +149,21 @@ fn contains(outer: Span, inner: Span) -> bool {
     outer.file == inner.file && outer.start <= inner.start && inner.end <= outer.end
 }
 
-/// Attach the hole `h` to an unsupported feature that has none yet (the
-/// innermost expression or pattern whose lowering failed).
+/// Attach the hole `h` to an unsupported feature, or a use of a stopped
+/// constant or flow, that has none yet (the innermost expression or pattern
+/// whose lowering failed).
 pub(crate) fn at_hole(mut f: Fail, h: Hole) -> Fail {
-    if f.kind == FailKind::Unsupported && f.hole.is_none() {
+    if matches!(f.kind, FailKind::Unsupported | FailKind::Stopped) && f.hole.is_none() {
         f.hole = Some(h);
     }
     f
+}
+
+/// A constant (of `const_ids`) or a flow (of `flow_fns`) a type stopped.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+enum Stop {
+    Const(DefId, Vec<GenericArg>),
+    Flow(DefId),
 }
 
 pub(crate) struct Lowerer<'a> {
@@ -176,10 +191,10 @@ pub(crate) struct Lowerer<'a> {
     lowering: Option<FnId>,
     /// The instances of types being filled, the innermost last (`types`).
     fills: Vec<types::Fill>,
-    /// The instances of types lowering does not lower, and those an internal
-    /// error or a limit stopped (`types`).
+    /// The instances of types lowering does not lower (`types`).
     bad_types: HashMap<TypeId, types::BadTy>,
-    broken_types: HashSet<TypeId>,
+    /// The constants and flows a type stopped, reported once (S-67).
+    stopped: HashSet<Stop>,
     pub(crate) eq_fns: HashMap<CTy, FnId>,
     messages: HashMap<String, MsgId>,
     pub(crate) flow_fns: HashMap<DefId, flow::FlowFns>,
@@ -195,9 +210,9 @@ pub(crate) struct Lowerer<'a> {
     pub(crate) holes: HashSet<Hole>,
     /// The source of every placeholder the current attempt lowered.
     pub(crate) hole_spans: Vec<Span>,
-    /// The placeholders of the current attempt whose type is `()` in place of
-    /// a type lowering does not support.
-    pub(crate) stand_in_spans: Vec<Span>,
+    /// The E0200s of the forms the attempts of the item being lowered found:
+    /// reported when it ends, unless a type stops the unit they are in.
+    attempts: Vec<Diagnostic>,
     /// The attempts of one item: one more than the holes there can be (every
     /// expression and pattern of every module), so it is never reached while
     /// each attempt finds a new hole.
@@ -260,7 +275,7 @@ pub fn lower_with(pkg: &Package, a: &Analysis, opts: &LowerOptions) -> Result<Mo
         lowering: None,
         fills: Vec::new(),
         bad_types: HashMap::new(),
-        broken_types: HashSet::new(),
+        stopped: HashSet::new(),
         eq_fns: HashMap::new(),
         messages: HashMap::new(),
         flow_fns: HashMap::new(),
@@ -270,7 +285,7 @@ pub fn lower_with(pkg: &Package, a: &Analysis, opts: &LowerOptions) -> Result<Mo
         bulk_threshold: opts.bulk_threshold,
         holes: HashSet::new(),
         hole_spans: Vec::new(),
-        stand_in_spans: Vec::new(),
+        attempts: Vec::new(),
         max_attempts: places + 1,
         unsupported: Vec::new(),
     };
@@ -329,6 +344,9 @@ impl<'a> Lowerer<'a> {
     /// after each unsupported feature found in an expression or an arm
     /// pattern (S-67). `Err` is an internal error, which stops lowering.
     ///
+    /// A unit that a type stops reports that E0200 alone (§18.1): the E0200s
+    /// its attempts found in it are dropped ([`Self::stop`]).
+    ///
     /// An internal failure is a consequence of a placeholder, and not
     /// reported, when its source and a placeholder's source of the same
     /// attempt are inside one another (the placeholder, or an expression
@@ -337,12 +355,11 @@ impl<'a> Lowerer<'a> {
     fn lower_item(&mut self, span: Span, mut attempt: impl FnMut(&mut Self) -> R<()>) -> Result<(), LowerFailure> {
         // A panic names this item (S-67).
         let _scope = onsa_diag::internal::item_scope(span);
-        for _ in 0..self.max_attempts {
+        for left in (0..self.max_attempts).rev() {
             self.hole_spans.clear();
-            self.stand_in_spans.clear();
-            let Err(fail) = attempt(self) else { return Ok(()) };
+            let Err(fail) = attempt(self) else { break };
             match fail.kind {
-                FailKind::Internal if from_placeholder(&self.hole_spans, fail.span, span) => return Ok(()),
+                FailKind::Internal if from_placeholder(&self.hole_spans, fail.span, span) => break,
                 FailKind::Internal | FailKind::Pending => {
                     return Err(LowerFailure::Internal { span: fail.span, message: fail.msg });
                 }
@@ -352,43 +369,65 @@ impl<'a> Lowerer<'a> {
                     };
                     return Err(LowerFailure::Diagnostics(vec![*d]));
                 }
-                FailKind::Unsupported => {
-                    // An operation on a stand-in `()` (`==` of two `Str`
-                    // placeholders) fails for the stand-in's type, not the
-                    // program's: its hole is used, and nothing reported.
-                    let region = fail.hole.and_then(|h| self.hole_span(h)).unwrap_or(fail.span);
-                    let around_stand_in = self.stand_in_spans.iter().any(|&h| contains(region, h));
-                    if !around_stand_in {
-                        let Some(d) = fail.report else {
+                // No hole: it stopped itself, or by a constant or flow it relied
+                // on not in an expression.
+                FailKind::UnsupportedType(_) | FailKind::Stopped if fail.hole.is_none() => {
+                    self.stop(fail, span);
+                    break;
+                }
+                FailKind::Unsupported | FailKind::UnsupportedType(_) | FailKind::Stopped => {
+                    match fail.report {
+                        Some(d) => self.attempts.push(*d),
+                        None if fail.kind == FailKind::Stopped => {}
+                        None => {
                             return Err(LowerFailure::Internal {
                                 span: fail.span,
                                 message: format!("an unsupported feature without its diagnostic: {}", fail.msg),
                             });
-                        };
-                        self.unsupported.push(*d);
+                        }
                     }
                     match fail.hole {
                         Some(h) if self.holes.insert(h) => {}
-                        _ => return Ok(()),
+                        _ => break,
                     }
                 }
             }
+            // A safety bound, not reached while every attempt finds a new hole.
+            if left == 0
+                && let Some(last) = self.attempts.last_mut()
+            {
+                let note = "this item may use more unsupported features that were not reported";
+                last.notes.push(onsa_diag::Note::at(last.span, note));
+            }
         }
-        // A safety bound, not reached while every attempt finds a new hole.
-        if let Some(last) = self.unsupported.last_mut() {
-            let at = last.span;
-            last.notes
-                .push(onsa_diag::Note::at(at, "this item may use more unsupported features that were not reported"));
-        }
+        self.unsupported.append(&mut self.attempts);
         Ok(())
     }
 
-    /// The source of a hole.
-    fn hole_span(&self, h: Hole) -> Option<Span> {
-        Some(match h {
-            Hole::Expr(m, e) => self.a.ast(self.pkg, m)?.parsed.ast.expr(e).span,
-            Hole::Pat(m, p) => self.a.ast(self.pkg, m)?.parsed.ast.pat(p).span,
-        })
+    /// A unit declared at `within` that a type stops (S-67): the E0200s its
+    /// attempts found in it are dropped (of a constant or a flow, from the
+    /// attempts of the item that lowers it), then the E0200 of that type, if
+    /// `f` is one (a unit it relied on reported its own), and the
+    /// [`FailKind::Stopped`]. Its placeholders stay: no unit lowers it again
+    /// (`fn_ids`, `stopped`), and its other instances stop at the same type,
+    /// as a type that differs among them stops the unit that makes them.
+    fn stop(&mut self, f: Fail, within: Span) -> Fail {
+        self.attempts.retain(|d| !contains(within, d.span));
+        if let Some(d) = f.report {
+            self.unsupported.push(*d);
+        }
+        stopped(f.span)
+    }
+
+    /// `f` of the unit `key` declared at `within`: a type that stops it
+    /// ([`Self::stop`]) is recorded, so that a later use finds it stopped and
+    /// reports nothing.
+    fn stop_unit(&mut self, key: Stop, within: Span, f: Fail) -> Fail {
+        if f.hole.is_some() || !matches!(f.kind, FailKind::UnsupportedType(_) | FailKind::Stopped) {
+            return f;
+        }
+        self.stopped.insert(key);
+        self.stop(f, within)
     }
 
     pub(crate) fn msg(&mut self, text: &str) -> MsgId {
@@ -649,13 +688,26 @@ impl<'a> Lowerer<'a> {
     /// literal, are a graph of defs with no cycle (E0312; the `...` is an edge
     /// to every default of its struct, `names/body/cycles.rs`), and a
     /// recursion goes down it, whatever the arguments. `span`: the use.
+    ///
+    /// A constant a type stops is reported once (S-67), and each use is
+    /// [`FailKind::Stopped`]: the expression that reads it is a placeholder.
     pub(crate) fn const_id(&mut self, d: DefId, gargs: Vec<GenericArg>, span: Span) -> R<ConstId> {
         if let Some(&id) = self.const_ids.get(&(d, gargs.clone())) {
             return Ok(id);
         }
+        let key = Stop::Const(d, gargs.clone());
+        if self.stopped.contains(&key) {
+            return Err(stopped(span));
+        }
+        let within = self.a.def(d).span;
+        self.lower_const(d, gargs, span).map_err(|f| self.stop_unit(key, within, f))
+    }
+
+    fn lower_const(&mut self, d: DefId, gargs: Vec<GenericArg>, span: Span) -> R<ConstId> {
         let def = self.a.def(d).clone();
         let DefKind::Const(c) = &def.kind else { return Err(internal(def.span, "not a const")) };
-        let ty = self.core_ty(c.ty, &gargs, def.span)?;
+        let at = body::Binding { ty: c.ty, at: def.span, decl: c.ty_span.unwrap_or(def.span) };
+        let ty = body::bind_tys(self, [at], &gargs, def.span)?[0];
         let init = match self.a.const_values.get(&d) {
             Some(v) => self.const_value_expr(v, ty, def.span)?,
             None => {
@@ -664,7 +716,7 @@ impl<'a> Lowerer<'a> {
                     return Err(internal(def.span, "a `const` whose initializer was not checked"));
                 };
                 let Some(v) = c.value else { return Err(internal(def.span, "const without initializer")) };
-                let mut cx = body::FnCx::new(self, d, gargs.clone(), body, ty)?;
+                let mut cx = body::FnCx::new(self, d, gargs.clone(), body, body::Ret::Made(ty))?;
                 cx.constant = true;
                 let e = body::lower_expr(self, &mut cx, v)?;
                 // A placeholder is a local of its own (S-67): not one of the initializer.
@@ -738,21 +790,23 @@ impl<'a> Lowerer<'a> {
                 if let Some(made) = f.derived {
                     return self.lower_derived(d, f, made, args, fid);
                 }
-                let ret = self.core_ty(f.ret, args, def.span)?;
+                // Of the result, where its type is converted (§4.4) and written.
+                let ret = body::Binding { ty: f.ret, at: def.span, decl: f.ret_span.unwrap_or(def.span) };
                 if f.body.is_none() {
                     // `target`: declaration only.
-                    let mut params = Vec::new();
-                    let mut locals = Vec::new();
                     if let Some(m) = f.self_mode {
                         return Err(internal(def.span, format!("bodyless method with self mode {m:?}")));
                     }
-                    for p in &f.params {
-                        let ty = self.core_ty(p.ty, args, p.span)?;
+                    let binds = f.params.iter().map(|p| body::Binding { ty: p.ty, at: p.span, decl: p.name_span });
+                    let tys = body::bind_tys(self, std::iter::once(ret).chain(binds), args, def.span)?;
+                    let mut params = Vec::new();
+                    let mut locals = Vec::new();
+                    for (p, &ty) in f.params.iter().zip(&tys[1..]) {
                         let local = LocalId(locals.len() as u32);
                         locals.push(Local { name: p.name.clone(), ty });
                         params.push(Param { local, mode: core_mode(p.mode), ty });
                     }
-                    self.fill_fn(fid, params, ret, f.rt, locals, None);
+                    self.fill_fn(fid, params, tys[0], f.rt, locals, None);
                     return Ok(());
                 }
                 let Some(info) = self.a.bodies.get(&d) else {
@@ -761,10 +815,10 @@ impl<'a> Lowerer<'a> {
                 if !info.complete {
                     return Err(internal(def.span, "function body has errors"));
                 }
-                let mut cx = body::FnCx::new(self, d, args.to_vec(), info, ret)?;
+                let mut cx = body::FnCx::new(self, d, args.to_vec(), info, body::Ret::Of(ret))?;
                 let params = body::bind_params(self, &mut cx, d, f)?;
                 let block = body::lower_fn_body(self, &mut cx, f.body.unwrap())?;
-                self.fill_fn(fid, params, ret, f.rt, cx.locals, Some(block));
+                self.fill_fn(fid, params, cx.ret, f.rt, cx.locals, Some(block));
                 Ok(())
             }
             DefKind::Test { name, body } => {
@@ -774,7 +828,7 @@ impl<'a> Lowerer<'a> {
                 if !info.complete {
                     return Err(internal(def.span, "test body has errors"));
                 }
-                let mut cx = body::FnCx::new(self, d, Vec::new(), info, Types::UNIT)?;
+                let mut cx = body::FnCx::new(self, d, Vec::new(), info, body::Ret::Made(Types::UNIT))?;
                 let block = body::lower_fn_body(self, &mut cx, *body)?;
                 // The mark that identifies the test (§11.8, S-55).
                 let module = self.a.modules.get(def.module).path.clone();
@@ -803,6 +857,5 @@ pub(crate) fn internal(span: Span, msg: impl Into<String>) -> Fail {
         msg: format!("internal lowering error: {}", msg.into()),
         hole: None,
         report: None,
-        bad: None,
     }
 }

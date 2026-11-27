@@ -450,7 +450,7 @@ impl Place<'_> {
             ExprKind::Lit(Lit::Int { value, .. }) => Some(*value),
             _ => None,
         });
-        ConstDef { ty: self.error, value, int_value, param: None, of_attr: None }
+        ConstDef { ty: self.error, ty_span: None, value, int_value, param: None, of_attr: None }
     }
 
     /// A function, with the mode of its `self` (a method, §6.2), known
@@ -465,6 +465,7 @@ impl Place<'_> {
             self_mode: self_param.map(|p| p.mode),
             params: Vec::new(),
             ret: self.unit,
+            ret_span: None,
             rt,
             effects: EffectSet::default(),
             body,

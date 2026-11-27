@@ -11,14 +11,10 @@ pub(crate) fn lower_expr(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId) -> R<Expr> 
     let x = if lw.holes.contains(&hole) {
         // An expression that uses an unsupported feature (S-67): a fresh
         // local of its type stands for it, so lowering reaches the next one.
-        // A type lowering does not support has `()` in its place (its uses
-        // are placeholders too). The Core is dropped (`lower_with`).
+        // The Core is dropped (`lower_with`).
         let span = cx.expr(e).span;
-        let (ty, stand_in) = placeholder_ty(lw, cx.value_ty(e)?, &cx.args, span)?;
+        let ty = lw.core_ty(cx.value_ty(e)?, &cx.args, span)?;
         lw.hole_spans.push(span);
-        if stand_in {
-            lw.stand_in_spans.push(span);
-        }
         let l = cx.temp("__unsupported", ty);
         local_expr(cx, l, span)
     } else {
@@ -30,15 +26,6 @@ pub(crate) fn lower_expr(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId) -> R<Expr> 
             super::call::coerce(lw, cx, x, to, core_mode(v.mode))
         }
         _ => Ok(x),
-    }
-}
-
-/// The Core type of a placeholder, and whether it stands in for a type
-/// lowering does not support (then it is `()`).
-pub(super) fn placeholder_ty(lw: &mut Lowerer, t: TyId, args: &[GenericArg], span: Span) -> R<(CTy, bool)> {
-    match lw.core_ty(t, args, span) {
-        Err(f) if f.kind == FailKind::Unsupported => Ok((Types::UNIT, true)),
-        r => r.map(|t| (t, false)),
     }
 }
 
@@ -75,7 +62,8 @@ fn lower_expr_at(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId) -> R<Expr> {
             ALit::Bool(b) => ExprKind::Lit(Lit::Bool(*b)),
             ALit::Str(s) => match *lw.m.tys.kind(ty) {
                 TyKind::Struct(id) => crate::lower::fixed_str::value(lw, cx, s, id, span)?,
-                _ => return Err(unsupported(span, Feature::StrValues, &[])),
+                // A `Str` stopped the unit at the type, above.
+                _ => return Err(internal(span, "a string literal of a type of no `FixedStr`")),
             },
         },
         AK::Path(_) => return Err(internal(span, "unresolved path")),
@@ -145,8 +133,8 @@ fn lower_expr_at(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId) -> R<Expr> {
         AK::At { expr: inner, .. } => return lower_expr(lw, cx, *inner),
         // `^y` has the `Target::Local` of `y`, lowered above.
         AK::Feedback(_) => return Err(internal(span, "a feedback reference without its local")),
-        AK::Handle { .. } => return Err(unsupported(span, Feature::EffectHandlers, &[])),
-        AK::Unsafe(_) => return Err(unsupported(span, Feature::Unsafe, &[])),
+        // The checks stop them (E0200 `EffectHandlers`, `Unsafe`).
+        AK::Handle { .. } | AK::Unsafe(_) => return Err(internal(span, "a handler or an `unsafe` block checked")),
         // Sema rejects `par` outside a flow body: lowering never sees one.
         AK::Par { .. } => return Err(internal(span, "`par~` outside a flow")),
         &AK::Binary { op, op_span, lhs, rhs } => return lower_binary(lw, cx, e, (op, op_span), lhs, rhs, ty),

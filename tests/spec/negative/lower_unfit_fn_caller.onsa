@@ -1,0 +1,40 @@
+// onsa.toml
+// [package]
+// name = "lower_unfit_fn_caller"
+// edition = "2026"
+//
+// [targets.c]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [test]
+// spec = ["§18.1", "§4.2"]
+
+// W8-16 B, S-67 (the decision of 2026-11-27): a function that is stopped (`inner` has a local of type `Str`) does not stop
+// the functions that call it: they are lowered, and only their own diagnostics are reported, with none for the call.
+// `caller` has a `Str` of its own, in the argument it passes: that one is its E0200 (the first expression with a type
+// this version does not lower), not a cascade from `unused_param`.
+
+fn unused_param(s: Str) -> U32 { 1 }   //~ E0200 @17
+
+pub fn caller() -> U32 { unused_param("a") }   //~ E0200
+
+fn inner() -> U32 {
+  let s = "a"   //~ E0200 @7
+  s.len()
+}
+
+// Calls a stopped function and has no other diagnostic: none.
+pub fn plain_caller() -> U32 { inner() + 1 }
+
+// Calls a stopped function and has its own E0200: that one only (the order of two arrays, R-119).
+pub fn caller_with_its_own(a: [I32; 2], b: [I32; 2]) -> U32 {
+  let ordered = a < b   //~ E0200
+  if ordered { inner() } else { 0 }
+}
+
+// A call through two levels.
+pub fn two_levels() -> U32 { plain_caller() + inner() }

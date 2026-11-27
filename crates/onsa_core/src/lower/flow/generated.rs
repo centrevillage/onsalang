@@ -212,7 +212,7 @@ impl<'b> Gen<'b> {
         stage: ClockStage,
         ret: CTy,
     ) -> R<Gen<'b>> {
-        let mut cx = FnCx::new(lw, def, Vec::new(), &info.body, ret)?;
+        let mut cx = FnCx::new(lw, def, Vec::new(), &info.body, Ret::Made(ret))?;
         for (l, &c) in &info.clocks.locals {
             let local = cx.locals.get_mut(l.0 as usize).ok_or_else(|| internal(span, "a clock of no local"))?;
             local.ty = burst_ty(Some(c), local.ty, &mut lw.m.tys);

@@ -1,0 +1,66 @@
+// onsa.toml
+// [package]
+// name = "lower_unfit_params"
+// edition = "2026"
+//
+// [targets.c]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [test]
+// spec = ["§18.1", "§4.2"]
+
+// W8-16 B, S-67 (the decision of 2026-11-27): a unit whose parameter has a type this version does not lower
+// (`Str`, a type that holds one, `Option[Str]`, `(Str, U32)`, `W[Str]`: Shared, §4.2) is stopped at its
+// bindings, not lowered. The unit's lowering diagnostic is one E0200 for each such type (§18.1), at the name of the
+// first parameter of that type. The body is not read, so a parameter that the body never reads is E0200 too (R-529),
+// and the E0200s of the body (a feature this version does not lower) do not appear: they come in the run after the
+// type is changed. Different types in one unit are one E0200 each; the same type twice is one.
+
+pub struct Mm { name: Str, n: U32 }
+
+pub struct Nn { label: Str, k: U32 }
+
+pub enum E { A(Str), B, C(U32) }
+
+pub struct W[T] { v: T, n: U32 }
+
+// The parameter is never read (R-529: it used to be lowered with the type `()` and no diagnostic).
+pub fn unused_str(s: Str) -> U32 { 1 }   //~ E0200 @19
+
+pub fn read_str(s: Str) -> U32 { s.len() }   //~ E0200 @17
+
+// The same type twice: the first parameter only.
+pub fn two_same(s: Str, t: Str) -> U32 { s.len() + t.len() }   //~ E0200 @17
+
+pub fn in_enum(e: E) -> U32 { 1 }   //~ E0200 @16
+
+pub fn in_option(o: Option[Str]) -> U32 { 1 }   //~ E0200 @18
+
+pub fn in_tuple(p: (Str, U32)) -> U32 { p.1 }   //~ E0200 @17
+
+pub fn in_generic(w: W[Str]) -> U32 { w.n }   //~ E0200 @19
+
+// A struct that holds a `Str` twice (two parameters of the same type): one.
+pub fn same_struct_twice(a: Mm, b: Mm) -> U32 { a.n + b.n }   //~ E0200 @26
+
+// Two structs that hold a `Str` are two types: one E0200 for each, at its first parameter.
+pub fn two_types(
+  a: Mm,   //~ E0200 @3
+  b: Nn,   //~ E0200 @3
+) -> U32 {
+  a.n + b.k
+}
+
+// Three parameters, two types: the first of each.
+pub fn same_then_other(a: Mm, b: Mm, c: Nn) -> U32 { a.n + b.n + c.k }   //~ E0200 @24 //~ E0200 @38
+
+// The body's own feature that this version does not lower (the order of two arrays, R-119) is not reported: only the
+// parameter is. The next run, with the parameter's type changed, reports it.
+pub fn body_feature(s: Str, a: [I32; 2], b: [I32; 2]) -> Bool { a < b }   //~ E0200 @21
+
+// No parameter of such a type (a `Str` in the body only is the case of lower_unfit_expr_only.onsa).
+pub fn fine(n: U32, o: Option[U32], p: (U32, Bool)) -> U32 { n }

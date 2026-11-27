@@ -1,0 +1,38 @@
+// onsa.toml
+// [package]
+// name = "lower_unfit_enum_variant_call"
+// edition = "2026"
+//
+// [targets.c]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [test]
+// spec = ["§18.1", "§4.2", "§4.1"]
+
+// W8-16 B, S-67 (the decision of 2026-11-27), R-335: an enum with a `Str` payload (`E.A(Str)`) is a type this version does
+// not lower, though the variants `E.B` and `E.C(n)` carry no `Str`. A unit that calls a function with one of them as an
+// argument had an internal error (`index out of bounds`, in `onsa dump --core`). `e_len` has the type in its
+// parameter: one E0200 at the name. `f` and `g` have no binding of the type, only an expression of it: the first
+// expression is one E0200 each (the line of the variant), and the unit's other features are not reported.
+
+pub enum E { A(Str), B, C(U32) }
+
+pub fn e_len(e: E) -> U32 { 0 }   //~ E0200 @14
+
+pub fn f(n: U32) -> U32 { e_len(E.C(n)) }   //~ E0200
+
+pub fn g(n: U32) -> U32 { e_len(E.B) }   //~ E0200
+
+// With `uses {Alloc}` too (the form that stopped `onsa dump --core` before `f` could).
+pub fn h(n: U32) -> U32 uses {Alloc} { e_len(E.B) + n }   //~ E0200
+
+// The enum of the same shape with no `Str` is lowered.
+pub enum Plain { A(U32), B, C(U32) }
+
+pub fn plain_len(e: Plain) -> U32 { 0 }
+
+pub fn plain_call(n: U32) -> U32 { plain_len(Plain.C(n)) + plain_len(Plain.B) }

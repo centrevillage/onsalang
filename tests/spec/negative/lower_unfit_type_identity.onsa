@@ -1,0 +1,48 @@
+// onsa.toml
+// [package]
+// name = "lower_unfit_type_identity"
+// edition = "2026"
+//
+// [targets.c]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [test]
+// spec = ["§18.1", "§4.2"]
+
+// W8-16 B, S-67 (the decision of 2026-11-27 and its supplement): the unit of "降下できない型ごとに" is the unsupported part
+// that a binding's type reaches: the feature, its text and the position in the declaration where it is written. So
+// `Str`, `Option[Str]` and a struct that holds a `Str` are one group when the `Str` is the same one written, and a unit has
+// one E0200 for the group, at the first binding of it: `(s: Str, o: Option[Str])` is one (at `s`), `(o: Outer, m: Mm)` is one
+// (both reach the `name: Str` of `Mm`, at `o`), and `ps: [Mm; 2]` with the loop variable of `for p in ps` is one (at `ps`).
+// The `for` is the borrowed array of R-335 (`for p in ps { .. p.n }` was an internal error). Two structs that write their own
+// `Str` (lower_unfit_params.onsa) are two groups.
+
+pub struct Mm { name: Str, n: U32 }
+
+pub struct Outer { m: Mm, k: U32 }
+
+pub fn str_and_option(
+  s: Str,   //~ E0200 @3
+  o: Option[Str],
+) -> U32 {
+  s.len()
+}
+
+pub fn outer_and_mm(
+  o: Outer,   //~ E0200 @3
+  m: Mm,
+) -> U32 {
+  o.k + m.n
+}
+
+pub fn total(ps: [Mm; 2]) -> U32 {   //~ E0200 @14
+  var t: U32 = 0
+  for p in ps {
+    t = t + p.n
+  }
+  t
+}

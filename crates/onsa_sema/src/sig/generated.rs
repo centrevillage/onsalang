@@ -187,14 +187,20 @@ impl<'p> Sema<'p> {
                     let derives = Some(Vec::new());
                     DefKind::Struct(StructDef { generics: Vec::new(), fields, derives, flow_ty: Some(t) })
                 }
-                Generated::Size | Generated::BulkSize => {
-                    DefKind::Const(ConstDef { ty: u32, value: None, int_value: None, param: None, of_attr: None })
-                }
+                Generated::Size | Generated::BulkSize => DefKind::Const(ConstDef {
+                    ty: u32,
+                    ty_span: None,
+                    value: None,
+                    int_value: None,
+                    param: None,
+                    of_attr: None,
+                }),
                 Generated::Fn(which) => DefKind::Fn(FnDef {
                     generics: Vec::new(),
                     self_mode: None,
                     params: Vec::new(),
                     ret: unit,
+                    ret_span: None,
                     rt: false,
                     effects: EffectSet::default(),
                     body: None,
@@ -561,7 +567,7 @@ impl<'p> Sema<'p> {
             self.fill_struct(flow, FlowTy::In, fs);
         }
         let u32 = self.a.types.int(IntKind::U32);
-        let size = ConstDef { ty: u32, value: None, int_value: None, param: None, of_attr: None };
+        let size = ConstDef { ty: u32, ty_span: None, value: None, int_value: None, param: None, of_attr: None };
         for g in [Generated::Size, Generated::BulkSize] {
             self.fill_generated(flow, g, DefKind::Const(size.clone()));
         }
@@ -608,6 +614,7 @@ impl<'p> Sema<'p> {
             mode,
             ty,
             span: name_span,
+            name_span,
         };
         let mut by_input = |t: FlowTy| {
             let named = self.generated_ty(flow, t).zip(t.param_name());
@@ -704,6 +711,7 @@ impl<'p> Sema<'p> {
             self_mode: None,
             params,
             ret,
+            ret_span: None,
             rt,
             effects,
             body: None,

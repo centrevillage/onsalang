@@ -1,0 +1,56 @@
+// onsa.toml
+// [package]
+// name = "lower_unfit_fields"
+// edition = "2026"
+//
+// [targets.c]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [test]
+// spec = ["§18.1", "§4.2"]
+
+// W8-16 B, S-67 (the decision of 2026-11-27): a binding whose type holds a `Str` through a field (`m: Mm` with
+// `name: Str`, and `Outer { m: Mm }` through two) is stopped like a binding of `Str` itself (lower_unfit_params.onsa).
+// The E0200 is at the binding's name, and a note points into the declaration that was written (the note's text is not
+// specified here: only the marker line and the number of diagnostics). Every unit that has a binding of such a type
+// reports its own E0200, at its own binding: they are different positions, so none of them is merged (§18.1). The units that
+// read the fields (`m.n`, R-332) and the units that call a stopped function (R-529) are not an internal error.
+
+pub struct Mm { name: Str, n: U32 }
+
+pub struct Outer { m: Mm, k: U32 }
+
+pub fn first(m: Mm) -> U32 { m.n }   //~ E0200 @14
+
+pub fn second(m: Mm) -> U32 { m.n + 1 }   //~ E0200 @15
+
+// A nested struct: the binding's name, once.
+pub fn third(o: Outer) -> U32 { o.k }   //~ E0200 @14
+
+pub fn fourth(o: Outer) -> U32 { o.k }   //~ E0200 @15
+
+// The parameter is not read, and passed to a function that is stopped itself: each is one E0200 at its own `m`.
+pub fn unused_struct_param(m: Mm) -> U32 { 1 }   //~ E0200 @28
+
+pub fn pass(m: Mm) -> U32 { unused_struct_param(m) }   //~ E0200 @13
+
+// A struct literal that is a local: the name, once.
+pub fn local_struct() -> U32 {
+  let m = Mm { name: "b", n: 2 }   //~ E0200 @7
+  let k = m.n
+  k + m.n
+}
+
+// A `Str`-free struct is lowered.
+pub struct Plain { a: U32, b: Bool }
+
+pub fn plain_param(p: Plain) -> U32 { p.a }
+
+pub fn plain_local() -> U32 {
+  let p = Plain { a: 1, b: true }
+  p.a
+}

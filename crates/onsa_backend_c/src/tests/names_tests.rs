@@ -146,3 +146,38 @@ fn the_place_of_an_element_of_a_tuple_has_its_type() {
     let c = emit(&m, &opts).unwrap_or_else(|d| panic!("{d:?}")).source;
     assert!(c.contains(".f1.a["), "{c}");
 }
+
+/// The members of a tuple are registered in their order, each new struct
+/// before the next: `(m.A, m.B)` defines `m.A`, `m.B`, then the tuple.
+#[test]
+fn the_new_members_of_a_tuple_are_defined_in_their_order() {
+    let mut tys = Types::default();
+    let (a, b) = (tys.intern(TyKind::Struct(TypeId(0))), tys.intern(TyKind::Struct(TypeId(1))));
+    let pair = tys.intern(TyKind::Tuple(Box::new([a, b])));
+    let field = |n: &str| TypeDefKind::Struct { fields: vec![(n.into(), Types::U32)] };
+    let types =
+        vec![TypeDef { name: "m.A".into(), kind: field("x") }, TypeDef { name: "m.B".into(), kind: field("y") }];
+    let m = module(tys, types);
+    let mut names = TypeNames::new(&m);
+    names.name(pair);
+    let order: Vec<String> = names
+        .order
+        .iter()
+        .map(|e| match e {
+            Entry::Def(id) => m.ty(*id).name.clone(),
+            Entry::Synth(_, n) => n.clone(),
+        })
+        .collect();
+    assert_eq!(order, ["m.A", "m.B", "onsa_tup_m__A_m__B"]);
+}
+
+/// A `Span` and a `Buf` of one element have two tags, in one unit.
+#[test]
+fn a_span_and_a_buf_of_one_element_have_two_tags() {
+    let mut tys = Types::default();
+    let span = tys.intern(TyKind::Span(Types::int(IntKind::U8)));
+    let buf = tys.intern(TyKind::Buf(Types::int(IntKind::U8)));
+    let m = module(tys, Vec::new());
+    let mut names = TypeNames::new(&m);
+    assert_eq!([names.tag(span), names.tag(buf)], ["span_u8", "buf_u8"]);
+}

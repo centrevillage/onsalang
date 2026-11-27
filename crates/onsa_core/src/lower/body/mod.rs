@@ -19,7 +19,7 @@ use super::build::{
     after, bool_lit, field, field_by_name, float_text, index, lit, local_expr, materialize, payload, stmt, tag_of,
     u32_lit,
 };
-use super::{FailKind, GenericArg, Hole, Lowerer, R, at_hole, core_mode, internal, unsupported};
+use super::{FailKind, GenericArg, Hole, Lowerer, R, at_hole, core_mode, internal, stopped, unsupported};
 use crate::ir::*;
 use crate::prim::{MathFn, Prim, PrimRow, Scalar, row_self};
 
@@ -31,7 +31,6 @@ use super::{derived, eq, flow};
 use call::lower_call;
 pub(super) use call::{of_type, span_of};
 pub(super) use expr::lower_expr;
-use expr::placeholder_ty;
 use pat::lower_match;
 pub(super) use pat::{arm_test, bind_irrefutable, lower_match_with, pat_bind};
 
@@ -54,24 +53,82 @@ pub(crate) struct FnCx<'b> {
     pub constant: bool,
 }
 
+/// A binding of a unit: its type, where it is converted (the limits of
+/// §4.4 are judged there) and where it is declared (its E0200, §18.1).
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct Binding {
+    pub ty: TyId,
+    pub at: Span,
+    pub decl: Span,
+}
+
+/// The result of a body: a binding of the unit, or made by its caller.
+pub(crate) enum Ret {
+    Of(Binding),
+    Made(CTy),
+}
+
+/// The binding stage of a unit (§18.1, S-67): the Core types of `binds`,
+/// in order. A type lowering does not lower stops the unit, as Stopped: one
+/// E0200 for each unsupported part (`BadTy`: its feature, its detail and the
+/// field it is written in), at the binding of it declared first, so that
+/// the body is not lowered. O(the bindings).
+pub(crate) fn bind_tys(
+    lw: &mut Lowerer,
+    binds: impl IntoIterator<Item = Binding>,
+    args: &[GenericArg],
+    span: Span,
+) -> R<Vec<CTy>> {
+    let (mut tys, mut first) = (Vec::new(), std::collections::HashMap::new());
+    for b in binds {
+        match lw.core_ty(b.ty, args, b.at) {
+            Ok(t) => tys.push(t),
+            Err(f) => {
+                let FailKind::UnsupportedType(bad) = f.kind else { return Err(f) };
+                let at = first.entry(bad).or_insert(b.decl);
+                *at = std::cmp::min_by_key(*at, b.decl, |s: &Span| s.start);
+            }
+        }
+    }
+    if first.is_empty() {
+        return Ok(tys);
+    }
+    let mut first: Vec<_> = first.into_iter().collect();
+    first.sort_by_key(|&(_, at)| at.start);
+    for (bad, at) in first {
+        if let Some(d) = bad.fail(lw, at).report {
+            lw.unsupported.push(*d);
+        }
+    }
+    Err(stopped(span))
+}
+
 impl<'b> FnCx<'b> {
+    /// The body of `def` at `args`, after the binding stage ([`bind_tys`]):
+    /// the result, the parameters `_` (no locals), then every local.
     pub(crate) fn new(
         lw: &mut Lowerer<'b>,
         def: DefId,
         args: Vec<GenericArg>,
         info: &'b BodyInfo,
-        ret: CTy,
+        ret: Ret,
     ) -> R<FnCx<'b>> {
         let d = lw.a.def(def);
-        let module = d.module;
-        let Some(m) = lw.a.ast(lw.pkg, module) else { return Err(internal(d.span, "module source not found")) };
-        let mut locals = Vec::new();
-        for l in &info.locals {
-            // A local of a type lowering does not support: the expressions
-            // that give it a value report the type (S-67), as placeholders.
-            let (ty, _) = placeholder_ty(lw, l.ty, &args, l.span)?;
-            locals.push(Local { name: l.name.clone(), ty });
-        }
+        let (module, span) = (d.module, d.span);
+        let Some(m) = lw.a.ast(lw.pkg, module) else { return Err(internal(span, "module source not found")) };
+        let (head, made) = match ret {
+            Ret::Of(b) => (Some(b), None),
+            Ret::Made(t) => (None, Some(t)),
+        };
+        let params = d.as_fn().map(|f| &f.params[..]).unwrap_or_default();
+        let wild = params.iter().filter(|p| p.name == "_").map(|p| Binding { ty: p.ty, at: p.span, decl: p.name_span });
+        let named = info.locals.iter().map(|l| Binding { ty: l.ty, at: l.span, decl: l.span });
+        let head: Vec<_> = head.into_iter().chain(wild).collect();
+        let n = head.len();
+        let mut tys = bind_tys(lw, head.into_iter().chain(named), &args, span)?;
+        let locals = tys.split_off(n).into_iter().zip(&info.locals);
+        let locals = locals.map(|(ty, l)| Local { name: l.name.clone(), ty }).collect();
+        let ret = made.or(tys.first().copied()).ok_or_else(|| internal(span, "a body of no result"))?;
         let (ast, text) = (&m.parsed.ast, &m.text[..]);
         Ok(FnCx { args, info, ast, text, module, locals, ret, inline_depth: 0, flow: None, constant: false })
     }
@@ -470,7 +527,9 @@ fn lower_for(
             span,
             ExprKind::Prim { prim: Prim::Len, args: vec![Arg { mode: Mode::Borrow, expr: seq.clone() }] },
         ),
-        _ => return Err(unsupported(span, Feature::Iteration, &[])),
+        // The checks stop the others (E0200 `Iteration`), and a type lowering
+        // does not lower stops the unit first.
+        _ => return Err(internal(span, "iteration over a type of no array")),
     };
     let i = cx.temp("__i", Types::U32);
     let mut stmts = Vec::new();

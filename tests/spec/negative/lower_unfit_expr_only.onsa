@@ -1,0 +1,74 @@
+// onsa.toml
+// [package]
+// name = "lower_unfit_expr_only"
+// edition = "2026"
+//
+// [targets.c]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [test]
+// spec = ["§18.1", "§4.2"]
+
+// W8-16 B, S-67 (the decision of 2026-11-27): a type that is in no binding of a unit and only in an expression of it
+// (the string literal of `"a".len()`, the call `mk()` of `mk().n`, the `None` of `let _: Option[Str] = None`) stops the
+// unit too, with one E0200 for the unit: the first expression that has such a type, in the order of the body. The
+// expressions after it are not reported, whatever their types are. A type in a binding comes first: with one, the unit's
+// diagnostic is at the binding and no expression of the body is reported.
+
+pub struct Mm { name: Str, n: U32 }
+
+pub fn mk() -> Mm {   //~ E0200 @16
+  Mm { name: "a", n: 1 }
+}
+
+pub fn literal_len() -> U32 {
+  "a".len()   //~ E0200
+}
+
+pub fn call_field() -> U32 uses {Alloc} {
+  mk().n   //~ E0200
+}
+
+pub fn discarded_none() -> U32 {
+  let _: Option[Str] = None   //~ E0200
+  3
+}
+
+// Two types in two expressions: the first only.
+pub fn first_of_two() -> U32 uses {Alloc} {
+  let a = mk().n   //~ E0200
+  let b = "b".len()
+  a + b
+}
+
+// The same type in many expressions: one.
+pub fn same_type_often() -> U32 {
+  let a = "a".len()   //~ E0200
+  let b = "b".len()
+  let c = "c".len()
+  a + b + c
+}
+
+// The unit stops at the expression type, and the E0200 of an earlier expression of a form this version does not lower
+// (the order of two arrays, R-119) is not reported either: only the first line below has a diagnostic.
+pub fn earlier_form_is_not_reported(a: [I32; 2], b: [I32; 2]) -> U32 {
+  let ordered = a < b
+  if ordered { "x".len() } else { 0 }   //~ E0200
+}
+
+// A binding's type wins: only the parameter is reported, not the expression of the body.
+pub fn binding_first(s: Str) -> U32 uses {Alloc} {   //~ E0200 @22
+  mk().n
+}
+
+// The effect row `uses {Alloc}` is there for the temporary `mk()` that is dropped (§8.1), which the checks need.
+
+// A `Str`-free body is lowered.
+pub fn fine(n: U32) -> U32 {
+  let _: Option[U32] = None
+  n + 1
+}

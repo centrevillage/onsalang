@@ -1,0 +1,43 @@
+// onsa.toml
+// [package]
+// name = "lower_unfit_const_reader"
+// edition = "2026"
+//
+// [targets.c]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [test]
+// spec = ["§18.1", "§6.6", "§4.2"]
+
+// W8-16 B, S-67 (the decision of 2026-11-27): a constant whose initializer has a type this version does not lower is one
+// E0200, at the constant. A unit that reads it is not stopped for that: the expression that reads the constant goes on
+// with no report, and every other E0200 of the reading unit is reported (the order of two arrays is the unit's own
+// feature that this version does not lower, R-119). The constant is read the same wherever it is declared (before or after
+// the reader), and by many units.
+
+fn n(s: Str) -> U32 { 1 }   //~ E0200 @6
+
+const K: U32 = n("abc")   //~ E0200
+
+// Reads `K` and has no other E0200: nothing is reported.
+pub fn use_k(x: U32) -> U32 { K + x }
+
+// Reads `K` and has its own E0200 too: that one, once.
+pub fn use_k_and_more(x: U32, a: [I32; 2], b: [I32; 2]) -> U32 {
+  let ordered = a < b   //~ E0200
+  if ordered { K + x } else { x }
+}
+
+// Reads `L`, which is declared after it.
+pub fn use_late(x: U32) -> U32 { L + x }
+
+const L: U32 = "abc".len()   //~ E0200
+
+// A constant that is lowered is read as before.
+const M: U32 = 7
+
+pub fn use_m(x: U32) -> U32 { M + x }

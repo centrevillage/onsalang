@@ -1,0 +1,41 @@
+// onsa.toml
+// [package]
+// name = "lower_unfit_panic_text_ok"
+// edition = "2026"
+//
+// [targets.c]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [test]
+// spec = ["§18.1", "§9.2"]
+// mode = "test"
+
+// W8-16 B, S-67 (the decision of 2026-11-27): the text of `panic("…")` is not counted as a `Str` the unit holds: lowering
+// does not lower it as a value, so a function with a `panic` is lowered, built and run as before, with no E0200
+// (the unit is stopped for a `Str` that it lowers, lower_unfit_expr_only.onsa). The test passes, and the target builds.
+
+fn guard(n: U32) -> U32 {
+  if n > 3 { panic("too big") }
+  n
+}
+
+fn guard_twice(n: U32, m: U32) -> U32 {
+  if n > 3 { panic("first is too big") }
+  if m > 3 { panic("second is too big") }
+  n + m
+}
+
+pub fn public_guard(n: U32) -> U32 {
+  if n > 9 { panic("a long one") }
+  n
+}
+
+test "panics carry a text" {
+  assert guard(2) == 2
+  assert guard_twice(1, 2) == 3
+  assert public_guard(5) == 5
+}

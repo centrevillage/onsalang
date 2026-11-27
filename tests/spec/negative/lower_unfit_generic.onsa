@@ -1,0 +1,48 @@
+// onsa.toml
+// [package]
+// name = "lower_unfit_generic"
+// edition = "2026"
+//
+// [targets.c]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [test]
+// spec = ["§18.1", "§4.4", "§4.2"]
+
+// W8-16 B, S-67 (the decision of 2026-11-27): a generic function is a unit for each instantiation. `tagged` is
+// instantiated for `U32` and for `I32`, and each of the two has the local `s: Str`, at the same position with the same
+// text: they are one E0200 (§18.1: "位置・コード・文面が同じ E0200 は一件"). The callers have no such type, so
+// they are lowered and report nothing, though the functions they call are stopped.
+
+fn tagged[T: Int](x: T) -> T {
+  let s = "a"   //~ E0200 @7
+  if s.len() > 0 { x } else { x }
+}
+
+pub fn at_u32() -> U32 { tagged(1) }
+
+pub fn at_i32() -> I32 { tagged(2) }
+
+// A third instantiation, from a unit that is not stopped itself.
+pub fn at_u8() -> U8 { tagged(3) }
+
+// `two` is stopped at the local `a: Str`, so the call `id("s")` does not make `id` for `Str`: the one E0200 is `two`'s,
+// and none is at `id`.
+fn id[T](x: T) -> T { x }
+
+pub fn two() -> U32 uses {Alloc} {
+  let a = id("s")   //~ E0200 @7
+  let b = id(1)
+  a.len() + b
+}
+
+// A generic function with no unit type in it is lowered for every instantiation.
+fn kept[T: Int](x: T) -> T { x }
+
+pub fn kept_u32() -> U32 { kept(1) }
+
+pub fn kept_i32() -> I32 { kept(2) }

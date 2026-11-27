@@ -1,0 +1,81 @@
+// onsa.toml
+// [package]
+// name = "lower_unfit_return_local"
+// edition = "2026"
+//
+// [targets.c]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [test]
+// spec = ["§18.1", "§4.2"]
+
+// W8-16 B, S-67 (the decision of 2026-11-27): the type of a return value and of a local binding that this version does
+// not lower stops the unit like a parameter's does (lower_unfit_params.onsa): one E0200 for each such type. The position
+// is the written return type for a return value and the name for a local binding, whether it is written
+// (`let a: Str`), inferred (`let b = "b"`) or a struct literal (`let m = Mm { .. }`, R-332). The body's own features that
+// this version does not lower are not reported.
+
+pub struct Mm { name: Str, n: U32 }
+
+pub struct Nn { label: Str, k: U32 }
+
+pub fn ret_str(n: U32) -> Str {   //~ E0200 @27
+  let k = n + 1
+  if k > 2 { "a" } else { "b" }
+}
+
+pub fn ret_option(n: U32) -> Option[Str] {   //~ E0200 @30
+  None
+}
+
+pub fn ret_struct(n: U32) -> Mm {   //~ E0200 @30
+  Mm { name: "a", n: n }
+}
+
+// The parameter and the return value have the same type: the parameter has the one E0200, and the return type none.
+pub fn same_in_and_out(s: Str) -> Str {   //~ E0200 @24
+  s
+}
+
+// A local written with its type and another of the same type, inferred: the first only.
+pub fn two_locals() -> U32 {
+  let a: Str = "a"   //~ E0200 @7
+  let b = "b"
+  a.len() + b.len()
+}
+
+pub fn inferred_local() -> U32 {
+  let b = "b"   //~ E0200 @7
+  b.len()
+}
+
+pub fn struct_local() -> U32 {
+  let m = Mm { name: "b", n: 2 }   //~ E0200 @7
+  let k = m.n
+  k + m.n
+}
+
+// Two types among the locals: one E0200 for each, at the first local of the type.
+pub fn two_struct_locals() -> U32 {
+  let m = Mm { name: "b", n: 2 }   //~ E0200 @7
+  let o = Nn { label: "c", k: 3 }   //~ E0200 @7
+  let p = Mm { name: "d", n: 4 }
+  m.n + o.k + p.n
+}
+
+// A tuple local that holds a `Str`.
+pub fn tuple_local() -> U32 {
+  let t = ("a", 1)   //~ E0200 @7
+  t.1
+}
+
+// A local that this version lowers: no diagnostic.
+pub fn fine() -> U32 {
+  let a = 1
+  let o: Option[U32] = Some(2)
+  match o { Some(x) => a + x, None => a }
+}

@@ -136,7 +136,6 @@ features! {
     /// (after an `.up~` outside it), is slower than `sample / 2^31`.
     ResetTicksPastU32: Language, "a `.reset_if~` whose condition resets at a tick slower than `sample / 2^31` in the frame of the part it wraps (`sample / 2^{}`)", None;
     Iteration: Language, "iteration over types other than arrays, `Span`, `Buf` and `Array`", None;
-    Equality: Language, "equality on this type", None;
     OrderingAggregates: Language, "ordering comparisons of aggregate values", None;
     /// R-06: the general path of a value `match` (W8-06).
     ValueMatch: Language,
@@ -148,8 +147,6 @@ features! {
     /// R-08, S-192: `return` leaves the anonymous function (W8-09).
     ReturnInFromFn: Language, "`return` inside an anonymous function passed to `array.from_fn`",
         Some("write the body as a named function `fn(i: U32) -> T` and pass it to `array.from_fn` by its name (`?` and `return` work there; it cannot read the caller's locals), or give the element as the anonymous function's last expression, with `if` / `else` for the early case");
-    StrPatterns: Language, "`Str` patterns", None;
-    StrValues: Language, "`Str` values", None;
     /// `{}`: the type's name.
     SharedTypes: Language, "the Shared type `{}`", None;
     /// S-610, R-85, W4-05 table 5: `{}`: the type of the `const`, holding a Shared

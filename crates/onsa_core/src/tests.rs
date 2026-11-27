@@ -276,10 +276,11 @@ fn every_unsupported_feature_of_a_function_is_reported() {
     assert_eq!(at, [first, second, generic], "{diags:?}");
 }
 
-/// S-67: a value of an unsupported type and an arm pattern that uses an
-/// unsupported feature are placeholders too: lowering goes on (W1-04/b M-1).
+/// S-67: an arm pattern that uses an unsupported feature is a placeholder
+/// too, and lowering goes on (W1-04/b M-1); a value of a type lowering does
+/// not lower is none: it stops the unit with that one E0200 (§18.1).
 #[test]
-fn unsupported_types_and_patterns_do_not_stop_the_item() {
+fn a_type_stops_the_unit_and_patterns_do_not_stop_the_item() {
     let lines = |src: &str| {
         let mut l: Vec<(u32, String)> = core_err(src)
             .iter()
@@ -290,12 +291,13 @@ fn unsupported_types_and_patterns_do_not_stop_the_item() {
     };
     let locals = "pub fn f() -> I32 uses {Alloc} {\n  let _ = \"abc\"\n  let _ = \"def\"\n  \
                   let _ = fn(v: I32) -> I32 { v }\n  1\n}\n";
+    // A type lowering does not lower stops the unit at its first expression
+    // (§18.1, S-67): neither the second `Str` nor the closure after it is reported.
     let got = lines(locals);
-    assert_eq!(got.iter().map(|(l, _)| *l).collect::<Vec<_>>(), [2, 3, 4], "{got:?}");
-    assert!(got[2].1.contains("anonymous functions"), "{got:?}");
-    // the `==` of two `Str` placeholders is not reported for their stand-in type
+    assert_eq!(got.iter().map(|(l, _)| *l).collect::<Vec<_>>(), [2], "{got:?}");
+    assert!(got[0].1.contains("Shared type `Str`"), "{got:?}");
     let eq = "pub fn g() -> I32 uses {Alloc} {\n  if \"a\" == \"b\" { 1 } else { 2 }\n}\n";
-    assert!(lines(eq).iter().all(|(_, m)| m.contains("Shared type `Str`")), "{:?}", lines(eq));
+    assert_eq!(lines(eq).len(), 1, "{:?}", lines(eq));
     let arms = "pub enum E {\n  A(I32),\n  B(I32),\n  C,\n}\n\n\
                 pub fn m(e: E, x: [I32; 2], y: [I32; 2]) -> I32 {\n  match e {\n    \
                 E.A(n) | E.B(n) => n,\n    E.C => if x < y { 1 } else { 2 },\n  }\n}\n";

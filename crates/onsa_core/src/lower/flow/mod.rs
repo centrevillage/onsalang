@@ -87,12 +87,12 @@ use onsa_sema::flow::{
 use onsa_sema::ty::{BuiltinTy, Len, Ty as STy};
 use onsa_syntax::ast::ExprId;
 
-use super::body::{FnCx, bind_irrefutable, lower_expr, of_type, span_of};
+use super::body::{Binding, FnCx, Ret, bind_irrefutable, bind_tys, lower_expr, of_type, span_of};
 use super::build::{
     after, assign, borrow, call, checked_binary, cmp, expr_stmt, field, float_lit, index, index_as, inout, lit,
     local_expr, materialize, payload, place_of, stmt, u32_lit,
 };
-use super::{GenericArg, Lowerer, R, core_mode, internal, unsupported};
+use super::{GenericArg, Lowerer, R, Stop, core_mode, internal, stopped, unsupported};
 use crate::ir::*;
 use crate::layout::{FlowLayout, flow_layout};
 use crate::prim::Prim;
@@ -365,10 +365,15 @@ struct FlowShape {
 
 impl<'a> Lowerer<'a> {
     /// Lower a flow once; its functions are reachable through the member
-    /// defs (`fn_id`) and through [`Module::flows`].
+    /// defs (`fn_id`) and through [`Module::flows`]. A flow a type stops,
+    /// and one that makes an instance of it, is reported once (S-67), and
+    /// each use is [`super::FailKind::Stopped`].
     pub(crate) fn ensure_flow(&mut self, flow: DefId) -> R<FlowFns> {
         if let Some(f) = self.flow_fns.get(&flow) {
             return Ok(f.clone());
+        }
+        if self.stopped.contains(&Stop::Flow(flow)) {
+            return Err(stopped(self.a.def(flow).span));
         }
         let def = self.a.def(flow).clone();
         let DefKind::Flow(fd) = &def.kind else { return Err(internal(def.span, "not a flow")) };
@@ -378,7 +383,7 @@ impl<'a> Lowerer<'a> {
         }
         let r = lower_flow(self, flow, fd.clone(), def.span);
         self.flows_in_progress.remove(&flow);
-        let fns = r?;
+        let fns = r.map_err(|f| self.stop_unit(Stop::Flow(flow), def.span, f))?;
         self.flow_fns.insert(flow, fns.clone());
         Ok(fns)
     }
@@ -480,6 +485,9 @@ fn lower_flow<'b>(lw: &mut Lowerer<'b>, flow: DefId, fd: FlowDef, span: Span) ->
     if !info.planned() {
         return Err(internal(span, "flow body has errors"));
     }
+    // The binding stage (S-67): the inputs are locals of the body, and the output.
+    let locals = info.body.locals.iter().map(|l| Binding { ty: l.ty, at: l.span, decl: l.span });
+    bind_tys(lw, std::iter::once(Binding { ty: fd.out, at: span, decl: span }).chain(locals), &[], span)?;
     let need = |f: FlowFn| generated_fn(a, &fd, f).ok_or_else(|| internal(span, format!("flow without {f:?}")));
     let state_ty = lw.flow_ty(flow, FlowTy::State, span)?;
     let config_ty = lw.flow_ty(flow, FlowTy::Config, span)?;

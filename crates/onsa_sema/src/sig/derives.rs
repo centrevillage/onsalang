@@ -48,6 +48,7 @@ impl<'p> Sema<'p> {
                 self_mode: row.recv,
                 params: Vec::new(),
                 ret: unit,
+                ret_span: None,
                 rt: true,
                 effects: EffectSet::default(),
                 body: None,
@@ -92,6 +93,7 @@ impl<'p> Sema<'p> {
                     mode: Mode::Borrow,
                     ty: self.item_ty(t, self_ty),
                     span: self.a.def(f).name_span,
+                    name_span: self.a.def(f).name_span,
                 });
                 let params = params.collect();
                 let ret = self.item_ty(row.ret, self_ty);

@@ -77,7 +77,7 @@ fn parts(k: &TyKind) -> impl Iterator<Item = CTy> + '_ {
 
 fn limit_fail(d: Diagnostic) -> Fail {
     let (span, msg) = (d.span, d.message.clone());
-    Fail { kind: FailKind::Limit, span, msg, hole: None, report: Some(Box::new(d)), bad: None }
+    Fail { kind: FailKind::Limit, span, msg, hole: None, report: Some(Box::new(d)) }
 }
 
 impl Lowerer<'_> {
@@ -153,7 +153,7 @@ impl Lowerer<'_> {
     /// Where a type over the limits is reported: at the field of a type being
     /// converted, not at the position `span` it is given, which an E0200 keeps.
     pub(super) fn place(&self, span: Span) -> Span {
-        self.fills.iter().rev().find_map(|f| f.at).unwrap_or(span)
+        self.field_at().map_or(span, |f| f.at)
     }
 
     /// Whether `d` is one that §4.5 counts: not what a flow generates or a

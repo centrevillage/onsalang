@@ -9,30 +9,46 @@
 //! an instance a field meets is made, on the stack (a function type reaches
 //! back), or one lowering does not lower ([`BadTy`]): none is left half made.
 
-use onsa_diag::Span;
 use onsa_diag::unsupported::Feature;
+use onsa_diag::{Span, Stage};
 use onsa_sema::DefId;
 use onsa_sema::def::{DefKind, Fields};
 use onsa_sema::ty::{Measure, TyId};
 
-use super::{Fail, FailKind, GenericArg, Lowerer, R, internal, unsupported};
+use super::{Fail, FailKind, GenericArg, Lowerer, R, gated, internal};
 use crate::ir::*;
 
-/// Why an instance of a type is not lowered: a field's type of a feature
-/// this version does not lower (E0200), written at `written`. The instances
-/// that hold it, and those it was made in, are not lowered either.
-#[derive(Debug, Clone, Copy)]
+/// Why an instance of a type is not lowered: a type of a feature this
+/// version does not lower (E0200). The instances that hold it, and those it
+/// was made in, are not lowered either. One unsupported part of a unit's
+/// bindings is one E0200 (§18.1, S-67): two of the same value are one.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) struct BadTy {
     pub feature: Feature,
     pub detail: Option<&'static str>,
-    #[allow(dead_code)] // the note of the E0200 (W8-16) reads it
-    pub written: Span,
+    /// The field of a declaration of a type it is written in; none when it
+    /// is written where it is used (`s: Str`, `Option[Str]`).
+    pub field: Option<FieldOf>,
+}
+
+/// A field of the declaration of a type: where its type is written, the
+/// type, and its place among the fields of every variant in order.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub(crate) struct FieldOf {
+    pub at: Span,
+    pub of: DefId,
+    pub part: u32,
 }
 
 impl BadTy {
-    /// The E0200 of a use at `span`: the one of the first use, carrying `self`.
-    fn fail(self, span: Span) -> Fail {
-        Fail { bad: Some(Box::new(self)), ..unsupported(span, self.feature, self.detail.as_slice()) }
+    /// The E0200 of a use at `span`, with the field it is written in as a
+    /// note: the one way to a [`FailKind::UnsupportedType`].
+    pub(super) fn fail(self, lw: &Lowerer, span: Span) -> Fail {
+        let mut d = self.feature.diagnostic(Stage::Build, span, self.detail.as_slice());
+        if let Some(f) = self.field {
+            d = d.with_note(f.at, lw.field_text(f));
+        }
+        Fail { kind: FailKind::UnsupportedType(self), ..gated(d) }
     }
 }
 
@@ -62,19 +78,51 @@ impl Lowerer<'_> {
     /// holds a type lowering does not lower.
     pub(crate) fn named_ty(&mut self, d: DefId, gargs: Vec<GenericArg>, span: Span) -> R<TypeId> {
         let id = self.type_id(d, gargs, span)?;
-        if let Some(&bad) = self.bad_types.get(&id) {
-            return Err(bad.fail(span));
+        match self.bad_types.get(&id) {
+            Some(&bad) => Err(bad.fail(self, span)),
+            None => Ok(id),
         }
-        if self.broken_types.contains(&id) {
-            return Err(internal(span, format!("`{}` was stopped by an internal error", self.m.ty(id).name)));
-        }
-        Ok(id)
     }
 
-    /// An E0200 of the type at `span` of `feature`: written at the field
+    /// An E0200 of the type at `span` of `feature`: written in the field
     /// being converted, if any.
     pub(super) fn bad_type(&self, span: Span, feature: Feature, detail: Option<&'static str>) -> Fail {
-        BadTy { feature, detail, written: self.place(span) }.fail(span)
+        BadTy { feature, detail, field: self.field_at() }.fail(self, span)
+    }
+
+    /// The field of a type being converted, the innermost (`limits` reports
+    /// a type over the limits there too).
+    pub(super) fn field_at(&self) -> Option<FieldOf> {
+        let f = self.fills.iter().rev().find(|f| f.at.is_some())?;
+        Some(FieldOf { at: f.at?, of: f.d, part: f.done.len() as u32 })
+    }
+
+    /// The note of a type held by the field `f`: ``the field `name` of `Mm`
+    /// has the type `Str` ``, of a variant ``a field of the variant `A` of `E`
+    /// has the type `Str` ``.
+    fn field_text(&self, f: FieldOf) -> String {
+        let def = self.a.def(f.of);
+        let shown = |t: TyId| self.a.display_under(t, def.generics());
+        let mut part = f.part as usize;
+        let field = match &def.kind {
+            DefKind::Struct(s) => match &s.fields {
+                Fields::Named(fs) => fs.get(part).map(|x| (format!("the field `{}`", x.name), x.ty)),
+                Fields::Opaque => None,
+            },
+            DefKind::Enum(e) => e.variants.iter().find_map(|v| match v.fields.get(part) {
+                Some(&t) => Some((format!("a field of the variant `{}`", v.name), t)),
+                None => {
+                    part -= v.fields.len();
+                    None
+                }
+            }),
+            _ => None,
+        };
+        match field {
+            Some((field, t)) => format!("{field} of `{}` has the type `{}`", def.name, shown(t)),
+            // A field is of a struct or an enum only (`type_id`).
+            None => format!("a field of `{}`", def.name),
+        }
     }
 
     /// A new type of the module (the one place that makes one).
@@ -124,8 +172,9 @@ impl Lowerer<'_> {
     }
 
     /// Fill the instances of the stack, the top first. A failure empties it:
-    /// its instances are bad ([`BadTy`]) or, at an internal error or a
-    /// limit, broken, so that no use finds them made.
+    /// of a type lowering does not lower, its instances are bad ([`BadTy`]),
+    /// so that no use finds them made. An internal error or a limit stops
+    /// lowering (`lower_item`), and no use comes after.
     fn fill_types(&mut self) -> R<()> {
         while let Some(top) = self.fills.last_mut() {
             let Some(&(t, at)) = top.parts.get(top.done.len()) else {
@@ -144,10 +193,8 @@ impl Lowerer<'_> {
                 Err(f) if f.kind == FailKind::Pending => {}
                 Err(f) => {
                     for fill in std::mem::take(&mut self.fills) {
-                        if let Some(&bad) = f.bad.as_deref() {
+                        if let FailKind::UnsupportedType(bad) = f.kind {
                             self.bad_types.entry(fill.id).or_insert(bad);
-                        } else {
-                            self.broken_types.insert(fill.id);
                         }
                     }
                     return Err(f);

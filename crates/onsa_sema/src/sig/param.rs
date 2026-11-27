@@ -235,7 +235,8 @@ impl<'p> Sema<'p> {
     fn param_value_def(&mut self, cx: &Cx<'p>, flow: DefId, key: ParamKey, value: ExprId, ty: TyId) -> DefId {
         let span = cx.ast.expr(value).span;
         let of_attr = Some(AttrValue::Param(key));
-        let kind = DefKind::Const(ConstDef { ty, value: Some(value), int_value: None, param: None, of_attr });
+        let kind =
+            DefKind::Const(ConstDef { ty, ty_span: None, value: Some(value), int_value: None, param: None, of_attr });
         let (name, module, item) = (format!("@param {}", key.name()), cx.m, self.a.def(flow).item);
         self.add_def(Def {
             name,

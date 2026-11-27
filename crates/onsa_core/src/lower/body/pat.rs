@@ -83,19 +83,6 @@ fn pat_binds(cx: &FnCx, pat: PatId) -> bool {
     }
 }
 
-/// The position of a string literal in the pattern `pat`, if it has one.
-fn str_lit(cx: &FnCx, pat: PatId) -> Option<Span> {
-    let p = cx.ast.pat(pat);
-    match &p.kind {
-        PatKind::Lit(ALit::Str(_)) => Some(p.span),
-        PatKind::Tuple(es) | PatKind::TupleStruct { elems: es, .. } | PatKind::Or(es) => {
-            es.iter().find_map(|&e| str_lit(cx, e))
-        }
-        PatKind::Struct { fields, .. } => fields.iter().find_map(|(_, p)| str_lit(cx, *p)),
-        _ => None,
-    }
-}
-
 /// Test of a refutable pattern against a place; `None` means "always matches".
 pub(crate) fn pat_test(lw: &mut Lowerer, cx: &mut FnCx, pat: PatId, place: &Expr) -> R<Option<Expr>> {
     let p = cx.ast.pat(pat);
@@ -121,7 +108,8 @@ pub(crate) fn pat_test(lw: &mut Lowerer, cx: &mut FnCx, pat: PatId, place: &Expr
                     let rhs = Expr::new(place.ty, span, crate::lower::fixed_str::value(lw, cx, text, id, span)?);
                     return crate::lower::eq::eq_expr(lw, place.clone(), rhs, span, span).map(Some);
                 }
-                (ALit::Str(_), _) => return Err(unsupported(span, Feature::StrPatterns, &[])),
+                // A `Str` subject stopped the unit at its type.
+                (ALit::Str(_), _) => return Err(internal(span, "a string pattern on a subject of no `FixedStr`")),
                 _ => return Err(internal(span, "literal pattern type")),
             };
             let rhs = lit(place.ty, span, v);
@@ -258,20 +246,12 @@ pub(super) fn lower_match(
 }
 
 /// The test of the arm pattern `pat` against `place` (none: always), and
-/// whether it binds. One that uses an unsupported feature (S-67), or any
-/// against a subject that stands in for a type lowering does not support
-/// (`()`), never matches and binds nothing, so lowering reaches the guard
-/// and the body; a string literal against a stand-in is the E0200 of one
-/// at the head (R-434).
+/// whether it binds. One that uses an unsupported feature (S-67) never
+/// matches and binds nothing, so lowering reaches the guard and the body.
 pub(crate) fn arm_test(lw: &mut Lowerer, cx: &mut FnCx, pat: PatId, place: &Expr) -> R<(Option<Expr>, bool)> {
-    let stand_in = place.ty == Types::UNIT && lw.stand_in_spans.contains(&place.span);
     let hole = Hole::Pat(cx.module, pat);
-    let placeholder = lw.holes.contains(&hole);
-    if !placeholder && !stand_in {
+    if !lw.holes.contains(&hole) {
         return Ok((pat_test(lw, cx, pat, place).map_err(|f| at_hole(f, hole))?, true));
-    }
-    if let (false, Some(at)) = (placeholder, str_lit(cx, pat)) {
-        return Err(at_hole(unsupported(at, Feature::StrPatterns, &[]), hole));
     }
     let span = cx.ast.pat(pat).span;
     lw.hole_spans.push(span);

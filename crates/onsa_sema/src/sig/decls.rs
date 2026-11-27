@@ -691,7 +691,7 @@ impl<'p> Sema<'p> {
         let ty = self.lower_type(&cx, c.ty);
         let param = c.value.and_then(|v| self.param_value(&cx, v));
         if let DefKind::Const(cd) = &mut self.a.defs[id.0 as usize].kind {
-            (cd.ty, cd.param) = (ty, param);
+            (cd.ty, cd.ty_span, cd.param) = (ty, Some(cx.ast.ty(c.ty).span), param);
         }
         // The heading of its `impl`, which a constant expression may read
         // before the `impl` is lowered (`constarg::impl_args`): as it lowers it.

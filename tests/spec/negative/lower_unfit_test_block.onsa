@@ -1,0 +1,41 @@
+// onsa.toml
+// [package]
+// name = "lower_unfit_test_block"
+// edition = "2026"
+//
+// [targets.c]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [test]
+// spec = ["§18.1", "§4.2", "§9.2"]
+
+// W8-16 B, S-67 (the decision of 2026-11-27), R-332: a `test` block is a unit like a function: a local binding of a
+// type this version does not lower (a struct that holds a `Str`, read by a field) is one E0200 at the local's name, not
+// the internal error (`no field`) that stopped `onsa test`. A test with no such local is lowered.
+
+pub struct Mm { name: Str, n: U32 }
+
+test "flat" {
+  let m = Mm { name: "b", n: 2 }   //~ E0200 @7
+  assert m.n == 2
+}
+
+test "two locals of one type" {
+  let m = Mm { name: "b", n: 2 }   //~ E0200 @7
+  let k = Mm { name: "c", n: 3 }
+  assert m.n + k.n == 5
+}
+
+test "a text" {
+  let s = "abc"   //~ E0200 @7
+  assert s.len() == 3
+}
+
+test "fine" {
+  let n: U32 = 2
+  assert n == 2
+}

@@ -13,16 +13,19 @@
 // [test]
 // spec = ["§7", "§18.1", "§4.2"]
 
-// R-434 (W5-12 U3a), E0200 from lowering (S-225, S-67): a string literal pattern inside another pattern (`Some("a")`, `("a", 1)`) on a subject whose type holds a `Str` is
-// the same E0200 as one at the head (negative/lower_str_pattern.onsa): this version does not lower `Str` values or patterns to Core (§4.2), and the subject is E0200 too.
-// It used to be an internal error. The same patterns on a `FixedStr[N]` inside an `Option` and a tuple are lowered (the last function, with no error).
+// R-434 (W5-12 U3a), E0200 from lowering (S-225, S-67): a string literal pattern inside another pattern (`Some("a")`, `("a", 1)`)
+// on a subject whose type holds a `Str`: this version does not lower `Str` values or patterns to Core (§4.2). It used to be an
+// internal error. Since W8-16 (the decision of 2026-11-27 on S-67) the unit is stopped at its parameter, whose type holds the
+// `Str`, with one E0200 at the parameter's name, and neither the subject `match o` nor the patterns are reported (they used to
+// be, one E0200 each); the pattern is not reached. The same patterns on a `FixedStr[N]` inside an `Option` and a tuple are
+// lowered (the last function, with no error).
 
 use std.text.FixedStr
 
-pub fn in_some(o: Option[Str]) -> U32 {
+pub fn in_some(o: Option[Str]) -> U32 {   //~ E0200 @16
   var r: U32 = 0
-  match o {                     //~ E0200
-    Some("a") => {              //~ E0200
+  match o {
+    Some("a") => {
       r = 1
     },
     _ => {},
@@ -30,10 +33,10 @@ pub fn in_some(o: Option[Str]) -> U32 {
   r
 }
 
-pub fn in_a_tuple(p: (Str, U32)) -> U32 {
+pub fn in_a_tuple(p: (Str, U32)) -> U32 {   //~ E0200 @19
   var r: U32 = 0
-  match p {                     //~ E0200
-    ("a", 1) => {               //~ E0200
+  match p {
+    ("a", 1) => {
       r = 1
     },
     _ => {},
@@ -41,9 +44,9 @@ pub fn in_a_tuple(p: (Str, U32)) -> U32 {
   r
 }
 
-pub fn a_binding_in_some(o: Option[Str]) -> U32 {
+pub fn a_binding_in_some(o: Option[Str]) -> U32 {   //~ E0200 @26
   var r: U32 = 0
-  match o {                     //~ E0200
+  match o {
     Some(_) => {
       r = 1
     },

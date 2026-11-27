@@ -387,7 +387,9 @@ impl<'p> Sema<'p> {
         let ItemKind::FieldDefault { value } = at.kind else {
             onsa_diag::internal::bug(Some(at.span), "a default that is no default item")
         };
-        let kind = DefKind::Const(ConstDef { ty, value: Some(value), int_value: None, param: None, of_attr: None });
+        let ty_span = Some(cx.ast.ty(f.ty).span);
+        let kind =
+            DefKind::Const(ConstDef { ty, ty_span, value: Some(value), int_value: None, param: None, of_attr: None });
         let (name, module, owner) = (f.name.name.clone(), cx.m, Some(cx.def));
         let span = at.span;
         self.add_def(Def { name, module, vis, span, name_span: span, kind, item: Some(item), owner, export: None })
@@ -457,9 +459,9 @@ impl<'p> Sema<'p> {
                     }
                 }
                 name => {
-                    let n = match name {
-                        ParamName::Ident(id) => id.name.clone(),
-                        _ => "_".into(),
+                    let (n, name_span) = match name {
+                        ParamName::Ident(id) => (id.name.clone(), id.span),
+                        ParamName::Wild(s) | ParamName::SelfParam(s) => ("_".into(), *s),
                     };
                     let ty = match p.ty {
                         Some(t) => self.lower_type(cx, t),
@@ -480,7 +482,7 @@ impl<'p> Sema<'p> {
                     if let Some(c) = &p.clock {
                         self.report(cx.def, clock_after(cx.ast, cx.text, p.ty, c));
                     }
-                    out.push(ParamSig { name: n, mode: p.mode, ty, span: p.span });
+                    out.push(ParamSig { name: n, mode: p.mode, ty, span: p.span, name_span });
                 }
             }
         }
@@ -528,6 +530,7 @@ impl<'p> Sema<'p> {
             fd.generics = cx.generics;
             fd.params = params;
             fd.ret = ret;
+            fd.ret_span = f.ret.map(|t| cx.ast.ty(t).span);
             fd.effects = effects;
         }
     }

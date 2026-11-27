@@ -154,6 +154,8 @@ pub struct ParamSig {
     pub mode: Mode,
     pub ty: TyId,
     pub span: Span,
+    /// Of its name (or `_`), after the mode.
+    pub name_span: Span,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -163,6 +165,10 @@ pub struct FnDef {
     pub self_mode: Option<Mode>,
     pub params: Vec<ParamSig>,
     pub ret: TyId,
+    /// Where the result type is written; none when it is not (`()`, a
+    /// function a flow or a derive makes). The E0200 of a result type that
+    /// lowering does not lower is there (§18.1, S-67).
+    pub ret_span: Option<Span>,
     pub rt: bool,
     pub effects: EffectSet,
     /// `None` for `target` declarations and generated flow functions.
@@ -308,6 +314,9 @@ pub struct EnumDef {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ConstDef {
     pub ty: TyId,
+    /// Where its type is written; none of one lowering makes (`SIZE`) or of
+    /// an attribute. The E0200 of a type lowering does not lower is there.
+    pub ty_span: Option<Span>,
     /// `None` inside a `trait`, and for generated `SIZE` / `BULK_SIZE` (M3).
     pub value: Option<ExprId>,
     /// The value when the initializer is an integer literal (array lengths, §4.1).
