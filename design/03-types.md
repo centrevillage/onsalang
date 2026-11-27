@@ -6,6 +6,7 @@
 - 種（`Kind::{Copy, Shared, Affine}`）と `rt` の破棄の要否は、`summary.rs` が宣言ごとの要約（`Facts { kind, drops, held }`）から答える（S-782）。配置は `walk.rs` の宣言を辿る歩きが読み、宣言と閉じた引数の組ごとに一度だけ答える（`Known`、R-30）。歩数の上限は配置の歩きだけに残る（S-939）。
 - 大きさと配置は、Core の降下の後のターゲットの pass が計算して Module に記録する（レビュー R-80、D-03 の追記）。`onsa interface`、`SIZE`、`_Static_assert`、プローブ、ホットリロードは記録を読む。sema は大きさを計算しない。
   W9-04 までは、`onsa interface` が型の宣言の大きさと配置を sema の `layout.rs`（`layout_of_def`）から、enum の tag の型を `layout::tag_kind` から読む（`sema` の `layout.rs` を消すのは W9-04）。
+  今の記録は Core の型ごとの事実の表 `Module.facts`（`TyFacts { size, align, views }`、`onsa_core` の `layout.rs`）で、降下が一つのポインタの幅（`LowerOptions.ptr_size`）で埋める: 求められた型を `Module::fill_facts` が明示のスタックで部分の後に一度ずつ埋め、降下の終わりに `fill_all_facts` が残りを埋める（W8-14 A2、R-515）。
 - 推論の状態は `Infer`（`infer.rs`。変数は束縛か、整数・浮動小数のリテラルの制約を持つ未束縛）。文の順に進め、型が決まってから確かめる検査は `Deferred`（`deferred.rs`）に並べて、文ごと（`check_deferred_now`）と本体の終わり（`check_deferred_end`。整数リテラルを `I32` にした後、S-22、仕様 §4.7）に確かめる（未解決の浮動小数リテラルは E0405）。
   `const` の宣言の型は、置ける所を `kind.rs::placed` が決める（置けない型は E0407、この版で置けない型は E0200。`body/entry.rs::const_type`、S-773）。
 - 名前の解決（レビュー R-84、S-78、D-15）: 型付けの前に一つの段を置き、本体の全ての経路と呼び出し先を一度だけ解決して `BodyNames`（`names/body/mod.rs`）に記録する（式は `PathRes`、パターンは `PatRes`、構造体リテラルは `StructRes`）。

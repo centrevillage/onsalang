@@ -25,6 +25,9 @@ pub enum Place { Local(LocalId), Field(Box<Place>, u32), Index(Box<Place>, Expr,
 
 （略記。今の定義は `crates/onsa_core/src/ir.rs`）
 
+- 型は `Module.tys`（`Types`）の id の `CTy` で引く。`Types` は一段の `TyKind` を一度ずつ intern し、組込みの型は固定の id、struct と enum は `Module.types` を指す（W8-14 A1a）。型ごとの大きさ・並び・ビューを持つかは `Module.facts`（`design/03-types.md` の「大きさと配置」の項）。
+  降下は降ろせない型（この版の `Str`・Shared を含む型など）の代わりの型を作らない: そういう型を束縛か式の型に持つ単位は降下せず、E0200 を出す（束縛の段 `lower/body/mod.rs::bind_tys`、S-67 の判断、W8-16 B1）。
+
 - 全ての式に型が付く。ジェネリクスは無い（単相化済み）。レートは無い（flow は降下済み）。
 - `hoisted` は局所変数の記憶域の高さ（R-481、R-484、S-1118 (2)）。スコープ（`IfExpr`・`Switch` の腕と、`If`・`While`・`ForRange` のブロック）の外へ出る値（腕の値と、外の場所への代入）が届くビューの根のうち、そのスコープが宣言した局所変数を、`LocalId` の昇順で並べる。
   ブロック式は中の局所変数の寿命を閉じない。`Let` は腕の中のままで、バックエンドは記憶域を関数の頭に置き、`Let` を代入にする。判定は `lower/storage.rs` の一か所で、降下の `fold` の後に関数ごとに一度行う。
