@@ -309,24 +309,6 @@ fn a_type_stops_the_unit_and_patterns_do_not_stop_the_item() {
     assert!(got[1].1.contains("or-patterns") && got[2].1.contains("ordering"), "{got:?}");
 }
 
-/// S-67 (W1-04/b M-2): an internal failure is a consequence of a placeholder
-/// only when one holds the other and it is not the whole item.
-#[test]
-fn internal_failures_near_placeholders() {
-    use crate::lower::from_placeholder;
-    let s = |a: u32, b: u32| onsa_diag::Span::new(FileId(0), a, b);
-    let item = s(0, 100);
-    let holes = [s(10, 20)];
-    assert!(from_placeholder(&holes, s(12, 15), item)); // inside the placeholder
-    assert!(from_placeholder(&holes, s(5, 30), item)); // an expression that uses it
-    assert!(!from_placeholder(&holes, s(40, 50), item)); // elsewhere: an internal error
-    assert!(!from_placeholder(&holes, s(15, 25), item)); // overlapping only
-    assert!(!from_placeholder(&holes, item, item)); // the whole item
-    assert!(!from_placeholder(&[], s(12, 15), item)); // no placeholder
-    let other_file = onsa_diag::Span::new(FileId(1), 12, 15);
-    assert!(!from_placeholder(&holes, other_file, item));
-}
-
 #[test]
 fn unsupported_features_are_e0200() {
     let diags = core_err("pub fn f() -> Str {\n  \"abc\"\n}\n");

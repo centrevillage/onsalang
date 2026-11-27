@@ -14,7 +14,7 @@ pub(crate) fn lower_expr(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId) -> R<Expr> 
         // The Core is dropped (`lower_with`).
         let span = cx.expr(e).span;
         let ty = lw.core_ty(cx.value_ty(e)?, &cx.args, span)?;
-        lw.hole_spans.push(span);
+        cx.placeholder = true;
         let l = cx.temp("__unsupported", ty);
         local_expr(cx, l, span)
     } else {

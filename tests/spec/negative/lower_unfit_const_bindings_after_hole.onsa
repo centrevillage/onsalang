@@ -1,0 +1,29 @@
+// onsa.toml
+// [package]
+// name = "lower_unfit_const_bindings_after_hole"
+// edition = "2026"
+//
+// [targets.c]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [test]
+// spec = ["§18.1", "§6.6", "§4.2"]
+
+// W8-16 B, S-67 (the decision of 2026-11-27): an initializer of a constant with a local binding is a form this version
+// does not lower (one E0200, at the constant), whatever the constants lowered before it. `H` comes first and has a
+// form of its own (the order of two arrays, R-119), which is reported too; `g` reads both and has no E0200 of its own.
+
+const A: [I32; 2] = [1, 2]
+
+const H: Bool = A < A   //~ E0200 @19
+
+const K: U32 = {   //~ E0200 @1
+  let q = 1
+  q
+}
+
+pub fn g(n: U32) -> U32 { if H { K + n } else { n } }

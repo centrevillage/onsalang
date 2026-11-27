@@ -1,0 +1,26 @@
+// onsa.toml
+// [package]
+// name = "lower_unfit_const_reads_const"
+// edition = "2026"
+//
+// [targets.c]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [test]
+// spec = ["§18.1", "§6.6", "§4.2"]
+
+// W8-16 B, S-67 (the decision of 2026-11-27): a constant that reads a constant a type stops is not stopped for that. `K`
+// is stopped by the type of its expression (one E0200, at it); `L` reads `K` as an expression with no report and goes on,
+// so its own E0200 (the order of two arrays, R-119) is reported, once. `f` reads `L` and has no E0200 of its own.
+
+const A: [I32; 2] = [1, 2]
+
+const K: U32 = "abc".len()   //~ E0200 @16
+
+const L: U32 = if A < A { K } else { 2 }   //~ E0200 @21
+
+pub fn f(x: U32) -> U32 { L + x }

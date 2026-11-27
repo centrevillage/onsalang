@@ -254,7 +254,7 @@ pub(crate) fn arm_test(lw: &mut Lowerer, cx: &mut FnCx, pat: PatId, place: &Expr
         return Ok((pat_test(lw, cx, pat, place).map_err(|f| at_hole(f, hole))?, true));
     }
     let span = cx.ast.pat(pat).span;
-    lw.hole_spans.push(span);
+    cx.placeholder = true;
     Ok((Some(bool_lit(span, false)), false))
 }
 

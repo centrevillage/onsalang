@@ -1,0 +1,30 @@
+// onsa.toml
+// [package]
+// name = "lower_unfit_const_reader_first"
+// edition = "2026"
+//
+// [targets.c]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [test]
+// spec = ["§18.1", "§6.6", "§4.2"]
+
+// W8-16 B, S-67 (the decision of 2026-11-27): a constant whose expression has both a form this version does not lower
+// (the order of two arrays, R-119) and a type it does not lower (`Str`) is stopped by the type: its one E0200 is that
+// of the type, and the form before it is not reported. The same when a constant that reads it is declared before it and
+// lowers it in its own lowering: `L` reads `K` as an expression with no report and goes on, with no report of its own.
+// `f` reads `L`, and `r` reads `K`.
+
+pub fn r(x: U32) -> U32 { K + x }
+
+const A: [I32; 2] = [1, 2]
+
+const L: U32 = K + 1
+
+const K: U32 = if A < A { 1 } else { "abc".len() }   //~ E0200 @38
+
+pub fn f(x: U32) -> U32 { L + x }

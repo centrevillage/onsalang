@@ -1,0 +1,32 @@
+// onsa.toml
+// [package]
+// name = "lower_unfit_const_pattern_hole"
+// edition = "2026"
+//
+// [targets.c]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [test]
+// spec = ["§18.1", "§6.6", "§7"]
+
+// W8-16 B, S-67 (the decision of 2026-11-27): an arm pattern of an initializer of a constant that this version does not
+// lower (an or-pattern with bindings) is one E0200. With a placeholder in it, the initializer is not reported as a
+// `const` initializer with local bindings (S-1272, for now).
+
+pub enum E { A(U32), B(U32), C }
+
+const K: U32 = {
+  match E.A(1) {
+    E.A(x) | E.B(x) => {   //~ E0200 @5
+      let _ = x
+    },
+    E.C => {},
+  }
+  3
+}
+
+pub fn g(n: U32) -> U32 { K + n }

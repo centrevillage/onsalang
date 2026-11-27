@@ -30,8 +30,6 @@
 //!   once: the later instances find it a placeholder already, so another
 //!   unsupported feature at the same expression of a later instance is not
 //!   reported.
-//! - An internal failure inside or around a placeholder is taken as a
-//!   consequence of it and not reported (see `lower_item`).
 
 mod body;
 mod build;
@@ -137,13 +135,6 @@ pub enum LowerFailure {
     Internal { span: Span, message: String },
 }
 
-/// Whether an internal failure at `at`, in the item at `item`, comes from
-/// one of the placeholders at `holes` (see [`Lowerer::lower_item`]): one
-/// holds the other, and the failure is not at the whole item.
-pub(crate) fn from_placeholder(holes: &[Span], at: Span, item: Span) -> bool {
-    at != item && holes.iter().any(|&h| contains(h, at) || contains(at, h))
-}
-
 /// Whether `outer` holds `inner` (the same file).
 fn contains(outer: Span, inner: Span) -> bool {
     outer.file == inner.file && outer.start <= inner.start && inner.end <= outer.end
@@ -208,8 +199,6 @@ pub(crate) struct Lowerer<'a> {
     /// Expressions and arm patterns that use an unsupported feature:
     /// lowered as placeholders, so that lowering goes on to the next one (S-67).
     pub(crate) holes: HashSet<Hole>,
-    /// The source of every placeholder the current attempt lowered.
-    pub(crate) hole_spans: Vec<Span>,
     /// The E0200s of the forms the attempts of the item being lowered found:
     /// reported when it ends, unless a type stops the unit they are in.
     attempts: Vec<Diagnostic>,
@@ -253,7 +242,7 @@ pub fn lower(pkg: &Package, a: &Analysis) -> Result<Module, LowerFailure> {
 /// (S-67): the innermost expression that uses it becomes a placeholder and
 /// the item is lowered again (see the module's documentation). The Core is
 /// then dropped, so no placeholder leaves this function. The first internal
-/// failure stops lowering, unless it is a consequence of a placeholder.
+/// failure stops lowering.
 pub fn lower_with(pkg: &Package, a: &Analysis, opts: &LowerOptions) -> Result<Module, LowerFailure> {
     let flat = onsa_sema::flatten(pkg);
     let places: usize =
@@ -284,7 +273,6 @@ pub fn lower_with(pkg: &Package, a: &Analysis, opts: &LowerOptions) -> Result<Mo
         hoist_uses: Vec::new(),
         bulk_threshold: opts.bulk_threshold,
         holes: HashSet::new(),
-        hole_spans: Vec::new(),
         attempts: Vec::new(),
         max_attempts: places + 1,
         unsupported: Vec::new(),
@@ -345,21 +333,14 @@ impl<'a> Lowerer<'a> {
     /// pattern (S-67). `Err` is an internal error, which stops lowering.
     ///
     /// A unit that a type stops reports that E0200 alone (§18.1): the E0200s
-    /// its attempts found in it are dropped ([`Self::stop`]).
-    ///
-    /// An internal failure is a consequence of a placeholder, and not
-    /// reported, when its source and a placeholder's source of the same
-    /// attempt are inside one another (the placeholder, or an expression
-    /// that uses its value) and it is not the whole item. Any other is an
-    /// internal error, whatever E0200 the item has.
+    /// its attempts found in it are dropped ([`Self::stop`]). An internal
+    /// failure is an internal error, whatever placeholders the attempt has.
     fn lower_item(&mut self, span: Span, mut attempt: impl FnMut(&mut Self) -> R<()>) -> Result<(), LowerFailure> {
         // A panic names this item (S-67).
         let _scope = onsa_diag::internal::item_scope(span);
         for left in (0..self.max_attempts).rev() {
-            self.hole_spans.clear();
             let Err(fail) = attempt(self) else { break };
             match fail.kind {
-                FailKind::Internal if from_placeholder(&self.hole_spans, fail.span, span) => break,
                 FailKind::Internal | FailKind::Pending => {
                     return Err(LowerFailure::Internal { span: fail.span, message: fail.msg });
                 }
@@ -719,8 +700,8 @@ impl<'a> Lowerer<'a> {
                 let mut cx = body::FnCx::new(self, d, gargs.clone(), body, body::Ret::Made(ty))?;
                 cx.constant = true;
                 let e = body::lower_expr(self, &mut cx, v)?;
-                // A placeholder is a local of its own (S-67): not one of the initializer.
-                if !cx.locals.is_empty() && self.hole_spans.is_empty() {
+                // Not with a placeholder, whose locals are not told apart (S-1272).
+                if !cx.locals.is_empty() && !cx.placeholder {
                     return Err(unsupported(def.span, Feature::ConstBindings, &[]));
                 }
                 e

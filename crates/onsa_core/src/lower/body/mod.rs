@@ -42,6 +42,9 @@ pub(crate) struct FnCx<'b> {
     pub module: ModId,
     pub locals: Vec<Local>,
     pub ret: CTy,
+    /// Of each parameter but `self`, in order, the Core type of a `_` (no
+    /// local), from the binding stage: [`bind_params`] reads it.
+    pub wild: Vec<Option<CTy>>,
     /// Depth of inlined closure bodies (`return` and `?` inside them are
     /// unsupported until W8-09: they leave the closure, S-192).
     pub inline_depth: u32,
@@ -51,6 +54,9 @@ pub(crate) struct FnCx<'b> {
     /// Lowering the initializer of a `const`, which has no local of its own
     /// (`Feature::ConstBindings`).
     pub constant: bool,
+    /// Whether this body lowered a placeholder (S-67), whatever the unit
+    /// that lowers it.
+    pub placeholder: bool,
 }
 
 /// A binding of a unit: its type, where it is converted (the limits of
@@ -79,22 +85,24 @@ pub(crate) fn bind_tys(
     args: &[GenericArg],
     span: Span,
 ) -> R<Vec<CTy>> {
-    let (mut tys, mut first) = (Vec::new(), std::collections::HashMap::new());
+    // In the order found, each at its binding declared first.
+    let (mut tys, mut first, mut index) = (Vec::new(), Vec::<(_, Span)>::new(), std::collections::HashMap::new());
     for b in binds {
         match lw.core_ty(b.ty, args, b.at) {
             Ok(t) => tys.push(t),
             Err(f) => {
                 let FailKind::UnsupportedType(bad) = f.kind else { return Err(f) };
-                let at = first.entry(bad).or_insert(b.decl);
-                *at = std::cmp::min_by_key(*at, b.decl, |s: &Span| s.start);
+                let i = *index.entry(bad).or_insert_with(|| {
+                    first.push((bad, b.decl));
+                    first.len() - 1
+                });
+                first[i].1 = std::cmp::min_by_key(first[i].1, b.decl, |s: &Span| s.start);
             }
         }
     }
     if first.is_empty() {
         return Ok(tys);
     }
-    let mut first: Vec<_> = first.into_iter().collect();
-    first.sort_by_key(|&(_, at)| at.start);
     for (bad, at) in first {
         if let Some(d) = bad.fail(lw, at).report {
             lw.unsupported.push(*d);
@@ -121,16 +129,37 @@ impl<'b> FnCx<'b> {
             Ret::Made(t) => (None, Some(t)),
         };
         let params = d.as_fn().map(|f| &f.params[..]).unwrap_or_default();
-        let wild = params.iter().filter(|p| p.name == "_").map(|p| Binding { ty: p.ty, at: p.span, decl: p.name_span });
+        // Sema names a parameter `_` only when it is one, and declares no local of it.
+        let is_wild: Vec<bool> = params.iter().map(|p| p.name == "_").collect();
+        let wild = params.iter().zip(&is_wild).filter(|(_, w)| **w);
+        let wild = wild.map(|(p, _)| Binding { ty: p.ty, at: p.span, decl: p.name_span });
         let named = info.locals.iter().map(|l| Binding { ty: l.ty, at: l.span, decl: l.span });
         let head: Vec<_> = head.into_iter().chain(wild).collect();
         let n = head.len();
         let mut tys = bind_tys(lw, head.into_iter().chain(named), &args, span)?;
         let locals = tys.split_off(n).into_iter().zip(&info.locals);
         let locals = locals.map(|(ty, l)| Local { name: l.name.clone(), ty }).collect();
-        let ret = made.or(tys.first().copied()).ok_or_else(|| internal(span, "a body of no result"))?;
+        let mut head = tys.into_iter();
+        let ret = match made {
+            Some(t) => t,
+            None => head.next().ok_or_else(|| internal(span, "a body of no result"))?,
+        };
+        let wild = is_wild.into_iter().map(|w| if w { head.next() } else { None }).collect();
         let (ast, text) = (&m.parsed.ast, &m.text[..]);
-        Ok(FnCx { args, info, ast, text, module, locals, ret, inline_depth: 0, flow: None, constant: false })
+        Ok(FnCx {
+            args,
+            info,
+            ast,
+            text,
+            module,
+            locals,
+            ret,
+            wild,
+            inline_depth: 0,
+            flow: None,
+            constant: false,
+            placeholder: false,
+        })
     }
 
     pub(crate) fn temp(&mut self, name: &str, ty: CTy) -> LocalId {
@@ -221,7 +250,8 @@ pub(crate) fn bind_params(lw: &mut Lowerer, cx: &mut FnCx, d: DefId, f: &SFnDef)
     let mut params = Vec::new();
     // Sema declares parameter locals first, in order, skipping `_`.
     let mut next_local = 0usize;
-    let mut sig = f.params.iter();
+    let wild = cx.wild.clone();
+    let mut sig = f.params.iter().zip(wild);
     for p in &ast_params {
         match &p.name {
             ast::ParamName::SelfParam(_) => {
@@ -231,20 +261,20 @@ pub(crate) fn bind_params(lw: &mut Lowerer, cx: &mut FnCx, d: DefId, f: &SFnDef)
                 let mode = core_mode(f.self_mode.unwrap_or(ast::Mode::Borrow));
                 params.push(Param { local: l, mode, ty: local.ty });
             }
-            ast::ParamName::Ident(_) => {
-                let Some(ps) = sig.next() else { return Err(internal(span, "parameter count")) };
-                let l = LocalId(next_local as u32);
-                next_local += 1;
+            ast::ParamName::Ident(_) | ast::ParamName::Wild(_) => {
+                let Some((ps, wild)) = sig.next() else { return Err(internal(span, "parameter count")) };
+                let l = match wild {
+                    Some(ty) => cx.temp("_", ty),
+                    None => {
+                        let l = LocalId(next_local as u32);
+                        next_local += 1;
+                        l
+                    }
+                };
                 let Some(local) = cx.locals.get(l.0 as usize) else {
                     return Err(internal(span, "missing param local"));
                 };
                 params.push(Param { local: l, mode: core_mode(ps.mode), ty: local.ty });
-            }
-            ast::ParamName::Wild(_) => {
-                let Some(ps) = sig.next() else { return Err(internal(span, "parameter count")) };
-                let ty = lw.core_ty(ps.ty, &cx.args, ps.span)?;
-                let l = cx.temp("_", ty);
-                params.push(Param { local: l, mode: core_mode(ps.mode), ty });
             }
         }
     }

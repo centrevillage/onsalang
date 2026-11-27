@@ -1,0 +1,29 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§2.2", "§6.1", "§6.2"]
+
+// W8-16 B (§2.2: `_` as a parameter name is a value not used): a parameter `_` before or between named ones, of a
+// function and of a method after `self`. The named ones are read as their own arguments, whatever the types of the `_`s
+// around them, and a `_` takes its own argument.
+
+pub struct S {
+  a: U32,
+}
+
+impl S {
+  pub fn m(self, _: F32, x: U32) -> U32 {
+    self.a + x
+  }
+}
+
+pub fn pick(_: F32, x: U32, _: U32, y: U32) -> U32 {
+  x * 10 + y
+}
+
+test "the named parameters after a `_` are their own arguments" {
+  let s = S { a: 100 }
+  assert s.m(1.5, 2) == 102
+  assert pick(1.5, 2, 30, 4) == 24
+  assert pick(-2.0, 7, 0, 9) == 79
+}

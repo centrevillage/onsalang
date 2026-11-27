@@ -1,0 +1,29 @@
+// onsa.toml
+// [package]
+// name = "lower_unfit_const_bindings_read_late"
+// edition = "2026"
+//
+// [targets.c]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [test]
+// spec = ["§18.1", "§6.6", "§4.2"]
+
+// W8-16 B, S-67 (the decision of 2026-11-27): the E0200 of a `const` initializer with local bindings is of that
+// initializer, whatever reads it. `L` is declared first, has a form of its own (the order of two arrays, R-119) and
+// lowers `K` in its own lowering after it: both E0200s are reported, as when `K` comes first.
+
+const A: [I32; 2] = [1, 2]
+
+const L: U32 = if A < A { K } else { 2 }   //~ E0200 @21
+
+const K: U32 = {   //~ E0200 @1
+  let x = 1
+  x + 1
+}
+
+pub fn f(x: U32) -> U32 { L + x }
