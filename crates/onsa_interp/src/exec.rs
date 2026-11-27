@@ -1,8 +1,8 @@
 //! The walk of the tree: statements and expressions.
 
 use onsa_core::{
-    Arg, BinOp, Block, Bounds, CmpOp, Expr, ExprKind, FnId, IntKind, Lit, LocalId, LogicOp, Mode, MsgId, Overflow,
-    PanicOrigin, Place, Stmt, StmtKind, Ty, UnOp,
+    Arg, BinOp, Block, Bounds, CTy, CmpOp, Expr, ExprKind, FnId, IntKind, Lit, LocalId, LogicOp, Mode, MsgId, Overflow,
+    PanicOrigin, Place, Stmt, StmtKind, TyKind, UnOp,
 };
 use onsa_diag::Span;
 
@@ -155,14 +155,14 @@ impl<'m> Interp<'m> {
             ExprKind::Lit(l) => self.eval_lit(l, e),
             ExprKind::Local(l) => self.eval_local(f, *l, span),
             ExprKind::Const(c) => self.const_val(*c),
-            ExprKind::Zeroed => self.eval_zeroed(&self.m.tys.tree(e.ty)),
+            ExprKind::Zeroed => self.eval_zeroed(e.ty),
             ExprKind::Unary(op, x) => self.eval_unary(f, *op, x, e),
             ExprKind::Binary { op, overflow, lhs, rhs } => self.eval_binary(f, (*op, *overflow), lhs, rhs, e),
             ExprKind::Cmp { op, lhs, rhs } => self.eval_cmp(f, *op, lhs, rhs, e),
             ExprKind::Logic { op, lhs, rhs } => self.eval_logic(f, *op, lhs, rhs),
             ExprKind::Cast(x) => self.eval_cast(f, x, e),
             ExprKind::Call { fn_, args } => self.eval_call(f, *fn_, args, e),
-            ExprKind::Prim { prim, args } => self.prim(f, prim, args, &self.m.tys.tree(e.ty), span),
+            ExprKind::Prim { prim, args } => self.prim(f, prim, args, e.ty, span),
             ExprKind::Field { base, index } => self.eval_field(f, base, *index, e),
             ExprKind::Index { base, index, bounds } => self.eval_index(f, base, index, *bounds, e),
             ExprKind::SpanOf(inner) => self.eval_span_of(f, inner, e),
@@ -181,7 +181,7 @@ impl<'m> Interp<'m> {
     }
 
     #[inline(never)]
-    fn eval_zeroed(&self, ty: &Ty) -> R<Value> {
+    fn eval_zeroed(&self, ty: CTy) -> R<Value> {
         Ok(zero(self.m, ty))
     }
 
@@ -195,7 +195,7 @@ impl<'m> Interp<'m> {
     #[inline(never)]
     fn eval_cast(&self, f: &mut Frame, x: &Expr, e: &Expr) -> R<Value> {
         let v = self.eval(f, x)?;
-        self.cast(v, &self.m.tys.tree(x.ty), &self.m.tys.tree(e.ty), e.span)
+        self.cast(v, self.kind(x.ty), self.kind(e.ty), e.span)
     }
 
     #[inline(never)]
@@ -229,7 +229,7 @@ impl<'m> Interp<'m> {
     #[cold]
     #[inline(never)]
     fn eval_panic(&self, f: &mut Frame, (msg, origin): (MsgId, PanicOrigin), shown: &[Expr], span: Span) -> R<Value> {
-        let mut value = |x: &Expr| Ok(onsa_diag::cut(&show_as(self.m, &self.m.tys.tree(x.ty), &self.eval(f, x)?)));
+        let mut value = |x: &Expr| Ok(onsa_diag::cut(&show_as(self.m, x.ty, &self.eval(f, x)?)));
         let shown = match shown {
             [l, r] => Some([value(l)?, value(r)?]),
             _ => None,
@@ -241,8 +241,8 @@ impl<'m> Interp<'m> {
     #[inline(never)]
     fn eval_lit(&self, l: &Lit, e: &Expr) -> R<Value> {
         Ok(match l {
-            Lit::Int(n) => match &self.m.tys.tree(e.ty) {
-                Ty::Int(k) => int_value(*k, *n),
+            Lit::Int(n) => match self.kind(e.ty) {
+                TyKind::Int(k) => int_value(*k, *n),
                 _ => internal(e.span, "integer literal type"),
             },
             Lit::F32(x) => Value::F32(*x),
@@ -343,11 +343,11 @@ impl<'m> Interp<'m> {
     #[inline(never)]
     fn eval_array(&self, f: &mut Frame, items: &[Expr], e: &Expr) -> R<Value> {
         let out = self.eval_all(f, items)?;
-        let elem = match &self.m.tys.tree(e.ty) {
-            Ty::Array(el, _) => (**el).clone(),
+        let elem = match self.kind(e.ty) {
+            TyKind::Array(el, _) => *el,
             _ => internal(e.span, "array literal type"),
         };
-        Ok(Value::Array(ArrayData::from_values(&elem, out)))
+        Ok(Value::Array(ArrayData::from_values(elem, out)))
     }
 
     #[inline(never)]
@@ -376,8 +376,8 @@ impl<'m> Interp<'m> {
             },
         };
         let Some(tag) = tag else { internal(span, "tag of a non-enum") };
-        match &self.m.tys.tree(e.ty) {
-            Ty::Int(k) => Ok(int_value(*k, tag as i128)),
+        match self.kind(e.ty) {
+            TyKind::Int(k) => Ok(int_value(*k, tag as i128)),
             _ => internal(span, "tag type"),
         }
     }

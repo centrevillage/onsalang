@@ -2,7 +2,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use onsa_core::{FloatKind, IntKind, Module, Ty, TypeDefKind, TypeId};
+use onsa_core::{CTy, FloatKind, IntKind, Module, TyKind, TypeDefKind, TypeId};
 
 const C_KEYWORDS: &[&str] = &[
     "auto", "break", "case", "char", "const", "continue", "default", "do", "double", "else", "enum", "extern", "float",
@@ -96,12 +96,12 @@ pub fn float_tag(k: FloatKind) -> &'static str {
 }
 
 /// The C spelling of a scalar type; `None` for the other types.
-pub fn scalar_c(ty: &Ty) -> Option<&'static str> {
+pub fn scalar_c(ty: &TyKind) -> Option<&'static str> {
     match ty {
-        Ty::Int(k) => Some(int_c(*k)),
-        Ty::Float(k) => Some(float_c(*k)),
-        Ty::Bool => Some("bool"),
-        Ty::Char => Some("uint32_t"),
+        TyKind::Int(k) => Some(int_c(*k)),
+        TyKind::Float(k) => Some(float_c(*k)),
+        TyKind::Bool => Some("bool"),
+        TyKind::Char => Some("uint32_t"),
         _ => None,
     }
 }
@@ -110,7 +110,7 @@ pub fn scalar_c(ty: &Ty) -> Option<&'static str> {
 pub struct TypeNames<'m> {
     pub m: &'m Module,
     /// C names of arrays, tuples, spans.
-    synthetic: HashMap<Ty, String>,
+    synthetic: HashMap<CTy, String>,
     /// Struct / enum typedef names.
     pub defs: HashMap<TypeId, String>,
     /// Struct tags that differ from the typedef name (exported flow states).
@@ -125,7 +125,7 @@ pub struct TypeNames<'m> {
 pub enum Entry {
     Def(TypeId),
     /// An array / tuple / span typedef, with its C name.
-    Synth(Ty, String),
+    Synth(CTy, String),
 }
 
 impl<'m> TypeNames<'m> {
@@ -141,20 +141,17 @@ impl<'m> TypeNames<'m> {
     }
 
     /// The C type name of `ty`, registering synthetic types on first use.
-    pub fn name(&mut self, ty: &Ty) -> String {
-        match ty {
-            Ty::Unit => "onsa_unit".into(),
-            Ty::Struct(id) | Ty::Enum(id) => {
-                self.register_def(*id);
-                self.defs[id].clone()
-            }
-            Ty::Array(..) | Ty::Tuple(_) | Ty::Span(_) | Ty::FnPtr(_) | Ty::Buf(_) => {
-                if let Some(n) = self.synthetic.get(ty) {
+    pub fn name(&mut self, ty: CTy) -> String {
+        match self.m.tys.kind(ty) {
+            TyKind::Unit => "onsa_unit".into(),
+            TyKind::Struct(id) | TyKind::Enum(id) => self.def(*id),
+            TyKind::Array(..) | TyKind::Tuple(_) | TyKind::Span(_) | TyKind::FnPtr(_) | TyKind::Buf(_) => {
+                if let Some(n) = self.synthetic.get(&ty) {
                     return n.clone();
                 }
                 let n = self.synthetic_name(ty);
-                self.synthetic.insert(ty.clone(), n.clone());
-                self.order.push(Entry::Synth(ty.clone(), n.clone()));
+                self.synthetic.insert(ty, n.clone());
+                self.order.push(Entry::Synth(ty, n.clone()));
                 n
             }
             // The scalars, named in one place.
@@ -162,38 +159,43 @@ impl<'m> TypeNames<'m> {
         }
     }
 
+    /// The C typedef name of the struct or enum `id`, registering it.
+    pub fn def(&mut self, id: TypeId) -> String {
+        self.register_def(id);
+        self.defs[&id].clone()
+    }
+
     /// A short mangled tag for use inside synthetic names.
-    pub fn tag(&mut self, ty: &Ty) -> String {
-        match ty {
-            Ty::Int(k) => int_tag(*k).into(),
-            Ty::Float(k) => float_tag(*k).into(),
-            Ty::Bool => "bool".into(),
-            Ty::Char => "char".into(),
-            Ty::Unit => "unit".into(),
-            Ty::Struct(id) | Ty::Enum(id) => {
-                self.register_def(*id);
-                self.defs[id].clone()
-            }
-            Ty::Array(e, n) => format!("arr_{}_{}", self.tag(e), n),
-            Ty::Tuple(ts) => {
-                let parts: Vec<String> = ts.iter().map(|t| self.tag(t)).collect();
+    pub fn tag(&mut self, ty: CTy) -> String {
+        let m = self.m;
+        match m.tys.kind(ty) {
+            TyKind::Int(k) => int_tag(*k).into(),
+            TyKind::Float(k) => float_tag(*k).into(),
+            TyKind::Bool => "bool".into(),
+            TyKind::Char => "char".into(),
+            TyKind::Unit => "unit".into(),
+            TyKind::Struct(id) | TyKind::Enum(id) => self.def(*id),
+            TyKind::Array(e, n) => format!("arr_{}_{}", self.tag(*e), n),
+            TyKind::Tuple(ts) => {
+                let parts: Vec<String> = ts.iter().map(|t| self.tag(*t)).collect();
                 format!("tup_{}", parts.join("_"))
             }
-            Ty::Span(e) => format!("span_{}", self.tag(e)),
-            Ty::FnPtr(_) => "fnptr".into(),
-            Ty::Buf(e) => format!("buf_{}", self.tag(e)),
+            TyKind::Span(e) => format!("span_{}", self.tag(*e)),
+            TyKind::FnPtr(_) => "fnptr".into(),
+            TyKind::Buf(e) => format!("buf_{}", self.tag(*e)),
         }
     }
 
-    fn synthetic_name(&mut self, ty: &Ty) -> String {
+    fn synthetic_name(&mut self, ty: CTy) -> String {
         // Register the element types first so definitions come out in order.
-        match ty {
-            Ty::Array(e, _) | Ty::Span(e) | Ty::Buf(e) => {
-                self.name(e);
+        let m = self.m;
+        match m.tys.kind(ty) {
+            TyKind::Array(e, _) | TyKind::Span(e) | TyKind::Buf(e) => {
+                self.name(*e);
             }
-            Ty::Tuple(ts) => {
+            TyKind::Tuple(ts) => {
                 for t in ts {
-                    self.name(t);
+                    self.name(*t);
                 }
             }
             _ => {}
@@ -206,19 +208,20 @@ impl<'m> TypeNames<'m> {
             return;
         }
         self.def_seen.insert(id);
-        let def = self.m.ty(id);
+        let m = self.m;
+        let def = m.ty(id);
         self.defs.insert(id, qualified(&def.name));
         // Field types first (dependency order), then this definition.
         match &def.kind {
             TypeDefKind::Struct { fields } => {
-                for (_, t) in fields.clone() {
-                    self.name(&self.m.tys.tree(t));
+                for (_, t) in fields {
+                    self.name(*t);
                 }
             }
             TypeDefKind::Enum { variants } => {
-                for (_, ts) in variants.clone() {
+                for (_, ts) in variants {
                     for t in ts {
-                        self.name(&self.m.tys.tree(t));
+                        self.name(*t);
                     }
                 }
             }

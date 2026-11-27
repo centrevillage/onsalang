@@ -3,7 +3,7 @@
 
 use std::fmt::Write as _;
 
-use onsa_core::{FixedField, FnId, Mode, ParamKey, ParamKind, ParamNumber, Ty, TyKind, Types};
+use onsa_core::{CTy, FixedField, FnId, Mode, ParamKey, ParamKind, ParamNumber, TyKind, Types};
 
 use crate::emit::{Cx, Export, R, f32_lit};
 use crate::names::ident;
@@ -47,14 +47,14 @@ pub(crate) fn header(cx: &mut Cx, e: &Export) -> R<(String, FlowParts)> {
     let _ = writeln!(h, "#define {up}_PARAM_COUNT {}\n", meta.params.len());
     let _ = writeln!(h, "typedef struct {sym} {sym};   /* the state (fast region); opaque */");
     // Params struct with the input names (spec §14.2).
-    let pfields = cx.fields(fns.params).to_vec();
+    let pfields = cx.fields(fns.params);
     let _ = write!(h, "typedef struct {sym}_params {{");
     if pfields.is_empty() {
         let _ = write!(h, " uint8_t onsa_empty;");
     }
     let mut params_fields = Vec::new();
-    for (name, ty) in &pfields {
-        let tn = scalar_c(cx, ty, &format!("the `block` input `{name}`"))?;
+    for (name, ty) in pfields {
+        let tn = scalar_c(cx, *ty, &format!("the `block` input `{name}`"))?;
         let _ = write!(h, " {tn} {};", ident(name));
         params_fields.push(crate::ApiField { name: name.clone(), c_name: ident(name), c_type: tn });
     }
@@ -106,7 +106,7 @@ pub(crate) fn header(cx: &mut Cx, e: &Export) -> R<(String, FlowParts)> {
         .params
         .into_iter()
         .map(|p| crate::IoArg {
-            c_type: cx.names.name(&p.elem),
+            c_type: cx.names.name(p.elem),
             name: p.onsa,
             c_name: p.name,
             planar: p.planar,
@@ -130,12 +130,12 @@ struct ConfigArgs {
 fn config_args(cx: &mut Cx, e: &Export) -> R<ConfigArgs> {
     let meta = &cx.m.flows[e.meta_index];
     let (fns, at) = (&meta.fns, meta.name_span);
-    let fields = cx.fields(fns.config).to_vec();
+    let fields = cx.fields(fns.config);
     let mut decls = String::new();
     let mut out = Vec::new();
     let mut api = Vec::new();
-    for (name, ty) in &fields {
-        let tn = scalar_c(cx, ty, &format!("the `init` input `{name}`"))?;
+    for (name, ty) in fields {
+        let tn = scalar_c(cx, *ty, &format!("the `init` input `{name}`"))?;
         let _ = write!(decls, "{tn} {}, ", ident(name));
         out.push((ident(name), ident(name)));
         api.push(crate::ApiField { name: name.clone(), c_name: ident(name), c_type: tn });
@@ -146,8 +146,12 @@ fn config_args(cx: &mut Cx, e: &Export) -> R<ConfigArgs> {
     Ok(ConfigArgs { decls, fields: out, api })
 }
 
-fn scalar_c(cx: &mut Cx, ty: &Ty, what: &str) -> R<String> {
-    if ty.is_scalar() { Ok(cx.names.name(ty)) } else { Err(unsupported(no_span(), Feature::ExportNonScalar, &[what])) }
+fn scalar_c(cx: &mut Cx, ty: CTy, what: &str) -> R<String> {
+    if cx.m.tys.is_scalar(ty) {
+        Ok(cx.names.name(ty))
+    } else {
+        Err(unsupported(no_span(), Feature::ExportNonScalar, &[what]))
+    }
 }
 
 /// One signal of `process`: a `Span` / planar parameter of the C API.
@@ -155,9 +159,11 @@ struct IoParam {
     name: String,
     /// The Onsa name (of the input or the field of the output).
     onsa: String,
-    elem: Ty,
+    elem: CTy,
     /// `Some(n)`: `[Span[T]; n]` (planar channels)
     planar: Option<u32>,
+    /// The type of the parameter or field: `Span[T]` or `[Span[T]; n]`.
+    ty: CTy,
     output: bool,
 }
 
@@ -242,27 +248,27 @@ fn process_io(cx: &mut Cx, e: &Export) -> R<ProcessIo> {
     let (mut params, mut groups, mut decls) = (Vec::new(), Vec::new(), String::new());
     for p in def.params.iter().skip(2) {
         let output = matches!(p.mode, Mode::Inout);
-        let (of, tys) = match &cx.m.tys.tree(p.ty) {
-            Ty::Struct(id) => (Some(*id), cx.fields(*id).iter().map(|(_, t)| t.clone()).collect()),
-            t => (None, vec![t.clone()]),
+        let (of, tys) = match m.tys.kind(p.ty) {
+            TyKind::Struct(id) => (Some(*id), cx.fields(*id).iter().map(|(_, t)| *t).collect()),
+            _ => (None, vec![p.ty]),
         };
         let start = params.len();
         for ty in tys {
             let onsa = names.next().ok_or_else(|| crate::emit::internal("more signals than the flow has"))?.clone();
             let name = ident(&onsa);
-            let (elem, planar) = match &ty {
-                Ty::Span(e) => ((**e).clone(), None),
-                Ty::Array(inner, n) => match &**inner {
-                    Ty::Span(e) => ((**e).clone(), Some(*n)),
+            let (elem, planar) = match m.tys.kind(ty) {
+                TyKind::Span(e) => (*e, None),
+                TyKind::Array(inner, n) => match m.tys.kind(*inner) {
+                    TyKind::Span(e) => (*e, Some(*n)),
                     _ => return Err(unsupported(def.span, Feature::ProcessParams, &[])),
                 },
                 _ => return Err(unsupported(def.span, Feature::ProcessParams, &[])),
             };
-            let et = scalar_c(cx, &elem, &format!("the signal `{name}`"))?;
+            let et = scalar_c(cx, elem, &format!("the signal `{name}`"))?;
             let c = if output { "" } else { "const " };
             let star = if planar.is_some() { "* const*" } else { "*" };
             let _ = write!(decls, "{c}{et}{star} {name}, ");
-            params.push(IoParam { name, onsa, elem, planar, output });
+            params.push(IoParam { name, onsa, elem, planar, ty, output });
         }
         groups.push(IoGroup { signals: start..params.len(), of });
     }
@@ -278,21 +284,21 @@ fn process_io(cx: &mut Cx, e: &Export) -> R<ProcessIo> {
 }
 
 /// One channel of a signal of `process`: one pointer and its range.
-struct IoRange<'a> {
+struct IoRange {
     ptr: String,
     output: bool,
     /// The type of its elements, and its C spelling.
-    elem: &'a Ty,
+    elem: CTy,
     c_type: String,
 }
 
 /// Every channel of every signal of `process` (one range per pointer), from
 /// the parameters of the Core `process` (R-141: by structure, not by name).
-fn io_ranges<'a>(cx: &mut Cx, io: &'a ProcessIo) -> Vec<IoRange<'a>> {
+fn io_ranges(cx: &mut Cx, io: &ProcessIo) -> Vec<IoRange> {
     let mut ranges = Vec::new();
     for p in &io.params {
-        let c_type = cx.names.name(&p.elem);
-        let range = |ptr: String| IoRange { ptr, output: p.output, elem: &p.elem, c_type: c_type.clone() };
+        let c_type = cx.names.name(p.elem);
+        let range = |ptr: String| IoRange { ptr, output: p.output, elem: p.elem, c_type: c_type.clone() };
         match p.planar {
             None => ranges.push(range(p.name.clone())),
             Some(n) => ranges.extend((0..n).map(|k| range(channel_ptr(p, k)))),
@@ -364,9 +370,9 @@ pub(crate) fn wrappers(cx: &mut Cx, e: &Export) -> R<String> {
     let meta = cx.m.flows[e.meta_index].clone();
     let fns = meta.fns.clone();
     let sym = e.symbol.clone();
-    let state = cx.names.name(&Ty::Struct(fns.state));
-    let config = cx.names.name(&Ty::Struct(fns.config));
-    let params = cx.names.name(&Ty::Struct(fns.params));
+    let state = cx.names.def(fns.state);
+    let config = cx.names.def(fns.config);
+    let params = cx.names.def(fns.params);
     let has_bulk = cx.bulk.contains_key(&fns.state);
     let poisoned = cx
         .fields(fns.state)
@@ -462,7 +468,7 @@ pub(crate) fn wrappers(cx: &mut Cx, e: &Export) -> R<String> {
         else {
             continue;
         };
-        match cx.m.tys.kind(*ty) {
+        match cx.kind(*ty) {
             TyKind::Float(onsa_core::FloatKind::F32) => {
                 let _ = writeln!(
                     s,
@@ -601,12 +607,12 @@ pub(crate) fn wrappers(cx: &mut Cx, e: &Export) -> R<String> {
 fn process_args(cx: &mut Cx, io: &ProcessIo, s: &mut String) -> Vec<String> {
     let mut views = Vec::new();
     for p in &io.params {
-        let tag = cx.names.tag(&p.elem);
-        let cast = if p.output { String::new() } else { format!("({}*)", cx.names.name(&p.elem)) };
+        let tag = cx.names.tag(p.elem);
+        let cast = if p.output { String::new() } else { format!("({}*)", cx.names.name(p.elem)) };
         match p.planar {
             None => views.push(format!("onsa_span_{tag}_of({cast}{}, frames)", p.name)),
             Some(n) => {
-                let arr = cx.names.name(&Ty::Array(Box::new(Ty::Span(Box::new(p.elem.clone()))), n));
+                let arr = cx.names.name(p.ty);
                 let spans = spans_local(p);
                 let _ = writeln!(s, "  {arr} {spans};");
                 for k in 0..n {
@@ -635,7 +641,7 @@ fn process_args(cx: &mut Cx, io: &ProcessIo, s: &mut String) -> Vec<String> {
         };
         // An `In` or `Out` (§11.6), passed as a struct is: by its address.
         let local = format!("onsa_io{k}");
-        let _ = writeln!(s, "  {} {local};", cx.names.name(&Ty::Struct(id)));
+        let _ = writeln!(s, "  {} {local};", cx.names.def(id));
         let fields: Vec<String> = cx.fields(id).iter().map(|(n, _)| ident(n)).collect();
         for (field, view) in fields.iter().zip(&views[g.signals.clone()]) {
             let _ = writeln!(s, "  {local}.{field} = {view};");
@@ -702,7 +708,7 @@ fn fn_signature(cx: &mut Cx, f: FnId) -> R<FnSignature> {
     }
     let short = def.name.rsplit('.').next().unwrap_or(&def.name).to_string();
     let sym = format!("{}{}", cx.opts.prefix(), ident(&short));
-    let ret = if def.ret == Types::UNIT { "void".to_string() } else { cx.names.name(&cx.m.tys.tree(def.ret)) };
+    let ret = if def.ret == Types::UNIT { "void".to_string() } else { cx.names.name(def.ret) };
     let mut decls = Vec::new();
     let mut fwd = Vec::new();
     let mut params = Vec::new();
@@ -710,20 +716,23 @@ fn fn_signature(cx: &mut Cx, f: FnId) -> R<FnSignature> {
         let onsa = def.locals[p.local.0 as usize].name.clone();
         let name = ident(&onsa);
         let field = |c_type: String| crate::ApiField { name: onsa.clone(), c_name: name.clone(), c_type };
-        match (&cx.m.tys.tree(p.ty), p.mode) {
-            (t, Mode::Inout) if t.is_scalar() => {
+        let tys = &cx.m.tys;
+        match (tys.kind(p.ty), p.mode) {
+            (_, Mode::Inout) if tys.is_scalar(p.ty) => {
+                let t = p.ty;
                 decls.push(format!("{}* {name}", cx.names.name(t)));
                 params.push(crate::FnParam { field: field(cx.names.name(t)), kind: crate::FnParamKind::InoutScalar });
                 fwd.push(name);
             }
-            (t, _) if t.is_scalar() => {
+            (_, _) if tys.is_scalar(p.ty) => {
+                let t = p.ty;
                 decls.push(format!("{} {name}", cx.names.name(t)));
                 params.push(crate::FnParam { field: field(cx.names.name(t)), kind: crate::FnParamKind::Scalar });
                 fwd.push(name);
             }
-            (Ty::Span(e), mode) if e.is_scalar() => {
-                let et = cx.names.name(e);
-                let tag = cx.names.tag(e);
+            (TyKind::Span(e), mode) if tys.is_scalar(*e) => {
+                let et = cx.names.name(*e);
+                let tag = cx.names.tag(*e);
                 let inout = matches!(mode, Mode::Inout);
                 let c = if inout { "" } else { "const " };
                 decls.push(format!("{c}{et}* {name}, uint32_t {name}_len"));
@@ -751,7 +760,7 @@ pub(crate) fn fn_wrapper(cx: &mut Cx, f: FnId) -> R<String> {
     if cx.opts.panic == PanicMode::Poison {
         // T4-4 (spec §9.2): panics do not cross the FFI boundary; the call
         // returns a zero value and `<prefix>take_panic()` reports it.
-        let ret = if def.ret == Types::UNIT { None } else { Some(cx.names.name(&cx.m.tys.tree(def.ret))) };
+        let ret = if def.ret == Types::UNIT { None } else { Some(cx.names.name(def.ret)) };
         // The previous slot is restored on every exit so that a wrapper entered from an
         // interrupt (or a nested host call) does not clear the outer wrapper's target (S-26).
         let _ = writeln!(s, "  jmp_buf onsa_jb;");

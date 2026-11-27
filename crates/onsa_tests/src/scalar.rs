@@ -4,7 +4,7 @@
 //! comparison of spec §13.4. One codec for the conformance harness
 //! ([`crate::conformance`]) and the host steps ([`crate::host`]).
 
-use onsa_core::{FloatKind, IntKind, Ty};
+use onsa_core::{CTy, FloatKind, IntKind, TyKind, Types};
 use onsa_interp::Value;
 use onsa_interp::value::int_value;
 
@@ -41,39 +41,37 @@ impl Scalar {
         Scalar::ALL.into_iter().find(|s| s.name() == name)
     }
 
-    pub fn of(ty: &Ty) -> Option<Scalar> {
+    pub fn of(ty: &TyKind) -> Option<Scalar> {
         Some(match ty {
-            Ty::Float(FloatKind::F32) => Scalar::F32,
-            Ty::Float(FloatKind::F64) => Scalar::F64,
-            Ty::Int(k) => Scalar::Int(*k),
-            Ty::Bool => Scalar::Bool,
-            Ty::Char => Scalar::Char,
+            TyKind::Float(FloatKind::F32) => Scalar::F32,
+            TyKind::Float(FloatKind::F64) => Scalar::F64,
+            TyKind::Int(k) => Scalar::Int(*k),
+            TyKind::Bool => Scalar::Bool,
+            TyKind::Char => Scalar::Char,
             _ => return None,
         })
     }
 
-    pub fn ty(self) -> Ty {
+    /// The built-in type, at the id it has in every table.
+    pub fn ty(self) -> CTy {
         match self {
-            Scalar::F32 => Ty::Float(FloatKind::F32),
-            Scalar::F64 => Ty::Float(FloatKind::F64),
-            Scalar::Int(k) => Ty::Int(k),
-            Scalar::Bool => Ty::Bool,
-            Scalar::Char => Ty::Char,
+            Scalar::F32 => Types::float(FloatKind::F32),
+            Scalar::F64 => Types::float(FloatKind::F64),
+            Scalar::Int(k) => Types::int(k),
+            Scalar::Bool => Types::BOOL,
+            Scalar::Char => Types::CHAR,
         }
     }
 
     /// The C type the C backend spells this type with (`float`, `int32_t`):
     /// the check of a type the backend recorded for a value of this type.
     pub fn c_type(self) -> Option<&'static str> {
-        onsa_backend_c::scalar_c(&self.ty())
+        onsa_backend_c::scalar_c(Types::builtin(self.ty())?)
     }
 
     /// The Onsa name (`F32`, `U8`), for messages: as Core prints the type.
     pub fn name(self) -> String {
-        let mut m = onsa_core::Module::default();
-        // A1b: through the bridge.
-        let t = m.tys.of(&self.ty());
-        onsa_core::dump::type_name(&m, t)
+        onsa_core::dump::type_name(&onsa_core::Module::default(), self.ty())
     }
 
     pub fn size(self) -> usize {
@@ -192,5 +190,19 @@ pub fn show(v: &Value) -> String {
             Some(n) => n.to_string(),
             None => format!("{v:?}"),
         },
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Each scalar is the one of its built-in type, and `()` is none.
+    #[test]
+    fn each_scalar_is_the_one_of_its_type() {
+        for s in Scalar::ALL {
+            assert_eq!(Types::builtin(s.ty()).and_then(Scalar::of), Some(s), "{}", s.name());
+        }
+        assert_eq!(Scalar::of(&TyKind::Unit), None);
     }
 }

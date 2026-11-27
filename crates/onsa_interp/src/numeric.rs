@@ -2,7 +2,7 @@
 //! types of values (R-92 (1)).
 
 use onsa_core::prim::MathFn;
-use onsa_core::{BinOp, CmpOp, FloatKind, IntKind, Overflow, Ty, UnOp};
+use onsa_core::{BinOp, CmpOp, FloatKind, IntKind, Overflow, TyKind, UnOp};
 use onsa_diag::Span;
 
 use crate::value::{self, Value, clamp_int, in_range, int_value, wrap_int};
@@ -135,9 +135,9 @@ impl<'m> Interp<'m> {
 
     /// Lossless widening (§3.3) of `v`, of type `from`, to `to`. The value
     /// has the type the operand declares (R-92 (1)).
-    pub(super) fn cast(&self, v: Value, from: &Ty, to: &Ty, span: Span) -> R<Value> {
+    pub(super) fn cast(&self, v: Value, from: &TyKind, to: &TyKind, span: Span) -> R<Value> {
         Ok(match (from, to) {
-            (Ty::Float(fk), Ty::Float(k)) => {
+            (TyKind::Float(fk), TyKind::Float(k)) => {
                 // Exact: an `F32` is exact as an `f64`, and back.
                 let x = float_of(&v, *fk, span);
                 match (fk, k) {
@@ -148,14 +148,14 @@ impl<'m> Interp<'m> {
                     }
                 }
             }
-            (Ty::Int(fk), Ty::Float(k)) => {
+            (TyKind::Int(fk), TyKind::Float(k)) => {
                 let i = int_of(&v, *fk, span);
                 match k {
                     FloatKind::F32 => Value::F32(i as f32),
                     FloatKind::F64 => Value::F64(i as f64),
                 }
             }
-            (Ty::Int(fk), Ty::Int(k)) => match int_of(&v, *fk, span) {
+            (TyKind::Int(fk), TyKind::Int(k)) => match int_of(&v, *fk, span) {
                 i if in_range(*k, i) => int_value(*k, i),
                 i => internal(span, format!("the cast of {i} to `{}` loses information", k.name())),
             },

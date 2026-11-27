@@ -17,7 +17,7 @@
 
 use std::collections::HashMap;
 
-use onsa_core::{FloatKind, FnDef, FnId, Module, Ty, TypeDefKind, TypeId};
+use onsa_core::{CTy, FloatKind, FnDef, FnId, Module, TyKind, TypeDefKind, TypeId};
 use onsa_interp::value::int_value;
 use onsa_interp::{ArrayData, Failure, Interp, Value as IValue};
 use onsa_sema::DefId;
@@ -114,12 +114,10 @@ fn run(interp: &Interp, f: FnId, args: Vec<IValue>) -> (Result<Value, Fault>, bo
 }
 
 fn to_interp_args(m: &Module, f: &FnDef, args: &[Value]) -> Result<Vec<IValue>, Fault> {
-    // A1b: the trees of the types, read through the bridge.
-    let tys: Vec<Ty> = f.params.iter().map(|p| m.tys.tree(p.ty)).collect();
-    each(m, tys.iter(), args)
+    each(m, f.params.iter().map(|p| p.ty), args)
 }
 
-fn each<'t>(m: &Module, tys: impl ExactSizeIterator<Item = &'t Ty>, vs: &[Value]) -> Result<Vec<IValue>, Fault> {
+fn each(m: &Module, tys: impl ExactSizeIterator<Item = CTy>, vs: &[Value]) -> Result<Vec<IValue>, Fault> {
     if tys.len() != vs.len() {
         return Err(Fault::Internal("values that are not as many as the types"));
     }
@@ -127,36 +125,32 @@ fn each<'t>(m: &Module, tys: impl ExactSizeIterator<Item = &'t Ty>, vs: &[Value]
 }
 
 /// The value of the evaluator as the interpreter holds a value of the type `ty` of Core.
-fn to_interp(m: &Module, ty: &Ty, v: &Value) -> Result<IValue, Fault> {
+fn to_interp(m: &Module, ty: CTy, v: &Value) -> Result<IValue, Fault> {
     let bad = Fault::Internal("a value that is not of the type of its place");
-    Ok(match (ty, v) {
-        (Ty::Int(k), Value::Int(j, n, _)) if k == j => int_value(*k, *n),
-        (Ty::Float(FloatKind::F32), Value::F32(x)) => IValue::F32(*x),
-        (Ty::Float(FloatKind::F64), Value::F64(x)) => IValue::F64(*x),
-        (Ty::Bool, Value::Bool(b)) => IValue::Bool(*b),
-        (Ty::Char, Value::Char(c)) => IValue::Char(*c),
-        (Ty::Unit, Value::Unit) => IValue::Unit,
-        (Ty::Array(e, n), Value::Array(vs)) if *n as usize == vs.len() => {
-            let es = each(m, std::iter::repeat_n(&**e, vs.len()), vs)?;
-            IValue::Array(ArrayData::from_values(e, es))
+    Ok(match (m.tys.kind(ty), v) {
+        (TyKind::Int(k), Value::Int(j, n, _)) if k == j => int_value(*k, *n),
+        (TyKind::Float(FloatKind::F32), Value::F32(x)) => IValue::F32(*x),
+        (TyKind::Float(FloatKind::F64), Value::F64(x)) => IValue::F64(*x),
+        (TyKind::Bool, Value::Bool(b)) => IValue::Bool(*b),
+        (TyKind::Char, Value::Char(c)) => IValue::Char(*c),
+        (TyKind::Unit, Value::Unit) => IValue::Unit,
+        (TyKind::Array(e, n), Value::Array(vs)) if *n as usize == vs.len() => {
+            let es = each(m, std::iter::repeat_n(*e, vs.len()), vs)?;
+            IValue::Array(ArrayData::from_values(*e, es))
         }
-        (Ty::Tuple(ts), Value::Tuple(vs, _)) => IValue::Tuple(each(m, ts.iter(), vs)?),
-        (Ty::Struct(id), Value::Struct(vs)) => match kind(m, *id) {
-            TypeDefKind::Struct { fields } => {
-                let tys: Vec<Ty> = fields.iter().map(|(_, t)| m.tys.tree(*t)).collect();
-                IValue::Struct(each(m, tys.iter(), vs)?)
-            }
+        (TyKind::Tuple(ts), Value::Tuple(vs, _)) => IValue::Tuple(each(m, ts.iter().copied(), vs)?),
+        (TyKind::Struct(id), Value::Struct(vs)) => match kind(m, *id) {
+            TypeDefKind::Struct { fields } => IValue::Struct(each(m, fields.iter().map(|(_, t)| *t), vs)?),
             _ => return Err(bad),
         },
-        (Ty::Enum(id), Value::Enum { tag, fields }) => match kind(m, *id) {
+        (TyKind::Enum(id), Value::Enum { tag, fields }) => match kind(m, *id) {
             TypeDefKind::Enum { variants } => {
                 let (_, ts) = variants.get(*tag as usize).ok_or(bad)?;
-                let tys: Vec<Ty> = ts.iter().map(|t| m.tys.tree(*t)).collect();
-                IValue::Enum { tag: *tag, fields: each(m, tys.iter(), fields)? }
+                IValue::Enum { tag: *tag, fields: each(m, ts.iter().copied(), fields)? }
             }
             _ => return Err(bad),
         },
-        (Ty::Span(_) | Ty::Buf(_) | Ty::FnPtr(_), _) => {
+        (TyKind::Span(_) | TyKind::Buf(_) | TyKind::FnPtr(_), _) => {
             return Err(Fault::Unavailable("a view, a buffer or a function value"));
         }
         _ => return Err(bad),

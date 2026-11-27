@@ -23,7 +23,7 @@ use std::path::Path;
 
 use onsa_backend_c::{FlowApi, PanicMode};
 use onsa_core::prim::Prim;
-use onsa_core::{Expr, ExprKind, FlowMeta, Module, Ty, TypeDefKind, TypeId};
+use onsa_core::{CTy, Expr, ExprKind, FlowMeta, Module, TyKind, TypeDefKind, TypeId};
 use onsa_driver::BuildOutput;
 use onsa_interp::value::{int_value, zero_array};
 use onsa_interp::{ArrayData, Interp, Proj, SpanRef, Value, slot};
@@ -130,24 +130,24 @@ struct Shape {
     outputs: Vec<Signal>,
 }
 
-// A1b: the trees of the fields, read through the bridge.
-fn struct_fields(m: &Module, id: TypeId) -> Vec<(String, Ty)> {
+fn struct_fields(m: &Module, id: TypeId) -> &[(String, CTy)] {
     match &m.ty(id).kind {
-        TypeDefKind::Struct { fields } => fields.iter().map(|(n, t)| (n.clone(), m.tys.tree(*t))).collect(),
-        _ => Vec::new(),
+        TypeDefKind::Struct { fields } => fields,
+        _ => &[],
     }
 }
 
-fn scalar_of(ty: &Ty, what: &str) -> Result<Scalar, String> {
-    Scalar::of(ty).ok_or_else(|| format!("{what} of type {ty:?} is not a scalar"))
+fn scalar_of(m: &Module, ty: CTy, what: &str) -> Result<Scalar, String> {
+    let name = || onsa_core::dump::type_name(m, ty);
+    Scalar::of(m.tys.kind(ty)).ok_or_else(|| format!("{what} of type {} is not a scalar", name()))
 }
 
-fn signal(name: &str, ty: &Ty, planar: Option<u32>, what: &str) -> Result<Signal, String> {
-    let (elem, planar) = match (ty, planar) {
-        (Ty::Array(e, n), None) => (&**e, Some(*n)),
-        (t, p) => (t, p),
+fn signal(m: &Module, name: &str, ty: CTy, planar: Option<u32>, what: &str) -> Result<Signal, String> {
+    let (elem, planar) = match (m.tys.kind(ty), planar) {
+        (TyKind::Array(e, n), None) => (*e, Some(*n)),
+        (_, p) => (ty, p),
     };
-    Ok(Signal { name: name.to_string(), scalar: scalar_of(elem, &format!("{what} `{name}`"))?, planar })
+    Ok(Signal { name: name.to_string(), scalar: scalar_of(m, elem, &format!("{what} `{name}`"))?, planar })
 }
 
 impl Shape {
@@ -155,7 +155,7 @@ impl Shape {
     fn of(m: &Module, meta: &FlowMeta) -> Result<Shape, String> {
         let config = struct_fields(m, meta.fns.config)
             .iter()
-            .map(|(n, t)| Ok((n.clone(), scalar_of(t, &format!("the `init` input `{n}`"))?)))
+            .map(|(n, t)| Ok((n.clone(), scalar_of(m, *t, &format!("the `init` input `{n}`"))?)))
             .collect::<Result<_, String>>()?;
         let pfields = struct_fields(m, meta.fns.params);
         if pfields.len() != meta.params.len() {
@@ -165,20 +165,17 @@ impl Shape {
             .iter()
             .zip(&meta.params)
             .map(|((n, t), (_, _, pm))| {
-                let s = scalar_of(t, &format!("the `block` input `{n}`"))?;
+                let s = scalar_of(m, *t, &format!("the `block` input `{n}`"))?;
                 Ok((n.clone(), s, s.param_value(pm.as_ref().and_then(|p| p.number(onsa_core::ParamKey::Default)))))
             })
             .collect::<Result<_, String>>()?;
         let inputs = meta
             .sig_inputs
             .iter()
-            .map(|(n, t)| signal(n, &m.tys.tree(*t), None, "the `sample` input"))
+            .map(|(n, t)| signal(m, n, *t, None, "the `sample` input"))
             .collect::<Result<_, _>>()?;
-        let outputs = meta
-            .outputs
-            .iter()
-            .map(|(n, t, p)| signal(n, &m.tys.tree(*t), *p, "the output"))
-            .collect::<Result<_, _>>()?;
+        let outputs =
+            meta.outputs.iter().map(|(n, t, p)| signal(m, n, *t, *p, "the output")).collect::<Result<_, _>>()?;
         Ok(Shape { config, params, inputs, outputs })
     }
 
@@ -338,7 +335,7 @@ fn interp_run(module: &Module, meta: &FlowMeta, shape: &Shape, stimuli: Vec<Vec<
         .map(|s| {
             (0..s.channels())
                 .map(|_| {
-                    let data = ArrayData::from_values(&s.scalar.ty(), inputs.next().expect("a stimulus per channel"));
+                    let data = ArrayData::from_values(s.scalar.ty(), inputs.next().expect("a stimulus per channel"));
                     slot(Value::Array(data))
                 })
                 .collect()
@@ -347,12 +344,12 @@ fn interp_run(module: &Module, meta: &FlowMeta, shape: &Shape, stimuli: Vec<Vec<
     let outs: Vec<Vec<onsa_interp::Slot>> = shape
         .outputs
         .iter()
-        .map(|s| (0..s.channels()).map(|_| slot(Value::Array(zero_array(module, &s.scalar.ty(), FRAMES)))).collect())
+        .map(|s| (0..s.channels()).map(|_| slot(Value::Array(zero_array(module, s.scalar.ty(), FRAMES)))).collect())
         .collect();
     // The number of the signals of each `In` or `Out` the Core `process` takes.
     let groups: Vec<Option<usize>> = (module.fn_(process).params.iter().skip(2))
-        .map(|p| match &module.tys.tree(p.ty) {
-            Ty::Struct(id) => match &module.ty(*id).kind {
+        .map(|p| match module.tys.kind(p.ty) {
+            TyKind::Struct(id) => match &module.ty(*id).kind {
                 TypeDefKind::Struct { fields } => Some(fields.len()),
                 _ => None,
             },
@@ -783,6 +780,19 @@ mod tests {
         assert_eq!(o.skipped.len(), 1);
         assert_eq!(o.skipped[0].0, "m.f");
         assert!(o.report[0].contains("skipped"), "{:?}", o.report);
+    }
+
+    /// A signal of an array type `[T; n]` is planar, a buffer per channel;
+    /// of a scalar, one buffer, unless the flow said its channels.
+    #[test]
+    fn a_signal_of_an_array_has_a_buffer_per_channel() {
+        let mut m = Module::default();
+        let f32_ = Types::float(FloatKind::F32);
+        let arr = m.tys.intern(TyKind::Array(f32_, 2));
+        let of = |ty, planar| signal(&m, "x", ty, planar, "the input").map(|s| (s.scalar, s.planar));
+        assert_eq!(of(arr, None), Ok((Scalar::F32, Some(2))));
+        assert_eq!(of(f32_, None), Ok((Scalar::F32, None)));
+        assert_eq!(of(f32_, Some(3)), Ok((Scalar::F32, Some(3))));
     }
 
     #[test]

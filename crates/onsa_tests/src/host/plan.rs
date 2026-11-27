@@ -228,8 +228,7 @@ fn struct_fields(m: &Module, id: TypeId) -> &[(String, CTy)] {
 }
 
 fn scalar_of(m: &Module, ty: CTy, what: &str) -> Result<Scalar, String> {
-    // A1b: the tree of the type, read through the bridge.
-    Scalar::of(&m.tys.tree(ty)).ok_or_else(|| {
+    Scalar::of(m.tys.kind(ty)).ok_or_else(|| {
         let name = onsa_core::dump::type_name(m, ty);
         format!("{what} has the type {name}, which the host steps cannot drive (not a scalar)")
     })
@@ -633,10 +632,9 @@ fn fn_step(st: &Step, api: &FnApi, m: &Module) -> Result<Op, PlanError> {
                 .into());
             }
             (_, _) => {
-                // A1b: the tree of the type, as the message showed it.
-                let t = m.tys.tree(cp.ty);
+                let t = onsa_core::dump::type_name(m, cp.ty);
                 return Err(PlanError::Harness(format!(
-                    "the parameter `{name}` of type {t:?}: its C API does not match"
+                    "the parameter `{name}` of type {t}: its C API does not match"
                 )));
             }
         };
@@ -651,7 +649,8 @@ fn fn_step(st: &Step, api: &FnApi, m: &Module) -> Result<Op, PlanError> {
             Some((s, recorded(c, s, "the returned value")?))
         }
         _ => {
-            return Err(PlanError::Harness(format!("`{}` returns {:?}, its C API does not match", api.fn_, def.ret)));
+            let t = onsa_core::dump::type_name(m, def.ret);
+            return Err(PlanError::Harness(format!("`{}` returns {t}, its C API does not match", api.fn_)));
         }
     };
     let result = match (ret.as_ref().map(|r| r.0), status, &st.result) {

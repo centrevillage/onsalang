@@ -9,7 +9,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use onsa_core::{FloatKind, FnId, IntKind, Module, Ty, TypeDefKind};
+use onsa_core::{CTy, FloatKind, FnId, IntKind, Module, TyKind, TypeDefKind, Types};
 
 /// A storage cell: one per local binding and one per `Buf`.
 pub type Slot = Rc<RefCell<Value>>;
@@ -70,8 +70,8 @@ impl ArrayData {
         }
     }
 
-    pub fn from_values(elem: &Ty, vs: Vec<Value>) -> ArrayData {
-        if *elem == Ty::Float(FloatKind::F32) {
+    pub fn from_values(elem: CTy, vs: Vec<Value>) -> ArrayData {
+        if elem == Types::float(FloatKind::F32) {
             ArrayData::F32(vs.iter().map(f32_element).collect())
         } else {
             ArrayData::Any(vs)
@@ -228,42 +228,37 @@ pub fn int_value(k: IntKind, v: i128) -> Value {
 /// The zero value of a type (`ExprKind::Zeroed`): numbers 0, `false`,
 /// `'\0'`, zeroed aggregates, enums at tag 0 with a zeroed payload, empty
 /// buffers and spans.
-pub fn zero(m: &Module, ty: &Ty) -> Value {
-    match ty {
-        Ty::Int(k) => int_value(*k, 0),
-        Ty::Float(FloatKind::F32) => Value::F32(0.0),
-        Ty::Float(FloatKind::F64) => Value::F64(0.0),
-        Ty::Bool => Value::Bool(false),
-        Ty::Char => Value::Char('\0'),
-        Ty::Unit => Value::Unit,
-        Ty::Array(e, n) => Value::Array(zero_array(m, e, *n)),
-        Ty::Tuple(ts) => Value::Tuple(ts.iter().map(|t| zero(m, t)).collect()),
-        Ty::Struct(id) => match &m.ty(*id).kind {
-            TypeDefKind::Struct { fields } => {
-                Value::Struct(fields.iter().map(|(_, t)| zero(m, &m.tys.tree(*t))).collect())
-            }
+pub fn zero(m: &Module, ty: CTy) -> Value {
+    match m.tys.kind(ty) {
+        TyKind::Int(k) => int_value(*k, 0),
+        TyKind::Float(FloatKind::F32) => Value::F32(0.0),
+        TyKind::Float(FloatKind::F64) => Value::F64(0.0),
+        TyKind::Bool => Value::Bool(false),
+        TyKind::Char => Value::Char('\0'),
+        TyKind::Unit => Value::Unit,
+        TyKind::Array(e, n) => Value::Array(zero_array(m, *e, *n)),
+        TyKind::Tuple(ts) => Value::Tuple(ts.iter().map(|t| zero(m, *t)).collect()),
+        TyKind::Struct(id) => match &m.ty(*id).kind {
+            TypeDefKind::Struct { fields } => Value::Struct(fields.iter().map(|(_, t)| zero(m, *t)).collect()),
             _ => onsa_diag::internal::bug(None, "the zero value of a struct type whose definition is not a struct"),
         },
-        Ty::Enum(id) => match &m.ty(*id).kind {
+        TyKind::Enum(id) => match &m.ty(*id).kind {
             TypeDefKind::Enum { variants } => Value::Enum {
                 tag: 0,
-                fields: variants
-                    .first()
-                    .map(|(_, ts)| ts.iter().map(|t| zero(m, &m.tys.tree(*t))).collect())
-                    .unwrap_or_default(),
+                fields: variants.first().map(|(_, ts)| ts.iter().map(|t| zero(m, *t)).collect()).unwrap_or_default(),
             },
             _ => onsa_diag::internal::bug(None, "the zero value of an enum type whose definition is not an enum"),
         },
-        Ty::Span(e) => {
-            Value::Span(SpanRef { root: slot(Value::Array(zero_array(m, e, 0))), projs: Vec::new(), start: 0, len: 0 })
+        TyKind::Span(e) => {
+            Value::Span(SpanRef { root: slot(Value::Array(zero_array(m, *e, 0))), projs: Vec::new(), start: 0, len: 0 })
         }
-        Ty::Buf(e) => Value::Buf(slot(Value::Array(zero_array(m, e, 0)))),
-        Ty::FnPtr(_) => Value::Fn(FnId(u32::MAX)),
+        TyKind::Buf(e) => Value::Buf(slot(Value::Array(zero_array(m, *e, 0)))),
+        TyKind::FnPtr(_) => Value::Fn(FnId(u32::MAX)),
     }
 }
 
-pub fn zero_array(m: &Module, elem: &Ty, n: u32) -> ArrayData {
-    if *elem == Ty::Float(FloatKind::F32) {
+pub fn zero_array(m: &Module, elem: CTy, n: u32) -> ArrayData {
+    if elem == Types::float(FloatKind::F32) {
         ArrayData::F32(vec![0.0; n as usize])
     } else {
         ArrayData::Any((0..n).map(|_| zero(m, elem)).collect())
@@ -350,24 +345,21 @@ pub fn show(v: &Value) -> String {
 /// names of its variants. The enums with `Show` in this version are `Option`
 /// and `Result` alone (a derive of it is E0200), which §6.3 writes with no
 /// type name; no struct has it.
-pub fn show_as(m: &Module, ty: &Ty, v: &Value) -> String {
+pub fn show_as(m: &Module, ty: CTy, v: &Value) -> String {
     let all = |xs: &mut dyn Iterator<Item = String>| xs.collect::<Vec<_>>().join(", ");
-    match (ty, v) {
-        (Ty::Array(t, _), Value::Array(xs)) => {
-            format!("[{}]", all(&mut (0..xs.len()).map(|i| show_as(m, t, &xs.get(i)))))
+    match (m.tys.kind(ty), v) {
+        (TyKind::Array(t, _), Value::Array(xs)) => {
+            format!("[{}]", all(&mut (0..xs.len()).map(|i| show_as(m, *t, &xs.get(i)))))
         }
-        (Ty::Tuple(ts), Value::Tuple(xs)) => {
-            format!("({})", all(&mut ts.iter().zip(xs).map(|(t, x)| show_as(m, t, x))))
+        (TyKind::Tuple(ts), Value::Tuple(xs)) => {
+            format!("({})", all(&mut ts.iter().zip(xs).map(|(t, x)| show_as(m, *t, x))))
         }
-        (Ty::Enum(id), Value::Enum { tag, fields }) => match &m.ty(*id).kind {
+        (TyKind::Enum(id), Value::Enum { tag, fields }) => match &m.ty(*id).kind {
             TypeDefKind::Enum { variants } if (*tag as usize) < variants.len() => {
                 let (name, tys) = &variants[*tag as usize];
                 match fields.is_empty() {
                     true => name.clone(),
-                    false => format!(
-                        "{name}({})",
-                        all(&mut tys.iter().zip(fields).map(|(t, x)| show_as(m, &m.tys.tree(*t), x)))
-                    ),
+                    false => format!("{name}({})", all(&mut tys.iter().zip(fields).map(|(t, x)| show_as(m, *t, x)))),
                 }
             }
             _ => show(v),

@@ -1303,3 +1303,23 @@ fn a_panic_lists_the_calls_it_went_out_of() {
         assert!(e.calls.is_empty(), "{:?}", e.calls);
     })
 }
+
+/// The zero value of an enum is its first variant with a zeroed payload, of
+/// a `Span` an empty view over no element; a tuple shows in parentheses
+/// (§6.3).
+#[test]
+fn the_zero_of_an_enum_and_a_span_and_the_show_of_a_tuple() {
+    use crate::value::{show, show_as, zero};
+    let mut m = Module::default();
+    let variants = vec![("A".into(), vec![Types::U32, Types::BOOL]), ("B".into(), vec![Types::float(FloatKind::F32)])];
+    m.types.push(TypeDef { name: "E".into(), kind: TypeDefKind::Enum { variants } });
+    let e = m.tys.intern(TyKind::Enum(TypeId(0)));
+    let span = m.tys.intern(TyKind::Span(Types::U32));
+    let pair = m.tys.intern(TyKind::Tuple(Box::new([Types::U32, Types::BOOL])));
+    let Value::Enum { tag, fields } = zero(&m, e) else { panic!("the zero of an enum") };
+    assert_eq!((tag, fields.iter().map(show).collect::<Vec<_>>()), (0, vec!["0".to_string(), "false".into()]));
+    let Value::Span(s) = zero(&m, span) else { panic!("the zero of a span") };
+    let Value::Array(root) = &*s.root.borrow() else { panic!("the root of a span") };
+    assert_eq!((root.len(), s.start, s.len), (0, 0, 0));
+    assert_eq!(show_as(&m, pair, &Value::Tuple(vec![Value::U32(1), Value::Bool(true)])), "(1, true)");
+}

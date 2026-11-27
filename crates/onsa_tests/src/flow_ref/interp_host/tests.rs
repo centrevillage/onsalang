@@ -7,7 +7,7 @@ use crate::flow_ref::expr::{Eval, Frame, Stop};
 use crate::flow_ref::expr_tests::{def_named, i32v, is, with_checked};
 use crate::flow_ref::host::TableHost;
 use crate::flow_ref::sema_view::View;
-use onsa_core::{IntKind, Module, TypeDef};
+use onsa_core::{IntKind, Module, TypeDef, Types};
 
 const SRC: &str = "
 use std.math.floor
@@ -312,22 +312,24 @@ fn small_module() -> Module {
 
 #[test]
 fn a_value_that_is_not_of_the_type_of_its_place_is_an_internal_error() {
-    let m = small_module();
-    let internal = |t: &Ty, v: &Value| matches!(to_interp(&m, t, v), Err(Fault::Internal(_)));
+    let mut m = small_module();
+    let kinds =
+        [TyKind::Array(Types::BOOL, 2), TyKind::Enum(TypeId(1)), TyKind::Struct(TypeId(0)), TyKind::Struct(TypeId(2))];
+    let [array, e1, s0, s2] = kinds.map(|k| m.tys.intern(k));
+    let internal = |t: CTy, v: &Value| matches!(to_interp(&m, t, v), Err(Fault::Internal(_)));
     // An integer of another kind, a float of another width, an array of another length, a variant out of the enum,
     // a variant with an element fewer, a struct with a field fewer, a type with no fields known.
-    assert!(internal(&Ty::Int(IntKind::I32), &Value::int(IntKind::U32, 1)));
-    assert!(internal(&Ty::Float(FloatKind::F64), &Value::F32(1.0)));
-    assert!(internal(&Ty::Array(Box::new(Ty::Bool), 2), &Value::Array(vec![Value::Bool(true)])));
-    assert!(internal(&Ty::Enum(TypeId(1)), &Value::Enum { tag: 2, fields: vec![] }));
-    assert!(internal(&Ty::Enum(TypeId(1)), &Value::Enum { tag: 1, fields: vec![] }));
-    assert!(internal(&Ty::Struct(TypeId(0)), &Value::Struct(vec![Value::int(IntKind::U8, 1)])));
-    assert!(internal(&Ty::Struct(TypeId(2)), &Value::Struct(vec![])));
+    assert!(internal(Types::int(IntKind::I32), &Value::int(IntKind::U32, 1)));
+    assert!(internal(Types::float(FloatKind::F64), &Value::F32(1.0)));
+    assert!(internal(array, &Value::Array(vec![Value::Bool(true)])));
+    assert!(internal(e1, &Value::Enum { tag: 2, fields: vec![] }));
+    assert!(internal(e1, &Value::Enum { tag: 1, fields: vec![] }));
+    assert!(internal(s0, &Value::Struct(vec![Value::int(IntKind::U8, 1)])));
+    assert!(internal(s2, &Value::Struct(vec![])));
     // And what fits goes through: S { a: 255, b: true }, B('x'), with the number of the variant kept.
-    let s =
-        to_interp(&m, &Ty::Struct(TypeId(0)), &Value::Struct(vec![Value::int(IntKind::U8, 255), Value::Bool(true)]));
+    let s = to_interp(&m, s0, &Value::Struct(vec![Value::int(IntKind::U8, 255), Value::Bool(true)]));
     assert!(matches!(s, Ok(IValue::Struct(f)) if matches!(f[..], [IValue::U8(255), IValue::Bool(true)])));
-    let e = to_interp(&m, &Ty::Enum(TypeId(1)), &Value::Enum { tag: 1, fields: vec![Value::Char('x')] });
+    let e = to_interp(&m, e1, &Value::Enum { tag: 1, fields: vec![Value::Char('x')] });
     assert!(matches!(e, Ok(IValue::Enum { tag: 1, fields }) if matches!(fields[..], [IValue::Char('x')])));
 }
 

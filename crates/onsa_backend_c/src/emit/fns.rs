@@ -76,7 +76,7 @@ impl<'a, 'm> FnEmitter<'a, 'm> {
         let name = self.cx.fn_name(self.f).to_string();
         let mut params = Vec::new();
         if def.sret {
-            let rt = self.cx.names.name(&self.cx.m.tys.tree(def.ret));
+            let rt = self.cx.names.name(def.ret);
             params.push(format!("{rt}* out"));
             self.used_names.insert("out".into());
         }
@@ -89,12 +89,12 @@ impl<'a, 'm> FnEmitter<'a, 'm> {
         let mut pre = String::new();
         for p in &def.params {
             let cname = self.fresh_local(p.local);
-            let tn = self.cx.names.name(&self.cx.m.tys.tree(p.ty));
-            if matches!(self.cx.m.tys.kind(p.ty), TyKind::Buf(_)) {
+            let tn = self.cx.names.name(p.ty);
+            if matches!(self.kind(p.ty), TyKind::Buf(_)) {
                 return Err(unsupported(def.span, Feature::Buf, &[]));
             }
             let (decl, lvalue) =
-                match (p.mode, self.cx.m.tys.is_aggregate(p.ty), matches!(self.cx.m.tys.kind(p.ty), TyKind::Span(_))) {
+                match (p.mode, self.cx.m.tys.is_aggregate(p.ty), matches!(self.kind(p.ty), TyKind::Span(_))) {
                     (Mode::Inout, _, false) => (format!("{tn}* {cname}"), format!("(*{cname})")),
                     (Mode::Borrow, true, false) => (format!("const {tn}* {cname}"), format!("(*{cname})")),
                     _ => (format!("{tn} {cname}"), cname.clone()),
@@ -105,11 +105,7 @@ impl<'a, 'm> FnEmitter<'a, 'm> {
             }
             self.locals.insert(p.local, LocalC { lvalue });
         }
-        let ret = if def.sret || def.ret == Types::UNIT {
-            "void".to_string()
-        } else {
-            self.cx.names.name(&self.cx.m.tys.tree(def.ret))
-        };
+        let ret = if def.sret || def.ret == Types::UNIT { "void".to_string() } else { self.cx.names.name(def.ret) };
         let plist = if params.is_empty() { "void".to_string() } else { params.join(", ") };
         // `@fp(relaxed)` (spec §15.5, §13.4, S-54, S-287): the function is relaxed
         // by the runtime's marks, the attribute of GCC on the declaration and the
@@ -145,11 +141,11 @@ impl<'a, 'm> FnEmitter<'a, 'm> {
         let nrvo = self.nrvo;
         for &l in def.hoisted.iter().filter(|&&l| Some(l) != nrvo) {
             let ty = self.local_ty(l);
-            if matches!(ty, Ty::Buf(_)) {
+            if matches!(self.kind(ty), TyKind::Buf(_)) {
                 return Err(unsupported(def.span, Feature::Buf, &[]));
             }
             let name = self.fresh_local(l);
-            let tn = self.cx.names.name(&ty);
+            let tn = self.cx.names.name(ty);
             self.line(&format!("{tn} {name};"));
             self.locals.insert(l, LocalC { lvalue: name });
         }
@@ -160,7 +156,7 @@ impl<'a, 'm> FnEmitter<'a, 'm> {
         if let Some(v) = &body.value {
             if def.sret {
                 if self.nrvo.is_none() {
-                    self.assign_into("(*out)", &self.cx.m.tys.tree(def.ret), v)?;
+                    self.assign_into("(*out)", def.ret, v)?;
                 }
             } else if def.ret == Types::UNIT {
                 self.expr_stmt(v)?;
@@ -259,7 +255,7 @@ impl<'a, 'm> FnEmitter<'a, 'm> {
         name
     }
 
-    fn temp(&mut self, ty: &Ty) -> (String, String) {
+    fn temp(&mut self, ty: CTy) -> (String, String) {
         self.temps += 1;
         let name = format!("{TEMP}{}", self.temps);
         let tn = self.cx.names.name(ty);
@@ -270,37 +266,41 @@ impl<'a, 'm> FnEmitter<'a, 'm> {
         self.cx.loc(span)
     }
 
-    fn local_ty(&self, l: LocalId) -> Ty {
-        self.cx.m.tys.tree(self.def.locals[l.0 as usize].ty)
+    /// What `t` is, one level deep.
+    fn kind(&self, t: CTy) -> &'m TyKind {
+        self.cx.m.tys.kind(t)
     }
 
-    fn place_ty(&self, p: &Place) -> R<Ty> {
+    fn local_ty(&self, l: LocalId) -> CTy {
+        self.def.locals[l.0 as usize].ty
+    }
+
+    fn place_ty(&self, p: &Place) -> R<CTy> {
         Ok(match p {
             Place::Local(l) => self.local_ty(*l),
             Place::Field(b, i) => {
                 let bt = self.place_ty(b)?;
-                field_ty(self.cx, &bt, *i)?
+                field_ty(self.cx, bt, *i)?
             }
-            Place::Index(b, ..) => match self.place_ty(b)? {
-                Ty::Array(e, _) | Ty::Span(e) | Ty::Buf(e) => *e,
+            Place::Index(b, ..) => match self.kind(self.place_ty(b)?) {
+                TyKind::Array(e, _) | TyKind::Span(e) | TyKind::Buf(e) => *e,
                 _ => return Err(internal("index of a non-sequence place")),
             },
         })
     }
 
     /// Render a field access on a C lvalue / rvalue of type `base_ty`.
-    fn field_access(&mut self, base: &str, base_ty: &Ty, index: u32) -> R<String> {
-        match base_ty {
-            Ty::Tuple(_) => Ok(format!("{}f{index}", dot(base))),
-            Ty::Struct(id) => {
-                let (fname, _) =
-                    self.cx.fields(*id).get(index as usize).cloned().ok_or_else(|| internal("field index"))?;
+    fn field_access(&mut self, base: &str, base_ty: CTy, index: u32) -> R<String> {
+        match self.kind(base_ty) {
+            TyKind::Tuple(_) => Ok(format!("{}f{index}", dot(base))),
+            TyKind::Struct(id) => {
+                let (fname, _) = self.cx.fields(*id).get(index as usize).ok_or_else(|| internal("field index"))?;
                 if let Some(b) = self.cx.bulk.get(id).cloned()
                     && b.fields.contains(&index)
                 {
-                    return Ok(format!("(*({}*){}bulk).{}", b.struct_name, dot(base), ident(&fname)));
+                    return Ok(format!("(*({}*){}bulk).{}", b.struct_name, dot(base), ident(fname)));
                 }
-                Ok(format!("{}{}", dot(base), ident(&fname)))
+                Ok(format!("{}{}", dot(base), ident(fname)))
             }
             _ => Err(internal("field of a non-record")),
         }
@@ -312,26 +312,26 @@ impl<'a, 'm> FnEmitter<'a, 'm> {
             Place::Field(b, i) => {
                 let bt = self.place_ty(b)?;
                 let bs = self.place(b)?;
-                self.field_access(&bs, &bt, *i)
+                self.field_access(&bs, bt, *i)
             }
             Place::Index(b, i, _, bounds) => {
                 let bt = self.place_ty(b)?;
                 let bs = self.place(b)?;
                 let idx = self.expr(i)?;
-                self.index_access(&bs, &bt, &idx, i.span, *bounds)
+                self.index_access(&bs, bt, &idx, i.span, *bounds)
             }
         }
     }
 
     /// `base[idx]`; checked by `onsa_idx` unless known in range (S-196).
-    fn index_access(&mut self, base: &str, base_ty: &Ty, idx: &str, span: Span, bounds: Bounds) -> R<String> {
+    fn index_access(&mut self, base: &str, base_ty: CTy, idx: &str, span: Span, bounds: Bounds) -> R<String> {
         let loc = self.loc(span);
-        match (base_ty, bounds) {
-            (Ty::Array(..), Bounds::Known) => Ok(format!("{base}.a[{idx}]")),
-            (Ty::Span(_), Bounds::Known) => Ok(format!("{base}.ptr[{idx}]")),
-            (Ty::Array(_, n), Bounds::Checked) => Ok(format!("{base}.a[onsa_idx({idx}, UINT32_C({n}), {loc})]")),
-            (Ty::Span(_), Bounds::Checked) => Ok(format!("{base}.ptr[onsa_idx({idx}, {base}.len, {loc})]")),
-            (Ty::Buf(_), _) => Err(unsupported(span, Feature::Buf, &[])),
+        match (self.kind(base_ty), bounds) {
+            (TyKind::Array(..), Bounds::Known) => Ok(format!("{base}.a[{idx}]")),
+            (TyKind::Span(_), Bounds::Known) => Ok(format!("{base}.ptr[{idx}]")),
+            (TyKind::Array(_, n), Bounds::Checked) => Ok(format!("{base}.a[onsa_idx({idx}, UINT32_C({n}), {loc})]")),
+            (TyKind::Span(_), Bounds::Checked) => Ok(format!("{base}.ptr[onsa_idx({idx}, {base}.len, {loc})]")),
+            (TyKind::Buf(_), _) => Err(unsupported(span, Feature::Buf, &[])),
             _ => Err(internal("index of a non-sequence")),
         }
     }
@@ -363,7 +363,7 @@ impl<'a, 'm> FnEmitter<'a, 'm> {
                 let mut decls = String::new();
                 for (j, prev) in strs.iter_mut().enumerate() {
                     if !Self::is_stable(prev) {
-                        let (t, tn) = self.temp(&self.cx.m.tys.tree(es[j].ty));
+                        let (t, tn) = self.temp(es[j].ty);
                         for _ in 0..self.indent {
                             decls.push_str("  ");
                         }
@@ -385,7 +385,7 @@ impl<'a, 'm> FnEmitter<'a, 'm> {
         if Self::is_stable(&s) || is_c_ident(&s) {
             return Ok(s);
         }
-        let (t, tn) = self.temp(&self.cx.m.tys.tree(e.ty));
+        let (t, tn) = self.temp(e.ty);
         self.line(&format!("{tn} {t} = {s};"));
         Ok(t)
     }
@@ -402,17 +402,17 @@ impl<'a, 'm> FnEmitter<'a, 'm> {
             StmtKind::Let(l, e) => {
                 if Some(*l) == self.nrvo {
                     let ty = self.local_ty(*l);
-                    return self.assign_into("(*out)", &ty, e);
+                    return self.assign_into("(*out)", ty, e);
                 }
                 let ty = self.local_ty(*l);
                 if self.def.hoisted.contains(l) {
                     let name = self.locals[l].lvalue.clone();
-                    self.assign_into(&name, &ty, e)?;
+                    self.assign_into(&name, ty, e)?;
                     return Ok(());
                 }
                 let name = self.fresh_local(*l);
                 self.locals.insert(*l, LocalC { lvalue: name.clone() });
-                self.declare(&name, &ty, e)?;
+                self.declare(&name, ty, e)?;
                 if let Some(void) = self.unread_use(*l, &name) {
                     self.line(&void);
                 }
@@ -421,7 +421,7 @@ impl<'a, 'm> FnEmitter<'a, 'm> {
             StmtKind::Assign(p, e) => {
                 let ty = self.place_ty(p)?;
                 let target = self.place(p)?;
-                self.assign_into(&target, &ty, e)
+                self.assign_into(&target, ty, e)
             }
             StmtKind::Expr(e) => self.expr_stmt(e),
             StmtKind::If(c, a, b) => {
@@ -461,10 +461,10 @@ impl<'a, 'm> FnEmitter<'a, 'm> {
                 let los = self.materialize(lo)?;
                 let his = {
                     let v = self.expr(hi)?;
-                    if Self::is_stable(&v) { v } else { self.materialize_str(&v, &self.cx.m.tys.tree(hi.ty)) }
+                    if Self::is_stable(&v) { v } else { self.materialize_str(&v, hi.ty) }
                 };
                 let ty = self.local_ty(*l);
-                let tn = self.cx.names.name(&ty);
+                let tn = self.cx.names.name(ty);
                 let name = self.fresh_local(*l);
                 self.locals.insert(*l, LocalC { lvalue: name.clone() });
                 self.open(&format!("for ({tn} {name} = {los}; {name} < {his}; {name}++) {{"));
@@ -485,8 +485,8 @@ impl<'a, 'm> FnEmitter<'a, 'm> {
             }
             StmtKind::Return(Some(e)) => {
                 if self.def.sret {
-                    let ret = self.cx.m.tys.tree(self.def.ret);
-                    self.assign_into("(*out)", &ret, e)?;
+                    let ret = self.def.ret;
+                    self.assign_into("(*out)", ret, e)?;
                     self.line("return;");
                 } else if self.def.ret == Types::UNIT {
                     self.expr_stmt(e)?;
@@ -501,9 +501,9 @@ impl<'a, 'm> FnEmitter<'a, 'm> {
     }
 
     /// `T name = e;` or `T name;` followed by construction in place.
-    fn declare(&mut self, name: &str, ty: &Ty, e: &Expr) -> R<()> {
+    fn declare(&mut self, name: &str, ty: CTy, e: &Expr) -> R<()> {
         let tn = self.cx.names.name(ty);
-        if matches!(ty, Ty::Buf(_)) {
+        if matches!(self.kind(ty), TyKind::Buf(_)) {
             return Err(unsupported(e.span, Feature::Buf, &[]));
         }
         if needs_construction(e, &self.cx.m.tys) {
@@ -517,11 +517,11 @@ impl<'a, 'm> FnEmitter<'a, 'm> {
     }
 
     /// Store the value of `e` into the C lvalue `target` of type `ty`.
-    fn assign_into(&mut self, target: &str, ty: &Ty, e: &Expr) -> R<()> {
+    fn assign_into(&mut self, target: &str, ty: CTy, e: &Expr) -> R<()> {
         match &e.kind {
-            ExprKind::Zeroed if ty.is_aggregate() => {
-                let bulk = match ty {
-                    Ty::Struct(id) => self.cx.bulk.get(id).cloned(),
+            ExprKind::Zeroed if self.cx.m.tys.is_aggregate(ty) => {
+                let bulk = match self.kind(ty) {
+                    TyKind::Struct(id) => self.cx.bulk.get(id).cloned(),
                     _ => None,
                 };
                 match bulk {
@@ -578,8 +578,9 @@ impl<'a, 'm> FnEmitter<'a, 'm> {
                 Ok(())
             }
             _ => {
-                if let (Ty::Struct(id), true) = (ty, self.cx.bulk.contains_key(&struct_id(ty))) {
-                    let _ = id;
+                if let TyKind::Struct(id) = self.kind(ty)
+                    && self.cx.bulk.contains_key(id)
+                {
                     return Err(unsupported(e.span, Feature::BulkCopy, &[]));
                 }
                 let v = self.expr(e)?;
@@ -590,7 +591,7 @@ impl<'a, 'm> FnEmitter<'a, 'm> {
     }
 
     /// Emit a block's statements; its value goes to `target` (or is dropped).
-    fn block_into(&mut self, b: &Block, target: Option<(&str, &Ty)>) -> R<()> {
+    fn block_into(&mut self, b: &Block, target: Option<(&str, CTy)>) -> R<()> {
         for s in &b.stmts {
             self.stmt(s)?;
         }
@@ -610,7 +611,7 @@ impl<'a, 'm> FnEmitter<'a, 'm> {
         s: &str,
         arms: &[(u32, Block)],
         default: Option<&Block>,
-        target: Option<(&str, &Ty)>,
+        target: Option<(&str, CTy)>,
     ) -> R<()> {
         // Every tag is covered when there is no default (Core's `Switch`): the
         // last arm is then the `else`, so a value it assigns is assigned on every
@@ -652,8 +653,8 @@ impl<'a, 'm> FnEmitter<'a, 'm> {
 
     /// A value of type `ty` where the code never comes (after a `panic` or
     /// a `return`): C still wants one.
-    fn never_read(&mut self, ty: &Ty) -> String {
-        if let Some(z) = zero_scalar(ty) {
+    fn never_read(&mut self, ty: CTy) -> String {
+        if let Some(z) = zero_scalar(self.kind(ty)) {
             return z;
         }
         let (t, tn) = self.temp(ty);
@@ -674,10 +675,10 @@ impl<'a, 'm> FnEmitter<'a, 'm> {
             ExprKind::Call { fn_, args } => {
                 let def = self.cx.m.fn_(*fn_);
                 if def.sret {
-                    let ret = self.cx.m.tys.tree(def.ret);
-                    let (t, tn) = self.temp(&ret);
+                    let ret = def.ret;
+                    let (t, tn) = self.temp(ret);
                     self.line(&format!("{tn} {t};"));
-                    return self.assign_into(&t, &ret, e);
+                    return self.assign_into(&t, ret, e);
                 }
                 let call = self.call_args(*fn_, args)?;
                 let name = self.cx.fn_name(*fn_).to_string();
@@ -735,7 +736,7 @@ impl<'a, 'm> FnEmitter<'a, 'm> {
         let mut strs = Vec::new();
         for (i, a) in args.iter().enumerate() {
             let p = &callee.params[i];
-            let by_ptr = matches!(p.mode, Mode::Inout) && !matches!(self.cx.m.tys.kind(p.ty), TyKind::Span(_))
+            let by_ptr = matches!(p.mode, Mode::Inout) && !matches!(self.kind(p.ty), TyKind::Span(_))
                 || (matches!(p.mode, Mode::Borrow) && self.cx.m.tys.is_aggregate(p.ty));
             if by_ptr {
                 let s = self.place_like(&a.expr)?;
@@ -763,26 +764,26 @@ impl<'a, 'm> FnEmitter<'a, 'm> {
 
     fn expr(&mut self, e: &Expr) -> R<String> {
         match &e.kind {
-            ExprKind::Lit(l) => Ok(lit(l, &self.cx.m.tys.tree(e.ty))),
+            ExprKind::Lit(l) => Ok(lit(l, self.kind(e.ty))),
             ExprKind::Local(l) => Ok(self.locals.get(l).ok_or_else(|| internal("unknown local"))?.lvalue.clone()),
             ExprKind::Const(c) => Ok(self.cx.const_names.get(c).cloned().ok_or_else(|| internal("unknown const"))?),
             ExprKind::Zeroed => {
-                if let Some(z) = zero_scalar(&self.cx.m.tys.tree(e.ty)) {
+                if let Some(z) = zero_scalar(self.kind(e.ty)) {
                     return Ok(z);
                 }
-                let (t, tn) = self.temp(&self.cx.m.tys.tree(e.ty));
+                let (t, tn) = self.temp(e.ty);
                 self.line(&format!("{tn} {t};"));
                 self.line(&format!("memset(&{t}, 0, sizeof {t});"));
                 Ok(t)
             }
             ExprKind::Unary(op, x) => {
                 let v = self.expr(x)?;
-                Ok(match (op, &self.cx.m.tys.tree(e.ty)) {
-                    (UnOp::Neg, Ty::Int(k)) => format!("onsa_neg_{}({v}, {})", int_tag(*k), self.loc(e.span)),
-                    (UnOp::Neg, Ty::Float(FloatKind::F32)) => format!("(float)(-{v})"),
+                Ok(match (op, self.kind(e.ty)) {
+                    (UnOp::Neg, TyKind::Int(k)) => format!("onsa_neg_{}({v}, {})", int_tag(*k), self.loc(e.span)),
+                    (UnOp::Neg, TyKind::Float(FloatKind::F32)) => format!("(float)(-{v})"),
                     (UnOp::Neg, _) => format!("(-{v})"),
-                    (UnOp::Not, Ty::Bool) => format!("(!{v})"),
-                    (UnOp::Not, Ty::Int(k)) => format!("(({})~{v})", crate::names::int_c(*k)),
+                    (UnOp::Not, TyKind::Bool) => format!("(!{v})"),
+                    (UnOp::Not, TyKind::Int(k)) => format!("(({})~{v})", crate::names::int_c(*k)),
                     (UnOp::Not, _) => format!("(!{v})"),
                 })
             }
@@ -790,8 +791,8 @@ impl<'a, 'm> FnEmitter<'a, 'm> {
                 let ops = self.operands(&[lhs, rhs])?;
                 let (a, b) = (&ops[0], &ops[1]);
                 let loc = self.loc(e.span);
-                Ok(match &self.cx.m.tys.tree(e.ty) {
-                    Ty::Float(k) => {
+                Ok(match self.kind(e.ty) {
+                    TyKind::Float(k) => {
                         let s = match op {
                             BinOp::Add => format!("{a} + {b}"),
                             BinOp::Sub => format!("{a} - {b}"),
@@ -805,7 +806,7 @@ impl<'a, 'm> FnEmitter<'a, 'm> {
                             FloatKind::F64 => format!("({s})"),
                         }
                     }
-                    Ty::Int(k) => {
+                    TyKind::Int(k) => {
                         let t = int_tag(*k);
                         let c = crate::names::int_c(*k);
                         match (op, overflow) {
@@ -827,7 +828,7 @@ impl<'a, 'm> FnEmitter<'a, 'm> {
                             (BinOp::Shr, _) => format!("onsa_shr_{t}({a}, {b}, {loc})"),
                         }
                     }
-                    Ty::Bool => match op {
+                    TyKind::Bool => match op {
                         BinOp::BitAnd => format!("((bool)({a} & {b}))"),
                         BinOp::BitOr => format!("((bool)({a} | {b}))"),
                         BinOp::BitXor => format!("((bool)({a} ^ {b}))"),
@@ -864,7 +865,7 @@ impl<'a, 'm> FnEmitter<'a, 'm> {
                     return Ok(format!("({a} {c} {b})"));
                 }
                 // Short-circuit with statements on the right-hand side.
-                let (t, _) = self.temp(&Ty::Bool);
+                let (t, _) = self.temp(Types::BOOL);
                 self.line(&format!("bool {t} = {a};"));
                 let test = if matches!(op, LogicOp::And) { t.clone() } else { format!("!{t}") };
                 self.open(&format!("{} {{", if_(&test)));
@@ -875,51 +876,51 @@ impl<'a, 'm> FnEmitter<'a, 'm> {
             }
             ExprKind::Cast(x) => {
                 let v = self.expr(x)?;
-                let tn = self.cx.names.name(&self.cx.m.tys.tree(e.ty));
+                let tn = self.cx.names.name(e.ty);
                 Ok(format!("(({tn}){v})"))
             }
             ExprKind::Call { fn_, args } => {
                 let def = self.cx.m.fn_(*fn_);
-                let ret = self.cx.m.tys.tree(def.ret);
+                let ret = def.ret;
                 if def.sret {
-                    let (t, tn) = self.temp(&ret);
+                    let (t, tn) = self.temp(ret);
                     self.line(&format!("{tn} {t};"));
-                    self.assign_into(&t, &ret, e)?;
+                    self.assign_into(&t, ret, e)?;
                     return Ok(t);
                 }
                 let call = self.call_args(*fn_, args)?;
                 let name = self.cx.fn_name(*fn_).to_string();
-                if ret == Ty::Unit {
+                if ret == Types::UNIT {
                     self.line(&format!("{name}({});", call.join(", ")));
                     return Ok("((onsa_unit){0})".into());
                 }
-                let (t, tn) = self.temp(&ret);
+                let (t, tn) = self.temp(ret);
                 self.line(&format!("{tn} {t} = {name}({});", call.join(", ")));
                 Ok(t)
             }
             ExprKind::Prim { prim, args } => self.prim(prim, args, e),
             ExprKind::Field { base, index } => {
                 let bs = self.place_like(base)?;
-                let bt = self.cx.m.tys.tree(base.ty);
-                self.field_access(&bs, &bt, *index)
+                let bt = base.ty;
+                self.field_access(&bs, bt, *index)
             }
             ExprKind::Index { base, index, bounds } => {
                 let bs = self.place_like(base)?;
                 let idx = self.materialize(index)?;
-                let bt = self.cx.m.tys.tree(base.ty);
-                self.index_access(&bs, &bt, &idx, e.span, *bounds)
+                let bt = base.ty;
+                self.index_access(&bs, bt, &idx, e.span, *bounds)
             }
             ExprKind::SpanOf(x) => {
                 let xs = self.place_like(x)?;
-                match &self.cx.m.tys.tree(x.ty) {
-                    Ty::Array(el, n) => Ok(self.array_span(&xs, el, *n)),
-                    Ty::Span(_) => Ok(xs),
-                    Ty::Buf(_) => Err(unsupported(e.span, Feature::Buf, &[])),
+                match self.kind(x.ty) {
+                    TyKind::Array(el, n) => Ok(self.array_span(&xs, e.ty, *el, *n)),
+                    TyKind::Span(_) => Ok(xs),
+                    TyKind::Buf(_) => Err(unsupported(e.span, Feature::Buf, &[])),
                     _ => Err(internal("span of a non-sequence")),
                 }
             }
             ExprKind::Struct { ty, fields } => {
-                let tn = self.cx.names.name(&self.cx.m.tys.tree(e.ty));
+                let tn = self.cx.names.name(e.ty);
                 let names: Vec<String> = self.cx.fields(*ty).iter().map(|(n, _)| ident(n)).collect();
                 if fields.is_empty() {
                     return Ok(format!("(({tn}){{ .onsa_empty = 0 }})"));
@@ -930,7 +931,7 @@ impl<'a, 'm> FnEmitter<'a, 'm> {
                 Ok(format!("(({tn}){{ {} }})", parts.join(", ")))
             }
             ExprKind::Variant { ty, tag, fields } => {
-                let tn = self.cx.names.name(&self.cx.m.tys.tree(e.ty));
+                let tn = self.cx.names.name(e.ty);
                 let vname = ident(&self.cx.variants(*ty)[*tag as usize].0);
                 if fields.is_empty() {
                     return Ok(format!("(({tn}){{ .tag = {tag} }})"));
@@ -941,13 +942,13 @@ impl<'a, 'm> FnEmitter<'a, 'm> {
                 Ok(format!("(({tn}){{ .tag = {tag}, .u = {{ .v_{vname} = {{ {} }} }} }})", parts.join(", ")))
             }
             ExprKind::Array(xs) => {
-                let tn = self.cx.names.name(&self.cx.m.tys.tree(e.ty));
+                let tn = self.cx.names.name(e.ty);
                 let refs: Vec<&Expr> = xs.iter().collect();
                 let vs = self.operands(&refs)?;
-                Ok(format!("(({tn}){})", consts::array_init(self.cx, &self.cx.m.tys.tree(e.ty), &vs)))
+                Ok(format!("(({tn}){})", consts::array_init(self.cx, e.ty, &vs)))
             }
             ExprKind::Repeat { elem, n } => {
-                let tn = self.cx.names.name(&self.cx.m.tys.tree(e.ty));
+                let tn = self.cx.names.name(e.ty);
                 let v = self.materialize(elem)?;
                 // The element of none is evaluated, as in the interpreter,
                 // and not read (no unused temporary, R-432).
@@ -955,12 +956,9 @@ impl<'a, 'm> FnEmitter<'a, 'm> {
                     self.line(&format!("(void){v};"));
                 }
                 if *n <= 8 {
-                    return Ok(format!(
-                        "(({tn}){})",
-                        consts::array_init(self.cx, &self.cx.m.tys.tree(e.ty), &vec![v; *n as usize])
-                    ));
+                    return Ok(format!("(({tn}){})", consts::array_init(self.cx, e.ty, &vec![v; *n as usize])));
                 }
-                let (t, _) = self.temp(&self.cx.m.tys.tree(e.ty));
+                let (t, _) = self.temp(e.ty);
                 self.line(&format!("{tn} {t};"));
                 self.open("{");
                 self.line("uint32_t onsa_i;");
@@ -969,7 +967,7 @@ impl<'a, 'm> FnEmitter<'a, 'm> {
                 Ok(t)
             }
             ExprKind::Tuple(xs) => {
-                let tn = self.cx.names.name(&self.cx.m.tys.tree(e.ty));
+                let tn = self.cx.names.name(e.ty);
                 if xs.is_empty() {
                     return Ok("((onsa_unit){0})".into());
                 }
@@ -984,7 +982,7 @@ impl<'a, 'm> FnEmitter<'a, 'm> {
             }
             ExprKind::Payload { base, tag, index } => {
                 let bs = self.place_like(base)?;
-                let Ty::Enum(id) = &self.cx.m.tys.tree(base.ty) else { return Err(internal("payload of a non-enum")) };
+                let TyKind::Enum(id) = self.kind(base.ty) else { return Err(internal("payload of a non-enum")) };
                 let vname = ident(&self.cx.variants(*id)[*tag as usize].0);
                 Ok(format!("{bs}.u.v_{vname}.f{index}"))
             }
@@ -993,10 +991,10 @@ impl<'a, 'm> FnEmitter<'a, 'm> {
                     self.expr_stmt(e)?;
                     return Ok("((onsa_unit){0})".into());
                 }
-                let (t, tn) = self.temp(&self.cx.m.tys.tree(e.ty));
+                let (t, tn) = self.temp(e.ty);
                 self.line(&format!("{tn} {t};"));
-                let ty = self.cx.m.tys.tree(e.ty);
-                self.assign_into(&t, &ty, e)?;
+                let ty = e.ty;
+                self.assign_into(&t, ty, e)?;
                 Ok(t)
             }
             ExprKind::Block(b) => {
@@ -1006,12 +1004,12 @@ impl<'a, 'm> FnEmitter<'a, 'm> {
                 match &b.value {
                     Some(v) if !b.diverges() => self.expr(v),
                     // `{ return e }` in value position (R-365), or a block of `()`.
-                    _ => Ok(self.never_read(&self.cx.m.tys.tree(e.ty))),
+                    _ => Ok(self.never_read(e.ty)),
                 }
             }
             ExprKind::Panic { msg: m, .. } => {
                 self.panic_stmt(*m, e.span);
-                Ok(self.never_read(&self.cx.m.tys.tree(e.ty)))
+                Ok(self.never_read(e.ty))
             }
         }
     }
@@ -1020,10 +1018,10 @@ impl<'a, 'm> FnEmitter<'a, 'm> {
     /// the type `ty`: `call` of the out-parameter is the runtime's function,
     /// which says whether the result is defined and writes it only then, so
     /// nothing undefined is computed (R-10) and the result is 0 when not.
-    fn parts(&mut self, ty: &Ty, k: IntKind, call: impl FnOnce(&str) -> String) -> String {
+    fn parts(&mut self, ty: CTy, k: IntKind, call: impl FnOnce(&str) -> String) -> String {
         let tn = self.cx.names.name(ty);
-        let (r, rc) = self.temp(&Ty::Int(k));
-        let (ok, okc) = self.temp(&Ty::Bool);
+        let (r, rc) = self.temp(Types::int(k));
+        let (ok, okc) = self.temp(Types::BOOL);
         self.line(&format!("{rc} {r} = 0;"));
         self.line(&format!("{okc} {ok} = {};", call(&r)));
         format!("(({tn}){{ .f0 = {ok}, .f1 = {r} }})")
@@ -1079,7 +1077,7 @@ impl<'a, 'm> FnEmitter<'a, 'm> {
                 // that the types decide, none of a signed and an unsigned value (R-11, R-145).
                 let vs = self.operands(&refs)?;
                 let (f, t) = (int_tag(*from), int_tag(*to));
-                Ok(self.parts(&self.cx.m.tys.tree(e.ty), *to, |r| format!("onsa_narrow_{f}_{t}({}, &{r})", vs[0])))
+                Ok(self.parts(e.ty, *to, |r| format!("onsa_narrow_{f}_{t}({}, &{r})", vs[0])))
             }
             Prim::IntToFloat { to, .. } | Prim::FloatToFloat { to, .. } => {
                 let vs = self.operands(&refs)?;
@@ -1105,9 +1103,7 @@ impl<'a, 'm> FnEmitter<'a, 'm> {
             Prim::Parts(op, k) => {
                 let vs = self.operands(&refs)?;
                 let t = int_tag(*k);
-                Ok(self.parts(&self.cx.m.tys.tree(e.ty), *k, |r| {
-                    format!("onsa_c{}_{t}({}, {}, &{r})", op.name(), vs[0], vs[1])
-                }))
+                Ok(self.parts(e.ty, *k, |r| format!("onsa_c{}_{t}({}, {}, &{r})", op.name(), vs[0], vs[1])))
             }
             Prim::DivEuclid(k) => {
                 let vs = self.operands(&refs)?;
@@ -1127,29 +1123,29 @@ impl<'a, 'm> FnEmitter<'a, 'm> {
             }
             Prim::Len => {
                 let s = self.place_like(&args[0].expr)?;
-                match &self.cx.m.tys.tree(args[0].expr.ty) {
-                    Ty::Span(_) => Ok(format!("{s}.len")),
-                    Ty::Array(_, n) => Ok(format!("UINT32_C({n})")),
+                match self.kind(args[0].expr.ty) {
+                    TyKind::Span(_) => Ok(format!("{s}.len")),
+                    TyKind::Array(_, n) => Ok(format!("UINT32_C({n})")),
                     _ => Err(unsupported(e.span, Feature::Buf, &[])),
                 }
             }
             Prim::Slice => {
                 let s = self.span_arg(&args[0].expr)?;
                 let vs = self.operands(&refs[1..])?;
-                let tag = self.span_tag(&self.cx.m.tys.tree(args[0].expr.ty))?;
+                let tag = self.span_tag(args[0].expr.ty)?;
                 Ok(format!("onsa_slice_{tag}({s}, {}, {}, {loc})", vs[0], vs[1]))
             }
             Prim::Fill => {
                 let s = self.span_arg(&args[0].expr)?;
                 let vs = self.operands(&refs[1..])?;
-                let tag = self.span_tag(&self.cx.m.tys.tree(args[0].expr.ty))?;
+                let tag = self.span_tag(args[0].expr.ty)?;
                 self.line(&format!("onsa_fill_{tag}({s}, {});", vs[0]));
                 Ok("((onsa_unit){0})".into())
             }
             Prim::AddFrom | Prim::CopyFrom => {
                 let d = self.span_arg(&args[0].expr)?;
                 let s = self.span_arg(&args[1].expr)?;
-                let tag = self.span_tag(&self.cx.m.tys.tree(args[0].expr.ty))?;
+                let tag = self.span_tag(args[0].expr.ty)?;
                 let f = if matches!(prim, Prim::AddFrom) { "add_from" } else { "copy_from" };
                 self.line(&format!("onsa_{f}_{tag}({d}, {s}, {loc});"));
                 Ok("((onsa_unit){0})".into())
@@ -1161,7 +1157,7 @@ impl<'a, 'm> FnEmitter<'a, 'm> {
         }
     }
 
-    fn materialize_str(&mut self, s: &str, ty: &Ty) -> String {
+    fn materialize_str(&mut self, s: &str, ty: CTy) -> String {
         if Self::is_stable(s) {
             return s.to_string();
         }
@@ -1170,31 +1166,28 @@ impl<'a, 'm> FnEmitter<'a, 'm> {
         t
     }
 
-    /// A span-typed argument as a C value (arrays become spans over the place).
+    /// A span-typed argument as a C value (lowering made an array argument
+    /// the `SpanOf` of its place).
     fn span_arg(&mut self, e: &Expr) -> R<String> {
-        match &self.cx.m.tys.tree(e.ty) {
-            Ty::Span(_) => self.place_like(e),
-            Ty::Array(el, n) => {
-                let p = self.place_like(e)?;
-                Ok(self.array_span(&p, el, *n))
-            }
+        match self.kind(e.ty) {
+            TyKind::Span(_) => self.place_like(e),
             _ => Err(unsupported(e.span, Feature::Buf, &[])),
         }
     }
 
-    /// The `Span` of the whole of the C array `arr` of `n` elements `el`.
-    /// The pointer is cast to the element's type: the array of a borrowed
-    /// parameter or of a `const` is `const`, and a `Span` the types stage
-    /// lets write is of none of them (R-431).
-    fn array_span(&mut self, arr: &str, el: &Ty, n: u32) -> String {
+    /// The `Span` `span` of the whole of the C array `arr` of `n` elements
+    /// `el`. The pointer is cast to the element's type: the array of a
+    /// borrowed parameter or of a `const` is `const`, and a `Span` the types
+    /// stage lets write is of none of them (R-431).
+    fn array_span(&mut self, arr: &str, span: CTy, el: CTy, n: u32) -> String {
         let (tag, et) = (self.cx.names.tag(el), self.cx.names.name(el));
-        let _ = self.cx.names.name(&Ty::Span(Box::new(el.clone())));
+        let _ = self.cx.names.name(span);
         format!("onsa_span_{tag}_of(({et}*){arr}.a, UINT32_C({n}))")
     }
 
-    fn span_tag(&mut self, ty: &Ty) -> R<String> {
-        match ty {
-            Ty::Span(el) | Ty::Array(el, _) => Ok(self.cx.names.tag(el)),
+    fn span_tag(&mut self, ty: CTy) -> R<String> {
+        match self.kind(ty) {
+            TyKind::Span(el) => Ok(self.cx.names.tag(*el)),
             _ => Err(unsupported(no_span(), Feature::Buf, &[])),
         }
     }
@@ -1280,13 +1273,6 @@ fn is_c_ident(s: &str) -> bool {
         && s.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
 }
 
-fn struct_id(ty: &Ty) -> TypeId {
-    match ty {
-        Ty::Struct(id) => *id,
-        _ => TypeId(u32::MAX),
-    }
-}
-
 /// Expressions that are built in place rather than assigned from a C expression.
 fn needs_construction(e: &Expr, tys: &Types) -> bool {
     match &e.kind {
@@ -1301,11 +1287,11 @@ fn needs_construction(e: &Expr, tys: &Types) -> bool {
     }
 }
 
-pub(crate) fn field_ty(cx: &Cx, base: &Ty, index: u32) -> R<Ty> {
-    match base {
-        Ty::Tuple(ts) => ts.get(index as usize).cloned().ok_or_else(|| internal("tuple index")),
-        Ty::Struct(id) => {
-            cx.fields(*id).get(index as usize).map(|(_, t)| t.clone()).ok_or_else(|| internal("field index"))
+pub(crate) fn field_ty(cx: &Cx, base: CTy, index: u32) -> R<CTy> {
+    match cx.kind(base) {
+        TyKind::Tuple(ts) => ts.get(index as usize).copied().ok_or_else(|| internal("tuple index")),
+        TyKind::Struct(id) => {
+            cx.fields(*id).get(index as usize).map(|(_, t)| *t).ok_or_else(|| internal("field index"))
         }
         _ => Err(internal("field of a non-record")),
     }

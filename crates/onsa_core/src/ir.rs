@@ -51,11 +51,12 @@ impl PanicOrigin {
 /// A concrete type: an index into the table of its module ([`Module::tys`]).
 /// Two types of one module are the same exactly when their ids are, so that
 /// comparing, hashing and copying one is O(1). Only [`Types`] makes one.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct CTy(u32);
 
 impl CTy {
     /// The position in the table: the ids of the parts of a type are smaller.
+    #[inline]
     pub fn index(self) -> usize {
         self.0 as usize
     }
@@ -117,11 +118,7 @@ pub struct Types {
 impl Default for Types {
     /// The table of the built-in types alone.
     fn default() -> Self {
-        let mut t = Types { kinds: Vec::new(), ids: HashMap::new() };
-        for k in &BUILTINS {
-            t.intern(k.clone());
-        }
-        t
+        Types { kinds: BUILTINS.to_vec(), ids: HashMap::new() }
     }
 }
 
@@ -151,9 +148,22 @@ impl Types {
         &self.kinds[t.index()]
     }
 
+    /// The id of `k` if the table has it. A built-in type is at its fixed
+    /// id, with no look-up (the most made of all).
+    fn find(&self, k: &TyKind) -> Option<CTy> {
+        Some(match *k {
+            TyKind::Int(k) => Types::int(k),
+            TyKind::Float(k) => Types::float(k),
+            TyKind::Bool => Types::BOOL,
+            TyKind::Char => Types::CHAR,
+            TyKind::Unit => Types::UNIT,
+            _ => return self.ids.get(k).copied(),
+        })
+    }
+
     /// The id of `k`: the one it has, or a new one at the end.
     pub fn intern(&mut self, k: TyKind) -> CTy {
-        if let Some(&t) = self.ids.get(&k) {
+        if let Some(t) = self.find(&k) {
             return t;
         }
         let t = CTy(self.kinds.len() as u32);
@@ -183,101 +193,10 @@ impl Types {
         matches!(self.kind(t), TyKind::Int(_) | TyKind::Float(_) | TyKind::Bool | TyKind::Char)
     }
 
-    // A1b: the bridge to the tree of the stages after Core, removed with `Ty`.
-    /// The type `t` as a tree (as deep as the type, §4.4).
-    pub fn tree(&self, t: CTy) -> Ty {
-        match self.kind(t) {
-            TyKind::Int(k) => Ty::Int(*k),
-            TyKind::Float(k) => Ty::Float(*k),
-            TyKind::Bool => Ty::Bool,
-            TyKind::Char => Ty::Char,
-            TyKind::Unit => Ty::Unit,
-            TyKind::Array(e, n) => Ty::Array(Box::new(self.tree(*e)), *n),
-            TyKind::Tuple(ts) => Ty::Tuple(ts.iter().map(|&t| self.tree(t)).collect()),
-            TyKind::Struct(id) => Ty::Struct(*id),
-            TyKind::Enum(id) => Ty::Enum(*id),
-            TyKind::Span(e) => Ty::Span(Box::new(self.tree(*e))),
-            TyKind::FnPtr(f) => Ty::FnPtr(Box::new(TreeSig {
-                rt: f.rt,
-                params: f.params.iter().map(|&(m, t)| (m, self.tree(t))).collect(),
-                ret: self.tree(f.ret),
-            })),
-            TyKind::Buf(e) => Ty::Buf(Box::new(self.tree(*e))),
-        }
+    /// Whether `t` is a planar array `[Span[T]; N]` (§5.3).
+    pub fn is_planar(&self, t: CTy) -> bool {
+        matches!(*self.kind(t), TyKind::Array(el, _) if matches!(self.kind(el), TyKind::Span(_)))
     }
-
-    // A1b: the bridge to the tree of the stages after Core, removed with `Ty`.
-    /// The id of the tree `t`, interned.
-    pub fn of(&mut self, t: &Ty) -> CTy {
-        let k = match t {
-            Ty::Int(k) => TyKind::Int(*k),
-            Ty::Float(k) => TyKind::Float(*k),
-            Ty::Bool => TyKind::Bool,
-            Ty::Char => TyKind::Char,
-            Ty::Unit => TyKind::Unit,
-            Ty::Array(e, n) => TyKind::Array(self.of(e), *n),
-            Ty::Tuple(ts) => TyKind::Tuple(ts.iter().map(|t| self.of(t)).collect()),
-            Ty::Struct(id) => TyKind::Struct(*id),
-            Ty::Enum(id) => TyKind::Enum(*id),
-            Ty::Span(e) => TyKind::Span(self.of(e)),
-            Ty::FnPtr(f) => {
-                let params = f.params.iter().map(|(m, t)| (*m, self.of(t))).collect();
-                TyKind::FnPtr(Box::new(FnSig { rt: f.rt, params, ret: self.of(&f.ret) }))
-            }
-            Ty::Buf(e) => TyKind::Buf(self.of(e)),
-        };
-        self.intern(k)
-    }
-}
-
-// A1b: the tree of a type, which the stages after Core read through
-// [`Types::tree`] until they read [`CTy`]; removed then.
-/// A concrete type as a tree. Structs and enums refer to `Module::types`.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum Ty {
-    Int(IntKind),
-    Float(FloatKind),
-    Bool,
-    Char,
-    Unit,
-    Array(Box<Ty>, u32),
-    Tuple(Vec<Ty>),
-    Struct(TypeId),
-    Enum(TypeId),
-    Span(Box<Ty>),
-    FnPtr(Box<TreeSig>),
-    Buf(Box<Ty>),
-}
-
-impl Ty {
-    pub fn is_aggregate(&self) -> bool {
-        matches!(self, Ty::Array(..) | Ty::Tuple(_) | Ty::Struct(_) | Ty::Enum(_))
-    }
-
-    pub fn is_int(&self) -> bool {
-        matches!(self, Ty::Int(_))
-    }
-
-    pub fn is_float(&self) -> bool {
-        matches!(self, Ty::Float(_))
-    }
-
-    pub fn is_scalar(&self) -> bool {
-        matches!(self, Ty::Int(_) | Ty::Float(_) | Ty::Bool | Ty::Char)
-    }
-
-    pub fn u32() -> Ty {
-        Ty::Int(IntKind::U32)
-    }
-}
-
-// A1b: removed with `Ty`.
-/// The signature of a function pointer of [`Ty`].
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct TreeSig {
-    pub rt: bool,
-    pub params: Vec<(Mode, Ty)>,
-    pub ret: Ty,
 }
 
 /// Argument modes (§5.2).

@@ -790,7 +790,7 @@ fn window(
             copy(cx, out, (l.clone(), k), u32_lit(span, 0), Src::At(src, at, e), (k, span), &lw.m.tys)?;
             Ok(l)
         }
-        t => Err(internal(span, format!("a window of the type {t:?}"))),
+        t => Err(internal(span, format!("a window of the type {}", crate::dump::kind_name(&lw.m, t)))),
     }
 }
 

@@ -19,7 +19,7 @@ use onsa_core::prim::{MathFn, Prim};
 use onsa_core::walk::{has_return, walk_block};
 use onsa_core::{
     BinOp, Block, Bounds, CTy, CmpOp, ConstId, Expr, ExprKind, FloatKind, FnDef, FnId, IntKind, Lit, LocalId, LogicOp,
-    Mode, Module, Overflow, Place, Stmt, StmtKind, Ty, TyKind, TypeDefKind, TypeId, Types, UnOp,
+    Mode, Module, Overflow, Place, Stmt, StmtKind, TyKind, TypeDefKind, TypeId, Types, UnOp,
 };
 use onsa_diag::unsupported::Feature;
 use onsa_diag::{Code, Diagnostic, Span, Stage};
@@ -74,7 +74,7 @@ pub(crate) struct Cx<'m> {
     pub guarded_names: HashMap<FnId, String>,
 }
 
-impl Cx<'_> {
+impl<'m> Cx<'m> {
     pub fn loc(&self, span: Span) -> String {
         match (&self.opts.locate, self.opts.panic_messages) {
             (Some(l), true) => {
@@ -100,21 +100,23 @@ impl Cx<'_> {
     }
 
     /// Fields of a struct type.
-    // A1b: the trees of the fields, read through the bridge.
-    pub fn fields(&self, id: TypeId) -> Vec<(String, Ty)> {
+    pub fn fields(&self, id: TypeId) -> &'m [(String, CTy)] {
         match &self.m.ty(id).kind {
-            TypeDefKind::Struct { fields } => fields.iter().map(|(n, t)| (n.clone(), self.m.tys.tree(*t))).collect(),
-            _ => Vec::new(),
+            TypeDefKind::Struct { fields } => fields,
+            _ => &[],
         }
     }
 
-    // A1b: the trees of the payloads, read through the bridge.
-    pub fn variants(&self, id: TypeId) -> Vec<(String, Vec<Ty>)> {
-        let tree = |ts: &[CTy]| ts.iter().map(|t| self.m.tys.tree(*t)).collect();
+    pub fn variants(&self, id: TypeId) -> &'m [(String, Vec<CTy>)] {
         match &self.m.ty(id).kind {
-            TypeDefKind::Enum { variants } => variants.iter().map(|(n, ts)| (n.clone(), tree(ts))).collect(),
-            _ => Vec::new(),
+            TypeDefKind::Enum { variants } => variants,
+            _ => &[],
         }
+    }
+
+    /// What `t` is, one level deep.
+    pub fn kind(&self, t: CTy) -> &'m TyKind {
+        self.m.tys.kind(t)
     }
 
     pub fn tag_c(&self, id: TypeId) -> &'static str {
@@ -205,9 +207,9 @@ pub fn int_lit(k: IntKind, v: i128) -> String {
     }
 }
 
-fn lit(l: &Lit, ty: &Ty) -> String {
+fn lit(l: &Lit, ty: &TyKind) -> String {
     match (l, ty) {
-        (Lit::Int(v), Ty::Int(k)) => int_lit(*k, *v),
+        (Lit::Int(v), TyKind::Int(k)) => int_lit(*k, *v),
         (Lit::Int(v), _) => format!("{v}"),
         (Lit::F32(x), _) => f32_lit(*x),
         (Lit::F64(x), _) => f64_lit(*x),
@@ -218,14 +220,14 @@ fn lit(l: &Lit, ty: &Ty) -> String {
 }
 
 /// Zero value of a scalar type, for dead code after a panic.
-fn zero_scalar(ty: &Ty) -> Option<String> {
+fn zero_scalar(ty: &TyKind) -> Option<String> {
     Some(match ty {
-        Ty::Int(k) => int_lit(*k, 0),
-        Ty::Float(FloatKind::F32) => "0.0f".into(),
-        Ty::Float(FloatKind::F64) => "0.0".into(),
-        Ty::Bool => "false".into(),
-        Ty::Char => "UINT32_C(0)".into(),
-        Ty::Unit => "((onsa_unit){0})".into(),
+        TyKind::Int(k) => int_lit(*k, 0),
+        TyKind::Float(FloatKind::F32) => "0.0f".into(),
+        TyKind::Float(FloatKind::F64) => "0.0".into(),
+        TyKind::Bool => "false".into(),
+        TyKind::Char => "UINT32_C(0)".into(),
+        TyKind::Unit => "((onsa_unit){0})".into(),
         _ => return None,
     })
 }

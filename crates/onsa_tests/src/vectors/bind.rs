@@ -61,11 +61,12 @@ pub fn bind(data: &Data, pkg: &str, module: &Module, exported: &[String]) -> Res
             errors.push(format!("{pkg}: `{q}` is exported but not in the build"));
             return None;
         };
-        let ty = |t: &onsa_core::Ty| {
-            Scalar::of(t).ok_or_else(|| format!("{pkg}: `{q}` has a type that is not a scalar of the boundary"))
+        let ty = |t| {
+            Scalar::of(module.tys.kind(t))
+                .ok_or_else(|| format!("{pkg}: `{q}` has a type that is not a scalar of the boundary"))
         };
-        let params: Result<Vec<Scalar>, String> = f.params.iter().map(|p| ty(&module.tys.tree(p.ty))).collect();
-        match (params, ty(&module.tys.tree(f.ret))) {
+        let params: Result<Vec<Scalar>, String> = f.params.iter().map(|p| ty(p.ty)).collect();
+        match (params, ty(f.ret)) {
             (Ok(params), Ok(ret)) => {
                 b.callees.push(Callee { name: q.to_string(), params, ret });
                 Some(b.callees.len() - 1)

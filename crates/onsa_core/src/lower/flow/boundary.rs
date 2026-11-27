@@ -8,9 +8,7 @@ use super::*;
 fn channel(e: &Expr, k: u32, span: Span, tys: &Types) -> R<(Expr, u32)> {
     match *tys.kind(e.ty) {
         TyKind::Span(_) => Ok((e.clone(), 1)),
-        TyKind::Array(inner, n) if matches!(tys.kind(inner), TyKind::Span(_)) => {
-            Ok((index(e.clone(), u32_lit(span, k), tys)?, n))
-        }
+        TyKind::Array(_, n) if tys.is_planar(e.ty) => Ok((index(e.clone(), u32_lit(span, k), tys)?, n)),
         _ => Err(internal(span, "length of a non-span")),
     }
 }

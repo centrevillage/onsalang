@@ -7,29 +7,29 @@ use super::*;
 /// A C constant expression (static initializer) for a `const` initializer.
 pub(super) fn const_init(cx: &mut Cx, e: &Expr) -> R<String> {
     match &e.kind {
-        ExprKind::Lit(l) => Ok(lit(l, &cx.m.tys.tree(e.ty))),
+        ExprKind::Lit(l) => Ok(lit(l, cx.kind(e.ty))),
         ExprKind::Const(c) => {
             let init = cx.m.const_(*c).init.clone();
             const_init(cx, &init)
         }
-        ExprKind::Unary(UnOp::Neg, x) => match (&x.kind, &cx.m.tys.tree(e.ty)) {
-            (ExprKind::Lit(Lit::Int(v)), Ty::Int(k)) => Ok(int_lit(*k, -*v)),
+        ExprKind::Unary(UnOp::Neg, x) => match (&x.kind, cx.kind(e.ty)) {
+            (ExprKind::Lit(Lit::Int(v)), TyKind::Int(k)) => Ok(int_lit(*k, -*v)),
             (ExprKind::Lit(Lit::F32(v)), _) => Ok(f32_lit(-*v)),
             (ExprKind::Lit(Lit::F64(v)), _) => Ok(f64_lit(-*v)),
             _ => Err(unsupported(e.span, Feature::ConstInitializer, &[])),
         },
         ExprKind::Cast(x) => {
             let inner = const_init(cx, x)?;
-            let ty = cx.names.name(&cx.m.tys.tree(e.ty));
+            let ty = cx.names.name(e.ty);
             Ok(format!("(({ty}){inner})"))
         }
         ExprKind::Array(xs) => {
             let parts: Vec<String> = xs.iter().map(|x| const_init(cx, x)).collect::<R<_>>()?;
-            Ok(array_init(cx, &cx.m.tys.tree(e.ty), &parts))
+            Ok(array_init(cx, e.ty, &parts))
         }
         ExprKind::Repeat { elem, n } => {
             let v = const_init(cx, elem)?;
-            Ok(array_init(cx, &cx.m.tys.tree(e.ty), &vec![v; *n as usize]))
+            Ok(array_init(cx, e.ty, &vec![v; *n as usize]))
         }
         ExprKind::Tuple(xs) => {
             let parts: Vec<String> =
@@ -69,27 +69,27 @@ pub(super) fn const_init(cx: &mut Cx, e: &Expr) -> R<String> {
 /// array of none has one element (`a[1]`), zero: braced to its first scalar,
 /// as gcc's `-Wmissing-braces` takes it in another initializer (an empty one
 /// is C23, R-432).
-pub(super) fn array_init(cx: &Cx, ty: &Ty, parts: &[String]) -> String {
-    match (parts.is_empty(), ty) {
-        (true, Ty::Array(el, _)) => format!("{{ {{ {} }} }}", zero(cx, el)),
+pub(super) fn array_init(cx: &Cx, ty: CTy, parts: &[String]) -> String {
+    match (parts.is_empty(), cx.kind(ty)) {
+        (true, TyKind::Array(el, _)) => format!("{{ {{ {} }} }}", zero(cx, *el)),
         _ => format!("{{ {{ {} }} }}", parts.join(", ")),
     }
 }
 
 /// A zero of the type `ty` as a C initializer, braced to its first scalar.
-fn zero(cx: &Cx, ty: &Ty) -> String {
-    match ty {
-        Ty::Array(..) => array_init(cx, ty, &[]),
-        Ty::Struct(id) => match cx.fields(*id).first() {
-            Some((n, t)) => format!("{{ .{} = {} }}", ident(n), zero(cx, t)),
+fn zero(cx: &Cx, ty: CTy) -> String {
+    match cx.kind(ty) {
+        TyKind::Array(..) => array_init(cx, ty, &[]),
+        TyKind::Struct(id) => match cx.fields(*id).first() {
+            Some((n, t)) => format!("{{ .{} = {} }}", ident(n), zero(cx, *t)),
             None => "{ 0 }".into(),
         },
-        Ty::Tuple(ts) => match ts.first() {
-            Some(t) => format!("{{ .f0 = {} }}", zero(cx, t)),
+        TyKind::Tuple(ts) => match ts.first() {
+            Some(t) => format!("{{ .f0 = {} }}", zero(cx, *t)),
             None => "{ 0 }".into(),
         },
         // A tag, a pointer or a unit first.
-        Ty::Enum(_) | Ty::Unit | Ty::Span(_) | Ty::Buf(_) => "{ 0 }".into(),
+        TyKind::Enum(_) | TyKind::Unit | TyKind::Span(_) | TyKind::Buf(_) => "{ 0 }".into(),
         _ => "0".into(),
     }
 }

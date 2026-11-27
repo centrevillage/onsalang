@@ -32,7 +32,7 @@ pub mod value;
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
-use onsa_core::{Bounds, ConstId, FnId, Module, PanicOrigin, Ty, TypeDefKind};
+use onsa_core::{Bounds, CTy, ConstId, FnId, Module, PanicOrigin, TyKind};
 use onsa_diag::{Diagnostic, Span};
 
 use calls::ConstState;
@@ -223,6 +223,8 @@ const _: () = assert!(STACK_RESERVE < onsa_diag::stack::STACK_SIZE);
 
 pub struct Interp<'m> {
     pub m: &'m Module,
+    /// The kinds of the types of `m` ([`Interp::kind`]).
+    kinds: &'m [TyKind],
     consts: Vec<RefCell<ConstState>>,
     /// The calls nested in the current evaluation (see [`MAX_CALL_DEPTH`]).
     depth: Cell<u32>,
@@ -235,10 +237,20 @@ impl<'m> Interp<'m> {
     pub fn new(m: &'m Module) -> Interp<'m> {
         Interp {
             m,
+            kinds: m.tys.kinds(),
             consts: m.consts.iter().map(|_| RefCell::new(ConstState::Unevaluated)).collect(),
             depth: Cell::new(0),
             evals: Cell::new(0),
         }
+    }
+
+    /// The kind of `t`, as [`Types::kind`](onsa_core::Types::kind) reads it,
+    /// by the built-in index of a slice: in the dev profile this crate is
+    /// optimized and `onsa_core` is not, and the index of its `Vec` is a call
+    /// into its unoptimized code for most nodes the evaluator reads.
+    #[inline]
+    fn kind(&self, t: CTy) -> &'m TyKind {
+        &self.kinds[t.index()]
     }
 
     pub fn fn_by_name(&self, name: &str) -> Option<FnId> {
@@ -275,17 +287,6 @@ impl<'m> Interp<'m> {
     pub fn const_value(&self, id: ConstId) -> Result<Value, Failure> {
         let at = self.m.const_(id).init.span;
         self.const_val(id).map_err(|s| Self::failure_of(s, at))
-    }
-}
-
-/// Type information for tools: the variant names of an enum type.
-pub fn variant_names(m: &Module, ty: &Ty) -> Vec<String> {
-    match ty {
-        Ty::Enum(id) => match &m.ty(*id).kind {
-            TypeDefKind::Enum { variants } => variants.iter().map(|(n, _)| n.clone()).collect(),
-            _ => Vec::new(),
-        },
-        _ => Vec::new(),
     }
 }
 

@@ -6,6 +6,8 @@ use onsa_sema::{Module as SModule, Package};
 use crate::ir::*;
 use crate::{dump, lower, verify};
 
+mod verify_tests;
+
 pub(crate) fn package(src: &str) -> (SourceMap, Package) {
     let mut sources = SourceMap::default();
     let std_mods: Vec<SModule> = onsa_sema::std_modules()
@@ -515,6 +517,18 @@ fn the_built_in_types_are_at_the_ids_of_their_constants() {
     assert_eq!(t.kinds().len(), n, "no built-in type is made again");
     let arr = t.intern(TyKind::Array(Types::U32, 2));
     assert_eq!((arr.index(), t.intern(TyKind::Array(Types::U32, 2)), Types::builtin(arr)), (n, arr, None));
+}
+
+/// A planar array is an array of spans (§5.3): neither an array of another
+/// element, a span, nor a tuple with a span is one.
+#[test]
+fn a_planar_array_is_an_array_of_spans() {
+    let mut t = Types::default();
+    let span = t.intern(TyKind::Span(Types::U32));
+    let planar = t.intern(TyKind::Array(span, 2));
+    let others = [t.intern(TyKind::Array(Types::U32, 2)), span, t.intern(TyKind::Tuple(Box::new([span, Types::U32])))];
+    assert!(t.is_planar(planar));
+    assert_eq!(others.map(|o| t.is_planar(o)), [false; 3]);
 }
 
 // ---------------------------------------------------------------- flows (T3-5, T3-6)
@@ -1116,6 +1130,18 @@ fn over_the_limits_in_a_declaration_is_at_the_type_of_the_innermost_field() {
         assert_eq!(d.code, onsa_diag::Code::E0422, "{decl}");
         assert_eq!(text_at(&src, d.span), at, "{decl}");
     }
+}
+
+/// The measure of a function type counts its result (§4.4): `T` of `Pair` is
+/// a function type of a result of about 2100, and `(T, T)` is over the size.
+#[test]
+fn the_measure_of_a_function_type_at_a_type_parameter_counts_its_result() {
+    let wide = vec!["U8"; 2100].join(", ");
+    let src =
+        format!("pub struct Pair[T] {{\n  a: (T, T),\n}}\npub fn u(p: Pair[fn() -> ({wide})]) -> U32 {{\n  0\n}}\n");
+    let d = the_one_limit(&src, u32::MAX);
+    assert_eq!(d.code, onsa_diag::Code::E0422, "{}", d.message);
+    assert_eq!(text_at(&src, d.span), "(T, T)");
 }
 
 /// A `FixedStr` literal in a body is of the size of its text, not of its

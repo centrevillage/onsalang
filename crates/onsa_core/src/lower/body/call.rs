@@ -27,11 +27,6 @@ pub(crate) fn of_type(e: Expr, want: CTy, tys: &Types) -> R<Expr> {
     }
 }
 
-/// Whether `t` is a planar array `[Span[T]; N]` (§5.3).
-fn planar(t: CTy, tys: &Types) -> bool {
-    matches!(*tys.kind(t), TyKind::Array(el, _) if matches!(tys.kind(el), TyKind::Span(_)))
-}
-
 pub(super) fn coerce(lw: &mut Lowerer, cx: &mut FnCx, e: Expr, want: CTy, mode: Mode) -> R<Expr> {
     if e.ty == want {
         return Ok(e);
@@ -41,7 +36,7 @@ pub(super) fn coerce(lw: &mut Lowerer, cx: &mut FnCx, e: Expr, want: CTy, mode: 
         (TyKind::Span(_), TyKind::Array(..) | TyKind::Buf(_)) => span_of(lw, cx, e, mode),
         // A `FixedStr[N]` at a `Span[U8]`: its used part (§4.2).
         (TyKind::Span(_), TyKind::Struct(_)) => crate::lower::fixed_str::view(lw, cx, e),
-        (&TyKind::Array(elem, n), &TyKind::Array(_, m)) if planar(want, &lw.m.tys) && n == m => {
+        (&TyKind::Array(elem, n), &TyKind::Array(_, m)) if lw.m.tys.is_planar(want) && n == m => {
             // Planar: an array of arrays / Bufs (a literal is converted by its elements, S-196),
             // a value that is no place bound to a temporary first, and the
             // indices of a place evaluated once (R-433); an `inout` argument

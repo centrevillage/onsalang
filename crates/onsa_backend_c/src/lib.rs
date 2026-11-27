@@ -346,7 +346,7 @@ impl CUnit {
 /// The C spelling of a scalar type at the API boundary (`float`, `int32_t`,
 /// `bool`), as the headers write it; `None` for a type that is not a scalar.
 /// For the tools that drive the API (the conformance harness).
-pub fn scalar_c(ty: &onsa_core::Ty) -> Option<&'static str> {
+pub fn scalar_c(ty: &onsa_core::TyKind) -> Option<&'static str> {
     names::scalar_c(ty)
 }
 

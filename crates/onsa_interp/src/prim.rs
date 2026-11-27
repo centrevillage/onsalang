@@ -1,7 +1,7 @@
 //! The primitives of Core ([`Prim`]).
 
 use onsa_core::prim::{CheckedOp, MathFn, NAN_BITS_F32, NAN_BITS_F64, Prim};
-use onsa_core::{Arg, BinOp, FloatKind, IntKind, Overflow, Ty};
+use onsa_core::{Arg, BinOp, CTy, FloatKind, IntKind, Overflow, TyKind};
 use onsa_diag::Span;
 
 use crate::numeric::{float_of, int_of, math_f32, math_f64, mismatch, trunc_to_int};
@@ -14,7 +14,7 @@ impl<'m> Interp<'m> {
 
     /// A primitive: its arguments, then the operation, in a function of its
     /// own, off the way down a recursion through an argument (R-05).
-    pub(super) fn prim(&self, f: &mut Frame, prim: &Prim, args: &[Arg], ty: &Ty, span: Span) -> R<Value> {
+    pub(super) fn prim(&self, f: &mut Frame, prim: &Prim, args: &[Arg], ty: CTy, span: Span) -> R<Value> {
         if let Prim::Len | Prim::Slice | Prim::Fill | Prim::AddFrom | Prim::CopyFrom | Prim::BufZeroed = prim {
             return self.seq_prim(f, prim, args, ty, span);
         }
@@ -27,7 +27,7 @@ impl<'m> Interp<'m> {
 
     /// The primitives that take their receiver as a sequence reference.
     #[inline(never)]
-    fn seq_prim(&self, f: &mut Frame, prim: &Prim, args: &[Arg], ty: &Ty, span: Span) -> R<Value> {
+    fn seq_prim(&self, f: &mut Frame, prim: &Prim, args: &[Arg], ty: CTy, span: Span) -> R<Value> {
         match prim {
             Prim::Len => {
                 let s = self.seq_of_arg(f, &args[0])?;
@@ -94,11 +94,11 @@ impl<'m> Interp<'m> {
             }
             Prim::BufZeroed => {
                 let n = self.eval_u32(f, &args[0].expr)?;
-                let elem = match ty {
-                    Ty::Buf(e) => (**e).clone(),
+                let elem = match self.kind(ty) {
+                    TyKind::Buf(e) => *e,
                     _ => internal(span, "Buf.zeroed type"),
                 };
-                Ok(Value::Buf(slot(Value::Array(zero_array(self.m, &elem, n)))))
+                Ok(Value::Buf(slot(Value::Array(zero_array(self.m, elem, n)))))
             }
             _ => internal(span, "not a sequence primitive"),
         }

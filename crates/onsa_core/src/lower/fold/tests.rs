@@ -182,6 +182,17 @@ fn the_smallest_char_and_a_widened_value_fold() {
     assert!(matches!(value(&f).kind, ExprKind::Cmp { .. }), "{:?}", value(&f));
 }
 
+/// A `Char` is at most U+10FFFF (§3.1): `x <= U+10FFFF` folds, `x < U+10FFFF` is not decided.
+#[test]
+fn the_largest_char_folds_and_one_below_it_does_not() {
+    let ch = Types::CHAR;
+    let max = || e(ch, ExprKind::Lit(Lit::Char(char::MAX)));
+    let f = folded(std::slice::from_ref(&ch), Vec::new(), Vec::new(), cmp(CmpOp::Le, local(0, ch), max()));
+    assert_eq!(folded_to(value(&f)).map(|x| x.0), Some(true), "{:?}", value(&f));
+    let f = folded(std::slice::from_ref(&ch), Vec::new(), Vec::new(), cmp(CmpOp::Lt, local(0, ch), max()));
+    assert!(matches!(value(&f).kind, ExprKind::Cmp { .. }), "{:?}", value(&f));
+}
+
 #[test]
 fn a_const_and_the_length_of_an_array_are_constants() {
     let u32t = Types::U32;
