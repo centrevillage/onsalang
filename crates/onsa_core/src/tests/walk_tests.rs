@@ -2,8 +2,9 @@
 //! evaluated, its scope and its role (W8-02 U1, `walk.rs`): an assignment
 //! gives its value before its place (§3.5), the right operand of `&&`/`||`
 //! is conditional, the condition and the body of a `while` are of a loop, a
-//! block expression is inline and always evaluated, and the values a panic
-//! shows are observed. Each child is named by the integer it holds.
+//! block expression is inline and always evaluated, the values a panic
+//! shows are observed, and the base of a projection is a base (W8-03 U6b).
+//! Each child is named by the integer it holds.
 
 use onsa_diag::{FileId, Span};
 
@@ -149,16 +150,17 @@ fn the_children_of_each_expression() {
     for kind in [ExprKind::Lit(Lit::Unit), ExprKind::Local(LocalId(0)), ExprKind::Const(ConstId(0)), ExprKind::Zeroed] {
         assert_eq!(of_expr(kind), none);
     }
-    let reads = [
-        ExprKind::Unary(UnOp::Neg, bx(n(1))),
-        ExprKind::Cast(bx(n(1))),
+    for kind in [ExprKind::Unary(UnOp::Neg, bx(n(1))), ExprKind::Cast(bx(n(1)))] {
+        assert_eq!(of_expr(kind), ["1 Always Read"]);
+    }
+    let bases = [
         ExprKind::SpanOf(bx(n(1))),
         ExprKind::Tag(bx(n(1))),
         ExprKind::Field { base: bx(n(1)), index: 0 },
         ExprKind::Payload { base: bx(n(1)), tag: 0, index: 0 },
     ];
-    for kind in reads {
-        assert_eq!(of_expr(kind), ["1 Always Read"]);
+    for kind in bases {
+        assert_eq!(of_expr(kind), ["1 Always Base"], "the base of a projection");
     }
     let two = ["1 Always Read", "2 Always Read"];
     assert_eq!(
@@ -166,7 +168,8 @@ fn the_children_of_each_expression() {
         two
     );
     assert_eq!(of_expr(ExprKind::Cmp { op: CmpOp::Lt, lhs: bx(n(1)), rhs: bx(n(2)) }), two);
-    assert_eq!(of_expr(ExprKind::Index { base: bx(n(1)), index: bx(n(2)), bounds: Bounds::Checked }), two);
+    let index = ExprKind::Index { base: bx(n(1)), index: bx(n(2)), bounds: Bounds::Checked };
+    assert_eq!(of_expr(index), ["1 Always Base", "2 Always Read"], "the base, then the index");
     let logic = ExprKind::Logic { op: LogicOp::And, lhs: bx(n(1)), rhs: bx(n(2)) };
     assert_eq!(of_expr(logic), ["1 Always Read", "2 Conditional Read"]);
     let args = || vec![arg(Mode::Borrow, n(1)), arg(Mode::Inout, n(2)), arg(Mode::Move, n(3))];
@@ -211,7 +214,7 @@ fn a_block_gives_its_statements_then_its_value_of_the_role_given() {
         });
         same(out, out_mut)
     };
-    for role in [Role::Read, Role::Consume, Role::Dest, Role::Inout] {
+    for role in [Role::Read, Role::Base, Role::Consume, Role::Dest, Role::Inout] {
         let b = Block { stmts: vec![st(StmtKind::Break), st(StmtKind::Continue)], value: Some(bx(n(1))) };
         assert_eq!(list(&b, role), ["Break".to_string(), "Continue".into(), format!("1 {role:?}")]);
     }

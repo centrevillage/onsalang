@@ -11,6 +11,8 @@ pub mod effects;
 pub mod ir;
 pub mod layout;
 pub mod lower;
+pub mod normalize;
+pub mod paths;
 pub mod prim;
 pub mod reach;
 mod rt_cycles;

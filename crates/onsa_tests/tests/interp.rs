@@ -283,3 +283,81 @@ fn interp_api_calls_functions_directly() {
         assert_eq!(v.to_i128(), Some(42));
     });
 }
+
+// ---- the normalization keeps what the tests record (W8-03, part 1 2.8) ------------------------
+
+/// The inputs of the test of the normalization: the forms of the order of
+/// evaluation (§3.5) and one each of a chain, `when~`, `par~` and events of
+/// a flow, with the edits that make one pass the checks (text, replacement).
+const NORMALIZED: &[(&str, &[(&str, &str)])] = &[
+    ("tests/spec/semantics/eval_order.onsa", &[]),
+    ("tests/spec/semantics/eval_order_struct_index.onsa", &[]),
+    ("tests/spec/semantics/range_eval_order.onsa", &[]),
+    // E0020 (lines 27 and 28) and E0309 (line 78) stop it at the checks.
+    (
+        "tests/review-phase1/parent/r93.onsa",
+        &[("  pub x: F32,\n  pub y: F32,", "  x: F32,\n  y: F32,"), ("let v = false", "let _ = false")],
+    ),
+    ("tests/spec/flow_semantics/feedback.onsa", &[]),
+    ("tests/spec/flow_semantics/event_when_rate_values.onsa", &[]),
+    ("tests/spec/flow_semantics/par_branch.onsa", &[]),
+    ("tests/spec/flow_semantics/event_two_inputs_block.onsa", &[]),
+];
+
+/// The record of each test of the Core lowered with `opts` (its full name,
+/// and of a failure its message, position, calls and values), and the times
+/// the lowering entered the stage of the normalization.
+fn records(
+    loaded: &onsa_driver::Loaded,
+    analyzed: &onsa_driver::Analyzed,
+    opts: &onsa_core::LowerOptions,
+) -> (Vec<(String, Option<String>)>, u32) {
+    let sources = &loaded.sources;
+    let (module, times) = onsa_diag::timing::record(|| onsa_driver::lower_core_with(analyzed, opts));
+    let module = module.unwrap_or_else(|e| panic!("{}", e.render(sources)));
+    let entered = times.phases.iter().find(|p| p.0 == onsa_diag::timing::Phase::Normalize).map_or(0, |p| p.2);
+    let report = match onsa_driver::run_tests(sources, &module, &onsa_driver::TestOptions::default()) {
+        Ok(onsa_driver::TestRun::Ran(r)) => r,
+        _ => panic!("the tests did not run"),
+    };
+    (report.tests.iter().map(|t| (t.full_name(), t.failure.as_ref().map(|f| format!("{f:?}")))).collect(), entered)
+}
+
+/// The records of the tests of `src` (of the file `path`) normalized, after
+/// checking that they are those of the Core lowered without the stage and
+/// that the one lowering only entered it.
+fn compare_normalized(path: &str, src: &str) -> Vec<(String, Option<String>)> {
+    let name = path.rsplit('/').next().expect("a file name");
+    let mut loaded = onsa_driver::Loaded::from_input(onsa_driver::PackageInput::single_file(name, src)).unwrap();
+    let analyzed = onsa_driver::analyze_loaded(&mut loaded).unwrap_or_else(|e| panic!("{}", e.render(&loaded.sources)));
+    assert!(analyzed.diagnostics.is_empty(), "{path}: {}", onsa_diag::to_text(&loaded.sources, &analyzed.diagnostics));
+    let skip = onsa_core::LowerOptions { skip_normalize: true, ..Default::default() };
+    let (normal, entered) = records(&loaded, &analyzed, &Default::default());
+    let (before, skipped) = records(&loaded, &analyzed, &skip);
+    assert_eq!((entered, skipped), (1, 0), "{path}: the stage runs in the one lowering only");
+    assert_eq!(normal.len(), before.len(), "{path}: the tests");
+    let differ: Vec<_> = normal.iter().zip(&before).filter(|(a, b)| a != b).collect();
+    assert!(differ.is_empty(), "{path}: (normalized, before) {differ:#?}");
+    normal
+}
+
+/// The Core normalized and the Core lowered without the stage run their
+/// tests to the same records (W8-03, part 1 2.8): each test passes or fails
+/// in both, with the same message at the same position.
+#[test]
+fn the_normalization_keeps_the_records_of_the_tests() {
+    let root = onsa_tests::case::repo_root();
+    let mut compared = 0;
+    for (path, edits) in NORMALIZED {
+        let mut src = std::fs::read_to_string(root.join(path)).unwrap_or_else(|e| panic!("{path}: {e}"));
+        for (from, to) in *edits {
+            assert_eq!(src.matches(from).count(), 1, "{path}: the text `{from}` to edit");
+            src = src.replacen(from, to, 1);
+        }
+        // The lowering and the interpreter on the stack of a command (R-05).
+        let records = onsa_diag::stack::run(|| compare_normalized(path, &src));
+        assert!(!records.is_empty(), "{path}: no test ran");
+        compared += records.len();
+    }
+    assert!(compared > 0, "no test compared");
+}

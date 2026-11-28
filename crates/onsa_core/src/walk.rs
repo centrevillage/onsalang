@@ -62,6 +62,10 @@ pub enum Scope {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Role {
     Read,
+    /// The base of a projection (`Field`, `Index`, `Tag`, `Payload`,
+    /// `SpanOf`): of a place, its root is read where the parent is, once
+    /// the parent's other children are evaluated (W8-03 N1).
+    Base,
     /// Taken by a `move` argument.
     Consume,
     /// Stored where it goes: the value of a `let`, an assignment, a
@@ -154,16 +158,18 @@ macro_rules! lists {
             let pair = |a: &'a $($m)? Expr, b: &'a $($m)? Expr| [a, b].into_iter();
             match &$($m)? e.kind {
                 ExprKind::Lit(_) | ExprKind::Local(_) | ExprKind::Const(_) | ExprKind::Zeroed => {}
-                ExprKind::Unary(_, x)
-                | ExprKind::Cast(x)
-                | ExprKind::SpanOf(x)
+                ExprKind::Unary(_, x) | ExprKind::Cast(x) => f($child::Expr(x, Always, Role::Read)),
+                ExprKind::SpanOf(x)
                 | ExprKind::Tag(x)
                 | ExprKind::Field { base: x, .. }
-                | ExprKind::Payload { base: x, .. } => f($child::Expr(x, Always, Role::Read)),
+                | ExprKind::Payload { base: x, .. } => f($child::Expr(x, Always, Role::Base)),
                 ExprKind::Binary { lhs, rhs, .. } | ExprKind::Cmp { lhs, rhs, .. } => {
                     each(&mut pair(lhs, rhs), Role::Read)
                 }
-                ExprKind::Index { base, index, .. } => each(&mut pair(base, index), Role::Read),
+                ExprKind::Index { base, index, .. } => {
+                    f($child::Expr(base, Always, Role::Base));
+                    f($child::Expr(index, Always, Role::Read));
+                }
                 ExprKind::Logic { lhs, rhs, .. } => {
                     f($child::Expr(lhs, Always, Role::Read));
                     f($child::Expr(rhs, Conditional, Role::Read));

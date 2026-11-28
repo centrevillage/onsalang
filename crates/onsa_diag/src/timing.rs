@@ -54,6 +54,8 @@ phases! {
     Lower "lower",
     /// The indexes of Core proved in range (`onsa_core::bounds`).
     Bounds "bounds",
+    /// The normal form of the evaluation order (`onsa_core::normalize`).
+    Normalize "normalize",
     /// The verifier of Core.
     Verify "verify",
 }

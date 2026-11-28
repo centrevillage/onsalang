@@ -225,12 +225,17 @@ pub struct LowerOptions {
     /// The instances a package may have: [`limits::INSTANCE_LIMIT`]. No key
     /// of the manifest sets it: the tests of Core count with a small one.
     pub instance_limit: u32,
+    /// Leave out the stage [`crate::normalize`]: the Core the test of the
+    /// normalization runs to compare with the normal one (W8-03). No
+    /// command sets it.
+    #[doc(hidden)]
+    pub skip_normalize: bool,
 }
 
 impl Default for LowerOptions {
     fn default() -> Self {
         let instance_limit = limits::INSTANCE_LIMIT;
-        LowerOptions { bulk_threshold: None, ptr_size: crate::layout::PTR_SIZE, instance_limit }
+        LowerOptions { bulk_threshold: None, ptr_size: crate::layout::PTR_SIZE, instance_limit, skip_normalize: false }
     }
 }
 
@@ -292,12 +297,12 @@ pub fn lower_with(pkg: &Package, a: &Analysis, opts: &LowerOptions) -> Result<Mo
         return Err(LowerFailure::Diagnostics(diagnostics));
     }
     deep.map_err(|e| verify_failure(&lw.m, e))?;
-    finish(lw.m)
+    finish(lw.m, opts)
 }
 
 /// The passes after the items are lowered, in their one order, and the
 /// verifier last: it reads what they make (`hoisted`, V-18; `moves`, V-20).
-fn finish(mut module: Module) -> Result<Module, LowerFailure> {
+fn finish(mut module: Module, opts: &LowerOptions) -> Result<Module, LowerFailure> {
     // No type is made after lowering: what reads the module reads the facts.
     module.fill_all_facts();
     // The comparisons the types decide and the assignments of a place to
@@ -307,6 +312,11 @@ fn finish(mut module: Module) -> Result<Module, LowerFailure> {
     {
         let _bounds = onsa_diag::timing::phase(onsa_diag::timing::Phase::Bounds);
         crate::bounds::module(&mut module);
+    }
+    // The normal form of the order, before `hoisted` sees the locals it adds.
+    if !opts.skip_normalize {
+        let _normalize = onsa_diag::timing::phase(onsa_diag::timing::Phase::Normalize);
+        module.fns.iter_mut().for_each(|f| crate::normalize::normalize(&module.tys, f));
     }
     // After the fold, which may drop a loop that never runs with its `let`s.
     for i in 0..module.fns.len() {
