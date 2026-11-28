@@ -1,0 +1,32 @@
+// A bench of `compare.py run-c`: a waveshaper oversampled by `.up~(4)`, the input made a bundle of four by linear
+// interpolation, the bundle of the output folded back in a `for` over its range. No panic.
+use std.math.tanh
+
+flow interp(x: F32 at sample) -> F32 at (sample * 4) {
+  let p = prev~(x)
+  [p + (0.25 * (x - p)), p + (0.5 * (x - p)), p + (0.75 * (x - p)), x]
+}
+
+flow shape(x: F32 at sample, drive: F32 at block) -> F32 at sample {
+  let y = tanh(drive * x)
+  y + (0.5 * (prev~(y) - y))
+}
+
+rt fn fold(x: [F32; 4]) -> F32 {
+  var acc = 0.0
+  for i in 0 ..< 4 {
+    acc = acc + x[i]
+  }
+  acc * 0.25
+}
+
+flow down4(x: F32 at (sample * 4)) -> F32 at sample { fold(x) }
+
+@export
+pub flow upchain(
+  x: F32 at sample,
+  @param(min: 1.0, max: 20.0, default: 6.0)
+  drive: F32 at block,
+) -> F32 at sample {
+  down4~(shape~(interp~(x), drive).up~(4))
+}

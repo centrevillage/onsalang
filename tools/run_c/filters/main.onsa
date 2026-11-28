@@ -1,0 +1,56 @@
+// A bench of `compare.py run-c`: four biquad low-pass sections in cascade, the coefficients made with the
+// functions of std.math at the block clock. The sections run in a `for` over the arrays of the state: an
+// aggregate assigned whole, a field then an index as the place assigned, struct literals. No panic: every
+// index is the variable of a `for` over the length.
+use std.math.{cos, sin, sum}
+
+const N: U32 = 4
+
+pub struct Coef { b0: F32, b1: F32, b2: F32, a1: F32, a2: F32 }
+
+pub struct Bank { s1: [F32; N], s2: [F32; N], y: F32 }
+
+/// The low-pass biquad of the cookbook at `fc` Hz.
+rt fn lowpass(fc: F32, q: F32, rate: F32) -> Coef {
+  let w = (2.0 * F32.PI * fc) / rate
+  let c = cos(w)
+  let alpha = sin(w) / (2.0 * q)
+  let a0 = 1.0 + alpha
+  Coef { b0: ((1.0 - c) * 0.5) / a0, b1: (1.0 - c) / a0, b2: ((1.0 - c) * 0.5) / a0, a1: (-2.0 * c) / a0, a2: (1.0 - alpha) / a0 }
+}
+
+rt fn coefs(fc: F32, q: F32, rate: F32) -> [Coef; N] {
+  var cs: [Coef; N] = [lowpass(fc, q, rate); N]
+  for i in 0 ..< N {
+    cs[i] = lowpass(fc * (1.0 + (0.5 * F32.round_from(i))), q, rate)
+  }
+  cs
+}
+
+/// One sample through the sections (transposed direct form II).
+rt fn step(cs: [Coef; N], s: Bank, x: F32) -> Bank {
+  var out = s
+  var v = x
+  for i in 0 ..< N {
+    let c = cs[i]
+    let y = (c.b0 * v) + s.s1[i]
+    out.s1[i] = ((c.b1 * v) - (c.a1 * y)) + s.s2[i]
+    out.s2[i] = (c.b2 * v) - (c.a2 * y)
+    v = y
+  }
+  out.y = v
+  out
+}
+
+@export
+pub flow filters(
+  x: F32 at sample,
+  @param(min: 20.0, max: 8000.0, default: 1200.0, unit: "Hz")
+  fc: F32 at block,
+  @param(min: 0.5, max: 4.0, default: 0.9)
+  q: F32 at block,
+) -> F32 at sample {
+  let cs = coefs(fc, q, sample_rate())
+  let b = step(cs, prev~(^b, Bank { s1: [0.0; N], s2: [0.0; N], y: 0.0 }), x)
+  b.y + (0.001 * sum(b.s2))
+}

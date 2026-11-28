@@ -632,6 +632,79 @@ class Compare(unittest.TestCase):
                 self.assertEqual(code, 1)
                 self.assertIn(why, lines[0])
 
+    def test_run_c_parts(self):
+        # The lines of `clang -fstack-usage` and of a bench's main; the benches are the directories with an onsa.toml.
+        su = "/t/onsa_a.c:3:1:a_init\t272\tstatic\n/t/onsa_a.c:9:6:main__step\t48\tdynamic,bounded\nbroken line\n"
+        self.assertEqual(compare.stack_frames(su), {"a_init": 272, "main__step": 48})
+        self.assertEqual(compare.measured(b"33838000 fc48/21.6\n"), (33838000, "fc48/21.6"))
+        for bad in (b"", b"12 a b", b"x1 v", b"-1 v"):
+            with self.subTest(bad=bad):
+                self.assertIsInstance(compare.measured(bad), str)
+        for rel in ("b/onsa.toml", "a/onsa.toml", "c/main.c"):
+            (self.root / "run" / rel).parent.mkdir(parents=True, exist_ok=True)
+            (self.root / "run" / rel).write_text("")
+        self.assertEqual(compare.benches(self.root / "run"), ["a", "b"])
+        self.assertEqual(compare.benches(self.root / "none"), [])
+
+    def test_run_c_lines(self):
+        # A row of the table: ms, ms, after / before; the values that differ between the sides or the rounds of one
+        # side; the stack frames that differ (one side only as `-`); a fall names its side.
+        same = (40_000_000, {"v"}, {"f": 16, "g": 32})
+        self.assertEqual(compare.bench_lines("a", [same, (50_000_000, {"v"}, {"f": 16, "g": 32})]),
+                         (False, ["a             40.000    50.000   1.250"]))
+        lines = compare.bench_lines("a", [same, (20_000_000, {"w"}, {"f": 24, "h": 8})])
+        self.assertEqual(lines, (True, ["a             40.000    20.000   0.500", "  value differs: before v, after w",
+                                 "  stack f: 16 -> 24", "  stack g: 32 -> -", "  stack h: - -> 8"]))
+        self.assertEqual(compare.bench_lines("a", [same, (40_000_000, {"v", "w"}, same[2])]),
+                         (True, ["a             40.000    40.000   1.000", "  value differs: before v, after v w"]))
+        self.assertEqual(compare.bench_lines("a", [same, "clang: exit 1: e"]),
+                         (True, ["a          fell", "  after: clang: exit 1: e"]))
+
+    def test_run_c(self):
+        # The benches built once a binary, then run a process at a time, the order of the two turned round every other
+        # round; the least time and the values kept; a value that differs or a fall exits 1, a time does not.
+        for n in ("a", "b"):
+            (self.root / "run" / n).mkdir(parents=True)
+            (self.root / "run" / n / "onsa.toml").write_text("")
+        b1, b2 = self.fakes({}, "b1", "b2")
+        out = {}  # (the executable, its runs so far) -> stdout or a fall
+        calls = []
+
+        def built(binary, bench, tmp):
+            return f"{Path(binary).name}-{bench.name}", {"f": 16}
+
+        def ran(argv, cwd):
+            calls.append(argv[0])
+            got = out.get((argv[0], calls.count(argv[0])), out.get(argv[0], b"30000000 v\n"))
+            return got
+
+        def run(*more):
+            with mock.patch.object(compare, "bench_exe", built), mock.patch.object(compare, "ran", ran):
+                return quiet_out(compare.main, ["run-c", "--benches", str(self.root / "run"), *more, b1, b2])
+
+        head = "run-c: 2 benches, 2 rounds of 5 runs; the least ms of a run: before, after, after / before"
+        out[("b2-a", 2)] = b"20000000 v\n"
+        code, lines = run("--rounds", "2")
+        self.assertEqual((code, lines), (0, [head, "a             30.000    20.000   0.667", "b             30.000    30.000   1.000"]))
+        self.assertEqual(calls, ["b1-a", "b2-a", "b1-b", "b2-b", "b2-a", "b1-a", "b2-b", "b1-b"])
+        out.update({"b2-b": b"30000000 w\n", ("b1-a", 1): "b1-a: exit 3: init or process did not return 0"})
+        calls.clear()
+        code, lines = run("--rounds", "2")
+        self.assertEqual((code, lines[1:]), (1, ["a          fell", "  before: b1-a: exit 3: init or process did not return 0",
+                                                 "b             30.000    30.000   1.000", "  value differs: before v, after w"]))
+        self.assertEqual(calls, ["b1-a", "b2-a", "b1-b", "b2-b", "b2-a", "b2-b", "b1-b"])  # a fallen side is not run again
+        calls.clear()
+        code, lines = run("--only", "b", "--rounds", "1")
+        self.assertEqual((code, calls), (1, ["b1-b", "b2-b"]))
+        with mock.patch.object(compare, "bench_exe", built):
+            self.assertEqual(quiet_out(compare.main, ["run-c", "--benches", str(self.root / "none"), b1, b2]),
+                             (1, [f"run-c: no bench in {self.root / 'none'}"]))
+        for bad in (["--only", "c"], ["--rounds", "0"], ["--rounds", "101"]):  # usage errors
+            buf = io.StringIO()
+            with self.subTest(bad=bad), mock.patch.object(sys, "stderr", buf), self.assertRaises(SystemExit) as e:
+                compare.main(["run-c", "--benches", str(self.root / "run"), *bad, b1, b2])
+            self.assertEqual(e.exception.code, 2)
+
     def test_help(self):
         # rules/tools.md 9.4, as `Work.test_help`
         for name, c in compare.COMMANDS.items():
@@ -651,7 +724,7 @@ class Compare(unittest.TestCase):
                 want = [n for n, c in compare.COMMANDS.items() if role in c.roles]
                 self.assertEqual((code, [x.split()[0] for x in lines if not x.startswith(" ")]), (0, want or ["（役割"]))
         names = list(compare.COMMANDS)
-        self.assertEqual(names, ["diags", "fmt", "cst", "core", "graph", "c", "fixes", "loops", "speed", "probe"])
+        self.assertEqual(names, ["diags", "fmt", "cst", "core", "graph", "c", "fixes", "loops", "speed", "run-c", "probe"])
         self.assertEqual([x.split()[0] for x in quiet_out(compare.main, ["help"])[1][: len(names)]], names)
         for argv, code in (([], 2), (["--help"], 0)):  # no command is a usage error; `--help` lists the commands
             buf = io.StringIO()

@@ -1,0 +1,36 @@
+// A bench of `compare.py run-c`: a reverb of many delay lines (four feedback combs damped by a one-pole low-pass,
+// then two allpasses), `delay~` with the feedback `^`, and `prev~`. No panic.
+
+flow allpass1(x: F32 at sample, g: F32 at block) -> F32 at sample {
+  let y = (delay~(x, 556) + (g * delay~(^y, 556))) - (g * x)
+  y
+}
+
+flow allpass2(x: F32 at sample, g: F32 at block) -> F32 at sample {
+  let y = (delay~(x, 441) + (g * delay~(^y, 441))) - (g * x)
+  y
+}
+
+@export
+pub flow delays(
+  x: F32 at sample,
+  @param(min: 0.0, max: 0.98, default: 0.84)
+  feedback: F32 at block,
+  @param(min: 0.0, max: 1.0, default: 0.2)
+  damp: F32 at block,
+) -> F32 at sample {
+  let d1 = delay~(^c1, 1116)
+  let f1 = d1 + (damp * (prev~(^f1) - d1))
+  let c1 = x + (feedback * f1)
+  let d2 = delay~(^c2, 1188)
+  let f2 = d2 + (damp * (prev~(^f2) - d2))
+  let c2 = x + (feedback * f2)
+  let d3 = delay~(^c3, 1277)
+  let f3 = d3 + (damp * (prev~(^f3) - d3))
+  let c3 = x + (feedback * f3)
+  let d4 = delay~(^c4, 1356)
+  let f4 = d4 + (damp * (prev~(^f4) - d4))
+  let c4 = x + (feedback * f4)
+  let wet = allpass2~(allpass1~((c1 + c2 + c3 + c4) * 0.25, 0.5), 0.5)
+  (x * 0.3) + (wet * 0.7)
+}

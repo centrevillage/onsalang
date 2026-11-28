@@ -2,7 +2,7 @@
 """Before and after: the diagnostics, the formatting, the Core and the time of `onsa` binaries (rules/refactoring.md 8;
 X-9 X9-18, X9-19; X-6 B1).
 
-Its commands are `diags`, `fmt`, `cst`, `core`, `graph`, `c`, `fixes`, `loops`, `speed` and `probe` (COMMANDS,
+Its commands are `diags`, `fmt`, `cst`, `core`, `graph`, `c`, `fixes`, `loops`, `speed`, `run-c` and `probe` (COMMANDS,
 rules/tools.md 9.1); `compare.py help` shows them.
 `diags` runs `check --json` of both binaries on every case of tests/: the seed files of the gate's fuzz
 (`fuzz.seeds`), a file in a package (a directory below tests/ with an `onsa.toml`, the outermost, as the case
@@ -39,6 +39,11 @@ it checks to 0 and the fixed one finds an error in (X-21 P-4); the choosing runs
 rounds. Each binary is named by its place in the arguments and the path past the directories they share; each run
 shows the wall seconds and the cpu seconds (user + sys of the children). The cpu seconds swing under load too (about
 55% in an A/A of one binary, 2026-10-20): judge on a quiet machine.
+`run-c` builds each bench of RUN_C (a package and a main.c, tools/run_c/bench.h) with both binaries, compiles the
+C with the same flags (CFLAGS, `-fstack-usage` too) and links it with the bench's main, then runs the two a process
+at a time, the order turned round every other round as `speed`, and lists per bench the least time of a run of
+`process` before and after and their ratio, the values of the output that differ, and the stack frames of the
+functions of the C that differ (S-1264 P4, W8-03 U2: the time of the generated C, which counts of `c` do not show).
 `probe` writes the cases of a file (`probe_cases`) as packages below `--out` and runs every binary on each, `check
 --json` or `--cmd`, named as in `speed` (W4-03, 70th session: the scripts the agents copied per worktree).
 `core` and `c` take `--sub` (the same rewriting of the texts of both binaries before they are compared) and `--lines`
@@ -84,6 +89,10 @@ GOOD = {"clean", "no-candidate"}  # the stops of `--fix-loop` that `loops` takes
 # is not compared; one taken by mistake (`flow` at the head of a line in a string) is the same usage error (exit 2)
 # in both binaries.
 FLOW_DECL = re.compile(r"^(?:pub(?:\(\w+\))? |priv )?flow (\w+)", re.M)
+RUN_C = ROOT / "tools/run_c"  # the benches of `run-c`: not below tests, std or examples, so no case nor seed
+CC = "clang"
+CFLAGS = ("-std=c11", "-O2", "-ffp-contract=off", "-fno-fast-math")  # `run-c`'s, the same for both binaries
+REPS = "5"  # the runs a process of a bench of `run-c` times, its least kept (tools/run_c/bench.h)
 
 
 def packaged(root, rels) -> list:
@@ -659,6 +668,104 @@ def speed(a) -> int:
     return 0
 
 
+def benches(where) -> list:
+    """The names of the benches of `run-c` in `where`: its directories with an onsa.toml (none if it is none)."""
+    return sorted(p.name for p in Path(where).iterdir() if (p / "onsa.toml").is_file()) if Path(where).is_dir() else []
+
+
+def ran(argv, cwd):
+    """The stdout (bytes) of `argv` run in `cwd` to exit 0, or (a str) how it ended: the program, the exit or the
+    signal, the first line of its output."""
+    try:
+        r = subprocess.run(argv, cwd=cwd, capture_output=True, timeout=TIMEOUT)
+    except (subprocess.TimeoutExpired, OSError) as e:
+        return f"{Path(argv[0]).name}: {type(e).__name__}"
+    if r.returncode == 0:
+        return r.stdout
+    head = "".join(f": {h[:100]}" for h in (r.stderr or r.stdout).decode("utf-8", "replace").splitlines()[:1])
+    how = f"signal {-r.returncode}" if r.returncode < 0 else f"exit {r.returncode}"
+    return f"{Path(argv[0]).name}: {how}{head}"
+
+
+def stack_frames(su: str) -> dict:
+    """{function: bytes} of the lines `<file>:<line>:<col>:<function>\\t<bytes>\\t<kind>` of `clang -fstack-usage`."""
+    fields = (line.split("\t") for line in su.splitlines())
+    return {f[0].rsplit(":", 1)[-1]: int(f[1]) for f in fields if len(f) == 3 and f[1].isdigit()}
+
+
+def measured(stdout: bytes):
+    """(the least nanoseconds, the value of the output) of the line of a bench's main (bench.h), or (a str) what
+    is wrong with it."""
+    parts = stdout.decode("utf-8", "replace").split()
+    if len(parts) != 2 or not parts[0].isdigit():
+        return f"no line `<ns> <value>`: {stdout[:80]!r}"
+    return int(parts[0]), parts[1]
+
+
+def bench_exe(binary, bench: Path, tmp):
+    """(the executable of `bench` built by `binary` and linked with its main.c, {function: the bytes of its stack
+    frame} of the C built) in a new directory below `tmp`, or (a str) the step that failed and how."""
+    d = Path(tempfile.mkdtemp(dir=tmp))
+    out = d / "out"
+    if isinstance(r := ran([binary, "build", "--target", "host", "--out", str(out), str(bench)], d), str):
+        return r
+    sources = sorted(out.glob("*.c"))
+    objects = [f"{d / c.stem}.o" for c in sources]  # an object a C file, its .su beside it
+    steps = [[CC, *CFLAGS, "-fstack-usage", "-c", str(c), "-o", o] for c, o in zip(sources, objects)]
+    for argv in [*steps, [CC, *CFLAGS, f"-I{out}", str(bench / "main.c"), *objects, "-o", "bench", "-lm"]]:
+        if isinstance(r := ran(argv, d), str):
+            return r
+    return str(d / "bench"), {k: v for c in sources for k, v in stack_frames((d / f"{c.stem}.su").read_text()).items()}
+
+
+def bench_lines(name, sides) -> tuple:
+    """(it fell or its values differ, its lines) of a bench of `run-c`: of [(the least ns of the rounds, {values},
+    {function: frame}) or (a str) how it fell] of before and after, the line of the table (ms, ms, after / before),
+    then the values or the falls, and the stack frames that differ (a function on one side only as `-`)."""
+    if any(isinstance(s, str) for s in sides):
+        falls = [f"  {w}: {s}" for w, s in zip(("before", "after"), sides) if isinstance(s, str)]
+        return True, [f"{name:10} fell", *falls]
+    (nb, vb, fb), (na, va, fa) = sides
+    out = [f"{name:10} {nb / 1e6:9.3f} {na / 1e6:9.3f} {na / nb:7.3f}"]
+    if differ := len(vb | va) > 1:  # between the sides, or between the rounds of one
+        out.append(f"  value differs: before {' '.join(sorted(vb))}, after {' '.join(sorted(va))}")
+    return differ, out + [f"  stack {f}: {fb.get(f, '-')} -> {fa.get(f, '-')}" for f in sorted(fb.keys() | fa.keys())
+                          if fb.get(f) != fa.get(f)]  # fmt: skip
+
+
+def run_c(a) -> int:
+    names = benches(a.benches)
+    if not 1 <= a.rounds <= 100:
+        a.parser_.error(f"--rounds {a.rounds}: give 1 to 100")
+    if a.only and a.only not in names:
+        a.parser_.error(f"--only {a.only}: no bench of that name in {a.benches} ({', '.join(names)})")
+    names = [a.only] if a.only else names
+    if not names:
+        print(f"run-c: no bench in {a.benches}")
+        return 1
+    binaries = [executable(a.parser_, b) for b in (a.before, a.after)]
+    with tempfile.TemporaryDirectory() as tmp:
+        sides = {n: [bench_exe(b, Path(a.benches) / n, tmp) for b in binaries] for n in names}
+        times = {n: [(1 << 62, set()) for _ in binaries] for n in names}
+        for r in range(a.rounds):  # a process at a time: run side by side, the times swing
+            for n in names:
+                for i in turn([0, 1], r):
+                    if isinstance(sides[n][i], str):
+                        continue
+                    got = ran([sides[n][i][0], REPS], tmp)
+                    got = got if isinstance(got, str) else measured(got)
+                    if isinstance(got, str):
+                        sides[n][i] = got
+                    else:
+                        times[n][i] = (min(times[n][i][0], got[0]), times[n][i][1] | {got[1]})
+    rows = {n: [s if isinstance(s, str) else (*times[n][i], s[1]) for i, s in enumerate(sides[n])] for n in names}
+    print(f"run-c: {len(names)} benches, {a.rounds} rounds of {REPS} runs; "
+          "the least ms of a run: before, after, after / before")
+    shown = [bench_lines(n, rows[n]) for n in names]
+    print(*(x for _, lines in shown for x in lines), sep="\n")
+    return 1 if any(bad for bad, _ in shown) else 0  # a time is no failure
+
+
 def probe_cases(text) -> list:
     """[(name, {path: text})] of a file of cases: `=== <name>` starts a case (a package), `--- <path>` a file of it,
     the lines before its first `---` are `main.onsa` (blank ones dropped), `onsa.toml` is added when not given.
@@ -804,6 +911,22 @@ def speed_args(p):
     p.add_argument("binaries", nargs="+", metavar="binary")
 
 
+def run_c_args(p):
+    p.add_argument("before")
+    p.add_argument("after")
+    p.add_argument("--rounds", type=int, default=3,
+                   help="本ごとに、前と後の実行を交互に（回ごとに順を入れ替えて）回す数（1〜100、既定 %(default)s）。回の間の最小を残す")
+    p.add_argument("--only", metavar="NAME", help="その本だけ（知らない名前は使い方の誤り）")
+    p.add_argument("--benches", default=str(RUN_C), help="本のディレクトリ（既定 tools/run_c。自己テストが替える）")
+    p.epilog = ("出力: 本ごとに一行（一回の実行の最小の ms の前と後、後 / 前）。その下に、出力の値（最後の回の全てのサンプルのビットの"
+                "ハッシュと和）が前後か回の間で違えば value differs、ビルド・リンク・実行が 0 以外で終われば fell とその段、"
+                "生成した C の関数ごとのスタックの枠（clang -fstack-usage）が違う関数（片方だけは -）。値の違いか落ちた本があれば"
+                "終了コード 1、速さの違いは失敗にしない。揺れ: 同じバイナリを前と後に渡した比は 0.997〜1.003 の内（2026-11-28、"
+                "静かな機械の 5 回。--rounds 1 でも同じ）。1.01 を超える本が二度続けて回しても出たら遅くなったと読み、一つずつ説明する。"
+                "他のビルドや検査と重なると揺れが大きくなるので、一本ずつ静かな時に回す")
+    p.set_defaults(parser_=p)
+
+
 def probe_args(p):
     p.add_argument("cases", help="the file of the cases: `=== <name>` starts a case (a package), `--- <path>` a file "
                    "of it (none: main.onsa); onsa.toml is added when not given")
@@ -860,6 +983,12 @@ COMMANDS = {
                "バイナリの時間を、回ごとに順を入れ替えて交互に測り、回ごとの最小（壁時計と cpu）を、引数の順の番号と経路の違う部分の名前で並べる",
                "リファクタリングの前後で性能が落ちていないかを測り、報告に並べるとき（rules/refactoring.md 8.2）。前のバイナリは diags と同じ",
                "compare.py speed all <主のツリー>/target/base/<基>/onsa target/debug/onsa"),
+    "run-c": C(run_c_args, run_c, ("parent", "i", "b"),
+               "tools/run_c の本（Onsa のパッケージと手書きの C の main）を二つのバイナリで build し、同じ clang -O2 の旗で main と繋いで"
+               "一本ずつ順に回し、本ごとの process の輪の最小の時間と比、出力の値の食い違い、関数ごとのスタックの枠の違いを並べる",
+               "生成する C の形を変える単位（W8-03・W8-05・W8-07 の出力を変える単位）の受け入れで、生成コードの実行の時間が落ちていないかを"
+               "測るとき（S-1264 の P4。gate には入れない）。前のバイナリは diags と同じ。遅くなった本は一つずつ説明する",
+               "compare.py run-c <主のツリー>/target/base/<基>/onsa target/debug/onsa"),
     "probe": C(probe_args, probe, ("i", "b"),
                "一つのファイルに書いた事例（=== でパッケージ、--- でファイル）を --out の下に書き、バイナリごとの終了コードと診断（コードと位置）を事例ごとに一行で並べる（全てのバイナリで同じなら一行）",
                "前からある挙動かを、dev のバイナリと作業のバイナリで比べるとき（壊す側、実装の担当）。dev のバイナリは diags と同じ。--full で全ての出力、--only で一つの事例、--cmd で check --json 以外の命令",

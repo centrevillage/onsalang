@@ -1,0 +1,43 @@
+// A bench of `compare.py run-c`: eight voices of a `par~` (a naive saw through a one-pole low-pass, panned), each
+// voice a struct literal, mixed in a `for` that assigns the fields of a struct. No panic.
+use std.math.floor
+
+const V: U32 = 8
+
+pub struct Stereo { l: F32, r: F32 }
+
+rt fn wrap01(x: F32) -> F32 {
+  x - floor(x)
+}
+
+flow voice(f: F32 at block, pan: F32 at block, cut: F32 at block) -> Stereo at sample {
+  let ph = wrap01(prev~(^ph) + (f / sample_rate()))
+  let p = prev~(^y)
+  let y = p + (cut * (((2.0 * ph) - 1.0) - p))
+  Stereo { l: y * (1.0 - pan), r: y * pan }
+}
+
+rt fn mix(vs: [Stereo; V]) -> Stereo {
+  var m = Stereo { l: 0.0, r: 0.0 }
+  for i in 0 ..< V {
+    m.l = m.l + vs[i].l
+    m.r = m.r + vs[i].r
+  }
+  m
+}
+
+@export
+pub flow voices(
+  @param(min: 20.0, max: 2000.0, default: 110.0, unit: "Hz")
+  f0: F32 at block,
+  @param(min: 0.0, max: 0.1, default: 0.02)
+  detune: F32 at block,
+  @param(min: 0.0, max: 1.0, default: 0.3)
+  cut: F32 at block,
+) -> Stereo at sample {
+  let vs = par~ i in 0 ..< V {
+    voice~(f0 * (1.0 + (detune * F32.round_from(i))), F32.round_from(i) / 7.0, cut)
+  }
+  let m = mix(vs)
+  Stereo { l: m.l * 0.125, r: m.r * 0.125 }
+}

@@ -1,0 +1,14 @@
+# A bench of `compare.py run-c` (not a case): built into a temporary directory, linked with main.c.
+[package]
+name = "upchain"
+edition = "2026"
+
+[export]
+prefix = "upchain_"
+
+[targets.host]
+kind = "source"
+lang = "c"
+platform = "host"
+panic = "poison"
+provides = []
