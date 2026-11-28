@@ -245,7 +245,8 @@ pub fn lower(pkg: &Package, a: &Analysis) -> Result<Module, LowerFailure> {
 /// (S-67): the innermost expression that uses it becomes a placeholder and
 /// the item is lowered again (see the module's documentation). The Core is
 /// then dropped, so no placeholder leaves this function. The first internal
-/// failure stops lowering. A Core that comes out is verified ([`verified`]).
+/// failure stops lowering, and so does a Core too deep (V-22), before the
+/// passes that recurse. A Core that comes out is verified ([`verified`]).
 pub fn lower_with(pkg: &Package, a: &Analysis, opts: &LowerOptions) -> Result<Module, LowerFailure> {
     let flat = onsa_sema::flatten(pkg);
     let places: usize =
@@ -279,12 +280,18 @@ pub fn lower_with(pkg: &Package, a: &Analysis, opts: &LowerOptions) -> Result<Mo
         lw.lowering = Some(fid);
         lw.lower_item(span, |lw| lw.lower_fn(def, &args, fid))?;
     }
-    // A placeholder is no call: what an E0200 hides is no edge of a cycle (S-911).
     let mut diagnostics = std::mem::take(&mut lw.unsupported);
-    diagnostics.extend(crate::rt_cycles::rt_cycles(&lw.m, a, &flat));
+    // V-22 before the walks, which recurse: of a Core too deep, the E0200s
+    // if any (a Core with placeholders is dropped anyway).
+    let deep = crate::verify::depth::module(&lw.m);
+    if deep.is_ok() {
+        // A placeholder is no call: what an E0200 hides is no edge of a cycle (S-911).
+        diagnostics.extend(crate::rt_cycles::rt_cycles(&lw.m, a, &flat));
+    }
     if !diagnostics.is_empty() {
         return Err(LowerFailure::Diagnostics(diagnostics));
     }
+    deep.map_err(|e| verify_failure(&lw.m, e))?;
     finish(lw.m)
 }
 
@@ -309,10 +316,16 @@ fn finish(mut module: Module) -> Result<Module, LowerFailure> {
 /// phase, not counted in the lowering's.
 pub(crate) fn verified(module: Module) -> Result<Module, LowerFailure> {
     let _verify = onsa_diag::timing::phase(onsa_diag::timing::Phase::Verify);
-    match crate::verify::with_item(&module) {
+    match crate::verify::verify(&module) {
         Ok(()) => Ok(module),
-        Err((error, item_core)) => Err(LowerFailure::Verify { error, item_core }),
+        Err(e) => Err(verify_failure(&module, e)),
     }
+}
+
+/// The failure `e` of the verifier on `m`, with the Core of its item (R-82).
+fn verify_failure(m: &Module, e: crate::VerifyError) -> LowerFailure {
+    let (error, item_core) = crate::verify::failure(m, e);
+    LowerFailure::Verify { error, item_core }
 }
 
 impl<'a> Lowerer<'a> {

@@ -5,50 +5,17 @@
 //! the chains before was 1000 deep.
 
 use super::core;
-use crate::ir::*;
-use crate::walk::{Child, Part, Role, block_children, expr_children, place_children, stmt_children};
+use crate::verify::depth::deepest;
 
-/// The number of nodes on the longest path from `c` down (a block, a
-/// statement, an expression and a place are each one).
-fn child_depth(c: Child) -> usize {
-    match c {
-        Child::Expr(e, ..) => 1 + max_of(|f| expr_children(e, f)),
-        Child::Block(b, ..) => block_depth(b),
-        Child::Place(p, role) => 1 + max_of(|f| place_children(p, role, f)),
-    }
-}
-
-fn block_depth(b: &Block) -> usize {
-    let mut d = 0;
-    block_children(b, Role::Read, &mut |p| {
-        d = d.max(match p {
-            Part::Stmt(s) => 1 + max_of(|f| stmt_children(s, f)),
-            Part::Value(v, _) => child_depth(Child::Expr(v, crate::walk::Eval::Always, Role::Read)),
-        })
-    });
-    1 + d
-}
-
-fn max_of<'a>(list: impl FnOnce(&mut dyn FnMut(Child<'a>))) -> usize {
-    let mut d = 0;
-    list(&mut |c| d = d.max(child_depth(c)));
-    d
-}
-
-/// The depth of the deepest body of `m`.
-fn deepest(m: &Module) -> usize {
-    m.fns.iter().filter_map(|f| f.body.as_ref()).map(block_depth).max().unwrap_or(0)
-}
-
-/// The depth of the deepest body of `src` lowered, on a large stack.
-fn depth_of(src: String) -> usize {
+/// The depth of the deepest item of `src` lowered (V-22), on a large stack.
+fn depth_of(src: String) -> u32 {
     onsa_diag::stack::spawn("chains", move || deepest(&core(&src))).unwrap().join().unwrap()
 }
 
 /// The deepest body of the chain of `n` is deeper than that of a chain of 2
 /// by the levels of a tree, ⌈log2 n⌉ = `levels`, not by `n`: at most two
 /// nodes for each level (an `IfExpr` and its block).
-fn assert_log_deep(of: impl Fn(usize) -> String, n: usize, levels: usize) {
+fn assert_log_deep(of: impl Fn(usize) -> String, n: usize, levels: u32) {
     let (short, long) = (depth_of(of(2)), depth_of(of(n)));
     assert!(long <= short + 2 * levels, "{n}: {long}, 2: {short}");
 }

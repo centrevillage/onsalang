@@ -9,6 +9,7 @@ use onsa_diag::Span;
 
 use crate::ir::*;
 
+pub(crate) mod depth;
 mod ids;
 mod prims;
 mod scope;
@@ -22,6 +23,7 @@ mod types;
 pub enum Rule {
     V01 = 1, V02, V03, V04, V05, V06, V07, V08, V09, V10,
     V11, V12, V13, V14, V15, V16, V17, V18, V19, V20,
+    V22 = 22,
 }
 
 impl fmt::Display for Rule {
@@ -49,16 +51,22 @@ impl fmt::Display for VerifyError {
 
 impl std::error::Error for VerifyError {}
 
-/// [`verify`], and on a failure the Core of its item (`dump_item`): what a
+/// [`verify`], and on a failure the Core of its item ([`failure`]): what a
 /// stage that verifies its output reports (R-82).
 pub fn with_item(m: &Module) -> Result<(), (VerifyError, String)> {
-    verify(m).map_err(|e| {
-        let item_core = crate::dump_item(m, &e.fn_name);
-        (e, item_core)
-    })
+    verify(m).map_err(|e| failure(m, e))
 }
 
+/// The failure `e` of `m` with the Core of its item (`dump_item`), but of
+/// a Core too deep to dump (V-22) none.
+pub(crate) fn failure(m: &Module, e: VerifyError) -> (VerifyError, String) {
+    let item_core = if e.rule == Rule::V22 { String::new() } else { crate::dump_item(m, &e.fn_name) };
+    (e, item_core)
+}
+
+/// The rules of the Core of `m`: V-22 first, as the other rules recurse on the Core.
 pub fn verify(m: &Module) -> Result<(), VerifyError> {
+    depth::module(m)?;
     ids::table(m)?;
     for c in &m.consts {
         let mut v = V {
