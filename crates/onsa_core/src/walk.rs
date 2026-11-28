@@ -8,6 +8,10 @@
 //! then its place). A reader handles [`Child::Block`] in one place, where a
 //! scope opens and closes ([`Scope`]); the matches on `StmtKind`, `ExprKind`
 //! and `Place` have no `_` arm, so a new form is a compile error in the list.
+//!
+//! Each list has a shared version ([`Child`], [`Part`]) and a `&mut` one
+//! ([`ChildMut`], [`PartMut`]) for the passes that rewrite Core in place;
+//! one text makes both (`lists!`), so they cannot differ.
 
 use crate::ir::{Block, Expr, ExprKind, FnDef, Mode, Place, Stmt, StmtKind};
 use crate::prim::Prim;
@@ -19,6 +23,14 @@ pub enum Child<'a> {
     /// A block: its statements, then its value ([`block_children`]).
     Block(&'a Block, Scope, Eval),
     Place(&'a Place, PlaceRole),
+}
+
+/// A [`Child`] that its reader may change.
+#[derive(Debug)]
+pub enum ChildMut<'a> {
+    Expr(&'a mut Expr, Eval, Role),
+    Block(&'a mut Block, Scope, Eval),
+    Place(&'a mut Place, PlaceRole),
 }
 
 /// How often a child is evaluated when its parent is.
@@ -65,96 +77,6 @@ pub enum PlaceRole {
     Write,
 }
 
-/// The direct parts of `s`, in evaluation order.
-pub fn stmt_children<'a>(s: &'a Stmt, f: &mut dyn FnMut(Child<'a>)) {
-    use Eval::{Always, Conditional, Loop};
-    let read = |e| Child::Expr(e, Always, Role::Read);
-    match &s.kind {
-        StmtKind::Let(_, e) | StmtKind::Return(Some(e)) => f(Child::Expr(e, Always, Role::Dest)),
-        StmtKind::Assign(p, e) => {
-            f(Child::Expr(e, Always, Role::Dest));
-            f(Child::Place(p, PlaceRole::Write));
-        }
-        StmtKind::Expr(e) => f(read(e)),
-        StmtKind::If(c, a, b) => {
-            f(read(c));
-            f(Child::Block(a, Scope::Opens, Conditional));
-            f(Child::Block(b, Scope::Opens, Conditional));
-        }
-        StmtKind::While(c, b) => {
-            f(Child::Expr(c, Loop, Role::Read));
-            f(Child::Block(b, Scope::Opens, Loop));
-        }
-        StmtKind::ForRange { lo, hi, body: b, .. } => {
-            f(read(lo));
-            f(read(hi));
-            f(Child::Block(b, Scope::Opens, Loop));
-        }
-        StmtKind::Break | StmtKind::Continue | StmtKind::Return(None) => {}
-    }
-}
-
-/// The direct parts of place `p` used as `role`: its base is used the same
-/// way, and an index is read.
-pub fn place_children<'a>(p: &'a Place, role: PlaceRole, f: &mut dyn FnMut(Child<'a>)) {
-    match p {
-        Place::Local(_) => {}
-        Place::Field(b, _) => f(Child::Place(b, role)),
-        Place::Index(b, i, ..) => {
-            f(Child::Place(b, role));
-            f(Child::Expr(i, Eval::Always, Role::Read));
-        }
-    }
-}
-
-/// The direct parts of `e`, in evaluation order. An expression has no
-/// [`Child::Place`].
-pub fn expr_children<'a>(e: &'a Expr, f: &mut dyn FnMut(Child<'a>)) {
-    use Eval::{Always, Conditional};
-    let mut each = |xs: &mut dyn Iterator<Item = &'a Expr>, role| xs.for_each(|x| f(Child::Expr(x, Always, role)));
-    let pair = |a: &'a Expr, b: &'a Expr| [a, b].into_iter();
-    match &e.kind {
-        ExprKind::Lit(_) | ExprKind::Local(_) | ExprKind::Const(_) | ExprKind::Zeroed => {}
-        ExprKind::Unary(_, x)
-        | ExprKind::Cast(x)
-        | ExprKind::SpanOf(x)
-        | ExprKind::Tag(x)
-        | ExprKind::Field { base: x, .. }
-        | ExprKind::Payload { base: x, .. } => f(Child::Expr(x, Always, Role::Read)),
-        ExprKind::Binary { lhs, rhs, .. } | ExprKind::Cmp { lhs, rhs, .. } => each(&mut pair(lhs, rhs), Role::Read),
-        ExprKind::Index { base, index, .. } => each(&mut pair(base, index), Role::Read),
-        ExprKind::Logic { lhs, rhs, .. } => {
-            f(Child::Expr(lhs, Always, Role::Read));
-            f(Child::Expr(rhs, Conditional, Role::Read));
-        }
-        ExprKind::Call { args, .. } | ExprKind::Prim { args, .. } => args.iter().for_each(|a| {
-            let role = match a.mode {
-                Mode::Borrow => Role::Read,
-                Mode::Inout => Role::Inout,
-                Mode::Move => Role::Consume,
-            };
-            f(Child::Expr(&a.expr, Always, role))
-        }),
-        ExprKind::Struct { fields, .. } => each(&mut fields.iter().map(|(_, x)| x), Role::Dest),
-        ExprKind::Variant { fields: xs, .. } | ExprKind::Array(xs) | ExprKind::Tuple(xs) => {
-            each(&mut xs.iter(), Role::Dest)
-        }
-        ExprKind::Repeat { elem, .. } => f(Child::Expr(elem, Always, Role::Dest)),
-        ExprKind::IfExpr { cond, then, else_ } => {
-            f(Child::Expr(cond, Always, Role::Read));
-            f(Child::Block(then, Scope::Opens, Conditional));
-            f(Child::Block(else_, Scope::Opens, Conditional));
-        }
-        ExprKind::Switch { scrutinee, arms, default } => {
-            f(Child::Expr(scrutinee, Always, Role::Read));
-            let blocks = arms.iter().map(|(_, b)| b).chain(default);
-            blocks.for_each(|b| f(Child::Block(b, Scope::Opens, Conditional)));
-        }
-        ExprKind::Block(b) => f(Child::Block(b, Scope::Inline, Always)),
-        ExprKind::Panic { shown, .. } => shown.iter().for_each(|x| f(Child::Expr(x, Eval::Observed, Role::Read))),
-    }
-}
-
 /// A part of a block ([`block_children`]).
 #[derive(Debug, Clone, Copy)]
 pub enum Part<'a> {
@@ -163,16 +85,130 @@ pub enum Part<'a> {
     Value(&'a Expr, Role),
 }
 
-/// The parts of block `b`, in order: each statement, then the value. The
-/// value goes where the value of the block goes, so it has `role`, the role
-/// of the expression the block is a part of (of a function's body, `Dest`);
-/// a reader that reads no role gives `Read`.
-pub fn block_children<'a>(b: &'a Block, role: Role, f: &mut dyn FnMut(Part<'a>)) {
-    b.stmts.iter().for_each(|s| f(Part::Stmt(s)));
-    if let Some(v) = &b.value {
-        f(Part::Value(v, role));
-    }
+/// A [`Part`] that its reader may change.
+#[derive(Debug)]
+pub enum PartMut<'a> {
+    Stmt(&'a mut Stmt),
+    Value(&'a mut Expr, Role),
 }
+
+/// The four lists, written once: given the child and the part types, the
+/// method that iterates a vector, the names of the four functions and,
+/// for the `&mut` version, `mut` (D-15: the two versions give the same
+/// children, in the same order, with the same `Eval`, `Scope` and `Role`).
+macro_rules! lists {
+    ($child:ident, $part:ident, $iter:ident, $stmt:ident, $place:ident, $expr:ident, $block:ident $(, $m:tt)?) => {
+        /// The direct parts of `s`, in evaluation order.
+        pub fn $stmt<'a>(s: &'a $($m)? Stmt, f: &mut dyn FnMut($child<'a>)) {
+            use Eval::{Always, Conditional, Loop};
+            let read = |e| $child::Expr(e, Always, Role::Read);
+            match &$($m)? s.kind {
+                StmtKind::Let(_, e) | StmtKind::Return(Some(e)) => f($child::Expr(e, Always, Role::Dest)),
+                StmtKind::Assign(p, e) => {
+                    f($child::Expr(e, Always, Role::Dest));
+                    f($child::Place(p, PlaceRole::Write));
+                }
+                StmtKind::Expr(e) => f(read(e)),
+                StmtKind::If(c, a, b) => {
+                    f(read(c));
+                    f($child::Block(a, Scope::Opens, Conditional));
+                    f($child::Block(b, Scope::Opens, Conditional));
+                }
+                StmtKind::While(c, b) => {
+                    f($child::Expr(c, Loop, Role::Read));
+                    f($child::Block(b, Scope::Opens, Loop));
+                }
+                StmtKind::ForRange { lo, hi, body: b, .. } => {
+                    f(read(lo));
+                    f(read(hi));
+                    f($child::Block(b, Scope::Opens, Loop));
+                }
+                StmtKind::Break | StmtKind::Continue | StmtKind::Return(None) => {}
+            }
+        }
+
+        /// The direct parts of place `p` used as `role`: its base is used the
+        /// same way, and an index is read.
+        pub fn $place<'a>(p: &'a $($m)? Place, role: PlaceRole, f: &mut dyn FnMut($child<'a>)) {
+            match p {
+                Place::Local(_) => {}
+                Place::Field(b, _) => f($child::Place(b, role)),
+                Place::Index(b, i, ..) => {
+                    f($child::Place(b, role));
+                    f($child::Expr(i, Eval::Always, Role::Read));
+                }
+            }
+        }
+
+        /// The direct parts of `e`, in evaluation order. An expression has no
+        /// [`Child::Place`].
+        pub fn $expr<'a>(e: &'a $($m)? Expr, f: &mut dyn FnMut($child<'a>)) {
+            use Eval::{Always, Conditional};
+            let mut each = |xs: &mut dyn Iterator<Item = &'a $($m)? Expr>, role| {
+                xs.for_each(|x| f($child::Expr(x, Always, role)))
+            };
+            let pair = |a: &'a $($m)? Expr, b: &'a $($m)? Expr| [a, b].into_iter();
+            match &$($m)? e.kind {
+                ExprKind::Lit(_) | ExprKind::Local(_) | ExprKind::Const(_) | ExprKind::Zeroed => {}
+                ExprKind::Unary(_, x)
+                | ExprKind::Cast(x)
+                | ExprKind::SpanOf(x)
+                | ExprKind::Tag(x)
+                | ExprKind::Field { base: x, .. }
+                | ExprKind::Payload { base: x, .. } => f($child::Expr(x, Always, Role::Read)),
+                ExprKind::Binary { lhs, rhs, .. } | ExprKind::Cmp { lhs, rhs, .. } => {
+                    each(&mut pair(lhs, rhs), Role::Read)
+                }
+                ExprKind::Index { base, index, .. } => each(&mut pair(base, index), Role::Read),
+                ExprKind::Logic { lhs, rhs, .. } => {
+                    f($child::Expr(lhs, Always, Role::Read));
+                    f($child::Expr(rhs, Conditional, Role::Read));
+                }
+                ExprKind::Call { args, .. } | ExprKind::Prim { args, .. } => args.$iter().for_each(|a| {
+                    let role = match a.mode {
+                        Mode::Borrow => Role::Read,
+                        Mode::Inout => Role::Inout,
+                        Mode::Move => Role::Consume,
+                    };
+                    f($child::Expr(&$($m)? a.expr, Always, role))
+                }),
+                ExprKind::Struct { fields, .. } => each(&mut fields.$iter().map(|(_, x)| x), Role::Dest),
+                ExprKind::Variant { fields: xs, .. } | ExprKind::Array(xs) | ExprKind::Tuple(xs) => {
+                    each(&mut xs.$iter(), Role::Dest)
+                }
+                ExprKind::Repeat { elem, .. } => f($child::Expr(elem, Always, Role::Dest)),
+                ExprKind::IfExpr { cond, then, else_ } => {
+                    f($child::Expr(cond, Always, Role::Read));
+                    f($child::Block(then, Scope::Opens, Conditional));
+                    f($child::Block(else_, Scope::Opens, Conditional));
+                }
+                ExprKind::Switch { scrutinee, arms, default } => {
+                    f($child::Expr(scrutinee, Always, Role::Read));
+                    let blocks = arms.$iter().map(|(_, b)| b).chain(default);
+                    blocks.for_each(|b| f($child::Block(b, Scope::Opens, Conditional)));
+                }
+                ExprKind::Block(b) => f($child::Block(b, Scope::Inline, Always)),
+                ExprKind::Panic { shown, .. } => {
+                    shown.$iter().for_each(|x| f($child::Expr(x, Eval::Observed, Role::Read)))
+                }
+            }
+        }
+
+        /// The parts of block `b`, in order: each statement, then the value.
+        /// The value goes where the value of the block goes, so it has `role`,
+        /// the role of the expression the block is a part of (of a function's
+        /// body, `Dest`); a reader that reads no role gives `Read`.
+        pub fn $block<'a>(b: &'a $($m)? Block, role: Role, f: &mut dyn FnMut($part<'a>)) {
+            b.stmts.$iter().for_each(|s| f($part::Stmt(s)));
+            if let Some(v) = &$($m)? b.value {
+                f($part::Value(v, role));
+            }
+        }
+    };
+}
+
+lists!(Child, Part, iter, stmt_children, place_children, expr_children, block_children);
+lists!(ChildMut, PartMut, iter_mut, stmt_children_mut, place_children_mut, expr_children_mut, block_children_mut, mut);
 
 /// The places an `inout` argument `e` writes, given to `f`, each an
 /// expression that is a place ([`Expr::as_place`]); whether `e` is of the

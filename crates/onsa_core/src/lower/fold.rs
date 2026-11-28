@@ -30,6 +30,9 @@
 
 use crate::ir::*;
 use crate::prim::Prim;
+use crate::walk::{
+    ChildMut, PartMut, Role, block_children_mut, expr_children_mut, place_children_mut, stmt_children_mut,
+};
 
 /// Fold every function body of `m`.
 pub fn fold_module(m: &mut Module) {
@@ -48,10 +51,13 @@ struct Folder<'m> {
 }
 
 impl Folder<'_> {
+    /// Each part of `b` folded, then the `for`s that never run dropped.
     fn block(&self, b: &mut Block) {
-        let stmts = std::mem::take(&mut b.stmts);
-        for mut s in stmts {
-            self.stmt(&mut s);
+        block_children_mut(b, Role::Read, &mut |p| match p {
+            PartMut::Stmt(s) => self.stmt(s),
+            PartMut::Value(v, _) => self.expr(v),
+        });
+        for s in std::mem::take(&mut b.stmts) {
             match s.kind {
                 // It never runs: its bounds stay as statements.
                 StmtKind::ForRange { lo, hi, inclusive: false, .. } if self.never_runs(&hi) => {
@@ -59,9 +65,6 @@ impl Folder<'_> {
                 }
                 kind => b.stmts.push(Stmt { span: s.span, kind }),
             }
-        }
-        if let Some(v) = &mut b.value {
-            self.expr(v);
         }
     }
 
@@ -81,91 +84,29 @@ impl Folder<'_> {
             .collect()
     }
 
+    fn child(&self, c: ChildMut<'_>) {
+        match c {
+            ChildMut::Expr(x, ..) => self.expr(x),
+            ChildMut::Block(b, ..) => self.block(b),
+            ChildMut::Place(p, role) => place_children_mut(p, role, &mut |c| self.child(c)),
+        }
+    }
+
+    /// The parts of `s` folded, then an assignment of a place to itself
+    /// made the place as an expression statement.
     fn stmt(&self, s: &mut Stmt) {
-        match &mut s.kind {
-            StmtKind::Let(_, e) | StmtKind::Expr(e) => self.expr(e),
-            StmtKind::Assign(p, e) => {
-                self.place(p);
-                self.expr(e);
-                if e.as_place().is_some_and(|q| same_path(p, &q)) {
-                    let e = std::mem::replace(e, Expr::new(Types::UNIT, s.span, ExprKind::Lit(Lit::Unit)));
-                    s.kind = StmtKind::Expr(e);
-                }
-            }
-            StmtKind::If(c, a, b) => {
-                self.expr(c);
-                self.block(a);
-                self.block(b);
-            }
-            StmtKind::While(c, b) => {
-                self.expr(c);
-                self.block(b);
-            }
-            StmtKind::ForRange { lo, hi, body: b, .. } => {
-                self.expr(lo);
-                self.expr(hi);
-                self.block(b);
-            }
-            StmtKind::Return(Some(e)) => self.expr(e),
-            StmtKind::Return(None) | StmtKind::Break | StmtKind::Continue => {}
+        stmt_children_mut(s, &mut |c| self.child(c));
+        if let StmtKind::Assign(p, e) = &mut s.kind
+            && e.as_place().is_some_and(|q| same_path(p, &q))
+        {
+            let e = std::mem::replace(e, Expr::new(Types::UNIT, s.span, ExprKind::Lit(Lit::Unit)));
+            s.kind = StmtKind::Expr(e);
         }
     }
 
-    fn place(&self, p: &mut Place) {
-        match p {
-            Place::Local(_) => {}
-            Place::Field(b, _) => self.place(b),
-            Place::Index(b, i, ..) => {
-                self.place(b);
-                self.expr(i);
-            }
-        }
-    }
-
+    /// The parts of `e` folded, then `e` if it is a comparison decided.
     fn expr(&self, e: &mut Expr) {
-        match &mut e.kind {
-            ExprKind::Lit(_) | ExprKind::Local(_) | ExprKind::Const(_) | ExprKind::Zeroed => {}
-            ExprKind::Unary(_, x) | ExprKind::Cast(x) | ExprKind::SpanOf(x) | ExprKind::Tag(x) => self.expr(x),
-            ExprKind::Binary { lhs, rhs, .. } | ExprKind::Cmp { lhs, rhs, .. } | ExprKind::Logic { lhs, rhs, .. } => {
-                self.expr(lhs);
-                self.expr(rhs);
-            }
-            ExprKind::Call { args, .. } | ExprKind::Prim { args, .. } => {
-                for a in args {
-                    self.expr(&mut a.expr);
-                }
-            }
-            ExprKind::Field { base, .. } | ExprKind::Payload { base, .. } => self.expr(base),
-            ExprKind::Index { base, index, .. } => {
-                self.expr(base);
-                self.expr(index);
-            }
-            ExprKind::Struct { fields, .. } => fields.iter_mut().for_each(|(_, x)| self.expr(x)),
-            ExprKind::Variant { fields: xs, .. }
-            | ExprKind::Array(xs)
-            | ExprKind::Tuple(xs)
-            | ExprKind::Panic { shown: xs, .. } => {
-                for x in xs {
-                    self.expr(x);
-                }
-            }
-            ExprKind::Repeat { elem, .. } => self.expr(elem),
-            ExprKind::IfExpr { cond, then, else_ } => {
-                self.expr(cond);
-                self.block(then);
-                self.block(else_);
-            }
-            ExprKind::Switch { scrutinee, arms, default } => {
-                self.expr(scrutinee);
-                for (_, b) in arms {
-                    self.block(b);
-                }
-                if let Some(b) = default {
-                    self.block(b);
-                }
-            }
-            ExprKind::Block(b) => self.block(b),
-        }
+        expr_children_mut(e, &mut |c| self.child(c));
         if let ExprKind::Cmp { op, lhs, rhs } = &e.kind
             && let Some(value) = self.decided(*op, lhs, rhs)
         {

@@ -10,7 +10,8 @@ use onsa_diag::{FileId, Span};
 use crate::ir::*;
 use crate::prim::Prim;
 use crate::walk::{
-    Child, Part, Role, block_children, expr_children, has_return, place_children, stmt_children, walk_block, walk_stmt,
+    Child, ChildMut, Part, PartMut, Role, block_children, block_children_mut, expr_children, expr_children_mut,
+    has_return, place_children, place_children_mut, stmt_children, stmt_children_mut, walk_block, walk_stmt,
     written_places,
 };
 
@@ -70,18 +71,36 @@ fn shown(c: Child<'_>) -> String {
     }
 }
 
+/// A child of the `&mut` lists as one of the shared lists, to show it.
+fn shared(c: ChildMut<'_>) -> Child<'_> {
+    match c {
+        ChildMut::Expr(x, eval, role) => Child::Expr(x, eval, role),
+        ChildMut::Block(b, scope, eval) => Child::Block(b, scope, eval),
+        ChildMut::Place(p, role) => Child::Place(p, role),
+    }
+}
+
+/// The list of each version, after checking that the two are the same
+/// (one text makes both, `lists!` in `walk.rs`).
+fn same(shared: Vec<String>, of_mut: Vec<String>) -> Vec<String> {
+    assert_eq!(shared, of_mut, "the `&mut` list gives what the shared one gives");
+    shared
+}
+
 fn of_stmt(kind: StmtKind) -> Vec<String> {
-    let s = st(kind);
-    let mut out = Vec::new();
+    let mut s = st(kind);
+    let (mut out, mut out_mut) = (Vec::new(), Vec::new());
     stmt_children(&s, &mut |c| out.push(shown(c)));
-    out
+    stmt_children_mut(&mut s, &mut |c| out_mut.push(shown(shared(c))));
+    same(out, out_mut)
 }
 
 fn of_expr(kind: ExprKind) -> Vec<String> {
-    let x = e(kind);
-    let mut out = Vec::new();
+    let mut x = e(kind);
+    let (mut out, mut out_mut) = (Vec::new(), Vec::new());
     expr_children(&x, &mut |c| out.push(shown(c)));
-    out
+    expr_children_mut(&mut x, &mut |c| out_mut.push(shown(shared(c))));
+    same(out, out_mut)
 }
 
 /// `xs[i]` of the local 0, named `[i]`.
@@ -112,9 +131,10 @@ fn the_children_of_each_statement() {
 #[test]
 fn the_base_of_a_place_has_its_role_and_an_index_is_read() {
     let list = |p: &Place| {
-        let mut out = Vec::new();
+        let (mut out, mut out_mut, mut p_mut) = (Vec::new(), Vec::new(), p.clone());
         place_children(p, crate::walk::PlaceRole::Write, &mut |c| out.push(shown(c)));
-        out
+        place_children_mut(&mut p_mut, crate::walk::PlaceRole::Write, &mut |c| out_mut.push(shown(shared(c))));
+        same(out, out_mut)
     };
     assert!(list(&Place::Local(LocalId(0))).is_empty());
     assert_eq!(list(&Place::Field(Box::new(indexed(2)), 1)), ["[2] Write"]);
@@ -176,14 +196,20 @@ fn the_children_of_each_expression() {
 #[test]
 fn a_block_gives_its_statements_then_its_value_of_the_role_given() {
     let list = |b: &Block, role| {
-        let mut out = Vec::new();
+        let (mut out, mut out_mut, mut b_mut) = (Vec::new(), Vec::new(), b.clone());
         block_children(b, role, &mut |p| {
             out.push(match p {
                 Part::Stmt(s) => format!("{:?}", s.kind),
                 Part::Value(v, role) => format!("{} {role:?}", name(v)),
             })
         });
-        out
+        block_children_mut(&mut b_mut, role, &mut |p| {
+            out_mut.push(match p {
+                PartMut::Stmt(s) => format!("{:?}", s.kind),
+                PartMut::Value(v, role) => format!("{} {role:?}", name(v)),
+            })
+        });
+        same(out, out_mut)
     };
     for role in [Role::Read, Role::Consume, Role::Dest, Role::Inout] {
         let b = Block { stmts: vec![st(StmtKind::Break), st(StmtKind::Continue)], value: Some(bx(n(1))) };
