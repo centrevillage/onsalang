@@ -95,7 +95,7 @@ fn foreign(i: usize) -> CTy {
 
 #[test]
 fn a_struct_literal_or_a_variant_of_another_type_is_rejected() {
-    let one = || vec![lit(Types::U32, Lit::Int(1))];
+    let one = || vec![(0, lit(Types::U32, Lit::Int(1)))];
     let m = base();
     rejected(
         &with_g(m, Expr::new(Types::BOOL, sp(), ExprKind::Struct { ty: TypeId(0), fields: one() })),
@@ -110,15 +110,38 @@ fn a_struct_literal_or_a_variant_of_another_type_is_rejected() {
         Rule::V01,
         "struct literal: type mismatch `S` vs `T`",
     );
-    let variant = ExprKind::Variant { ty: TypeId(1), tag: 0, fields: one() };
+    let variant = ExprKind::Variant { ty: TypeId(1), tag: 0, fields: vec![lit(Types::U32, Lit::Int(1))] };
     rejected(&with_g(base(), Expr::new(Types::BOOL, sp(), variant)), Rule::V01, "variant: type mismatch `E` vs `Bool`");
+}
+
+/// V-01 (W8-03): a struct literal gives each field once, in the order of
+/// evaluation (written `b` then `a` is one): a field given twice or left out
+/// is rejected, and a number past the declaration is V-20.
+#[test]
+fn a_struct_literal_gives_each_field_exactly_once() {
+    let mut m = base();
+    let fields = vec![("a".into(), Types::U32), ("b".into(), Types::U32)];
+    m.types.push(TypeDef { name: "P".into(), kind: TypeDefKind::Struct { fields } });
+    let p = m.tys.intern(TyKind::Struct(TypeId(2)));
+    let of = |fields: &[u32]| {
+        let fields = fields.iter().map(|&k| (k, lit(Types::U32, Lit::Int(1)))).collect();
+        let mut m = with_g(m.clone(), Expr::new(p, sp(), ExprKind::Struct { ty: TypeId(2), fields }));
+        m.fill_all_facts();
+        m
+    };
+    assert!(verify(&of(&[1, 0])).is_ok(), "{:?}", verify(&of(&[1, 0])));
+    rejected(&of(&[0, 0]), Rule::V01, "struct literal field 0 given twice");
+    rejected(&of(&[1, 1]), Rule::V01, "struct literal field 1 given twice");
+    rejected(&of(&[1]), Rule::V01, "struct literal field count");
+    rejected(&of(&[0, 1, 1]), Rule::V01, "struct literal field count");
+    rejected(&of(&[0, 2]), Rule::V20, "struct literal field 2 out of range");
 }
 
 #[test]
 fn a_field_a_view_or_an_argument_of_another_type_is_rejected() {
     let mut m = base();
     let s = m.tys.intern(TyKind::Struct(TypeId(0)));
-    let fields = vec![lit(Types::BOOL, Lit::Bool(true))];
+    let fields = vec![(0, lit(Types::BOOL, Lit::Bool(true)))];
     rejected(
         &with_g(m, Expr::new(s, sp(), ExprKind::Struct { ty: TypeId(0), fields })),
         Rule::V01,

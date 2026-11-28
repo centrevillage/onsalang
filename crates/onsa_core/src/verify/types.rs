@@ -302,7 +302,15 @@ impl<'a> V<'a> {
                 if defs.len() != fields.len() {
                     return Err(self.err(Rule::V01, "struct literal field count"));
                 }
-                for (f, (_, dt)) in fields.iter().zip(defs) {
+                // Each field once, in any order (the order of evaluation).
+                let mut seen = vec![false; defs.len()];
+                for (k, f) in fields {
+                    let Some((_, dt)) = defs.get(*k as usize) else {
+                        return Err(self.err(Rule::V20, format!("struct literal field {k} out of range")));
+                    };
+                    if std::mem::replace(&mut seen[*k as usize], true) {
+                        return Err(self.err(Rule::V01, format!("struct literal field {k} given twice")));
+                    }
                     self.same(f.ty, *dt, "struct field")?;
                 }
                 self.is(&TyKind::Struct(*id), ty, "struct literal")?;

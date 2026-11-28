@@ -30,7 +30,7 @@ pub(crate) fn tilde_if(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId, ty: CTy) -> R
         taken = Expr::new(Types::U32, span, ExprKind::IfExpr { cond: Box::new(c), then, else_: value(taken) });
     }
     let mut stmts = Vec::new();
-    let taken = materialize(cx, taken, &mut stmts, "__taken");
+    let taken = materialize(cx, taken, &mut stmts, "__taken", &lw.m.tys);
     let bodies: Vec<ExprId> = chain.links.iter().map(|l| l.then).chain([last]).collect();
     every(lw, cx, &bodies, taken, ty, stmts, span)
 }
@@ -81,7 +81,7 @@ fn every(
         let Some(t) = b.value.as_ref().map(|v| v.ty) else {
             return Err(internal(cx.ast.expr(x).span, "a branch of an `if~` or `match~` with no value"));
         };
-        values.push(materialize(cx, Expr::new(t, span, ExprKind::Block(b)), &mut stmts, "__branch"));
+        values.push(materialize(cx, Expr::new(t, span, ExprKind::Block(b)), &mut stmts, "__branch", &lw.m.tys));
     }
     let n = values.len() as u32;
     let chosen = pick(&taken, &mut values.into_iter(), (0, n), ty, span);
@@ -143,7 +143,7 @@ pub(super) fn choose(
         work(lw, cx, info, *scrutinee, s, state, out)?;
     }
     let v = cond_value(lw, cx, info, *scrutinee, s, state)?;
-    let place = materialize(cx, v, out, "__match");
+    let place = materialize(cx, v, out, "__match", &lw.m.tys);
     let none = u32_lit(span, arms.len() as u32);
     let taken = cx.temp("__arm", Types::U32);
     out.push(stmt(span, StmtKind::Let(taken, none.clone())));

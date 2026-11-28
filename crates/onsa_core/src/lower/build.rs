@@ -5,6 +5,7 @@ use onsa_diag::Span;
 
 use super::body::FnCx;
 use super::{Lowerer, R, internal};
+use crate::effects::repeatable;
 use crate::ir::*;
 
 pub(super) fn local_expr(cx: &FnCx, l: LocalId, span: Span) -> Expr {
@@ -92,21 +93,22 @@ pub(super) fn index_as(base: Expr, idx: Expr, bounds: Bounds, tys: &Types) -> R<
 }
 
 /// Statements that evaluate `e` once, for an expression used more than once
-/// (§3.5): a place stays one, not copied, with each of its indices that may
-/// have an effect ([`has_effect`]) bound to a temporary first (the base
-/// before its index, R-433); another expression is bound to a temporary.
-pub(super) fn materialize(cx: &mut FnCx, e: Expr, stmts: &mut Vec<Stmt>, name: &str) -> Expr {
+/// (§3.5): a place stays one, not copied, with each of its indices that is
+/// not [`repeatable`] bound to a temporary first (the base before its index,
+/// R-433); another expression is bound to a temporary. (`tys`: the types of
+/// the module, last as in [`index`].)
+pub(super) fn materialize(cx: &mut FnCx, e: Expr, stmts: &mut Vec<Stmt>, name: &str, tys: &Types) -> Expr {
     if e.as_place().is_some() {
         let Expr { ty, span, kind } = e;
         let kind = match kind {
             ExprKind::Field { base, index } => {
-                ExprKind::Field { base: Box::new(materialize(cx, *base, stmts, name)), index }
+                ExprKind::Field { base: Box::new(materialize(cx, *base, stmts, name, tys)), index }
             }
             ExprKind::Index { base, index, bounds } => {
-                let base = Box::new(materialize(cx, *base, stmts, name));
-                let index = match has_effect(&index) {
-                    false => index,
-                    true => Box::new(materialize(cx, *index, stmts, "__index")),
+                let base = Box::new(materialize(cx, *base, stmts, name, tys));
+                let index = match repeatable(&index, tys) {
+                    true => index,
+                    false => Box::new(materialize(cx, *index, stmts, "__index", tys)),
                 };
                 ExprKind::Index { base, index, bounds }
             }
@@ -118,31 +120,6 @@ pub(super) fn materialize(cx: &mut FnCx, e: Expr, stmts: &mut Vec<Stmt>, name: &
     let t = cx.temp(name, e.ty);
     stmts.push(stmt(span, StmtKind::Let(t, e)));
     local_expr(cx, t, span)
-}
-
-/// Whether evaluating `e` may have an effect: a call, an `inout` argument, a
-/// block. Of one without (`i + 1`, `ys[j] as U32`, `min(i, 1)`, `Some(i)`), a second
-/// evaluation gives the same value or the same panic, in the same order.
-pub(super) fn has_effect(e: &Expr) -> bool {
-    match &e.kind {
-        ExprKind::Lit(_) | ExprKind::Local(_) | ExprKind::Const(_) | ExprKind::Zeroed => false,
-        ExprKind::Unary(_, x)
-        | ExprKind::Cast(x)
-        | ExprKind::Tag(x)
-        | ExprKind::Field { base: x, .. }
-        | ExprKind::Payload { base: x, .. } => has_effect(x),
-        ExprKind::Binary { lhs, rhs, .. }
-        | ExprKind::Cmp { lhs, rhs, .. }
-        | ExprKind::Logic { lhs, rhs, .. }
-        | ExprKind::Index { base: lhs, index: rhs, .. } => has_effect(lhs) || has_effect(rhs),
-        ExprKind::Prim { prim, args } => {
-            !prim.computes_only() || args.iter().any(|a| a.mode == Mode::Inout || has_effect(&a.expr))
-        }
-        ExprKind::Struct { fields: xs, .. } | ExprKind::Variant { fields: xs, .. } => xs.iter().any(has_effect),
-        ExprKind::Array(xs) | ExprKind::Tuple(xs) => xs.iter().any(has_effect),
-        ExprKind::Repeat { elem, .. } => has_effect(elem),
-        _ => true,
-    }
 }
 
 /// `value` after the statements `stmts` (of [`materialize`]), a block when

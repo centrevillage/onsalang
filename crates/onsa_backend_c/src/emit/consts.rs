@@ -37,14 +37,12 @@ pub(super) fn const_init(cx: &mut Cx, e: &Expr) -> R<String> {
             Ok(format!("{{ {} }}", parts.join(", ")))
         }
         ExprKind::Struct { ty, fields } => {
-            let names: Vec<String> = cx.fields(*ty).iter().map(|(n, _)| ident(n)).collect();
-            if names.is_empty() {
+            if cx.fields(*ty).is_empty() {
                 return Ok("{ 0 }".into());
             }
             let parts: Vec<String> = fields
                 .iter()
-                .zip(names)
-                .map(|(x, n)| Ok(format!(".{n} = {}", const_init(cx, x)?)))
+                .map(|(k, x)| Ok(format!(".{} = {}", cx.field_name(*ty, *k)?, const_init(cx, x)?)))
                 .collect::<R<_>>()?;
             Ok(format!("{{ {} }}", parts.join(", ")))
         }

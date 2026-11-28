@@ -154,7 +154,7 @@ fn the_children_of_each_expression() {
     assert_eq!(of_expr(ExprKind::Call { fn_: FnId(0), args: args() }), roles);
     assert_eq!(of_expr(ExprKind::Prim { prim: Prim::Fill, args: args() }), roles);
     let dests = ["1 Always Dest", "2 Always Dest"];
-    assert_eq!(of_expr(ExprKind::Struct { ty: TypeId(0), fields: vec![n(1), n(2)] }), dests);
+    assert_eq!(of_expr(ExprKind::Struct { ty: TypeId(0), fields: vec![(1, n(1)), (0, n(2))] }), dests);
     assert_eq!(of_expr(ExprKind::Variant { ty: TypeId(0), tag: 0, fields: vec![n(1), n(2)] }), dests);
     assert_eq!(of_expr(ExprKind::Array(vec![n(1), n(2)])), dests);
     assert_eq!(of_expr(ExprKind::Tuple(vec![n(1), n(2)])), dests);
@@ -227,7 +227,7 @@ fn the_places_an_inout_argument_writes() {
     assert_eq!(places(&slice(span(local(2)))), (true, vec![Some(2)]));
     let planar = e(ExprKind::Array(vec![span(local(1)), slice(span(local(2)))]));
     assert_eq!(places(&planar), (true, vec![Some(1), Some(2)]));
-    let out = e(ExprKind::Struct { ty: TypeId(0), fields: vec![planar.clone(), span(field(4))] });
+    let out = e(ExprKind::Struct { ty: TypeId(0), fields: vec![(0, planar.clone()), (1, span(field(4)))] });
     assert_eq!(places(&out), (true, vec![Some(1), Some(2), Some(4)]));
     assert!(!places(&n(1)).0);
     assert!(!places(&span(n(1))).0);

@@ -29,7 +29,7 @@ pub(super) fn view(lw: &mut Lowerer, cx: &mut FnCx, e: Expr) -> R<Expr> {
     let TyKind::Struct(id) = *lw.m.tys.kind(e.ty) else { return Err(internal(span, "a view of a non-struct")) };
     let row = row(lw, id, span)?;
     let mut stmts = Vec::new();
-    let base = materialize(cx, e, &mut stmts, "__fixed_str");
+    let base = materialize(cx, e, &mut stmts, "__fixed_str", &lw.m.tys);
     let (bytes, len) = (field(lw, base.clone(), row.bytes)?, field(lw, base, row.len)?);
     let TyKind::Array(el, _) = *lw.m.tys.kind(bytes.ty) else {
         return Err(internal(span, "the bytes of a `FixedStr`"));
@@ -75,8 +75,8 @@ pub(super) fn value(lw: &Lowerer, cx: &mut FnCx, text: &StrLit, id: TypeId, span
         let value = Some(Box::new(local_expr(cx, tmp, span)));
         Expr::new(*bytes, span, ExprKind::Block(Block { stmts, value }))
     };
-    let mut out = vec![lit(*len, span, Lit::Int(text.len() as i128))];
+    let mut out = vec![(row.bytes, array), (row.len, lit(*len, span, Lit::Int(text.len() as i128)))];
     // The two fields in the order of the declaration.
-    out.insert(row.bytes as usize, array);
+    out.sort_by_key(|&(k, _)| k);
     Ok(ExprKind::Struct { ty: id, fields: out })
 }

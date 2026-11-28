@@ -523,10 +523,11 @@ impl<'a> Dumper<'a> {
                     _ => Vec::new(),
                 };
                 let _ = write!(self.out, "{} {{", self.type_ref_name(*ty));
-                for (i, f) in fields.iter().enumerate() {
+                for (i, (k, f)) in fields.iter().enumerate() {
                     self.out.push_str(if i > 0 { ", " } else { " " });
-                    if let Some(n) = names.get(i) {
-                        let _ = write!(self.out, "{n}: ");
+                    match names.get(*k as usize) {
+                        Some(n) => _ = write!(self.out, "{n}: "),
+                        None => _ = write!(self.out, "{k}: "),
                     }
                     self.expr(f);
                 }

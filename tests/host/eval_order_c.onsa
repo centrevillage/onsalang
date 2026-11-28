@@ -1,0 +1,298 @@
+// onsa.toml
+// [package]
+// name = "eval_order_c"
+// edition = "2026"
+//
+// [export]
+// prefix = "eoc_"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "poison"
+// provides = []
+//
+// [test]
+// spec = ["§3.5", "§5.2", "§13.4"]
+//
+// # W8-03 U3/t, §3.5 ("変換先の言語が順序を決めていない所（C の引数や添字）でも、コンパイラが順序を固定して出力する"): the C that the compiler writes gives the
+// # values that the order of §3.5 gives (the same forms run in the interpreter in `tests/spec/semantics/eval_order_struct_index.onsa`). Each exported function folds
+// # the log of the calls (`tick(inout log, d)` appends the digit `d`) and the values it read into one `U32`, which the host compares. No form here panics.
+// # The expected values are derived by hand from §3.5, never from an output.
+//
+// # Three fields written against the declaration order: the log is 123 (the order written), the fields are c = 1, a = 2, b = 3: 123 * 1000 + 100 + 20 + 3.
+// [[test.host]]
+// name = "c: a struct literal runs its fields in the order written"
+// target = "host"
+// fn = "eval_order_c.reverse_fields"
+// steps = [
+//   { call = "fn", args = {}, status = 0, result = 123123 },
+// ]
+//
+// # `Pair { b: x, a: bump(inout x) }` with x = 5: b is the value before the write (5), a is 15, x is 15: 5 * 10000 + 15 * 100 + 15.
+// [[test.host]]
+// name = "c: a sibling field written first reads the value before the write"
+// target = "host"
+// fn = "eval_order_c.sibling_read_first"
+// steps = [
+//   { call = "fn", args = { x0 = 5 }, status = 0, result = 51515 },
+// ]
+//
+// # `Pair { b: bump(inout x), a: x }` with x = 5: b is 15, a reads the value after the write (15), x is 15: 15 * 10000 + 15 * 100 + 15.
+// [[test.host]]
+// name = "c: a sibling field written later reads the value after the write"
+// target = "host"
+// fn = "eval_order_c.sibling_read_later"
+// steps = [
+//   { call = "fn", args = { x0 = 5 }, status = 0, result = 151515 },
+// ]
+//
+// # `Pair { b: next(inout x), a: xs[x] }` with x = 0 and xs = [10, 20, 30]: b is 1, a is xs[1] = 20, x is 1: 1 * 10000 + 20 * 100 + 1.
+// [[test.host]]
+// name = "c: a field that indexes uses the variable after the field written before it"
+// target = "host"
+// fn = "eval_order_c.sibling_index"
+// steps = [
+//   { call = "fn", args = {}, status = 0, result = 12001 },
+// ]
+//
+// # `Cfg { mode: tick 1, gain: tick 2, ... }`: the log is 12, bias keeps its default 7, mode is 1, gain is 2: 12 * 1000 + 7 * 100 + 1 * 10 + 2.
+// [[test.host]]
+// name = "c: the fields filled by defaults run no effect and the others keep the order written"
+// target = "host"
+// fn = "eval_order_c.defaults_order"
+// steps = [
+//   { call = "fn", args = {}, status = 0, result = 12712 },
+// ]
+//
+// # `Outer { y: Pair { b: tick 1, a: tick 2 }, x: tick 3 }`: the log is 123; y.b = 1, y.a = 2, x = 3: 123 * 1000 + 100 + 20 + 3.
+// [[test.host]]
+// name = "c: a nested struct literal runs the inner fields where it is written"
+// target = "host"
+// fn = "eval_order_c.nested_struct"
+// steps = [
+//   { call = "fn", args = {}, status = 0, result = 123123 },
+// ]
+//
+// # `Wrap { w: tick 1, v: tick 2 }` (a generic struct): the log is 12, w = 1, v = 2: 12 * 100 + 1 * 10 + 2.
+// [[test.host]]
+// name = "c: a generic struct literal runs its fields in the order written"
+// target = "host"
+// fn = "eval_order_c.generic_struct"
+// steps = [
+//   { call = "fn", args = {}, status = 0, result = 1212 },
+// ]
+//
+// # `Pair { b: grid[next(k)][next(k)], a: next(k) }` over rows (0, 1, 2, 3), (10, 11, 12, 13), ...: b = grid[1][2] = 12, a = 3, k = 3: 12 * 1000 + 3 * 100 + 3.
+// [[test.host]]
+// name = "c: a field that reads a nested index runs where it is written"
+// target = "host"
+// fn = "eval_order_c.field_nested_index"
+// steps = [
+//   { call = "fn", args = {}, status = 0, result = 12303 },
+// ]
+//
+// # `cube[next(k)][next(k)][next(k)]` reads cube[1][2][3] (77 was written there) and k is 3: 77 * 10 + 3.
+// [[test.host]]
+// name = "c: a read of three nested indices takes them from the base outward"
+// target = "host"
+// fn = "eval_order_c.cube_read"
+// steps = [
+//   { call = "fn", args = {}, status = 0, result = 773 },
+// ]
+//
+// # `w.cells[next(k)].vals[next(k)]` reads cells[1].vals[2] of cells (1, 2, 3, 4), (5, 6, 7, 8), (9, 10, 11, 12) = 7, and k is 2: 7 * 10 + 2.
+// [[test.host]]
+// name = "c: a nested read through a field takes the indices where they are written"
+// target = "host"
+// fn = "eval_order_c.field_index_read"
+// steps = [
+//   { call = "fn", args = {}, status = 0, result = 72 },
+// ]
+//
+// # `grid[idx(1, 1)][idx(2, 2)] = tick 3`: the right-hand side first, then the indices from the left: the log is 312, grid[1][2] = 3 and grid[2][1] = 0: 312 * 100 + 3 * 10 + 0.
+// [[test.host]]
+// name = "c: an assignment to a nested element runs the right-hand side, then the indices from the left"
+// target = "host"
+// fn = "eval_order_c.assign_logged"
+// steps = [
+//   { call = "fn", args = {}, status = 0, result = 31230 },
+// ]
+//
+// # `cube[next][next][next] = next` from k = 0: the right-hand side is 1, the indices are 2, 3, 4 and k is 4: cube[2][3][4] = 1, cube[1][2][3] = 0, cube[4][3][2] = 0: 1 * 1000 + 0 + 0 + 4.
+// [[test.host]]
+// name = "c: an assignment to three nested elements runs the right-hand side first"
+// target = "host"
+// fn = "eval_order_c.assign_cube"
+// steps = [
+//   { call = "fn", args = {}, status = 0, result = 1004 },
+// ]
+//
+// # `w.cells[next].vals[next] = next` from k = 0: the right-hand side is 1, the indices are 2 and 3, k is 3: cells[2].vals[3] = 1, cells[1].vals[2] = 0: 1 * 100 + 0 * 10 + 3.
+// [[test.host]]
+// name = "c: an assignment through a field between two indices runs the right-hand side first"
+// target = "host"
+// fn = "eval_order_c.assign_field"
+// steps = [
+//   { call = "fn", args = {}, status = 0, result = 103 },
+// ]
+
+fn tick(inout log: U32, d: U32) -> U32 {
+  let shifted = log * 10
+  log = shifted + d
+  d
+}
+
+// Appends `d` to the log and returns `i` (an index).
+fn idx(inout log: U32, d: U32, i: U32) -> U32 {
+  let shifted = log * 10
+  log = shifted + d
+  i
+}
+
+// `k` goes up by one and the new value is returned.
+fn next(inout k: U32) -> U32 {
+  k = k + 1
+  k
+}
+
+// `x` goes up by ten and the new value is returned.
+fn bump(inout x: U32) -> U32 {
+  x = x + 10
+  x
+}
+
+pub struct Pair {
+  a: U32,
+  b: U32,
+}
+
+pub struct Trio {
+  a: U32,
+  b: U32,
+  c: U32,
+}
+
+pub struct Outer {
+  x: U32,
+  y: Pair,
+}
+
+pub struct Cfg {
+  gain: U32,
+  bias: U32 = 7,
+  mode: U32 = 9,
+}
+
+pub struct Wrap[T] {
+  v: T,
+  w: T,
+}
+
+pub struct Cell {
+  vals: [U32; 4],
+}
+
+pub struct World {
+  cells: [Cell; 3],
+}
+
+@export
+pub fn reverse_fields() -> U32 {
+  var log: U32 = 0
+  let t = Trio { c: tick(inout log, 1), a: tick(inout log, 2), b: tick(inout log, 3) }
+  log * 1000 + t.c * 100 + t.a * 10 + t.b
+}
+
+@export
+pub fn sibling_read_first(x0: U32) -> U32 {
+  var x: U32 = x0
+  let p = Pair { b: x, a: bump(inout x) }
+  p.b * 10000 + p.a * 100 + x
+}
+
+@export
+pub fn sibling_read_later(x0: U32) -> U32 {
+  var x: U32 = x0
+  let p = Pair { b: bump(inout x), a: x }
+  p.b * 10000 + p.a * 100 + x
+}
+
+@export
+pub fn sibling_index() -> U32 {
+  var x: U32 = 0
+  let xs: [U32; 3] = [10, 20, 30]
+  let p = Pair { b: next(inout x), a: xs[x] }
+  p.b * 10000 + p.a * 100 + x
+}
+
+@export
+pub fn defaults_order() -> U32 {
+  var log: U32 = 0
+  let c = Cfg { mode: tick(inout log, 1), gain: tick(inout log, 2), ... }
+  log * 1000 + c.bias * 100 + c.mode * 10 + c.gain
+}
+
+@export
+pub fn nested_struct() -> U32 {
+  var log: U32 = 0
+  let o = Outer { y: Pair { b: tick(inout log, 1), a: tick(inout log, 2) }, x: tick(inout log, 3) }
+  log * 1000 + o.y.b * 100 + o.y.a * 10 + o.x
+}
+
+@export
+pub fn generic_struct() -> U32 {
+  var log: U32 = 0
+  let g: Wrap[U32] = Wrap { w: tick(inout log, 1), v: tick(inout log, 2) }
+  log * 100 + g.w * 10 + g.v
+}
+
+@export
+pub fn field_nested_index() -> U32 {
+  var k: U32 = 0
+  let grid: [[U32; 4]; 4] = [[0, 1, 2, 3], [10, 11, 12, 13], [20, 21, 22, 23], [30, 31, 32, 33]]
+  let p = Pair { b: grid[next(inout k)][next(inout k)], a: next(inout k) }
+  p.b * 1000 + p.a * 100 + k
+}
+
+@export
+pub fn cube_read() -> U32 {
+  var k: U32 = 0
+  var cube: [[[U32; 4]; 4]; 4] = [[[0; 4]; 4]; 4]
+  cube[1][2][3] = 77
+  let v = cube[next(inout k)][next(inout k)][next(inout k)]
+  v * 10 + k
+}
+
+@export
+pub fn field_index_read() -> U32 {
+  var k: U32 = 0
+  let w = World { cells: [Cell { vals: [1, 2, 3, 4] }, Cell { vals: [5, 6, 7, 8] }, Cell { vals: [9, 10, 11, 12] }] }
+  let v = w.cells[next(inout k)].vals[next(inout k)]
+  v * 10 + k
+}
+
+@export
+pub fn assign_logged() -> U32 {
+  var log: U32 = 0
+  var grid: [[U32; 4]; 4] = [[0; 4]; 4]
+  grid[idx(inout log, 1, 1)][idx(inout log, 2, 2)] = tick(inout log, 3)
+  log * 100 + grid[1][2] * 10 + grid[2][1]
+}
+
+@export
+pub fn assign_cube() -> U32 {
+  var k: U32 = 0
+  var cube: [[[U32; 5]; 5]; 5] = [[[0; 5]; 5]; 5]
+  cube[next(inout k)][next(inout k)][next(inout k)] = next(inout k)
+  cube[2][3][4] * 1000 + cube[1][2][3] * 100 + cube[4][3][2] * 10 + k
+}
+
+@export
+pub fn assign_field() -> U32 {
+  var k: U32 = 0
+  var w = World { cells: [Cell { vals: [0; 4] }, Cell { vals: [0; 4] }, Cell { vals: [0; 4] }] }
+  w.cells[next(inout k)].vals[next(inout k)] = next(inout k)
+  w.cells[2].vals[3] * 100 + w.cells[1].vals[2] * 10 + k
+}

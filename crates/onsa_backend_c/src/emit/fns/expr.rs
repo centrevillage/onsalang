@@ -165,13 +165,16 @@ impl<'a, 'm> FnEmitter<'a, 'm> {
             }
             ExprKind::Struct { ty, fields } => {
                 let tn = self.cx.names.name(e.ty);
-                let names: Vec<String> = self.cx.fields(*ty).iter().map(|(n, _)| ident(n)).collect();
                 if fields.is_empty() {
                     return Ok(format!("(({tn}){{ .onsa_empty = 0 }})"));
                 }
-                let refs: Vec<&Expr> = fields.iter().collect();
+                let refs: Vec<&Expr> = fields.iter().map(|(_, x)| x).collect();
                 let vs = self.operands(&refs)?;
-                let parts: Vec<String> = vs.iter().zip(names).map(|(v, n)| format!(".{n} = {v}")).collect();
+                let parts: Vec<String> = fields
+                    .iter()
+                    .zip(vs)
+                    .map(|((k, _), v)| Ok(format!(".{} = {v}", self.cx.field_name(*ty, *k)?)))
+                    .collect::<R<_>>()?;
                 Ok(format!("(({tn}){{ {} }})", parts.join(", ")))
             }
             ExprKind::Variant { ty, tag, fields } => {

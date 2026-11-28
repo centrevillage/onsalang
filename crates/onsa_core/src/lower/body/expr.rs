@@ -98,13 +98,19 @@ fn lower_expr_at(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId) -> R<Expr> {
         }
         AK::Struct { fields, .. } => {
             let TyKind::Struct(id) = *lw.m.tys.kind(ty) else { return Err(internal(span, "struct literal type")) };
-            let defs = lw.struct_fields(id);
-            let mut out = Vec::new();
-            for (name, _) in &defs {
-                out.push(match fields.iter().find(|(n, _)| n.name == *name) {
-                    Some((_, v)) => lower_expr(lw, cx, *v)?,
-                    None => crate::lower::derived::filled_field(lw, id, name, span)?,
-                });
+            // In the order written (§3.5), then the fields the last `...`
+            // fills, in the order of the declaration.
+            let n = lw.struct_fields(id).len();
+            let (mut out, mut written) = (Vec::with_capacity(n), vec![false; n]);
+            for (name, v) in fields {
+                let k = lw.struct_fields(id).iter().position(|(m, _)| *m == name.name);
+                let k = k.ok_or_else(|| internal(name.span, format!("no field `{}`", name.name)))?;
+                written[k] = true;
+                out.push((k as u32, lower_expr(lw, cx, *v)?));
+            }
+            for k in (0..n).filter(|&k| !written[k]) {
+                let name = lw.struct_fields(id)[k].0.clone();
+                out.push((k as u32, crate::lower::derived::filled_field(lw, id, &name, span)?));
             }
             ExprKind::Struct { ty: id, fields: out }
         }
@@ -343,7 +349,7 @@ fn lower_try(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId, inner: ExprId, ty: CTy,
         return Err(internal(span, "`?` in a function without Option / Result"));
     };
     let mut stmts = Vec::new();
-    let tmp = materialize(cx, v, &mut stmts, "__try");
+    let tmp = materialize(cx, v, &mut stmts, "__try", &lw.m.tys);
     // `exit` returns itself, with its elements; `keep` gives its element.
     let n = lw.enum_variants(id)[exit as usize].1.len() as u32;
     let fields = (0..n).map(|i| payload(lw, tmp.clone(), exit, i)).collect::<R<Vec<_>>>()?;

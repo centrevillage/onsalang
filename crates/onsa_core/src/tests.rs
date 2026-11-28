@@ -8,6 +8,7 @@ use crate::{dump, lower, verify};
 
 mod chains_tests;
 mod depth_tests;
+mod effects_tests;
 mod prim_tests;
 mod types_tests;
 mod verify_tests;

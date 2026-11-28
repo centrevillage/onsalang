@@ -1,7 +1,7 @@
 //! The primitives of Core ([`Prim`]).
 
 use onsa_core::prim::{CheckedOp, MathFn, NAN_BITS_F32, NAN_BITS_F64, Prim};
-use onsa_core::{Arg, BinOp, CTy, FloatKind, IntKind, Overflow, TyKind};
+use onsa_core::{Arg, BinOp, Expr, FloatKind, IntKind, Overflow, TyKind};
 use onsa_diag::Span;
 
 use crate::numeric::{float_of, int_of, math_f32, math_f64, mismatch, trunc_to_int};
@@ -14,20 +14,24 @@ impl<'m> Interp<'m> {
 
     /// A primitive: its arguments, then the operation, in a function of its
     /// own, off the way down a recursion through an argument (R-05).
-    pub(super) fn prim(&self, f: &mut Frame, prim: &Prim, args: &[Arg], ty: CTy, span: Span) -> R<Value> {
+    pub(super) fn prim(&self, f: &mut Frame, prim: &Prim, args: &[Arg], at: &Expr) -> R<Value> {
         if let Prim::Len | Prim::Slice | Prim::Fill | Prim::AddFrom | Prim::CopyFrom | Prim::BufZeroed = prim {
-            return self.seq_prim(f, prim, args, ty, span);
+            return self.seq_prim(f, prim, args, at);
         }
         let mut vs = Vec::with_capacity(args.len());
         for a in args {
             vs.push(self.eval(f, &a.expr)?);
         }
-        self.prim_values(prim, &vs, span)
+        match self.prim_values(prim, &vs, at.span) {
+            Err(s) => self.own_panic(at, s),
+            v => v,
+        }
     }
 
     /// The primitives that take their receiver as a sequence reference.
     #[inline(never)]
-    fn seq_prim(&self, f: &mut Frame, prim: &Prim, args: &[Arg], ty: CTy, span: Span) -> R<Value> {
+    fn seq_prim(&self, f: &mut Frame, prim: &Prim, args: &[Arg], at: &Expr) -> R<Value> {
+        let (ty, span) = (at.ty, at.span);
         match prim {
             Prim::Len => {
                 let s = self.seq_of_arg(f, &args[0])?;
@@ -38,10 +42,8 @@ impl<'m> Interp<'m> {
                 let from = self.eval_u32(f, &args[1].expr)?;
                 let to = self.eval_u32(f, &args[2].expr)?;
                 if from > to || to > s.len {
-                    return panic(
-                        span,
-                        format!("slice {from}..{to} is out of range for a sequence of length {}", s.len),
-                    );
+                    let msg = format!("slice {from}..{to} is out of range for a sequence of length {}", s.len);
+                    return panic(span, msg).or_else(|s| self.own_panic(at, s));
                 }
                 Ok(Value::Span(SpanRef { root: s.root, projs: s.projs, start: s.start + from, len: to - from }))
             }

@@ -575,9 +575,12 @@ pub enum ExprKind {
     },
     /// A `Span` over an array or `Buf` place.
     SpanOf(Box<Expr>),
+    /// Each field once (V-01): its number in the declaration and its value,
+    /// in the order of evaluation, that of the source (§3.5), the fields it
+    /// does not write after.
     Struct {
         ty: TypeId,
-        fields: Vec<Expr>,
+        fields: Vec<(u32, Expr)>,
     },
     Variant {
         ty: TypeId,

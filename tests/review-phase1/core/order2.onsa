@@ -7,7 +7,7 @@ test "nested index: interpreter order" {
   var k: U32 = 0
   let xs: [[U32; 3]; 3] = [[0, 1, 2], [10, 11, 12], [20, 21, 22]]
   let v = xs[next(inout k)][next(inout k)]
-  assert v == 21
+  assert v == 12
 }
 
 test "index place panic order" {

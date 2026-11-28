@@ -20,6 +20,7 @@ use super::build::{
     tag_of, u32_lit,
 };
 use super::{FailKind, GenericArg, Hole, Lowerer, R, at_hole, core_mode, internal, stopped, unsupported};
+use crate::effects::repeatable;
 use crate::ir::*;
 use crate::prim::{MathFn, Prim, PrimRow, Scalar, row_self};
 
@@ -454,7 +455,7 @@ fn lower_stmt(lw: &mut Lowerer, cx: &mut FnCx, s: StmtId, out: &mut Vec<Stmt>) -
 
 /// The comparison `cmp` of an `assert` that shows its values (§18.1,
 /// S-1261), and the two values: each operand lowered and evaluated once, in
-/// order (§3.5). When one has an effect, the left is put in a temporary first
+/// order (§3.5). When one is not [`repeatable`] (has an effect), the left is put in a temporary first
 /// (the right may change what it reads), and so is the right with one; an
 /// operand without an effect is read again when the `assert` fails, to the
 /// same value, as the comparison passed it without a panic.
@@ -464,7 +465,7 @@ fn assert_comparison(lw: &mut Lowerer, cx: &mut FnCx, cmp: ExprId, out: &mut Vec
     };
     let mut l = lower_expr(lw, cx, lhs)?;
     let mut r = lower_expr(lw, cx, rhs)?;
-    let effect = (super::build::has_effect(&l), super::build::has_effect(&r));
+    let effect = (!repeatable(&l, &lw.m.tys), !repeatable(&r, &lw.m.tys));
     // SPEC-GAP(S-1263): a `const` has no temporary of its own (`Feature::ConstBindings`): the
     // `assert` of its initializer with an operand of an effect shows no values.
     let shows = !(cx.constant && (effect.0 || effect.1));
@@ -549,7 +550,7 @@ fn lower_for(
     }
     // Sequence: index loop over a place (or a temporary holding the value).
     let seq = lower_expr(lw, cx, iter)?;
-    let seq = materialize(cx, seq, out, "__seq");
+    let seq = materialize(cx, seq, out, "__seq", &lw.m.tys);
     let len = match *lw.m.tys.kind(seq.ty) {
         TyKind::Array(_, n) => u32_lit(span, n),
         TyKind::Span(_) | TyKind::Buf(_) => Expr::new(

@@ -217,27 +217,6 @@ reasons = ["S-191"]
 until = "W8-09"
 note = "map_err の本体の関数値の呼び出しの降下（E0200、W8-09）"
 
-[[pending]]
-kind = "test-case"
-target = "tests/spec/semantics/eval_order.onsa::struct literal fields are evaluated in the order written"
-reasons = ["R-93", "S-75"]
-until = "W8-03"
-note = "struct リテラルを書いた順でなく宣言の順に評価する（§3.5）"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/semantics/eval_order.onsa::assignment to a nested element: the right-hand side, then the indices left to right"
-reasons = ["R-93", "S-75"]
-until = "W8-03"
-note = "代入先の添字を右から左に評価する（§3.5）"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/semantics/eval_order.onsa::nested indices are evaluated from the outside in"
-reasons = ["R-93", "S-75"]
-until = "W8-03"
-note = "xs[i][j] の添字を内側から評価する（§3.5）"
-
 # --- W1-09 の意味のテスト（flow の世界）。最終の構文で書いたので、ほとんどが実装待ち（2026-10-07）
 
 # --- W1-09: 意味のテスト（flow の世界、tests/spec/flow_semantics/）の実装待ち（2026-10-07）
@@ -915,3 +894,24 @@ target = "tests/spec/flow_clock/modifier_n_const_expressions_w9_03.onsa"
 reasons = ["S-1077"]
 until = "W9-03"
 note = "修飾子の N の算術は W9-03 まで E0200（FlowConstExprs）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/host/eval_order_c.onsa::c: an assignment to a nested element runs the right-hand side, then the indices from the left"
+reasons = ["R-93", "S-75"]
+until = "W8-03"
+note = "C は代入の右辺を代入先の添字の後に評価する（§3.5。W8-03 の正規化 U7a で直る見込み）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/host/eval_order_c.onsa::c: an assignment to three nested elements runs the right-hand side first"
+reasons = ["R-93", "S-75"]
+until = "W8-03"
+note = "C は代入の右辺を代入先の添字の後に評価する（§3.5。W8-03 の正規化 U7a で直る見込み）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/host/eval_order_c.onsa::c: an assignment through a field between two indices runs the right-hand side first"
+reasons = ["R-93", "S-75"]
+until = "W8-03"
+note = "C は代入の右辺を代入先の添字の後に評価する（§3.5。W8-03 の正規化 U7a で直る見込み）"

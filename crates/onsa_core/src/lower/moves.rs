@@ -112,11 +112,8 @@ impl Cx<'_> {
     /// `move` arguments. Statements inside nested blocks are visited too.
     fn inner(&mut self, e: &Expr) {
         match &e.kind {
-            ExprKind::Struct { fields, .. } | ExprKind::Variant { fields, .. } => {
-                for x in fields {
-                    self.stored(x, None);
-                }
-            }
+            ExprKind::Struct { fields, .. } => fields.iter().for_each(|(_, x)| self.stored(x, None)),
+            ExprKind::Variant { fields, .. } => fields.iter().for_each(|x| self.stored(x, None)),
             ExprKind::Array(xs) | ExprKind::Tuple(xs) => {
                 for x in xs {
                     self.stored(x, None);

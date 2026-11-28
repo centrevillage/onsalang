@@ -142,7 +142,7 @@ fn fold(words: &[Expr], r: Ratio, j: Option<&Expr>, span: Span) -> R<Vec<Expr>> 
 /// The time the callee of the walk takes from that of its caller (§11.4,
 /// S-1217): two words folded out of each boundary, the outermost first, in
 /// `let`s `t_in`, `t_hi_in` into `out` that the next shares, cut to `words`.
-fn child_time(cx: &mut FnCx, out: &mut Vec<Stmt>, w: &Walk, words: usize) -> R<Vec<Expr>> {
+fn child_time(cx: &mut FnCx, out: &mut Vec<Stmt>, w: &Walk, words: usize, tys: &Types) -> R<Vec<Expr>> {
     let mut time = cx.flow.as_ref().expect("flow context").now.time.clone();
     // The stage of an event in an `.up~` is of no run of it: the run 0 (§11.4).
     let first = u32_lit(w.span, 0);
@@ -155,7 +155,7 @@ fn child_time(cx: &mut FnCx, out: &mut Vec<Stmt>, w: &Walk, words: usize) -> R<V
         // run.
         let j = w.j(k).or((!b.ratio.slower_than_body()).then_some(&first));
         let kept = fold(&time, b.ratio, j, w.span)?.into_iter().take(if k == 0 { words } else { 2 });
-        time = kept.zip(["t_in", "t_hi_in"]).map(|(e, name)| materialize(cx, e, out, name)).collect();
+        time = kept.zip(["t_in", "t_hi_in"]).map(|(e, name)| materialize(cx, e, out, name, tys)).collect();
     }
     let time = time.get(..words).ok_or_else(|| internal(w.span, format!("a callee of {words} words of time")))?;
     Ok(time.to_vec())
@@ -307,7 +307,7 @@ fn ops(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, w: &mut Walk, list:
                 let src = match from {
                     Feed::Arg => match w.port(port)? {
                         (v, Some(q)) => {
-                            let v = materialize(cx, v, out, "__arg");
+                            let v = materialize(cx, v, out, "__arg", &lw.m.tys);
                             Src::At(v, at(lw, cx, w, (f, caller), x, q)?, q)
                         }
                         (v, None) => Src::Value(v),
@@ -358,7 +358,7 @@ fn ops(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, w: &mut Walk, list:
                 let on = match cond {
                     CondRead::Read => {
                         let v = w.cond(lw, cx, out, w.guard(g)?.at)?;
-                        let v = materialize(cx, v, out, "__on");
+                        let v = materialize(cx, v, out, "__on", &lw.m.tys);
                         if w.info.field_at(FieldOf::Node(w.id, Part::On(g))).is_some() {
                             assign(out, &w.field(lw, Part::On(g))?, v.clone())?;
                         }
@@ -504,10 +504,10 @@ fn give(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, w: &Walk, v: Expr)
     let mut one = Vec::new();
     let (v, each) = match *lw.m.tys.kind(v.ty) {
         TyKind::Array(_, n) => {
-            let (all, i) = (materialize(cx, v, out, "__events"), cx.temp("__i", Types::U32));
+            let (all, i) = (materialize(cx, v, out, "__events", &lw.m.tys), cx.temp("__i", Types::U32));
             (hold(cx, &mut one, index(all, local_expr(cx, i, span), &lw.m.tys)?, "__event"), Some((i, n)))
         }
-        _ => (materialize(cx, v, out, "__event"), None),
+        _ => (materialize(cx, v, out, "__event", &lw.m.tys), None),
     };
     let some = super::event_option(lw.a, span)?.keep;
     let event = payload(lw, v.clone(), some, 0)?;
@@ -745,7 +745,7 @@ fn copy(
         Src::At(a, _, q) if whole(x, e) && whole(x, q) => return assign(out, &dst, a),
         Src::At(a, at, _) if whole(x, e) && count == 1 => return assign(out, &dst, index(a, at, tys)?),
         Src::At(a, at, _) if count == 1 => return assign(out, &index(dst, pos, tys)?, index(a, at, tys)?),
-        Src::Value(v) => (materialize(cx, v, out, "__chunk"), u32_lit(span, 0)),
+        Src::Value(v) => (materialize(cx, v, out, "__chunk", tys), u32_lit(span, 0)),
         Src::At(a, at, _) => (a, at),
     };
     let i = cx.temp("__i", Types::U32);
@@ -818,7 +818,7 @@ fn run(lw: &mut Lowerer, cx: &mut FnCx, w: &Walk, body: ClockStage) -> R<Expr> {
     let f = sub.stage_fn(body).ok_or_else(|| internal(span, format!("a callee with no stage {body:?}")))?;
     let own = w.field(lw, Part::Own)?;
     let (words, mut lets) = (g.time_words(body), Vec::new());
-    let time = if words > 0 { child_time(cx, &mut lets, w, words)? } else { Vec::new() };
+    let time = if words > 0 { child_time(cx, &mut lets, w, words, &lw.m.tys)? } else { Vec::new() };
     let mut inputs = Vec::new();
     for input in head_inputs(lw, w, body)? {
         let (src, e, owner) = match n.ring_of(0, Port::Input(input)) {

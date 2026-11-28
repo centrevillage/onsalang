@@ -1,7 +1,7 @@
 //! Places: locals, projections, and the sequences a primitive reads or
 //! writes.
 
-use onsa_core::{Arg, Bounds, LocalId, Mode, Place};
+use onsa_core::{Arg, Bounds, Expr, LocalId, Mode, Place};
 use onsa_diag::Span;
 
 use crate::numeric::mismatch;
@@ -70,14 +70,25 @@ impl<'m> Interp<'m> {
                 let r = self.resolve_place(f, b, span)?;
                 self.project_field(r, *i, span)
             }
-            // Each element has its own position (R-188): an inner `xs[i]` of
-            // `xs[i][0]` that is out of range panics at `xs[i]`.
-            Place::Index(b, e, at, bounds) => {
-                let i = self.eval_u32(f, e)?;
-                let r = self.resolve_place(f, b, span)?;
-                self.project_index(r, i, *bounds, *at)
-            }
+            Place::Index(b, e, at, bounds) => self.resolve_index(f, b, e, (*at, *bounds), span),
         }
+    }
+
+    /// The element `base[e]` at `at` (§3.5, S-75, S-1275): the base, the
+    /// range checks inside it included, then the index, then its range. Each
+    /// element has its own position (R-188): an inner `xs[i]` of `xs[i][0]`
+    /// that is out of range panics at `xs[i]`.
+    pub(super) fn resolve_index(
+        &self,
+        f: &mut Frame,
+        base: &Place,
+        e: &Expr,
+        (at, bounds): (Span, Bounds),
+        span: Span,
+    ) -> R<PlaceRef> {
+        let r = self.resolve_place(f, base, span)?;
+        let i = self.eval_u32(f, e)?;
+        self.project_index(r, i, bounds, at)
     }
 
     pub(super) fn project_field(&self, mut r: PlaceRef, i: u32, span: Span) -> R<PlaceRef> {

@@ -146,6 +146,17 @@ impl CheckedOp {
     }
 }
 
+/// What a primitive does besides giving its value ([`Prim::effect`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PrimEffect {
+    /// Nothing: no panic, no effect.
+    Pure,
+    /// It may panic, and has no other effect.
+    Panics,
+    /// An effect a second call would repeat (a write, an allocation, a failed check).
+    Effect,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Prim {
     /// `std.math` on `F32` / `F64`.
@@ -273,31 +284,33 @@ impl Prim {
         }
     }
 
-    /// Whether it only computes a value from its arguments: a second call
-    /// gives the same value or the same panic (what Core may evaluate again,
-    /// `has_effect`). Without a `_`, so that a new primitive must say.
-    pub fn computes_only(&self) -> bool {
+    /// What a call of it does besides giving its value, its arguments not
+    /// counted (the row of `Prim` of `onsa_core::effects::own`, R-79).
+    /// Without a `_`, so that a new primitive must say.
+    pub fn effect(&self) -> PrimEffect {
         match self {
             Prim::Math(..)
-            | Prim::IntAbs(_)
             | Prim::IntMin(_)
             | Prim::IntMax(_)
             | Prim::NarrowParts { .. }
             | Prim::IntToFloat { .. }
             | Prim::FloatToFloat { .. }
-            | Prim::TruncToInt { .. }
+            | Prim::TruncToInt { sat: true, .. }
             | Prim::ToBits(_)
             | Prim::FromBits(_)
             | Prim::Parts(..)
-            | Prim::DivEuclid(_)
-            | Prim::RemEuclid(_)
             | Prim::IsNan(_)
             | Prim::IsFinite(_)
             | Prim::Len
-            | Prim::Slice
-            | Prim::StrLen => true,
+            | Prim::StrLen => PrimEffect::Pure,
+            // `abs(MIN)`; out of range or NaN; a zero divisor or `MIN / -1`; out of range.
+            Prim::IntAbs(_)
+            | Prim::TruncToInt { sat: false, .. }
+            | Prim::DivEuclid(_)
+            | Prim::RemEuclid(_)
+            | Prim::Slice => PrimEffect::Panics,
             Prim::Fill | Prim::AddFrom | Prim::CopyFrom | Prim::BufZeroed | Prim::AssertNear | Prim::Pending(_) => {
-                false
+                PrimEffect::Effect
             }
         }
     }

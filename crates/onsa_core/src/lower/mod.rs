@@ -635,10 +635,10 @@ impl<'a> Lowerer<'a> {
         }
     }
 
-    pub(crate) fn struct_fields(&self, id: TypeId) -> Vec<(String, CTy)> {
+    pub(crate) fn struct_fields(&self, id: TypeId) -> &[(String, CTy)] {
         match &self.m.ty(id).kind {
-            TypeDefKind::Struct { fields } => fields.clone(),
-            _ => Vec::new(),
+            TypeDefKind::Struct { fields } => fields,
+            _ => &[],
         }
     }
 
@@ -778,10 +778,11 @@ impl<'a> Lowerer<'a> {
                 ExprKind::Tuple(out)
             }
             (C::Struct(xs), TyKind::Struct(id)) => {
-                let fields = self.struct_fields(id);
                 let mut out = Vec::new();
-                for (x, &(_, t)) in xs.iter().zip(&fields) {
-                    out.push(self.const_value_expr(x, t, span)?);
+                for (k, x) in (0..).zip(xs) {
+                    let t = self.struct_fields(id).get(k as usize).map(|&(_, t)| t);
+                    let t = t.ok_or_else(|| internal(span, "const value does not match its type"))?;
+                    out.push((k, self.const_value_expr(x, t, span)?));
                 }
                 ExprKind::Struct { ty: id, fields: out }
             }

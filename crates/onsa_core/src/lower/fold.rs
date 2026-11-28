@@ -137,8 +137,8 @@ impl Folder<'_> {
                 self.expr(base);
                 self.expr(index);
             }
-            ExprKind::Struct { fields: xs, .. }
-            | ExprKind::Variant { fields: xs, .. }
+            ExprKind::Struct { fields, .. } => fields.iter_mut().for_each(|(_, x)| self.expr(x)),
+            ExprKind::Variant { fields: xs, .. }
             | ExprKind::Array(xs)
             | ExprKind::Tuple(xs)
             | ExprKind::Panic { shown: xs, .. } => {

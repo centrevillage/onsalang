@@ -90,9 +90,9 @@ fn eq_body(lw: &mut Lowerer, locals: &mut Vec<Local>, ty: CTy, a: Expr, b: Expr,
         |base: &Expr, i: u32, t: CTy| Expr::new(t, span, ExprKind::Field { base: Box::new(base.clone()), index: i });
     match lw.m.tys.kind(ty).clone() {
         TyKind::Struct(id) => {
-            let fields = lw.struct_fields(id);
             let mut parts = Vec::new();
-            for (i, &(_, t)) in fields.iter().enumerate() {
+            for i in 0..lw.struct_fields(id).len() {
+                let t = lw.struct_fields(id)[i].1;
                 parts.push(eq_expr(lw, field(&a, i as u32, t), field(&b, i as u32, t), span, span)?);
             }
             Ok(Block { stmts: Vec::new(), value: Some(Box::new(and_all(parts, span))) })

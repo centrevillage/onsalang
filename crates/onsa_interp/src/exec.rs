@@ -1,5 +1,6 @@
 //! The walk of the tree: statements and expressions.
 
+use onsa_core::effects::{Own, own};
 use onsa_core::{
     Arg, BinOp, Block, Bounds, CTy, CmpOp, Expr, ExprKind, FnId, IntKind, Lit, LocalId, LogicOp, Mode, MsgId, Overflow,
     PanicOrigin, Place, Stmt, StmtKind, TyKind, UnOp,
@@ -162,7 +163,7 @@ impl<'m> Interp<'m> {
             ExprKind::Logic { op, lhs, rhs } => self.eval_logic(f, *op, lhs, rhs),
             ExprKind::Cast(x) => self.eval_cast(f, x, e),
             ExprKind::Call { fn_, args } => self.eval_call(f, *fn_, args, e),
-            ExprKind::Prim { prim, args } => self.prim(f, prim, args, e.ty, span),
+            ExprKind::Prim { prim, args } => self.prim(f, prim, args, e),
             ExprKind::Field { base, index } => self.eval_field(f, base, *index, e),
             ExprKind::Index { base, index, bounds } => self.eval_index(f, base, index, *bounds, e),
             ExprKind::SpanOf(inner) => self.eval_span_of(f, inner, e),
@@ -180,6 +181,21 @@ impl<'m> Interp<'m> {
         }
     }
 
+    /// The panic `s` of the node `at` itself, not of a child: an internal
+    /// error when [`own`] classifies the node `Pure` (W8-03), which the order
+    /// of the normal form does not keep. Read on the way of a panic only.
+    #[cold]
+    #[inline(never)]
+    pub(super) fn own_panic<T>(&self, at: &Expr, s: Signal) -> R<T> {
+        if let Signal::Fail(f) = &s
+            && let Failure::Panic(p) = &**f
+            && own(at, &self.m.tys) == Own::Pure
+        {
+            internal(p.span, format!("{}, of a node classified pure", p.message));
+        }
+        Err(s)
+    }
+
     #[inline(never)]
     fn eval_zeroed(&self, ty: CTy) -> R<Value> {
         Ok(zero(self.m, ty))
@@ -189,7 +205,10 @@ impl<'m> Interp<'m> {
     fn eval_unary(&self, f: &mut Frame, op: UnOp, x: &Expr, at: &Expr) -> R<Value> {
         let span = at.span;
         let v = self.eval(f, x)?;
-        self.unary(op, v, span)
+        match self.unary(op, v, span) {
+            Err(s) => self.own_panic(at, s),
+            v => v,
+        }
     }
 
     #[inline(never)]
@@ -206,8 +225,30 @@ impl<'m> Interp<'m> {
     }
 
     #[inline(never)]
-    fn eval_struct(&self, f: &mut Frame, fields: &[Expr]) -> R<Value> {
-        Ok(Value::Struct(self.eval_all(f, fields)?))
+    fn eval_struct(&self, f: &mut Frame, fields: &[(u32, Expr)]) -> R<Value> {
+        // In the order written (V-01: each field once), each value at the
+        // number of its field: pushed while the two orders agree.
+        let mut out = Vec::with_capacity(fields.len());
+        for (k, x) in fields {
+            if *k as usize != out.len() {
+                return self.eval_struct_placed(f, fields, out);
+            }
+            out.push(self.eval(f, x)?);
+        }
+        Ok(Value::Struct(out))
+    }
+
+    /// The rest of [`Interp::eval_struct`] from the first field written out
+    /// of the order of the declaration, `out` the values before it.
+    #[cold]
+    #[inline(never)]
+    fn eval_struct_placed(&self, f: &mut Frame, fields: &[(u32, Expr)], mut out: Vec<Value>) -> R<Value> {
+        let done = out.len();
+        out.resize(fields.len(), Value::Unit);
+        for (k, x) in &fields[done..] {
+            out[*k as usize] = self.eval(f, x)?;
+        }
+        Ok(Value::Struct(out))
     }
 
     #[inline(never)]
@@ -264,7 +305,10 @@ impl<'m> Interp<'m> {
         let span = at.span;
         let a = self.eval(f, lhs)?;
         let b = self.eval(f, rhs)?;
-        self.binary(op.0, op.1, a, b, span)
+        match self.binary(op.0, op.1, a, b, span) {
+            Err(s) => self.own_panic(at, s),
+            v => v,
+        }
     }
 
     #[inline(never)]
@@ -304,9 +348,7 @@ impl<'m> Interp<'m> {
     fn eval_index(&self, f: &mut Frame, base: &Expr, index: &Expr, bounds: Bounds, at: &Expr) -> R<Value> {
         let span = at.span;
         if let Some(p) = base.as_place() {
-            let i = self.eval_u32(f, index)?;
-            let r = self.resolve_place(f, &p, span)?;
-            let r = self.project_index(r, i, bounds, span)?;
+            let r = self.resolve_index(f, &p, index, (span, bounds), span)?;
             return self.read(&r, span);
         }
         let v = self.eval(f, base)?;

@@ -67,7 +67,8 @@ fn is_static_init(e: &Expr) -> bool {
         // As the C backend writes it (`const_init`): `-` of a literal only;
         // `-F64.INFINITY` (a `const` of `1.0 / 0.0`) is evaluated here.
         ExprKind::Unary(UnOp::Neg, x) => matches!(x.kind, ExprKind::Lit(_)),
-        ExprKind::Struct { fields, .. } | ExprKind::Variant { fields, .. } => fields.iter().all(is_static_init),
+        ExprKind::Struct { fields, .. } => fields.iter().all(|(_, x)| is_static_init(x)),
+        ExprKind::Variant { fields, .. } => fields.iter().all(is_static_init),
         ExprKind::Array(xs) | ExprKind::Tuple(xs) => xs.iter().all(is_static_init),
         ExprKind::Repeat { elem, .. } => is_static_init(elem),
         _ => false,
@@ -104,8 +105,9 @@ pub fn value_to_expr(m: &Module, v: &Value, ty: CTy, span: onsa_diag::Span) -> O
         }
         (Value::Struct(vs), TyKind::Struct(id)) => {
             let TypeDefKind::Struct { fields } = &m.ty(*id).kind else { return None };
+            let xs = (0..).zip(vs.iter().zip(fields));
             let xs =
-                vs.iter().zip(fields).map(|(x, &(_, t))| value_to_expr(m, x, t, span)).collect::<Option<Vec<_>>>()?;
+                xs.map(|(k, (x, &(_, t)))| Some((k, value_to_expr(m, x, t, span)?))).collect::<Option<Vec<_>>>()?;
             Some(Expr::new(ty, span, ExprKind::Struct { ty: *id, fields: xs }))
         }
         (Value::Enum { tag, fields: vs }, TyKind::Enum(id)) => {

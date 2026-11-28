@@ -1074,6 +1074,26 @@ fn an_index_known_in_range_out_of_range_is_an_internal_error() {
     })
 }
 
+/// W8-03: a node `effects::own` classifies `Pure` that panics is an internal
+/// error, not a panic of the program. Of a literal out of the range of its
+/// type (which the verifier refuses), `own` sees a divisor other than 0, the
+/// interpreter reads 0; a shift of an amount below the width likewise. The
+/// same division by a literal 0 is `Panics`, and a panic.
+#[test]
+fn a_panic_of_a_node_classified_pure_is_an_internal_error() {
+    on_stack(|| {
+        let i32_ = |n| int(IntKind::I32, n);
+        for op in [BinOp::Div, BinOp::Rem] {
+            let pure = bin(op, Overflow::Checked, i32_(7), i32_(1 << 32));
+            let message = internal_error_of(|| eval(pure));
+            assert!(message.contains("division by zero") && message.contains("classified pure"), "{message}");
+            assert!(eval(bin(op, Overflow::Checked, i32_(7), i32_(0))).is_err_and(|p| p.message.contains("division")));
+        }
+        let shift = bin(BinOp::Shl, Overflow::Checked, i32_(1), int(IntKind::U32, (1 << 32) + 40));
+        assert!(eval(shift).is_err(), "an amount the table sees as not below the width panics");
+    })
+}
+
 /// A call of a function without a body is an internal error (lowering never
 /// makes one).
 #[test]

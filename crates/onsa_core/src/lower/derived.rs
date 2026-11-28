@@ -96,7 +96,10 @@ fn valued(e: Expr) -> Block {
 /// The body of `default()` of the struct `id`.
 fn default_body(lw: &mut Lowerer, id: TypeId, span: Span) -> R<Block> {
     let (fields, args) = named_fields(lw, id, span)?;
-    let fields = fields.iter().map(|f| field_default(lw, f, &args, span, Unwritten::Derived)).collect::<R<_>>()?;
+    let fields = (0..)
+        .zip(fields)
+        .map(|(k, f)| Ok((k, field_default(lw, f, &args, span, Unwritten::Derived)?)))
+        .collect::<R<_>>()?;
     Ok(valued(Expr::new(lw.ty(TyKind::Struct(id)), span, ExprKind::Struct { ty: id, fields })))
 }
 

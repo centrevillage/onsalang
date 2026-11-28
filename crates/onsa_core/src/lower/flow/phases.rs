@@ -94,7 +94,7 @@ pub(super) fn init_delay(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, i
         PlanKind::Prev { init, ty, .. } => {
             let t = lw.core_ty(*ty, &[], span)?;
             let v = init_value(lw, init, t, span, |lw, e| lower_expr(lw, cx, e))?;
-            let v = materialize(cx, v, out, &format!("{name}.init"));
+            let v = materialize(cx, v, out, &format!("{name}.init"), &lw.m.tys);
             if info.field(at(Part::Init)).is_some() {
                 assign(out, &sfield(lw, info, state, at(Part::Init), span)?, v.clone())?;
             }
@@ -104,7 +104,7 @@ pub(super) fn init_delay(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, i
             let t = lw.core_ty(*ty, &[], span)?;
             let len = ring_len(&n.kind, span)?;
             let v = init_value(lw, init, t, span, |lw, e| lower_expr(lw, cx, e))?;
-            let v = materialize(cx, v, out, &format!("{name}.init"));
+            let v = materialize(cx, v, out, &format!("{name}.init"), &lw.m.tys);
             if info.field(at(Part::Init)).is_some() {
                 assign(out, &sfield(lw, info, state, at(Part::Init), span)?, v.clone())?;
             }
@@ -133,6 +133,7 @@ pub(super) fn own_stage(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, id
     let sub = lw.ensure_flow(callee)?;
     let fields = super::chain::inputs_of(lw, cx, out, id, state)?;
     let st = sfield(lw, info, state, FieldOf::Node(id, Part::Own), span)?;
+    let fields: Vec<_> = (0..).zip(fields).collect();
     let arg = |lw: &mut Lowerer, ty| Expr::new(lw.ty(TyKind::Struct(ty)), span, ExprKind::Struct { ty, fields });
     if stage(cx) == ClockStage::Block {
         expr_stmt(out, call(sub.ctl, Types::UNIT, span, vec![inout(st), borrow(arg(lw, sub.params))]));
@@ -520,7 +521,7 @@ fn store_node(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, id: NodeId, 
     // Evaluated while a guard stops it too (§11.10), stored of a tick it ran (its `_ran`).
     let ran = n.runs_guarded().then(|| sfield(lw, info, state, at(Part::Ran), span)).transpose()?;
     let v = lower_expr(lw, cx, arg)?;
-    let v = if ran.is_some() { materialize(cx, v, out, "__store") } else { v };
+    let v = if ran.is_some() { materialize(cx, v, out, "__store", &lw.m.tys) } else { v };
     let mut store = Vec::new();
     match ring {
         None => assign(&mut store, &sfield(lw, info, state, at(Part::Own), span)?, v)?,

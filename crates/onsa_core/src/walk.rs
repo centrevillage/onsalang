@@ -135,10 +135,10 @@ pub fn expr_children<'a>(e: &'a Expr, f: &mut dyn FnMut(Child<'a>)) {
             };
             f(Child::Expr(&a.expr, Always, role))
         }),
-        ExprKind::Struct { fields: xs, .. }
-        | ExprKind::Variant { fields: xs, .. }
-        | ExprKind::Array(xs)
-        | ExprKind::Tuple(xs) => each(&mut xs.iter(), Role::Dest),
+        ExprKind::Struct { fields, .. } => each(&mut fields.iter().map(|(_, x)| x), Role::Dest),
+        ExprKind::Variant { fields: xs, .. } | ExprKind::Array(xs) | ExprKind::Tuple(xs) => {
+            each(&mut xs.iter(), Role::Dest)
+        }
         ExprKind::Repeat { elem, .. } => f(Child::Expr(elem, Always, Role::Dest)),
         ExprKind::IfExpr { cond, then, else_ } => {
             f(Child::Expr(cond, Always, Role::Read));
@@ -183,9 +183,8 @@ pub fn written_places<'a>(e: &'a Expr, f: &mut dyn FnMut(&'a Expr)) -> bool {
     match &e.kind {
         ExprKind::SpanOf(inner) => inner.as_place().map(|_| f(inner)).is_some(),
         ExprKind::Prim { prim: Prim::Slice, args } => args.first().is_some_and(|a| written_places(&a.expr, f)),
-        ExprKind::Array(items) | ExprKind::Struct { fields: items, .. } => {
-            items.iter().fold(true, |all, x| written_places(x, f) && all)
-        }
+        ExprKind::Array(items) => items.iter().fold(true, |all, x| written_places(x, f) && all),
+        ExprKind::Struct { fields, .. } => fields.iter().fold(true, |all, (_, x)| written_places(x, f) && all),
         _ => e.as_place().map(|_| f(e)).is_some(),
     }
 }

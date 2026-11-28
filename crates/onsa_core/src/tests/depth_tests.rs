@@ -136,7 +136,7 @@ fn wraps() -> Vec<Wrap> {
         ("index_base", |e| ex(ExprKind::Index { base: bx(e), index: bx(lit()), bounds: Bounds::Checked })),
         ("index_index", |e| ex(ExprKind::Index { base: bx(lit()), index: bx(e), bounds: Bounds::Checked })),
         ("spanof", |e| ex(ExprKind::SpanOf(bx(e)))),
-        ("struct_last", |e| ex(ExprKind::Struct { ty: TypeId(0), fields: vec![lit(), e] })),
+        ("struct_last", |e| ex(ExprKind::Struct { ty: TypeId(0), fields: vec![(0, lit()), (1, e)] })),
         ("variant_last", |e| ex(ExprKind::Variant { ty: TypeId(0), tag: 0, fields: vec![lit(), e] })),
         ("array_last", |e| ex(ExprKind::Array(vec![lit(), e]))),
         ("repeat", |e| ex(ExprKind::Repeat { elem: bx(e), n: 2 })),

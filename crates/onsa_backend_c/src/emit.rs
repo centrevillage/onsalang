@@ -107,6 +107,11 @@ impl<'m> Cx<'m> {
         }
     }
 
+    /// The C name of the field `k` of the struct `id`.
+    pub fn field_name(&self, id: TypeId, k: u32) -> R<String> {
+        self.fields(id).get(k as usize).map(|(n, _)| ident(n)).ok_or_else(|| internal("a field out of range"))
+    }
+
     pub fn variants(&self, id: TypeId) -> &'m [(String, Vec<CTy>)] {
         match &self.m.ty(id).kind {
             TypeDefKind::Enum { variants } => variants,

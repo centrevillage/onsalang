@@ -188,7 +188,7 @@ pub(super) fn gen_process_inplace<'b>(
                 if lw.struct_fields(id).iter().map(|&(_, t)| t).ne(outs.iter().map(|e| e.ty)) {
                     return Err(unpaired());
                 }
-                Expr::new(t, span, ExprKind::Struct { ty: id, fields: outs })
+                Expr::new(t, span, ExprKind::Struct { ty: id, fields: (0..).zip(outs).collect() })
             }
             (_, [one]) if one.ty == t => one.clone(),
             _ => return Err(unpaired()),
@@ -258,12 +258,14 @@ pub(super) fn gen_render<'b>(lw: &mut Lowerer<'b>, shape: &FlowShape, info: &'b 
     }
     let process = process_of(fns, span)?;
     let output = match process_types(lw, process).last().map(|&t| (t, lw.m.tys.kind(t))) {
-        Some((t, &TyKind::Struct(id))) => Expr::new(t, span, ExprKind::Struct { ty: id, fields: views }),
+        Some((t, &TyKind::Struct(id))) => {
+            Expr::new(t, span, ExprKind::Struct { ty: id, fields: (0..).zip(views).collect() })
+        }
         _ => views.pop().filter(|_| views.is_empty()).ok_or_else(|| internal(span, "outputs of no `Out`"))?,
     };
     args.push(inout(output));
     expr_stmt(&mut g.stmts, call(process, Types::UNIT, span, args));
-    let out = Expr::new(out_ty, span, ExprKind::Struct { ty: shape.out_ty, fields: out_fields });
+    let out = Expr::new(out_ty, span, ExprKind::Struct { ty: shape.out_ty, fields: (0..).zip(out_fields).collect() });
     let render = fns.render.ok_or_else(|| internal(span, "a flow with no `render`"))?;
     g.finish(lw, render, out_ty, false, Some(out));
     Ok(())
@@ -286,7 +288,7 @@ pub(super) fn gen_params_default<'b>(
     for (t, d) in defaults {
         fields.push(lw.const_value_expr(&d.into(), t, span)?);
     }
-    let v = Expr::new(ty, span, ExprKind::Struct { ty: shape.params_ty, fields });
+    let v = Expr::new(ty, span, ExprKind::Struct { ty: shape.params_ty, fields: (0..).zip(fields).collect() });
     g.finish(lw, fid, ty, false, Some(v));
     Ok(())
 }

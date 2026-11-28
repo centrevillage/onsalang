@@ -5,6 +5,7 @@
 //! how flows become `init` / `reset` / `ctl` / `tick` / `process`.
 
 pub mod dump;
+pub mod effects;
 pub mod ir;
 pub mod layout;
 pub mod lower;

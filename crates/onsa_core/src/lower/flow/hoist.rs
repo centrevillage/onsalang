@@ -354,7 +354,7 @@ fn arm_write(
         let (pat, span) = (arms[arm as usize].pat, cx.ast.expr(*scrutinee).span);
         let v = if k == 0 { cond_value(lw, cx, info, *scrutinee, s, state)? } else { lower_expr(lw, cx, *scrutinee)? };
         let mut before = Vec::new();
-        let place = materialize(cx, v, &mut before, "__arm");
+        let place = materialize(cx, v, &mut before, "__arm", &lw.m.tys);
         let (test, binds) = arm_test(lw, cx, pat, &place)?;
         let mut inner = Vec::new();
         if binds {

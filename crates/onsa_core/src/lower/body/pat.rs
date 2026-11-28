@@ -19,7 +19,7 @@ pub(crate) fn bind_irrefutable(lw: &mut Lowerer, cx: &mut FnCx, pat: PatId, valu
             Ok(())
         }
         PatKind::Tuple(elems) => {
-            let base = materialize(cx, value, out, "__tuple");
+            let base = materialize(cx, value, out, "__tuple", &lw.m.tys);
             for (i, &el) in elems.iter().enumerate() {
                 let f = field(lw, base.clone(), i as u32)?;
                 bind_irrefutable(lw, cx, el, f, out)?;
@@ -27,7 +27,7 @@ pub(crate) fn bind_irrefutable(lw: &mut Lowerer, cx: &mut FnCx, pat: PatId, valu
             Ok(())
         }
         PatKind::Struct { fields, .. } => {
-            let base = materialize(cx, value, out, "__struct");
+            let base = materialize(cx, value, out, "__struct", &lw.m.tys);
             for (name, fp) in fields {
                 let f = field_by_name(lw, base.clone(), &name.name, name.span)?;
                 bind_irrefutable(lw, cx, *fp, f, out)?;
@@ -36,7 +36,7 @@ pub(crate) fn bind_irrefutable(lw: &mut Lowerer, cx: &mut FnCx, pat: PatId, valu
         }
         PatKind::TupleStruct { elems, .. } => {
             let (tag, _) = ctor_of(lw, cx, pat, value.ty)?;
-            let base = materialize(cx, value, out, "__variant");
+            let base = materialize(cx, value, out, "__variant", &lw.m.tys);
             for (i, &el) in elems.iter().enumerate() {
                 let f = payload(lw, base.clone(), tag, i as u32)?;
                 bind_irrefutable(lw, cx, el, f, out)?;
@@ -256,7 +256,7 @@ pub(crate) fn lower_match_with(
 ) -> R<Expr> {
     let span = cx.expr(e).span;
     let mut stmts = Vec::new();
-    let place = materialize(cx, s, &mut stmts, "__match");
+    let place = materialize(cx, s, &mut stmts, "__match", &lw.m.tys);
     let want = ty != Types::UNIT;
     // Fast path: every arm is a constructor (or a final catch-all) with
     // irrefutable sub-patterns and no guard -> `Switch`.

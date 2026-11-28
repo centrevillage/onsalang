@@ -42,7 +42,7 @@ pub(super) fn coerce(lw: &mut Lowerer, cx: &mut FnCx, e: Expr, want: CTy, mode: 
             // indices of a place evaluated once (R-433); an `inout` argument
             // is a place, with no statements before it.
             let mut stmts = Vec::new();
-            let base = materialize(cx, e, &mut stmts, "__planar");
+            let base = materialize(cx, e, &mut stmts, "__planar", &lw.m.tys);
             if mode == Mode::Inout && !stmts.is_empty() {
                 return Err(unsupported(span, Feature::PlanarInoutIndex, &[]));
             }
