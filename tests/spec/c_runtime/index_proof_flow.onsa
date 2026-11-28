@@ -1,0 +1,158 @@
+// onsa.toml
+// [package]
+// name = "index_proof_flow"
+// edition = "2026"
+//
+// [export]
+// prefix = "ipx_"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "poison"
+// provides = []
+//
+// [test]
+// mode = "test"
+// spec = ["§9.2", "§11.4", "§11.5", "§13.4"]
+//
+// # W8-03 U5/t, S-1264 P2 (§9.2: a compiler may remove a check that it can prove, and "意味は変わらない"; the write position of a delay is the position that the compiler writes itself, and the index of a replica of
+// # `par~` is `i - a`): the values of the state that the lowering of a flow makes. No form here panics, so what is checked is that a removed check (or a wrong position) does not change a value. The input is
+// # x[n] = n + 1 for 24 frames, which is far more than the length of every delay here, so the write position goes round its ring many times. The expected arrays are worked out by hand from §11.4 (`delay~(e, N)`:
+// # "出力は `buf[w]`（= `e[n - N]`）、その後 `buf[w] = e`、`w = (w + 1) % N`") and §11.5 (`par~ i in a ..< b` has `b - a` replicas and `i` goes from `a`), never from an output. In the host, `process` runs twice
+// # (13 frames and 11) so that the write position goes round across two calls. The same flows run in the interpreter (`render`, the tests below). What the other tests of delays already cover:
+// # `tests/spec/flow_semantics/prev_delay.onsa` (`delay~` of 2 and 3 over 6 and 8 frames), `tests/spec/flow_semantics/par_tilde_closed_range.onsa` and `tests/conformance/par_closed_range.onsa` (the closed range of `par~`).
+//
+// # `delays`: delay~(x, N) for N of 2 (the least), 3, 5 and 7 (not powers of 2) and 4 and 8 (powers of 2): the output is the input N frames late, 0 before. 24 frames wrap the ring of 2 twelve
+// # times, of 8 three times
+// [[test.host]]
+// name = "c: delays over two calls of process"
+// target = "host"
+// flow = "index_proof_flow.delays"
+// steps = [
+//   { call = "init", config = {}, sample_rate = 8.0, status = 0 },
+//   { call = "process", params = {}, frames = 13, input = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0], status = 0, output = [[0.0, 0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0], [0.0, 0.0, 0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0], [0.0, 0.0, 0.0, 0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0], [0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0], [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0], [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 2.0, 3.0, 4.0, 5.0]] },
+//   { call = "process", params = {}, frames = 11, input = [14.0, 15.0, 16.0, 17.0, 18.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0], status = 0, output = [[12.0, 13.0, 14.0, 15.0, 16.0, 17.0, 18.0, 19.0, 20.0, 21.0, 22.0], [11.0, 12.0, 13.0, 14.0, 15.0, 16.0, 17.0, 18.0, 19.0, 20.0, 21.0], [10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0, 17.0, 18.0, 19.0, 20.0], [9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0, 17.0, 18.0, 19.0], [7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0, 17.0], [6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0]] },
+// ]
+//
+// # `vdelays`: vdelay~ with d of 2.0 (MAX 4), 4.0 (d = MAX) and 2.5 (MAX 5): the integer d gives the input d frames late, d of 2.5 gives (x[n - 2] + x[n - 3]) / 2 (§11.4, f = 0.5; the buffers
+// # hold 5 and 6)
+// [[test.host]]
+// name = "c: vdelays over two calls of process"
+// target = "host"
+// flow = "index_proof_flow.vdelays"
+// steps = [
+//   { call = "init", config = {}, sample_rate = 8.0, status = 0 },
+//   { call = "process", params = {}, frames = 13, input = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0], status = 0, output = [[0.0, 0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0], [0.0, 0.0, 0.0, 0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0], [0.0, 0.0, 0.5, 1.5, 2.5, 3.5, 4.5, 5.5, 6.5, 7.5, 8.5, 9.5, 10.5]] },
+//   { call = "process", params = {}, frames = 11, input = [14.0, 15.0, 16.0, 17.0, 18.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0], status = 0, output = [[12.0, 13.0, 14.0, 15.0, 16.0, 17.0, 18.0, 19.0, 20.0, 21.0, 22.0], [10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0, 17.0, 18.0, 19.0, 20.0], [11.5, 12.5, 13.5, 14.5, 15.5, 16.5, 17.5, 18.5, 19.5, 20.5, 21.5]] },
+// ]
+//
+// # `par_delays`: par~ i in 2 ..< 5 { delay~(x * i, 3) }: the replica c has i = 2 + c and is (2 + c) * x[n - 3], so a replica that kept the state of another one gives a wrong value
+// [[test.host]]
+// name = "c: par_delays over two calls of process"
+// target = "host"
+// flow = "index_proof_flow.par_delays"
+// steps = [
+//   { call = "init", config = {}, sample_rate = 8.0, status = 0 },
+//   { call = "process", params = {}, frames = 13, input = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0], status = 0, output = [[0.0, 0.0, 0.0, 2.0, 4.0, 6.0, 8.0, 10.0, 12.0, 14.0, 16.0, 18.0, 20.0], [0.0, 0.0, 0.0, 3.0, 6.0, 9.0, 12.0, 15.0, 18.0, 21.0, 24.0, 27.0, 30.0], [0.0, 0.0, 0.0, 4.0, 8.0, 12.0, 16.0, 20.0, 24.0, 28.0, 32.0, 36.0, 40.0]] },
+//   { call = "process", params = {}, frames = 11, input = [14.0, 15.0, 16.0, 17.0, 18.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0], status = 0, output = [[22.0, 24.0, 26.0, 28.0, 30.0, 32.0, 34.0, 36.0, 38.0, 40.0, 42.0], [33.0, 36.0, 39.0, 42.0, 45.0, 48.0, 51.0, 54.0, 57.0, 60.0, 63.0], [44.0, 48.0, 52.0, 56.0, 60.0, 64.0, 68.0, 72.0, 76.0, 80.0, 84.0]] },
+// ]
+//
+// # `par_accs`: par~ i in 2 ..< 5 { acc~(x + i) } with acc the running sum y[n] = x[n] + y[n - 1]: the replica c is the sum of (x[m] + 2 + c) for m up to n = (n + 1)(n + 2) / 2 + (2 + c)(n + 1)
+// [[test.host]]
+// name = "c: par_accs over two calls of process"
+// target = "host"
+// flow = "index_proof_flow.par_accs"
+// steps = [
+//   { call = "init", config = {}, sample_rate = 8.0, status = 0 },
+//   { call = "process", params = {}, frames = 13, input = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0], status = 0, output = [[3.0, 7.0, 12.0, 18.0, 25.0, 33.0, 42.0, 52.0, 63.0, 75.0, 88.0, 102.0, 117.0], [4.0, 9.0, 15.0, 22.0, 30.0, 39.0, 49.0, 60.0, 72.0, 85.0, 99.0, 114.0, 130.0], [5.0, 11.0, 18.0, 26.0, 35.0, 45.0, 56.0, 68.0, 81.0, 95.0, 110.0, 126.0, 143.0]] },
+//   { call = "process", params = {}, frames = 11, input = [14.0, 15.0, 16.0, 17.0, 18.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0], status = 0, output = [[133.0, 150.0, 168.0, 187.0, 207.0, 228.0, 250.0, 273.0, 297.0, 322.0, 348.0], [147.0, 165.0, 184.0, 204.0, 225.0, 247.0, 270.0, 294.0, 319.0, 345.0, 372.0], [161.0, 180.0, 200.0, 221.0, 243.0, 266.0, 290.0, 315.0, 341.0, 368.0, 396.0]] },
+// ]
+
+pub flow acc(x: F32 at sample) -> F32 at sample {
+  let y = x + prev~(^y)
+  y
+}
+
+@export
+pub flow delays(x: F32 at sample) -> [F32; 6] at sample {
+  [delay~(x, 2), delay~(x, 3), delay~(x, 4), delay~(x, 5), delay~(x, 7), delay~(x, 8)]
+}
+
+@export
+pub flow vdelays(x: F32 at sample) -> [F32; 3] at sample {
+  [vdelay~(x, 2.0, 4), vdelay~(x, 4.0, 4), vdelay~(x, 2.5, 5)]
+}
+
+@export
+pub flow par_delays(x: F32 at sample) -> [F32; 3] at sample {
+  par~ i in 2 ..< 5 {
+    delay~(x * F32.round_from(i), 3)
+  }
+}
+
+@export
+pub flow par_accs(x: F32 at sample) -> [F32; 3] at sample {
+  par~ i in 2 ..< 5 {
+    acc~(x + F32.round_from(i))
+  }
+}
+
+fn input() -> [F32; 24] {
+  var xs: [F32; 24] = [0.0; 24]
+  for n in 0 ..< 24 {
+    xs[n] = F32.round_from(n) + 1.0
+  }
+  xs
+}
+
+/// e[n - lag] of the input x[m] = m + 1, 0 before the first frame.
+fn late(n: U32, lag: U32) -> F32 {
+  if n >= lag {
+    F32.round_from(n - lag) + 1.0
+  } else {
+    0.0
+  }
+}
+
+test "delays: every length gives the input that many frames late, over many turns of the ring" {
+  let o = delays.render(input(), 8.0)
+  for n in 0 ..< 24 {
+    assert o.out[0][n] == late(n, 2)
+    assert o.out[1][n] == late(n, 3)
+    assert o.out[2][n] == late(n, 4)
+    assert o.out[3][n] == late(n, 5)
+    assert o.out[4][n] == late(n, 7)
+    assert o.out[5][n] == late(n, 8)
+  }
+}
+
+test "vdelays: a whole delay is the input that many frames late and 2.5 is the mean of two frames" {
+  let o = vdelays.render(input(), 8.0)
+  for n in 0 ..< 24 {
+    assert o.out[0][n] == late(n, 2)
+    assert o.out[1][n] == late(n, 4)
+    assert o.out[2][n] == 0.5 * late(n, 2) + 0.5 * late(n, 3)
+  }
+}
+
+test "par_delays: the replicas of a range that starts at 2 keep a state each" {
+  let o = par_delays.render(input(), 8.0)
+  for n in 0 ..< 24 {
+    assert o.out[0][n] == 2.0 * late(n, 3)
+    assert o.out[1][n] == 3.0 * late(n, 3)
+    assert o.out[2][n] == 4.0 * late(n, 3)
+  }
+}
+
+test "par_accs: the running sum of each replica of a range that starts at 2 is its own" {
+  let o = par_accs.render(input(), 8.0)
+  for n in 0 ..< 24 {
+    let m = F32.round_from(n) + 1.0
+    let tri = m * (m + 1.0) * 0.5
+    assert o.out[0][n] == tri + 2.0 * m
+    assert o.out[1][n] == tri + 3.0 * m
+    assert o.out[2][n] == tri + 4.0 * m
+  }
+}

@@ -1,0 +1,13 @@
+// The length of an array and the ends of loops that are constants of another module (S-1264 P2, §9.2, §15.1).
+
+pub const LEN: U32 = 3
+pub const OVER: U32 = 4
+
+/// `[1, 2, …, N]`: the element at k is k + 1.
+pub fn ramp[const N: U32]() -> [U32; N] {
+  var xs: [U32; N] = [0; N]
+  for k in 0 ..< N {
+    xs[k] = k + 1
+  }
+  xs
+}

@@ -1,0 +1,549 @@
+// onsa.toml
+// [package]
+// name = "index_proof_ops"
+// edition = "2026"
+//
+// [export]
+// prefix = "ipo_"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "poison"
+// provides = []
+//
+// [test]
+// mode = "test"
+// spec = ["§9.2", "§3.4", "§3.5"]
+//
+// # W8-03 U5/t, S-1264 P2 (§9.2: a compiler may remove a check that it can prove, and "意味は変わらない"; the examples that it names are `for i in 0 ..< N` and `% N`): the index is an operation on a value that the
+// # compiler does not know. An operation bounds the index only by what §3.4 says it does: `% N` is below N, `& m` is at most m, `>> s` is below 2^(32 - s), but `| m`, `+ 1` after a `%`, and `- 1` after
+// # a `U8` is widened are not bounded by the length that the neighbour has. `-%` and `+%` wrap (§3.4) and `<<` drops the bits above the type (§3.4: "上位にはみ出したビットを捨てる"), so a value that is
+// # small after the wrap is not the value that the arithmetic of the integers gives, and the reverse. Each family is a function `f(k, …)` whose `k` picks the form (so that one group of the host runs them all);
+// # in every form the index is an operation on the argument. The array `ramp` holds k + 1 at k, so an element that is read gives its index plus 1 (the wrong element is a wrong value). The same body runs in the
+// # interpreter (the tests below) and in the C of the target (the `[[test.host]]` groups: an exported function that panics is status 1, §9.2). Expected values are derived by hand from §3.4, never from an output.
+//
+// # `rem`: `%` and `/`. 0: `xs4[i % 4]` never panics (a length of 4). 1: `xs3[i % 4]` on 3 panics when `i % 4` is 3. 2: `xs3[i % 3]` never panics. 3: `xs3[i % n]` with `n` of 3 fits and 4 can
+// # panic. 4: `xs5[(i % 4) + 1]` fits on 5 and 5: `xs4[(i % 4) + 1]` panics when `i % 4` is 3 (the `+ 1` is on the result of `%`). 6: `xs2[i / 2]` fits for `i` of 3 and panics for 4.
+// [[test.host]]
+// name = "c: rem"
+// target = "host"
+// fn = "index_proof_ops.rem"
+// steps = [
+//   { call = "fn", args = { k = 0, i = 0, n = 0 }, status = 0, result = 1 },
+//   { call = "fn", args = { k = 0, i = 5, n = 0 }, status = 0, result = 2 },
+//   { call = "fn", args = { k = 0, i = 4294967295, n = 0 }, status = 0, result = 4 },
+//   { call = "fn", args = { k = 1, i = 2, n = 0 }, status = 0, result = 3 },
+//   { call = "fn", args = { k = 1, i = 4, n = 0 }, status = 0, result = 1 },
+//   { call = "fn", args = { k = 1, i = 3, n = 0 }, status = 1 },
+//   { call = "fn", args = { k = 1, i = 7, n = 0 }, status = 1 },
+//   { call = "fn", args = { k = 1, i = 4294967295, n = 0 }, status = 1 },
+//   { call = "fn", args = { k = 2, i = 4294967295, n = 0 }, status = 0, result = 1 },
+//   { call = "fn", args = { k = 2, i = 5, n = 0 }, status = 0, result = 3 },
+//   { call = "fn", args = { k = 3, i = 7, n = 3 }, status = 0, result = 2 },
+//   { call = "fn", args = { k = 3, i = 7, n = 4 }, status = 1 },
+//   { call = "fn", args = { k = 3, i = 2, n = 4 }, status = 0, result = 3 },
+//   { call = "fn", args = { k = 3, i = 6, n = 4 }, status = 0, result = 3 },
+//   { call = "fn", args = { k = 4, i = 3, n = 0 }, status = 0, result = 5 },
+//   { call = "fn", args = { k = 4, i = 4, n = 0 }, status = 0, result = 2 },
+//   { call = "fn", args = { k = 5, i = 3, n = 0 }, status = 1 },
+//   { call = "fn", args = { k = 5, i = 2, n = 0 }, status = 0, result = 4 },
+//   { call = "fn", args = { k = 5, i = 0, n = 0 }, status = 0, result = 2 },
+//   { call = "fn", args = { k = 6, i = 3, n = 0 }, status = 0, result = 2 },
+//   { call = "fn", args = { k = 6, i = 4, n = 0 }, status = 1 },
+//   { call = "fn", args = { k = 6, i = 1, n = 0 }, status = 0, result = 1 },
+// ]
+//
+// # `bits`: `&`, `|` and `>>` on a `U32`. 0: `xs8[i & 7]` never panics, 1: `xs7[i & 7]` panics when the low three bits are 7. 2: `xs8[i | 4]` fits for `i` below 8 and panics from 8 (`8 | 4` is
+// # 12). 3: `xs8[(i & 3) | 4]` is 4 to 7 for every `i`, 4: the same on 7 panics when the low two bits are 3. 5: `xs4[i >> 1]` fits below 8. 6: `xs4[i >> 30]` is 0 to 3 for every `i`, 7: `xs3[i
+// # >> 30]` panics from 3 * 2^30. 8: `xs2[i >> 31]` never panics, 9: `xs1[i >> 31]` panics from 2^31.
+// [[test.host]]
+// name = "c: bits"
+// target = "host"
+// fn = "index_proof_ops.bits"
+// steps = [
+//   { call = "fn", args = { k = 0, i = 0 }, status = 0, result = 1 },
+//   { call = "fn", args = { k = 0, i = 9 }, status = 0, result = 2 },
+//   { call = "fn", args = { k = 0, i = 4294967295 }, status = 0, result = 8 },
+//   { call = "fn", args = { k = 1, i = 6 }, status = 0, result = 7 },
+//   { call = "fn", args = { k = 1, i = 8 }, status = 0, result = 1 },
+//   { call = "fn", args = { k = 1, i = 7 }, status = 1 },
+//   { call = "fn", args = { k = 1, i = 15 }, status = 1 },
+//   { call = "fn", args = { k = 2, i = 0 }, status = 0, result = 5 },
+//   { call = "fn", args = { k = 2, i = 3 }, status = 0, result = 8 },
+//   { call = "fn", args = { k = 2, i = 8 }, status = 1 },
+//   { call = "fn", args = { k = 2, i = 4294967295 }, status = 1 },
+//   { call = "fn", args = { k = 3, i = 1 }, status = 0, result = 6 },
+//   { call = "fn", args = { k = 3, i = 2 }, status = 0, result = 7 },
+//   { call = "fn", args = { k = 3, i = 4294967295 }, status = 0, result = 8 },
+//   { call = "fn", args = { k = 3, i = 4 }, status = 0, result = 5 },
+//   { call = "fn", args = { k = 4, i = 0 }, status = 0, result = 5 },
+//   { call = "fn", args = { k = 4, i = 2 }, status = 0, result = 7 },
+//   { call = "fn", args = { k = 4, i = 3 }, status = 1 },
+//   { call = "fn", args = { k = 4, i = 7 }, status = 1 },
+//   { call = "fn", args = { k = 5, i = 0 }, status = 0, result = 1 },
+//   { call = "fn", args = { k = 5, i = 7 }, status = 0, result = 4 },
+//   { call = "fn", args = { k = 5, i = 8 }, status = 1 },
+//   { call = "fn", args = { k = 6, i = 0 }, status = 0, result = 1 },
+//   { call = "fn", args = { k = 6, i = 1073741824 }, status = 0, result = 2 },
+//   { call = "fn", args = { k = 6, i = 4294967295 }, status = 0, result = 4 },
+//   { call = "fn", args = { k = 7, i = 1073741823 }, status = 0, result = 1 },
+//   { call = "fn", args = { k = 7, i = 2147483648 }, status = 0, result = 3 },
+//   { call = "fn", args = { k = 7, i = 3221225472 }, status = 1 },
+//   { call = "fn", args = { k = 7, i = 4294967295 }, status = 1 },
+//   { call = "fn", args = { k = 8, i = 4294967295 }, status = 0, result = 2 },
+//   { call = "fn", args = { k = 8, i = 2147483647 }, status = 0, result = 1 },
+//   { call = "fn", args = { k = 9, i = 2147483647 }, status = 0, result = 1 },
+//   { call = "fn", args = { k = 9, i = 2147483648 }, status = 1 },
+// ]
+//
+// # `wrap`: `-%` and `+%` on a `U32`, and the same with `-` and `+`. 0: `xs3[i -% 1]` wraps to the largest value at 0 and panics (4 panics too). 1: `xs3[i - 1]` at 0 panics at the subtraction.
+// # 2: `xs3[i +% 1]` wraps to 0 at the largest value (1), panics at 2 and at the largest value minus 1. 3: `xs4[(i + 1) % 4]` panics at the largest value (the `+` overflows before the `%`), 4:
+// # `xs4[(i +% 1) % 4]` wraps to 0 there (1).
+// [[test.host]]
+// name = "c: wrap"
+// target = "host"
+// fn = "index_proof_ops.wrap"
+// steps = [
+//   { call = "fn", args = { k = 0, i = 1 }, status = 0, result = 1 },
+//   { call = "fn", args = { k = 0, i = 3 }, status = 0, result = 3 },
+//   { call = "fn", args = { k = 0, i = 4 }, status = 1 },
+//   { call = "fn", args = { k = 0, i = 0 }, status = 1 },
+//   { call = "fn", args = { k = 1, i = 1 }, status = 0, result = 1 },
+//   { call = "fn", args = { k = 1, i = 0 }, status = 1 },
+//   { call = "fn", args = { k = 2, i = 4294967295 }, status = 0, result = 1 },
+//   { call = "fn", args = { k = 2, i = 0 }, status = 0, result = 2 },
+//   { call = "fn", args = { k = 2, i = 1 }, status = 0, result = 3 },
+//   { call = "fn", args = { k = 2, i = 2 }, status = 1 },
+//   { call = "fn", args = { k = 2, i = 4294967294 }, status = 1 },
+//   { call = "fn", args = { k = 3, i = 3 }, status = 0, result = 1 },
+//   { call = "fn", args = { k = 3, i = 2 }, status = 0, result = 4 },
+//   { call = "fn", args = { k = 3, i = 4294967295 }, status = 1 },
+//   { call = "fn", args = { k = 4, i = 4294967295 }, status = 0, result = 1 },
+//   { call = "fn", args = { k = 4, i = 2 }, status = 0, result = 4 },
+// ]
+//
+// # `narrow`: A `U8` index. 0: `xs256[(b -% 1) as U32]` wraps 0 to 255 (a length of 256 fits). 1: the same on 255 panics at 0. 2: `xs256[(b +% 1) as U32]` wraps 255 to 0. 3: the same on 255
+// # panics at 254. 4: `xs17[(b << 4) as U32]` (`<<` drops the high bits, §3.4): 1 gives 16, 17 (0x11) gives 0x110 which is 16 in a `U8`, 16 gives 0, 33 gives 16; 2 gives 32, 18 gives 32, 31
+// # gives 240 and 255 gives 240, which panic. 5: `xs256[b as U32]` fits for every `b`, 6: on 255 it panics for 255. 7: `xs256[(b as U32) + 1]` panics for 255 (the sum is 256, not wrapped,
+// # because it is a `U32`), 8: on 257 it fits.
+// [[test.host]]
+// name = "c: narrow"
+// target = "host"
+// fn = "index_proof_ops.narrow"
+// steps = [
+//   { call = "fn", args = { k = 0, b = 0 }, status = 0, result = 256 },
+//   { call = "fn", args = { k = 0, b = 1 }, status = 0, result = 1 },
+//   { call = "fn", args = { k = 0, b = 255 }, status = 0, result = 255 },
+//   { call = "fn", args = { k = 1, b = 0 }, status = 1 },
+//   { call = "fn", args = { k = 1, b = 1 }, status = 0, result = 1 },
+//   { call = "fn", args = { k = 1, b = 255 }, status = 0, result = 255 },
+//   { call = "fn", args = { k = 2, b = 255 }, status = 0, result = 1 },
+//   { call = "fn", args = { k = 2, b = 0 }, status = 0, result = 2 },
+//   { call = "fn", args = { k = 2, b = 254 }, status = 0, result = 256 },
+//   { call = "fn", args = { k = 3, b = 254 }, status = 1 },
+//   { call = "fn", args = { k = 3, b = 255 }, status = 0, result = 1 },
+//   { call = "fn", args = { k = 3, b = 253 }, status = 0, result = 255 },
+//   { call = "fn", args = { k = 4, b = 0 }, status = 0, result = 1 },
+//   { call = "fn", args = { k = 4, b = 1 }, status = 0, result = 17 },
+//   { call = "fn", args = { k = 4, b = 17 }, status = 0, result = 17 },
+//   { call = "fn", args = { k = 4, b = 16 }, status = 0, result = 1 },
+//   { call = "fn", args = { k = 4, b = 33 }, status = 0, result = 17 },
+//   { call = "fn", args = { k = 4, b = 2 }, status = 1 },
+//   { call = "fn", args = { k = 4, b = 31 }, status = 1 },
+//   { call = "fn", args = { k = 4, b = 255 }, status = 1 },
+//   { call = "fn", args = { k = 4, b = 18 }, status = 1 },
+//   { call = "fn", args = { k = 5, b = 255 }, status = 0, result = 256 },
+//   { call = "fn", args = { k = 5, b = 0 }, status = 0, result = 1 },
+//   { call = "fn", args = { k = 5, b = 100 }, status = 0, result = 101 },
+//   { call = "fn", args = { k = 6, b = 254 }, status = 0, result = 255 },
+//   { call = "fn", args = { k = 6, b = 255 }, status = 1 },
+//   { call = "fn", args = { k = 7, b = 254 }, status = 0, result = 256 },
+//   { call = "fn", args = { k = 7, b = 255 }, status = 1 },
+//   { call = "fn", args = { k = 8, b = 255 }, status = 0, result = 257 },
+//   { call = "fn", args = { k = 8, b = 0 }, status = 0, result = 2 },
+// ]
+
+/// `[1, 2, …, N]`: the element at k is k + 1.
+fn ramp[const N: U32]() -> [U32; N] {
+  var xs: [U32; N] = [0; N]
+  for k in 0 ..< N {
+    xs[k] = k + 1
+  }
+  xs
+}
+
+@export
+pub fn rem(k: U32, i: U32, n: U32) -> U32 {
+  let xs2: [U32; 2] = ramp()
+  let xs3: [U32; 3] = ramp()
+  let xs4: [U32; 4] = ramp()
+  let xs5: [U32; 5] = ramp()
+  var r: U32 = 0
+  match k {
+    0 => {
+      r = xs4[i % 4]
+    },
+    1 => {
+      r = xs3[i % 4]
+    },
+    2 => {
+      r = xs3[i % 3]
+    },
+    3 => {
+      r = xs3[i % n]
+    },
+    4 => {
+      r = xs5[(i % 4) + 1]
+    },
+    5 => {
+      r = xs4[(i % 4) + 1]
+    },
+    _ => {
+      r = xs2[i / 2]
+    },
+  }
+  r
+}
+
+@export
+pub fn bits(k: U32, i: U32) -> U32 {
+  let xs1: [U32; 1] = ramp()
+  let xs2: [U32; 2] = ramp()
+  let xs3: [U32; 3] = ramp()
+  let xs4: [U32; 4] = ramp()
+  let xs7: [U32; 7] = ramp()
+  let xs8: [U32; 8] = ramp()
+  var r: U32 = 0
+  match k {
+    0 => {
+      r = xs8[i & 7]
+    },
+    1 => {
+      r = xs7[i & 7]
+    },
+    2 => {
+      r = xs8[i | 4]
+    },
+    3 => {
+      r = xs8[(i & 3) | 4]
+    },
+    4 => {
+      r = xs7[(i & 3) | 4]
+    },
+    5 => {
+      r = xs4[i >> 1]
+    },
+    6 => {
+      r = xs4[i >> 30]
+    },
+    7 => {
+      r = xs3[i >> 30]
+    },
+    8 => {
+      r = xs2[i >> 31]
+    },
+    _ => {
+      r = xs1[i >> 31]
+    },
+  }
+  r
+}
+
+@export
+pub fn wrap(k: U32, i: U32) -> U32 {
+  let xs3: [U32; 3] = ramp()
+  let xs4: [U32; 4] = ramp()
+  var r: U32 = 0
+  match k {
+    0 => {
+      r = xs3[i -% 1]
+    },
+    1 => {
+      r = xs3[i - 1]
+    },
+    2 => {
+      r = xs3[i +% 1]
+    },
+    3 => {
+      r = xs4[(i + 1) % 4]
+    },
+    _ => {
+      r = xs4[(i +% 1) % 4]
+    },
+  }
+  r
+}
+
+@export
+pub fn narrow(k: U32, b: U8) -> U32 {
+  let xs17: [U32; 17] = ramp()
+  let xs255: [U32; 255] = ramp()
+  let xs256: [U32; 256] = ramp()
+  let xs257: [U32; 257] = ramp()
+  var r: U32 = 0
+  match k {
+    0 => {
+      r = xs256[(b -% 1) as U32]
+    },
+    1 => {
+      r = xs255[(b -% 1) as U32]
+    },
+    2 => {
+      r = xs256[(b +% 1) as U32]
+    },
+    3 => {
+      r = xs255[(b +% 1) as U32]
+    },
+    4 => {
+      r = xs17[(b << 4) as U32]
+    },
+    5 => {
+      r = xs256[b as U32]
+    },
+    6 => {
+      r = xs255[b as U32]
+    },
+    7 => {
+      r = xs256[(b as U32) + 1]
+    },
+    _ => {
+      r = xs257[(b as U32) + 1]
+    },
+  }
+  r
+}
+
+test "rem: the forms that fit give the element that the arithmetic names" {
+  assert rem(0, 0, 0) == 1
+  assert rem(0, 5, 0) == 2
+  assert rem(0, 4294967295, 0) == 4
+  assert rem(1, 2, 0) == 3
+  assert rem(1, 4, 0) == 1
+  assert rem(2, 4294967295, 0) == 1
+  assert rem(2, 5, 0) == 3
+  assert rem(3, 7, 3) == 2
+  assert rem(3, 2, 4) == 3
+  assert rem(3, 6, 4) == 3
+  assert rem(4, 3, 0) == 5
+  assert rem(4, 4, 0) == 2
+  assert rem(5, 2, 0) == 4
+  assert rem(5, 0, 0) == 2
+  assert rem(6, 3, 0) == 2
+  assert rem(6, 1, 0) == 1
+}
+
+test "rem: form 1 panics for 3, 0" {
+  let r = rem(1, 3, 0) //~ PANIC "rem: form 1 panics for 3, 0"
+  assert r == 0
+}
+
+test "rem: form 1 panics for 7, 0" {
+  let r = rem(1, 7, 0) //~ PANIC "rem: form 1 panics for 7, 0"
+  assert r == 0
+}
+
+test "rem: form 1 panics for 4294967295, 0" {
+  let r = rem(1, 4294967295, 0) //~ PANIC "rem: form 1 panics for 4294967295, 0"
+  assert r == 0
+}
+
+test "rem: form 3 panics for 7, 4" {
+  let r = rem(3, 7, 4) //~ PANIC "rem: form 3 panics for 7, 4"
+  assert r == 0
+}
+
+test "rem: form 5 panics for 3, 0" {
+  let r = rem(5, 3, 0) //~ PANIC "rem: form 5 panics for 3, 0"
+  assert r == 0
+}
+
+test "rem: form 6 panics for 4, 0" {
+  let r = rem(6, 4, 0) //~ PANIC "rem: form 6 panics for 4, 0"
+  assert r == 0
+}
+
+test "bits: the forms that fit give the element that the arithmetic names" {
+  assert bits(0, 0) == 1
+  assert bits(0, 9) == 2
+  assert bits(0, 4294967295) == 8
+  assert bits(1, 6) == 7
+  assert bits(1, 8) == 1
+  assert bits(2, 0) == 5
+  assert bits(2, 3) == 8
+  assert bits(3, 1) == 6
+  assert bits(3, 2) == 7
+  assert bits(3, 4294967295) == 8
+  assert bits(3, 4) == 5
+  assert bits(4, 0) == 5
+  assert bits(4, 2) == 7
+  assert bits(5, 0) == 1
+  assert bits(5, 7) == 4
+  assert bits(6, 0) == 1
+  assert bits(6, 1073741824) == 2
+  assert bits(6, 4294967295) == 4
+  assert bits(7, 1073741823) == 1
+  assert bits(7, 2147483648) == 3
+  assert bits(8, 4294967295) == 2
+  assert bits(8, 2147483647) == 1
+  assert bits(9, 2147483647) == 1
+}
+
+test "bits: form 1 panics for 7" {
+  let r = bits(1, 7) //~ PANIC "bits: form 1 panics for 7"
+  assert r == 0
+}
+
+test "bits: form 1 panics for 15" {
+  let r = bits(1, 15) //~ PANIC "bits: form 1 panics for 15"
+  assert r == 0
+}
+
+test "bits: form 2 panics for 8" {
+  let r = bits(2, 8) //~ PANIC "bits: form 2 panics for 8"
+  assert r == 0
+}
+
+test "bits: form 2 panics for 4294967295" {
+  let r = bits(2, 4294967295) //~ PANIC "bits: form 2 panics for 4294967295"
+  assert r == 0
+}
+
+test "bits: form 4 panics for 3" {
+  let r = bits(4, 3) //~ PANIC "bits: form 4 panics for 3"
+  assert r == 0
+}
+
+test "bits: form 4 panics for 7" {
+  let r = bits(4, 7) //~ PANIC "bits: form 4 panics for 7"
+  assert r == 0
+}
+
+test "bits: form 5 panics for 8" {
+  let r = bits(5, 8) //~ PANIC "bits: form 5 panics for 8"
+  assert r == 0
+}
+
+test "bits: form 7 panics for 3221225472" {
+  let r = bits(7, 3221225472) //~ PANIC "bits: form 7 panics for 3221225472"
+  assert r == 0
+}
+
+test "bits: form 7 panics for 4294967295" {
+  let r = bits(7, 4294967295) //~ PANIC "bits: form 7 panics for 4294967295"
+  assert r == 0
+}
+
+test "bits: form 9 panics for 2147483648" {
+  let r = bits(9, 2147483648) //~ PANIC "bits: form 9 panics for 2147483648"
+  assert r == 0
+}
+
+test "wrap: the forms that fit give the element that the arithmetic names" {
+  assert wrap(0, 1) == 1
+  assert wrap(0, 3) == 3
+  assert wrap(1, 1) == 1
+  assert wrap(2, 4294967295) == 1
+  assert wrap(2, 0) == 2
+  assert wrap(2, 1) == 3
+  assert wrap(3, 3) == 1
+  assert wrap(3, 2) == 4
+  assert wrap(4, 4294967295) == 1
+  assert wrap(4, 2) == 4
+}
+
+test "wrap: form 0 panics for 4" {
+  let r = wrap(0, 4) //~ PANIC "wrap: form 0 panics for 4"
+  assert r == 0
+}
+
+test "wrap: form 0 panics for 0" {
+  let r = wrap(0, 0) //~ PANIC "wrap: form 0 panics for 0"
+  assert r == 0
+}
+
+test "wrap: form 1 panics for 0" {
+  let r = wrap(1, 0) //~ PANIC "wrap: form 1 panics for 0"
+  assert r == 0
+}
+
+test "wrap: form 2 panics for 2" {
+  let r = wrap(2, 2) //~ PANIC "wrap: form 2 panics for 2"
+  assert r == 0
+}
+
+test "wrap: form 2 panics for 4294967294" {
+  let r = wrap(2, 4294967294) //~ PANIC "wrap: form 2 panics for 4294967294"
+  assert r == 0
+}
+
+test "wrap: form 3 panics for 4294967295" {
+  let r = wrap(3, 4294967295) //~ PANIC "wrap: form 3 panics for 4294967295"
+  assert r == 0
+}
+
+test "narrow: the forms that fit give the element that the arithmetic names" {
+  assert narrow(0, 0) == 256
+  assert narrow(0, 1) == 1
+  assert narrow(0, 255) == 255
+  assert narrow(1, 1) == 1
+  assert narrow(1, 255) == 255
+  assert narrow(2, 255) == 1
+  assert narrow(2, 0) == 2
+  assert narrow(2, 254) == 256
+  assert narrow(3, 255) == 1
+  assert narrow(3, 253) == 255
+  assert narrow(4, 0) == 1
+  assert narrow(4, 1) == 17
+  assert narrow(4, 17) == 17
+  assert narrow(4, 16) == 1
+  assert narrow(4, 33) == 17
+  assert narrow(5, 255) == 256
+  assert narrow(5, 0) == 1
+  assert narrow(5, 100) == 101
+  assert narrow(6, 254) == 255
+  assert narrow(7, 254) == 256
+  assert narrow(8, 255) == 257
+  assert narrow(8, 0) == 2
+}
+
+test "narrow: form 1 panics for 0" {
+  let r = narrow(1, 0) //~ PANIC "narrow: form 1 panics for 0"
+  assert r == 0
+}
+
+test "narrow: form 3 panics for 254" {
+  let r = narrow(3, 254) //~ PANIC "narrow: form 3 panics for 254"
+  assert r == 0
+}
+
+test "narrow: form 4 panics for 2" {
+  let r = narrow(4, 2) //~ PANIC "narrow: form 4 panics for 2"
+  assert r == 0
+}
+
+test "narrow: form 4 panics for 31" {
+  let r = narrow(4, 31) //~ PANIC "narrow: form 4 panics for 31"
+  assert r == 0
+}
+
+test "narrow: form 4 panics for 255" {
+  let r = narrow(4, 255) //~ PANIC "narrow: form 4 panics for 255"
+  assert r == 0
+}
+
+test "narrow: form 4 panics for 18" {
+  let r = narrow(4, 18) //~ PANIC "narrow: form 4 panics for 18"
+  assert r == 0
+}
+
+test "narrow: form 6 panics for 255" {
+  let r = narrow(6, 255) //~ PANIC "narrow: form 6 panics for 255"
+  assert r == 0
+}
+
+test "narrow: form 7 panics for 255" {
+  let r = narrow(7, 255) //~ PANIC "narrow: form 7 panics for 255"
+  assert r == 0
+}

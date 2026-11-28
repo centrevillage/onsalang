@@ -1,0 +1,446 @@
+// onsa.toml
+// [package]
+// name = "index_proof_locals"
+// edition = "2026"
+//
+// [export]
+// prefix = "ipl_"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "poison"
+// provides = []
+//
+// [test]
+// mode = "test"
+// spec = ["§9.2", "§5.2", "§7", "§3.5"]
+//
+// # W8-03 U5/t, S-1264 P2 (§9.2: a compiler may remove a check that it can prove, and "意味は変わらない"): the index is a local variable. A variable that is never written is a value that a compiler knows; one that is
+// # written later (by an assignment, in a branch, in a loop, or by an `inout` argument of a call) is not the value it was bound to, so a read of it past the length still panics, and the read before the write still
+// # reads its own element. Each form is a pair of an index that fits and one that does not. The array `ramp` holds k + 1 at k, with a length of 3 (the values 1, 2, 3). The same bodies run in the interpreter
+// # (the tests below) and in the C of the target (the `[[test.host]]` groups: an exported function that panics is status 1, §9.2). Expected values are derived by hand from §3.5 and §9.2.
+//
+// # `fixed`: 0: `let j = 2; xs[j]` is 3. 1: `let j = 3` panics. 2: `let j: U32 = 1 + 1` is 3. 3: `let j = 1; let m = j + 1` is 3. 4: `let j = 2; let m = j + 1` panics. 5: a block that computes another value (5 - 4) beside the index `j` of 2: 3 + 1 = 4. 6: a `var j` that is never written is 3.
+// [[test.host]]
+// name = "c: a local that is never written"
+// target = "host"
+// fn = "index_proof_locals.fixed"
+// steps = [
+//   { call = "fn", args = { k = 0 }, status = 0, result = 3 },
+//   { call = "fn", args = { k = 1 }, status = 1 },
+//   { call = "fn", args = { k = 2 }, status = 0, result = 3 },
+//   { call = "fn", args = { k = 3 }, status = 0, result = 3 },
+//   { call = "fn", args = { k = 4 }, status = 1 },
+//   { call = "fn", args = { k = 5 }, status = 0, result = 4 },
+//   { call = "fn", args = { k = 6 }, status = 0, result = 3 },
+// ]
+//
+// # `rewritten`: `var j = 2`, read (3), then `j = k` and read again: 0 gives 3 + 1 = 4, 1 gives 3 + 2 = 5, 2 gives 3 + 3 = 6, 3 panics (after the first read), the largest value panics.
+// [[test.host]]
+// name = "c: a var that is written after a read"
+// target = "host"
+// fn = "index_proof_locals.rewritten"
+// steps = [
+//   { call = "fn", args = { k = 0 }, status = 0, result = 4 },
+//   { call = "fn", args = { k = 1 }, status = 0, result = 5 },
+//   { call = "fn", args = { k = 2 }, status = 0, result = 6 },
+//   { call = "fn", args = { k = 3 }, status = 1 },
+//   { call = "fn", args = { k = 4294967295 }, status = 1 },
+// ]
+//
+// # `branchy`: `var j = 0` and `if c { j = v }`: not taken reads xs[0] = 1 whatever `v` is, taken with 2 is 3, with 3 panics.
+// [[test.host]]
+// name = "c: a var written in a branch"
+// target = "host"
+// fn = "index_proof_locals.branchy"
+// steps = [
+//   { call = "fn", args = { c = false, v = 9 }, status = 0, result = 1 },
+//   { call = "fn", args = { c = false, v = 3 }, status = 0, result = 1 },
+//   { call = "fn", args = { c = true, v = 2 }, status = 0, result = 3 },
+//   { call = "fn", args = { c = true, v = 3 }, status = 1 },
+// ]
+//
+// # `loop_carried`: `j` starts at 0 and `n` turns add 1: n of 0 reads xs[0] = 1, 2 reads xs[2] = 3, 3 panics.
+// [[test.host]]
+// name = "c: a var that a loop counts up"
+// target = "host"
+// fn = "index_proof_locals.loop_carried"
+// steps = [
+//   { call = "fn", args = { n = 0 }, status = 0, result = 1 },
+//   { call = "fn", args = { n = 2 }, status = 0, result = 3 },
+//   { call = "fn", args = { n = 3 }, status = 1 },
+// ]
+//
+// # `while_lt` sums xs[j] while `j < n`: 3 is 6, 0 is 0, 4 panics at j = 3. `while_le` sums while `j <= n`: 2 is 6, 3 panics at j = 3. `stride2` adds 2 to `j` while `j < n`: 3 reads xs[0], xs[2] = 4,
+// # 4 reads the same (j = 4 stops), 5 reads xs[4] and panics.
+// [[test.host]]
+// name = "c: a while loop with a var index, < and <="
+// target = "host"
+// fn = "index_proof_locals.while_lt"
+// steps = [
+//   { call = "fn", args = { n = 3 }, status = 0, result = 6 },
+//   { call = "fn", args = { n = 0 }, status = 0, result = 0 },
+//   { call = "fn", args = { n = 4 }, status = 1 },
+// ]
+//
+// [[test.host]]
+// name = "c: a while loop that goes to the closed end"
+// target = "host"
+// fn = "index_proof_locals.while_le"
+// steps = [
+//   { call = "fn", args = { n = 2 }, status = 0, result = 6 },
+//   { call = "fn", args = { n = 3 }, status = 1 },
+// ]
+//
+// [[test.host]]
+// name = "c: a while loop that steps by 2"
+// target = "host"
+// fn = "index_proof_locals.stride2"
+// steps = [
+//   { call = "fn", args = { n = 3 }, status = 0, result = 4 },
+//   { call = "fn", args = { n = 4 }, status = 0, result = 4 },
+//   { call = "fn", args = { n = 5 }, status = 1 },
+// ]
+//
+// # `via_inout`: `var j = start`, `bump(inout j, d)` adds `d`, then xs[j]: (0, 2) is 3, (0, 0) is 1, (2, 0) is 3, (1, 2) panics (j = 3), (0, 3) panics.
+// [[test.host]]
+// name = "c: a local that an inout argument writes"
+// target = "host"
+// fn = "index_proof_locals.via_inout"
+// steps = [
+//   { call = "fn", args = { start = 0, d = 2 }, status = 0, result = 3 },
+//   { call = "fn", args = { start = 0, d = 0 }, status = 0, result = 1 },
+//   { call = "fn", args = { start = 2, d = 0 }, status = 0, result = 3 },
+//   { call = "fn", args = { start = 1, d = 2 }, status = 1 },
+//   { call = "fn", args = { start = 0, d = 3 }, status = 1 },
+// ]
+//
+// # `via_inout_loop`: `bump(inout j, 1)` `n` times from 0: 2 reads xs[2] = 3, 3 panics. `field_index`: the same with a field `c.i` that `adv(inout c)` adds 1 to.
+// [[test.host]]
+// name = "c: a local that an inout argument writes in a loop"
+// target = "host"
+// fn = "index_proof_locals.via_inout_loop"
+// steps = [
+//   { call = "fn", args = { n = 2 }, status = 0, result = 3 },
+//   { call = "fn", args = { n = 3 }, status = 1 },
+// ]
+//
+// [[test.host]]
+// name = "c: a field that an inout argument writes"
+// target = "host"
+// fn = "index_proof_locals.field_index"
+// steps = [
+//   { call = "fn", args = { n = 2 }, status = 0, result = 3 },
+//   { call = "fn", args = { n = 3 }, status = 1 },
+// ]
+//
+// # `write_idx`: `ys` is [0, 0, 0], `var j = 1`, `ys[j] = 7`, then `j = k` and `ys[j] = 9`; the result is ys[0] + 10 * ys[1] + 100 * ys[2]: k of 2 is 70 + 900 = 970, 1 is 90, 0 is 9 + 70 = 79, 3 panics.
+// [[test.host]]
+// name = "c: a var that is written and then used as the index of a write"
+// target = "host"
+// fn = "index_proof_locals.write_idx"
+// steps = [
+//   { call = "fn", args = { k = 2 }, status = 0, result = 970 },
+//   { call = "fn", args = { k = 1 }, status = 0, result = 90 },
+//   { call = "fn", args = { k = 0 }, status = 0, result = 79 },
+//   { call = "fn", args = { k = 3 }, status = 1 },
+// ]
+
+/// `[1, 2, …, N]`: the element at k is k + 1.
+fn ramp[const N: U32]() -> [U32; N] {
+  var xs: [U32; N] = [0; N]
+  for k in 0 ..< N {
+    xs[k] = k + 1
+  }
+  xs
+}
+
+fn bump(inout j: U32, d: U32) {
+  j = j + d
+}
+
+pub struct Cur {
+  i: U32,
+}
+
+fn adv(inout c: Cur) {
+  c.i = c.i + 1
+}
+
+@export
+pub fn fixed(k: U32) -> U32 {
+  let xs: [U32; 3] = ramp()
+  var r: U32 = 0
+  match k {
+    0 => {
+      let j = 2
+      r = xs[j]
+    },
+    1 => {
+      let j = 3
+      r = xs[j]
+    },
+    2 => {
+      let j: U32 = 1 + 1
+      r = xs[j]
+    },
+    3 => {
+      let j = 1
+      let m = j + 1
+      r = xs[m]
+    },
+    4 => {
+      let j = 2
+      let m = j + 1
+      r = xs[m]
+    },
+    5 => {
+      let j = 2
+      let w = {
+        let q = 5
+        q - 4
+      }
+      r = xs[j] + w
+    },
+    _ => {
+      var j: U32 = 2
+      r = xs[j]
+    },
+  }
+  r
+}
+
+@export
+pub fn rewritten(k: U32) -> U32 {
+  let xs: [U32; 3] = ramp()
+  var j: U32 = 2
+  let a = xs[j]
+  j = k
+  let b = xs[j]
+  a + b
+}
+
+@export
+pub fn branchy(c: Bool, v: U32) -> U32 {
+  let xs: [U32; 3] = ramp()
+  var j: U32 = 0
+  if c {
+    j = v
+  }
+  xs[j]
+}
+
+@export
+pub fn loop_carried(n: U32) -> U32 {
+  let xs: [U32; 3] = ramp()
+  var j: U32 = 0
+  for _ in 0 ..< n {
+    j = j + 1
+  }
+  xs[j]
+}
+
+@export
+pub fn while_lt(n: U32) -> U32 {
+  let xs: [U32; 3] = ramp()
+  var j: U32 = 0
+  var s: U32 = 0
+  while j < n {
+    s = s + xs[j]
+    j = j + 1
+  }
+  s
+}
+
+@export
+pub fn while_le(n: U32) -> U32 {
+  let xs: [U32; 3] = ramp()
+  var j: U32 = 0
+  var s: U32 = 0
+  while j <= n {
+    s = s + xs[j]
+    j = j + 1
+  }
+  s
+}
+
+@export
+pub fn stride2(n: U32) -> U32 {
+  let xs: [U32; 3] = ramp()
+  var j: U32 = 0
+  var s: U32 = 0
+  while j < n {
+    s = s + xs[j]
+    j = j + 2
+  }
+  s
+}
+
+@export
+pub fn via_inout(start: U32, d: U32) -> U32 {
+  let xs: [U32; 3] = ramp()
+  var j = start
+  bump(inout j, d)
+  xs[j]
+}
+
+@export
+pub fn via_inout_loop(n: U32) -> U32 {
+  let xs: [U32; 3] = ramp()
+  var j: U32 = 0
+  for _ in 0 ..< n {
+    bump(inout j, 1)
+  }
+  xs[j]
+}
+
+@export
+pub fn field_index(n: U32) -> U32 {
+  let xs: [U32; 3] = ramp()
+  var c = Cur { i: 0 }
+  for _ in 0 ..< n {
+    adv(inout c)
+  }
+  xs[c.i]
+}
+
+@export
+pub fn write_idx(k: U32) -> U32 {
+  var ys: [U32; 3] = [0; 3]
+  var j: U32 = 1
+  ys[j] = 7
+  j = k
+  ys[j] = 9
+  ys[0] + ys[1] * 10 + ys[2] * 100
+}
+
+test "fixed: a local that is never written is the element it names" {
+  assert fixed(0) == 3
+  assert fixed(2) == 3
+  assert fixed(3) == 3
+  assert fixed(5) == 4
+  assert fixed(6) == 3
+}
+
+test "fixed: a local that names the length panics" {
+  let r = fixed(1) //~ PANIC "fixed: a local that names the length panics"
+  assert r == 0
+}
+
+test "fixed: a let that derives the length from another let panics" {
+  let r = fixed(4) //~ PANIC "fixed: a let that derives the length from another let panics"
+  assert r == 0
+}
+
+test "rewritten: a var that is written after a read reads the new element" {
+  assert rewritten(0) == 4
+  assert rewritten(1) == 5
+  assert rewritten(2) == 6
+}
+
+test "rewritten: a var that is written to the length panics after its first read" {
+  let r = rewritten(3) //~ PANIC "rewritten: a var that is written to the length panics after its first read"
+  assert r == 0
+}
+
+test "rewritten: a var that is written to the largest value panics" {
+  let r = rewritten(4294967295) //~ PANIC "rewritten: a var that is written to the largest value panics"
+  assert r == 0
+}
+
+test "branchy: a branch that is not taken leaves the first index" {
+  assert branchy(false, 9) == 1
+  assert branchy(false, 3) == 1
+  assert branchy(true, 2) == 3
+}
+
+test "branchy: a branch that writes the length panics" {
+  let r = branchy(true, 3) //~ PANIC "branchy: a branch that writes the length panics"
+  assert r == 0
+}
+
+test "loop_carried: a counter that stays in the array" {
+  assert loop_carried(0) == 1
+  assert loop_carried(2) == 3
+}
+
+test "loop_carried: a counter that reaches the length panics" {
+  let r = loop_carried(3) //~ PANIC "loop_carried: a counter that reaches the length panics"
+  assert r == 0
+}
+
+test "while_lt: a while loop that stops before the length" {
+  assert while_lt(3) == 6
+  assert while_lt(0) == 0
+}
+
+test "while_lt: a while loop to 4 on a length of 3 panics at the fourth read" {
+  let r = while_lt(4) //~ PANIC "while_lt: a while loop to 4 on a length of 3 panics at the fourth read"
+  assert r == 0
+}
+
+test "while_le: a while loop that reaches the last element" {
+  assert while_le(2) == 6
+}
+
+test "while_le: a while loop that reaches the length panics" {
+  let r = while_le(3) //~ PANIC "while_le: a while loop that reaches the length panics"
+  assert r == 0
+}
+
+test "stride2: a step of 2 that stops before the length" {
+  assert stride2(3) == 4
+  assert stride2(4) == 4
+}
+
+test "stride2: a step of 2 that lands on 4 panics" {
+  let r = stride2(5) //~ PANIC "stride2: a step of 2 that lands on 4 panics"
+  assert r == 0
+}
+
+test "via_inout: a local that an inout argument writes to an index that fits" {
+  assert via_inout(0, 2) == 3
+  assert via_inout(0, 0) == 1
+  assert via_inout(2, 0) == 3
+}
+
+test "via_inout: a local that an inout argument writes to the length panics" {
+  let r = via_inout(1, 2) //~ PANIC "via_inout: a local that an inout argument writes to the length panics"
+  assert r == 0
+}
+
+test "via_inout: a local that an inout argument adds 3 to panics" {
+  let r = via_inout(0, 3) //~ PANIC "via_inout: a local that an inout argument adds 3 to panics"
+  assert r == 0
+}
+
+test "via_inout_loop: an inout counter in a loop that fits" {
+  assert via_inout_loop(2) == 3
+}
+
+test "via_inout_loop: an inout counter in a loop that reaches the length panics" {
+  let r = via_inout_loop(3) //~ PANIC "via_inout_loop: an inout counter in a loop that reaches the length panics"
+  assert r == 0
+}
+
+test "field_index: a field that an inout argument counts up and that fits" {
+  assert field_index(2) == 3
+}
+
+test "field_index: a field that an inout argument counts up to the length panics" {
+  let r = field_index(3) //~ PANIC "field_index: a field that an inout argument counts up to the length panics"
+  assert r == 0
+}
+
+test "write_idx: a var that is written and then used as the index of a write" {
+  assert write_idx(2) == 970
+  assert write_idx(1) == 90
+  assert write_idx(0) == 79
+}
+
+test "write_idx: a write through an index that is the length panics" {
+  let r = write_idx(3) //~ PANIC "write_idx: a write through an index that is the length panics"
+  assert r == 0
+}

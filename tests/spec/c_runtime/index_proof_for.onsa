@@ -1,0 +1,791 @@
+// onsa.toml
+// [package]
+// name = "index_proof_for"
+// edition = "2026"
+//
+// [export]
+// prefix = "ipf_"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "poison"
+// provides = []
+//
+// [test]
+// mode = "test"
+// spec = ["§9.2", "§7", "§3.5"]
+//
+// # W8-03 U5/t, S-1264 P2 (§9.2: "コンパイラは、成り立つことを証明できる検査（`for i in 0 ..< N` の中の `xs[i]`、`% N` の添字など）を取り除いてよい。意味は変わらない"): a compiler that removes
+// # a check it can prove leaves the meaning as it is, so an index that is out of range still panics and one that is in range reads the same element. Each form is a pair: the end of the loop that is
+// # one too far (a panic) and the end that fits exactly. The array `ramp` holds k + 1 at k, so a read of the wrong element is a wrong value. The same bodies run in the interpreter (the tests below)
+// # and in the C of the target (the `[[test.host]]` groups: the call of an exported function that panics is status 1, §9.2). The expected values are derived by hand from §7 and §3.5, never from an output.
+// # The functions with `k` hold the forms whose loop ends are literals or constants (a compiler can prove them); `k` only picks the form, so that one group of the host runs them all.
+//
+// # `lit_ends`: 0: `0 ..< 3` on a length of 3: 1 + 2 + 3 = 6. 1: `0 ..< 4` on 3 panics (the 4th turn). 2: `0 ..= 2` is 6. 3: `0 ..= 3` panics. 4: `1 ..= 3` with `xs[i - 1]` is 6. 5: `1 ..= 4` with `xs[i - 1]` panics.
+// # 6: `0 ..< 3` with `xs[i + 1]` on 3 panics (the 3rd turn). 7: the same on 4 is 2 + 3 + 4 = 9. 8: `5 ..< 3` is empty, so `xs[i - 3]` never runs (0). 9: `4 ..= 3` is empty (0).
+// # 10: `0 ..< N3` on `[U32; N3]` is 6. 11: `0 ..< N3 + 1` panics. 12: `0 ..= N3 - 1` is 6. 13: `0 ..= N3` panics.
+// [[test.host]]
+// name = "c: literal and constant ends against a length"
+// target = "host"
+// fn = "index_proof_for.lit_ends"
+// steps = [
+//   { call = "fn", args = { k = 0 }, status = 0, result = 6 },
+//   { call = "fn", args = { k = 1 }, status = 1 },
+//   { call = "fn", args = { k = 2 }, status = 0, result = 6 },
+//   { call = "fn", args = { k = 3 }, status = 1 },
+//   { call = "fn", args = { k = 4 }, status = 0, result = 6 },
+//   { call = "fn", args = { k = 5 }, status = 1 },
+//   { call = "fn", args = { k = 6 }, status = 1 },
+//   { call = "fn", args = { k = 7 }, status = 0, result = 9 },
+//   { call = "fn", args = { k = 8 }, status = 0, result = 0 },
+//   { call = "fn", args = { k = 9 }, status = 0, result = 0 },
+//   { call = "fn", args = { k = 10 }, status = 0, result = 6 },
+//   { call = "fn", args = { k = 11 }, status = 1 },
+//   { call = "fn", args = { k = 12 }, status = 0, result = 6 },
+//   { call = "fn", args = { k = 13 }, status = 1 },
+// ]
+//
+// # `generic_len`: the length is the const parameter of a generic function. 0: `0 ..< M` on a length of 5 is 15. 1: on a length of 0 the loop does not run (0). 2: `0 ..= M` on 3 panics. 3: `0 ..= M` on 0 panics (the index 0).
+// [[test.host]]
+// name = "c: the end is the length of a generic array"
+// target = "host"
+// fn = "index_proof_for.generic_len"
+// steps = [
+//   { call = "fn", args = { k = 0 }, status = 0, result = 15 },
+//   { call = "fn", args = { k = 1 }, status = 0, result = 0 },
+//   { call = "fn", args = { k = 2 }, status = 1 },
+//   { call = "fn", args = { k = 3 }, status = 1 },
+// ]
+//
+// # `lt_n` sums `xs[i]` over `0 ..< n` on a length of 3: n of 0 is 0, 2 is 3, 3 is 6, 4 panics. `le_n` over `0 ..= n`: 2 is 6, 3 panics.
+// [[test.host]]
+// name = "c: the end is an argument"
+// target = "host"
+// fn = "index_proof_for.lt_n"
+// steps = [
+//   { call = "fn", args = { n = 0 }, status = 0, result = 0 },
+//   { call = "fn", args = { n = 2 }, status = 0, result = 3 },
+//   { call = "fn", args = { n = 3 }, status = 0, result = 6 },
+//   { call = "fn", args = { n = 4 }, status = 1 },
+//   { call = "fn", args = { n = 4294967295 }, status = 1 },
+// ]
+//
+// [[test.host]]
+// name = "c: the closed end is an argument"
+// target = "host"
+// fn = "index_proof_for.le_n"
+// steps = [
+//   { call = "fn", args = { n = 0 }, status = 0, result = 1 },
+//   { call = "fn", args = { n = 2 }, status = 0, result = 6 },
+//   { call = "fn", args = { n = 3 }, status = 1 },
+// ]
+//
+// # `from_to` sums `xs[i]` over `lo ..< hi` on a length of 3: (0, 3) is 6, (1, 3) is 2 + 3 = 5, (2, 3) is 3, (3, 3) is 0, (5, 3) is empty (0, the index 5 is never read), (2, 4) panics, (0, 4) panics.
+// [[test.host]]
+// name = "c: both ends are arguments"
+// target = "host"
+// fn = "index_proof_for.from_to"
+// steps = [
+//   { call = "fn", args = { lo = 0, hi = 3 }, status = 0, result = 6 },
+//   { call = "fn", args = { lo = 1, hi = 3 }, status = 0, result = 5 },
+//   { call = "fn", args = { lo = 2, hi = 3 }, status = 0, result = 3 },
+//   { call = "fn", args = { lo = 3, hi = 3 }, status = 0, result = 0 },
+//   { call = "fn", args = { lo = 5, hi = 3 }, status = 0, result = 0 },
+//   { call = "fn", args = { lo = 2, hi = 4 }, status = 1 },
+//   { call = "fn", args = { lo = 0, hi = 4 }, status = 1 },
+// ]
+//
+// # §3.5: "範囲 `a ..< b` は、`a`、`b` の順に、最初の反復の前に一度だけ評価する。本体で端の変数を変えても、反復の回数は変わらない". `end_grows`: the end is `n0` and the body adds 5 to it: 3 turns, so 6 for 3 (the
+// # index never passes 2 although `n` is 18 at the end), and 4 turns for 4, which panics. `end_shrinks`: the end is `n0` and the body sets it to 1: still `n0` turns, so 6 for 3 and a panic for 4.
+// # `start_changes`: the start is `lo0` and the body sets it to 9: 1 gives 2 + 3 = 5, 0 gives 6, 4 is empty (0).
+// [[test.host]]
+// name = "c: a body that changes the end of its own loop"
+// target = "host"
+// fn = "index_proof_for.end_grows"
+// steps = [
+//   { call = "fn", args = { n0 = 3 }, status = 0, result = 6 },
+//   { call = "fn", args = { n0 = 0 }, status = 0, result = 0 },
+//   { call = "fn", args = { n0 = 4 }, status = 1 },
+// ]
+//
+// [[test.host]]
+// name = "c: a body that makes the end of its own loop smaller"
+// target = "host"
+// fn = "index_proof_for.end_shrinks"
+// steps = [
+//   { call = "fn", args = { n0 = 3 }, status = 0, result = 6 },
+//   { call = "fn", args = { n0 = 4 }, status = 1 },
+// ]
+//
+// [[test.host]]
+// name = "c: a body that changes the start of its own loop"
+// target = "host"
+// fn = "index_proof_for.start_changes"
+// steps = [
+//   { call = "fn", args = { lo0 = 1 }, status = 0, result = 5 },
+//   { call = "fn", args = { lo0 = 0 }, status = 0, result = 6 },
+//   { call = "fn", args = { lo0 = 4 }, status = 0, result = 0 },
+// ]
+//
+// # The grid `g[i][j]` holds 10 * i + j + 1 (the rows 1, 2, 3 and 11, 12, 13) with 2 rows of 3. `grid`: 0: `0 ..< 2` and `0 ..< 3` is 6 + 36 = 42. 1: 3 rows panics (the outer index 2). 2: 4 columns panics (the inner index 3).
+// # 3: `g[j][i]` with `i` of 2 and `j` of 3 panics (`j` of 2 is not a row). 4: the inner end `i + 2` is 1 + 2 + 11 + 12 + 13 = 39. 5: the inner end `i + 3` panics (the inner index 3 at `i` of 1; the first row is fine).
+// # 6: the inner start `i` is 1 + 2 + 3 + 12 + 13 = 31. 7: the inner end `i` (empty at the first row) is 11 (`g[1][0]`).
+// [[test.host]]
+// name = "c: nested loops over a grid"
+// target = "host"
+// fn = "index_proof_for.grid"
+// steps = [
+//   { call = "fn", args = { k = 0 }, status = 0, result = 42 },
+//   { call = "fn", args = { k = 1 }, status = 1 },
+//   { call = "fn", args = { k = 2 }, status = 1 },
+//   { call = "fn", args = { k = 3 }, status = 1 },
+//   { call = "fn", args = { k = 4 }, status = 0, result = 39 },
+//   { call = "fn", args = { k = 5 }, status = 1 },
+//   { call = "fn", args = { k = 6 }, status = 0, result = 31 },
+//   { call = "fn", args = { k = 7 }, status = 0, result = 11 },
+// ]
+//
+// # A loop that is longer than the array, ended or guarded before the index passes the end. `break_at`: the loop is `0 ..< 10` and the body breaks at `i == n` before it reads: 3 gives 6, 4 panics (the read of 3), 0 gives 0.
+// # `guarded`: 0: `if i < 3` around the read is 6. 1: `if i <= 3` panics. 2: `if i >= 3 { continue }` before the read is 6. 3: `if i > 3 { continue }` panics.
+// [[test.host]]
+// name = "c: a break before the index passes the end"
+// target = "host"
+// fn = "index_proof_for.break_at"
+// steps = [
+//   { call = "fn", args = { n = 0 }, status = 0, result = 0 },
+//   { call = "fn", args = { n = 3 }, status = 0, result = 6 },
+//   { call = "fn", args = { n = 4 }, status = 1 },
+// ]
+//
+// [[test.host]]
+// name = "c: a guard or a continue before the index"
+// target = "host"
+// fn = "index_proof_for.guarded"
+// steps = [
+//   { call = "fn", args = { k = 0 }, status = 0, result = 6 },
+//   { call = "fn", args = { k = 1 }, status = 1 },
+//   { call = "fn", args = { k = 2 }, status = 0, result = 6 },
+//   { call = "fn", args = { k = 3 }, status = 1 },
+// ]
+//
+// # The range that ends at the largest value of `U8` (§7: "`b` が型の最大値でも溢れずに終わる"). `u8_top`: 250 ..= 255 is 6 turns; the index `i - 250` goes 0 to 5, so a length of 6 sums 21 and a length of 5 panics (the 6th turn).
+// # `u8_all`: 0 ..= 255 on a length of 256 sums 1 + … + 256 = 32896; on a length of 255 it panics (the 256th turn).
+// [[test.host]]
+// name = "c: a range that ends at U8.MAX"
+// target = "host"
+// fn = "index_proof_for.u8_top"
+// steps = [
+//   { call = "fn", args = { len6 = true }, status = 0, result = 21 },
+//   { call = "fn", args = { len6 = false }, status = 1 },
+// ]
+//
+// [[test.host]]
+// name = "c: the whole range of U8 against a length of 256 and of 255"
+// target = "host"
+// fn = "index_proof_for.u8_all"
+// steps = [
+//   { call = "fn", args = { len256 = true }, status = 0, result = 32896 },
+//   { call = "fn", args = { len256 = false }, status = 1 },
+// ]
+//
+// # A closure that takes the index (the only closure that this version lowers is the argument of `array.from_fn`): the array of 3 elements built from an array of 3 is 6, built to 4 elements it panics at the fourth.
+// [[test.host]]
+// name = "c: an index through the closure of array.from_fn"
+// target = "host"
+// fn = "index_proof_for.via_from_fn"
+// steps = [
+//   { call = "fn", args = { len4 = false }, status = 0, result = 6 },
+//   { call = "fn", args = { len4 = true }, status = 1 },
+// ]
+
+use std.array
+
+const N3: U32 = 3
+
+/// `[1, 2, …, N]`: the element at k is k + 1.
+fn ramp[const N: U32]() -> [U32; N] {
+  var xs: [U32; N] = [0; N]
+  for k in 0 ..< N {
+    xs[k] = k + 1
+  }
+  xs
+}
+
+fn total[const M: U32](xs: [U32; M]) -> U32 {
+  var s: U32 = 0
+  for i in 0 ..< M {
+    s = s + xs[i]
+  }
+  s
+}
+
+fn total_over[const M: U32](xs: [U32; M]) -> U32 {
+  var s: U32 = 0
+  for i in 0 ..= M {
+    s = s + xs[i]
+  }
+  s
+}
+
+@export
+pub fn lit_ends(k: U32) -> U32 {
+  let a3: [U32; 3] = ramp()
+  let a4: [U32; 4] = ramp()
+  let an: [U32; N3] = ramp()
+  var s: U32 = 0
+  match k {
+    0 => {
+      for i in 0 ..< 3 {
+        s = s + a3[i]
+      }
+    },
+    1 => {
+      for i in 0 ..< 4 {
+        s = s + a3[i]
+      }
+    },
+    2 => {
+      for i in 0 ..= 2 {
+        s = s + a3[i]
+      }
+    },
+    3 => {
+      for i in 0 ..= 3 {
+        s = s + a3[i]
+      }
+    },
+    4 => {
+      for i in 1 ..= 3 {
+        s = s + a3[i - 1]
+      }
+    },
+    5 => {
+      for i in 1 ..= 4 {
+        s = s + a3[i - 1]
+      }
+    },
+    6 => {
+      for i in 0 ..< 3 {
+        s = s + a3[i + 1]
+      }
+    },
+    7 => {
+      for i in 0 ..< 3 {
+        s = s + a4[i + 1]
+      }
+    },
+    8 => {
+      for i in 5 ..< 3 {
+        s = s + a3[i - 3]
+      }
+    },
+    9 => {
+      for i in 4 ..= 3 {
+        s = s + a3[i]
+      }
+    },
+    10 => {
+      for i in 0 ..< N3 {
+        s = s + an[i]
+      }
+    },
+    11 => {
+      for i in 0 ..< N3 + 1 {
+        s = s + an[i]
+      }
+    },
+    12 => {
+      for i in 0 ..= N3 - 1 {
+        s = s + an[i]
+      }
+    },
+    _ => {
+      for i in 0 ..= N3 {
+        s = s + an[i]
+      }
+    },
+  }
+  s
+}
+
+@export
+pub fn generic_len(k: U32) -> U32 {
+  var s: U32 = 0
+  match k {
+    0 => {
+      s = total(ramp::[5]())
+    },
+    1 => {
+      s = total(ramp::[0]())
+    },
+    2 => {
+      s = total_over(ramp::[3]())
+    },
+    _ => {
+      s = total_over(ramp::[0]())
+    },
+  }
+  s
+}
+
+@export
+pub fn lt_n(n: U32) -> U32 {
+  let xs: [U32; 3] = ramp()
+  var s: U32 = 0
+  for i in 0 ..< n {
+    s = s + xs[i]
+  }
+  s
+}
+
+@export
+pub fn le_n(n: U32) -> U32 {
+  let xs: [U32; 3] = ramp()
+  var s: U32 = 0
+  for i in 0 ..= n {
+    s = s + xs[i]
+  }
+  s
+}
+
+@export
+pub fn from_to(lo: U32, hi: U32) -> U32 {
+  let xs: [U32; 3] = ramp()
+  var s: U32 = 0
+  for i in lo ..< hi {
+    s = s + xs[i]
+  }
+  s
+}
+
+@export
+pub fn end_grows(n0: U32) -> U32 {
+  let xs: [U32; 3] = ramp()
+  var n = n0
+  var s: U32 = 0
+  for i in 0 ..< n {
+    n = n + 5
+    s = s + xs[i]
+  }
+  s
+}
+
+@export
+pub fn end_shrinks(n0: U32) -> U32 {
+  let xs: [U32; 3] = ramp()
+  var n = n0
+  var s: U32 = 0
+  for i in 0 ..< n {
+    n = 1
+    s = s + xs[i]
+  }
+  s
+}
+
+@export
+pub fn start_changes(lo0: U32) -> U32 {
+  let xs: [U32; 3] = ramp()
+  var lo = lo0
+  var s: U32 = 0
+  for i in lo ..< 3 {
+    lo = 9
+    s = s + xs[i]
+  }
+  s
+}
+
+@export
+pub fn grid(k: U32) -> U32 {
+  var g: [[U32; 3]; 2] = [[0; 3]; 2]
+  for i in 0 ..< 2 {
+    for j in 0 ..< 3 {
+      g[i][j] = i * 10 + j + 1
+    }
+  }
+  var s: U32 = 0
+  match k {
+    0 => {
+      for i in 0 ..< 2 {
+        for j in 0 ..< 3 {
+          s = s + g[i][j]
+        }
+      }
+    },
+    1 => {
+      for i in 0 ..< 3 {
+        for j in 0 ..< 3 {
+          s = s + g[i][j]
+        }
+      }
+    },
+    2 => {
+      for i in 0 ..< 2 {
+        for j in 0 ..< 4 {
+          s = s + g[i][j]
+        }
+      }
+    },
+    3 => {
+      for i in 0 ..< 2 {
+        for j in 0 ..< 3 {
+          s = s + g[j][i]
+        }
+      }
+    },
+    4 => {
+      for i in 0 ..< 2 {
+        for j in 0 ..< i + 2 {
+          s = s + g[i][j]
+        }
+      }
+    },
+    5 => {
+      for i in 0 ..< 2 {
+        for j in 0 ..< i + 3 {
+          s = s + g[i][j]
+        }
+      }
+    },
+    6 => {
+      for i in 0 ..< 2 {
+        for j in i ..< 3 {
+          s = s + g[i][j]
+        }
+      }
+    },
+    _ => {
+      for i in 0 ..< 2 {
+        for j in 0 ..< i {
+          s = s + g[i][j]
+        }
+      }
+    },
+  }
+  s
+}
+
+@export
+pub fn break_at(n: U32) -> U32 {
+  let xs: [U32; 3] = ramp()
+  var s: U32 = 0
+  for i in 0 ..< 10 {
+    if i == n {
+      break
+    }
+    s = s + xs[i]
+  }
+  s
+}
+
+@export
+pub fn guarded(k: U32) -> U32 {
+  let xs: [U32; 3] = ramp()
+  var s: U32 = 0
+  for i in 0 ..< 10 {
+    match k {
+      0 => {
+        if i < 3 {
+          s = s + xs[i]
+        }
+      },
+      1 => {
+        if i <= 3 {
+          s = s + xs[i]
+        }
+      },
+      2 => {
+        if i >= 3 {
+          continue
+        }
+        s = s + xs[i]
+      },
+      _ => {
+        if i > 3 {
+          continue
+        }
+        s = s + xs[i]
+      },
+    }
+  }
+  s
+}
+
+@export
+pub fn u8_top(len6: Bool) -> U32 {
+  let a6: [U32; 6] = ramp()
+  let a5: [U32; 5] = ramp()
+  var s: U32 = 0
+  for i in 250 ..= U8.MAX {
+    let pos = (i - 250) as U32
+    if len6 {
+      s = s + a6[pos]
+    } else {
+      s = s + a5[pos]
+    }
+  }
+  s
+}
+
+@export
+pub fn u8_all(len256: Bool) -> U32 {
+  let a256: [U32; 256] = ramp()
+  let a255: [U32; 255] = ramp()
+  var s: U32 = 0
+  for i in 0 ..= U8.MAX {
+    let pos = i as U32
+    if len256 {
+      s = s + a256[pos]
+    } else {
+      s = s + a255[pos]
+    }
+  }
+  s
+}
+
+@export
+pub fn via_from_fn(len4: Bool) -> U32 {
+  let xs: [U32; 3] = ramp()
+  var s: U32 = 0
+  if len4 {
+    let ys: [U32; 4] = array.from_fn(fn(k: U32) -> U32 {
+      xs[k]
+    })
+    s = total(ys)
+  } else {
+    let ys: [U32; 3] = array.from_fn(fn(k: U32) -> U32 {
+      xs[k]
+    })
+    s = total(ys)
+  }
+  s
+}
+
+test "lit_ends: 0 ..< 3 on a length of 3 reads every element" {
+  assert lit_ends(0) == 6
+}
+
+test "lit_ends: 0 ..< 4 on a length of 3 panics at the fourth turn" {
+  let r = lit_ends(1) //~ PANIC "lit_ends: 0 ..< 4 on a length of 3 panics at the fourth turn"
+  assert r == 0
+}
+
+test "lit_ends: 0 ..= 2 on a length of 3 reads every element" {
+  assert lit_ends(2) == 6
+}
+
+test "lit_ends: 0 ..= 3 on a length of 3 panics" {
+  let r = lit_ends(3) //~ PANIC "lit_ends: 0 ..= 3 on a length of 3 panics"
+  assert r == 0
+}
+
+test "lit_ends: 1 ..= 3 with xs[i - 1] reads every element" {
+  assert lit_ends(4) == 6
+}
+
+test "lit_ends: 1 ..= 4 with xs[i - 1] panics" {
+  let r = lit_ends(5) //~ PANIC "lit_ends: 1 ..= 4 with xs[i - 1] panics"
+  assert r == 0
+}
+
+test "lit_ends: 0 ..< 3 with xs[i + 1] on a length of 3 panics at the third turn" {
+  let r = lit_ends(6) //~ PANIC "lit_ends: 0 ..< 3 with xs[i + 1] on a length of 3 panics at the third turn"
+  assert r == 0
+}
+
+test "lit_ends: 0 ..< 3 with xs[i + 1] on a length of 4 reads the last three" {
+  assert lit_ends(7) == 9
+}
+
+test "lit_ends: an empty loop does not read its index" {
+  assert lit_ends(8) == 0
+  assert lit_ends(9) == 0
+}
+
+test "lit_ends: a constant as the end" {
+  assert lit_ends(10) == 6
+  assert lit_ends(12) == 6
+}
+
+test "lit_ends: 0 ..< N3 + 1 on a length of N3 panics" {
+  let r = lit_ends(11) //~ PANIC "lit_ends: 0 ..< N3 + 1 on a length of N3 panics"
+  assert r == 0
+}
+
+test "lit_ends: 0 ..= N3 on a length of N3 panics" {
+  let r = lit_ends(13) //~ PANIC "lit_ends: 0 ..= N3 on a length of N3 panics"
+  assert r == 0
+}
+
+test "generic_len: the end is the length of the array" {
+  assert generic_len(0) == 15
+  assert generic_len(1) == 0
+}
+
+test "generic_len: a closed end that is the length panics" {
+  let r = generic_len(2) //~ PANIC "generic_len: a closed end that is the length panics"
+  assert r == 0
+}
+
+test "generic_len: a closed end on an empty array panics" {
+  let r = generic_len(3) //~ PANIC "generic_len: a closed end on an empty array panics"
+  assert r == 0
+}
+
+test "lt_n: the end is an argument that fits" {
+  assert lt_n(0) == 0
+  assert lt_n(2) == 3
+  assert lt_n(3) == 6
+}
+
+test "lt_n: an end past the length panics" {
+  let r = lt_n(4) //~ PANIC "lt_n: an end past the length panics"
+  assert r == 0
+}
+
+test "lt_n: the largest end panics" {
+  let r = lt_n(4294967295) //~ PANIC "lt_n: the largest end panics"
+  assert r == 0
+}
+
+test "le_n: a closed end that fits" {
+  assert le_n(0) == 1
+  assert le_n(2) == 6
+}
+
+test "le_n: a closed end that is the length panics" {
+  let r = le_n(3) //~ PANIC "le_n: a closed end that is the length panics"
+  assert r == 0
+}
+
+test "from_to: both ends are arguments that fit" {
+  assert from_to(0, 3) == 6
+  assert from_to(1, 3) == 5
+  assert from_to(2, 3) == 3
+  assert from_to(3, 3) == 0
+}
+
+test "from_to: a start past the end is empty and never reads" {
+  assert from_to(5, 3) == 0
+}
+
+test "from_to: an end past the length panics" {
+  let r = from_to(2, 4) //~ PANIC "from_to: an end past the length panics"
+  assert r == 0
+}
+
+test "from_to: 0 ..< 4 panics" {
+  let r = from_to(0, 4) //~ PANIC "from_to: 0 ..< 4 panics"
+  assert r == 0
+}
+
+test "end_grows: a body that adds to the end keeps the number of turns" {
+  assert end_grows(3) == 6
+  assert end_grows(0) == 0
+}
+
+test "end_grows: four turns on a length of 3 panic" {
+  let r = end_grows(4) //~ PANIC "end_grows: four turns on a length of 3 panic"
+  assert r == 0
+}
+
+test "end_shrinks: a body that sets the end to 1 keeps the number of turns" {
+  assert end_shrinks(3) == 6
+}
+
+test "end_shrinks: four turns on a length of 3 panic although the body sets the end to 1" {
+  let r = end_shrinks(4) //~ PANIC "end_shrinks: four turns on a length of 3 panic although the body sets the end to 1"
+  assert r == 0
+}
+
+test "start_changes: a body that changes the start does not move the loop" {
+  assert start_changes(1) == 5
+  assert start_changes(0) == 6
+  assert start_changes(4) == 0
+}
+
+test "grid: 0 ..< 2 and 0 ..< 3 over a grid of 2 rows of 3" {
+  assert grid(0) == 42
+}
+
+test "grid: an outer end of 3 on 2 rows panics" {
+  let r = grid(1) //~ PANIC "grid: an outer end of 3 on 2 rows panics"
+  assert r == 0
+}
+
+test "grid: an inner end of 4 on 3 columns panics" {
+  let r = grid(2) //~ PANIC "grid: an inner end of 4 on 3 columns panics"
+  assert r == 0
+}
+
+test "grid: g[j][i] with j to 3 on 2 rows panics" {
+  let r = grid(3) //~ PANIC "grid: g[j][i] with j to 3 on 2 rows panics"
+  assert r == 0
+}
+
+test "grid: an inner end that depends on the outer index and fits" {
+  assert grid(4) == 39
+}
+
+test "grid: an inner end that depends on the outer index and passes the columns panics" {
+  let r = grid(5) //~ PANIC "grid: an inner end that depends on the outer index and passes the columns panics"
+  assert r == 0
+}
+
+test "grid: an inner start that depends on the outer index" {
+  assert grid(6) == 31
+  assert grid(7) == 11
+}
+
+test "break_at: a break before the read keeps the index in the array" {
+  assert break_at(0) == 0
+  assert break_at(3) == 6
+}
+
+test "break_at: a break one turn late panics" {
+  let r = break_at(4) //~ PANIC "break_at: a break one turn late panics"
+  assert r == 0
+}
+
+test "guarded: a guard or a continue that fits" {
+  assert guarded(0) == 6
+  assert guarded(2) == 6
+}
+
+test "guarded: a guard that lets the index reach the length panics" {
+  let r = guarded(1) //~ PANIC "guarded: a guard that lets the index reach the length panics"
+  assert r == 0
+}
+
+test "guarded: a continue that lets the index reach the length panics" {
+  let r = guarded(3) //~ PANIC "guarded: a continue that lets the index reach the length panics"
+  assert r == 0
+}
+
+test "u8_top: 250 ..= U8.MAX on a length of 6 reads every element" {
+  assert u8_top(true) == 21
+}
+
+test "u8_top: 250 ..= U8.MAX on a length of 5 panics at the last turn" {
+  let r = u8_top(false) //~ PANIC "u8_top: 250 ..= U8.MAX on a length of 5 panics at the last turn"
+  assert r == 0
+}
+
+test "u8_all: 0 ..= U8.MAX on a length of 256 reads every element" {
+  assert u8_all(true) == 32896
+}
+
+test "u8_all: 0 ..= U8.MAX on a length of 255 panics at the last turn" {
+  let r = u8_all(false) //~ PANIC "u8_all: 0 ..= U8.MAX on a length of 255 panics at the last turn"
+  assert r == 0
+}
+
+test "via_from_fn: the closure of array.from_fn reads the elements of an array of its own length" {
+  assert via_from_fn(false) == 6
+}
+
+test "via_from_fn: the closure of array.from_fn passes the length of the array it reads panics" {
+  let r = via_from_fn(true) //~ PANIC "via_from_fn: the closure of array.from_fn passes the length of the array it reads panics"
+  assert r == 0
+}

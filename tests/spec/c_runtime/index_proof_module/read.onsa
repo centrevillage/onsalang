@@ -1,0 +1,72 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§9.2", "§15.1", "§7"]
+//
+// # W8-03 U5/t, S-1264 P2 (§9.2: a compiler may remove a check that it can prove): the length of the array and the end of the loop are constants of another module, so the proof has to go through the module
+// # boundary and still give the constant's value. `LEN` is 3 and `OVER` is 4, one more. `sum` (k): 0: `0 ..< LEN` on a `[U32; LEN]` is 1 + 2 + 3 = 6. 1: `0 ..< OVER` on the same array panics at the fourth turn.
+// # 2: `0 ..= LEN - 1` is 6. 3: `0 ..= LEN` panics. 4: the array is `[U32; OVER]` and the end is `LEN`: 1 + 2 + 3 = 6 (the array is longer than the loop).
+// [[test.host]]
+// name = "c: constants of another module as the length and the end"
+// target = "host"
+// fn = "read.sum"
+// steps = [
+//   { call = "fn", args = { k = 0 }, status = 0, result = 6 },
+//   { call = "fn", args = { k = 1 }, status = 1 },
+//   { call = "fn", args = { k = 2 }, status = 0, result = 6 },
+//   { call = "fn", args = { k = 3 }, status = 1 },
+//   { call = "fn", args = { k = 4 }, status = 0, result = 6 },
+// ]
+
+use lens.{LEN, OVER, ramp}
+
+@export
+pub fn sum(k: U32) -> U32 {
+  let xs: [U32; LEN] = ramp()
+  let ys: [U32; OVER] = ramp()
+  var s: U32 = 0
+  match k {
+    0 => {
+      for i in 0 ..< LEN {
+        s = s + xs[i]
+      }
+    },
+    1 => {
+      for i in 0 ..< OVER {
+        s = s + xs[i]
+      }
+    },
+    2 => {
+      for i in 0 ..= LEN - 1 {
+        s = s + xs[i]
+      }
+    },
+    3 => {
+      for i in 0 ..= LEN {
+        s = s + xs[i]
+      }
+    },
+    _ => {
+      for i in 0 ..< LEN {
+        s = s + ys[i]
+      }
+    },
+  }
+  s
+}
+
+test "sum: the end and the length are the same constant of another module" {
+  assert sum(0) == 6
+  assert sum(2) == 6
+  assert sum(4) == 6
+}
+
+test "sum: an end that is one more than the length panics" {
+  let r = sum(1) //~ PANIC "sum: an end that is one more than the length panics"
+  assert r == 0
+}
+
+test "sum: a closed end that is the length panics" {
+  let r = sum(3) //~ PANIC "sum: a closed end that is the length panics"
+  assert r == 0
+}
