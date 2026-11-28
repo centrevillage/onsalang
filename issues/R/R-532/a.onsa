@@ -1,0 +1,197 @@
+fn reset(inout xs: [U32; 3]) -> U32 {
+  xs = [7, 8, 9]
+  1
+}
+
+fn next(inout k: U32) -> U32 {
+  k = k + 1
+  k - 1
+}
+
+fn rg(inout g: [[U32; 2]; 2]) -> U32 {
+  g = [[5, 6], [7, 8]]
+  1
+}
+
+pub struct P {
+  x: U32,
+  xs: [U32; 3],
+}
+
+fn rp(inout ps: [P; 2]) -> U32 {
+  ps = [P { x: 50, xs: [5, 6, 7] }, P { x: 70, xs: [7, 8, 9] }]
+  1
+}
+
+fn rt2(inout t: ([U32; 3], U32)) -> U32 {
+  t.0 = [7, 8, 9]
+  1
+}
+
+pub struct V {
+  xs: [U32; 3],
+  n: U32,
+}
+
+impl V {
+  fn pick(inout self) -> U32 {
+    self.xs = [7, 8, 9]
+    self.n = self.n + 1
+    1
+  }
+  fn rd(inout self) -> U32 {
+    self.xs[self.pick!()]
+  }
+  fn wr(inout self) -> U32 {
+    self.xs[self.pick!()] = 5
+    self.xs[0] * 100 + self.xs[1] * 10 + self.xs[2]
+  }
+}
+
+// nested index order: g[next][next]
+@export
+pub fn m01_nested_order() -> U32 {
+  let g: [[U32; 2]; 2] = [[1, 2], [3, 4]]
+  var k: U32 = 0
+  g[next(inout k)][next(inout k)]
+}
+
+@export
+pub fn m02_tuple_base() -> U32 {
+  var t: ([U32; 3], U32) = ([1, 2, 3], 0)
+  t.0[rt2(inout t)]
+}
+
+@export
+pub fn m03_index_then_field() -> U32 {
+  var ps: [P; 2] = [P { x: 10, xs: [1, 2, 3] }, P { x: 30, xs: [3, 4, 5] }]
+  ps[rp(inout ps)].x
+}
+
+@export
+pub fn m04_field_of_elem_index() -> U32 {
+  var ps: [P; 2] = [P { x: 10, xs: [1, 2, 3] }, P { x: 30, xs: [3, 4, 5] }]
+  ps[0].xs[rp(inout ps)]
+}
+
+@export
+pub fn m05_self_method_read() -> U32 {
+  var v = V { xs: [1, 2, 3], n: 0 }
+  v.rd!()
+}
+
+@export
+pub fn m06_self_method_write() -> U32 {
+  var v = V { xs: [1, 2, 3], n: 0 }
+  v.wr!()
+}
+
+@export
+pub fn m07_match_scrutinee() -> U32 {
+  var g: [[U32; 2]; 2] = [[1, 2], [3, 4]]
+  var o: [Option[U32]; 2] = [Some(1), None]
+  let _ = g[rg(inout g)][0]
+  match o[ro(inout o)] {
+    Some(v) => v,
+    None => 0,
+  }
+}
+
+@export
+pub fn m08_if_cond() -> U32 {
+  var xs: [U32; 3] = [1, 2, 3]
+  if xs[reset(inout xs)] == 8 { 1 } else { 0 }
+}
+
+@export
+pub fn m09_range_end() -> U32 {
+  var xs: [U32; 3] = [1, 2, 3]
+  var s: U32 = 0
+  for _ in 0 ..< xs[reset(inout xs)] {
+    s = s + 1
+  }
+  s
+}
+
+@export
+pub fn m10_return() -> U32 {
+  var xs: [U32; 3] = [1, 2, 3]
+  return xs[reset(inout xs)]
+}
+
+fn sw[T: Copy, const N: U32](inout xs: [T; N]) -> U32 {
+  let a = xs[0]
+  xs[0] = xs[1]
+  xs[1] = a
+  1
+}
+
+fn gen[T: Copy, const N: U32](inout xs: [T; N]) -> T {
+  xs[sw(inout xs)]
+}
+
+fn ro(inout o: [Option[U32]; 2]) -> U32 {
+  o = [None, Some(42)]
+  1
+}
+
+@export
+pub fn m11_generic() -> U32 {
+  var xs: [U32; 3] = [1, 2, 3]
+  gen(inout xs)
+}
+
+@export
+pub fn m12_inner_index_in_index() -> U32 {
+  var ys: [U32; 3] = [0, 2, 1]
+  ys[ys[sm(inout ys)]]
+}
+
+fn sm(inout ys: [U32; 3]) -> U32 {
+  ys = [2, 0, 1]
+  1
+}
+
+@export
+pub fn m13_assign_rhs() -> U32 {
+  var xs: [U32; 3] = [1, 2, 3]
+  xs[0] = reset(inout xs)
+  xs[0] * 100 + xs[1] * 10 + xs[2]
+}
+
+@export
+pub fn m14_elem_field_assign() -> U32 {
+  var ps: [P; 2] = [P { x: 10, xs: [1, 2, 3] }, P { x: 30, xs: [3, 4, 5] }]
+  ps[rp(inout ps)].x = 1
+  ps[0].x * 100 + ps[1].x
+}
+
+@export
+pub fn m15_block_base() -> U32 {
+  var xs: [U32; 3] = [1, 2, 3]
+  ({ xs })[reset(inout xs)]
+}
+
+@export
+pub fn m16_assert() -> U32 {
+  var xs: [U32; 3] = [1, 2, 3]
+  assert xs[reset(inout xs)] == 8
+  1
+}
+
+test "m01 nested order (1,2 => g[0][1] = 2)" { assert m01_nested_order() == 99 }
+test "m02 tuple base" { assert m02_tuple_base() == 99 }
+test "m03 index then field" { assert m03_index_then_field() == 99 }
+test "m04 field of elem index" { assert m04_field_of_elem_index() == 99 }
+test "m05 self method read" { assert m05_self_method_read() == 99 }
+test "m06 self method write" { assert m06_self_method_write() == 99 }
+test "m07 match scrutinee" { assert m07_match_scrutinee() == 99 }
+test "m08 if cond" { assert m08_if_cond() == 99 }
+test "m09 range end" { assert m09_range_end() == 99 }
+test "m10 return" { assert m10_return() == 99 }
+test "m11 generic" { assert m11_generic() == 99 }
+test "m12 inner index" { assert m12_inner_index_in_index() == 99 }
+test "m13 assign rhs" { assert m13_assign_rhs() == 99 }
+test "m14 elem field assign" { assert m14_elem_field_assign() == 99 }
+test "m15 block base" { assert m15_block_base() == 99 }
+test "m16 assert" { assert m16_assert() == 99 }

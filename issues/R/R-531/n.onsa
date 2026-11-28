@@ -1,0 +1,80 @@
+fn rb(inout b: Buf[F32]) -> U32 uses {Alloc} {
+  b = Buf.zeroed(3)
+  1
+}
+
+fn grow(inout b: Buf[F32]) -> U32 uses {Alloc} {
+  b = Buf.zeroed(8)
+  b[5] = 4.0
+  5
+}
+
+fn rbs(inout bs: [Buf[F32]; 2]) -> U32 uses {Alloc} {
+  bs = [Buf.zeroed(5), Buf.zeroed(6)]
+  1
+}
+
+fn bump(inout x: F32) -> U32 {
+  x = x + 10.0
+  0
+}
+
+fn reset(inout xs: [U32; 3]) -> U32 {
+  xs = [7, 8, 9]
+  1
+}
+
+fn rob(inout o: [Option[Buf[F32]]; 2]) -> U32 uses {Alloc} {
+  o = [None, Some(Buf.zeroed(9))]
+  1
+}
+
+pub fn n01_if_base_affine(t: Bool) -> U32 uses {Alloc} {
+  var bs: [Buf[F32]; 2] = [Buf.zeroed(1), Buf.zeroed(2)]
+  let cs: [Buf[F32]; 2] = [Buf.zeroed(3), Buf.zeroed(4)]
+  (if t { bs } else { cs })[rbs(inout bs)].len()
+}
+
+pub fn n02_block_base_affine() -> U32 uses {Alloc} {
+  var bs: [Buf[F32]; 2] = [Buf.zeroed(1), Buf.zeroed(2)]
+  ({ bs })[rbs(inout bs)].len()
+}
+
+pub fn n04_match_affine() -> U32 uses {Alloc} {
+  var o: [Option[Buf[F32]]; 2] = [None, None]
+  match o[rob(inout o)] {
+    Some(b) => b.len(),
+    None => 0,
+  }
+}
+
+pub fn n10_grow() -> F32 uses {Alloc} {
+  var b: Buf[F32] = Buf.zeroed(3)
+  b[grow(inout b)]
+}
+
+pub fn n11_inout_elem() -> F32 uses {Alloc} {
+  var b: Buf[F32] = Buf.zeroed(2)
+  b[1] = 2.0
+  let _ = bump(inout b[rb(inout b)])
+  b[1]
+}
+
+pub fn n20_slice_base_buf() -> F32 uses {Alloc} {
+  var b: Buf[F32] = Buf.zeroed(2)
+  b[1] = 2.0
+  b.slice(0, 2)[rb(inout b)]
+}
+
+pub fn n21_slice_base_arr() -> U32 {
+  var xs: [U32; 3] = [1, 2, 3]
+  xs.slice(0, 3)[reset(inout xs)]
+}
+
+test "n01" { assert n01_if_base_affine(true) == 99 }
+test "n02" { assert n02_block_base_affine() == 99 }
+test "n04" { assert n04_match_affine() == 99 }
+test "n10" { assert n10_grow() == 99.0 }
+test "n11" { assert n11_inout_elem() == 99.0 }
+test "n20" { assert n20_slice_base_buf() == 99.0 }
+test "n21" { assert n21_slice_base_arr() == 99 }

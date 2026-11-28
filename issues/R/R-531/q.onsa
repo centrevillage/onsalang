@@ -1,0 +1,65 @@
+fn take(move b: Buf[F32]) -> U32 uses {Alloc} { 1 }
+
+fn reset(inout xs: [U32; 3]) -> U32 {
+  xs = [7, 8, 9]
+  1
+}
+
+rt fn rreset(inout xs: [U32; 3]) -> U32 {
+  xs = [7, 8, 9]
+  1
+}
+
+rt fn q01_rt(inout xs: [U32; 3]) -> U32 {
+  xs[rreset(inout xs)]
+}
+
+pub fn q02_if_move(t: Bool) -> F32 uses {Alloc} {
+  var b: Buf[F32] = Buf.zeroed(3)
+  let c: Buf[F32] = Buf.zeroed(3)
+  (if t { b } else { c })[take(move b)]
+}
+
+pub fn q03_slice_move() -> F32 uses {Alloc} {
+  var b: Buf[F32] = Buf.zeroed(3)
+  b.slice(0, 2)[take(move b)]
+}
+
+
+
+pub struct H { xs: [U32; 3], n: U32 }
+pub struct W { h: H, k: U32 }
+
+fn rw(inout w: W) -> U32 {
+  w.h.xs = [7, 8, 9]
+  1
+}
+
+pub fn q10_tryop(inout rs: [Result[U32, U32]; 2]) -> Result[U32, U32] {
+  let v = rs[rr(inout rs)]?
+  Ok(v)
+}
+
+fn rr(inout rs: [Result[U32, U32]; 2]) -> U32 {
+  rs = [Ok(7), Err(8)]
+  1
+}
+
+pub fn q11_while() -> U32 {
+  var xs: [U32; 3] = [1, 2, 3]
+  var n: U32 = 0
+  while xs[reset(inout xs)] == 8 && n < 2 {
+    n = n + 1
+  }
+  n
+}
+
+
+
+test "q01" { var xs: [U32; 3] = [1, 2, 3]
+  assert q01_rt(inout xs) == 99 }
+test "q11" { assert q11_while() == 99 }
+test "q10" { var rs: [Result[U32, U32]; 2] = [Ok(1), Ok(2)]
+  assert q10_tryop(inout rs) == Ok(99) }
+test "q02" { assert q02_if_move(true) == 99.0 }
+test "q03" { assert q03_slice_move() == 99.0 }
