@@ -13,7 +13,7 @@
 # 今の中身は `tools/builtin_names.py --print` で出せる（same_spelling の項目は残し、残りを allow に
 # 置く。一覧を書き換える前に差分を読むこと）。
 
-[allow."crates/onsa_backend_c/src/emit/fns.rs"]
+[allow."crates/onsa_backend_c/src/emit/fns/prim.rs"]
 "add_from" = 1
 "copy_from" = 1
 
@@ -240,7 +240,7 @@
 "INFINITY" = { count = 2, note = "C の <math.h> のマクロ名（生成する C の字面）" }
 "NAN" = { count = 2, note = "C の <math.h> のマクロ名（生成する C の字面）" }
 
-[same_spelling."crates/onsa_backend_c/src/emit/fns.rs"]
+[same_spelling."crates/onsa_backend_c/src/emit/fns/text.rs"]
 "INFINITY" = { count = 1, note = "C の <math.h> のマクロ名（生成する C の字面）" }
 "NAN" = { count = 1, note = "C の <math.h> のマクロ名（生成する C の字面）" }
 
