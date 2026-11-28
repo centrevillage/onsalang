@@ -1,0 +1,112 @@
+struct S { n: U32 }
+
+fn f1(x0: U8) -> U32 {
+  var x: U8 = x0
+  var n: U32 = 0
+  for _ in 0 ..< (x as U32) {
+    x = 0
+    n = n + 1
+  }
+  n
+}
+fn f1b(x0: U8) -> U32 {
+  var x: U8 = x0
+  var n: U32 = 0
+  for _ in 0 ..< (x as U32) {
+    x = 0
+    n = n + 1
+  }
+  n
+}
+fn f2(x0: U32) -> U32 {
+  var a: [U32; 2] = [x0, 0]
+  var n: U32 = 0
+  for _ in 0 ..< a[0] {
+    a[0] = 0
+    n = n + 1
+  }
+  n
+}
+fn f3(x0: U32) -> U32 {
+  var s: S = S { n: x0 }
+  var n: U32 = 0
+  for _ in 0 ..< s.n {
+    s.n = 0
+    n = n + 1
+  }
+  n
+}
+fn f4(x0: I32) -> U32 {
+  var x: I32 = x0
+  var n: U32 = 0
+  for _ in 0 ..< (x as I64) {
+    x = 0
+    n = n + 1
+  }
+  n
+}
+fn f5(x0: U32) -> U32 {
+  var x: U32 = x0
+  var n: U32 = 0
+  for _ in 0 ..< (x + 0) {
+    x = 0
+    n = n + 1
+  }
+  n
+}
+fn f6(x0: U32) -> U32 {
+  var x: U32 = x0
+  var n: U32 = 0
+  for _ in 0 ..< (0 + x) {
+    x = 0
+    n = n + 1
+  }
+  n
+}
+fn f7(x0: U32) -> U32 {
+  var x: U32 = x0
+  var n: U32 = 0
+  for _ in 0 ..< (x * 1 + 0) {
+    x = 0
+    n = n + 1
+  }
+  n
+}
+fn f8(x0: U32) -> U32 {
+  var x: U32 = x0
+  var n: U32 = 0
+  for _ in 0 ..< (x) {
+    x = 0
+    n = n + 1
+  }
+  n
+}
+fn f9(x0: U32) -> U32 {
+  var t: (U32, U32) = (x0, 1)
+  var n: U32 = 0
+  for _ in 0 ..< t.0 {
+    t = (0, 0)
+    n = n + 1
+  }
+  n
+}
+@export
+pub fn x1(x: U8) -> U32 { f1(x) }
+@export
+pub fn x1b(x: U8) -> U32 { f1b(x) }
+@export
+pub fn x2(x: U32) -> U32 { f2(x) }
+@export
+pub fn x3(x: U32) -> U32 { f3(x) }
+@export
+pub fn x4(x: I32) -> U32 { f4(x) }
+@export
+pub fn x5(x: U32) -> U32 { f5(x) }
+@export
+pub fn x6(x: U32) -> U32 { f6(x) }
+@export
+pub fn x7(x: U32) -> U32 { f7(x) }
+@export
+pub fn x8(x: U32) -> U32 { f8(x) }
+@export
+pub fn x9(x: U32) -> U32 { f9(x) }

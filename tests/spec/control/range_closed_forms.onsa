@@ -1,0 +1,114 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// canonical = false
+// spec = ["§7", "§3.1", "§3.5"]
+
+// W8-03 U4/t (spec §7, S-257): the closed range `a..=b` in the header of a `for`. It replaces negative/range_inclusive_for_e0200.onsa, the
+// case of this version that reported the header as E0200 ("the lowering of `b` that may be the largest value of its type is not made
+// in this version"): the same forms, written without spaces around `..=` as there, are now a program and have values. The
+// ends are the same as in `a..<b`: integers, `a` then `b` evaluated once, an end may have binary operators. The values at the
+// edges of a type, the order of the ends and the other bodies are in range_closed_edges.onsa, range_closed_order.onsa
+// and range_closed_values.onsa. `canonical = false`: the spaces round `..=` are those of the old file (`onsa fmt` puts
+// one on each side, tests/spec/fmt/range_spaces_closed_tight.onsa).
+//
+// Every value below is worked out by hand from the spec text.
+
+pub fn literal_ends() -> U32 {
+  var t: U32 = 0
+  for i in 0..=3 {
+    t = t + i
+  }
+  t
+}
+
+pub fn named_ends(lo: U32, hi: U32) -> U32 {
+  var t: U32 = 0
+  for i in lo..=hi {
+    t = t + i
+  }
+  t
+}
+
+pub fn ends_are_sums(lo: U32, hi: U32) -> U32 {
+  var t: U32 = 0
+  for i in lo + 1..=hi - 1 {
+    t = t + i
+  }
+  t
+}
+
+pub fn the_end_is_the_largest_value() -> U32 {
+  var c: U32 = 0
+  for _ in 250..=U8.MAX {
+    c = c + 1
+  }
+  c
+}
+
+pub fn in_an_inner_loop(n: U32) -> U32 {
+  var c: U32 = 0
+  for i in 0..<n {
+    for _ in 0..=i {
+      c = c + 1
+    }
+  }
+  c
+}
+
+pub fn in_a_branch(go: Bool, n: U32) -> U32 {
+  var c: U32 = 0
+  if go {
+    for _ in 0..=n {
+      c = c + 1
+    }
+  }
+  c
+}
+
+// The half-open range next to it.
+
+pub fn fine(n: U32) -> U32 {
+  var t: U32 = 0
+  for i in 0..<n {
+    t = t + i
+  }
+  t
+}
+
+test "literal ends" {
+  // 0 + 1 + 2 + 3.
+  assert literal_ends() == 6
+}
+
+test "named ends" {
+  // 2 + 3 + 4.
+  assert named_ends(2, 4) == 9
+  assert named_ends(5, 5) == 5
+  // The start is past the end: no value.
+  assert named_ends(5, 4) == 0
+}
+
+test "ends that are sums" {
+  // 1 + 1 ..= 5 - 1 is 2 ..= 4.
+  assert ends_are_sums(1, 5) == 9
+  // 2 ..= 2.
+  assert ends_are_sums(1, 3) == 2
+  // 2 ..= 1 is empty.
+  assert ends_are_sums(1, 2) == 0
+}
+
+test "the end is the largest value of U8" {
+  // 250, 251, 252, 253, 254, 255.
+  assert the_end_is_the_largest_value() == 6
+}
+
+test "a closed range in an inner loop and in a branch" {
+  // 1 + 2 + 3 + 4.
+  assert in_an_inner_loop(4) == 10
+  assert in_an_inner_loop(0) == 0
+  // 0 ..= 5 is six values.
+  assert in_a_branch(true, 5) == 6
+  assert in_a_branch(false, 5) == 0
+  assert fine(4) == 6
+}

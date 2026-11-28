@@ -1,0 +1,380 @@
+// onsa.toml
+// [package]
+// name = "range_closed_c"
+// edition = "2026"
+//
+// [export]
+// prefix = "rcc_"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "poison"
+// provides = []
+//
+// [test]
+// spec = ["§7", "§3.5", "§13.4"]
+//
+// # W8-03 U4/t, §7 ("`for i in a ..= b` は、`b` が型の最大値でも溢れずに終わる") and §3.5 ("範囲 `a ..= b` は、`a`、`b` の順に、最初の反復の前に一度だけ評価する。
+// # 本体で端の変数を変えても、反復の回数は変わらない"): the C that the compiler writes for a closed range gives the values that the interpreter gives (the
+// # same forms run in `tests/spec/control/range_closed_*.onsa`). A loop of C written as `for (x = a; x <= b; x++)` does not end when `b` is the largest
+// # value of the type (`x` wraps to 0 and `x <= 255` holds for ever), so every type here has a case at its edge. No form here panics.
+// # The expected values are derived by hand from §7 and §3.5, never from an output.
+//
+// # 250, 251, 252, 253, 254, 255: 6; 255 alone: 1; the whole range of U8: 256; a start past the end: 0; 254 and 255: 2.
+// [[test.host]]
+// name = "c: the end is the largest value of U8"
+// target = "host"
+// fn = "range_closed_c.u8_count"
+// steps = [
+//   { call = "fn", args = { lo = 250, hi = 255 }, status = 0, result = 6 },
+//   { call = "fn", args = { lo = 255, hi = 255 }, status = 0, result = 1 },
+//   { call = "fn", args = { lo = 0, hi = 255 }, status = 0, result = 256 },
+//   { call = "fn", args = { lo = 255, hi = 254 }, status = 0, result = 0 },
+//   { call = "fn", args = { lo = 1, hi = 0 }, status = 0, result = 0 },
+//   { call = "fn", args = { lo = 254, hi = 255 }, status = 0, result = 2 },
+// ]
+//
+// # `lo ..= U8.MAX`: the last value is 255; the sum of 250 ..= 255 is 1515 and of 0 ..= 255 is 255 * 256 / 2 = 32640.
+// [[test.host]]
+// name = "c: the last value and the sum of a range that ends at U8.MAX"
+// target = "host"
+// fn = "range_closed_c.u8_last"
+// steps = [
+//   { call = "fn", args = { lo = 250 }, status = 0, result = 255 },
+//   { call = "fn", args = { lo = 255 }, status = 0, result = 255 },
+// ]
+//
+// [[test.host]]
+// name = "c: the sum of the values of a range that ends at U8.MAX"
+// target = "host"
+// fn = "range_closed_c.u8_sum"
+// steps = [
+//   { call = "fn", args = { lo = 250 }, status = 0, result = 1515 },
+//   { call = "fn", args = { lo = 0 }, status = 0, result = 32640 },
+// ]
+//
+// # `continue` on an even value goes to the next value, the last one included: the odd values of 250 ..= 255 are 251, 253, 255 (3); of 255 alone 1.
+// [[test.host]]
+// name = "c: continue at the largest value of U8 ends the loop"
+// target = "host"
+// fn = "range_closed_c.u8_odd_to_max"
+// steps = [
+//   { call = "fn", args = { lo = 250 }, status = 0, result = 3 },
+//   { call = "fn", args = { lo = 254 }, status = 0, result = 1 },
+//   { call = "fn", args = { lo = 255 }, status = 0, result = 1 },
+// ]
+//
+// # `continue` on the largest value itself: 250 to 254 count (5), 255 continues; 255 alone counts nothing (0).
+// [[test.host]]
+// name = "c: continue on the largest value of U8 itself"
+// target = "host"
+// fn = "range_closed_c.u8_skip_max"
+// steps = [
+//   { call = "fn", args = { lo = 250 }, status = 0, result = 5 },
+//   { call = "fn", args = { lo = 255 }, status = 0, result = 0 },
+// ]
+//
+// # Two nested loops that both end at 255: 254 gives 2 + 1 = 3, 253 gives 3 + 2 + 1 = 6.
+// [[test.host]]
+// name = "c: nested loops that both end at the largest value of U8"
+// target = "host"
+// fn = "range_closed_c.u8_nested_at_max"
+// steps = [
+//   { call = "fn", args = { lo = 254 }, status = 0, result = 3 },
+//   { call = "fn", args = { lo = 253 }, status = 0, result = 6 },
+// ]
+//
+// # I8: -128, -127, -126 sum to -381; 126 and 127 to 253; the whole range to -128; -3 ..= 2 to -3; a start past the end to 0.
+// [[test.host]]
+// name = "c: the sum of a closed range of I8"
+// target = "host"
+// fn = "range_closed_c.i8_sum"
+// steps = [
+//   { call = "fn", args = { lo = -128, hi = -126 }, status = 0, result = -381 },
+//   { call = "fn", args = { lo = 126, hi = 127 }, status = 0, result = 253 },
+//   { call = "fn", args = { lo = -128, hi = 127 }, status = 0, result = -128 },
+//   { call = "fn", args = { lo = -3, hi = 2 }, status = 0, result = -3 },
+//   { call = "fn", args = { lo = 127, hi = -128 }, status = 0, result = 0 },
+//   { call = "fn", args = { lo = -128, hi = -128 }, status = 0, result = -128 },
+// ]
+//
+// # The whole range of I8 has 256 values; one value; empty.
+// [[test.host]]
+// name = "c: the number of values of a closed range of I8"
+// target = "host"
+// fn = "range_closed_c.i8_count"
+// steps = [
+//   { call = "fn", args = { lo = -128, hi = 127 }, status = 0, result = 256 },
+//   { call = "fn", args = { lo = 127, hi = 127 }, status = 0, result = 1 },
+//   { call = "fn", args = { lo = 0, hi = -1 }, status = 0, result = 0 },
+// ]
+//
+// # U32 and I32 at their edges: 4294967293 ..= 4294967295 is 3 values; U32.MAX alone 1; 5 ..= 2 none; 0 ..= 0 one.
+// [[test.host]]
+// name = "c: a closed range of U32 that ends at U32.MAX"
+// target = "host"
+// fn = "range_closed_c.u32_count"
+// steps = [
+//   { call = "fn", args = { lo = 4294967293, hi = 4294967295 }, status = 0, result = 3 },
+//   { call = "fn", args = { lo = 4294967295, hi = 4294967295 }, status = 0, result = 1 },
+//   { call = "fn", args = { lo = 5, hi = 2 }, status = 0, result = 0 },
+//   { call = "fn", args = { lo = 0, hi = 0 }, status = 0, result = 1 },
+// ]
+//
+// # `lo ..= I32.MAX`: 2147483646 and 2147483647 are 2 values; `I32.MIN ..= hi`: -2147483648 and -2147483647 are 2.
+// [[test.host]]
+// name = "c: a closed range of I32 at its largest value"
+// target = "host"
+// fn = "range_closed_c.i32_to_max"
+// steps = [
+//   { call = "fn", args = { lo = 2147483646 }, status = 0, result = 2 },
+//   { call = "fn", args = { lo = 2147483647 }, status = 0, result = 1 },
+// ]
+//
+// [[test.host]]
+// name = "c: a closed range of I32 from its smallest value"
+// target = "host"
+// fn = "range_closed_c.i32_from_min"
+// steps = [
+//   { call = "fn", args = { hi = -2147483647 }, status = 0, result = 2 },
+//   { call = "fn", args = { hi = -2147483648 }, status = 0, result = 1 },
+// ]
+//
+// # `U64.MAX - 2 ..= U64.MAX` is 3 values, `U64.MAX ..= U64.MAX` is 1, `I64.MAX - 1 ..= I64.MAX` is 2 (a total of 6).
+// [[test.host]]
+// name = "c: closed ranges of U64 and I64 that end at the largest value"
+// target = "host"
+// fn = "range_closed_c.wide_tops"
+// steps = [
+//   { call = "fn", args = {}, status = 0, result = 6 },
+// ]
+//
+// # `1 ..= n` with n = 0 is empty, with n = 3 it is 3 values.
+// [[test.host]]
+// name = "c: 1 ..= n with n = 0 runs 0 times"
+// target = "host"
+// fn = "range_closed_c.from_one"
+// steps = [
+//   { call = "fn", args = { n = 0 }, status = 0, result = 0 },
+//   { call = "fn", args = { n = 3 }, status = 0, result = 3 },
+// ]
+//
+// # `0 ..= i` inside `0 ..= n`: for n = 3 it is 1 + 2 + 3 + 4 = 10, for n = 0 it is 1.
+// [[test.host]]
+// name = "c: a closed range in a closed range"
+// target = "host"
+// fn = "range_closed_c.triangle"
+// steps = [
+//   { call = "fn", args = { n = 3 }, status = 0, result = 10 },
+//   { call = "fn", args = { n = 0 }, status = 0, result = 1 },
+// ]
+//
+// # The end changed by the body: `0 ..= hi` with hi = 3 runs 4 times and hi is 7 after: 7 * 10 + 4.
+// [[test.host]]
+// name = "c: the end changed by the body does not change the number of iterations"
+// target = "host"
+// fn = "range_closed_c.end_changed"
+// steps = [
+//   { call = "fn", args = { hi0 = 3 }, status = 0, result = 74 },
+//   { call = "fn", args = { hi0 = 0 }, status = 0, result = 11 },
+// ]
+//
+// # `tick 1 ..= tick 2 + tick 3` is 1 ..= 5: the log is 123 and the body ran 5 times: 123 * 100 + 5.
+// [[test.host]]
+// name = "c: the ends run once, the start first"
+// target = "host"
+// fn = "range_closed_c.ends_order"
+// steps = [
+//   { call = "fn", args = {}, status = 0, result = 12305 },
+// ]
+//
+// # `tick 5 ..= tick 2` is empty and both ends ran in that order: the log is 52 and the body ran 0 times: 52 * 100 + 0.
+// [[test.host]]
+// name = "c: both ends run when the range is empty"
+// target = "host"
+// fn = "range_closed_c.empty_ends_order"
+// steps = [
+//   { call = "fn", args = {}, status = 0, result = 5200 },
+// ]
+
+fn tick(inout log: U32, d: U32) -> U32 {
+  let shifted = log * 10
+  log = shifted + d
+  d
+}
+
+@export
+pub fn u8_count(lo: U8, hi: U8) -> U32 {
+  var n: U32 = 0
+  for _ in lo ..= hi {
+    n = n + 1
+  }
+  n
+}
+
+@export
+pub fn u8_last(lo: U8) -> U8 {
+  var last: U8 = 0
+  for i in lo ..= U8.MAX {
+    last = i
+  }
+  last
+}
+
+@export
+pub fn u8_sum(lo: U8) -> U32 {
+  var s: U32 = 0
+  for i in lo ..= U8.MAX {
+    s = s + (i as U32)
+  }
+  s
+}
+
+@export
+pub fn u8_odd_to_max(lo: U8) -> U32 {
+  var n: U32 = 0
+  for i in lo ..= U8.MAX {
+    let r = i % 2
+    if r == 0 {
+      continue
+    }
+    n = n + 1
+  }
+  n
+}
+
+@export
+pub fn u8_skip_max(lo: U8) -> U32 {
+  var n: U32 = 0
+  for i in lo ..= U8.MAX {
+    if i == U8.MAX {
+      continue
+    }
+    n = n + 1
+  }
+  n
+}
+
+@export
+pub fn u8_nested_at_max(lo: U8) -> U32 {
+  var n: U32 = 0
+  for i in lo ..= U8.MAX {
+    for _ in i ..= U8.MAX {
+      n = n + 1
+    }
+  }
+  n
+}
+
+@export
+pub fn i8_sum(lo: I8, hi: I8) -> I32 {
+  var s: I32 = 0
+  for i in lo ..= hi {
+    s = s + (i as I32)
+  }
+  s
+}
+
+@export
+pub fn i8_count(lo: I8, hi: I8) -> U32 {
+  var n: U32 = 0
+  for _ in lo ..= hi {
+    n = n + 1
+  }
+  n
+}
+
+@export
+pub fn u32_count(lo: U32, hi: U32) -> U32 {
+  var n: U32 = 0
+  for _ in lo ..= hi {
+    n = n + 1
+  }
+  n
+}
+
+@export
+pub fn i32_to_max(lo: I32) -> U32 {
+  var n: U32 = 0
+  for _ in lo ..= I32.MAX {
+    n = n + 1
+  }
+  n
+}
+
+@export
+pub fn i32_from_min(hi: I32) -> U32 {
+  var n: U32 = 0
+  for _ in I32.MIN ..= hi {
+    n = n + 1
+  }
+  n
+}
+
+@export
+pub fn wide_tops() -> U32 {
+  var n: U32 = 0
+  for _ in U64.MAX - 2 ..= U64.MAX {
+    n = n + 1
+  }
+  for _ in U64.MAX ..= U64.MAX {
+    n = n + 1
+  }
+  for _ in I64.MAX - 1 ..= I64.MAX {
+    n = n + 1
+  }
+  n
+}
+
+@export
+pub fn from_one(n: U32) -> U32 {
+  var c: U32 = 0
+  for _ in 1 ..= n {
+    c = c + 1
+  }
+  c
+}
+
+@export
+pub fn triangle(n: U32) -> U32 {
+  var c: U32 = 0
+  for i in 0 ..= n {
+    for _ in 0 ..= i {
+      c = c + 1
+    }
+  }
+  c
+}
+
+@export
+pub fn end_changed(hi0: U32) -> U32 {
+  var hi: U32 = hi0
+  var n: U32 = 0
+  for _ in 0 ..= hi {
+    hi = hi + 1
+    n = n + 1
+  }
+  hi * 10 + n
+}
+
+@export
+pub fn ends_order() -> U32 {
+  var log: U32 = 0
+  var n: U32 = 0
+  for _ in tick(inout log, 1) ..= tick(inout log, 2) + tick(inout log, 3) {
+    n = n + 1
+  }
+  log * 100 + n
+}
+
+@export
+pub fn empty_ends_order() -> U32 {
+  var log: U32 = 0
+  var n: U32 = 0
+  for _ in tick(inout log, 5) ..= tick(inout log, 2) {
+    n = n + 1
+  }
+  log * 100 + n
+}

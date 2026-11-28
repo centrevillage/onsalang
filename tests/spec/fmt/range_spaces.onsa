@@ -7,8 +7,8 @@
 // `..<`, and the ends keep the spaces of their own operators. A range binds more weakly than every
 // binary operator (§3.1), so the spaces show what the ends are: `lo + 1 ..< hi - 1` ends at `hi - 1`.
 // The file is canonical, so `onsa fmt` leaves it unchanged; the same programs written without the
-// spaces are in range_spaces_tight.onsa and range_spaces_loose.onsa. The closed range `..=` is not
-// lowered in this version (E0200), so its spaces are in range_spaces_closed.onsa (`mode = "parse"`).
+// spaces are in range_spaces_tight.onsa and range_spaces_loose.onsa. The spaces of the closed range
+// `..=` are in range_spaces_closed.onsa (`mode = "parse"`; the values of `..=` are in control/range_closed_*.onsa).
 // Every value below is worked out by hand from the spec text.
 
 use std.array

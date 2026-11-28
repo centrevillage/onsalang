@@ -205,6 +205,16 @@ fn generics_are_monomorphized_and_deduplicated() {
     assert!(d.contains("t.clamp__F32(a, 0.0:F32, 1.0:F32)"), "{d}");
 }
 
+/// A `for` over `a..=b` is one loop with its end included (S-257): the dump
+/// shows `..=`, and `..<` as before.
+#[test]
+fn a_for_over_a_closed_range_keeps_its_end() {
+    let d = text(
+        "pub fn f(n: U8) -> U32 {\n  var c: U32 = 0\n  for _ in 0..=n { c = c + 1 }\n  for _ in 0..<n { c = c + 1 }\n  c\n}\n",
+    );
+    assert!(d.contains("in 0:U8..=n {") && d.contains("in 0:U8..n {"), "{d}");
+}
+
 #[test]
 fn const_generics_name_instances() {
     let d = text("use std.math.{sum}\n\npub fn f(xs: [F32; 4]) -> F32 {\n  sum(xs)\n}\n");
@@ -472,7 +482,8 @@ fn the_verifier_rejects_an_index_known_in_range_outside_the_sample_loop() {
     verify(&m).unwrap_or_else(|e| panic!("{e}"));
     let i = LocalId(0);
     let lit0 = Expr::new(Types::U32, span, ExprKind::Lit(Lit::Int(0)));
-    let looped = StmtKind::ForRange(i, lit0.clone(), lit0, Block { stmts: vec![index(Bounds::Known)], value: None });
+    let looped =
+        StmtKind::for_excluded(i, lit0.clone(), lit0, Block { stmts: vec![index(Bounds::Known)], value: None });
     m.fns.push(FnDef {
         name: "other".into(),
         params: Vec::new(),

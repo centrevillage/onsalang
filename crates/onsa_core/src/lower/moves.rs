@@ -160,7 +160,7 @@ impl Cx<'_> {
                 self.inner(c);
                 self.block(b, false);
             }
-            StmtKind::ForRange(_, lo, hi, b) => {
+            StmtKind::ForRange { lo, hi, body: b, .. } => {
                 self.inner(lo);
                 self.inner(hi);
                 self.block(b, false);

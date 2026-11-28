@@ -919,11 +919,8 @@ fn for_ranges() {
     assert_eq!(f("0..<n"), vec![]);
     // The bounds are integers (§7).
     assert_eq!(f("0.0..<1.0"), vec![Code::E0401]);
-    // `..=` is E0200 until the loop that ends at the type's maximum (W8-03,
-    // S-224), after the checks of the bounds; never read as `..<` (R-81).
-    let d = check("pub fn f(n: U32) {\n  for _ in 0..=n { }\n}\n").diagnostics;
-    assert_eq!(d.iter().map(|d| d.code).collect::<Vec<_>>(), vec![Code::E0200]);
-    assert!(d[0].message.contains("`a..=b`") && d[0].message.contains("`for`"), "{}", d[0].message);
+    // `..=` includes its end (§7, S-257).
+    assert_eq!(f("0..=n"), vec![]);
     assert_eq!(f("0.0..=1.0"), vec![Code::E0401]);
     // The form of an end is named, not a type variable (`?0`).
     for head in [

@@ -66,7 +66,7 @@ impl<'a> V<'a> {
             StmtKind::Expr(_) => Ok(()),
             StmtKind::If(c, ..) => self.same(c.ty, Types::BOOL, "if condition"),
             StmtKind::While(c, _) => self.same(c.ty, Types::BOOL, "while condition"),
-            StmtKind::ForRange(l, lo, hi, _) => {
+            StmtKind::ForRange { local: l, lo, hi, .. } => {
                 let lt = lo.ty;
                 if !self.tys_of(lt)?.is_int(lt) {
                     return Err(self.err(Rule::V01, "for range bounds must be integers"));

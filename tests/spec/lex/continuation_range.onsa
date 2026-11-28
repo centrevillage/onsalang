@@ -10,8 +10,8 @@
 // goes on, and the `{` of the head is on the last line of the head (S-202). The head of a `for` and the
 // head of a `par` are the only places where a range can stand; a range symbol is never at the start
 // of a line (that is E0020, tests/spec/fixes/e0020_leading_range.onsa). The closed range `..=` goes on
-// in the same way; its `for` and `par` heads are not lowered in this version (E0200), so those are in
-// tests/spec/negative/range_continuation_closed_e0200.onsa.
+// in the same way; its `for` heads are in tests/spec/control/range_closed_continuation.onsa and its
+// `par~` heads in tests/spec/flow_semantics/par_closed_continuation.onsa.
 
 pub fn sum_to(n: U32) -> U32 {
   var t: U32 = 0

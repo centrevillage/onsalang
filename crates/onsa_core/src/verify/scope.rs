@@ -33,7 +33,7 @@ impl<'a> V<'a> {
     pub(super) fn stmt(&mut self, s: &'a Stmt) -> R<()> {
         let outer = self.at.replace(s.span);
         let var = match s.kind {
-            StmtKind::ForRange(l, ..) => Some(l),
+            StmtKind::ForRange { local, .. } => Some(local),
             _ => None,
         };
         let mut r = Ok(());

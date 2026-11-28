@@ -61,15 +61,6 @@ impl<'a, 'm> FnEmitter<'a, 'm> {
     pub(super) fn place_like(&mut self, e: &Expr) -> R<String> {
         if let Some(p) = e.as_place() { self.place(&p) } else { self.materialize(e) }
     }
-
-    pub(super) fn materialize_str(&mut self, s: &str, ty: CTy) -> String {
-        if Self::is_stable(s) {
-            return s.to_string();
-        }
-        let (t, tn) = self.temp(ty);
-        self.line(&format!("{tn} {t} = {s};"));
-        t
-    }
 }
 
 /// `if (cond)`: every `if` the backend writes is made here, so its condition

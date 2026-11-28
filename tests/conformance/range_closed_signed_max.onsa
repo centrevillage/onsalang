@@ -1,0 +1,39 @@
+// onsa.toml
+// [package]
+// name = "range_closed_signed_max"
+// edition = "2026"
+//
+// [export]
+// prefix = "rcsm_"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [test]
+// spec = ["§7", "§13.4"]
+// conformance = true
+
+// W8-03 U4 (U4/b L1), §7 ("`for i in a ..= b` は、`b` が型の最大値でも溢れずに終わる"): ranges that end
+// at the largest value of `I32` and `I64`, run in the interpreter and in C, and in C under the sanitizers
+// (`c-sanitize`): a loop that steps past its end there overflows a signed integer, which UBSan stops.
+
+rt fn up_to_max(k: I32) -> F32 {
+  var n: I32 = 0
+  for i in I32.MAX - k ..= I32.MAX {
+    n = n + (i - (I32.MAX - k)) + 1
+  }
+  var m: I64 = 0
+  for j in I64.MAX - 2 ..= I64.MAX {
+    m = m + (j - (I64.MAX - 2))
+  }
+  F32.round_from(n) + F32.round_from(m)
+}
+
+@export
+pub flow range_closed_signed_max(x: F32 at sample) -> F32 at sample {
+  x + up_to_max(3)
+}

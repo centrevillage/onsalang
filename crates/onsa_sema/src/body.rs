@@ -22,7 +22,7 @@ use onsa_diag::unsupported::Feature;
 use onsa_diag::{Code, Diagnostic, Fix, Span, Stage};
 use onsa_syntax::ast::{
     Arg, Ast, BinOp, Block, CallKind, Expr, ExprId, ExprKind, Ident, Lit, MatchArm, Mode, OpGroup, Param, ParamName,
-    PatId, PatKind, Path, RangeEnd, RangeHead, StmtId, StmtKind, StrSeg, UnOp,
+    PatId, PatKind, Path, RangeHead, StmtId, StmtKind, StrSeg, UnOp,
 };
 
 use crate::binding::Bind;
@@ -487,14 +487,6 @@ impl<'a> Checker<'a> {
     /// E0200 for `feature` found by `stage`.
     pub(crate) fn unsupported_in(&mut self, stage: Stage, span: Span, feature: Feature, details: &[&str]) -> Stop {
         self.diag(feature.diagnostic(stage, span, details).with_found(self.src(span)))
-    }
-
-    /// E0200 for a range with its end (`a..=b`, S-224) in the head of a
-    /// `for` (W8-03, the types stage), once its ends are checked; it is
-    /// never read as `a..<b` (R-81).
-    pub(crate) fn closed_range_unsupported(&mut self, r: &RangeHead) -> Stop {
-        let (lo, hi) = (self.expr(r.lo).span, self.expr(r.hi).span);
-        self.unsupported_in(Stage::Types, Span::new(lo.file, lo.start, hi.end), Feature::InclusiveRangeFor, &[])
     }
 
     /// E0401 for an end of a range whose form is no integer, whatever its

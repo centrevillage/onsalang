@@ -85,7 +85,7 @@ pub fn stmt_children<'a>(s: &'a Stmt, f: &mut dyn FnMut(Child<'a>)) {
             f(Child::Expr(c, Loop, Role::Read));
             f(Child::Block(b, Scope::Opens, Loop));
         }
-        StmtKind::ForRange(_, lo, hi, b) => {
+        StmtKind::ForRange { lo, hi, body: b, .. } => {
             f(read(lo));
             f(read(hi));
             f(Child::Block(b, Scope::Opens, Loop));

@@ -34,7 +34,9 @@ impl<'m> Interp<'m> {
             StmtKind::Expr(e) => self.exec_expr(f, e),
             StmtKind::If(c, t, e) => self.exec_if(f, c, t, e),
             StmtKind::While(c, body) => self.exec_while(f, c, body),
-            StmtKind::ForRange(l, lo, hi, body) => self.exec_for(f, *l, lo, hi, body, s.span),
+            StmtKind::ForRange { local, lo, hi, body, inclusive } => {
+                self.exec_for(f, *local, [lo, hi], *inclusive, body, s.span)
+            }
             StmtKind::Break => Err(Signal::Break),
             StmtKind::Continue => Err(Signal::Continue),
             StmtKind::Return(e) => self.exec_return(f, e.as_ref()),
@@ -89,8 +91,18 @@ impl<'m> Interp<'m> {
         Ok(())
     }
 
+    /// `for l in lo..<hi`, or `lo..=hi` when `inclusive`: the values are
+    /// `i128`, so no end is past a type's maximum (S-257).
     #[inline(never)]
-    fn exec_for(&self, f: &mut Frame, l: LocalId, lo: &Expr, hi: &Expr, body: &Block, span: Span) -> R<()> {
+    fn exec_for(
+        &self,
+        f: &mut Frame,
+        l: LocalId,
+        [lo, hi]: [&Expr; 2],
+        inclusive: bool,
+        body: &Block,
+        span: Span,
+    ) -> R<()> {
         let lo_v = self.eval(f, lo)?;
         let hi_v = self.eval(f, hi)?;
         let kind = int_kind_of(&lo_v, span);
@@ -98,7 +110,7 @@ impl<'m> Interp<'m> {
         let var = slot(lo_v);
         f.locals[l.0 as usize] = Some(Loc::Slot(var.clone()));
         let mut i = lo_i;
-        while i < hi_i {
+        while if inclusive { i <= hi_i } else { i < hi_i } {
             *var.borrow_mut() = int_value(kind, i);
             match self.exec_block(f, body) {
                 Ok(_) | Err(Signal::Continue) => {}

@@ -188,9 +188,9 @@ fn wraps() -> Vec<Wrap> {
         ("stmt_if_else", |e| with_stmt(StmtKind::If(lit(), blk(vec![], None), blk(vec![], Some(e))))),
         ("stmt_while_cond", |e| with_stmt(StmtKind::While(e, blk(vec![], None)))),
         ("stmt_while_body", |e| with_stmt(StmtKind::While(lit(), blk(vec![], Some(e))))),
-        ("stmt_for_lo", |e| with_stmt(StmtKind::ForRange(LocalId(0), e, lit(), blk(vec![], None)))),
-        ("stmt_for_hi", |e| with_stmt(StmtKind::ForRange(LocalId(0), lit(), e, blk(vec![], None)))),
-        ("stmt_for_body", |e| with_stmt(StmtKind::ForRange(LocalId(0), lit(), lit(), blk(vec![], Some(e))))),
+        ("stmt_for_lo", |e| with_stmt(StmtKind::for_excluded(LocalId(0), e, lit(), blk(vec![], None)))),
+        ("stmt_for_hi", |e| with_stmt(StmtKind::for_excluded(LocalId(0), lit(), e, blk(vec![], None)))),
+        ("stmt_for_body", |e| with_stmt(StmtKind::for_excluded(LocalId(0), lit(), lit(), blk(vec![], Some(e))))),
         ("stmt_return", |e| with_stmt(StmtKind::Return(Some(e)))),
     ]
 }

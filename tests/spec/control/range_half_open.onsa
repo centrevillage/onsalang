@@ -8,9 +8,9 @@
 // expression of binary operators (`0..<n + 1` ends at `n + 1`, §3.1), and both ends are evaluated
 // once, `a` then `b`, before the first iteration (§3.5). The ends are integers (§7).
 //
-// Every value below is worked out by hand from the spec text. The closed form `a..=b` has no
-// case here: its meaning is not lowered yet (E0200, negative/range_inclusive_for_e0200.onsa), and
-// W8-03 writes its cases. A `par` header has its own file (flow_semantics/par_range_half_open.onsa).
+// Every value below is worked out by hand from the spec text. The closed form `a..=b` has its
+// cases in range_closed_values.onsa, range_closed_edges.onsa, range_closed_order.onsa and
+// range_closed_forms.onsa. A `par` header has its own file (flow_semantics/par_range_half_open.onsa).
 
 use std.array
 

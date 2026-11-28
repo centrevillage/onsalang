@@ -163,10 +163,6 @@ features! {
     /// R-294: `{}`: a name the spec gives a builtin type (`Str.from_utf8`),
     /// of the table `MISSING` of `onsa_sema`'s `builtin.rs`.
     BuiltinName: Language, "the builtin name `{}`", None;
-    /// S-224, S-257: the `for` loop over `a..=b` that ends when `b` is the
-    /// type's maximum (W8-03); never lowered as `..<` (R-81).
-    InclusiveRangeFor: Language, "a range with its end (`a..=b`) in a `for` head",
-        Some("write `a..<b + 1` when `b + 1` fits in the type");
     /// R-195: the values of the constant expressions of §4.5 other than an
     /// integer literal and a `const` with a literal value (W9-03).
     FlowConstExprs: Language, "computing the value of a constant expression in a flow (a bound of a `par` or `par~`, a delay length, the maximum of a `vdelay~`)",

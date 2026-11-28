@@ -1,0 +1,124 @@
+// onsa.toml
+// [package]
+// name = "c_range_ends_once"
+// edition = "2026"
+//
+// [export]
+// prefix = "creo_"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "poison"
+// provides = []
+//
+// [test]
+// mode = "test"
+// spec = ["§3.5", "§7", "§13.4"]
+//
+// # W8-03 U4 (R-535, U4/b H1 and H2), §3.5 ("範囲 `a ..= b` は、`a`、`b` の順に、最初の反復の前に一度だけ評価する。
+// # 本体で端の変数を変えても、反復の回数は変わらない"): the ends of a `for` are read once, before it, in C as in the
+// # interpreter (the `test` below), for `..<` and `..=`; and an end that is the literal largest value of a
+// # type of 8 or 16 bits builds with no warning (§13.4: `c-gcc` builds this case with `-Wextra -Werror`).
+//
+// # The body sets the end's variable to 0: 0 ..< 3 runs 3 times, 0 ..= 3 runs 4 times.
+// [[test.host]]
+// name = "c: an end converted from a variable the body changes, ..<"
+// target = "host"
+// fn = "c_range_ends_once.cast_open"
+// steps = [
+//   { call = "fn", args = { x0 = 3 }, status = 0, result = 3 },
+//   { call = "fn", args = { x0 = 0 }, status = 0, result = 0 },
+// ]
+//
+// [[test.host]]
+// name = "c: an end converted from a variable the body changes, ..="
+// target = "host"
+// fn = "c_range_ends_once.cast_closed"
+// steps = [
+//   { call = "fn", args = { x0 = 3 }, status = 0, result = 4 },
+//   { call = "fn", args = { x0 = 0 }, status = 0, result = 1 },
+// ]
+//
+// # `x ..< bump(inout x)`: `x` is read before `bump` adds 10 to it, so x0 ..< x0 + 10 runs 10 times.
+// [[test.host]]
+// name = "c: the start is read before the end"
+// target = "host"
+// fn = "c_range_ends_once.start_first"
+// steps = [
+//   { call = "fn", args = { x0 = 1 }, status = 0, result = 10 },
+// ]
+//
+// # lo ..= the literal largest value: 250 ..= 255 is 6 values, 127 ..= 127 is 1, 65530 ..= 65535 is 6, 32760 ..= 32767 is 8.
+// [[test.host]]
+// name = "c: a literal largest value as the end, four types"
+// target = "host"
+// fn = "c_range_ends_once.literal_max"
+// steps = [
+//   { call = "fn", args = { a = 250, b = 127, c = 65530, d = 32760 }, status = 0, result = 21 },
+// ]
+
+@export
+pub fn cast_open(x0: U8) -> U32 {
+  var x = x0
+  var n: U32 = 0
+  for _ in 0 ..< (x as U32) {
+    x = 0
+    n = n + 1
+  }
+  n
+}
+
+@export
+pub fn cast_closed(x0: U8) -> U32 {
+  var x = x0
+  var n: U32 = 0
+  for _ in 0 ..= (x as U32) {
+    x = 0
+    n = n + 1
+  }
+  n
+}
+
+fn bump(inout x: U32) -> U32 {
+  x = x + 10
+  x
+}
+
+@export
+pub fn start_first(x0: U32) -> U32 {
+  var x = x0
+  var n: U32 = 0
+  for _ in x ..< bump(inout x) {
+    n = n + 1
+  }
+  n
+}
+
+@export
+pub fn literal_max(a: U8, b: I8, c: U16, d: I16) -> U32 {
+  var n: U32 = 0
+  for _ in a ..= 255 {
+    n = n + 1
+  }
+  for _ in b ..= 127 {
+    n = n + 1
+  }
+  for _ in c ..= 65535 {
+    n = n + 1
+  }
+  for _ in d ..= 32767 {
+    n = n + 1
+  }
+  n
+}
+
+test "the ends are read once, before the loop" {
+  assert cast_open(3) == 3
+  assert cast_open(0) == 0
+  assert cast_closed(3) == 4
+  assert cast_closed(0) == 1
+  assert start_first(1) == 10
+  assert literal_max(250, 127, 65530, 32760) == 21
+}

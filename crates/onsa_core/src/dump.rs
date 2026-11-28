@@ -325,12 +325,12 @@ impl<'a> Dumper<'a> {
                 self.out.push(' ');
                 self.block(b);
             }
-            StmtKind::ForRange(l, lo, hi, b) => {
+            StmtKind::ForRange { local, lo, hi, body: b, inclusive } => {
                 self.out.push_str("for ");
-                self.local(*l);
+                self.local(*local);
                 self.out.push_str(" in ");
                 self.expr(lo);
-                self.out.push_str("..");
+                self.out.push_str(if *inclusive { "..=" } else { ".." });
                 self.expr(hi);
                 self.out.push(' ');
                 self.block(b);

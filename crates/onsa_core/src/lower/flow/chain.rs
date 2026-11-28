@@ -433,7 +433,7 @@ fn ops(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, w: &mut Walk, list:
                 let (mut body, n) = (Vec::new(), count(w.bound(u)?.ratio, span)?);
                 drive(runs, &j, span, &mut body)?;
                 let body = Block { stmts: body, value: None };
-                out.push(stmt(span, StmtKind::ForRange(l, u32_lit(span, 0), u32_lit(span, n), body)));
+                out.push(stmt(span, StmtKind::for_excluded(l, u32_lit(span, 0), u32_lit(span, n), body)));
             }
         }
     }
@@ -534,7 +534,7 @@ fn give(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, w: &Walk, v: Expr)
         None => out.append(&mut one),
         Some((i, n)) => {
             let body = Block { stmts: one, value: None };
-            out.push(stmt(span, StmtKind::ForRange(i, u32_lit(span, 0), u32_lit(span, n), body)));
+            out.push(stmt(span, StmtKind::for_excluded(i, u32_lit(span, 0), u32_lit(span, n), body)));
         }
     }
     Ok(())
@@ -753,7 +753,7 @@ fn copy(
     let mut body = Vec::new();
     assign(&mut body, &place, index(a, checked_binary(BinOp::Add, at, local_expr(cx, i, span)), tys)?)?;
     let block = Block { stmts: body, value: None };
-    out.push(stmt(span, StmtKind::ForRange(i, u32_lit(span, 0), u32_lit(span, count), block)));
+    out.push(stmt(span, StmtKind::for_excluded(i, u32_lit(span, 0), u32_lit(span, count), block)));
     Ok(())
 }
 

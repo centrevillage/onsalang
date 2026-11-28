@@ -101,7 +101,7 @@ fn the_children_of_each_statement() {
     let if_ = StmtKind::If(n(1), blk(2), blk(3));
     assert_eq!(of_stmt(if_), ["1 Always Read", "{2} Opens Conditional", "{3} Opens Conditional"]);
     assert_eq!(of_stmt(StmtKind::While(n(1), blk(2))), ["1 Loop Read", "{2} Opens Loop"]);
-    let for_ = StmtKind::ForRange(LocalId(0), n(1), n(2), blk(3));
+    let for_ = StmtKind::for_excluded(LocalId(0), n(1), n(2), blk(3));
     assert_eq!(of_stmt(for_), ["1 Always Read", "2 Always Read", "{3} Opens Loop"]);
     assert_eq!(of_stmt(StmtKind::Return(Some(n(1)))), ["1 Always Dest"]);
     for kind in [StmtKind::Return(None), StmtKind::Break, StmtKind::Continue] {

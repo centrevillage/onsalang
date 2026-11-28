@@ -132,7 +132,7 @@ fn eq_body(lw: &mut Lowerer, locals: &mut Vec<Local>, ty: CTy, a: Expr, b: Expr,
             let lo = Expr::new(Types::U32, span, ExprKind::Lit(Lit::Int(0)));
             let hi = Expr::new(Types::U32, span, ExprKind::Lit(Lit::Int(n as i128)));
             Ok(Block {
-                stmts: vec![Stmt { span, kind: StmtKind::ForRange(i, lo, hi, body) }],
+                stmts: vec![Stmt { span, kind: StmtKind::for_excluded(i, lo, hi, body) }],
                 value: Some(Box::new(Expr::new(Types::BOOL, span, ExprKind::Lit(Lit::Bool(true))))),
             })
         }

@@ -1,10 +1,10 @@
 //! The spellings of a range, `a..<b` and `a..=b` (spec §7, §3.1, §18.1, S-257): the diagnostics of
-//! the wrong spellings, `onsa fmt` and `onsa diff --ast` on a range, and the closed range that this
-//! version reads but does not lower (W3-18/t).
+//! the wrong spellings, `onsa fmt` and `onsa diff --ast` on a range, and the closed range in the
+//! header of a `for`, which runs (W3-18/t, W8-03).
 //!
 //! The case files in `tests/spec/` pin the code and the line of each diagnostic and the text after
 //! each candidate (`fixes/e0020_range_dots.onsa`, `negative/range_outside_header.onsa`,
-//! `negative/range_types.onsa`, `negative/range_move.onsa`, `negative/range_inclusive_for_e0200.onsa`),
+//! `negative/range_types.onsa`, `negative/range_move.onsa`, `control/range_closed_forms.onsa`),
 //! and `spec/foreign-forms.toml` lists the forms of other languages (`range_dots`,
 //! `range_outside_header`). These tests say what those cannot: the main span of the E0020 (the range
 //! symbol and nothing else), that the edit of a candidate changes that token and no other (S-251), that
@@ -455,13 +455,11 @@ fn diff_ast_sees_the_symbol_and_the_ends_and_not_the_spaces_in_them() {
     }
 }
 
-// ---- the closed range is read and not lowered: E0200 (§18.1, S-224) -----------------------------------
+// ---- the closed range in a `for` header runs (§7, S-257) ---------------------------------------------
 
 #[test]
-fn a_closed_range_in_a_for_header_stops_onsa_test_with_e0200() {
-    // §18.2: `onsa test` stops at a check error and at an E0200 that does not depend on the target;
-    // `tests` is an empty array then. The closed range is read (it is not a syntax error) and named
-    // as the feature that this version does not lower. W8-03 removes this test.
+fn a_closed_range_in_a_for_header_runs_in_onsa_test() {
+    // §7: `for i in a..=b` includes `b`. The file has no diagnostic, and its test runs and passes.
     let src = "\
 fn total(n: U32) -> U32 {
   var t: U32 = 0
@@ -478,22 +476,19 @@ test \"a closed range\" {
     let d = Dir::bare("closed");
     let path = d.file("a.onsa", src);
     let out = onsa(&["test", "--json", &path]);
-    assert_eq!(code(&out), 1, "{out:?}");
+    assert_eq!(code(&out), 0, "{out:?}");
     let text = String::from_utf8(out.stdout).expect("utf-8");
     let v: Value = serde_json::from_str(&text).unwrap_or_else(|e| panic!("no JSON ({e}): {text}"));
-    let diags = v["diagnostics"].as_array().expect("`diagnostics`");
-    let codes: Vec<&str> = diags.iter().map(code_of).collect();
-    assert_eq!(codes, ["E0200"], "one E0200 and no syntax error: {text}");
-    assert_eq!(span_of(&diags[0]).0.0, 3, "the diagnostic is at the header: {text}");
-    assert_eq!(v["tests"].as_array().map(Vec::len), Some(0), "no test ran: {text}");
+    assert_eq!(v["diagnostics"].as_array().map(Vec::len), Some(0), "no diagnostic: {text}");
+    let tests = v["tests"].as_array().expect("`tests`");
+    assert_eq!(tests.len(), 1, "one test ran: {text}");
+    assert_eq!(tests[0]["status"], "ok", "the test passed: {text}");
 }
 
 #[test]
 fn a_closed_range_is_not_a_syntax_error_for_fmt() {
-    // §18.2: only the diagnostics of the syntax stage stop `fmt`. E0200 of the closed range cannot be
-    // one of them: the candidate `a..=b` of E0020 (§7) must leave no diagnostic of the syntax stage in
-    // the unit it touches (§18.1), and it leaves this E0200. So a file with a closed range header is
-    // formatted (it is a program of the language).
+    // §18.2: only the diagnostics of the syntax stage stop `fmt`, and a closed range header is a
+    // program of the language (§7): it is formatted.
     let d = Dir::bare("closed_fmt");
     let text = loop_with("0 ..= n");
     let path = d.file("a.onsa", &text);

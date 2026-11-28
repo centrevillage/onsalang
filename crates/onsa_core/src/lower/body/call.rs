@@ -285,7 +285,7 @@ fn lower_from_fn(lw: &mut Lowerer, cx: &mut FnCx, args: &[ast::Arg], ty: CTy, sp
     ));
     let stmts = vec![
         stmt(span, StmtKind::Let(arr, Expr::new(ty, span, ExprKind::Zeroed))),
-        stmt(span, StmtKind::ForRange(i, u32_lit(span, 0), u32_lit(span, n), Block { stmts: body, value: None })),
+        stmt(span, StmtKind::for_excluded(i, u32_lit(span, 0), u32_lit(span, n), Block { stmts: body, value: None })),
     ];
     Ok(Expr::new(ty, span, ExprKind::Block(Block { stmts, value: Some(Box::new(local_expr(cx, arr, span))) })))
 }

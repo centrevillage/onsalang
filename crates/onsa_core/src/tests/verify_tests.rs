@@ -522,7 +522,7 @@ fn a_local_is_seen_in_its_scope_only() {
     let s = st(sp(), StmtKind::While(inline(vec![let_a()], yes()), body));
     assert_eq!(rejected(&reads(1, vec![let_b(), s]), Rule::V04, "local `a` read").span, Some(at()));
     // The variable of a `for` past its body; an assignment to a local never defined.
-    let for_ = st(sp(), StmtKind::ForRange(LocalId(1), one(), one(), empty()));
+    let for_ = st(sp(), StmtKind::for_excluded(LocalId(1), one(), one(), empty()));
     assert_eq!(rejected(&reads(1, vec![for_]), Rule::V04, "local `b` read before").span, Some(at()));
     let assign = st(at(), StmtKind::Assign(Place::Local(LocalId(0)), one()));
     assert_eq!(rejected(&reads(0, vec![assign]), Rule::V04, "local `a` written before").span, Some(at()));
@@ -535,7 +535,7 @@ fn a_local_is_seen_in_its_scope_only() {
     let ab = m.fns[0].locals.clone();
     m.fns.push(f("h", vec![], Types::U32, ab.clone(), vec![expr(Expr::new(Types::U32, sp(), if_))], read(0)));
     let read_b = block(vec![expr(read(1))], unit());
-    let for_ = st(sp(), StmtKind::ForRange(LocalId(1), one(), one(), read_b));
+    let for_ = st(sp(), StmtKind::for_excluded(LocalId(1), one(), one(), read_b));
     m.fns.push(f("k", vec![], Types::U32, ab, vec![let_a(), let_a(), for_], read(0)));
     m.fill_all_facts();
     verify(&m).expect("seen");

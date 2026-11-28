@@ -660,7 +660,7 @@ fn the_scope_of_a_replica_is_popped_after_its_body_and_an_empty_body_makes_no_lo
         Ok(())
     });
     assert!(some.is_ok(), "a body");
-    assert!(matches!(&out[..], [Stmt { kind: StmtKind::ForRange(..), .. }]) && depth(&mut g) == 1, "{out:?}");
+    assert!(matches!(&out[..], [Stmt { kind: StmtKind::ForRange { .. }, .. }]) && depth(&mut g) == 1, "{out:?}");
 }
 
 /// `init` writes `T.default()` in a loop of the replicas of a `par~` whose

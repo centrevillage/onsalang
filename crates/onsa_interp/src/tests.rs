@@ -964,7 +964,7 @@ fn values_of_the_wrong_type_are_internal_errors() {
         }
         // The two bounds of a `for` of two integer types.
         let for_ = Stmt {
-            kind: StmtKind::ForRange(LocalId(0), i32_(0), i64_(3), Block { stmts: Vec::new(), value: None }),
+            kind: StmtKind::for_excluded(LocalId(0), i32_(0), i64_(3), Block { stmts: Vec::new(), value: None }),
             span: sp(),
         };
         let m = Module {

@@ -207,7 +207,7 @@ fn a_const_and_the_length_of_an_array_are_constants() {
     let arr = tys.intern(TyKind::Array(u32t, 0));
     let len = e(u32t, ExprKind::Prim { prim: Prim::Len, args: vec![Arg { mode: Mode::Borrow, expr: local(0, arr) }] });
     let body = Block { stmts: Vec::new(), value: None };
-    let stmts = vec![Stmt { span: sp(), kind: StmtKind::ForRange(LocalId(1), local(2, u32t), len, body) }];
+    let stmts = vec![Stmt { span: sp(), kind: StmtKind::for_excluded(LocalId(1), local(2, u32t), len, body) }];
     let f = folded_in(tys, &[arr, u32t, u32t], Vec::new(), stmts, int(IntKind::U32, 1));
     let kept = &f.body.as_ref().expect("a body").stmts;
     assert_eq!(kept.len(), 2, "{kept:?}");
@@ -220,19 +220,27 @@ fn a_loop_up_to_a_bound_above_the_smallest_value_stays() {
     for (k, hi) in [(IntKind::U32, 1), (IntKind::I16, -32767)] {
         let t = Types::int(k);
         let body = Block { stmts: Vec::new(), value: None };
-        let stmts = vec![Stmt { span: sp(), kind: StmtKind::ForRange(LocalId(0), local(1, t), int(k, hi), body) }];
+        let stmts = vec![Stmt { span: sp(), kind: StmtKind::for_excluded(LocalId(0), local(1, t), int(k, hi), body) }];
         let f = folded(&[t, t], Vec::new(), stmts, int(IntKind::U32, 1));
         let kept = &f.body.as_ref().expect("a body").stmts;
-        assert!(matches!(kept[..], [Stmt { kind: StmtKind::ForRange(..), .. }]), "{k:?}: {kept:?}");
+        assert!(matches!(kept[..], [Stmt { kind: StmtKind::ForRange { .. }, .. }]), "{k:?}: {kept:?}");
     }
     // At the smallest value of a signed type, it goes.
     let t = Types::int(IntKind::I16);
     let body = Block { stmts: Vec::new(), value: None };
-    let stmts =
-        vec![Stmt { span: sp(), kind: StmtKind::ForRange(LocalId(0), local(1, t), int(IntKind::I16, -32768), body) }];
+    let stmts = vec![Stmt {
+        span: sp(),
+        kind: StmtKind::for_excluded(LocalId(0), local(1, t), int(IntKind::I16, -32768), body),
+    }];
     let f = folded(&[t, t], Vec::new(), stmts, int(IntKind::U32, 1));
     let kept = &f.body.as_ref().expect("a body").stmts;
     assert!(matches!(kept[..], [ref s] if is_local_stmt(s, 1)), "{kept:?}");
+    // `..=` up to it runs once when the lower bound is it too (S-257): it stays.
+    let (lo, hi) = (local(1, t), int(IntKind::I16, -32768));
+    let closed = StmtKind::ForRange { local: LocalId(0), lo, hi, body: Block::default(), inclusive: true };
+    let f = folded(&[t, t], Vec::new(), vec![Stmt { span: sp(), kind: closed }], int(IntKind::U32, 1));
+    let kept = &f.body.as_ref().expect("a body").stmts;
+    assert!(matches!(kept[..], [Stmt { kind: StmtKind::ForRange { inclusive: true, .. }, .. }]), "{kept:?}");
 }
 
 #[test]

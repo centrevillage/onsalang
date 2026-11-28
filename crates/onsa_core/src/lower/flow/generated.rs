@@ -198,12 +198,12 @@ impl Replicas {
         // With no `k`, `from + count` fits in `U32` ([`replicas`], the one maker).
         let Some(k) = self.k else {
             let (from, to) = (u32_lit(span, self.from), u32_lit(span, self.from + self.count));
-            return out.push(stmt(span, StmtKind::ForRange(var, from, to, Block { stmts, value: None })));
+            return out.push(stmt(span, StmtKind::for_excluded(var, from, to, Block { stmts, value: None })));
         };
         let at = checked_binary(BinOp::Add, u32_lit(span, self.from), self.index(cx, span));
         stmts.insert(0, stmt(span, StmtKind::Let(var, at)));
         let (zero, count) = (u32_lit(span, 0), u32_lit(span, self.count));
-        out.push(stmt(span, StmtKind::ForRange(k, zero, count, Block { stmts, value: None })));
+        out.push(stmt(span, StmtKind::for_excluded(k, zero, count, Block { stmts, value: None })));
     }
 }
 

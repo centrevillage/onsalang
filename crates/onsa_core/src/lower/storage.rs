@@ -83,7 +83,7 @@ impl<'a> Storage<'a> {
             StmtKind::Expr(_)
             | StmtKind::If(..)
             | StmtKind::While(..)
-            | StmtKind::ForRange(..)
+            | StmtKind::ForRange { .. }
             | StmtKind::Break
             | StmtKind::Continue
             | StmtKind::Return(_) => {}

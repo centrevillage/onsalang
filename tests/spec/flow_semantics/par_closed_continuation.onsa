@@ -6,7 +6,8 @@
 // W7-14 U3/t, S-257, S-335: the closed range `..=` at the end of a line goes on, as `..<` does (§2.5, §7),
 // in the head of a `par~`, and the replication is made: N = b - a + 1. It was the `par_head` of
 // negative/range_continuation_closed_e0200.onsa, which was E0200 until the closed range of `par~` was
-// made (W7-14); the `for` head stays there. The same heads with `..<` are in lex/continuation_range.onsa.
+// made (W7-14); the `for` head went to control/range_closed_continuation.onsa when the closed range of a `for`
+// was lowered (W8-03). The same heads with `..<` are in lex/continuation_range.onsa.
 // The values are worked out by hand.
 
 pub flow par_head(x: F32 at sample) -> [F32; 4] at sample {

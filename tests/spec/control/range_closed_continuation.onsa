@@ -1,0 +1,57 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// canonical = false
+// spec = ["§2.5", "§7", "§3.5"]
+
+// W8-03 U4/t (spec §2.5, §7, S-335, S-257): the closed range `..=` at the end of a line goes on, as `..<` does, and the head of the
+// `for` is lowered. It was negative/range_continuation_closed_e0200.onsa, the two heads that this version reported as E0200 (the
+// closed range in the head of a `for` was not lowered); they are now a program, with the `n` on the next line as the end
+// of the range. The same heads with `..<` are in lex/continuation_range.onsa, the heads of a `par~` are in
+// flow_semantics/par_closed_continuation.onsa. The values are worked out by hand. `canonical = false`: the spaces round
+// `..=` are those of the old file (`onsa fmt` puts one on each side).
+
+pub fn for_head(n: U32) -> U32 {
+  var t: U32 = 0
+  for i in 0..=
+    n {
+    t = t + i
+  }
+  t
+}
+
+pub fn for_head_with_a_comment(n: U32) -> U32 {
+  var t: U32 = 0
+  for i in 0..=
+    // the last value of the range
+
+    n {
+    t = t + i
+  }
+  t
+}
+
+pub fn for_head_with_a_sum(lo: U32, hi: U32) -> U32 {
+  var t: U32 = 0
+  for i in lo + 1 ..=
+    hi -
+    1 {
+    t = t + i
+  }
+  t
+}
+
+test "a line that ends with the closed range symbol goes on" {
+  // 0 + 1 + 2 + 3.
+  assert for_head(3) == 6
+  assert for_head(0) == 0
+  assert for_head_with_a_comment(3) == 6
+  assert for_head_with_a_comment(4) == 10
+}
+
+test "the end of the range may be a sum written on two lines" {
+  // lo + 1 ..= hi - 1 for 1 and 5 is 2 ..= 4.
+  assert for_head_with_a_sum(1, 5) == 9
+  // 2 ..= 1 is empty.
+  assert for_head_with_a_sum(1, 2) == 0
+}

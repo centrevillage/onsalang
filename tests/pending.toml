@@ -250,20 +250,6 @@ note = "関数値の降下（E0200、W8-09）"
 # その直前の隙間の種類（無し・空白・改行。改行の前とファイルの先頭は比べない）の並びで比べる（onsa_tests::fixes）。理由と until は W3-02/i が実際の結果で確かめた（R-87 は
 # その部分を担う作業（(4) W3-15、(5) W4-04、(6) W6-03）の項目にだけ書く）
 
-[[pending]]
-kind = "test-case"
-target = "tests/spec/control/range_guard_fine.onsa"
-reasons = ["S-249"]
-until = "W8-06"
-note = "e0020_patterns_range.onsa の正しい形（W3-21 で移した）。ガードの付いた match を値に使う形が E0200（W8-06）"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/control/range_header_fine.onsa"
-reasons = ["S-278", "S-224"]
-until = "W8-03"
-note = "range_header_one_sided.onsa の正しい形（W3-21 で移した）。for の見出しの ..= が E0200（W8-03）"
-
 # --- 字句解析器のキーワードと仕様 §2.2 の一覧の差（gate の項目 keywords、tools/keywords.py。W3-02/b 12）
 
 [[pending]]
@@ -692,20 +678,6 @@ target = "tests/spec/num_traits/tp_positions_match_guard.onsa"
 reasons = ["R-06", "S-46"]
 until = "W8-06"
 note = "ガードの値の match が降下で E0200（W8-06、`I32` でも同じ）"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/num_traits/tp_range_ends_closed.onsa"
-reasons = ["S-257"]
-until = "W8-03"
-note = "閉じた範囲 `a ..= b` の `for` が E0200（W8-03、具体的な型も同じ）"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/c_runtime/c_generic_param_path_closed.onsa"
-reasons = ["S-257"]
-until = "W8-03"
-note = "閉じた範囲 `a ..= b` の `for` が E0200（W8-03、具体的な型も同じ）"
 
 [[pending]]
 kind = "test-case"

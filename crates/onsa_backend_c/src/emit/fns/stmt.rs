@@ -66,19 +66,25 @@ impl<'a, 'm> FnEmitter<'a, 'm> {
                 }
                 self.loop_body(b)
             }
-            StmtKind::ForRange(l, lo, hi, b) => {
-                let los = self.materialize(lo)?;
-                let his = {
-                    let v = self.expr(hi)?;
-                    if Self::is_stable(&v) { v } else { self.materialize_str(&v, hi.ty) }
-                };
-                let ty = self.local_ty(*l);
+            StmtKind::ForRange { local, lo, hi, body, inclusive } => {
+                let los = self.range_end(lo, true)?;
+                let his = self.range_end(hi, !*inclusive)?;
+                let ty = self.local_ty(*local);
                 let tn = self.cx.names.name(ty);
-                let name = self.fresh_local(*l);
-                self.locals.insert(*l, LocalC { lvalue: name.clone() });
-                self.open(&format!("for ({tn} {name} = {los}; {name} < {his}; {name}++) {{"));
+                let i = self.fresh_local(*local);
+                self.locals.insert(*local, LocalC { lvalue: i.clone() });
+                let head = if *inclusive {
+                    // `g` is 1 while `i` is below `hi`: compared before the
+                    // step (where a `continue` goes), `i` stops at `hi`, the
+                    // type's maximum too (S-257), and `lo > hi` runs none.
+                    let (g, _) = self.temp(ty);
+                    format!("{tn} {i} = {los}, {g} = ({tn})({i} <= {his}); {g}; {g} = ({tn})({i} != {his}), {i} += {g}")
+                } else {
+                    format!("{tn} {i} = {los}; {i} < {his}; {i}++")
+                };
+                self.open(&format!("for ({head}) {{"));
                 self.enter_loop(false);
-                self.loop_body(b)
+                self.loop_body(body)
             }
             StmtKind::Break => {
                 self.leave_loop(true);
@@ -107,6 +113,19 @@ impl<'a, 'm> FnEmitter<'a, 'm> {
                 Ok(())
             }
         }
+    }
+
+    /// An end of a `for`, evaluated once before it (§3.5, S-188, R-535): in
+    /// a temporary, but a literal when `literal_kept` (the `hi` of `..=` is
+    /// not: `i <= 255` of a `U8` is always true, a `-Wtype-limits` of GCC).
+    fn range_end(&mut self, e: &Expr, literal_kept: bool) -> R<String> {
+        let s = self.expr(e)?;
+        if literal_kept && matches!(e.kind, ExprKind::Lit(_)) {
+            return Ok(s);
+        }
+        let (t, tn) = self.temp(e.ty);
+        self.line(&format!("{tn} {t} = {s};"));
+        Ok(t)
     }
 
     /// A value of type `ty` where the code never comes (after a `panic` or

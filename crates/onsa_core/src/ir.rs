@@ -401,11 +401,27 @@ pub enum StmtKind {
     Expr(Expr),
     If(Expr, Block, Block),
     While(Expr, Block),
-    /// `for local in lo..hi` (half-open, `U32` or any integer type).
-    ForRange(LocalId, Expr, Expr, Block),
+    /// `for local in lo..<hi`, or `lo..=hi` when `inclusive` (any integer
+    /// type): `lo`, then `hi`, once before the loop (S-188); no iteration
+    /// when `lo >= hi` (`..<`) or `lo > hi` (`..=`, S-219), and none past a
+    /// `hi` that is the type's maximum (S-257).
+    ForRange {
+        local: LocalId,
+        lo: Expr,
+        hi: Expr,
+        body: Block,
+        inclusive: bool,
+    },
     Break,
     Continue,
     Return(Option<Expr>),
+}
+
+impl StmtKind {
+    /// `for local in lo..<hi`: the loops the lowering makes.
+    pub fn for_excluded(local: LocalId, lo: Expr, hi: Expr, body: Block) -> StmtKind {
+        StmtKind::ForRange { local, lo, hi, body, inclusive: false }
+    }
 }
 
 /// A memory location: a local, or a field / element of one.

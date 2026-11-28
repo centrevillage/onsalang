@@ -171,10 +171,6 @@ impl<'a> Checker<'a> {
                 }
             }
             self.record(iter, lt);
-            if r.end == RangeEnd::Included {
-                // Until the loop that ends at the type's maximum (W8-03).
-                return Err(self.closed_range_unsupported(&r));
-            }
             return Ok(lt);
         }
         let it = self.check_expr(iter, None)?;

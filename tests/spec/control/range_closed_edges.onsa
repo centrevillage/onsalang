@@ -1,0 +1,417 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§7", "§3.4", "§3.5", "§6.6", "§4.7"]
+
+// W8-03 U4/t, spec §7 ("`for i in a ..= b` は、`b` が型の最大値でも溢れずに終わる"), S-257, S-219: the closed range at the edges of
+// its type. The end may be the largest value of the type (`U8.MAX`, `I8.MAX`, `U64.MAX`): the loop takes `b` as its last
+// value and ends without a step past it, so no value of the type overflows and the loop does not run for ever. The start
+// may be the smallest value (`I8.MIN`). A range whose start is past its end is empty at the edges as anywhere else.
+// The end of the range is the type of the loop variable, so a literal end takes the type of the start (§4.7: the later end
+// is expected to have the type of the earlier one).
+//
+// Every value below is worked out by hand from the spec text: a type with 8 bits has 256 values, `U8` 0 to 255, `I8`
+// -128 to 127.
+
+// ----------------------------------------------------------------------------------------------- U8
+
+fn count_u8(lo: U8, hi: U8) -> U32 {
+  var n: U32 = 0
+  for _ in lo ..= hi {
+    n = n + 1
+  }
+  n
+}
+
+fn count_to_max(lo: U8) -> U32 {
+  var n: U32 = 0
+  for _ in lo ..= U8.MAX {
+    n = n + 1
+  }
+  n
+}
+
+// The end is a literal of the type of the start.
+fn count_to_255(lo: U8) -> U32 {
+  var n: U32 = 0
+  for _ in lo ..= 255 {
+    n = n + 1
+  }
+  n
+}
+
+fn last_to_max(lo: U8) -> U8 {
+  var last: U8 = 0
+  for i in lo ..= U8.MAX {
+    last = i
+  }
+  last
+}
+
+fn sum_to_max(lo: U8) -> U32 {
+  var s: U32 = 0
+  for i in lo ..= U8.MAX {
+    s = s + (i as U32)
+  }
+  s
+}
+
+fn full_range_count() -> U32 {
+  var n: U32 = 0
+  for _ in 0 ..= U8.MAX {
+    n = n + 1
+  }
+  n
+}
+
+fn full_range_sum() -> U32 {
+  var s: U32 = 0
+  for i in 0 ..= U8.MAX {
+    s = s + (i as U32)
+  }
+  s
+}
+
+test "the end is the largest value of U8" {
+  // 250, 251, 252, 253, 254, 255.
+  assert count_to_max(250) == 6
+  assert count_to_255(250) == 6
+  assert last_to_max(250) == 255
+  assert sum_to_max(250) == 1515
+  // The range with the one value.
+  assert count_to_max(255) == 1
+  assert last_to_max(255) == 255
+}
+
+test "the whole range of U8 has 256 values" {
+  assert full_range_count() == 256
+  // 0 + 1 + ... + 255 = 255 * 256 / 2.
+  assert full_range_sum() == 32640
+  assert count_u8(0, 255) == 256
+}
+
+test "a range whose start is past its end is empty at the edges of U8" {
+  assert count_u8(255, 254) == 0
+  assert count_u8(255, 0) == 0
+  assert count_u8(1, 0) == 0
+  assert count_u8(0, 0) == 1
+  assert count_u8(255, 255) == 1
+  assert count_u8(254, 255) == 2
+}
+
+// `break` and `continue` at the largest value.
+
+fn break_at_max(lo: U8) -> U8 {
+  var last: U8 = 0
+  for i in lo ..= U8.MAX {
+    last = i
+    if i == U8.MAX {
+      break
+    }
+  }
+  last
+}
+
+// The odd values: `continue` on an even value goes to the next value, also when the even value is the last one.
+fn odd_to_max(lo: U8) -> U32 {
+  var n: U32 = 0
+  for i in lo ..= U8.MAX {
+    let r = i % 2
+    if r == 0 {
+      continue
+    }
+    n = n + 1
+  }
+  n
+}
+
+// `continue` on the largest value itself: the loop ends there and does not take the next value of the type.
+fn skip_the_max(lo: U8) -> U32 {
+  var n: U32 = 0
+  for i in lo ..= U8.MAX {
+    if i == U8.MAX {
+      continue
+    }
+    n = n + 1
+  }
+  n
+}
+
+fn nested_at_max(lo: U8) -> U32 {
+  var n: U32 = 0
+  for i in lo ..= U8.MAX {
+    for _ in i ..= U8.MAX {
+      n = n + 1
+    }
+  }
+  n
+}
+
+test "break and continue at the largest value" {
+  assert break_at_max(250) == 255
+  assert break_at_max(255) == 255
+  // 251, 253, 255 of 250 ..= 255; 255 of 254 ..= 255; 255 alone.
+  assert odd_to_max(250) == 3
+  assert odd_to_max(254) == 1
+  assert odd_to_max(255) == 1
+  // 250 to 254 count, 255 continues.
+  assert skip_the_max(250) == 5
+  assert skip_the_max(255) == 0
+  // 254: 254 ..= 255 is 2 values, 255 ..= 255 is 1; 253: 3 + 2 + 1.
+  assert nested_at_max(254) == 3
+  assert nested_at_max(253) == 6
+}
+
+// The end that is a sum of the type does not make an end a loop can step over: it is the value of the sum.
+
+fn count_to_plus_one(hi: U8) -> U32 {
+  var n: U32 = 0
+  for _ in 0 ..= hi + 1 {
+    n = n + 1
+  }
+  n
+}
+
+test "an end that is a sum is the value of the sum" {
+  // 0 ..= 255.
+  assert count_to_plus_one(254) == 256
+  assert count_to_plus_one(0) == 2
+}
+
+test "an end that is a sum that overflows panics before the loop" {
+  // 255 + 1 does not fit in U8 (§3.4): the sum panics, the range is not clamped to U8.MAX.
+  let n = count_to_plus_one(255) //~ PANIC "an end that is a sum that overflows panics before the loop"
+  assert n == 256
+}
+
+// ----------------------------------------------------------------------------------------------- I8
+
+fn count_i8(lo: I8, hi: I8) -> U32 {
+  var n: U32 = 0
+  for _ in lo ..= hi {
+    n = n + 1
+  }
+  n
+}
+
+fn min_edge() -> I32 {
+  var s: I32 = 0
+  for i in I8.MIN ..= I8.MIN + 2 {
+    s = s + (i as I32)
+  }
+  s
+}
+
+fn max_edge() -> I32 {
+  var s: I32 = 0
+  for i in I8.MAX - 1 ..= I8.MAX {
+    s = s + (i as I32)
+  }
+  s
+}
+
+fn last_of_max_edge() -> I8 {
+  var last: I8 = 0
+  for i in I8.MAX - 1 ..= I8.MAX {
+    last = i
+  }
+  last
+}
+
+fn first_of_min_edge() -> I8 {
+  var first: I8 = 0
+  var seen = false
+  for i in I8.MIN ..= I8.MIN + 2 {
+    if !seen {
+      first = i
+      seen = true
+    }
+  }
+  first
+}
+
+fn sum_all_i8() -> I32 {
+  var s: I32 = 0
+  for i in I8.MIN ..= I8.MAX {
+    s = s + (i as I32)
+  }
+  s
+}
+
+fn below_zero(lo: I8) -> I32 {
+  var s: I32 = 0
+  for i in lo ..= 2 {
+    s = s + (i as I32)
+  }
+  s
+}
+
+test "the start is the smallest value of I8" {
+  // -128 + -127 + -126.
+  assert min_edge() == -381
+  assert first_of_min_edge() == -128
+  assert count_i8(-128, -126) == 3
+}
+
+test "the end is the largest value of I8" {
+  // 126 + 127.
+  assert max_edge() == 253
+  assert last_of_max_edge() == 127
+  assert count_i8(126, 127) == 2
+}
+
+test "the whole range of I8 has 256 values" {
+  assert count_i8(-128, 127) == 256
+  // -128 + (-127 + 127) + ... + (-1 + 1) + 0.
+  assert sum_all_i8() == -128
+}
+
+test "a range of a signed type from below zero" {
+  // -3 ..= 2: -3, -2, -1, 0, 1, 2.
+  assert below_zero(-3) == -3
+  assert below_zero(2) == 2
+  assert below_zero(3) == 0
+  assert count_i8(127, -128) == 0
+  assert count_i8(-128, -128) == 1
+  assert count_i8(127, 127) == 1
+}
+
+// ------------------------------------------------------------------ the wider types: the largest values
+
+fn top_u32() -> U32 {
+  var n: U32 = 0
+  for _ in U32.MAX - 2 ..= U32.MAX {
+    n = n + 1
+  }
+  n
+}
+
+fn last_u32() -> U32 {
+  var last: U32 = 0
+  for i in U32.MAX - 2 ..= U32.MAX {
+    last = i
+  }
+  last
+}
+
+fn top_i32() -> U32 {
+  var n: U32 = 0
+  for _ in I32.MAX - 1 ..= I32.MAX {
+    n = n + 1
+  }
+  n
+}
+
+fn bottom_i32() -> I32 {
+  var last: I32 = 0
+  for i in I32.MIN ..= I32.MIN + 1 {
+    last = i
+  }
+  last
+}
+
+fn top_u64() -> U32 {
+  var n: U32 = 0
+  for _ in U64.MAX - 2 ..= U64.MAX {
+    n = n + 1
+  }
+  n
+}
+
+fn last_u64() -> U64 {
+  var last: U64 = 0
+  for i in U64.MAX - 2 ..= U64.MAX {
+    last = i
+  }
+  last
+}
+
+fn only_u64_max() -> U32 {
+  var n: U32 = 0
+  for _ in U64.MAX ..= U64.MAX {
+    n = n + 1
+  }
+  n
+}
+
+fn top_i64() -> U32 {
+  var n: U32 = 0
+  for _ in I64.MAX - 1 ..= I64.MAX {
+    n = n + 1
+  }
+  n
+}
+
+fn bottom_i64() -> I64 {
+  var last: I64 = 0
+  for i in I64.MIN ..= I64.MIN + 1 {
+    last = i
+  }
+  last
+}
+
+test "the end is the largest value of U32 and of I32" {
+  assert top_u32() == 3
+  assert last_u32() == U32.MAX
+  assert top_i32() == 2
+}
+
+test "the start is the smallest value of I32 and of I64" {
+  let second = I32.MIN + 1
+  assert bottom_i32() == second
+  let second64 = I64.MIN + 1
+  assert bottom_i64() == second64
+}
+
+test "the end is the largest value of U64 and of I64" {
+  assert top_u64() == 3
+  assert last_u64() == U64.MAX
+  assert only_u64_max() == 1
+  assert top_i64() == 2
+}
+
+// ------------------------------------------------------------------------------ a type parameter T: Int
+
+fn count_top_two[T: Int](x: T) -> U32 {
+  var n: U32 = 0
+  for _ in T.MAX - T.ONE ..= T.MAX {
+    n = n + 1
+  }
+  n
+}
+
+fn count_to_t_max[T: Int](lo: T) -> U32 {
+  var n: U32 = 0
+  for _ in lo ..= T.MAX {
+    n = n + 1
+  }
+  n
+}
+
+fn last_to_t_max[T: Int](lo: T) -> T {
+  var last = lo
+  for i in lo ..= T.MAX {
+    last = i
+  }
+  last
+}
+
+test "the end that is the largest value of T does not overflow" {
+  let a: U8 = 0
+  let b: I8 = 0
+  let c: U64 = 0
+  let d: I64 = 0
+  assert count_top_two(a) == 2
+  assert count_top_two(b) == 2
+  assert count_top_two(c) == 2
+  assert count_top_two(d) == 2
+  let e: U8 = 250
+  let f: I8 = 125
+  let g: U64 = U64.MAX - 2
+  assert count_to_t_max(e) == 6
+  assert count_to_t_max(f) == 3
+  assert count_to_t_max(g) == 3
+  assert last_to_t_max(e) == U8.MAX
+  assert last_to_t_max(f) == I8.MAX
+  assert last_to_t_max(g) == U64.MAX
+}

@@ -159,7 +159,7 @@ pub(super) fn gen_process<'b>(lw: &mut Lowerer<'b>, shape: &FlowShape, info: &'b
             None => assign(&mut body, &index_as(sp, i_e.clone(), Bounds::Known, &lw.m.tys)?, val)?,
         }
     }
-    g.stmts.push(stmt(span, StmtKind::ForRange(i, u32_lit(span, 0), len, Block { stmts: body, value: None })));
+    g.stmts.push(stmt(span, StmtKind::for_excluded(i, u32_lit(span, 0), len, Block { stmts: body, value: None })));
     g.finish(lw, process_of(fns, span)?, Types::UNIT, true, None);
     Ok(())
 }

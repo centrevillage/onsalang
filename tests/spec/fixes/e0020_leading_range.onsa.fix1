@@ -21,8 +21,8 @@
 // comment), as for any binary operator (e0020_leading_operator.onsa). The other languages' `..` and `...`
 // start a line the same way, and they are one error (the symbol is replaced and moved in one candidate)
 // with the two readings of §7 as candidates, `..<` first and then `..=`. The main position is the
-// symbol, so the marker is on its line. The closed range `..=` is not lowered in this version (E0200),
-// which is a later stage and the case does not list. A symbol that would start a range outside the head
+// symbol, so the marker is on its line. The closed range `..=` of the second candidate is a range like
+// `..<` (§7), so the case lists no diagnostic after it. A symbol that would start a range outside the head
 // is not this rule: tests/spec/negative/range_leading_outside_header.onsa.
 
 pub fn half_open(n: U32) -> U32 {

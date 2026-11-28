@@ -533,10 +533,6 @@ fn lower_for(
 ) -> R<()> {
     if let AK::Range(r) = &cx.expr(iter).kind {
         let r = *r;
-        if r.end != RangeEnd::Excluded {
-            // The checker gives E0200 until W8-03 (S-224); never as `..<` (R-81).
-            return Err(internal(span, "a `for` over `a..=b` reached the lowering"));
-        }
         let lo = lower_expr(lw, cx, r.lo)?;
         let hi = lower_expr(lw, cx, r.hi)?;
         let var = match &cx.ast.pat(pat).kind {
@@ -545,7 +541,8 @@ fn lower_for(
             _ => return Err(internal(span, "range loop pattern")),
         };
         let b = lower_block_expr(lw, cx, body)?;
-        out.push(stmt(span, StmtKind::ForRange(var, lo, hi, drop_value(b))));
+        let inclusive = r.end == RangeEnd::Included;
+        out.push(stmt(span, StmtKind::ForRange { local: var, lo, hi, body: drop_value(b), inclusive }));
         return Ok(());
     }
     // Sequence: index loop over a place (or a temporary holding the value).
@@ -578,6 +575,6 @@ fn lower_for(
     let b = lower_block_expr(lw, cx, body)?;
     let b = drop_value(b);
     stmts.extend(b.stmts);
-    out.push(stmt(span, StmtKind::ForRange(i, u32_lit(span, 0), len, Block { stmts, value: None })));
+    out.push(stmt(span, StmtKind::for_excluded(i, u32_lit(span, 0), len, Block { stmts, value: None })));
     Ok(())
 }

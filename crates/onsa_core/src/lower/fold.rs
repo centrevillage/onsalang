@@ -54,7 +54,9 @@ impl Folder<'_> {
             self.stmt(&mut s);
             match s.kind {
                 // It never runs: its bounds stay as statements.
-                StmtKind::ForRange(_, from, to, _) if self.never_runs(&to) => b.stmts.extend(self.effects([from, to])),
+                StmtKind::ForRange { lo, hi, inclusive: false, .. } if self.never_runs(&hi) => {
+                    b.stmts.extend(self.effects([lo, hi]))
+                }
                 kind => b.stmts.push(Stmt { span: s.span, kind }),
             }
         }
@@ -63,8 +65,9 @@ impl Folder<'_> {
         }
     }
 
-    /// A `for` whose upper bound `hi` is at or below the smallest value of
-    /// the loop variable's type never runs.
+    /// A `for` over `lo..<hi` whose `hi` is at or below the smallest value of
+    /// the loop variable's type never runs (one over `lo..=hi` runs when `lo`
+    /// is that value: `hi` alone does not say).
     fn never_runs(&self, hi: &Expr) -> bool {
         matches!((self.constant(hi), limits(hi.ty)), (Some(k), Some((lo, _))) if k <= lo)
     }
@@ -98,7 +101,7 @@ impl Folder<'_> {
                 self.expr(c);
                 self.block(b);
             }
-            StmtKind::ForRange(_, lo, hi, b) => {
+            StmtKind::ForRange { lo, hi, body: b, .. } => {
                 self.expr(lo);
                 self.expr(hi);
                 self.block(b);
