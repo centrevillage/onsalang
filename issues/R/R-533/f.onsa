@@ -1,0 +1,54 @@
+fn nx(inout k: U32) -> U32 {
+  k = k + 1
+  0
+}
+
+@export
+pub fn f01_for_source_effect() -> U32 {
+  let g: [[U32; 4]; 2] = [[1, 2, 3, 4], [5, 6, 7, 8]]
+  var k: U32 = 0
+  var s: U32 = 0
+  for x in g[nx(inout k)] {
+    s = s + x
+  }
+  s * 100 + k
+}
+
+test "f01: sum 10, k once" { assert f01_for_source_effect() == 1001 }
+
+@export
+pub fn f02_for_empty_rows(i: U32) -> U32 {
+  let g: [[U32; 0]; 2] = [[], []]
+  var s: U32 = 0
+  for x in g[i] {
+    s = s + x
+  }
+  s + 7
+}
+
+test "f02: i out of range panics" { assert f02_for_empty_rows(5) == 7 }
+
+@export
+pub fn f03_len_of_row(i: U32) -> U32 {
+  let g: [[U32; 3]; 2] = [[0; 3]; 2]
+  g[i].len()
+}
+
+fn first_or(s: Span[U32]) -> U32 { s.len() }
+
+@export
+pub fn f04_span_of_empty_row(i: U32) -> U32 {
+  let g: [[U32; 0]; 2] = [[], []]
+  first_or(g[i]) + 7
+}
+
+@export
+pub fn f05_let_empty_row(i: U32) -> U32 {
+  let g: [[U32; 0]; 2] = [[], []]
+  let r = g[i]
+  r.len() + 7
+}
+
+test "f03: panics" { assert f03_len_of_row(5) == 3 }
+test "f04: panics" { assert f04_span_of_empty_row(5) == 7 }
+test "f05: panics" { assert f05_let_empty_row(5) == 7 }
