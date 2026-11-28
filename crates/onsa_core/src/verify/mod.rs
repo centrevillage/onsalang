@@ -10,6 +10,7 @@ use onsa_diag::Span;
 use crate::bounds::Env;
 use crate::ir::*;
 
+mod aliased;
 pub(crate) mod depth;
 mod ids;
 mod prims;
@@ -78,6 +79,7 @@ pub fn verify(m: &Module) -> Result<(), VerifyError> {
             env: Env::new(Parts { tys: &m.tys, types: &m.types }, (&consts, &below), None),
             visible: Vec::new(),
             aliases: crate::alias::Table::default(),
+            aliased: aliased::Aliased::default(),
             undo: Vec::new(),
             lets: Vec::new(),
             named: Vec::new(),
@@ -105,6 +107,7 @@ pub fn verify(m: &Module) -> Result<(), VerifyError> {
             env: Env::new(Parts { tys: &m.tys, types: &m.types }, (&consts, &below), Some(f)),
             visible: vec![false; f.locals.len()],
             aliases: crate::alias::table(f),
+            aliased: aliased::Aliased::of(f),
             undo: Vec::new(),
             lets: vec![false; f.locals.len()],
             named: vec![false; f.locals.len()],
@@ -153,6 +156,8 @@ struct V<'a> {
     visible: Vec<bool>,
     /// The places the aliases name (V-05, V-21).
     aliases: crate::alias::Table,
+    /// Whether the aliases may be used where a node is (V-21).
+    aliased: aliased::Aliased,
     undo: Vec<LocalId>,
     /// The locals a `let` defines.
     lets: Vec<bool>,

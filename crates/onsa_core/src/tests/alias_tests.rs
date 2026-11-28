@@ -2,6 +2,8 @@
 //! first part of V-21, in a Core made by hand: an alias is defined by its
 //! one `Alias` alone, one not written through is the root of no write, and
 //! a write through one writes the place it names (`alias::resolve`, V-05).
+//! U6a2: its second part, no use of an alias once a place that may overlap
+//! the one it names is written not through it.
 
 use onsa_diag::{FileId, Span};
 
@@ -30,6 +32,8 @@ const Q: LocalId = LocalId(3);
 const S: LocalId = LocalId(4);
 /// `p: U32`, an alias not written through.
 const P: LocalId = LocalId(5);
+/// `t: (U32, U32)`, a value.
+const T: LocalId = LocalId(6);
 
 fn row(m: &mut Module) -> CTy {
     m.tys.intern(TyKind::Array(Types::U32, 2))
@@ -68,12 +72,14 @@ fn elem(m: &mut Module, l: LocalId, k: i128) -> Expr {
     Expr::new(Types::U32, sp(), ExprKind::Index { base, index: Box::new(n(k)), bounds: Bounds::Checked })
 }
 
-/// `callee(inout y: U32)` and `g(<mode> xs: [[U32; 2]; 2])` of the locals
-/// above and the statements `stmts`, made of the module `m` gives.
+/// `callee(inout y: U32)`, `g(<mode> xs: [[U32; 2]; 2])` of the locals
+/// above and the statements `stmts`, made of the module `m` gives, and
+/// `both(inout y: U32, z: U32)`.
 fn module(mode: Mode, stmts: impl FnOnce(&mut Module) -> Vec<Stmt>) -> Module {
     let mut m = Module::default();
     let r = row(&mut m);
     let grid = m.tys.intern(TyKind::Array(r, 2));
+    let pair = m.tys.intern(TyKind::Tuple(vec![Types::U32, Types::U32].into_boxed_slice()));
     let stmts = stmts(&mut m);
     let fn_of = |name: &str, params: Vec<Param>, locals: Vec<Local>, stmts: Vec<Stmt>| FnDef {
         name: name.into(),
@@ -99,8 +105,13 @@ fn module(mode: Mode, stmts: impl FnOnce(&mut Module) -> Vec<Stmt>) -> Module {
         of("q", r, false),
         of("s", Types::U32, true),
         of("p", Types::U32, false),
+        Local::value("t", pair),
     ];
     m.fns.push(fn_of("g", vec![Param { local: XS, mode, ty: grid }], locals, stmts));
+    let z = Param { local: LocalId(1), mode: Mode::Borrow, ty: Types::U32 };
+    let yz = vec![Local::value("y", Types::U32), Local::value("z", Types::U32)];
+    let y = Param { local: LocalId(0), mode: Mode::Inout, ty: Types::U32 };
+    m.fns.push(fn_of("both", vec![y, z], yz, vec![]));
     m.fill_all_facts();
     m
 }
@@ -276,4 +287,192 @@ fn a_write_through_an_alias_of_the_variable_of_a_for_is_rejected() {
         ]
     });
     rejected(&m, Rule::V28, "the variable 1 of a `for` written in its body");
+}
+
+/// `xs[a][b]`.
+fn xs(a: i128, b: i128) -> Place {
+    at_index(at_index(Place::Local(XS), a), b)
+}
+
+/// `p = v`.
+fn set(p: Place, v: i128) -> Stmt {
+    st(sp(), StmtKind::Assign(p, n(v)))
+}
+
+/// A read of `l[k]`, of the alias `l: [U32; 2]`, its local at the position
+/// of an error.
+fn read(m: &mut Module, l: LocalId, k: i128) -> Stmt {
+    let base = Box::new(Expr::new(row(m), at(), ExprKind::Local(l)));
+    let e = ExprKind::Index { base, index: Box::new(n(k)), bounds: Bounds::Checked };
+    st(sp(), StmtKind::Expr(Expr::new(Types::U32, sp(), e)))
+}
+
+/// A read of the alias `l: U32`, at the position of an error.
+fn read_one(l: LocalId) -> Stmt {
+    st(sp(), StmtKind::Expr(Expr::new(Types::U32, at(), ExprKind::Local(l))))
+}
+
+fn block(stmts: Vec<Stmt>) -> Block {
+    Block { stmts, value: Some(Box::new(unit())) }
+}
+
+fn yes() -> Expr {
+    Expr::new(Types::BOOL, sp(), ExprKind::Lit(Lit::Bool(true)))
+}
+
+const LOST: &str = "used after a place it names was written not through it";
+
+/// V-21, the second part: once a place that may overlap the place of an
+/// alias is written not through it, the alias is neither read nor the root
+/// of a write; an index is the same place whatever its value
+/// (`paths::disjoint`); a write of another root or through the alias
+/// itself loses nothing.
+#[test]
+fn an_alias_is_not_used_once_its_place_is_written_not_through_it() {
+    let q0 = || alias(Q, at_index(Place::Local(XS), 0));
+    let m = module(Mode::Inout, |m| vec![q0(), set(xs(0, 1), 3), read(m, Q, 0)]);
+    rejected(&m, Rule::V21, &format!("the alias 3 {LOST}"));
+    // At another index, of any value: the indices are not compared.
+    let m = module(Mode::Inout, |m| vec![q0(), set(xs(1, 0), 3), read(m, Q, 0)]);
+    rejected(&m, Rule::V21, &format!("the alias 3 {LOST}"));
+    // The whole of its root, a place its place is in.
+    let whole = |m: &mut Module| {
+        let r = row(m);
+        let grid = m.tys.intern(TyKind::Array(r, 2));
+        st(sp(), StmtKind::Assign(Place::Local(XS), Expr::new(grid, sp(), ExprKind::Zeroed)))
+    };
+    let m = module(Mode::Inout, |m| vec![q0(), whole(m), read(m, Q, 1)]);
+    rejected(&m, Rule::V21, &format!("the alias 3 {LOST}"));
+    // A write through the alias lost: its root, at the assignment.
+    let r0 = || alias(R, at_index(Place::Local(XS), 0));
+    let m = module(Mode::Inout, |_| {
+        vec![r0(), set(xs(1, 0), 3), st(at(), StmtKind::Assign(at_index(Place::Local(R), 1), n(4)))]
+    });
+    rejected(&m, Rule::V21, &format!("the alias 2 {LOST}"));
+    // Accepted: a write of another root, and through the alias itself.
+    let m = module(Mode::Inout, |m| {
+        vec![
+            st(sp(), StmtKind::Let(I, n(0))),
+            r0(),
+            set(Place::Local(I), 1),
+            set(at_index(Place::Local(R), 1), 2),
+            read(m, R, 0),
+        ]
+    });
+    verify(&m).expect("writes of another root and through the alias");
+}
+
+/// `paths::disjoint`: a write of another field of the root is no write of
+/// the place of an alias, a write of the same field is.
+#[test]
+fn a_write_of_another_field_keeps_an_alias() {
+    let pair = |m: &mut Module| {
+        let t = m.tys.intern(TyKind::Tuple(vec![Types::U32, Types::U32].into_boxed_slice()));
+        st(sp(), StmtKind::Let(T, Expr::new(t, sp(), ExprKind::Zeroed)))
+    };
+    let field = |i| Place::Field(Box::new(Place::Local(T)), i);
+    let m = module(Mode::Inout, |m| vec![pair(m), alias(P, field(0)), set(field(1), 3), read_one(P)]);
+    verify(&m).expect("another field");
+    let m = module(Mode::Inout, |m| vec![pair(m), alias(P, field(0)), set(field(0), 3), read_one(P)]);
+    rejected(&m, Rule::V21, &format!("the alias 5 {LOST}"));
+}
+
+/// The places an `inout` argument writes are written once the call has
+/// evaluated all its arguments: an alias read by a later argument of the
+/// call is read before, and lost after it.
+#[test]
+fn an_inout_argument_writes_after_all_the_arguments() {
+    let q0 = || alias(Q, at_index(Place::Local(XS), 0));
+    let xs00 = |m: &mut Module| {
+        let (r, ix) = (row(m), |base, k| ExprKind::Index {
+            base: Box::new(base),
+            index: Box::new(n(k)),
+            bounds: Bounds::Checked,
+        });
+        let xs = Expr::new(m.tys.intern(TyKind::Array(r, 2)), sp(), ExprKind::Local(XS));
+        Expr::new(Types::U32, sp(), ix(Expr::new(r, sp(), ix(xs, 0)), 0))
+    };
+    let m = module(Mode::Inout, |m| vec![q0(), pass(xs00(m)), read(m, Q, 1)]);
+    rejected(&m, Rule::V21, &format!("the alias 3 {LOST}"));
+    let both = |m: &mut Module| {
+        let StmtKind::Expr(q) = read(m, Q, 1).kind else { unreachable!() };
+        let args = vec![Arg { mode: Mode::Inout, expr: xs00(m) }, Arg { mode: Mode::Borrow, expr: q }];
+        st(sp(), StmtKind::Expr(Expr::new(Types::UNIT, sp(), ExprKind::Call { fn_: FnId(2), args })))
+    };
+    verify(&module(Mode::Inout, |m| vec![q0(), both(m)])).expect("read by a later argument");
+    let m = module(Mode::Inout, |m| vec![q0(), both(m), read(m, Q, 0)]);
+    rejected(&m, Rule::V21, &format!("the alias 3 {LOST}"));
+}
+
+/// The arms of an `If` begin with the state before them; past them an
+/// alias lost in either is lost.
+#[test]
+fn an_alias_lost_in_an_arm_is_lost_past_the_arms() {
+    let q0 = || alias(Q, at_index(Place::Local(XS), 0));
+    let arms =
+        |m: &mut Module| st(sp(), StmtKind::If(yes(), block(vec![set(xs(0, 0), 1)]), block(vec![read(m, Q, 0)])));
+    verify(&module(Mode::Inout, |m| vec![q0(), arms(m)])).expect("read in the other arm");
+    let m = module(Mode::Inout, |m| vec![q0(), arms(m), read(m, Q, 1)]);
+    rejected(&m, Rule::V21, &format!("the alias 3 {LOST}"));
+    let other =
+        |m: &mut Module| st(sp(), StmtKind::If(yes(), block(vec![read(m, Q, 0)]), block(vec![set(xs(1, 0), 1)])));
+    let m = module(Mode::Inout, |m| vec![q0(), other(m), read(m, Q, 1)]);
+    rejected(&m, Rule::V21, &format!("the alias 3 {LOST}"));
+}
+
+/// An alias of before a loop, used in it and then lost in it, would be used
+/// lost in its next turn; one written after the loop, or defined in its
+/// body (again in each turn), is not.
+#[test]
+fn an_alias_used_in_a_loop_that_then_writes_its_place_is_rejected() {
+    let q0 = || alias(Q, at_index(Place::Local(XS), 0));
+    let looped = "the alias 3 used in a loop that then writes a place it names not through it";
+    let write = || st(at(), StmtKind::Assign(xs(1, 1), n(2)));
+    let m = module(Mode::Inout, |m| vec![q0(), st(sp(), StmtKind::While(yes(), block(vec![read(m, Q, 0), write()])))]);
+    rejected(&m, Rule::V21, looped);
+    // In an inner loop, and of a `for`.
+    let m = module(Mode::Inout, |m| {
+        let inner = st(sp(), StmtKind::While(yes(), block(vec![read(m, Q, 0)])));
+        vec![q0(), st(sp(), StmtKind::for_excluded(I, n(0), n(2), block(vec![inner, write()])))]
+    });
+    rejected(&m, Rule::V21, looped);
+    let m = module(Mode::Inout, |m| {
+        vec![q0(), st(sp(), StmtKind::for_excluded(I, n(0), n(2), block(vec![read(m, Q, 0)]))), set(xs(0, 0), 1)]
+    });
+    verify(&m).expect("written after the loop");
+    let m = module(Mode::Inout, |m| {
+        vec![st(sp(), StmtKind::While(yes(), block(vec![q0(), read(m, Q, 0), set(xs(0, 0), 1)])))]
+    });
+    verify(&m).expect("defined in the body");
+}
+
+/// The walk does not tell code no path reaches: a read after a `Return`
+/// and after a write is rejected, as is one past an arm that writes and
+/// returns.
+#[test]
+fn a_read_no_path_reaches_after_a_write_is_rejected() {
+    let q0 = || alias(Q, at_index(Place::Local(XS), 0));
+    let ret = || st(sp(), StmtKind::Return(None));
+    let m = module(Mode::Inout, |m| vec![q0(), set(xs(0, 0), 1), ret(), read(m, Q, 0)]);
+    rejected(&m, Rule::V21, &format!("the alias 3 {LOST}"));
+    let m = module(Mode::Inout, |m| {
+        vec![q0(), st(sp(), StmtKind::If(yes(), block(vec![set(xs(0, 0), 1), ret()]), block(vec![]))), read(m, Q, 0)]
+    });
+    rejected(&m, Rule::V21, &format!("the alias 3 {LOST}"));
+}
+
+/// An alias at the root of the place of another (`alias s = r[1]`): a write
+/// through `s` is through `r` too, and loses neither; one through `r` not
+/// through `s` loses `s`, and a write of the root loses both.
+#[test]
+fn a_write_through_a_nested_alias_is_through_the_alias_at_its_root() {
+    let nested = || vec![alias(R, at_index(Place::Local(XS), 0)), alias(S, at_index(Place::Local(R), 1))];
+    let m = module(Mode::Inout, |m| [nested(), vec![set(Place::Local(S), 3), read(m, R, 0), read_one(S)]].concat());
+    verify(&m).expect("through `s` and `r`");
+    let m = module(Mode::Inout, |m| {
+        [nested(), vec![set(at_index(Place::Local(R), 0), 3), read(m, R, 1), read_one(S)]].concat()
+    });
+    rejected(&m, Rule::V21, &format!("the alias 4 {LOST}"));
+    let m = module(Mode::Inout, |m| [nested(), vec![set(xs(0, 1), 3), read(m, R, 1)]].concat());
+    rejected(&m, Rule::V21, &format!("the alias 2 {LOST}"));
 }

@@ -3,7 +3,8 @@
 //! ([`V::stmt_here`], [`V::expr_here`]; an error in a part is found before
 //! one of its parent). The context a node is checked in, the locals seen
 //! (V-04), a loop (V-07), the sample loop of a `process` and what is known
-//! of the locals (V-25, V-28), changes in [`V::stmt`] and [`V::child`] only.
+//! of the locals (V-25, V-28), changes in [`V::stmt`] and [`V::child`] only;
+//! the state of the aliases (V-21, `aliased.rs`) in [`V::children`] too.
 
 use super::{R, Rule, V};
 use crate::bounds::Var;
@@ -34,19 +35,17 @@ impl<'a> V<'a> {
     pub(super) fn stmt(&mut self, s: &'a Stmt) -> R<()> {
         let outer = self.at.replace(s.span);
         let var = self.env.variable(&s.kind);
-        let mut r = Ok(());
-        stmt_children(s, &mut |c| {
-            if r.is_ok() {
-                r = self.child(c, var)
-            }
-        });
-        r?;
+        self.children(|each| stmt_children(s, each), var)?;
         self.stmt_here(s)?;
-        if let StmtKind::Alias(l, _) = &s.kind {
+        if let StmtKind::Alias(l, p) = &s.kind {
             self.define(*l, true)?;
             if std::mem::replace(&mut self.named[l.0 as usize], true) {
                 return Err(self.err(Rule::V21, format!("a second `Alias` of the alias {}", l.0)));
             }
+            self.alias_named(*l, p);
+        }
+        if let StmtKind::Assign(p, _) = &s.kind {
+            self.alias_assigned(p)?;
         }
         if let StmtKind::Let(l, e) = &s.kind {
             self.unwritten(*l)?;
@@ -58,29 +57,56 @@ impl<'a> V<'a> {
         Ok(())
     }
 
+    /// The `inout` arguments of `e` write their places once all its
+    /// children are evaluated (V-21).
     pub(super) fn expr(&mut self, e: &'a Expr) -> R<()> {
-        let outer = self.at.replace(e.span);
-        let mut r = Ok(());
-        expr_children(e, &mut |c| {
-            if r.is_ok() {
-                r = self.child(c, None)
-            }
-        });
-        r?;
+        let (outer, mark) = (self.at.replace(e.span), self.aliased.mark());
+        self.children(|each| expr_children(e, each), None)?;
         self.expr_here(e)?;
+        if let ExprKind::Local(l) = e.kind {
+            self.alias_used(l)?;
+        }
+        self.alias_written(mark)?;
         self.at = outer;
         Ok(())
     }
 
     fn place(&mut self, p: &'a Place, role: PlaceRole) -> R<()> {
-        let mut r = Ok(());
-        place_children(p, role, &mut |c| {
-            if r.is_ok() {
-                r = self.child(c, None)
+        self.children(|each| place_children(p, role, each), None)?;
+        self.place_here(p, role)?;
+        match p {
+            Place::Local(l) => self.alias_used(*l),
+            Place::Field(..) | Place::Index(..) => Ok(()),
+        }
+    }
+
+    /// The children `list` gives, in order, each in its context
+    /// ([`V::child`]), up to the first error. Of the aliases (V-21): each
+    /// arm of a node begins with the state before the arms, and the
+    /// children of a loop are in a loop of their own.
+    fn children(&mut self, list: impl FnOnce(&mut dyn FnMut(Child<'a>)), var: Option<Var>) -> R<()> {
+        let (mut r, mut arms, mut looped) = (Ok(()), None, false);
+        list(&mut |c| {
+            if r.is_err() {
+                return;
             }
+            let eval = match c {
+                Child::Expr(_, eval, _) | Child::Block(_, _, eval) => eval,
+                Child::Place(..) => Eval::Always,
+            };
+            self.aliased.arm(eval, &mut arms);
+            if eval == Eval::Loop && !looped {
+                looped = true;
+                self.aliased.enter();
+            }
+            r = self.child(c, var);
+            self.aliased.armed(eval, &mut arms);
         });
-        r?;
-        self.place_here(p, role)
+        self.aliased.arm(Eval::Always, &mut arms);
+        if looped {
+            self.aliased.leave();
+        }
+        r
     }
 
     /// A child in its context. The names defined in a block a backend opens
@@ -98,6 +124,7 @@ impl<'a> V<'a> {
                 self.expr(x)?;
                 if role == Role::Inout {
                     self.inout(x)?;
+                    self.alias_inout(x);
                 }
                 eval != Eval::Always
             }
