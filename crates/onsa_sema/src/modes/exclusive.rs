@@ -1,6 +1,7 @@
 //! The exclusivity of the places of one call (§5.2, §3.5; S-193, S-799):
 //! its arguments that are places, which overlap one another
-//! or a change made in another argument (E0702).
+//! or a change made in another argument (E0702); and of the base of an
+//! index, with a change made in its index (S-1275).
 
 use std::rc::Rc;
 
@@ -13,6 +14,7 @@ use super::check::{Changed, Walker};
 use super::flow::Run;
 use super::place::{ByRoot, Place, place_of};
 use super::scoped::Reader;
+use super::walk::Pos;
 use crate::Kind;
 use crate::body::LocalId;
 use crate::sources::{Cx, Leaf, Open, What, leaves};
@@ -50,6 +52,14 @@ impl Passed {
 enum Read {
     Copied,
     Unknown,
+}
+
+/// The window of E0702's changes (§3.5, §5.2): the arguments of a call,
+/// or the index of an index (S-1275).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum Window {
+    Call,
+    Index,
 }
 
 /// The note of a Dup value passed to a `move` parameter (S-801), and of a value with no kind.
@@ -95,17 +105,7 @@ impl Walker<'_> {
             if m == Mode::Borrow {
                 self.ends_inside(&leaves, x, Reader::CALL);
             }
-            let mut opened: Vec<_> = leaves.iter().flat_map(|l| [l.up, l.arg]).filter(|&a| a != x).collect();
-            opened.sort_unstable();
-            opened.dedup();
-            let opened: Rc<[ExprId]> = opened.into();
-            for leaf in leaves {
-                let What::Place(b) = leaf.what else { continue };
-                let Some(place) = place_of(self.ast, self.names, b) else {
-                    bug(Some(self.ast.expr(b).span), "a place leaf with no place")
-                };
-                passed.push(self.passed(&leaf, (x, &opened), m, place.then(&leaf.over)));
-            }
+            self.pass(leaves, x, m, &mut passed);
         }
         let (mut later, index) = (Vec::new(), ByRoot::new(&self.deps, passed.iter().map(|q| &q.place)));
         for (j, b) in passed.iter().enumerate() {
@@ -120,6 +120,42 @@ impl Walker<'_> {
             }
         }
         (later, passed, index)
+    }
+
+    /// The places the argument `x` passes as `m`, of its leaves `leaves`,
+    /// pushed on `passed`.
+    fn pass(&mut self, leaves: Vec<Leaf>, x: ExprId, m: Mode, passed: &mut Vec<Passed>) {
+        let mut opened: Vec<_> = leaves.iter().flat_map(|l| [l.up, l.arg]).filter(|&a| a != x).collect();
+        opened.sort_unstable();
+        opened.dedup();
+        let opened: Rc<[ExprId]> = opened.into();
+        for leaf in leaves {
+            let What::Place(b) = leaf.what else { continue };
+            let Some(place) = place_of(self.ast, self.names, b) else {
+                bug(Some(self.ast.expr(b).span), "a place leaf with no place")
+            };
+            passed.push(self.passed(&leaf, (x, &opened), m, place.then(&leaf.over)));
+        }
+    }
+
+    /// The index `index` of `base` (§3.5, §5.2, S-1275), walked as an
+    /// argument of a call is: a change in it that may overlap a place of the
+    /// base, which stands for its places as a borrowed argument does, is
+    /// E0702 ([`Walker::changed_in_args`]); whether one was found.
+    pub(super) fn indexed(&mut self, r: &mut Run, base: ExprId, index: ExprId) -> bool {
+        let mut passed = Vec::new();
+        self.pass(leaves(self.cx(), base, Open::Arg), base, Mode::Borrow, &mut passed);
+        if passed.is_empty() {
+            self.expr(r, index, Pos::Read);
+            return false;
+        }
+        let by_root = ByRoot::new(&self.deps, passed.iter().map(|q| &q.place));
+        let start = self.inside.changes.len();
+        // One deeper, as the arguments of a call: its changes are recorded.
+        self.inside.calls += 1;
+        self.expr(r, index, Pos::Read);
+        self.inside.calls -= 1;
+        self.changed_in_args(r, start, (&passed, &by_root), Window::Index)
     }
 
     /// What the stages after the types read of the body ([`crate::sources`]).
@@ -232,9 +268,16 @@ impl Walker<'_> {
     /// walk, copies (§5.2, S-1030: E0702's test, no error). Out of the
     /// arguments of every call, the record is emptied. The places passed are
     /// looked up by their roots (`index`): linear in the changes and the
-    /// places of no root in common.
-    pub(super) fn changed_in_args(&mut self, r: &mut Run, start: usize, (passed, index): (&[Passed], &ByRoot)) {
-        let (this, mut copies) = (Some(self.inside.calls + 1), Vec::new());
+    /// places of no root in common. Of the window of an index (`of`), the
+    /// places are its base's ([`Walker::indexed`]). Whether one was found.
+    pub(super) fn changed_in_args(
+        &mut self,
+        r: &mut Run,
+        start: usize,
+        (passed, index): (&[Passed], &ByRoot),
+        of: Window,
+    ) -> bool {
+        let (this, mut copies, mut found) = (Some(self.inside.calls + 1), Vec::new(), false);
         let window = self.inside.changes[start..].iter().filter(|c| c.release || (self.reports && c.direct != this));
         // The elements opened in the call, each argument's once (its places share them).
         let fresh = |&(i, p): &(usize, &Passed)| i == 0 || !Rc::ptr_eq(&passed[i - 1].opened, &p.opened);
@@ -256,17 +299,29 @@ impl Walker<'_> {
                 continue;
             }
             let (changed, arg) = (self.place_text(*at, &[], w), self.passed_text(q));
-            let message = format!(
-                "`{changed}` is changed in another argument while `{arg}` is passed {} in the same call; the places may overlap (§3.5, §5.2)",
-                how(q.mode)
-            );
-            let mode = format!("{} here", how(q.mode).trim_start_matches("as "));
-            let d = self.at_later(message, (span(q), mode), (*at, "changed here".to_string()), &[q]);
+            let (message, note) = match of {
+                Window::Call => (
+                    format!(
+                        "`{changed}` is changed in another argument while `{arg}` is passed {} in the same call; the places may overlap (§3.5, §5.2)",
+                        how(q.mode)
+                    ),
+                    format!("{} here", how(q.mode).trim_start_matches("as ")),
+                ),
+                Window::Index => (
+                    format!(
+                        "`{changed}` is changed in the index while `{arg}` is indexed; the places may overlap (§3.5, §5.2)"
+                    ),
+                    "indexed here".to_string(),
+                ),
+            };
+            let d = self.at_later(message, (span(q), note), (*at, "changed here".to_string()), &[q]);
             self.m.found.push(d);
+            found = true;
         }
         copies.into_iter().for_each(|(l, by, b)| self.restore(r, l, (by, Some(b))));
         if self.inside.calls == 0 {
             self.inside.changes.clear();
         }
+        found
     }
 }

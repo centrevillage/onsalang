@@ -1,0 +1,75 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§3.5"]
+// fixes = 0
+
+// S-1275 (the decision): "今通る `self.voices[self.alloc!()].note_on!(n)` の類は E0702 になり、添字を先に `let` に取る形に直す". The index
+// that calls a method with `!` on the holder of the base (`self` is the root of `self.xs`) changes a place that holds
+// the base, so it is E0702 even when the method writes only another field of `self`: a path that is passed as a whole
+// is counted as the whole (§5.2: "`xs` の場所は借用の引数と同じに数える", as `f(s.xs, inout s)`). The same holds
+// for a root that is passed to a function with `inout` and the function writes another field (`s.xs[adv(inout s)] = 5`),
+// as an assignment target and as a receiver of a `!`. The repaired forms (the index taken in a `let` first, and the
+// index that passes a field, not the root) are in semantics/index_base_unchanged.onsa.
+// One error per function (P-01), no repair candidate, the line of the change.
+
+pub struct Voice {
+  note: U32,
+}
+
+impl Voice {
+  pub fn note_on(inout self, n: U32) {
+    self.note = n
+  }
+}
+
+pub struct Pool {
+  voices: [Voice; 4],
+  xs: [U32; 3],
+  n: U32,
+}
+
+pub fn adv(inout s: Pool) -> U32 {
+  s.n = s.n + 1
+  1
+}
+
+impl Pool {
+  pub fn pick(inout self) -> U32 {
+    self.n = self.n + 1
+    1
+  }
+
+  pub fn alloc(inout self) -> U32 {
+    self.n = self.n + 1
+    self.n - 1
+  }
+
+  pub fn read_through_pick(inout self) -> U32 {
+    self.xs[self.pick!()] //~ E0702
+  }
+
+  pub fn write_through_pick(inout self) {
+    self.xs[self.pick!()] = 5 //~ E0702
+  }
+
+  pub fn note_on_the_allocated_voice(inout self, n: U32) {
+    self.voices[self.alloc!()].note_on!(n) //~ E0702
+  }
+
+  pub fn root_passed_to_a_function(inout self) -> U32 {
+    self.xs[adv(inout self)] //~ E0702
+  }
+}
+
+pub fn root_passed_as_an_assignment_target(inout s: Pool) {
+  s.xs[adv(inout s)] = 5 //~ E0702
+}
+
+pub fn receiver_with_a_bang_on_a_local() -> U32 {
+  var p = Pool { voices: [Voice { note: 0 }; 4], xs: [1, 2, 3], n: 0 }
+  p.xs[p.pick!()] //~ E0702
+}
+
+pub fn element_receiver_with_a_bang(inout p: Pool, n: U32) {
+  p.voices[p.alloc!()].note_on!(n) //~ E0702
+}

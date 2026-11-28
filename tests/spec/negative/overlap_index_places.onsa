@@ -1,0 +1,151 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§3.5"]
+// fixes = 0
+
+// S-1275, S-1273 (§5.2): "添字 `xs[i]` の `i` の中の変更も同じに数え、`xs` と重なる場所を変更すると E0702 である
+// （`xs[reset(inout xs)]`、`s.xs[f(inout s)]`、`xs.slice(0, 2)[f(inout xs)]`）。`xs` の場所は借用の引数と同じに数える".
+// The place at the base of an index is the same as a borrowed argument (a variable, an `inout` parameter, a field
+// path, a path of nested indices, a tuple field, an element before a field), and a change in the index that
+// overlaps it is E0702: the whole base, a place that holds it (the root the base is a field of), a part of it (an
+// element of the same array: "同じ配列の添字どうしは、添字が等しいかを静的に判定しないので、重なる"). One error per function
+// (P-01), no repair candidate (`fixes = 0`). The error is at the line of the change, the later written of the two
+// places (S-799: the position of the index case is not promised). The kinds of change are in
+// negative/overlap_index_changes.onsa, the positions of the indexed expression in negative/overlap_index_positions.onsa,
+// the bases that are not places in negative/overlap_index_bases.onsa, the forms that stay valid in
+// semantics/index_base_unchanged.onsa.
+
+pub struct S {
+  xs: [U32; 3],
+  n: U32,
+}
+
+pub struct P {
+  x: U32,
+  xs: [U32; 3],
+}
+
+pub fn reset(inout xs: [U32; 3]) -> U32 {
+  xs = [7, 8, 9]
+  1
+}
+
+pub fn bump_at(inout x: U32) -> U32 {
+  x = x + 10
+  1
+}
+
+pub fn rg(inout g: [[U32; 2]; 2]) -> U32 {
+  g = [[5, 6], [7, 8]]
+  1
+}
+
+pub fn rs(inout s: S) -> U32 {
+  s.xs = [7, 8, 9]
+  1
+}
+
+pub fn rtup(inout t: ([U32; 3], U32)) -> U32 {
+  t.0 = [7, 8, 9]
+  1
+}
+
+pub fn rp(inout ps: [P; 2]) -> U32 {
+  ps = [P { x: 50, xs: [5, 6, 7] }, P { x: 70, xs: [7, 8, 9] }]
+  1
+}
+
+// ---------------------------------------------------------------------- the base is a variable
+
+pub fn local_variable() -> U32 {
+  var xs: [U32; 3] = [1, 2, 3]
+  xs[reset(inout xs)] //~ E0702
+}
+
+pub fn inout_parameter(inout xs: [U32; 3]) -> U32 {
+  xs[reset(inout xs)] //~ E0702
+}
+
+pub fn parenthesized_base() -> U32 {
+  var xs: [U32; 3] = [1, 2, 3]
+  (xs)[reset(inout xs)] //~ E0702
+}
+
+// ---------------------------------------------------------------------- the base is a field path
+
+pub fn field_path_root_passed(inout s: S) -> U32 {
+  s.xs[rs(inout s)] //~ E0702
+}
+
+pub fn field_path_itself_passed(inout s: S) -> U32 {
+  s.xs[reset(inout s.xs)] //~ E0702
+}
+
+pub fn field_path_local_root() -> U32 {
+  var s = S { xs: [1, 2, 3], n: 0 }
+  s.xs[rs(inout s)] //~ E0702
+}
+
+pub fn tuple_field_base() -> U32 {
+  var t: ([U32; 3], U32) = ([1, 2, 3], 0)
+  t.0[rtup(inout t)] //~ E0702
+}
+
+pub fn field_of_a_field_path(inout o: ([S; 2], U32)) -> U32 {
+  o.0[0].xs[rt_o(inout o)] //~ E0702
+}
+
+pub fn rt_o(inout o: ([S; 2], U32)) -> U32 {
+  o.1 = 1
+  1
+}
+
+// ------------------------------------------------------------ the base is a nested index
+
+pub fn nested_outer_index() -> U32 {
+  var g: [[U32; 2]; 2] = [[1, 2], [3, 4]]
+  g[rg(inout g)][0] //~ E0702
+}
+
+pub fn nested_inner_index() -> U32 {
+  var g: [[U32; 2]; 2] = [[1, 2], [3, 4]]
+  g[0][rg(inout g)] //~ E0702
+}
+
+pub fn index_then_field() -> U32 {
+  var ps: [P; 2] = [P { x: 10, xs: [1, 2, 3] }, P { x: 30, xs: [3, 4, 5] }]
+  ps[rp(inout ps)].x //~ E0702
+}
+
+pub fn element_field_then_index() -> U32 {
+  var ps: [P; 2] = [P { x: 10, xs: [1, 2, 3] }, P { x: 30, xs: [3, 4, 5] }]
+  ps[0].xs[rp(inout ps)] //~ E0702
+}
+
+pub fn index_inside_an_index() -> U32 {
+  var ys: [U32; 3] = [0, 2, 1]
+  ys[ys[reset(inout ys)]] //~ E0702
+}
+
+// -------------------------------------------- the change writes a part of the base, not the whole
+
+pub fn an_element_of_the_base() -> U32 {
+  var xs: [U32; 3] = [1, 2, 3]
+  xs[bump_at(inout xs[1])] //~ E0702
+}
+
+pub fn another_element_of_the_base_than_the_one_read() -> U32 {
+  var xs: [U32; 3] = [1, 2, 3]
+  let k = xs[bump_at(inout xs[2])] //~ E0702
+  k
+}
+
+pub fn an_element_of_the_row_of_a_nested_base() -> U32 {
+  var g: [[U32; 2]; 2] = [[1, 2], [3, 4]]
+  g[0][bump_at(inout g[1][0])] //~ E0702
+}
+
+pub fn the_same_field_of_another_element() -> U32 {
+  var ps: [P; 2] = [P { x: 10, xs: [1, 2, 3] }, P { x: 30, xs: [3, 4, 5] }]
+  ps[0].xs[bump_at(inout ps[1].xs[0])] //~ E0702
+}

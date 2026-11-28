@@ -1,0 +1,89 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§3.5", "§9.2", "§7"]
+
+// R-533, S-1275 (§3.5, §9.2): "`xs` の評価は、中の添字の範囲の検査を含む" and the check of an index does not depend on the length of
+// the element. The iterable of a `for` that is an element of an array whose elements have length 0 (`g: [[U32; 0]; 2]`)
+// reports an index that is out of range, as the same `g[i]` does as a binding, as the receiver of `len()` and as an
+// argument (semantics/index_base_check_order.onsa), and as an element of length 2 does in the iterable of a `for`. The
+// iterable is evaluated once before the first iteration, so the check runs though the loop would touch no element. The forms
+// are the base as a local, a path of fields and a nested index. Every test is wrong today in the interpreter (it reports no
+// panic and runs no iteration); W8-03 U3b fixes it, and the C target in U7a.
+
+pub struct Empty {
+  rows: [[U32; 0]; 2],
+}
+
+pub struct Row {
+  cells: [U32; 0],
+  n: U32,
+}
+
+pub struct Rows {
+  rs: [Row; 2],
+}
+
+test "the iterable of a for that is an element of length 0 reports the index out of range" {
+  let g: [[U32; 0]; 2] = [[], []]
+  let i: U32 = 5
+  var n: U32 = 0
+  for x in g[i] { //~ PANIC "the iterable of a for that is an element of length 0 reports the index out of range"
+    n = n + x
+  }
+  assert n == 0
+}
+
+test "the iterable of a for that is an element of length 0 of a field reports the index out of range" {
+  let t = Empty { rows: [[], []] }
+  let i: U32 = 5
+  var n: U32 = 0
+  for x in t.rows[i] { //~ PANIC "the iterable of a for that is an element of length 0 of a field reports the index out of range"
+    n = n + x
+  }
+  assert n == 0
+}
+
+test "the iterable of a for that is a nested element of length 0 reports the second index out of range" {
+  let g: [[[U32; 0]; 2]; 2] = [[[], []], [[], []]]
+  let j: U32 = 5
+  var n: U32 = 0
+  for x in g[1][j] { //~ PANIC "the iterable of a for that is a nested element of length 0 reports the second index out of range"
+    n = n + x
+  }
+  assert n == 0
+}
+
+test "the iterable of a for that is an element of length 0 with the first index out of range reports it before the division" {
+  let g: [[[U32; 0]; 2]; 2] = [[[], []], [[], []]]
+  let i: U32 = 5
+  let z: U32 = 0
+  var n: U32 = 0
+  for x in g[i][ //~ PANIC "the iterable of a for that is an element of length 0 with the first index out of range reports it before the division"
+    1 / z
+  ] {
+    n = n + x
+  }
+  assert n == 0
+}
+
+// The element of length 0 is a field after the index (W8-03 U3b/b, M3): the index of the path is checked.
+test "the iterable of a for that is a field of length 0 of an element reports the index out of range" {
+  let rs: [Row; 2] = [Row { cells: [], n: 0 }, Row { cells: [], n: 1 }]
+  let i: U32 = 5
+  var n: U32 = 0
+  for x in rs[i].cells { //~ PANIC "the iterable of a for that is a field of length 0 of an element reports the index out of range"
+    n = n + x
+  }
+  assert n == 0
+}
+
+test "the iterable of a for that is a field of length 0 of an element of a field reports the index out of range" {
+  let t = Rows { rs: [Row { cells: [], n: 0 }, Row { cells: [], n: 1 }] }
+  let i: U32 = 5
+  var n: U32 = 0
+  for x in t.rs[i].cells { //~ PANIC "the iterable of a for that is a field of length 0 of an element of a field reports the index out of range"
+    n = n + x
+  }
+  assert n == 0
+}

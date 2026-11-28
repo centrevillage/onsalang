@@ -110,6 +110,11 @@ pub(super) struct Inside {
     /// An argument that overlaps an earlier one of its call (E0702), and
     /// the call: its root is not reported as used after a move in the call.
     pub(super) excuse: Option<(LocalId, Span)>,
+    /// The root of a place used, whose index was E0702 (S-1275), and the
+    /// place as written: not reported as used after a move or a change in it
+    /// (S-1276).
+    // SPEC-GAP(S-1276): one E0702, not also the E0704, where both apply (provisional).
+    pub(super) indexed: Option<(LocalId, Span)>,
     /// The changes made in the arguments of the calls the walk is in, and
     /// how many those calls are (S-193, S-799: `exclusive.rs`).
     pub(super) changes: Vec<Changed>,
@@ -223,12 +228,15 @@ impl<'a> Walker<'a> {
         self.read_captured(l, at);
         self.restore(r, l, (at, None));
         let Some(why) = self.unusable(r, p).filter(|_| self.reports) else { return true };
+        let excused = |x: Option<(LocalId, Span)>, c: Span| x.is_some_and(|(x, s)| x == l && s.contains(c.start));
         let name = &self.info.locals[l.0 as usize].name;
         let d = match why {
-            // The E0702 of the argument, not this symptom (§18.1).
-            Why::Moved(m, _) if self.inside.excuse.is_some_and(|(x, c)| x == l && c.contains(m.start)) => {
+            // The E0702 of the argument or of the index, not this symptom (§18.1, S-1276).
+            Why::Moved(m, _) if [self.inside.excuse, self.inside.indexed].iter().any(|&x| excused(x, m)) => {
                 return false;
             }
+            // SPEC-GAP(S-1276): of the index, a change too (provisional; of a call, a move only).
+            Why::Stale(c, ..) if excused(self.inside.indexed, c) => return false,
             Why::Moved(m, via_loop) => {
                 // S-85: by a field taken out, said so, with how to read the others.
                 let took =

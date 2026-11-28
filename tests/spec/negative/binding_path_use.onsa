@@ -315,11 +315,12 @@ pub fn match_on_the_path_whose_binding_reads_the_whole(inout w: Wrap) -> U32 {
 }
 
 // ---- the expression of an index inside a path is evaluated before the element is read ----
+// A change in the index of the place it indexes is E0702 (§5.2, S-1275), and the E0704 of the use is not reported (S-1276).
 
 pub fn index_expression_changes_the_array(inout w: Wrap) -> U32 {
   match w {
     Wrap { h: hh, k: _ } => {
-      hh.xs[set_xs(inout w.h.xs)] //~ E0704
+      hh.xs[set_xs(inout w.h.xs)] //~ E0702
     },
   }
 }

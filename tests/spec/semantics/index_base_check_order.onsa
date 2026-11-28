@@ -1,0 +1,259 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§3.5", "§9.2", "§7"]
+
+// S-1274, S-1275 (§3.5): "添字 `xs[i]` は、`xs` の後に `i` を評価する。`xs` の評価は、中の添字の範囲の検査を含む" and "`xs[i][1 / z]` で `i` が範囲外、
+// `z` が 0 なら `i`". In a nested index the base `grid[i]` is a part of the expression that is written before the later
+// index, and its check is a part of evaluating it, so an index that is out of range is reported before the later index
+// runs: before a division by zero (`grid[i][1 / z]`), a call that panics, a `?` and a `break` of the later index. It holds
+// at every position of the expression: a read, the target of an assignment (after the right-hand side, S-1264), the place
+// of an `inout` and of a borrowed argument, the iterable of a `for`. A path of fields and three nested indices give the same.
+// The reason of the panic is told by the line of the report: the marker is on the line where the panic expression starts (the
+// base `grid[i]` on the first line, the later index that panics on the second line, so the line of the marker says which
+// of the two is reported). The reason cannot be told inside a function that is called, as the position is the call; so the
+// forms are in the body of the test (a callee gives the line of the call, as in `divz(z)` and `read_with_question`).
+// The interpreter does this since W8-03 U3; the C target does it in U7a (the cases of `conformance` are a later work). The
+// iterable of a `for` that is an element of length 0 (R-533) is in semantics/index_base_empty_row_iterable.onsa,
+// the forms that never changed (the order of the let-split `let row = grid[i]`, of the arguments, of the base that is in
+// range) are at the end of this file.
+
+pub struct Row {
+  ys: [U32; 3],
+}
+
+pub struct Table {
+  xs: [Row; 2],
+}
+
+fn divz(z: U32) -> U32 {
+  1 / z
+}
+
+fn rd_row(r: [U32; 3], k: U32) -> U32 {
+  r[0] + k
+}
+
+fn bump(inout x: U32) {
+  x = x + 1
+}
+
+fn rd(a: U32) -> U32 {
+  a
+}
+
+fn pf(z: U32) -> Result[U32, U32] {
+  if z == 0 {
+    Err(7)
+  } else {
+    Ok(1)
+  }
+}
+
+fn is_ok(r: Result[U32, U32]) -> Bool {
+  match r {
+    Ok(_) => true,
+    Err(_) => false,
+  }
+}
+
+fn read_with_question(grid: [[U32; 3]; 2], i: U32, z: U32) -> Result[U32, U32] {
+  let v = grid[i][pf(z)?]
+  Ok(v)
+}
+
+// ------------------------------------------------------------------------------------- a read
+
+test "a read reports the index of the base out of range before the division of the later index" {
+  let grid: [[U32; 3]; 2] = [[1, 2, 3], [4, 5, 6]]
+  let i: U32 = 5
+  let z: U32 = 0
+  let v = grid[i][ //~ PANIC "a read reports the index of the base out of range before the division of the later index"
+    1 / z
+  ]
+  assert v == 0
+}
+
+test "a read through a path of fields reports the index of the base out of range first" {
+  let t = Table { xs: [Row { ys: [1, 2, 3] }, Row { ys: [4, 5, 6] }] }
+  let i: U32 = 5
+  let z: U32 = 0
+  let v = t.xs[i].ys[ //~ PANIC "a read through a path of fields reports the index of the base out of range first"
+    1 / z
+  ]
+  assert v == 0
+}
+
+test "a read reports the index of the base out of range before a call of the later index that panics" {
+  let grid: [[U32; 3]; 2] = [[1, 2, 3], [4, 5, 6]]
+  let i: U32 = 5
+  let z: U32 = 0
+  let v = grid[i][ //~ PANIC "a read reports the index of the base out of range before a call of the later index that panics"
+    divz(z)
+  ]
+  assert v == 0
+}
+
+test "a read reports the index of the base out of range before the `?` of the later index returns" {
+  let grid: [[U32; 3]; 2] = [[1, 2, 3], [4, 5, 6]]
+  let i: U32 = 5
+  let z: U32 = 0
+  let r = read_with_question(grid, i, z) //~ PANIC "a read reports the index of the base out of range before the `?` of the later index returns"
+  assert is_ok(r)
+}
+
+test "a read reports the index of the base out of range before a `break` of the later index" {
+  let grid: [[U32; 3]; 2] = [[1, 2, 3], [4, 5, 6]]
+  let i: U32 = 5
+  let z: U32 = 0
+  var n: U32 = 0
+  for _ in 0 ..< 1 {
+    let v = grid[i][ //~ PANIC "a read reports the index of the base out of range before a `break` of the later index"
+      if z == 0 { break } else { 0 }
+    ]
+    n = v
+  }
+  assert n == 0
+}
+
+test "a read of three nested indices reports the second index out of range before the division of the third" {
+  let cube: [[[U32; 3]; 2]; 2] = [[[1, 2, 3], [4, 5, 6]], [[7, 8, 9], [1, 2, 3]]]
+  let j: U32 = 5
+  let z: U32 = 0
+  let v = cube[1][j][ //~ PANIC "a read of three nested indices reports the second index out of range before the division of the third"
+    1 / z
+  ]
+  assert v == 0
+}
+
+// --------------------------------------------------------------------- the place of an assignment
+
+test "the target of an assignment reports the index of the base out of range before the division of the later index" {
+  var grid: [[U32; 3]; 2] = [[1, 2, 3], [4, 5, 6]]
+  let i: U32 = 5
+  let z: U32 = 0
+  grid[i][ //~ PANIC "the target of an assignment reports the index of the base out of range before the division of the later index"
+    1 / z
+  ] = 5
+  assert grid[0][0] == 1
+}
+
+test "the target through a path of fields reports the index of the base out of range first" {
+  var t = Table { xs: [Row { ys: [1, 2, 3] }, Row { ys: [4, 5, 6] }] }
+  let i: U32 = 5
+  let z: U32 = 0
+  t.xs[i].ys[ //~ PANIC "the target through a path of fields reports the index of the base out of range first"
+    1 / z
+  ] = 5
+  assert t.xs[0].ys[0] == 1
+}
+
+// ------------------------------------------------------------------- the place of an argument
+
+test "the place of an `inout` argument reports the index of the base out of range before the division" {
+  var grid: [[U32; 3]; 2] = [[1, 2, 3], [4, 5, 6]]
+  let i: U32 = 5
+  let z: U32 = 0
+  bump(inout grid[i][ //~ PANIC "the place of an `inout` argument reports the index of the base out of range before the division"
+    1 / z
+  ])
+  assert grid[0][0] == 1
+}
+
+test "the place of a borrowed argument reports the index of the base out of range before the division" {
+  let grid: [[U32; 3]; 2] = [[1, 2, 3], [4, 5, 6]]
+  let i: U32 = 5
+  let z: U32 = 0
+  let v = rd(grid[i][ //~ PANIC "the place of a borrowed argument reports the index of the base out of range before the division"
+    1 / z
+  ])
+  assert v == 0
+}
+
+// -------------------------------------------------------------------------- the iterable of a for
+
+test "the iterable of a for reports the index of the base out of range before the division" {
+  let g: [[[U32; 2]; 2]; 2] = [[[1, 2], [3, 4]], [[5, 6], [7, 8]]]
+  let i: U32 = 5
+  let z: U32 = 0
+  var s: U32 = 0
+  for x in g[i][ //~ PANIC "the iterable of a for reports the index of the base out of range before the division"
+    1 / z
+  ] {
+    s = s + x
+  }
+  assert s == 0
+}
+
+// ----------------------------------------------------------- the forms that were and stay in this order
+
+test "a read whose base is in range reports the division of the later index" {
+  let grid: [[U32; 3]; 2] = [[1, 2, 3], [4, 5, 6]]
+  let z: U32 = 0
+  let v = grid[0][
+    1 / z //~ PANIC "a read whose base is in range reports the division of the later index"
+  ]
+  assert v == 0
+}
+
+test "a read whose base index is the one that divides reports the division before the later index" {
+  let grid: [[U32; 3]; 2] = [[1, 2, 3], [4, 5, 6]]
+  let i: U32 = 5
+  let z: U32 = 0
+  let v = grid[
+    1 / z //~ PANIC "a read whose base index is the one that divides reports the division before the later index"
+  ][i]
+  assert v == 0
+}
+
+test "the base taken in a let before the later index is reported out of range" {
+  let grid: [[U32; 3]; 2] = [[1, 2, 3], [4, 5, 6]]
+  let i: U32 = 5
+  let z: U32 = 0
+  let row = grid[i] //~ PANIC "the base taken in a let before the later index is reported out of range"
+  let v = row[1 / z]
+  assert v == 0
+}
+
+test "an argument that is the base is reported out of range before the argument that divides" {
+  let grid: [[U32; 3]; 2] = [[1, 2, 3], [4, 5, 6]]
+  let i: U32 = 5
+  let z: U32 = 0
+  let v = rd_row(grid[i], //~ PANIC "an argument that is the base is reported out of range before the argument that divides"
+    1 / z)
+  assert v == 0
+}
+
+test "the iterable of a for that is an element of length 2 reports the index out of range" {
+  let g: [[U32; 2]; 2] = [[1, 2], [3, 4]]
+  let i: U32 = 5
+  var n: U32 = 0
+  for x in g[i] { //~ PANIC "the iterable of a for that is an element of length 2 reports the index out of range"
+    n = n + x
+  }
+  assert n == 0
+}
+
+test "the iterable of a for that is an element of length 0 with an index in range runs no iteration" {
+  let g: [[U32; 0]; 2] = [[], []]
+  let i: U32 = 1
+  var n: U32 = 0
+  for x in g[i] {
+    n = n + x + 1
+  }
+  assert n == 0
+}
+
+test "an element of length 0 bound by a let reports the index out of range" {
+  let g: [[U32; 0]; 2] = [[], []]
+  let i: U32 = 5
+  let r = g[i] //~ PANIC "an element of length 0 bound by a let reports the index out of range"
+  assert r.len() == 0
+}
+
+test "the length of an element of length 0 reports the index out of range" {
+  let g: [[U32; 0]; 2] = [[], []]
+  let i: U32 = 5
+  let n = g[i].len() //~ PANIC "the length of an element of length 0 reports the index out of range"
+  assert n == 0
+}

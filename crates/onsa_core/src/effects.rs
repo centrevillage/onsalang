@@ -99,11 +99,22 @@ fn writes_or(args: &[Arg], other: Own) -> Own {
 /// panic, in the same order (what the lowering may evaluate again, V-23): no
 /// node of it has an effect, writes or is a form of statements.
 pub fn repeatable(e: &Expr, tys: &Types) -> bool {
-    let mut ok = matches!(own(e, tys), Own::Pure | Own::Panics);
+    every(e, tys, |o| matches!(o, Own::Pure | Own::Panics))
+}
+
+/// Whether evaluating `e` gives its value and does nothing else: no node of
+/// it may panic, has an effect or writes.
+pub fn pure(e: &Expr, tys: &Types) -> bool {
+    every(e, tys, |o| o == Own::Pure)
+}
+
+/// Whether what every node of `e` does itself is `ok`.
+fn every(e: &Expr, tys: &Types, ok_own: fn(Own) -> bool) -> bool {
+    let mut ok = ok_own(own(e, tys));
     expr_children(e, &mut |c| {
         ok = ok
             && match c {
-                Child::Expr(x, ..) => repeatable(x, tys),
+                Child::Expr(x, ..) => every(x, tys, ok_own),
                 // Not a guard: a block is a child of the forms of statements
                 // only, which are `Effect` already, and an expression has no place.
                 Child::Block(..) | Child::Place(..) => false,

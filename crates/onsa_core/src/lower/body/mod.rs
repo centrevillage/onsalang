@@ -20,7 +20,7 @@ use super::build::{
     tag_of, u32_lit,
 };
 use super::{FailKind, GenericArg, Hole, Lowerer, R, at_hole, core_mode, internal, stopped, unsupported};
-use crate::effects::repeatable;
+use crate::effects::{pure, repeatable};
 use crate::ir::*;
 use crate::prim::{MathFn, Prim, PrimRow, Scalar, row_self};
 
@@ -552,6 +552,15 @@ fn lower_for(
     let seq = lower_expr(lw, cx, iter)?;
     let seq = materialize(cx, seq, out, "__seq", &lw.m.tys);
     let len = match *lw.m.tys.kind(seq.ty) {
+        // No iteration reads an element of an empty array: its place is
+        // evaluated here, once, for the checks of its indexes, if it may
+        // panic (§3.5, §9.2, R-533; every source once is V-24's, W8-03 U7b).
+        TyKind::Array(_, 0) => {
+            if !pure(&seq, &lw.m.tys) {
+                out.push(stmt(span, StmtKind::Expr(seq.clone())));
+            }
+            u32_lit(span, 0)
+        }
         TyKind::Array(_, n) => u32_lit(span, n),
         TyKind::Span(_) | TyKind::Buf(_) => Expr::new(
             Types::U32,

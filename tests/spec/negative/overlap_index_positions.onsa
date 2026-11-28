@@ -1,0 +1,181 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§3.5", "§5.4", "§7"]
+// fixes = 0
+
+// S-1275, S-1273 (§5.2): "添字 `xs[i]` の `i` の中の変更も同じに数え、`xs` と重なる場所を変更すると E0702 である". The rule is
+// about the index expression and its base, not about where the indexed expression stands, so every position of
+// the expression gives the same error: the target of an assignment (the right-hand side runs first, S-1264, and
+// then the place with its index), an `inout` and a borrowed argument, the receiver of a method, the iterable of a `for`, the
+// initializer of a binding, the object of a `match`, the condition of an `if` and a `while`, `return`, the end of a
+// range, the operand of `?` and of a binary operator, an element of a literal, a statement of `assert`.
+// One error per function (P-01), no repair candidate, the line of the change.
+// The right-hand side that changes the base of the target (`xs[0] = reset(inout xs)`) is not an error
+// (semantics/index_base_unchanged.onsa).
+
+pub struct Pair {
+  a: U32,
+  b: U32,
+}
+
+pub fn reset(inout xs: [U32; 3]) -> U32 {
+  xs = [7, 8, 9]
+  1
+}
+
+pub fn rg(inout g: [[U32; 2]; 2]) -> U32 {
+  g = [[5, 6], [7, 8]]
+  1
+}
+
+pub fn ro(inout o: [Option[U32]; 2]) -> U32 {
+  o = [None, Some(42)]
+  1
+}
+
+pub fn rr(inout rs: [Result[U32, U32]; 2]) -> U32 {
+  rs = [Ok(1), Ok(2)]
+  1
+}
+
+pub fn bump(inout x: U32) {
+  x = x + 10
+}
+
+pub fn rd(a: U32) -> U32 {
+  a
+}
+
+pub fn rd2(a: [U32; 2]) -> U32 {
+  a[0]
+}
+
+// ----------------------------------------------------------------------- the target of an assignment
+
+pub fn assignment_target() {
+  var xs: [U32; 3] = [1, 2, 3]
+  xs[reset(inout xs)] = 5 //~ E0702
+}
+
+pub fn assignment_target_nested() {
+  var g: [[U32; 2]; 2] = [[1, 2], [3, 4]]
+  g[0][rg(inout g)] = 9 //~ E0702
+}
+
+pub fn assignment_target_after_the_right_hand_side(c: U32) {
+  var xs: [U32; 3] = [1, 2, 3]
+  xs[reset(inout xs)] = c + 1 //~ E0702
+}
+
+// ------------------------------------------------------------------- the place of an argument
+
+pub fn inout_argument_place() {
+  var xs: [U32; 3] = [1, 2, 3]
+  bump(inout xs[reset(inout xs)]) //~ E0702
+}
+
+pub fn borrowed_argument_place() -> U32 {
+  var xs: [U32; 3] = [1, 2, 3]
+  rd(xs[reset(inout xs)]) //~ E0702
+}
+
+pub fn borrowed_argument_row() -> U32 {
+  var g: [[U32; 2]; 2] = [[1, 2], [3, 4]]
+  rd2(g[rg(inout g)]) //~ E0702
+}
+
+pub fn receiver_of_a_method() -> U32 {
+  var g: [[U32; 2]; 2] = [[1, 2], [3, 4]]
+  g[rg(inout g)].len() //~ E0702
+}
+
+// ------------------------------------------------------------------------- the heading of a form
+
+pub fn iterable_of_a_for() -> U32 {
+  var g: [[U32; 2]; 2] = [[1, 2], [3, 4]]
+  var s: U32 = 0
+  for x in g[rg(inout g)] { //~ E0702
+    s = s + x
+  }
+  s
+}
+
+pub fn initializer_of_a_let() -> U32 {
+  var g: [[U32; 2]; 2] = [[1, 2], [3, 4]]
+  let r = g[rg(inout g)] //~ E0702
+  r[0]
+}
+
+pub fn object_of_a_match() -> U32 {
+  var o: [Option[U32]; 2] = [Some(1), None]
+  match o[ro(inout o)] { //~ E0702
+    Some(v) => v,
+    None => 0,
+  }
+}
+
+pub fn condition_of_an_if() -> U32 {
+  var xs: [U32; 3] = [1, 2, 3]
+  if xs[reset(inout xs)] == 8 { //~ E0702
+    1
+  } else {
+    0
+  }
+}
+
+pub fn condition_of_a_while() -> U32 {
+  var xs: [U32; 3] = [1, 2, 3]
+  var n: U32 = 0
+  while xs[reset(inout xs)] == 8 { //~ E0702
+    n = n + 1
+    break
+  }
+  n
+}
+
+pub fn end_of_a_range() -> U32 {
+  var xs: [U32; 3] = [1, 2, 3]
+  var s: U32 = 0
+  for _ in 0 ..< xs[reset(inout xs)] { //~ E0702
+    s = s + 1
+  }
+  s
+}
+
+// ------------------------------------------------------------------------ an operand, an element
+
+pub fn returned_value() -> U32 {
+  var xs: [U32; 3] = [1, 2, 3]
+  return xs[reset(inout xs)] //~ E0702
+}
+
+pub fn question_mark_operand() -> Result[U32, U32] {
+  var rs: [Result[U32, U32]; 2] = [Ok(3), Err(4)]
+  let v = rs[rr(inout rs)]? //~ E0702
+  Ok(v)
+}
+
+pub fn left_operand() -> U32 {
+  var xs: [U32; 3] = [1, 2, 3]
+  xs[reset(inout xs)] + 1 //~ E0702
+}
+
+pub fn right_operand() -> U32 {
+  var xs: [U32; 3] = [1, 2, 3]
+  1 + xs[reset(inout xs)] //~ E0702
+}
+
+pub fn element_of_a_struct_literal() -> Pair {
+  var xs: [U32; 3] = [1, 2, 3]
+  Pair { a: xs[reset(inout xs)], b: 0 } //~ E0702
+}
+
+pub fn element_of_an_array_literal() -> [U32; 2] {
+  var xs: [U32; 3] = [1, 2, 3]
+  [xs[reset(inout xs)], 0] //~ E0702
+}
+
+pub fn statement_of_assert() {
+  var xs: [U32; 3] = [1, 2, 3]
+  assert xs[reset(inout xs)] == 8 //~ E0702
+}

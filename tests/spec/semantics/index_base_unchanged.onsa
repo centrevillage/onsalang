@@ -1,0 +1,249 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§3.5", "§5.2", "§5.4"]
+
+// S-1275, S-1273 (§3.5, §5.2): the forms that stay valid beside the E0702 of an index that changes its base
+// (negative/overlap_index_*.onsa). "`xs` の評価は、中の添字の範囲の検査を含む" and "添字 `xs[i]` の `i` の中の変更も同じに数え、`xs` と重なる場所を
+// 変更すると E0702 である" leave these alone: the right-hand side of an assignment that changes the base of its target
+// (the right-hand side runs first, S-1264: `xs[0] = reset(inout xs)`), an earlier sibling element that reads the base
+// before a later one changes it (S-806: "兄弟の要素の中の変更は重なりに数えない", `xs[0] + reset(inout xs)`), the base that is read
+// in the index (`xs[xs.len() - 1]`, `ys[ys[0]]`), a change of a place that does not overlap the base ("異なるフィールドは重ならない":
+// `r.buf[bump(inout r.pos)]`, a block of a method that writes the field `pos`, not `buf`), a variable that the block
+// declares, a change of another variable, and an index taken first in a `let` (the repair of
+// `self.xs[self.pick!()]`). Every test passes today and stays after W8-03.
+
+pub struct Ring {
+  buf: [U32; 4],
+  pos: U32,
+}
+
+impl Ring {
+  pub fn pick(inout self) -> U32 {
+    self.pos = self.pos + 1
+    self.pos
+  }
+
+  pub fn read_after_pick(inout self) -> U32 {
+    let i = self.pick!()
+    self.buf[i]
+  }
+
+  pub fn read_through_a_block(inout self) -> U32 {
+    self.buf[{
+      self.pos = self.pos + 1
+      self.pos
+    }]
+  }
+
+  pub fn write_through_a_block(inout self, v: U32) {
+    self.buf[{
+      self.pos = self.pos + 1
+      self.pos
+    }] = v
+  }
+
+  pub fn peek(self) -> U32 {
+    self.pos
+  }
+
+  pub fn read_through_peek(self) -> U32 {
+    self.buf[self.peek()]
+  }
+}
+
+pub struct Cell {
+  xs: [U32; 3],
+  n: U32,
+}
+
+pub struct Hist {
+  xs: [U32; 3],
+}
+
+pub fn first_of(o: Option[Hist]) -> U32 {
+  match o {
+    Some(h) => h.xs[0],
+    None => 0,
+  }
+}
+
+pub fn ro(inout o: Option[Hist]) -> U32 {
+  o = Some(Hist { xs: [7, 8, 9] })
+  1
+}
+
+pub fn reset(inout xs: [U32; 3]) -> U32 {
+  xs = [7, 8, 9]
+  1
+}
+
+pub fn rg(inout g: [[U32; 2]; 2]) -> U32 {
+  g = [[5, 6], [7, 8]]
+  1
+}
+
+pub fn bump(inout p: U32) -> U32 {
+  p = p + 1
+  p
+}
+
+pub fn adv(inout n: U32) -> U32 {
+  n = n + 1
+  1
+}
+
+// ----------------------------------------------------------- the right-hand side runs first
+
+test "the right-hand side that changes the base of the target runs before the target is placed" {
+  var xs: [U32; 3] = [1, 2, 3]
+  xs[0] = reset(inout xs)
+  assert xs[0] == 1
+  assert xs[1] == 8
+  assert xs[2] == 9
+}
+
+test "the nested target is placed after the right-hand side that changes the whole array" {
+  var g: [[U32; 2]; 2] = [[1, 2], [3, 4]]
+  g[0][1] = rg(inout g)
+  assert g[0][0] == 5
+  assert g[0][1] == 1
+  assert g[1][0] == 7
+}
+
+test "a right-hand side that reads the base after changing it is a sibling of the operator" {
+  var xs: [U32; 3] = [1, 2, 3]
+  xs[2] = reset(inout xs) + xs[0]
+  assert xs[0] == 7
+  assert xs[1] == 8
+  assert xs[2] == 8
+}
+
+// ------------------------------------------------------------------ an earlier sibling element
+
+test "an earlier element reads the base before a later element changes it" {
+  var xs: [U32; 3] = [1, 2, 3]
+  let v = xs[0] + reset(inout xs)
+  assert v == 2
+  assert xs[0] == 7
+}
+
+test "an element of a tuple reads the base before the next element changes it" {
+  var xs: [U32; 3] = [1, 2, 3]
+  let t = (xs[1], reset(inout xs))
+  assert t.0 == 2
+  assert t.1 == 1
+  assert xs[1] == 8
+}
+
+// ------------------------------------------------------------------ the base is read in the index
+
+test "the base is read in its own index" {
+  let xs: [U32; 3] = [1, 2, 3]
+  assert xs[xs.len() - 1] == 3
+}
+
+test "an element of the base is the index of the base" {
+  let ys: [U32; 3] = [2, 0, 1]
+  assert ys[ys[0]] == 1
+  assert ys[ys[ys[0]]] == 0
+}
+
+test "the base of a nested index is read in the indices" {
+  let g: [[U32; 2]; 2] = [[1, 0], [1, 1]]
+  assert g[g[0][0]][g[1][1]] == 1
+}
+
+// ----------------------------------------------- a change of a place that does not overlap the base
+
+test "an index that passes the field that is not the base" {
+  var r = Ring { buf: [10, 20, 30, 40], pos: 0 }
+  let v = r.buf[bump(inout r.pos)]
+  assert v == 20
+  assert r.pos == 1
+}
+
+test "an index that passes the field that is not the base, as the target of an assignment" {
+  var r = Ring { buf: [10, 20, 30, 40], pos: 2 }
+  r.buf[bump(inout r.pos)] = 5
+  assert r.buf[3] == 5
+  assert r.buf[2] == 30
+  assert r.pos == 3
+}
+
+test "an index that passes a field of another variable" {
+  var c = Cell { xs: [1, 2, 3], n: 0 }
+  let d = Cell { xs: [4, 5, 6], n: 0 }
+  let v = d.xs[adv(inout c.n)]
+  assert v == 5
+  assert c.n == 1
+}
+
+test "an index that changes another variable than the base" {
+  var xs: [U32; 3] = [1, 2, 3]
+  var ys: [U32; 3] = [4, 5, 6]
+  let v = ys[reset(inout xs)]
+  assert v == 5
+  assert xs[0] == 7
+  assert ys[0] == 4
+}
+
+test "a method with `inout self` that writes the field that is not the base, through a block" {
+  var r = Ring { buf: [10, 20, 30, 40], pos: 0 }
+  let v = r.read_through_a_block!()
+  assert v == 20
+  assert r.pos == 1
+  r.write_through_a_block!(5)
+  assert r.buf[2] == 5
+  assert r.pos == 2
+}
+
+test "a method that only reads `self` in the index" {
+  let r = Ring { buf: [10, 20, 30, 40], pos: 3 }
+  assert r.read_through_peek() == 40
+}
+
+test "the index taken first in a `let` is the repair of an index that calls a `!` method" {
+  var r = Ring { buf: [10, 20, 30, 40], pos: 0 }
+  let v = r.read_after_pick!()
+  assert v == 20
+  assert r.pos == 1
+}
+
+// ------------------------------------------------------------ a variable that the block declares
+
+test "a block that declares the variable it changes" {
+  let xs: [U32; 3] = [1, 2, 3]
+  let v = xs[{
+    var t: U32 = 0
+    t = t + 2
+    t
+  }]
+  assert v == 3
+}
+
+test "a block that changes a variable of the function that is not the base" {
+  let xs: [U32; 3] = [1, 2, 3]
+  var k: U32 = 0
+  let v = xs[{
+    k = k + 1
+    k
+  }]
+  assert v == 2
+  assert k == 1
+}
+
+// ------------------------------------------------------------------- a Copy binding as the base
+
+test "the base that is a Copy binding keeps the value it had when it was bound" {
+  var o: Option[Hist] = Some(Hist { xs: [1, 2, 3] })
+  var v: U32 = 0
+  match o {
+    Some(hh) => {
+      v = hh.xs[ro(inout o)]
+    },
+    None => {},
+  }
+  assert v == 2
+  assert first_of(o) == 7
+}

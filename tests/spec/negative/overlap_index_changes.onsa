@@ -1,0 +1,130 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§3.5", "§7"]
+// fixes = 0
+
+// S-1275 (§5.2): "添字 `xs[i]` の `i` の中の変更も同じに数え、`xs` と重なる場所を変更すると E0702 である". The change
+// is counted as in the arguments of a call (§3.5, §5.2): "代入、`inout` への受け渡し、`!` の呼び出し、`move` で、
+// 引数に置いたブロック式や `if`・`match` の腕の中の文と、入れ子の呼び出しの引数を含む" and "変更が実行されない道（`if` の
+// 片方の腕、ループの本体、`&&` の右辺）にあっても数える". The base `xs` is a variable here, so only the kind of the
+// change varies: a call with `inout`, a `!` call on the base or on a value that holds it, an assignment or a `!` call in a block
+// that is the index, a change in a path that is not taken, in a loop body, in a nested call. A variable declared in
+// the block is not the base (the forms that stay valid are in semantics/index_base_unchanged.onsa). The `move`
+// of the base is in negative/overlap_index_move.onsa and the detail S-1276 in
+// negative/overlap_index_detail_s1276.onsa. One error per function (P-01), no repair candidate, the line of the
+// change (S-799).
+
+pub struct Ring {
+  xs: [U32; 3],
+  n: U32,
+}
+
+impl Ring {
+  pub fn pick(inout self) -> U32 {
+    self.n = self.n + 1
+    1
+  }
+}
+
+pub fn reset(inout xs: [U32; 3]) -> U32 {
+  xs = [7, 8, 9]
+  1
+}
+
+pub fn id(k: U32) -> U32 {
+  k
+}
+
+// ------------------------------------------------------------------ `inout` and `!` calls
+
+pub fn inout_call() -> U32 {
+  var xs: [U32; 3] = [1, 2, 3]
+  xs[reset(inout xs)] //~ E0702
+}
+
+pub fn bang_call_on_the_holder() -> U32 {
+  var r = Ring { xs: [1, 2, 3], n: 0 }
+  r.xs[r.pick!()] //~ E0702
+}
+
+pub fn inout_call_nested_in_a_call() -> U32 {
+  var xs: [U32; 3] = [1, 2, 3]
+  xs[id(reset(inout xs))] //~ E0702
+}
+
+pub fn inout_call_in_an_arithmetic_index() -> U32 {
+  var xs: [U32; 3] = [1, 2, 3]
+  xs[reset(inout xs) + 1] //~ E0702
+}
+
+// -------------------------------------------------------------- a block that is the index
+
+pub fn assignment_in_a_block() -> U32 {
+  var xs: [U32; 3] = [1, 2, 3]
+  xs[{
+    xs = [7, 8, 9] //~ E0702
+    1
+  }]
+}
+
+pub fn element_assignment_in_a_block() -> U32 {
+  var xs: [U32; 3] = [1, 2, 3]
+  xs[{
+    xs[0] = 5 //~ E0702
+    1
+  }]
+}
+
+pub fn bang_call_in_a_block() -> U32 {
+  var xs: [U32; 3] = [1, 2, 3]
+  xs[{
+    xs.fill!(7) //~ E0702
+    1
+  }]
+}
+
+pub fn inout_call_in_a_block() -> U32 {
+  var xs: [U32; 3] = [1, 2, 3]
+  xs[{
+    let a = 0
+    let b = reset(inout xs) //~ E0702
+    a + b
+  }]
+}
+
+// ------------------------------------------------------ a path that is not taken, a loop body
+
+pub fn then_arm_of_an_if(c: Bool) -> U32 {
+  var xs: [U32; 3] = [1, 2, 3]
+  xs[if c { reset(inout xs) } else { 0 }] //~ E0702
+}
+
+pub fn else_arm_of_an_if(c: Bool) -> U32 {
+  var xs: [U32; 3] = [1, 2, 3]
+  xs[if c { 0 } else { reset(inout xs) }] //~ E0702
+}
+
+pub fn arm_of_a_match(k: U32) -> U32 {
+  var xs: [U32; 3] = [1, 2, 3]
+  xs[match k { 0 => 0, _ => reset(inout xs) }] //~ E0702
+}
+
+pub fn right_side_of_and(c: Bool) -> U32 {
+  var xs: [U32; 3] = [1, 2, 3]
+  xs[if c && reset(inout xs) == 1 { 1 } else { 0 }] //~ E0702
+}
+
+pub fn loop_body_in_a_block(n: U32) -> U32 {
+  var xs: [U32; 3] = [1, 2, 3]
+  xs[{
+    for _ in 0 ..< n {
+      xs = [7, 8, 9] //~ E0702
+    }
+    1
+  }]
+}
+
+pub fn path_that_never_runs() -> U32 {
+  var xs: [U32; 3] = [1, 2, 3]
+  xs[if false { reset(inout xs) } else { 1 }] //~ E0702
+}

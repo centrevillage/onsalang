@@ -11,6 +11,7 @@ use onsa_diag::{Code, Diagnostic, Fix, Span, Stage};
 use onsa_syntax::ast::{Arg, CallKind, ExprId, Mode};
 
 use super::check::Walker;
+use super::exclusive::Window;
 use super::flow::Run;
 use super::place::place_of;
 use super::walk::Pos;
@@ -95,7 +96,7 @@ impl Walker<'_> {
             true => r.forget(values),
         }
         self.inside.calls -= 1;
-        self.changed_in_args(r, start, (&passed, &index));
+        self.changed_in_args(r, start, (&passed, &index), Window::Call);
         for (place, at) in replace(&mut self.inside.after_call, outer) {
             self.changed(r, &place, at);
         }

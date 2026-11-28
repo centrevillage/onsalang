@@ -1,0 +1,143 @@
+// onsa.toml
+// [test]
+// spec = ["§3.5", "§5.2", "§5.4", "§7"]
+// fixes = 0
+
+// W8-03 U3b/b (M2): the forms that tell the window of an index (S-1275, E0702) from the E0704 of a use (§5.2, §7),
+// and the order in which the indexes of a path are walked ("添字 `xs[i]` は、`xs` の後に `i` を評価する", §3.5).
+// - The E0702 of an inner index of a two-index path, and of the head of a `match` and of a `let`, is the one error:
+//   the E0704 of the use of the borrowed binding is not reported (S-1276, provisional).
+// - A move made before the expression is a real E0704 at the use: the window of the index does not excuse it.
+// - An index of a base that is no place (a call) is walked as any index is: a use of a moved variable in it is E0704.
+// - The indexes of a path are walked from the left: a variable moved in the first index is used after its move in the
+//   second (E0704); used in the first and moved in the second, it is not.
+// - A method of a state that advances its own counter in the index of a field of the state is E0702 (S-1275: the
+//   index is taken out with a `let` first).
+// One error per function (P-01), no repair candidate.
+
+pub struct H {
+  rows: [[U32; 2]; 2],
+  buf: Buf[U32],
+  n: U32,
+}
+
+pub struct W {
+  h: H,
+}
+
+pub fn seth(inout h: H) -> U32 uses {Alloc} {
+  h.n = 1
+  0
+}
+
+pub fn mk() -> W uses {Alloc} {
+  W { h: H { rows: [[1, 2], [3, 4]], buf: Buf.zeroed(3), n: 0 } }
+}
+
+pub fn take(move b: Buf[F32]) -> U32 uses {Alloc} {
+  0
+}
+
+pub fn mkarr() -> [U32; 3] {
+  [1, 2, 3]
+}
+
+// ---- the E0702 of an index is the one error of the use of a borrowed binding ----
+
+pub fn the_inner_index_of_two_changes_the_place_the_binding_derives_from() -> U32 uses {Alloc} {
+  var w = mk()
+  match w {
+    W { h: hh } => hh.rows[seth(inout w.h)][0], //~ E0702
+  }
+}
+
+pub fn the_outer_index_of_two_changes_the_place_the_binding_derives_from() -> U32 uses {Alloc} {
+  var w = mk()
+  match w {
+    W { h: hh } => hh.rows[0][seth(inout w.h)], //~ E0702
+  }
+}
+
+pub fn the_head_of_a_match_changes_the_place_its_binding_derives_from() -> U32 uses {Alloc} {
+  var w = mk()
+  match w {
+    W { h: hh } => match hh.buf[seth(inout w.h)] { //~ E0702
+      0 => 1,
+      _ => 2,
+    },
+  }
+}
+
+pub fn the_value_of_a_let_changes_the_place_its_binding_derives_from() -> U32 uses {Alloc} {
+  var w = mk()
+  match w {
+    W { h: hh } => {
+      let v = hh.buf[seth(inout w.h)] //~ E0702
+      v
+    },
+  }
+}
+
+// ---- a move before the expression is the E0704 of the use ----
+
+pub fn moved_before_and_again_in_the_index(move b: Buf[F32]) -> F32 uses {Alloc} {
+  let a = take(move b)
+  b[take(move b)] //~ E0704
+}
+
+// ---- an index of a base that is no place ----
+
+pub fn moved_before_and_read_in_the_index_of_a_call(move b: Buf[F32]) -> U32 uses {Alloc} {
+  let t = take(move b)
+  mkarr()[b.len()] + t //~ E0704
+}
+
+pub fn moved_in_the_index_of_a_call_and_read_after(move b: Buf[F32]) -> U32 uses {Alloc} {
+  let r = mkarr()[take(move b)]
+  b.len() + r //~ E0704
+}
+
+// ---- the indexes of a path from the left ----
+
+pub fn moved_in_the_first_index_and_read_in_the_second(move b: Buf[F32]) -> U32 uses {Alloc} {
+  let g: [[U32; 2]; 2] = [[1, 2], [3, 4]]
+  g[take(move b)][b.len()] //~ E0704
+}
+
+pub fn read_in_the_first_index_and_moved_in_the_second(move b: Buf[F32]) -> U32 uses {Alloc} {
+  let g: [[U32; 2]; 2] = [[1, 2], [3, 4]]
+  g[b.len()][take(move b)]
+}
+
+// ---- a state that advances its own counter in the index ----
+
+pub struct Osc {
+  table: [F32; 4],
+  seed: U32,
+  ph: U32,
+}
+
+pub fn next_rand(inout o: Osc) -> U32 {
+  o.seed = o.seed *% 1664525 +% 1013904223
+  o.seed
+}
+
+impl Osc {
+  pub fn advance(inout self) -> U32 {
+    self.ph = (self.ph + 1) % 4
+    self.ph
+  }
+
+  pub fn tick(inout self, x: F32) {
+    self.table[self.advance!()] = x //~ E0702
+  }
+
+  pub fn noise(inout self) -> F32 {
+    self.table[next_rand(inout self) % 4] //~ E0702
+  }
+
+  pub fn tick_with_the_index_taken_first(inout self, x: F32) {
+    let i = self.advance!()
+    self.table[i] = x
+  }
+}

@@ -2690,7 +2690,8 @@ pub fn variant_elsewhere() -> U32 uses {Alloc} {
 /// whole, a variant at the place changed, the arms of a `match` together
 /// (S-804), a hole; after a change of the parent and of a `!` receiver; in
 /// the next iteration of a loop. An index in the path is walked before the
-/// element is read (E1, §3.5). `take3(hh.buf)` is the E0711 of a borrow.
+/// element is read (E1, §3.5): a change in it of the place it indexes is
+/// E0702 (S-1275, S-1276). `take3(hh.buf)` is the E0711 of a borrow.
 #[test]
 fn a_path_that_overlaps_the_change_is_e0704() {
     let line = |b: &str| {
@@ -2716,11 +2717,13 @@ fn a_path_that_overlaps_the_change_is_e0704() {
         ("    w.h = mkh()\n    len_of(hh.buf)", 2, "hh.buf"),
         ("    w.h.buf.fill!(0.0)\n    len_of(hh.buf)", 2, "hh.buf"),
         ("    var n: U32 = 0\n    while c {\n      n = n + hh.n\n      w.h.n = 5\n    }\n    n", 3, "hh.n"),
-        ("    hh.xs[{ w.h.xs[0] = 1\n    0 }]", 1, "hh.xs[{ w.h.xs[0] = 1\n    0 }]"),
     ];
     for (b, n, text) in cases {
         assert_eq!(said_at(&line(b)), [(Code::E0704, 3 + n, text.to_string())], "{b}");
     }
+    // A change in the index of the place it indexes is its E0702, at the change, not the E0704 (S-1275, S-1276).
+    let index = line("    hh.xs[{ w.h.xs[0] = 1\n    0 }]");
+    assert_eq!(said_at(&index), [(Code::E0702, 4, "w.h.xs[0]".to_string())]);
     let s = "pub fn t() -> U32 uses {Alloc} {
   var w = mkw()
   match w { W3 { h: hh, i: _, k: _ } => { w.h.n = 5
@@ -2765,7 +2768,7 @@ fn the_text_of_an_e0704_of_a_change() {
     let arms = "    match hh { H2 { buf: _, n: _, m: 0, xs: _, o: _ } => 1, H2 { buf: _, n: 0, m: _, xs: _, o: _ } => 2, _ => 0 }";
     let by = note("0", "read by this pattern");
     assert_eq!(t(arms), (msg("hh.n"), vec![changed.clone(), bound.clone(), by]));
-    let multi = "pub fn t() -> U32 uses {Alloc} {\n  var w = mkw()\n  match w { W3 { h: hh, i: _, k: _ } => hh.xs[{ w.h.xs[0] = 1\n    0 }] }\n}\n";
+    let multi = "pub fn t() -> U32 uses {Alloc} {\n  var w = mkw()\n  match w { W3 { h: hh, i: _, k: _ } => { w.h.xs[0] = 1\n    hh.xs[{ let q: U32 = 0\n    q }] } }\n}\n";
     let (_, _, _, message, _) = said(multi).remove(0);
     let named =
         "`hh.xs[_]` cannot be used after `w.h.xs[0]` changed: the place it borrows overlaps the changed place (§7)";
@@ -3241,6 +3244,43 @@ pub fn moved_first() -> U32 uses {Alloc} {
     says(2, "`o` is changed in another argument while `b` is passed borrowed in the same call");
     says(4, "`x` is changed in another argument while `x` is passed as `move` in the same call");
     assert!(messages.iter().all(|m| m.3.is_empty()), "no candidate: {messages:?}");
+}
+
+/// S-1275 (§3.5, §5.2): the E0702 of a change in an index of the place it
+/// indexes stands at the change, noted at the base ("indexed here", as a
+/// borrowed argument is noted), at the tail of a base that is no place, and
+/// at the binding the base derives from (S-796).
+#[test]
+fn the_notes_of_a_change_in_an_index() {
+    let src = "pub fn rx(inout xs: [U32; 2]) -> U32 { 0 }
+pub fn plain() -> U32 {
+  var xs: [U32; 2] = [1, 2]
+  xs[rx(inout xs)]
+}
+pub fn derived() -> U32 uses {Alloc} {
+  var w = mkw()
+  match w { W3 { h: hh, i: _, k: _ } => hh.xs[rx(inout w.h.xs)] }
+}
+pub fn tail(c: Bool) -> U32 {
+  var xs: [U32; 2] = [1, 2]
+  let ys: [U32; 2] = [3, 4]
+  (if c { ys } else { xs })[{ xs = [5, 6]
+    0 }]
+}
+";
+    let msg = |x: &str, b: &str| {
+        format!("`{x}` is changed in the index while `{b}` is indexed; the places may overlap (§3.5, §5.2)")
+    };
+    let note = |at: &str, m: &str| (Some(at.to_string()), m.to_string());
+    let indexed = |at: &str| note(at, "indexed here");
+    let bound = note("hh", "`hh` is bound here as a borrow of `w.h` (§5.4)");
+    let e = |line: usize, at: &str, b: &str, notes: Notes| (Code::E0702, line, at.to_string(), msg(at, b), notes);
+    let expected = vec![
+        e(4, "xs", "xs", vec![indexed("xs")]),
+        e(8, "w.h.xs", "hh.xs", vec![indexed("hh.xs"), bound]),
+        e(13, "xs", "xs", vec![indexed("xs")]),
+    ];
+    assert_eq!(said(src), expected);
 }
 
 /// R-24, S-798 (§5.4): a change of a place a borrowed

@@ -1,0 +1,60 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§5.4", "§7"]
+// fixes = 0
+
+// S-1276 (the detail, provisional until it is decided): an index that changes its base in a form that is E0704 as well
+// as E0702 gives one error, E0702, as the arguments of a call do ("同じ位置の E0704 は出さない", S-799). The forms:
+// - the path of a borrowed binding whose index changes the place it derives from (the binding `hh` of `match w` is
+//   the place `w.h`, §5.4, S-803; the same form as `index_expression_changes_the_array` of
+//   negative/binding_path_use.onsa, which is E0704 there);
+// - the variable that is moved in its own index (`b[take(move b)]`);
+// - the path or the root of the base that is moved ("Affine のフィールドの経路の `move` は根の全体を消費する":
+//   `h.buf[take(move h.buf)]`, `h.buf[take_h(move h)]`).
+// Only the code in the marker depends on the detail: the program is an error either way. One error per function
+// (P-01), no repair candidate, the line of the change.
+
+pub struct Holder {
+  buf: Buf[F32],
+  m: U32,
+  n: U32,
+  xs: [U32; 2],
+}
+
+pub fn take_h(move h: Holder) -> U32 uses {Alloc} {
+  0
+}
+
+pub struct Wrap {
+  h: Holder,
+  k: U32,
+}
+
+pub fn set_xs(inout xs: [U32; 2]) -> U32 {
+  xs[0] = 1
+  0
+}
+
+pub fn take(move b: Buf[F32]) -> U32 uses {Alloc} {
+  0
+}
+
+pub fn path_of_a_binding_whose_index_changes_the_place(inout w: Wrap) -> U32 {
+  match w {
+    Wrap { h: hh, k: _ } => {
+      hh.xs[set_xs(inout w.h.xs)] //~ E0702
+    },
+  }
+}
+
+pub fn variable_moved_in_its_own_index(move b: Buf[F32]) -> F32 uses {Alloc} {
+  b[take(move b)] //~ E0702
+}
+
+pub fn field_buf_moved_with_the_root(move h: Holder) -> F32 uses {Alloc} {
+  h.buf[take_h(move h)] //~ E0702
+}
+
+pub fn field_moved_as_a_field(move h: Holder) -> F32 uses {Alloc} {
+  h.buf[take(move h.buf)] //~ E0702
+}

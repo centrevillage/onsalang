@@ -1,0 +1,150 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§5.3", "§3.5", "§12.2"]
+// fixes = 0
+
+// S-1275, S-1273 (§5.2): "`xs` の場所は借用の引数と同じに数える". The base of an index that is not a place of its own is
+// counted as the base of a borrowed argument is: "借用の引数に置いた `if`・`match`・ブロック式は、各末尾の場所（実行されない腕も）を
+// その引数の場所として重なりを見る" and "部分ビュー・フィールド・添字の基に置いたときも、各末尾の場所にその経路を足した場所を数え、
+// 基の型によらない". So the places of the tails of an `if`, a `match` or a block at the base (the arm that is not taken too), a part
+// view of the base (`xs.slice(0, 2)[i]`, "部分ビューも範囲によらず、元の場所 … と重なる"), and the base of any type
+// (an array, a `Span`, a `Buf`, an array of `Buf`, an array of `Span`, a struct that holds a `Buf`, a type
+// parameter, a body of an `rt fn`) give E0702 when the index changes the place. One error per function (P-01), no repair candidate, the line of the change.
+
+pub struct Holder {
+  buf: Buf[F32],
+  n: U32,
+}
+
+pub fn reset(inout xs: [U32; 3]) -> U32 {
+  xs = [7, 8, 9]
+  1
+}
+
+pub fn fill7(inout s: Span[F32]) -> U32 {
+  s.fill!(7.0)
+  1
+}
+
+pub fn wr(inout ch: [Span[F32]; 2]) -> U32 {
+  ch[0].fill!(7.0)
+  1
+}
+
+pub fn rb(inout b: Buf[F32]) -> U32 uses {Alloc} {
+  b = Buf.zeroed(2)
+  1
+}
+
+pub fn shrink(inout b: Buf[[U32; 3]]) -> U32 uses {Alloc} {
+  b = Buf.zeroed(1)
+  0
+}
+
+pub fn rbs(inout bs: [Buf[F32]; 2]) -> U32 uses {Alloc} {
+  bs = [Buf.zeroed(6), Buf.zeroed(6)]
+  1
+}
+
+pub fn rh(inout hs: [Holder; 2]) -> U32 uses {Alloc} {
+  hs = [Holder { buf: Buf.zeroed(5), n: 1 }, Holder { buf: Buf.zeroed(5), n: 1 }]
+  1
+}
+
+pub fn sw[T: Copy, const N: U32](inout xs: [T; N]) -> U32 {
+  let a = xs[0]
+  xs[0] = xs[1]
+  xs[1] = a
+  1
+}
+
+// ----------------------------------------------------------- the base is an `if`, a `match` or a block
+
+pub fn if_then_arm(c: Bool) -> U32 {
+  var xs: [U32; 3] = [1, 2, 3]
+  var ys: [U32; 3] = [4, 5, 6]
+  (if c { xs } else { ys })[reset(inout xs)] //~ E0702
+}
+
+pub fn if_else_arm(c: Bool) -> U32 {
+  var xs: [U32; 3] = [1, 2, 3]
+  var ys: [U32; 3] = [4, 5, 6]
+  (if c { ys } else { xs })[reset(inout xs)] //~ E0702
+}
+
+pub fn match_arm(k: U32) -> U32 {
+  var xs: [U32; 3] = [1, 2, 3]
+  var ys: [U32; 3] = [4, 5, 6]
+  (match k { 0 => ys, _ => xs })[reset(inout xs)] //~ E0702
+}
+
+pub fn block_tail() -> U32 {
+  var xs: [U32; 3] = [1, 2, 3]
+  ({ xs })[reset(inout xs)] //~ E0702
+}
+
+pub fn the_arm_that_is_not_the_changed_place(c: Bool) -> U32 {
+  var xs: [U32; 3] = [1, 2, 3]
+  var ys: [U32; 3] = [4, 5, 6]
+  (if c { ys } else { xs })[reset(inout ys)] //~ E0702
+}
+
+pub fn inout_parameter_in_an_if(c: Bool, inout xs: [U32; 3], ys: [U32; 3]) -> U32 {
+  (if c { xs } else { ys })[reset(inout xs)] //~ E0702
+}
+
+// ----------------------------------------------------------------------------- a part view
+
+pub fn slice_of_an_array() -> U32 {
+  var xs: [U32; 3] = [1, 2, 3]
+  xs.slice(0, 2)[reset(inout xs)] //~ E0702
+}
+
+pub fn slice_of_an_array_in_an_if(c: Bool) -> U32 {
+  var xs: [U32; 3] = [1, 2, 3]
+  var ys: [U32; 3] = [4, 5, 6]
+  (if c { xs } else { ys }).slice(0, 2)[reset(inout xs)] //~ E0702
+}
+
+pub fn slice_of_a_row(inout g: [[U32; 3]; 2]) -> U32 {
+  g[0].slice(1, 3)[reset(inout g[1])] //~ E0702
+}
+
+// ------------------------------------------------------------------- the type of the base
+
+pub fn span_parameter(inout s: Span[F32]) -> F32 {
+  s[fill7(inout s)] //~ E0702
+}
+
+pub fn element_of_a_planar_array(inout ch: [Span[F32]; 2]) -> F32 {
+  ch[0][wr(inout ch)] //~ E0702
+}
+
+pub fn buf_replaced_by_the_change(inout b: Buf[F32]) -> F32 uses {Alloc} {
+  b[rb(inout b)] //~ E0702
+}
+
+pub fn buf_of_arrays_that_gets_shorter(inout b: Buf[[U32; 3]]) -> U32 uses {Alloc} {
+  b[2][shrink(inout b)] //~ E0702
+}
+
+pub fn array_of_buf(inout bs: [Buf[F32]; 2]) -> U32 uses {Alloc} {
+  bs[rbs(inout bs)].len() //~ E0702
+}
+
+pub fn array_of_structs_that_hold_a_buf(inout hs: [Holder; 2]) -> U32 uses {Alloc} {
+  hs[rh(inout hs)].buf.len() //~ E0702
+}
+
+pub fn type_parameter_and_const_parameter[T: Copy, const N: U32](inout xs: [T; N]) -> T {
+  xs[sw(inout xs)] //~ E0702
+}
+
+pub rt fn reset_rt(inout xs: [U32; 3]) -> U32 {
+  xs = [7, 8, 9]
+  1
+}
+
+pub rt fn in_a_rt_fn(inout xs: [U32; 3]) -> U32 {
+  xs[reset_rt(inout xs)] //~ E0702
+}

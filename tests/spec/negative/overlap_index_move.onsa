@@ -1,0 +1,37 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§5.3", "§3.5"]
+// fixes = 0
+
+// S-1275, S-1273 (§5.2): the change in an index that overlaps the base can be a `move` as it can be in an
+// argument ("`move` の引数も同じ変更", §5.2, §3.5: "変更は … 代入、`inout` への受け渡し、`!` の呼び出し、`move` で"). A
+// place that is not the base itself, but is counted as the base (the tail of an `if`, a part view of it), is
+// E0702 as the base of an argument is (`h(x, move x)`). The base that is a variable or a path and moved in its own index
+// (`b[take(move b)]`, `h.buf[take(move h.buf)]`) is the detail S-1276 (negative/overlap_index_detail_s1276.onsa),
+// where E0704 would also apply.
+// One error per function (P-01), no repair candidate, the line of the change.
+
+pub struct Holder {
+  buf: Buf[F32],
+  n: U32,
+}
+
+pub fn take(move b: Buf[F32]) -> U32 uses {Alloc} {
+  0
+}
+
+pub fn take_h(move h: Holder) -> U32 uses {Alloc} {
+  0
+}
+
+pub fn base_in_an_if(c: Bool, move b: Buf[F32], move d: Buf[F32]) -> F32 uses {Alloc} {
+  (if c { b } else { d })[take(move b)] //~ E0702
+}
+
+pub fn base_in_the_else_arm_of_an_if(c: Bool, move b: Buf[F32], move d: Buf[F32]) -> F32 uses {Alloc} {
+  (if c { d } else { b })[take(move b)] //~ E0702
+}
+
+pub fn part_view_of_the_base(move b: Buf[F32]) -> F32 uses {Alloc} {
+  b.slice(0, 2)[take(move b)] //~ E0702
+}

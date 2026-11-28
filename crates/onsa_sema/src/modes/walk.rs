@@ -3,6 +3,8 @@
 //! to [`Walker::consume`]. A call gives its receiver and arguments the
 //! positions of the parameters of its callee (`calls.rs`).
 
+use std::mem::replace;
+
 use onsa_syntax::ast::{ExprId, ExprKind, Lit, Mode, PatId, StrSeg};
 
 use super::check::Walker;
@@ -100,8 +102,12 @@ impl<'a> Walker<'a> {
             return;
         }
         // A use of a place is of its path, at the whole of it (S-803).
-        if let Some(place) = self.path(r, e) {
-            self.used(r, &place, ast.expr(e).span, None);
+        if let Some((place, excused)) = self.path(r, e) {
+            let at = ast.expr(e).span;
+            // SPEC-GAP(S-1276): a change in its index that is E0702 is not also the E0704 of the use (provisional).
+            let outer = replace(&mut self.inside.indexed, excused.then_some((place.root, at)));
+            self.used(r, &place, at, None);
+            self.inside.indexed = outer;
             return;
         }
         // An element is where a value is put, but for a literal passed to a
@@ -146,7 +152,7 @@ impl<'a> Walker<'a> {
                 if !pos.waits() {
                     self.waits(r, *base, Pos::Arg(Mode::Borrow));
                 }
-                self.expr(r, *index, Pos::Read);
+                self.indexed(r, *base, *index);
                 self.ran(r, values, ast.expr(e).span);
             }
             // A path of a value made here (D2): consumed, the rest of it is dropped there; else the whole, after.
@@ -261,23 +267,25 @@ impl<'a> Walker<'a> {
     }
 
     /// The place `e` is, the indexes in it walked first, the inner first
-    /// (§3.5: an element is read after its index is evaluated, S-803).
-    fn path(&mut self, r: &mut Run, e: ExprId) -> Option<Place> {
+    /// (§3.5: an element is read after its index is evaluated, S-803), each
+    /// in the window of its base (S-1275); with whether one is E0702 there,
+    /// whose use of the place after is not reported (S-1276).
+    fn path(&mut self, r: &mut Run, e: ExprId) -> Option<(Place, bool)> {
         let place = place_of(self.ast, self.names, e)?;
         let (mut indexes, mut x) = (Vec::new(), self.ast.without_parens(e));
         loop {
             x = match &self.ast.expr(x).kind {
                 ExprKind::Field { base, .. } | ExprKind::TupleIndex { base, .. } => *base,
                 ExprKind::Index { base, index } => {
-                    indexes.push(*index);
+                    indexes.push((*base, *index));
                     *base
                 }
                 _ => break,
             };
             x = self.ast.without_parens(x);
         }
-        indexes.into_iter().rev().for_each(|i| self.expr(r, i, Pos::Read));
-        Some(place)
+        let excused = indexes.into_iter().rev().fold(false, |found, (b, i)| self.indexed(r, b, i) || found);
+        Some((place, excused))
     }
 
     /// The value `e` of a head at `pos` with the patterns `pats` (of each
@@ -289,7 +297,7 @@ impl<'a> Walker<'a> {
         let place = place_of(self.ast, self.names, e).filter(|p| pos != Pos::Own && self.deps.indexed(p.root));
         let Some(place) = place else { return self.expr(r, e, pos) };
         let at = self.ast.expr(e).span;
-        self.path(r, e);
+        let excused = self.path(r, e).is_some_and(|(_, x)| x);
         self.read_captured(place.root, at);
         let mut reads = Vec::new();
         for &p in pats {
@@ -297,12 +305,15 @@ impl<'a> Walker<'a> {
                 reads.push((proj.to_vec(), q))
             });
         }
+        // SPEC-GAP(S-1276): as at the use of a path (`Walker::expr`), provisional.
+        let outer = replace(&mut self.inside.indexed, excused.then_some((place.root, at)));
         for (proj, q) in reads {
             let by = self.ast.pat(q).span;
             if !self.used(r, &Place { root: place.root, proj }, at, Some(by)) {
-                return;
+                break;
             }
         }
+        self.inside.indexed = outer;
     }
 
     /// The borrowed argument `e` of a parameter of the type `param`, if
