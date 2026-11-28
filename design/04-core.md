@@ -11,7 +11,7 @@ pub struct FnDef {
     hoisted: Vec<LocalId>,                // 記憶域を関数の高さに置く局所変数（R-481。下の注）
 }
 pub enum Stmt { Let(LocalId, Expr), Assign(Place, Expr), Expr(Expr),
-                If(Expr, Block, Block), While(Expr, Block), ForRange(LocalId, Expr, Expr, Block),
+                If(Expr, Block, Block), While(Expr, Block), ForRange { local: LocalId, lo: Expr, hi: Expr, body: Block, inclusive: bool },
                 Break, Continue, Return(Option<Expr>) }
 pub enum Expr { Lit(Lit, Ty), Local(LocalId), Const(ConstId),
                 Unary(UnOp, Ty, Box<Expr>), Binary(BinOp, NumTy, Overflow, Box<Expr>, Box<Expr>),  // Overflow: Checked|Wrap|Sat
