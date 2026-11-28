@@ -1,0 +1,29 @@
+fn next(inout k: U32) -> U32 {
+  k = k + 1
+  k - 1
+}
+
+@export
+pub fn k01_var_then_next() -> U32 {
+  let g: [[U32; 2]; 2] = [[0, 1], [10, 11]]
+  var k: U32 = 0
+  g[k][next(inout k)]
+}
+
+@export
+pub fn k02_var_then_next_assign() -> U32 {
+  var g: [[U32; 2]; 2] = [[0, 1], [10, 11]]
+  var k: U32 = 0
+  g[k][next(inout k)] = 5
+  g[0][0] * 1000 + g[1][0]
+}
+
+@export
+pub fn k03_sibling() -> U32 {
+  var k: U32 = 0
+  k * 10 + next(inout k) + k
+}
+
+test "k01 (g[0][0] = 0 by the order of 3.5)" { assert k01_var_then_next() == 99 }
+test "k02 (5010 by the order of 3.5)" { assert k02_var_then_next_assign() == 99 }
+test "k03 (0 + 0 + 1 = 1)" { assert k03_sibling() == 99 }
