@@ -16,7 +16,7 @@ pub enum Stmt { Let(LocalId, Expr), Assign(Place, Expr), Expr(Expr),
 pub enum Expr { Lit(Lit, Ty), Local(LocalId), Const(ConstId),
                 Unary(UnOp, Ty, Box<Expr>), Binary(BinOp, NumTy, Overflow, Box<Expr>, Box<Expr>),  // Overflow: Checked|Wrap|Sat
                 Cmp(CmpOp, Ty, ..), Cast(Ty, Ty, ..), Call(FnId, Vec<Arg>), Prim(PrimId, Vec<Expr>),
-                Field(Box<Expr>, u32), Index(Box<Expr>, Box<Expr>, Bounds),  // Bounds: Checked は境界検査付き、Known は process のサンプルループの入出力（S-196。dump は `xs[known i]`）
+                Field(Box<Expr>, u32), Index(Box<Expr>, Box<Expr>, Bounds),  // Bounds: Checked は境界検査付き、Known は範囲の内と決まった添字（区間の段が示したもの（§9.2）と process のサンプルループの入出力（S-196）。dump は `xs[known i]`）
                 Struct(Ty, Vec<(u32, Expr)>), Array(Vec<Expr>),  // Struct: （欄の番号, 式）を書いた順に（§3.5）
                 Repeat(Box<Expr>, u32), Tuple(Vec<Expr>),
                 IfExpr(..), Switch(Box<Expr>, Vec<(Tag, Block)>),  // enum のタグで分岐。束縛は Field で取り出す
@@ -32,6 +32,7 @@ pub enum Place { Local(LocalId), Field(Box<Place>, u32), Index(Box<Place>, Expr,
 - 全ての式に型が付く。ジェネリクスは無い（単相化済み）。レートは無い（flow は降下済み）。
 - `hoisted` は局所変数の記憶域の高さ（R-481、R-484、S-1118 (2)）。スコープ（`IfExpr`・`Switch` の腕と、`If`・`While`・`ForRange` のブロック）の外へ出る値（腕の値と、外の場所への代入）が届くビューの根のうち、そのスコープが宣言した局所変数を、`LocalId` の昇順で並べる。
   ブロック式は中の局所変数の寿命を閉じない。`Let` は腕の中のままで、バックエンドは記憶域を関数の頭に置き、`Let` を代入にする。判定は `lower/storage.rs` の一か所で、降下の `fold` の後に関数ごとに一度行う。
+- 範囲の内と示せる配列の添字を `Known` にするのは区間の段（`bounds.rs`）の一か所で、`fold` の直後に関数ごとに一度行う（§9.2、S-1264）。降下は `process` のサンプルループのほかに `Known` を作らない。
 - `Prim` は `std.math` の `target` 宣言と組込みのメンバ（`trunc_sat_from`、`to_bits`、`Span.len` など）。`Prim` の一覧は `onsa_sema::prim` に置き（`onsa_core::prim` が再輸出する）、各バックエンドはこの一覧に対して対応表（`supports`）を持つ（表の欠けはテストで検出、`design/06-placement.md` の「`Prim` の表」の行）。
 - `verify(Module)` は、常に（release も）段の境目ごとに走らせる（降下と正規化の後、ターゲットの pass の後）。失敗は内部エラー（終了コード 101、診断コード無し。S-67）で、破った規則の番号、関数名、Core の位置を報告し、その関数の Core のダンプを不具合の報告用に残す（レビュー R-82）。検証器は D-15 に従い、Core の構造から性質を確かめる。
   規則は次の一覧で全てである。規則ごとに、その規則だけを破った Core を手で作って検証器が拒むことを確かめる否定のテストを置く。Core の形を変えるときは、一覧・検証器・テストを一緒に直す。
@@ -56,9 +57,11 @@ pub enum Place { Local(LocalId), Field(Box<Place>, u32), Index(Box<Place>, Expr,
 | V-16 | ターゲットの pass の後: flow のメタデータ（入力、出力、パラメータ）が、`State` / `Params` の型と生成した関数のシグネチャと一致する | R-82 |
 | V-17 | flow の `init` は、状態の全てのフィールドを設定する。設定しないのは、flow の計画（§3.5）が「段の順で読む前に必ず書かれる」と記録したフィールドだけ | R-92 |
 | V-18 | `hoisted` の局所変数は、本体のどこかの `Let` で定義し、本体の一番上の `Let` では定義しない（引数と `ForRange` の変数は `Let` を持たず、NRVO の局所変数は一番上の `Let`） | R-481 |
-| V-19 | 範囲の内と決まった添字（`Bounds::Known`）は、flow に生成した `process`（`FlowFns::process`、名前で比べない）のサンプルループ（`ForRange`）の中にだけある | S-196 |
+| V-19 | 欠番（V-25 の前半に移した） | |
 | V-20 | ID（`FnId`・`ConstId`・`TypeId`・`LocalId`・`MsgId`・`CTy`）と、欄・組の要素・列挙子・`Payload` の番号が範囲の内で（`Switch` の腕のタグは V-08）、型の表の部分の `CTy` は自分より前にあり、型の事実の表（`Module.facts`）が型の表の全ての型を覆い、フィールドを読む型と構造体のリテラルの型が `Opaque` でない | R-82、W8-02 |
 | V-22 | 式と文の入れ子の深さ（節点は `Block`・文・式・`Place`、関数の本体と定数の初期化式が 1）が `CORE_DEPTH_LIMIT`（1400）以下。降下の直後と各段の検証の頭で、明示のスタックで数える。§2.5 の深さの内の正しいプログラムは、定数の値の入れ子（宣言の鎖に比例、R-319 の残り）が上限を超えない限り通る（超えれば内部エラー。利用者の判断） | R-319、W8-02 |
+| V-25 | 範囲の内と決まった添字（`Bounds::Known`）は、flow に生成した `process`（`FlowFns::process`、名前で比べない）のサンプルループ（`ForRange`）の中にあるか、区間の段（`bounds.rs`）が範囲の内と示せる（検証器は段と同じ関数で示し直す） | S-196、S-1264 |
+| V-28 | `ForRange` の変数は、本体の中で代入・`inout` の引数・`let`・内側の `ForRange` の根にならない（V-25 の区間の前提） | S-1264 |
 
 正規形の R3（評価順に並べる）と R4（条件の内側に出す）は、Core から元の順序が分からないので検証器では確かめない。評価順の再現の期待値付きテストと、インタプリタと C の差分テストで押さえる（R-81）。
 - テキスト形式 `onsa dump --core`（隠しコマンド）を持ち、golden テストにも使う。
