@@ -50,14 +50,13 @@ fn for_(l: u32, lo: Expr, hi: Expr, inclusive: bool, stmts: Vec<Stmt>) -> Stmt {
     stmt(StmtKind::ForRange { local: LocalId(l), lo, hi, body, inclusive })
 }
 
-/// The statement that reads `xs[index]`, of the parameter `xs` (local 0), checked.
+/// The statement that reads `xs[index]`, of the parameter `xs` (local 0),
+/// checked: `if xs[index] == 0 {}`, which the stage does not drop (R-533).
 fn read(base: CTy, index: Expr) -> Stmt {
     let xs = Box::new(local(base, 0));
-    stmt(StmtKind::Expr(Expr::new(
-        Types::U32,
-        sp(),
-        ExprKind::Index { base: xs, index: Box::new(index), bounds: Bounds::Checked },
-    )))
+    let x = Expr::new(Types::U32, sp(), ExprKind::Index { base: xs, index: Box::new(index), bounds: Bounds::Checked });
+    let zero = Expr::new(Types::BOOL, sp(), ExprKind::Cmp { op: CmpOp::Eq, lhs: Box::new(x), rhs: Box::new(u32_(0)) });
+    stmt(StmtKind::If(zero, Block::default(), Block::default()))
 }
 
 /// A module of the function `g(xs: base)`, of the other locals `tys` (from
@@ -406,4 +405,143 @@ fn a_chain_of_constants_is_read_once_each() {
     let d = onsa_diag::stack::spawn("consts", move || crate::dump::dump_item(&crate::tests::core(&src), "t.f"));
     let d = d.unwrap().join().unwrap();
     assert!(d.contains("xs[known const t.C299]"), "{d}");
+}
+
+/// A flow of a `prev~` of `U32` (field 0) and a delay of 5 (its ring field
+/// 1, its write position field 2), lowered.
+fn ring() -> Module {
+    crate::tests::core("pub flow f(x: U32 at sample) -> U32 at sample {\n  prev~(x) + delay~(x, 5)\n}\n")
+}
+
+/// The state of the flow of `m`, its type and the expression `s` of the parameter of `tick`.
+fn state(m: &Module) -> (TypeId, CTy, Expr) {
+    let (id, tick) = (m.flows[0].fns.state, m.fns.iter().find(|f| f.name == "t.f.tick").expect("tick"));
+    let p = &tick.params[0];
+    (id, p.ty, Expr::new(p.ty, sp(), ExprKind::Local(p.local)))
+}
+
+fn field(s: &Expr, i: u32) -> Expr {
+    Expr::new(Types::U32, sp(), ExprKind::Field { base: Box::new(s.clone()), index: i })
+}
+
+/// The module `m` with `stmts` (given `s`) at the end of the statements of `tick`, verified.
+fn tick_with(mut m: Module, stmts: impl FnOnce(&Expr) -> Vec<Stmt>) -> Result<(), crate::VerifyError> {
+    let s = state(&m).2;
+    let tick = m.fns.iter_mut().find(|f| f.name == "t.f.tick").expect("tick");
+    tick.body.as_mut().expect("a body").stmts.extend(stmts(&s));
+    verify(&m)
+}
+
+fn v26(r: Result<(), crate::VerifyError>) {
+    assert_eq!(r.expect_err("V-26").rule, Rule::V26);
+}
+
+/// The write position of a delay is below the length of its ring, and the
+/// field of a `prev~` of `U32` has no interval: the index `s.1[s.2]` of the
+/// lowering is proved (V-25), into a ring of 5 and not of 4.
+#[test]
+fn the_write_position_of_a_delay_is_below_the_length_of_its_ring() {
+    let mut m = ring();
+    let (id, ty, s) = state(&m);
+    let (five, four) = (m.tys.intern(TyKind::Array(Types::U32, 5)), m.tys.intern(TyKind::Array(Types::U32, 4)));
+    let (consts, below) = (crate::bounds::consts(&m), crate::bounds::below(&m));
+    assert_eq!(below.iter().collect::<Vec<_>>(), [(&(id, 2), &5)]);
+    let env = crate::bounds::Env::new(Parts { tys: &m.tys, types: &m.types }, (&consts, &below), None);
+    assert_eq!(env.interval(&field(&s, 2)), Some(crate::bounds::Iv { lo: 0, hi: 4 }));
+    assert_eq!((env.interval(&field(&s, 0)), env.below(ty, 2)), (None, Some(5)));
+    assert!(env.proved(&field(&s, 2), five) && !env.proved(&field(&s, 2), four));
+    // The stage proved the read and the write of the ring: the dump of `tick`.
+    let d = crate::dump::dump_item(&m, "t.f.tick");
+    assert_eq!(d.matches("s.1[known s.2]").count(), 2, "{d}");
+}
+
+/// V-26: a value written to the write position is proved below 5.
+#[test]
+fn a_write_of_the_write_position_is_proved_below_its_length() {
+    let assign =
+        |v: fn(&Expr) -> Expr| move |s: &Expr| vec![stmt(StmtKind::Assign(field(s, 2).as_place().unwrap(), v(s)))];
+    v26(tick_with(ring(), assign(|_| u32_(5))));
+    assert!(tick_with(ring(), assign(|_| u32_(4))).is_ok());
+    // `w + 1` with no `% 5`; with it, below 5.
+    fn next(s: &Expr) -> Expr {
+        bin(BinOp::Add, Overflow::Checked, field(s, 2), u32_(1))
+    }
+    v26(tick_with(ring(), assign(next)));
+    assert!(tick_with(ring(), assign(|s| bin(BinOp::Rem, Overflow::Checked, next(s), u32_(5)))).is_ok());
+    // Until W8-07, `Zeroed` is 0; a value not known is not below 5.
+    assert!(tick_with(ring(), assign(|_| Expr::new(Types::U32, sp(), ExprKind::Zeroed))).is_ok());
+    v26(tick_with(ring(), assign(|s| field(s, 0))));
+    // The field of the `prev~` is below no length.
+    let prev = |s: &Expr| vec![stmt(StmtKind::Assign(field(s, 0).as_place().unwrap(), u32_(9)))];
+    assert!(tick_with(ring(), prev).is_ok());
+}
+
+/// V-26: a struct literal of the state has its write position below 5;
+/// an `inout` argument is not the write position itself.
+#[test]
+fn a_struct_literal_and_an_inout_argument_of_the_write_position() {
+    let literal = |w: i128| {
+        let m = ring();
+        let (id, ty, _) = state(&m);
+        let TypeDefKind::Struct { fields } = &m.types[id.0 as usize].kind else { panic!("a struct") };
+        let value = |(i, &(_, t)): (u32, &(String, CTy))| {
+            (i, if i == 2 { u32_(w) } else { Expr::new(t, sp(), ExprKind::Zeroed) })
+        };
+        let lit = Expr::new(ty, sp(), ExprKind::Struct { ty: id, fields: (0..).zip(fields).map(value).collect() });
+        tick_with(m, |s| vec![stmt(StmtKind::Assign(s.as_place().unwrap(), lit))])
+    };
+    v26(literal(5));
+    assert!(literal(4).is_ok());
+    // `h(inout s.2)` gives the callee the field to write any value to; `h(inout s.0)` and `h(inout s)` do not.
+    let call = |arg: fn(&Expr) -> Expr| {
+        let mut m = ring();
+        let (h, ty) = (FnId(m.fns.len() as u32), arg(&state(&m).2).ty);
+        m.fns.push(FnDef {
+            name: "h".into(),
+            params: vec![Param { local: LocalId(0), mode: Mode::Inout, ty }],
+            ret: Types::UNIT,
+            sret: false,
+            rt: true,
+            locals: vec![Local { name: "a".into(), ty }],
+            body: Some(Block::default()),
+            span: sp(),
+            fp_relaxed: false,
+            test: None,
+            decl: None,
+            hoisted: Vec::new(),
+        });
+        tick_with(m, |s| {
+            let args = vec![Arg { mode: Mode::Inout, expr: arg(s) }];
+            vec![stmt(StmtKind::Expr(Expr::new(Types::UNIT, sp(), ExprKind::Call { fn_: h, args })))]
+        })
+    };
+    v26(call(|s| field(s, 2)));
+    assert!(call(|s| field(s, 0)).is_ok());
+    assert!(call(|s| s.clone()).is_ok());
+}
+
+/// R-533: the statement of the iterable of a `for` over a row of length 0
+/// that the stage proves in range is dropped; one of an index not proved stays.
+#[test]
+fn the_statement_of_an_iterable_proved_in_range_is_dropped() {
+    let src = "pub fn g(gs: [[U32; 0]; 2], i: U32) -> U32 {\n  var s: U32 = 0\n  for x in gs[1] {\n    s = s + x\n  }\n  \
+               for x in gs[i] {\n    s = s + x\n  }\n  s\n}\n";
+    let d = crate::dump::dump_item(&crate::tests::core(src), "t.g");
+    assert!(!d.contains("gs[known") && d.contains("\n  gs[i]\n"), "{d}");
+}
+
+/// The index of a replica of a `par~` from 2 is `i -% 2` in a loop of `i`
+/// over 2..<5 (§11.5), proved below 3; and an index by `i` itself in its
+/// body has the interval of the variable of the `for`: `T[i + (x % 3)]` is
+/// at most 4 + 2, below 8.
+#[test]
+fn the_variable_of_the_replicas_of_a_par_is_that_of_a_for() {
+    let src = "const T: [U32; 8] = [1, 2, 3, 4, 5, 6, 7, 8]\n\
+               pub flow f(x: U32 at sample) -> [U32; 3] at sample {\n  par~ i in 2 ..< 5 { delay~(T[i + (x % 3)], 3) }\n}\n";
+    let m = crate::tests::core(src);
+    let d = crate::dump::dump_item(&m, "t.f.tick");
+    assert!(d.contains("for i in 2:U32..5:U32 {") && !d.contains("let i"), "{d}");
+    assert!(d.contains("const t.T[known (i + (x % 3:U32))]") && d.contains("s.0[known (i -% 2:U32)].1 ="), "{d}");
+    // The index of the replicas is of no check.
+    assert!(!d.contains("(i - 2:U32)") && !d.contains("[(i -% 2:U32)]"), "{d}");
 }

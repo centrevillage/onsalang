@@ -206,6 +206,17 @@ pub struct FlowMeta {
     pub outputs: Vec<(String, CTy, Option<u32>)>,
     /// The flow's name in its heading: where a diagnostic of its API goes.
     pub name_span: Span,
+    /// Of each type of its state (`State`, the replica of a `par~`), what
+    /// is known of each of its fields, in their order.
+    pub states: Vec<(TypeId, Vec<StateField>)>,
+}
+
+/// What is known of a field of a type of the state of a flow.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct StateField {
+    /// Of the write position of a delay, the length `N` of its ring: every
+    /// value of the field is below it (the stage of the bounds reads it, V-26).
+    pub below: Option<u32>,
 }
 
 /// An input of the flow as its functions read it (§11.2, §11.6): its local,
@@ -518,7 +529,10 @@ fn lower_flow<'b>(lw: &mut Lowerer<'b>, flow: DefId, fd: FlowDef, span: Span) ->
     check_stages(info, span)?;
     let inputs = inputs(info, &fd, span)?;
     // The fields of the state are the plan's (S-05, S-06, §12.4).
-    let fields = state_fields(lw, flow, &state::decls(info, &inputs), info, &info.fields)?;
+    let mut states = Vec::new();
+    let fields = state_fields(lw, (flow, &mut states), &state::decls(info, &inputs), info, &info.fields)?;
+    let (fields, known) = fields.into_iter().map(|(name, t, f)| ((name, t), f)).unzip();
+    states.push((state_ty, known));
     lw.set_state_fields(state_ty, fields, span)?;
 
     let shape = FlowShape {
@@ -550,6 +564,7 @@ fn lower_flow<'b>(lw: &mut Lowerer<'b>, flow: DefId, fd: FlowDef, span: Span) ->
         sig_inputs,
         outputs: shape.outputs.clone(),
         name_span: a.def(flow).name_span,
+        states,
     });
     Ok(fns)
 }

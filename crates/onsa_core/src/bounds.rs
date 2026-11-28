@@ -10,7 +10,8 @@
 //! known where a node is ([`Env`]): the variable of a `for` in its body, from
 //! the intervals of its ends, from 0 of a start of none (the body does not
 //! write it, V-28); a local of one `let` that nothing writes, from its value
-//! where it is defined; a constant, from its initializer ([`consts`]). The
+//! where it is defined; a constant, from its initializer ([`consts`]); a
+//! field of a state below the length of a ring, below it ([`below`], V-26). The
 //! base of an index of a `Span` or a `Buf` has its length at run time: no
 //! index of one is proved.
 //!
@@ -21,6 +22,9 @@
 //! end of a `for`. The walks recurse: they run after V-22, on a Core of at
 //! most `CORE_DEPTH_LIMIT` levels, on the stack of a command.
 
+use std::collections::HashMap;
+
+use crate::effects::pure;
 use crate::ir::*;
 use crate::walk::{
     Child, ChildMut, Eval, Part, PartMut, PlaceRole, Role, Scope, block_children, block_children_mut, expr_children,
@@ -68,6 +72,7 @@ pub struct Env<'m> {
     parts: Parts<'m>,
     /// By `ConstId`: the interval of each constant ([`consts`]).
     consts: &'m [Option<Iv>],
+    below: &'m Below,
     /// By `LocalId`: the interval of the local, where it has one.
     vars: Vec<Option<Iv>>,
     /// By `LocalId`: a local of one `let` that nothing writes ([`fixed`]).
@@ -78,10 +83,16 @@ pub struct Env<'m> {
 
 impl<'m> Env<'m> {
     /// The locals of the body of `f`; of none (a `const`), no local.
-    pub fn new(parts: Parts<'m>, consts: &'m [Option<Iv>], f: Option<&FnDef>) -> Env<'m> {
+    pub fn new(parts: Parts<'m>, (consts, below): (&'m [Option<Iv>], &'m Below), f: Option<&FnDef>) -> Env<'m> {
         let n = f.map_or(0, |f| f.locals.len());
         let fixed = f.and_then(|f| f.body.as_ref()).map_or_else(Vec::new, |b| fixed(b, n));
-        Env { parts, consts, vars: vec![None; n], fixed, looped: vec![false; n] }
+        Env { parts, consts, below, vars: vec![None; n], fixed, looped: vec![false; n] }
+    }
+
+    /// The length the values of the field `i` of a value of `base` are below ([`below`]).
+    pub fn below(&self, base: CTy, i: u32) -> Option<u32> {
+        let Ok(&TyKind::Struct(t)) = self.parts.kind(base) else { return None };
+        self.below.get(&(t, i)).copied()
     }
 
     /// Past `let l = e`: a local of one `let` that nothing writes has the interval of `e` here.
@@ -138,6 +149,9 @@ impl<'m> Env<'m> {
             ExprKind::Binary { op, lhs, rhs, .. } => self.binary(*op, lhs, rhs, max),
             // A widening keeps the value (§3.3); of a signed or wider type, none.
             ExprKind::Cast(x) => self.interval(x)?.within(max),
+            ExprKind::Field { base, index } => {
+                Iv { lo: 0, hi: u64::from(self.below(base.ty, *index)?).checked_sub(1)? }.within(max)
+            }
             ExprKind::Lit(_)
             | ExprKind::Zeroed
             | ExprKind::Unary(..)
@@ -145,7 +159,6 @@ impl<'m> Env<'m> {
             | ExprKind::Logic { .. }
             | ExprKind::Call { .. }
             | ExprKind::Prim { .. }
-            | ExprKind::Field { .. }
             | ExprKind::Index { .. }
             | ExprKind::SpanOf(_)
             | ExprKind::Struct { .. }
@@ -227,11 +240,13 @@ impl<'m> Env<'m> {
 pub fn consts(m: &Module) -> Vec<Option<Iv>> {
     let n = m.consts.len();
     let (mut table, mut seen) = (vec![None; n], vec![false; n]);
+    // A constant reads no field of a state.
+    let (parts, none) = (Parts { tys: &m.tys, types: &m.types }, Below::new());
     for root in 0..n {
         let mut stack = vec![(root, false)];
         while let Some((c, read)) = stack.pop() {
             if read {
-                table[c] = Env::new(Parts { tys: &m.tys, types: &m.types }, &table, None).interval(&m.consts[c].init);
+                table[c] = Env::new(parts, (&table, &none), None).interval(&m.consts[c].init);
             } else if !std::mem::replace(&mut seen[c], true) {
                 stack.push((c, true));
                 walk_expr(&m.consts[c].init, &mut |e| match e.kind {
@@ -242,6 +257,16 @@ pub fn consts(m: &Module) -> Vec<Option<Iv>> {
         }
     }
     table
+}
+
+/// By (type, field number): the length `N` every value of the field is
+/// below, of the fields of the states of the flows of `m` that have one
+/// (`StateField::below`). The verifier proves it of every write (V-26).
+pub type Below = HashMap<(TypeId, u32), u32>;
+
+pub fn below(m: &Module) -> Below {
+    let fields = m.flows.iter().flat_map(|f| &f.states).flat_map(|(t, fs)| (0..).zip(fs).map(move |(i, f)| (*t, i, f)));
+    fields.filter_map(|(t, i, f)| Some(((t, i), f.below?))).collect()
 }
 
 /// By `LocalId` of the `n` locals: whether the body `b` defines the local by
@@ -297,13 +322,14 @@ fn fixed(b: &Block, n: usize) -> Vec<bool> {
 }
 
 /// The checked indexes of an array that each function of `m` proves below
-/// its length become `Known`.
+/// its length become `Known`; a statement of an expression that is pure
+/// then, and was not before, is dropped (R-533: it was kept for the checks).
 pub fn module(m: &mut Module) {
-    let consts = consts(m);
+    let (consts, below) = (consts(m), below(m));
     let Module { tys, types, fns, .. } = m;
     for f in fns.iter_mut() {
-        let env = Env::new(Parts { tys, types }, &consts, Some(f));
-        let mut mark = Mark { env, locals: &f.locals };
+        let env = Env::new(Parts { tys, types }, (&consts, &below), Some(f));
+        let mut mark = Mark { env, locals: &f.locals, marked: false };
         if let Some(b) = &mut f.body {
             mark.block(b);
         }
@@ -316,18 +342,26 @@ pub fn module(m: &mut Module) {
 struct Mark<'m> {
     env: Env<'m>,
     locals: &'m [Local],
+    /// An index was marked since the statement began.
+    marked: bool,
 }
 
 impl Mark<'_> {
     fn block(&mut self, b: &mut Block) {
+        let mut dropped = Vec::new();
         block_children_mut(b, Role::Read, &mut |p| match p {
-            PartMut::Stmt(s) => self.stmt(s),
+            PartMut::Stmt(s) => dropped.push(self.stmt(s)),
             PartMut::Value(v, _) => self.expr(v),
         });
+        let mut drop = dropped.into_iter();
+        b.stmts.retain(|_| !drop.next().unwrap_or(false));
     }
 
     /// The body of a `for` has its variable; a `let` defines past it.
-    fn stmt(&mut self, s: &mut Stmt) {
+    /// Whether `s` is to be dropped: an expression an index marked made pure
+    /// (a checked index is not pure, so it was not).
+    fn stmt(&mut self, s: &mut Stmt) -> bool {
+        self.marked = false;
         let var = self.env.variable(&s.kind);
         stmt_children_mut(s, &mut |c| match c {
             ChildMut::Block(b, ..) => {
@@ -340,6 +374,8 @@ impl Mark<'_> {
         if let StmtKind::Let(l, e) = &s.kind {
             self.env.define(*l, e);
         }
+        // A statement inside clears the mark: an expression of a block is not pure.
+        self.marked && matches!(&s.kind, StmtKind::Expr(e) if pure(e, self.env.parts.tys))
     }
 
     fn child(&mut self, c: ChildMut<'_>) {
@@ -367,9 +403,10 @@ impl Mark<'_> {
         }
     }
 
-    fn mark(&self, bounds: &mut Bounds, index: &Expr, base: CTy) {
+    fn mark(&mut self, bounds: &mut Bounds, index: &Expr, base: CTy) {
         if *bounds == Bounds::Checked && self.env.proved(index, base) {
             *bounds = Bounds::Known;
+            self.marked = true;
         }
     }
 }

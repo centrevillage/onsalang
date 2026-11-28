@@ -86,17 +86,14 @@ pub(super) fn ring_len(kind: &PlanKind, span: Span) -> R<u32> {
 
 /// The replicas of a `par~` (§11.5): its variable, its first value and
 /// their number as the plan gives them, read in this one place. The loop
-/// over them is of the variable, `from..<from + count`, when that end fits
-/// in `U32`; past it (a last of `U32`'s maximum, S-257) it counts them with
-/// a local `k` of its own from 0 and binds the variable to `from + k`, and
-/// no end past the last is made. Of one the function is of a replica of
+/// over them is of the variable ([`Replicas::ends`]), and the index of the
+/// replica of the iteration is the variable less the first
+/// ([`var_index`]). Of one the function is of a replica of
 /// ([`StageCx::pinned`]), that replica alone, with no loop.
 pub(super) struct Replicas {
     var: onsa_sema::LocalId,
     from: u32,
     count: u32,
-    /// The counter of the loop when `from + count` is past `U32`.
-    k: Option<LocalId>,
     pinned: bool,
 }
 
@@ -108,14 +105,13 @@ pub(super) fn range(info: &FlowInfo, id: NodeId, span: Span) -> R<(onsa_sema::Lo
     }
 }
 
-/// The replicas of the `par~` `id`, with the locals of a loop over them in
-/// `cx`, and the state of the one of the iteration in `state` (or it, of none).
-fn replicas(lw: &Lowerer, cx: &mut FnCx, id: NodeId, state: &Expr, span: Span) -> R<(Replicas, Expr)> {
+/// The replicas of the `par~` `id`, and the state of the one of the
+/// iteration in `state` (or it, of none).
+fn replicas(lw: &Lowerer, cx: &FnCx, id: NodeId, state: &Expr, span: Span) -> R<(Replicas, Expr)> {
     let f = cx.flow.as_ref().expect("flow context");
     let (info, pinned) = (f.info, f.now.pinned.contains(&id));
     let (var, from, count) = range(info, id, span)?;
-    let k = (!pinned && from.checked_add(count).is_none()).then(|| cx.temp("k", Types::U32));
-    let r = Replicas { var, from, count, k, pinned };
+    let r = Replicas { var, from, count, pinned };
     let own = FieldOf::Node(id, Part::Own);
     let elem = match info.field_at(own) {
         Some(_) => index(sfield(lw, info, state, own, span)?, r.index(cx, span), &lw.m.tys)?,
@@ -143,16 +139,23 @@ pub(super) fn replicas_place(
     out.push(stmt(span, StmtKind::Let(l, Expr::new(ty, span, ExprKind::Zeroed))));
     let mut place = local_expr(cx, l, span);
     for (var, from, _) in each {
-        place = index(place, var_index(cx, var, from, span), tys)?;
+        place = index(place, var_index(cx, var, from, false, span), tys)?;
     }
     Ok(place)
 }
 
-/// The index of the replica of the variable `var` of a `par~` from `from`
-/// (`var - from`): in a loop over them ([`Replicas::each`]) or pinned.
-fn var_index(cx: &FnCx, var: onsa_sema::LocalId, from: u32, span: Span) -> Expr {
+/// The index of the replica of the variable `var` of a `par~` from `from`:
+/// the variable, of a `from` of 0; in a loop over them ([`Replicas::each`]),
+/// `var -% from`, which does not wrap (the variable is at least `from`) and
+/// the stage of the bounds proves below their number (§9.2); pinned, `var - from`.
+fn var_index(cx: &FnCx, var: onsa_sema::LocalId, from: u32, pinned: bool, span: Span) -> Expr {
     let v = local_expr(cx, LocalId(var.0), span);
-    if from == 0 { v } else { checked_binary(BinOp::Sub, v, u32_lit(span, from)) }
+    if from == 0 {
+        return v;
+    }
+    let overflow = if pinned { Overflow::Checked } else { Overflow::Wrap };
+    let (ty, lhs, rhs) = (v.ty, Box::new(v), Box::new(u32_lit(span, from)));
+    Expr::new(ty, span, ExprKind::Binary { op: BinOp::Sub, overflow, lhs, rhs })
 }
 
 impl Replicas {
@@ -175,35 +178,37 @@ impl Replicas {
         cx.flow.as_mut().expect("flow context").now.scopes.pop();
         let v = done?;
         if !stmts.is_empty() {
-            r.each(cx, out, span, stmts);
+            r.each(out, span, stmts);
         }
         Ok(v)
     }
 
-    /// The index of the replica of the iteration (`var - from`, or `k`).
+    /// The index of the replica of the iteration ([`var_index`]).
     pub(super) fn index(&self, cx: &FnCx, span: Span) -> Expr {
-        match self.k {
-            Some(k) => local_expr(cx, k, span),
-            None => var_index(cx, self.var, self.from, span),
+        var_index(cx, self.var, self.from, self.pinned, span)
+    }
+
+    /// The range of the loop over them, the one place of it: `from..<from +
+    /// count` when that end fits in `U32`, else `from..=from + count - 1`
+    /// (a last of `U32`'s maximum, S-257), so no end past the last is made.
+    /// Its end, and whether it is closed.
+    fn ends(&self) -> (u32, bool) {
+        match self.from.checked_add(self.count) {
+            Some(end) => (end, false),
+            // Past `U32`, so `count` is not 0.
+            None => (self.from.wrapping_add(self.count.wrapping_sub(1)), true),
         }
     }
 
     /// The body `stmts` in a loop over them, of the variable of the `par~`,
     /// into `out`; of the one of the function, as it is.
-    pub(super) fn each(&self, cx: &FnCx, out: &mut Vec<Stmt>, span: Span, mut stmts: Vec<Stmt>) {
+    pub(super) fn each(&self, out: &mut Vec<Stmt>, span: Span, mut stmts: Vec<Stmt>) {
         if self.pinned {
             return out.append(&mut stmts);
         }
-        let var = LocalId(self.var.0);
-        // With no `k`, `from + count` fits in `U32` ([`replicas`], the one maker).
-        let Some(k) = self.k else {
-            let (from, to) = (u32_lit(span, self.from), u32_lit(span, self.from + self.count));
-            return out.push(stmt(span, StmtKind::for_excluded(var, from, to, Block { stmts, value: None })));
-        };
-        let at = checked_binary(BinOp::Add, u32_lit(span, self.from), self.index(cx, span));
-        stmts.insert(0, stmt(span, StmtKind::Let(var, at)));
-        let (zero, count) = (u32_lit(span, 0), u32_lit(span, self.count));
-        out.push(stmt(span, StmtKind::for_excluded(k, zero, count, Block { stmts, value: None })));
+        let (local, (hi, inclusive)) = (LocalId(self.var.0), self.ends());
+        let (lo, hi, body) = (u32_lit(span, self.from), u32_lit(span, hi), Block { stmts, value: None });
+        out.push(stmt(span, StmtKind::ForRange { local, lo, hi, body, inclusive }));
     }
 }
 

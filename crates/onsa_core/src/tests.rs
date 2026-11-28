@@ -674,9 +674,10 @@ fn delay_ring_buffer_order_of(call: &str) {
     );
     // init: buffer filled with init, w = 0.
     assert!(d.contains("s.0 = [0.0:F32; 4]\n  s.1 = 0:U32"), "{d}");
-    // tick: output = buf[w], then (at the end) buf[w] = e, w = (w + 1) % N.
-    let read = pos(&d, "= s.0[s.1]\n");
-    let store = pos(&d, "s.0[s.1] = x\n");
+    // tick: output = buf[w], then (at the end) buf[w] = e, w = (w + 1) % N;
+    // `w` is below N (V-26), so its index is known in range (§9.2).
+    let read = pos(&d, "= s.0[known s.1]\n");
+    let store = pos(&d, "s.0[known s.1] = x\n");
     let advance = pos(&d, "s.1 = ((s.1 + 1:U32) % 4:U32)\n");
     assert!(read < store && store < advance, "{d}");
 }

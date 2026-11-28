@@ -61,6 +61,9 @@ impl<'a> V<'a> {
             }
             StmtKind::Assign(p, e) => {
                 let pt = self.place_ty(p)?;
+                if let Place::Field(b, i) = p {
+                    self.below(self.place_ty(b)?, *i, e)?;
+                }
                 self.same(e.ty, pt, "assignment")
             }
             StmtKind::Expr(_) => Ok(()),
@@ -285,6 +288,9 @@ impl<'a> V<'a> {
                     self.same(f.ty, *dt, "struct field")?;
                 }
                 self.is(&TyKind::Struct(*id), ty, "struct literal")?;
+                for (k, f) in fields {
+                    self.below(ty, *k, f)?;
+                }
             }
             ExprKind::Variant { ty: id, tag, fields } => {
                 let TypeDefKind::Enum { variants } = &self.ty(*id)?.kind else {

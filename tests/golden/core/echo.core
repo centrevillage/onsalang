@@ -31,7 +31,7 @@ rt fn echo.echo.tick(inout s: echo.echo.State, x: F32) -> F32 {
     y.vdelay_0
   }))
   let __out: F32 = y
-  s.3[s.4] = y
+  s.3[known s.4] = y
   s.4 = ((s.4 + 1:U32) % 96001:U32)
   __out
 }

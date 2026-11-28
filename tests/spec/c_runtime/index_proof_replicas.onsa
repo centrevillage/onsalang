@@ -1,0 +1,188 @@
+// onsa.toml
+// [package]
+// name = "index_proof_replicas"
+// edition = "2026"
+//
+// [export]
+// prefix = "ipr_"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "poison"
+// provides = []
+//
+// [test]
+// mode = "test"
+// spec = ["§9.2", "§11.4", "§11.5", "§13.4"]
+//
+// # W8-03 U5c (§9.2, §11.5: `par~ i in a ..< b` has `b - a` replicas and the replica c has i = a + c; §11.4: `delay~(e, N)` is e[n - N], 0 before): the loops over the
+// # replicas of a `par~` of a first not 0, of which the stage of the bounds proves the index of the replica in range. Two loops over the same replicas in one function, a loop
+// # whose body does not read its variable, nested replicas, an index of a constant table by the variable and a range to the last of `U32`; the C is built with -Werror
+// # (no variable it does not read). The input is x[n] = n + 1 for 9 frames, in two calls of `process` (5 and 4), more than the lengths of the delays. The expected arrays
+// # are worked out from §11.4 and §11.5, never from an output. The same flows run in the interpreter (`render`, the tests below).
+//
+// # `shifted`: par~ i in 2 ..< 5 { delay~(x + i, 3) }: the replica c has i = 2 + c and is x[n - 3] + 2 + c, 0 before (the loops over it in `init` and `tick` do not read `i` but in its body)
+// [[test.host]]
+// name = "c: shifted over two calls of process"
+// target = "host"
+// flow = "index_proof_replicas.shifted"
+// steps = [
+//   { call = "init", config = {}, sample_rate = 8.0, status = 0 },
+//   { call = "process", params = {}, frames = 5, input = [1, 2, 3, 4, 5], status = 0, output = [[0, 0, 0, 3, 4], [0, 0, 0, 4, 5], [0, 0, 0, 5, 6]] },
+//   { call = "process", params = {}, frames = 4, input = [6, 7, 8, 9], status = 0, output = [[5, 6, 7, 8], [6, 7, 8, 9], [7, 8, 9, 10]] },
+// ]
+//
+// # `twice`: two loops over the replicas of 2 ..< 5 in one function, one of `delay~(x, 3)` and one of `acc~(x + i)` (the running sum): the replica c is x[n - 3] + the sum of (x[m] + 2 + c) for m up to n
+// [[test.host]]
+// name = "c: twice over two calls of process"
+// target = "host"
+// flow = "index_proof_replicas.twice"
+// steps = [
+//   { call = "init", config = {}, sample_rate = 8.0, status = 0 },
+//   { call = "process", params = {}, frames = 5, input = [1.0, 2.0, 3.0, 4.0, 5.0], status = 0, output = [[3.0, 7.0, 12.0, 19.0, 27.0], [4.0, 9.0, 15.0, 23.0, 32.0], [5.0, 11.0, 18.0, 27.0, 37.0]] },
+//   { call = "process", params = {}, frames = 4, input = [6.0, 7.0, 8.0, 9.0], status = 0, output = [[36.0, 46.0, 57.0, 69.0], [42.0, 53.0, 65.0, 78.0], [48.0, 60.0, 73.0, 87.0]] },
+// ]
+//
+// # `nested`: par~ i in 4 ..< 7 { pair_sum(par~ j in 3 ..= 4 { delay~(x * (i + j), 2) }) }: the replica c is (4 + c + 3) * x[n - 2] + (4 + c + 4) * x[n - 2], 0 before
+// [[test.host]]
+// name = "c: nested over two calls of process"
+// target = "host"
+// flow = "index_proof_replicas.nested"
+// steps = [
+//   { call = "init", config = {}, sample_rate = 8.0, status = 0 },
+//   { call = "process", params = {}, frames = 5, input = [1.0, 2.0, 3.0, 4.0, 5.0], status = 0, output = [[0.0, 0.0, 15.0, 30.0, 45.0], [0.0, 0.0, 17.0, 34.0, 51.0], [0.0, 0.0, 19.0, 38.0, 57.0]] },
+//   { call = "process", params = {}, frames = 4, input = [6.0, 7.0, 8.0, 9.0], status = 0, output = [[60.0, 75.0, 90.0, 105.0], [68.0, 85.0, 102.0, 119.0], [76.0, 95.0, 114.0, 133.0]] },
+// ]
+//
+// # `tab`: par~ i in 2 ..< 5 { delay~(T[i + (x % 3)], 3) } with T[k] = k + 1: the replica c is T[2 + c + x[n - 3] % 3], 0 before (the index is at most 4 + 2, below 8)
+// [[test.host]]
+// name = "c: tab over two calls of process"
+// target = "host"
+// flow = "index_proof_replicas.tab"
+// steps = [
+//   { call = "init", config = {}, sample_rate = 8.0, status = 0 },
+//   { call = "process", params = {}, frames = 5, input = [1, 2, 3, 4, 5], status = 0, output = [[0, 0, 0, 4, 5], [0, 0, 0, 5, 6], [0, 0, 0, 6, 7]] },
+//   { call = "process", params = {}, frames = 4, input = [6, 7, 8, 9], status = 0, output = [[3, 4, 5, 3], [4, 5, 6, 4], [5, 6, 7, 5]] },
+// ]
+//
+// # `top`: par~ i in 4294967293 ..= 4294967295 { delay~(x + (i - 4294967293), 2) }: a range to the last of `U32`, whose end of `..<` is past it (S-257); the replica c is x[n - 2] + c, 0 before
+// [[test.host]]
+// name = "c: top over two calls of process"
+// target = "host"
+// flow = "index_proof_replicas.top"
+// steps = [
+//   { call = "init", config = {}, sample_rate = 8.0, status = 0 },
+//   { call = "process", params = {}, frames = 5, input = [1.0, 2.0, 3.0, 4.0, 5.0], status = 0, output = [[0.0, 0.0, 1.0, 2.0, 3.0], [0.0, 0.0, 2.0, 3.0, 4.0], [0.0, 0.0, 3.0, 4.0, 5.0]] },
+//   { call = "process", params = {}, frames = 4, input = [6.0, 7.0, 8.0, 9.0], status = 0, output = [[4.0, 5.0, 6.0, 7.0], [5.0, 6.0, 7.0, 8.0], [6.0, 7.0, 8.0, 9.0]] },
+// ]
+
+const T: [U32; 8] = [1, 2, 3, 4, 5, 6, 7, 8]
+
+rt fn pair_sum(a: [F32; 2]) -> F32 {
+  a[0] + a[1]
+}
+
+pub flow acc(x: F32 at sample) -> F32 at sample {
+  let y = x + prev~(^y)
+  y
+}
+
+@export
+pub flow shifted(x: U32 at sample) -> [U32; 3] at sample {
+  par~ i in 2 ..< 5 { delay~(x + i, 3) }
+}
+
+@export
+pub flow twice(x: F32 at sample) -> [F32; 3] at sample {
+  let a = par~ i in 2 ..< 5 { delay~(x, 3) }
+  let b = par~ i in 2 ..< 5 { acc~(x + F32.round_from(i)) }
+  par i in 2 ..< 5 { a[i - 2] + b[i - 2] }
+}
+
+@export
+pub flow nested(x: F32 at sample) -> [F32; 3] at sample {
+  par~ i in 4 ..< 7 {
+    pair_sum(par~ j in 3 ..= 4 { delay~(x * F32.round_from(i + j), 2) })
+  }
+}
+
+@export
+pub flow tab(x: U32 at sample) -> [U32; 3] at sample {
+  par~ i in 2 ..< 5 { delay~(T[i + (x % 3)], 3) }
+}
+
+@export
+pub flow top(x: F32 at sample) -> [F32; 3] at sample {
+  par~ i in 4294967293 ..= 4294967295 { delay~(x + F32.round_from(i - 4294967293), 2) }
+}
+
+fn us() -> [U32; 9] {
+  var xs: [U32; 9] = [0; 9]
+  for n in 0 ..< 9 {
+    xs[n] = n + 1
+  }
+  xs
+}
+
+fn fs() -> [F32; 9] {
+  var xs: [F32; 9] = [0.0; 9]
+  for n in 0 ..< 9 {
+    xs[n] = F32.round_from(n) + 1.0
+  }
+  xs
+}
+
+test "shifted: each replica of a range from 2 is its own sum, three frames late" {
+  let o = shifted.render(us(), 8.0)
+  for n in 3 ..< 9 {
+    for c in 0 ..< 3 {
+      assert o.out[c][n] == n - 2 + 2 + c
+    }
+  }
+  for n in 0 ..< 3 {
+    assert o.out[0][n] == 0 && o.out[1][n] == 0 && o.out[2][n] == 0
+  }
+}
+
+test "twice: two loops over the same replicas in one function keep a state each" {
+  let o = twice.render(fs(), 8.0)
+  for n in 0 ..< 9 {
+    let m = F32.round_from(n) + 1.0
+    let late = if n >= 3 { m - 3.0 } else { 0.0 }
+    for c in 0 ..< 3 {
+      assert o.out[c][n] == late + m * (m + 1.0) * 0.5 + (2.0 + F32.round_from(c)) * m
+    }
+  }
+}
+
+test "nested: the replicas of a par~ in a par~ from 4 and 3" {
+  let o = nested.render(fs(), 8.0)
+  for n in 0 ..< 9 {
+    let late = if n >= 2 { F32.round_from(n) - 1.0 } else { 0.0 }
+    for c in 0 ..< 3 {
+      assert o.out[c][n] == (15.0 + 2.0 * F32.round_from(c)) * late
+    }
+  }
+}
+
+test "tab: the table read at the variable of a replica from 2" {
+  let o = tab.render(us(), 8.0)
+  for n in 3 ..< 9 {
+    for c in 0 ..< 3 {
+      assert o.out[c][n] == T[2 + c + ((n - 2) % 3)]
+    }
+  }
+}
+
+test "top: the replicas of a range to the last of U32" {
+  let o = top.render(fs(), 8.0)
+  for n in 0 ..< 9 {
+    let late = if n >= 2 { F32.round_from(n) - 1.0 } else { 0.0 }
+    for c in 0 ..< 3 {
+      let v = if n >= 2 { late + F32.round_from(c) } else { 0.0 }
+      assert o.out[c][n] == v
+    }
+  }
+}

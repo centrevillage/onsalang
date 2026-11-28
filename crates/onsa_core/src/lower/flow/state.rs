@@ -26,20 +26,39 @@ pub(super) fn decls(info: &FlowInfo, inputs: &[Input]) -> Decls {
     out
 }
 
+/// The types of the state of a flow and what is known of their fields ([`FlowMeta::states`]).
+pub(super) type States = Vec<(TypeId, Vec<StateField>)>;
+
 /// The Core fields of a struct of the state, the `State` of the flow or the
 /// replica of a `par~`, of the fields the plan names and orders (S-05,
-/// S-06, §12.4; [`FlowInfo::fields_of`]): their Core types.
+/// S-06, §12.4; [`FlowInfo::fields_of`]): their Core types and what is
+/// known of them; the types of the replicas inside, in `states`.
 pub(super) fn state_fields(
     lw: &mut Lowerer,
-    flow: DefId,
+    (flow, states): (DefId, &mut States),
     decls: &Decls,
     info: &FlowInfo,
     fs: &[Field],
-) -> R<Vec<(String, CTy)>> {
-    fs.iter().map(|f| Ok((f.name.clone(), field_ty(lw, flow, decls, info, f.of)?))).collect()
+) -> R<Vec<(String, CTy, StateField)>> {
+    let mut one = |f: &Field| {
+        let ty = field_ty(lw, (flow, &mut *states), decls, info, f.of)?;
+        // The write position of a delay is below the length of its ring (V-26).
+        let below = match f.of {
+            FieldOf::Node(id, Part::W) => Some(ring_len(&info.node(id).kind, ast_span(lw, flow, info.node(id).expr)?)?),
+            _ => None,
+        };
+        Ok((f.name.clone(), ty, StateField { below }))
+    };
+    fs.iter().map(&mut one).collect()
 }
 
-fn field_ty(lw: &mut Lowerer, flow: DefId, decls: &Decls, info: &FlowInfo, of: FieldOf) -> R<CTy> {
+fn field_ty(
+    lw: &mut Lowerer,
+    (flow, states): (DefId, &mut States),
+    decls: &Decls,
+    info: &FlowInfo,
+    of: FieldOf,
+) -> R<CTy> {
     match of {
         FieldOf::SampleRate => Ok(Types::float(FloatKind::F32)),
         FieldOf::Tick | FieldOf::TickHi => Ok(Types::U32),
@@ -49,7 +68,7 @@ fn field_ty(lw: &mut Lowerer, flow: DefId, decls: &Decls, info: &FlowInfo, of: F
                 decls.get(&l).ok_or_else(|| internal(lw.a.def(flow).span, "a stored local of no declaration"))?;
             lw.core_ty(decl.0, &[], decl.1)
         }
-        FieldOf::Node(id, part) => node_field_ty(lw, flow, decls, info, id, part),
+        FieldOf::Node(id, part) => node_field_ty(lw, (flow, states), decls, info, (id, part)),
         FieldOf::Hoist(h) => {
             let x = info.hoist(h);
             let ty = info.body.expr_types.get(&x.expr).ok_or_else(|| internal(x.span, "a hoisted field of no type"))?;
@@ -59,7 +78,13 @@ fn field_ty(lw: &mut Lowerer, flow: DefId, decls: &Decls, info: &FlowInfo, of: F
 }
 
 /// The Core type of the field `part` of the node `id` (S-06).
-fn node_field_ty(lw: &mut Lowerer, flow: DefId, decls: &Decls, info: &FlowInfo, id: NodeId, part: Part) -> R<CTy> {
+fn node_field_ty(
+    lw: &mut Lowerer,
+    (flow, states): (DefId, &mut States),
+    decls: &Decls,
+    info: &FlowInfo,
+    (id, part): (NodeId, Part),
+) -> R<CTy> {
     let n = info.node(id);
     let span = ast_span(lw, flow, n.expr)?;
     match (&n.kind, part) {
@@ -104,9 +129,11 @@ fn node_field_ty(lw: &mut Lowerer, flow: DefId, decls: &Decls, info: &FlowInfo, 
             lw.core_ty(out.ok_or_else(|| internal(span, "a held output of no flow"))?, &[], span)
         }
         (PlanKind::Par { fields, count, .. }, Part::Own) => {
-            let inner = state_fields(lw, flow, decls, info, fields)?;
+            let inner = state_fields(lw, (flow, &mut *states), decls, info, fields)?;
+            let (inner, known) = inner.into_iter().map(|(name, t, f)| ((name, t), f)).unzip();
             let tname = format!("{}.{}.State", lw.qual_name(flow), n.path);
             let tid = lw.new_type(tname, TypeDefKind::Struct { fields: inner });
+            states.push((tid, known));
             // The array of the states of the replicas (§11.5).
             let state = lw.ty(TyKind::Struct(tid));
             Ok(lw.ty(TyKind::Array(state, *count)))

@@ -460,8 +460,7 @@ fn the_stage_of_a_call_in_a_par_is_of_the_replica_that_gave_the_event() {
         &e,
         &[
             "(inout s: t.f.State, ev: U32) -> ()",
-            "for k",
-            "let i: U32 = (4294967294:U32 + k",
+            "for i in 4294967294:U32..=4294967295:U32",
             "t.f.ev_1(inout s, i, payload(",
         ],
     );
@@ -498,7 +497,7 @@ fn what_a_delay_stores_of_events_in_a_par_is_read_of_each_replica() {
         "for i in",
         "for j in",
         "for l in",
-        "__early.o.prev_0[known i][known j][known (l - 1:U32)] = s.1[known i].",
+        "__early.o.prev_0[known i][known j][known (l -% 1:U32)] = s.1[known i].",
     ];
     let all: Vec<usize> = parts.iter().map(|p| t.find(p).unwrap_or_else(|| panic!("{p}: {t}"))).collect();
     assert!(all.is_sorted(), "{t}");
@@ -507,7 +506,7 @@ fn what_a_delay_stores_of_events_in_a_par_is_read_of_each_replica() {
         &[
             "let __early.o.prev_0: [[[U32; 4]; 3]; 2] = zeroed",
             "t.gen.tick(",
-            "(x + __early.o.prev_0[known i][known j][known (l - 1:U32)])",
+            "(x + __early.o.prev_0[known i][known j][known (l -% 1:U32)])",
         ],
     );
 }
@@ -678,8 +677,8 @@ fn the_scope_of_a_replica_is_popped_after_its_body_and_an_empty_body_makes_no_lo
 
 /// `init` writes `T.default()` in a loop of the replicas of a `par~` whose
 /// replica has such a field (`FlowInfo::starts_default_in`) and of no other:
-/// one loop of it, and no counter `k` of a range past `U32` made for a
-/// loop of the defaults not made, before the one of the loop of its `init`.
+/// one loop of it, before the loop of the other's `init`: of its variable,
+/// over a range to the last of `U32` closed (S-257), and of no local of its own.
 #[test]
 fn the_defaults_of_init_loop_over_the_replicas_that_have_one() {
     let src = "flow g4(x: F32 at (sample * 4)) -> F32 at sample { x[0] + x[1] * 10.0 + x[2] * 100.0 + x[3] * 1000.0 }
@@ -698,10 +697,10 @@ pub flow f(x: F32 at sample) -> F32 at sample {
     let loops: Vec<&str> = init.lines().filter(|l| l.trim_start().starts_with("for ")).collect();
     assert_eq!(loops.len(), 3, "{init}");
     // The defaults are of the replicas of `zs` alone, in the first loop.
-    let (first, second) = (at(&init, "[std.core.num.F32.default(); 4]"), init.find("for k@").unwrap_or(0));
-    assert!(loops[0].contains("for i@") && first < second && !init[..first].contains("for k@"), "{init}");
-    // The first `k` of the function is the counter of the loop of `ys`: none made before it for no loop.
+    let (first, second) = (at(&init, "[std.core.num.F32.default(); 4]"), at(&init, "4294967294:U32..="));
+    assert!(loops[0].contains("for i@") && first < second, "{init}");
+    // A loop over them makes no local of its own (its variable is of the `par~`).
     let f = m.fns.iter().find(|f| f.name == "t.f.init").expect("`init`");
-    let k = f.locals.iter().position(|l| l.name == "k").expect("a `k`");
-    assert!(loops[1].trim_start().starts_with(&format!("for k@{k} in")), "{init}");
+    assert!(f.locals.iter().all(|l| l.name != "k"), "{init}");
+    assert!(loops[1].contains("in 4294967294:U32..=4294967295:U32"), "{init}");
 }

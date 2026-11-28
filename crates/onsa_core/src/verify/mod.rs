@@ -24,7 +24,7 @@ mod types;
 pub enum Rule {
     V01 = 1, V02, V03, V04, V05, V06, V07, V08, V09, V10,
     V11, V12, V13, V14, V15, V16, V17, V18,
-    V20 = 20, V22 = 22, V25 = 25, V28 = 28,
+    V20 = 20, V22 = 22, V25 = 25, V26, V28 = 28,
 }
 
 impl fmt::Display for Rule {
@@ -69,13 +69,13 @@ pub(crate) fn failure(m: &Module, e: VerifyError) -> (VerifyError, String) {
 pub fn verify(m: &Module) -> Result<(), VerifyError> {
     depth::module(m)?;
     ids::table(m)?;
-    // V-25 reads the intervals of the constants, as the stage does.
-    let consts = crate::bounds::consts(m);
+    // V-25 reads the intervals of the constants and the fields below a length, as the stage does.
+    let (consts, below) = (crate::bounds::consts(m), crate::bounds::below(m));
     for c in &m.consts {
         let mut v = V {
             m,
             f: None,
-            env: Env::new(Parts { tys: &m.tys, types: &m.types }, &consts, None),
+            env: Env::new(Parts { tys: &m.tys, types: &m.types }, (&consts, &below), None),
             visible: Vec::new(),
             undo: Vec::new(),
             lets: Vec::new(),
@@ -100,7 +100,7 @@ pub fn verify(m: &Module) -> Result<(), VerifyError> {
         let mut v = V {
             m,
             f: Some(f),
-            env: Env::new(Parts { tys: &m.tys, types: &m.types }, &consts, Some(f)),
+            env: Env::new(Parts { tys: &m.tys, types: &m.types }, (&consts, &below), Some(f)),
             visible: vec![false; f.locals.len()],
             undo: Vec::new(),
             lets: vec![false; f.locals.len()],

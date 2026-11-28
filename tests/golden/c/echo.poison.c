@@ -61,7 +61,7 @@ ONSA_INLINE float echo__echo__tick(echo__echo__State* s, float x) {
   float y__vdelay_0 = (float)((float)((float)(1.0f - y__vdelay_0__f) * y__vdelay_0__a) + (float)(y__vdelay_0__f * y__vdelay_0__b));
   float y = (float)(onsa_t4 + (float)(onsa_t3 * y__vdelay_0));
   float onsa__out = y;
-  s->y__vdelay_0__buf.a[onsa_idx(s->y__vdelay_0__w, UINT32_C(96001), "echo.onsa", 30)] = y;
+  s->y__vdelay_0__buf.a[s->y__vdelay_0__w] = y;
   s->y__vdelay_0__w = onsa_rem_u32(onsa_add_u32(s->y__vdelay_0__w, UINT32_C(1), "echo.onsa", 30), UINT32_C(96001), "echo.onsa", 30);
   return onsa__out;
 }

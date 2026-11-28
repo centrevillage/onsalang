@@ -292,7 +292,7 @@ ONSA_INLINE float voice__echo__tick(voice__echo__State* s, float x) {
   float y__vdelay_0 = (float)((float)((float)(1.0f - y__vdelay_0__f) * y__vdelay_0__a) + (float)(y__vdelay_0__f * y__vdelay_0__b));
   float y = (float)(onsa_t4 + (float)(onsa_t3 * y__vdelay_0));
   float onsa__out = y;
-  s->y__vdelay_0__buf.a[onsa_idx(s->y__vdelay_0__w, UINT32_C(96001), "voice.onsa", 90)] = y;
+  s->y__vdelay_0__buf.a[s->y__vdelay_0__w] = y;
   s->y__vdelay_0__w = onsa_rem_u32(onsa_add_u32(s->y__vdelay_0__w, UINT32_C(1), "voice.onsa", 90), UINT32_C(96001), "voice.onsa", 90);
   return onsa__out;
 }

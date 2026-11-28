@@ -156,16 +156,40 @@ impl<'a> V<'a> {
         Err(self.err(Rule::V05, format!("write to the borrowed parameter `{name}`")))
     }
 
-    /// The places an `inout` argument writes: writable (V-05). That it is of
-    /// the forms that write places is its parent's check.
+    /// The places an `inout` argument writes: writable (V-05), and no field
+    /// below a length (V-26: the callee could write any value to it). That
+    /// it is of the forms that write places is its parent's check.
     fn inout(&self, x: &Expr) -> R<()> {
         let mut r = Ok(());
         written_places(x, &mut |p| {
             if let (Ok(()), Some(l)) = (&r, p.place_root()) {
                 r = self.writable(l)
             }
+            if let (Ok(()), ExprKind::Field { base, index }) = (&r, &p.kind)
+                && self.env.below(base.ty, *index).is_some()
+            {
+                r = Err(self.err(Rule::V26, format!("an `inout` argument of the field {index} below a length")));
+            }
         });
         r
+    }
+
+    /// V-26: a value `v` written to the field `i` of a value of `base`
+    /// below a length is proved below it; `Zeroed` is 0 (W8-07 proves that
+    /// a field is written before it is read). So every value of the type
+    /// has it below its length, which its reads assume (V-25): of a struct
+    /// literal or a write of the field, here; of a copy of another value, of
+    /// that one; of a callee given it `inout`, of the writes of the callee.
+    pub(super) fn below(&self, base: CTy, i: u32, v: &Expr) -> R<()> {
+        let Some(n) = self.env.below(base, i) else { return Ok(()) };
+        let hi = match v.kind {
+            ExprKind::Zeroed => Some(0),
+            _ => self.env.interval(v).map(|iv| iv.hi),
+        };
+        if hi.is_some_and(|hi| hi < u64::from(n)) {
+            return Ok(());
+        }
+        Err(self.err(Rule::V26, format!("a value not proved below {n} written to the field {i} below it")))
     }
 
     /// V-28: the variable of a `for` is not written in its body: no
