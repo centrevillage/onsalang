@@ -58,16 +58,16 @@ rt fn unison.wrap01(x: F32) -> F32 {
 }
 rt fn unison.unison.ctl(inout s: unison.unison.State, p: unison.unison.Params) -> () {
   for i in 0:U32..4:U32 {
-    unison.saw.ctl(inout s.0[i].0, unison.saw.Params { f0: (p.0 * (1.0:F32 + (p.1 * s.0[i].1))) })
+    unison.saw.ctl(inout s.0[known i].0, unison.saw.Params { f0: (p.0 * (1.0:F32 + (p.1 * s.0[known i].1))) })
   }
 }
 rt fn unison.unison.tick(inout s: unison.unison.State) -> F32 {
   let saws@2: [F32; 4] = {
     let saws@5: [F32; 4] = zeroed:[F32; 4]
     for i in 0:U32..4:U32 {
-      saws@5[i] = {
+      saws@5[known i] = {
         {
-          let saws.saw_0: F32 = unison.saw.tick(inout s.0[i].0)
+          let saws.saw_0: F32 = unison.saw.tick(inout s.0[known i].0)
           saws.saw_0
         }
       }
@@ -80,8 +80,8 @@ rt fn unison.unison.tick(inout s: unison.unison.State) -> F32 {
 fn unison.unison.init(cfg: unison.unison.Config, sample_rate: F32) -> unison.unison.State sret {
   let s: unison.unison.State = zeroed:unison.unison.State
   for i in 0:U32..4:U32 {
-    s.0[i].1 = unison.spread(i, const unison.UNISON)
-    s.0[i].0 = unison.saw.init(unison.saw.Config {}, sample_rate)
+    s.0[known i].1 = unison.spread(i, const unison.UNISON)
+    s.0[known i].0 = unison.saw.init(unison.saw.Config {}, sample_rate)
   }
   s.1 = false
   s.2 = true
@@ -89,7 +89,7 @@ fn unison.unison.init(cfg: unison.unison.Config, sample_rate: F32) -> unison.uni
 }
 rt fn unison.unison.reset(inout s: unison.unison.State) -> () {
   for i in 0:U32..4:U32 {
-    unison.saw.reset(inout s.0[i].0)
+    unison.saw.reset(inout s.0[known i].0)
   }
   s.1 = false
 }
@@ -115,9 +115,9 @@ rt fn std.math.sum__F32__4(xs: [F32; 4]) -> F32 {
   if (4:U32 == 0:U32) {
     return const std.core.num.F32.ZERO
   }
-  let acc: F32 = xs[0:U32]
+  let acc: F32 = xs[known 0:U32]
   for i in 1:U32..4:U32 {
-    acc = (acc + xs[i])
+    acc = (acc + xs[known i])
   }
   acc
 }

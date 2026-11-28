@@ -52,6 +52,8 @@ phases! {
     Report "report",
     /// The lowering to Core.
     Lower "lower",
+    /// The indexes of Core proved in range (`onsa_core::bounds`).
+    Bounds "bounds",
     /// The verifier of Core.
     Verify "verify",
 }

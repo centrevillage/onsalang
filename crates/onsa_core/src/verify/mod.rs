@@ -7,6 +7,7 @@ use std::fmt;
 
 use onsa_diag::Span;
 
+use crate::bounds::Env;
 use crate::ir::*;
 
 pub(crate) mod depth;
@@ -17,13 +18,13 @@ mod types;
 
 /// A rule of the verifier: its number in the list of `design/04-core.md`,
 /// shown as `V-04`: the numbers that list has a row of (a work adds a
-/// number with its row).
+/// number with its row; V-19 is no more, a part of V-25).
 #[rustfmt::skip]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Rule {
     V01 = 1, V02, V03, V04, V05, V06, V07, V08, V09, V10,
-    V11, V12, V13, V14, V15, V16, V17, V18, V19, V20,
-    V22 = 22,
+    V11, V12, V13, V14, V15, V16, V17, V18,
+    V20 = 20, V22 = 22, V25 = 25, V28 = 28,
 }
 
 impl fmt::Display for Rule {
@@ -68,10 +69,13 @@ pub(crate) fn failure(m: &Module, e: VerifyError) -> (VerifyError, String) {
 pub fn verify(m: &Module) -> Result<(), VerifyError> {
     depth::module(m)?;
     ids::table(m)?;
+    // V-25 reads the intervals of the constants, as the stage does.
+    let consts = crate::bounds::consts(m);
     for c in &m.consts {
         let mut v = V {
             m,
             f: None,
+            env: Env::new(Parts { tys: &m.tys, types: &m.types }, &consts, None),
             visible: Vec::new(),
             undo: Vec::new(),
             lets: Vec::new(),
@@ -84,7 +88,7 @@ pub fn verify(m: &Module) -> Result<(), VerifyError> {
         v.expr(&c.init)?;
         v.same(c.init.ty, c.ty, "const initializer")?;
     }
-    // The generated `process` of each flow, marked once (V-19).
+    // The generated `process` of each flow, marked once (V-25).
     let mut process = vec![false; m.fns.len()];
     for fl in &m.flows {
         if let Some(p) = fl.fns.process.and_then(|f| process.get_mut(f.0 as usize)) {
@@ -96,6 +100,7 @@ pub fn verify(m: &Module) -> Result<(), VerifyError> {
         let mut v = V {
             m,
             f: Some(f),
+            env: Env::new(Parts { tys: &m.tys, types: &m.types }, &consts, Some(f)),
             visible: vec![false; f.locals.len()],
             undo: Vec::new(),
             lets: vec![false; f.locals.len()],
@@ -137,6 +142,8 @@ pub fn verify(m: &Module) -> Result<(), VerifyError> {
 struct V<'a> {
     m: &'a Module,
     f: Option<&'a FnDef>,
+    /// What is known of the locals where a node is (V-25, V-28).
+    env: Env<'a>,
     /// The locals seen where a node is (V-04), and the ones that became so,
     /// in order, to undo when a scope of names closes.
     visible: Vec<bool>,
@@ -147,7 +154,7 @@ struct V<'a> {
     in_loop: bool,
     /// The function is the `process` generated for a flow (`FlowFns::process`).
     process: bool,
-    /// V-19 (S-196): an index `Bounds::Known` may be here, in the sample loop of a `process`.
+    /// V-25 (S-196): any index `Bounds::Known` may be here, in the sample loop of a `process`.
     known: bool,
     name: String,
     /// The node being checked, the position of an error.

@@ -85,8 +85,27 @@ impl<'a> V<'a> {
     }
 
     pub(super) fn kind(&self, t: CTy) -> R<&'a TyKind> {
-        let out = || self.err(Rule::V20, format!("ty {} out of range", t.index()));
-        self.m.tys.kinds().get(t.index()).ok_or_else(out)
+        self.of(self.parts().kind(t))
+    }
+
+    pub(super) fn parts(&self) -> Parts<'a> {
+        Parts { tys: &self.m.tys, types: &self.m.types }
+    }
+
+    /// A part [`Parts`] finds, else the error: an id out of its table, a part past the end are V-20.
+    pub(super) fn of<T>(&self, part: Result<T, NoPart>) -> R<T> {
+        let name = |t| crate::dump::type_name(self.m, t);
+        part.map_err(|e| match e {
+            NoPart::Ty(t) => self.err(Rule::V20, format!("ty {} out of range", t.index())),
+            NoPart::Type(id) => self.err(Rule::V20, format!("type {} out of range", id.0)),
+            NoPart::Local => self.err(Rule::V20, "local out of range"),
+            NoPart::Field => self.err(Rule::V20, "field index out of range"),
+            NoPart::TupleField => self.err(Rule::V20, "tuple index out of range"),
+            NoPart::Opaque => self.err(Rule::V20, "field access on an opaque type"),
+            NoPart::EnumField => self.err(Rule::V01, "field access on an enum"),
+            NoPart::NoFields(t) => self.err(Rule::V01, format!("field access on `{}`", name(t))),
+            NoPart::NoElems(t) => self.err(Rule::V01, format!("index on `{}`", name(t))),
+        })
     }
 
     /// The table of the types, to ask of `t`, which is in it.

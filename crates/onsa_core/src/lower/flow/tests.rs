@@ -35,7 +35,7 @@ fn the_replicas_of_a_par_store_in_a_loop_after_the_output() {
   y
 }";
     let t = tick(src, "f");
-    let (out, store) = (at(&t, "let __out"), at(&t, "s.0[i].0 = "));
+    let (out, store) = (at(&t, "let __out"), at(&t, "s.0[known i].0 = "));
     assert!(out < store && t[out..store].contains("for i in"), "{t}");
     assert_eq!(t.matches("for i in").count(), 2, "{t}");
 }
@@ -193,8 +193,8 @@ fn a_binding_a_delay_stores_in_a_par_has_a_place_of_each_replica() {
     let t = tick(src, "f");
     let (place, write, store) = (
         at(&t, "let __bind.n: [U32; 2] = zeroed:[U32; 2]"),
-        at(&t, "__bind.n[i] = n"),
-        at(&t, "s.0[i].1 = round.U32.F32(__bind.n[i])"),
+        at(&t, "__bind.n[known i] = n"),
+        at(&t, "s.0[known i].1 = round.U32.F32(__bind.n[known i])"),
     );
     // The store is in the loop of the stores after the output.
     let stores = t.rfind("for i in").unwrap_or_default();
@@ -471,8 +471,8 @@ fn the_stage_of_a_call_in_a_par_is_of_the_replica_that_gave_the_event() {
         &[
             "(inout s: t.f.State, i: U32, ev: U32) -> ()",
             "let __bind.v: [U32; 3] = zeroed",
-            "__bind.v[j] = v\n",
-            "s.1[(i - 4294967294:U32)].1[j].0 = __bind.v[j]",
+            "__bind.v[known j] = v\n",
+            "s.1[(i - 4294967294:U32)].1[known j].0 = __bind.v[known j]",
         ],
     );
     at(&e, "let __bind.n: U32 = zeroed");
@@ -492,8 +492,14 @@ fn what_a_delay_stores_of_events_in_a_par_is_read_of_each_replica() {
   o[0] + o[1]
 }";
     let t = event_fn(f, "f.tick");
-    let parts =
-        ["let __early", "let o@", "for i in", "for j in", "for l in", "__early.o.prev_0[i][j][(l - 1:U32)] = s.1[i]."];
+    let parts = [
+        "let __early",
+        "let o@",
+        "for i in",
+        "for j in",
+        "for l in",
+        "__early.o.prev_0[known i][known j][known (l - 1:U32)] = s.1[known i].",
+    ];
     let all: Vec<usize> = parts.iter().map(|p| t.find(p).unwrap_or_else(|| panic!("{p}: {t}"))).collect();
     assert!(all.is_sorted(), "{t}");
     in_order(
@@ -501,7 +507,7 @@ fn what_a_delay_stores_of_events_in_a_par_is_read_of_each_replica() {
         &[
             "let __early.o.prev_0: [[[U32; 4]; 3]; 2] = zeroed",
             "t.gen.tick(",
-            "(x + __early.o.prev_0[i][j][(l - 1:U32)])",
+            "(x + __early.o.prev_0[known i][known j][known (l - 1:U32)])",
         ],
     );
 }
@@ -550,12 +556,19 @@ pub flow f() -> U32 at sample { cnt~(four~()) }";
     let events = "let __events: [std.core.Option__U32; 2] = t.two.tick(inout s.0)";
     in_order(
         &t,
-        &["-> [std.core.Option__U32; 4]", "for __j", events, "for __i", "= __events[__i]", "__out[__n] = t.four.ev_0("],
+        &[
+            "-> [std.core.Option__U32; 4]",
+            "for __j",
+            events,
+            "for __i",
+            "= __events[known __i]",
+            "__out[__n] = t.four.ev_0(",
+        ],
     );
     let t = event_fn(f, "f.tick");
     in_order(
         &t,
-        &["-> U32", "t.four.tick(inout s.", "for __i", "= __events[__i]", "t.f.ev_0(inout s, ", "t.cnt.tick("],
+        &["-> U32", "t.four.tick(inout s.", "for __i", "= __events[known __i]", "t.f.ev_0(inout s, ", "t.cnt.tick("],
     );
     assert!(!t.contains("__n"), "{t}");
 }

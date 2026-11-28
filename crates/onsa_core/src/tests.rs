@@ -6,6 +6,7 @@ use onsa_sema::{Module as SModule, Package};
 use crate::ir::*;
 use crate::{dump, lower, verify};
 
+mod bounds_tests;
 mod chains_tests;
 mod depth_tests;
 mod effects_tests;
@@ -173,7 +174,7 @@ fn option_equality_uses_generated_eq() {
 fn for_over_array_is_an_index_loop() {
     let d = text("pub fn sum(xs: [F32; 4]) -> F32 {\n  var acc = 0.0\n  for x in xs { acc = acc + x }\n  acc\n}\n");
     assert!(d.contains("for __i in 0:U32..4:U32 {"), "{d}");
-    assert!(d.contains("let x: F32 = xs[__i]"), "{d}");
+    assert!(d.contains("let x: F32 = xs[known __i]"), "{d}");
 }
 
 #[test]
@@ -191,7 +192,7 @@ fn from_fn_closure_is_inlined() {
     assert!(d.contains("let __arr: [F32; 3] = zeroed:[F32; 3]"), "{d}");
     assert!(d.contains("for __i in 0:U32..3:U32 {"), "{d}");
     assert!(d.contains("let i: U32 = __i"), "{d}");
-    assert!(d.contains("__arr[__i] = (round.U32.F32(i) * k)"), "{d}");
+    assert!(d.contains("__arr[known __i] = (round.U32.F32(i) * k)"), "{d}");
     assert!(d.contains("sret"), "{d}");
 }
 
@@ -454,8 +455,9 @@ fn verifier_rejects_bad_modules() {
     assert_eq!(err.rule, crate::Rule::V01, "{err}");
 }
 
-/// V-19 (S-196): an index known in range is in the sample loop of a generated `process` only. The same
-/// index outside it, before the loop of `process` or in the loop of another function, fails the verifier.
+/// V-25 (S-196): an index known in range and not proved in range (`[0][1]`) is in the sample loop of a
+/// generated `process` only. The same index outside it, before the loop of `process` or in the loop of
+/// another function, fails the verifier.
 #[test]
 fn the_verifier_rejects_an_index_known_in_range_outside_the_sample_loop() {
     let mut m = core("pub flow f(x: F32 at sample) -> F32 at sample {\n  x\n}\n");
@@ -464,8 +466,9 @@ fn the_verifier_rejects_an_index_known_in_range_outside_the_sample_loop() {
     m.fill_all_facts();
     let index = |bounds: Bounds| {
         let zero = Expr::new(Types::U32, span, ExprKind::Lit(Lit::Int(0)));
-        let base = Expr::new(one, span, ExprKind::Array(vec![zero.clone()]));
-        let e = Expr::new(Types::U32, span, ExprKind::Index { base: Box::new(base), index: Box::new(zero), bounds });
+        let past = Expr::new(Types::U32, span, ExprKind::Lit(Lit::Int(1)));
+        let base = Expr::new(one, span, ExprKind::Array(vec![zero]));
+        let e = Expr::new(Types::U32, span, ExprKind::Index { base: Box::new(base), index: Box::new(past), bounds });
         Stmt { span, kind: StmtKind::Expr(e) }
     };
     let process = m.flows[0].fns.process.expect("a `process`").0 as usize;
@@ -477,7 +480,7 @@ fn the_verifier_rejects_an_index_known_in_range_outside_the_sample_loop() {
     body(&mut m, process)[0] = index(Bounds::Known);
     let err = verify(&m).unwrap_err();
     assert!(err.message.contains("outside the sample loop") && err.fn_name.ends_with(".process"), "{err}");
-    assert_eq!(err.rule, crate::Rule::V19, "{err}");
+    assert_eq!(err.rule, crate::Rule::V25, "{err}");
     body(&mut m, process).remove(0);
     verify(&m).unwrap_or_else(|e| panic!("{e}"));
     let i = LocalId(0);
@@ -794,11 +797,11 @@ fn par_replicates_state_and_loops() {
     // The part at `init` of the argument is hoisted in each replica (S-1140),
     // in the one loop of the body, before the `init` of the call (S-1233).
     assert!(d.contains("type t.uni.saws.State = struct { saw_0: t.saw.State, _hoist_0: F32 }"), "{d}");
-    let field = "for i in 0:U32..4:U32 {\n    s.0[i].1 = (1.0:F32 + (round.U32.F32(i) * 0.01:F32))\n";
-    assert!(d.contains(&format!("{field}    s.0[i].0 = t.saw.init(t.saw.Config {{}}, sample_rate)")), "{d}");
-    assert!(d.contains("t.saw.ctl(inout s.0[i].0, t.saw.Params { f0: (p.0 * s.0[i].1) })"), "{d}");
-    assert!(d.contains("= t.saw.tick(inout s.0[i].0)"), "{d}");
-    assert!(d.contains("t.saw.reset(inout s.0[i].0)"), "{d}");
+    let field = "for i in 0:U32..4:U32 {\n    s.0[known i].1 = (1.0:F32 + (round.U32.F32(i) * 0.01:F32))\n";
+    assert!(d.contains(&format!("{field}    s.0[known i].0 = t.saw.init(t.saw.Config {{}}, sample_rate)")), "{d}");
+    assert!(d.contains("t.saw.ctl(inout s.0[known i].0, t.saw.Params { f0: (p.0 * s.0[known i].1) })"), "{d}");
+    assert!(d.contains("= t.saw.tick(inout s.0[known i].0)"), "{d}");
+    assert!(d.contains("t.saw.reset(inout s.0[known i].0)"), "{d}");
     assert!(d.contains("std.math.sum__F32__4("), "{d}");
 }
 
@@ -811,11 +814,11 @@ fn planar_and_struct_outputs() {
     assert!(d.contains("input: [Span[F32]; 2], inout output: [Span[F32]; 2]) -> () {"), "{d}");
     // R-22: every channel of every span is compared with the first, before `ctl`.
     assert!(
-        d.contains("[1:U32]) != len) {\n    panic(\"span lengths differ\")\n  }\n  if (len(output[0:U32]) != len) {"),
+        d.contains("[known 1:U32]) != len) {\n    panic(\"span lengths differ\")\n  }\n  if (len(output[known 0:U32]) != len) {"),
         "{d}"
     );
     assert!(
-        d.contains("if (len(output[1:U32]) != len) {\n    panic(\"span lengths differ\")\n  }\n  t.dup.ctl("),
+        d.contains("if (len(output[known 1:U32]) != len) {\n    panic(\"span lengths differ\")\n  }\n  t.dup.ctl("),
         "{d}"
     );
     assert!(d.contains("[known 0:U32][known i], input"), "{d}");
@@ -1283,7 +1286,8 @@ fn tick_id(m: &Module, end: &str) -> FnId {
     FnId(m.fns.iter().position(|f| f.name.ends_with(end)).expect("the function") as u32)
 }
 
-/// V-19 (W8-02): the sample loop of `process` ends with it: an index known in range after the loop is rejected.
+/// V-25 (W8-02): the sample loop of `process` ends with it: an index known in range after the loop, and
+/// not proved in range (`[0][1]`), is rejected.
 #[test]
 fn the_verifier_rejects_an_index_known_after_the_sample_loop() {
     let mut m = core("pub flow f(x: F32 at sample) -> F32 at sample {\n  x\n}\n");
@@ -1291,15 +1295,16 @@ fn the_verifier_rejects_an_index_known_after_the_sample_loop() {
     let one = m.tys.intern(TyKind::Array(Types::U32, 1));
     m.fill_all_facts();
     let zero = Expr::new(Types::U32, span, ExprKind::Lit(Lit::Int(0)));
-    let base = Expr::new(one, span, ExprKind::Array(vec![zero.clone()]));
+    let past = Expr::new(Types::U32, span, ExprKind::Lit(Lit::Int(1)));
+    let base = Expr::new(one, span, ExprKind::Array(vec![zero]));
     let e = Expr::new(
         Types::U32,
         span,
-        ExprKind::Index { base: Box::new(base), index: Box::new(zero), bounds: Bounds::Known },
+        ExprKind::Index { base: Box::new(base), index: Box::new(past), bounds: Bounds::Known },
     );
     let process = m.flows[0].fns.process.expect("a `process`").0 as usize;
     verify(&m).unwrap_or_else(|e| panic!("{e}"));
     m.fns[process].body.as_mut().expect("a body").stmts.push(Stmt { span, kind: StmtKind::Expr(e) });
     let err = verify(&m).unwrap_err();
-    assert_eq!(err.rule, crate::Rule::V19, "{err}");
+    assert_eq!(err.rule, crate::Rule::V25, "{err}");
 }

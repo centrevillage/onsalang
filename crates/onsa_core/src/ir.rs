@@ -435,9 +435,10 @@ pub enum Place {
 }
 
 /// Whether an index is checked against the length of its sequence (§18.1),
-/// or known in range: the inputs and outputs of the sample loop of
-/// `process`, whose lengths it compared before the loop (S-196), and the
-/// constant channels of a planar `[Span; N]` there.
+/// or known in range (V-25): one of an array proved below its length
+/// (`bounds.rs`, §9.2), and in the sample loop of `process` the inputs and
+/// outputs, whose lengths it compared before the loop (S-196), and the
+/// constant channels of a planar `[Span; N]`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Bounds {
     Checked,
@@ -449,6 +450,64 @@ impl Place {
         match self {
             Place::Local(l) => *l,
             Place::Field(p, _) | Place::Index(p, ..) => p.root(),
+        }
+    }
+}
+
+/// The types of the parts of a type and of a place, of the tables of a
+/// module that may not have them ([`NoPart`]): the verifier and the stage
+/// of the bounds read them here (D-15).
+#[derive(Clone, Copy)]
+pub struct Parts<'m> {
+    pub tys: &'m Types,
+    pub types: &'m [TypeDef],
+}
+
+/// Why [`Parts`] finds no type: an id out of its table, a part past the
+/// end, a field of what has none (a part `Field` of a struct, a tuple).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NoPart {
+    Ty(CTy),
+    Type(TypeId),
+    Local,
+    Field,
+    TupleField,
+    Opaque,
+    EnumField,
+    NoFields(CTy),
+    NoElems(CTy),
+}
+
+impl<'m> Parts<'m> {
+    pub fn kind(self, t: CTy) -> Result<&'m TyKind, NoPart> {
+        self.tys.kinds().get(t.index()).ok_or(NoPart::Ty(t))
+    }
+
+    pub fn field(self, base: CTy, i: u32) -> Result<CTy, NoPart> {
+        match self.kind(base)? {
+            TyKind::Struct(id) => match &self.types.get(id.0 as usize).ok_or(NoPart::Type(*id))?.kind {
+                TypeDefKind::Struct { fields } => fields.get(i as usize).map(|f| f.1).ok_or(NoPart::Field),
+                TypeDefKind::Opaque => Err(NoPart::Opaque),
+                TypeDefKind::Enum { .. } => Err(NoPart::EnumField),
+            },
+            TyKind::Tuple(ts) => ts.get(i as usize).copied().ok_or(NoPart::TupleField),
+            _ => Err(NoPart::NoFields(base)),
+        }
+    }
+
+    pub fn elem(self, base: CTy) -> Result<CTy, NoPart> {
+        match self.kind(base)? {
+            TyKind::Array(e, _) | TyKind::Span(e) | TyKind::Buf(e) => Ok(*e),
+            _ => Err(NoPart::NoElems(base)),
+        }
+    }
+
+    /// A place has no `ty`: its type is of its form, of the `locals` of its function.
+    pub fn place(self, locals: &[Local], p: &Place) -> Result<CTy, NoPart> {
+        match p {
+            Place::Local(l) => locals.get(l.0 as usize).map(|x| x.ty).ok_or(NoPart::Local),
+            Place::Field(b, i) => self.field(self.place(locals, b)?, *i),
+            Place::Index(b, ..) => self.elem(self.place(locals, b)?),
         }
     }
 }

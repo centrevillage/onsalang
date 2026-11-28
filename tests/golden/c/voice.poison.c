@@ -286,9 +286,9 @@ ONSA_INLINE float voice__echo__tick(voice__echo__State* s, float x) {
   float y__vdelay_0__f = (float)(y__vdelay_0__dc - ((float)y__vdelay_0__k));
   uint32_t y__vdelay_0__wlk = onsa_sub_u32(onsa_add_u32(s->y__vdelay_0__w, UINT32_C(96001), "voice.onsa", 90), y__vdelay_0__k, "voice.onsa", 90);
   uint32_t onsa_t1 = onsa_rem_u32(y__vdelay_0__wlk, UINT32_C(96001), "voice.onsa", 99);
-  float y__vdelay_0__a = s->y__vdelay_0__buf.a[onsa_idx(onsa_t1, UINT32_C(96001), "voice.onsa", 90)];
+  float y__vdelay_0__a = s->y__vdelay_0__buf.a[onsa_t1];
   uint32_t onsa_t2 = onsa_rem_u32(onsa_sub_u32(y__vdelay_0__wlk, UINT32_C(1), "voice.onsa", 99), UINT32_C(96001), "voice.onsa", 99);
-  float y__vdelay_0__b = s->y__vdelay_0__buf.a[onsa_idx(onsa_t2, UINT32_C(96001), "voice.onsa", 90)];
+  float y__vdelay_0__b = s->y__vdelay_0__buf.a[onsa_t2];
   float y__vdelay_0 = (float)((float)((float)(1.0f - y__vdelay_0__f) * y__vdelay_0__a) + (float)(y__vdelay_0__f * y__vdelay_0__b));
   float y = (float)(onsa_t4 + (float)(onsa_t3 * y__vdelay_0));
   float onsa__out = y;

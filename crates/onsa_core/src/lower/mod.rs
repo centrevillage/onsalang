@@ -303,6 +303,11 @@ fn finish(mut module: Module) -> Result<Module, LowerFailure> {
     // The comparisons the types decide and the assignments of a place to
     // itself (S-288), before the copies are counted.
     fold::fold_module(&mut module);
+    // The indexes proved in range, on the Core folded (§9.2); its own phase.
+    {
+        let _bounds = onsa_diag::timing::phase(onsa_diag::timing::Phase::Bounds);
+        crate::bounds::module(&mut module);
+    }
     // After the fold, which may drop a loop that never runs with its `let`s.
     for i in 0..module.fns.len() {
         module.fns[i].hoisted = storage::hoisted(&module, &module.fns[i]);

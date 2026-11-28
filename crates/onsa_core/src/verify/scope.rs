@@ -2,10 +2,11 @@
 //! children of a node in evaluation order, then the node where it is
 //! ([`V::stmt_here`], [`V::expr_here`]; an error in a part is found before
 //! one of its parent). The context a node is checked in, the locals seen
-//! (V-04), a loop (V-07) and the sample loop of a `process` (V-19), changes
-//! in [`V::child`] only.
+//! (V-04), a loop (V-07), the sample loop of a `process` and what is known
+//! of the locals (V-25, V-28), changes in [`V::stmt`] and [`V::child`] only.
 
 use super::{R, Rule, V};
+use crate::bounds::Var;
 use crate::ir::*;
 use crate::walk::{
     Child, Eval, Part, PlaceRole, Role, Scope, block_children, expr_children, place_children, stmt_children,
@@ -32,10 +33,7 @@ impl<'a> V<'a> {
     /// but in its parts.
     pub(super) fn stmt(&mut self, s: &'a Stmt) -> R<()> {
         let outer = self.at.replace(s.span);
-        let var = match s.kind {
-            StmtKind::ForRange { local, .. } => Some(local),
-            _ => None,
-        };
+        let var = self.env.variable(&s.kind);
         let mut r = Ok(());
         stmt_children(s, &mut |c| {
             if r.is_ok() {
@@ -44,9 +42,11 @@ impl<'a> V<'a> {
         });
         r?;
         self.stmt_here(s)?;
-        if let StmtKind::Let(l, _) = s.kind {
-            self.define(l)?;
+        if let StmtKind::Let(l, e) = &s.kind {
+            self.unwritten(*l)?;
+            self.define(*l)?;
             self.lets[l.0 as usize] = true;
+            self.env.define(*l, e);
         }
         self.at = outer;
         Ok(())
@@ -83,9 +83,9 @@ impl<'a> V<'a> {
     /// it; a block expression closes no name, as it ends no life (V-04).
     /// The body of a loop is in that loop; its condition is in the loop
     /// around it if any, as its source is for a `for` (§7, V-07). `var`, the
-    /// variable of a `ForRange`, is defined in its body, the sample loop of a
-    /// `process` (V-19).
-    fn child(&mut self, c: Child<'a>, var: Option<LocalId>) -> R<()> {
+    /// variable of a `ForRange`, is defined in its body, with its interval,
+    /// the sample loop of a `process` (V-25).
+    fn child(&mut self, c: Child<'a>, var: Option<Var>) -> R<()> {
         let (mark, outer) = (self.undo.len(), (self.in_loop, self.known));
         let closes = match c {
             Child::Expr(x, eval, role) => {
@@ -97,11 +97,17 @@ impl<'a> V<'a> {
             }
             Child::Block(b, scope, eval) => {
                 self.in_loop |= eval == Eval::Loop;
-                if let Some(l) = var {
-                    self.define(l)?;
-                    self.known |= self.process;
-                }
+                let saved = match var {
+                    Some(v) => {
+                        self.unwritten(v.local)?;
+                        self.define(v.local)?;
+                        self.known |= self.process;
+                        self.env.enter(v)
+                    }
+                    None => None,
+                };
                 self.block(b)?;
+                self.env.leave(saved);
                 scope == Scope::Opens || eval != Eval::Always
             }
             Child::Place(p, role) => {
@@ -142,6 +148,7 @@ impl<'a> V<'a> {
     /// through a view (`let v = xs.slice(…)`, then `v[0] = …`) has the view
     /// as its root: the verifier leaves it to sema.
     pub(super) fn writable(&self, root: LocalId) -> R<()> {
+        self.unwritten(root)?;
         let Some(f) = self.f.filter(|f| f.params.iter().any(|p| p.local == root && p.mode == Mode::Borrow)) else {
             return Ok(());
         };
@@ -161,10 +168,21 @@ impl<'a> V<'a> {
         r
     }
 
-    /// V-19 (S-196): an index known in range is in the sample loop of a `process` only.
-    pub(super) fn bounds(&self, b: Bounds) -> R<()> {
-        if b == Bounds::Known && !self.known {
-            return Err(self.err(Rule::V19, "an index known in range outside the sample loop of `process`"));
+    /// V-28: the variable of a `for` is not written in its body: no
+    /// assignment, `inout` argument, `let` or `for` has it as its root.
+    fn unwritten(&self, l: LocalId) -> R<()> {
+        if self.env.looped(l) {
+            return Err(self.err(Rule::V28, format!("the variable {} of a `for` written in its body", l.0)));
+        }
+        Ok(())
+    }
+
+    /// V-25 (S-196, §9.2): an index `index` of `base` known in range is in
+    /// the sample loop of a `process`, or proved below its length.
+    pub(super) fn known(&self, index: &Expr, base: CTy) -> R<()> {
+        if !self.known && !self.env.proved(index, base) {
+            let msg = "an index known in range outside the sample loop of `process` and not proved in range";
+            return Err(self.err(Rule::V25, msg));
         }
         Ok(())
     }

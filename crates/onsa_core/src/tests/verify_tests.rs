@@ -347,9 +347,11 @@ fn other() -> Span {
 #[test]
 fn a_rule_is_shown_by_its_number() {
     use Rule::*;
-    let all = [V01, V02, V03, V04, V05, V06, V07, V08, V09, V10, V11, V12, V13, V14, V15, V16, V17, V18, V19, V20];
+    let all =
+        [V01, V02, V03, V04, V05, V06, V07, V08, V09, V10, V11, V12, V13, V14, V15, V16, V17, V18, V20, V22, V25, V28];
     let shown: Vec<String> = all.iter().map(|r| r.to_string()).collect();
-    assert_eq!(shown, (1..=20).map(|i| format!("V-{i:02}")).collect::<Vec<_>>());
+    let numbers = (1..=18).chain([20, 22, 25, 28]);
+    assert_eq!(shown, numbers.map(|i| format!("V-{i:02}")).collect::<Vec<_>>());
 }
 
 /// The position of an error in a statement, past a statement at the node

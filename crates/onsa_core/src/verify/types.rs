@@ -91,19 +91,10 @@ impl<'a> V<'a> {
         }
     }
 
-    /// A place has no `ty`: its type is of its form.
+    /// Of the root first: a local outside a function is its own error.
     fn place_ty(&self, p: &Place) -> R<CTy> {
-        match p {
-            Place::Local(l) => self.local_ty(*l),
-            Place::Field(b, i) => {
-                let bt = self.place_ty(b)?;
-                self.field_ty(bt, *i)
-            }
-            Place::Index(b, ..) => {
-                let bt = self.place_ty(b)?;
-                self.elem_ty(bt)
-            }
-        }
+        self.local_ty(p.root())?;
+        self.of(self.parts().place(self.f.map_or(&[], |f| &f.locals), p))
     }
 
     pub(super) fn place_here(&self, p: &Place) -> R<()> {
@@ -114,34 +105,12 @@ impl<'a> V<'a> {
                 self.writable(*l)
             }
             Place::Field(..) => Ok(()),
-            Place::Index(_, i, _, bounds) => {
-                self.bounds(*bounds)?;
+            Place::Index(b, i, _, bounds) => {
+                if *bounds == Bounds::Known {
+                    self.known(i, self.place_ty(b)?)?;
+                }
                 self.same(i.ty, Types::U32, "index")
             }
-        }
-    }
-
-    fn field_ty(&self, base: CTy, i: u32) -> R<CTy> {
-        match self.kind(base)? {
-            TyKind::Struct(id) => match &self.ty(*id)?.kind {
-                TypeDefKind::Struct { fields } => fields
-                    .get(i as usize)
-                    .map(|&(_, t)| t)
-                    .ok_or_else(|| self.err(Rule::V20, "field index out of range")),
-                TypeDefKind::Opaque => Err(self.err(Rule::V20, "field access on an opaque type")),
-                TypeDefKind::Enum { .. } => Err(self.err(Rule::V01, "field access on an enum")),
-            },
-            TyKind::Tuple(ts) => {
-                ts.get(i as usize).copied().ok_or_else(|| self.err(Rule::V20, "tuple index out of range"))
-            }
-            _ => Err(self.err(Rule::V01, format!("field access on `{}`", crate::dump::type_name(self.m, base)))),
-        }
-    }
-
-    fn elem_ty(&self, base: CTy) -> R<CTy> {
-        match self.kind(base)? {
-            TyKind::Array(e, _) | TyKind::Span(e) | TyKind::Buf(e) => Ok(*e),
-            _ => Err(self.err(Rule::V01, format!("index on `{}`", crate::dump::type_name(self.m, base)))),
         }
     }
 
@@ -274,13 +243,15 @@ impl<'a> V<'a> {
                 self.prim_sig(prim, args, ty)?;
             }
             ExprKind::Field { base, index } => {
-                let ft = self.field_ty(base.ty, *index)?;
+                let ft = self.of(self.parts().field(base.ty, *index))?;
                 self.same(ft, ty, "field")?;
             }
             ExprKind::Index { base, index, bounds } => {
-                self.bounds(*bounds)?;
+                if *bounds == Bounds::Known {
+                    self.known(index, base.ty)?;
+                }
                 self.same(index.ty, Types::U32, "index")?;
-                let et = self.elem_ty(base.ty)?;
+                let et = self.of(self.parts().elem(base.ty))?;
                 self.same(et, ty, "element")?;
             }
             ExprKind::SpanOf(x) => {

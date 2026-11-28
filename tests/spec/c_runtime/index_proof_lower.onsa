@@ -1,0 +1,304 @@
+// onsa.toml
+// [test]
+// spec = ["§9.2", "§3.4", "§7"]
+// mode = "test"
+
+// W8-03 U5b, S-1264 P2 (§9.2: a compiler may remove a check that it can prove, and "意味は変わらない"): the least value of an index. `a -% b` wraps below 0 (§3.4: "2^(ビット幅) を法として"), so an index
+// `x -% y` is in range only when the least `x` is not below the greatest `y`; each operation before the `-%` (`|`, `>>`, `<<`, `+`, `%`, `&`, the variable of a `for`) has its own least value, and a form
+// whose least value is below the right side wraps to an index far past the length and panics (§9.2). Each such form beside one of the same operation that stays in range. The variable of a `for` whose start
+// is an argument is at least 0 (it is a `U32`) and below its end. The array `ramp` holds k + 1 at k, so an element that is read gives its index plus 1. Expected values are derived by hand from §3.4 and §9.2.
+
+/// `[1, 2, …, N]`: the element at k is k + 1.
+fn ramp[const N: U32]() -> [U32; N] {
+  var xs: [U32; N] = [0; N]
+  for k in 0 ..< N {
+    xs[k] = k + 1
+  }
+  xs
+}
+
+/// `i -% j` of `i` from 0 and `j` from 0 to 3: `0 -% 1` wraps.
+fn sub_vars() -> U32 {
+  let xs: [U32; 8] = ramp()
+  var s: U32 = 0
+  for i in 0 ..< 4 {
+    for j in 0 ..< 4 {
+      s = s +% xs[i -% j]
+    }
+  }
+  s
+}
+
+/// `i -% j` of `i` from 3 to 6 and `j` from 0 to 3: 0 to 6.
+fn sub_vars_fit() -> U32 {
+  let xs: [U32; 8] = ramp()
+  var s: U32 = 0
+  for i in 3 ..< 7 {
+    for j in 0 ..< 4 {
+      s = s +% xs[i -% j]
+    }
+  }
+  s
+}
+
+/// `5 -% j` of `j` from 0 to 3: 5 to 2, on 3 and on 6.
+fn sub_point(n: U32) -> U32 {
+  let xs3: [U32; 3] = ramp()
+  let xs6: [U32; 6] = ramp()
+  var s: U32 = 0
+  for j in 0 ..< 4 {
+    if n == 3 {
+      s = s +% xs3[5 -% j]
+    } else {
+      s = s +% xs6[5 -% j]
+    }
+  }
+  s
+}
+
+/// `i -% 3` of `i` from `a & 3` to 7.
+fn from_and(a: U32) -> U32 {
+  let xs: [U32; 8] = ramp()
+  var s: U32 = 0
+  for i in (a & 3) ..< 8 {
+    s = s +% xs[i -% 3]
+  }
+  s
+}
+
+/// `(i | 1) -% 3` of `i` from 0 to 3: `1 -% 3` wraps.
+fn or_low() -> U32 {
+  let xs: [U32; 8] = ramp()
+  var s: U32 = 0
+  for i in 0 ..< 4 {
+    s = s +% xs[(i | 1) -% 3]
+  }
+  s
+}
+
+/// `(i | 4) -% 4` of `i` from 0 to 3: 0 to 3.
+fn or_fit() -> U32 {
+  let xs: [U32; 8] = ramp()
+  var s: U32 = 0
+  for i in 0 ..< 4 {
+    s = s +% xs[(i | 4) -% 4]
+  }
+  s
+}
+
+/// `(i >> 1) -% 2` of `i` from 0 to 7: `0 -% 2` wraps.
+fn shr_low() -> U32 {
+  let xs: [U32; 8] = ramp()
+  var s: U32 = 0
+  for i in 0 ..< 8 {
+    s = s +% xs[(i >> 1) -% 2]
+  }
+  s
+}
+
+/// `(i >> 1) -% 2` of `i` from 4 to 7: 0 to 1.
+fn shr_fit() -> U32 {
+  let xs: [U32; 8] = ramp()
+  var s: U32 = 0
+  for i in 4 ..< 8 {
+    s = s +% xs[(i >> 1) -% 2]
+  }
+  s
+}
+
+/// `(i << 1) -% 4` of `i` from 0 to 3: `0 -% 4` wraps.
+fn shl_low() -> U32 {
+  let xs: [U32; 8] = ramp()
+  var s: U32 = 0
+  for i in 0 ..< 4 {
+    s = s +% xs[(i << 1) -% 4]
+  }
+  s
+}
+
+/// `(i << 1) -% 4` of `i` from 2 to 5: 0 to 6.
+fn shl_fit() -> U32 {
+  let xs: [U32; 8] = ramp()
+  var s: U32 = 0
+  for i in 2 ..< 6 {
+    s = s +% xs[(i << 1) -% 4]
+  }
+  s
+}
+
+/// `(i + j) -% 3` of `i` and `j` from 0 to 3: `0 -% 3` wraps.
+fn add_low() -> U32 {
+  let xs: [U32; 8] = ramp()
+  var s: U32 = 0
+  for i in 0 ..< 4 {
+    for j in 0 ..< 4 {
+      s = s +% xs[(i + j) -% 3]
+    }
+  }
+  s
+}
+
+/// `(i + j) -% 3` of `i` from 1 to 3 and `j` from 2 to 3: 0 to 3.
+fn add_fit() -> U32 {
+  let xs: [U32; 8] = ramp()
+  var s: U32 = 0
+  for i in 1 ..< 4 {
+    for j in 2 ..< 4 {
+      s = s +% xs[(i + j) -% 3]
+    }
+  }
+  s
+}
+
+/// `(a % 4) -% 2`: 0 and 1 wrap.
+fn rem_low(a: U32) -> U32 {
+  let xs: [U32; 8] = ramp()
+  xs[(a % 4) -% 2]
+}
+
+/// `(a & 3) -% 1`: 0 wraps.
+fn and_low(a: U32) -> U32 {
+  let xs: [U32; 8] = ramp()
+  xs[(a & 3) -% 1]
+}
+
+/// `7 & i` of `i` from 0 to 99: 0 to 7.
+fn and_left() -> U32 {
+  let xs: [U32; 8] = ramp()
+  var s: U32 = 0
+  for i in 0 ..< 100 {
+    s = s +% xs[7 & i]
+  }
+  s
+}
+
+/// `i` from `a` to `n - 1` (to `n` when `closed`) on 4.
+fn from_arg(a: U32, n: U32, closed: Bool) -> U32 {
+  let xs: [U32; 4] = ramp()
+  var s: U32 = 0
+  if closed {
+    for i in a ..= 3 {
+      s = s +% xs[i]
+    }
+  } else if n == 4 {
+    for i in a ..< 4 {
+      s = s +% xs[i]
+    }
+  } else {
+    for i in a ..< 5 {
+      s = s +% xs[i]
+    }
+  }
+  s
+}
+
+/// `i -% 1` of `i` from `a` to 3: `0 -% 1` wraps.
+fn from_arg_sub(a: U32) -> U32 {
+  let xs: [U32; 4] = ramp()
+  var s: U32 = 0
+  for i in a ..< 4 {
+    s = s +% xs[i -% 1]
+  }
+  s
+}
+
+test "the forms that stay in range give the elements that the arithmetic names" {
+  // 4 * (3 + 4 + 5 + 6) - 4 * (0 + 1 + 2 + 3) + 16
+  assert sub_vars_fit() == 64
+  assert sub_point(6) == 18
+  // from 3: the elements 0 to 4
+  assert from_and(3) == 15
+  assert from_and(7) == 15
+  assert or_fit() == 10
+  assert shr_fit() == 6
+  assert shl_fit() == 16
+  // (i + j) - 2 of (1, 2), (1, 3), (2, 2), (2, 3), (3, 2), (3, 3)
+  assert add_fit() == 15
+  assert rem_low(2) == 1
+  assert rem_low(7) == 2
+  assert and_low(1) == 1
+  assert and_low(7) == 3
+  // 12 turns of 1 to 8 and then 1 to 4
+  assert and_left() == 442
+  assert from_arg(0, 4, false) == 10
+  assert from_arg(2, 4, false) == 7
+  assert from_arg(5, 4, false) == 0
+  assert from_arg(1, 0, true) == 9
+  assert from_arg(5, 5, false) == 0
+  assert from_arg_sub(1) == 6
+}
+
+test "i -% j wraps at 0 -% 1" {
+  let r = sub_vars() //~ PANIC "i -% j wraps at 0 -% 1"
+  assert r == 0
+}
+
+test "5 -% j is 5 on 3" {
+  let r = sub_point(3) //~ PANIC "5 -% j is 5 on 3"
+  assert r == 0
+}
+
+test "i -% 3 from a & 3 of 0 wraps" {
+  let r = from_and(0) //~ PANIC "i -% 3 from a & 3 of 0 wraps"
+  assert r == 0
+}
+
+test "i -% 3 from a & 3 of 2 wraps" {
+  let r = from_and(6) //~ PANIC "i -% 3 from a & 3 of 2 wraps"
+  assert r == 0
+}
+
+test "(i | 1) -% 3 wraps" {
+  let r = or_low() //~ PANIC "(i | 1) -% 3 wraps"
+  assert r == 0
+}
+
+test "(i >> 1) -% 2 wraps" {
+  let r = shr_low() //~ PANIC "(i >> 1) -% 2 wraps"
+  assert r == 0
+}
+
+test "(i << 1) -% 4 wraps" {
+  let r = shl_low() //~ PANIC "(i << 1) -% 4 wraps"
+  assert r == 0
+}
+
+test "(i + j) -% 3 wraps" {
+  let r = add_low() //~ PANIC "(i + j) -% 3 wraps"
+  assert r == 0
+}
+
+test "(a % 4) -% 2 of 0 wraps" {
+  let r = rem_low(0) //~ PANIC "(a % 4) -% 2 of 0 wraps"
+  assert r == 0
+}
+
+test "(a % 4) -% 2 of 5 wraps" {
+  let r = rem_low(5) //~ PANIC "(a % 4) -% 2 of 5 wraps"
+  assert r == 0
+}
+
+test "(a & 3) -% 1 of 0 wraps" {
+  let r = and_low(0) //~ PANIC "(a & 3) -% 1 of 0 wraps"
+  assert r == 0
+}
+
+test "(a & 3) -% 1 of 4 wraps" {
+  let r = and_low(4) //~ PANIC "(a & 3) -% 1 of 4 wraps"
+  assert r == 0
+}
+
+test "i from 0 below 5 on 4 reaches 4" {
+  let r = from_arg(0, 5, false) //~ PANIC "i from 0 below 5 on 4 reaches 4"
+  assert r == 0
+}
+
+test "i from 4 below 5 on 4 is 4" {
+  let r = from_arg(4, 5, false) //~ PANIC "i from 4 below 5 on 4 is 4"
+  assert r == 0
+}
+
+test "i -% 1 from 0 wraps" {
+  let r = from_arg_sub(0) //~ PANIC "i -% 1 from 0 wraps"
+  assert r == 0
+}

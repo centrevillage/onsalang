@@ -113,15 +113,15 @@ pub flow f(x: F32 at sample, level: F32 at block) -> F32 at sample {
     assert!(d.contains("type t.f.a.par_0.State = struct { par_0: [t.f.a.par_0.par_0.State; 2] }"), "{d}");
     assert!(d.contains("type t.f.b.par_0.State = struct { _hoist_0: F32, _hoist_1: F32 }"), "{d}");
     let init = phase(src, "init");
-    let nested = "for i@4 in 0:U32..2:U32 {\n    for j in 0:U32..2:U32 {\n      s.0[i@4].0[j].0 = t.make(round.U32.F32((i@4 + j)))\n";
+    let nested = "for i@4 in 0:U32..2:U32 {\n    for j in 0:U32..2:U32 {\n      s.0[known i@4].0[known j].0 = t.make(round.U32.F32((i@4 + j)))\n";
     assert!(init.contains(nested), "{init}");
-    assert!(init.contains("for i@6 in 0:U32..2:U32 {\n    s.1[i@6].1 = round.U32.F32(i@6)\n"), "{init}");
+    assert!(init.contains("for i@6 in 0:U32..2:U32 {\n    s.1[known i@6].1 = round.U32.F32(i@6)\n"), "{init}");
     assert_eq!(init.matches("for ").count(), 3, "{init}");
     let ctl = phase(src, "ctl");
-    assert!(ctl.contains("for i@6 in 0:U32..2:U32 {\n    s.1[i@6].0 = (p.0 * s.1[i@6].1)\n"), "{ctl}");
+    assert!(ctl.contains("for i@6 in 0:U32..2:U32 {\n    s.1[known i@6].0 = (p.0 * s.1[known i@6].1)\n"), "{ctl}");
     assert_eq!(ctl.matches("for ").count(), 1, "{ctl}");
     let tick = phase(src, "tick");
-    assert!(tick.contains("(x * s.0[i@4].0[j].0)") && tick.contains("(x * s.1[i@6].0)"), "{tick}");
+    assert!(tick.contains("(x * s.0[known i@4].0[known j].0)") && tick.contains("(x * s.1[known i@6].0)"), "{tick}");
     assert!(!tick.contains("make") && !tick.contains("round"), "{tick}");
     assert!(!phase(src, "reset").contains("for "), "the replicas have no node");
 }
@@ -206,7 +206,7 @@ pub flow f(x: F32 at sample, g: Bool at sample, i: I32 at init) -> F32 at sample
     let slow = phase(src, "tick_4");
     let free = "  s@11.7 = s@4.0\n";
     let held = "  if s@11.6 {\n    s@11.8 = (s@4.0 * 3.0:F32)\n  }\n";
-    let each = "  for j@9 in 0:U32..3:U32 {\n    s@11.2[j@9].0 = s@4.0\n  }\n";
+    let each = "  for j@9 in 0:U32..3:U32 {\n    s@11.2[known j@9].0 = s@4.0\n  }\n";
     at(&slow, &format!("{free}{held}{each}  s@11.9 = s@4.1\n  s@11.10 = s@4.1\n  s@11.1 = k\n"));
     assert_eq!(slow.matches("if ").count(), 1, "{slow}");
 }

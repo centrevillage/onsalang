@@ -9,9 +9,9 @@ rt fn std.math.sum__F32__4(xs: [F32; 4]) -> F32 {
   if (4:U32 == 0:U32) {
     return const std.core.num.F32.ZERO
   }
-  let acc: F32 = xs[0:U32]
+  let acc: F32 = xs[known 0:U32]
   for i in 1:U32..4:U32 {
-    acc = (acc + xs[i])
+    acc = (acc + xs[known i])
   }
   acc
 }

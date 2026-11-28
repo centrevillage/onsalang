@@ -25,8 +25,8 @@ rt fn echo.echo.tick(inout s: echo.echo.State, x: F32) -> F32 {
     let y.vdelay_0.k: U32 = trunc.F32.U32(y.vdelay_0.dc)
     let y.vdelay_0.f: F32 = (y.vdelay_0.dc - round.U32.F32(y.vdelay_0.k))
     let y.vdelay_0.wlk: U32 = ((s.4 + 96001:U32) - y.vdelay_0.k)
-    let y.vdelay_0.a: F32 = s.3[(y.vdelay_0.wlk % 96001:U32)]
-    let y.vdelay_0.b: F32 = s.3[((y.vdelay_0.wlk - 1:U32) % 96001:U32)]
+    let y.vdelay_0.a: F32 = s.3[known (y.vdelay_0.wlk % 96001:U32)]
+    let y.vdelay_0.b: F32 = s.3[known ((y.vdelay_0.wlk - 1:U32) % 96001:U32)]
     let y.vdelay_0: F32 = (((1.0:F32 - y.vdelay_0.f) * y.vdelay_0.a) + (y.vdelay_0.f * y.vdelay_0.b))
     y.vdelay_0
   }))
