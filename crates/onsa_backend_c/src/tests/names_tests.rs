@@ -133,7 +133,7 @@ fn the_place_of_an_element_of_a_tuple_has_its_type() {
         ret: i32t,
         sret: false,
         rt: true,
-        locals: vec![Local { name: "t".into(), ty: pair }],
+        locals: vec![Local::value("t", pair)],
         body: Some(Block { stmts, value: Some(Box::new(first)) }),
         span: sp(),
         fp_relaxed: false,

@@ -97,29 +97,43 @@ pub(super) fn index_as(base: Expr, idx: Expr, bounds: Bounds, tys: &Types) -> R<
 /// not [`repeatable`] bound to a temporary first (the base before its index,
 /// R-433); another expression is bound to a temporary. (`tys`: the types of
 /// the module, last as in [`index`].)
-pub(super) fn materialize(cx: &mut FnCx, e: Expr, stmts: &mut Vec<Stmt>, name: &str, tys: &Types) -> Expr {
-    if e.as_place().is_some() {
-        let Expr { ty, span, kind } = e;
-        let kind = match kind {
-            ExprKind::Field { base, index } => {
-                ExprKind::Field { base: Box::new(materialize(cx, *base, stmts, name, tys)), index }
-            }
-            ExprKind::Index { base, index, bounds } => {
-                let base = Box::new(materialize(cx, *base, stmts, name, tys));
-                let index = match repeatable(&index, tys) {
-                    true => index,
-                    false => Box::new(materialize(cx, *index, stmts, "__index", tys)),
-                };
-                ExprKind::Index { base, index, bounds }
-            }
-            kind => kind,
-        };
-        return Expr::new(ty, span, kind);
+pub(super) fn materialize(cx: &mut FnCx, mut e: Expr, stmts: &mut Vec<Stmt>, name: &str, tys: &Types) -> Expr {
+    let place = unrepeated(&mut e, tys, &mut |i| {
+        let x = Expr::new(i.ty, i.span, std::mem::replace(&mut i.kind, ExprKind::Lit(Lit::Unit)));
+        *i = materialize(cx, x, stmts, "__index", tys);
+    });
+    if place {
+        return e;
     }
     let span = e.span;
     let t = cx.temp(name, e.ty);
     stmts.push(stmt(span, StmtKind::Let(t, e)));
     local_expr(cx, t, span)
+}
+
+/// Whether [`materialize`] binds nothing of `e`: a place whose indices are
+/// all [`repeatable`]. (`&mut` as [`unrepeated`], the one walk of both, D-15,
+/// changes nothing here.)
+pub(super) fn stays(e: &mut Expr, tys: &Types) -> bool {
+    let mut all = true;
+    unrepeated(e, tys, &mut |_| all = false) && all
+}
+
+/// Whether `e` is a place ([`Expr::as_place`]); of one, each index that is
+/// not [`repeatable`] given to `f`, the base before its index (R-433).
+fn unrepeated(e: &mut Expr, tys: &Types, f: &mut dyn FnMut(&mut Expr)) -> bool {
+    match &mut e.kind {
+        ExprKind::Local(_) => true,
+        ExprKind::Field { base, .. } => unrepeated(base, tys, f),
+        ExprKind::Index { base, index, .. } => {
+            let place = unrepeated(base, tys, f);
+            if place && !repeatable(index, tys) {
+                f(index);
+            }
+            place
+        }
+        _ => false,
+    }
 }
 
 /// `value` after the statements `stmts` (of [`materialize`]), a block when

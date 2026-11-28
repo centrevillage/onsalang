@@ -43,11 +43,11 @@ impl<'a, 'm> FnEmitter<'a, 'm> {
                 let bs = self.place(b)?;
                 self.field_access(&bs, bt, *i)
             }
-            Place::Index(b, i, _, bounds) => {
+            Place::Index(b, i, at, bounds) => {
                 let bt = self.place_ty(b)?;
                 let bs = self.place(b)?;
                 let idx = self.expr(i)?;
-                self.index_access(&bs, bt, &idx, i.span, *bounds)
+                self.index_access(&bs, bt, &idx, *at, *bounds)
             }
         }
     }

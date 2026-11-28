@@ -1,0 +1,247 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§3.5", "§5.3", "§11.6", "§5.2"]
+
+// W8-03 U6a/t (§3.5, §5.3, §11.6, S-218 (b), S-75, R-433): the field of an `inout` literal of a generated `Out` is an argument of its own (§11.6: "引数の位置に struct リテラルを書いて作り、
+// 排他性はフィールドの場所ごとに検査する（`inout [a, b]` と同じ）"), so a planar field `aux: [Span[F32]; 2]` takes an element of an array of arrays whose index has an effect. It replaces
+// negative/flow_gen_bind_planar_inout_index.onsa, which reported seven forms as E0200 ("this version does not support an `inout` planar span of an element whose index has an effect"):
+// the same forms are programs and have values here (the first seven tests, in the order of the old marks: a call, a nested index, a sum in parentheses, a pure call, a view whose length has an
+// effect with a nested index, parentheses with both fields, and a borrowed literal beside it). §3.5: the index is evaluated once, the literal's fields in the order they are written, the arguments from the left,
+// and the first panic in that order is the one reported (a PANIC marker is on the line where the reported expression starts). The array of arrays on the left of the index and the counter are different
+// variables, so the window of the index (S-1275, E0702) is not met. `next(inout n)` returns the old value and adds 1; `pure_next(i)` is the call of a function without an effect.
+// The expected arrays are built from zeros and the cells that the function writes, worked out by hand: `write_bus` sets `main[0]` to 1.0 and `aux[1][0]` to 2.0, `read_write` sets
+// `main[0]` to `x[0][0]` and `aux[1][2]` to `m[0]` of its borrowed input. `bus` gives main = m, aux = [n + 1.0, m + 2.0] (a frame at a time).
+// The planar `inout` arguments of a function are in values/place_inout_planar_index.onsa, the same forms in C in c_runtime/planar_inout_index.onsa.
+
+pub struct Bus {
+  main: F32,
+  aux: [F32; 2],
+}
+
+pub flow bus(m: F32 at sample, n: F32 at sample) -> Bus at sample {
+  Bus { main: m, aux: [n + 1.0, m + 2.0] }
+}
+
+pub struct Wide {
+  a: F32,
+  b: F32,
+}
+
+pub flow spread(x: [F32; 2] at sample, m: F32 at sample) -> Wide at sample {
+  Wide { a: x[0] + m, b: x[1] + m }
+}
+
+fn next(inout n: U32) -> U32 {
+  n = n + 1
+  n - 1
+}
+
+fn pure_next(i: U32) -> U32 {
+  i
+}
+
+fn write_bus(inout o: bus.Out) {
+  o.main[0] = 1.0
+  o.aux[1][0] = 2.0
+}
+
+fn read_write(i: spread.In, inout o: bus.Out) {
+  o.main[0] = i.x[0][0]
+  o.aux[1][2] = i.m[0]
+}
+
+fn g2() -> [[[F32; 3]; 2]; 2] {
+  [[[0.0; 3]; 2]; 2]
+}
+
+fn g3() -> [[[F32; 3]; 2]; 3] {
+  [[[0.0; 3]; 2]; 3]
+}
+
+fn h2() -> [[[[F32; 3]; 2]; 2]; 2] {
+  [[[[0.0; 3]; 2]; 2]; 2]
+}
+
+fn h3() -> [[[[F32; 3]; 2]; 2]; 3] {
+  [[[[0.0; 3]; 2]; 2]; 3]
+}
+
+// ---------------------------------------------------------------------- the seven forms that were E0200
+
+test "a call in the index of the planar field" {
+  var m: [F32; 3] = [0.0; 3]
+  var g = g2()
+  var i: U32 = 0
+  write_bus(inout bus.Out { main: m, aux: g[next(inout i)] })
+  var want = g2()
+  want[0][1][0] = 2.0
+  assert i == 1
+  assert m == [1.0, 0.0, 0.0]
+  assert g == want
+}
+
+test "a call in the nested index of the planar field" {
+  var m: [F32; 3] = [0.0; 3]
+  var h = h2()
+  var i: U32 = 1
+  write_bus(inout bus.Out { main: m, aux: h[0][next(inout i)] })
+  var want = h2()
+  want[0][1][1][0] = 2.0
+  assert i == 2
+  assert m == [1.0, 0.0, 0.0]
+  assert h == want
+}
+
+test "a call in a sum, in parentheses" {
+  var m: [F32; 3] = [0.0; 3]
+  var g = g2()
+  var i: U32 = 1
+  write_bus(inout (bus.Out { main: m, aux: g[next(inout i) + 0] }))
+  var want = g2()
+  want[1][1][0] = 2.0
+  assert i == 2
+  assert g == want
+}
+
+test "a call of a function without an effect" {
+  var m: [F32; 3] = [0.0; 3]
+  var g = g2()
+  let i: U32 = 1
+  write_bus(inout bus.Out { main: m, aux: g[pure_next(i)] })
+  var want = g2()
+  want[1][1][0] = 2.0
+  assert g == want
+}
+
+test "a view whose length has an effect, and a nested index" {
+  var z: [F32; 4] = [0.0; 4]
+  var h = h2()
+  var j: U32 = 2
+  let i: U32 = 1
+  write_bus(inout bus.Out { main: z.slice(0, next(inout j)), aux: h[0][pure_next(i)] })
+  var want = h2()
+  want[0][1][1][0] = 2.0
+  assert j == 3
+  assert z == [1.0, 0.0, 0.0, 0.0]
+  assert h == want
+}
+
+test "indexes with a call in both fields, in parentheses" {
+  var g = g2()
+  var h = h2()
+  let i: U32 = 1
+  write_bus(inout (bus.Out { main: g[0][pure_next(i)], aux: h[pure_next(i)][0] }))
+  var wg = g2()
+  wg[0][1][0] = 1.0
+  var wh = h2()
+  wh[1][0][1][0] = 2.0
+  assert g == wg
+  assert h == wh
+}
+
+test "an inout literal next to a borrowed literal that takes indexes" {
+  let gv: [[[F32; 3]; 2]; 2] = [[[10.0, 11.0, 12.0], [13.0, 14.0, 15.0]], [[20.0, 21.0, 22.0], [23.0, 24.0, 25.0]]]
+  let m2: [[F32; 3]; 2] = [[0.5, 0.25, 0.125], [3.0, 4.0, 5.0]]
+  var w: [F32; 4] = [0.0; 4]
+  var h = h2()
+  let i: U32 = 1
+  read_write(spread.In { x: gv[i], m: m2[i] }, inout bus.Out { main: w, aux: h[pure_next(i)][0] })
+  var want = h2()
+  want[1][0][1][2] = 3.0
+  assert w == [20.0, 0.0, 0.0, 0.0]
+  assert h == want
+}
+
+// ------------------------------------------------------------------------- the fields and the arguments in order
+
+test "an index with an effect in both fields is evaluated in the order the fields are written" {
+  var ms: [[F32; 3]; 3] = [[0.0; 3]; 3]
+  var g = g3()
+  var i: U32 = 0
+  write_bus(inout bus.Out { main: ms[next(inout i)], aux: g[next(inout i)] })
+  var want = g3()
+  want[1][1][0] = 2.0
+  assert i == 2
+  assert ms == [[1.0, 0.0, 0.0], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]]
+  assert g == want
+}
+
+test "the same literal with the fields written in the other order takes the indexes in that order" {
+  var ms: [[F32; 3]; 3] = [[0.0; 3]; 3]
+  var g = g3()
+  var i: U32 = 0
+  write_bus(inout bus.Out { aux: g[next(inout i)], main: ms[next(inout i)] })
+  var want = g3()
+  want[0][1][0] = 2.0
+  assert i == 2
+  assert ms == [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 0.0, 0.0]]
+  assert g == want
+}
+
+test "the arguments are evaluated from the left, the borrowed literal before the inout one" {
+  let gv: [[[F32; 3]; 2]; 3] = [[[10.0, 11.0, 12.0], [13.0, 14.0, 15.0]], [[20.0, 21.0, 22.0], [23.0, 24.0, 25.0]], [[30.0, 31.0, 32.0], [33.0, 34.0, 35.0]]]
+  let m3: [[F32; 3]; 3] = [[1.5, 0.0, 0.0], [2.5, 0.0, 0.0], [3.5, 0.0, 0.0]]
+  var w: [F32; 4] = [0.0; 4]
+  var h = h3()
+  var i: U32 = 0
+  read_write(spread.In { x: gv[next(inout i)], m: m3[next(inout i)] }, inout bus.Out { main: w, aux: h[next(inout i)][0] })
+  var want = h3()
+  want[2][0][1][2] = 2.5
+  assert i == 3
+  assert w == [10.0, 0.0, 0.0, 0.0]
+  assert h == want
+}
+
+test "the call of process with the literal writes the row that the index names" {
+  var st = bus.init(8.0)
+  var mo: [F32; 3] = [0.0; 3]
+  var g = g2()
+  var i: U32 = 1
+  let a: [F32; 3] = [1.0, 2.0, 3.0]
+  let b: [F32; 3] = [10.0, 20.0, 30.0]
+  bus.process(inout st, bus.In { m: a, n: b }, inout bus.Out { main: mo, aux: g[next(inout i)] })
+  var want = g2()
+  want[1] = [[11.0, 21.0, 31.0], [3.0, 4.0, 5.0]]
+  assert i == 2
+  assert mo == [1.0, 2.0, 3.0]
+  assert g == want
+}
+
+// ------------------------------------------------------------------------------------------------- panics
+
+test "an index out of range in the planar field panics" {
+  var m: [F32; 3] = [0.0; 3]
+  var g = g2()
+  var i: U32 = 2
+  write_bus(inout bus.Out { main: m, aux: g[next(inout i)] }) //~ PANIC "an index out of range in the planar field panics"
+  assert i == 3
+}
+
+test "the nested index out of range in the planar field panics" {
+  var m: [F32; 3] = [0.0; 3]
+  var h = h2()
+  var i: U32 = 2
+  write_bus(inout bus.Out { main: m, aux: h[0][next(inout i)] }) //~ PANIC "the nested index out of range in the planar field panics"
+  assert i == 3
+}
+
+test "the field that is written first is the one reported when both indexes are out of range, main" {
+  var ms: [[F32; 3]; 3] = [[0.0; 3]; 3]
+  var g = g3()
+  var i: U32 = 9
+  var j: U32 = 9
+  write_bus(inout bus.Out { main: ms[next(inout i)], //~ PANIC "the field that is written first is the one reported when both indexes are out of range, main"
+                            aux: g[next(inout j)] })
+  assert i == 10
+}
+
+test "the field that is written first is the one reported when both indexes are out of range, aux" {
+  var ms: [[F32; 3]; 3] = [[0.0; 3]; 3]
+  var g = g3()
+  var i: U32 = 9
+  var j: U32 = 9
+  write_bus(inout bus.Out { aux: g[next(inout i)], //~ PANIC "the field that is written first is the one reported when both indexes are out of range, aux"
+                            main: ms[next(inout j)] })
+  assert i == 10
+}

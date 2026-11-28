@@ -348,8 +348,8 @@ fn recursive_fn(name: &str, zero: Expr, deeper: Expr, extra: Vec<CTy>) -> FnDef 
             else_: value_block(Vec::new(), deeper),
         },
     );
-    let mut locals = vec![Local { name: "n".into(), ty: u32_() }];
-    locals.extend(extra.into_iter().enumerate().map(|(i, ty)| Local { name: format!("k{i}"), ty }));
+    let mut locals = vec![Local::value("n", u32_())];
+    locals.extend(extra.into_iter().enumerate().map(|(i, ty)| Local::value(format!("k{i}"), ty)));
     FnDef {
         name: name.into(),
         params: vec![Param { local: LocalId(0), mode: Mode::Borrow, ty: u32_() }],
@@ -975,7 +975,7 @@ fn values_of_the_wrong_type_are_internal_errors() {
                 ret: Types::UNIT,
                 sret: false,
                 rt: false,
-                locals: vec![Local { name: "i".into(), ty: Types::int(IntKind::I32) }],
+                locals: vec![Local::value("i", Types::int(IntKind::I32))],
                 body: Some(Block { stmts: vec![for_], value: None }),
                 span: sp(),
                 fp_relaxed: false,
@@ -1006,7 +1006,7 @@ fn an_internal_failure_is_not_a_panic() {
                 ret: Types::int(IntKind::I32),
                 sret: false,
                 rt: false,
-                locals: vec![Local { name: "x".into(), ty: Types::int(IntKind::I32) }],
+                locals: vec![Local::value("x", Types::int(IntKind::I32))],
                 body: Some(Block { stmts: Vec::new(), value: Some(Box::new(read)) }),
                 span: sp(),
                 fp_relaxed: false,
@@ -1045,7 +1045,7 @@ fn index_out_of_range(bounds: Bounds, of_local: bool) -> Module {
             ret: i32t,
             sret: false,
             rt: false,
-            locals: vec![Local { name: "a".into(), ty: arr_ty }],
+            locals: vec![Local::value("a", arr_ty)],
             body: Some(Block { stmts, value: Some(Box::new(read)) }),
             span: sp(),
             fp_relaxed: false,

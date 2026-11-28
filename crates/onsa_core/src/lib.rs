@@ -4,6 +4,7 @@
 //! See `design/04-core.md` for the IR shape and D-03 for
 //! how flows become `init` / `reset` / `ctl` / `tick` / `process`.
 
+pub mod alias;
 pub mod bounds;
 pub mod dump;
 pub mod effects;

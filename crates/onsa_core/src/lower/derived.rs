@@ -191,7 +191,7 @@ impl Lowerer<'_> {
         let mut locals = Vec::new();
         let mut bind = |name: &str, mode, ty: CTy| {
             params.push(Param { local: LocalId(locals.len() as u32), mode: core_mode(mode), ty });
-            locals.push(Local { name: name.to_string(), ty });
+            locals.push(Local::value(name, ty));
         };
         if let Some(mode) = f.self_mode {
             bind("self", mode, this);

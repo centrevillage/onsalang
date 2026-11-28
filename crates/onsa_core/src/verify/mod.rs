@@ -24,7 +24,7 @@ mod types;
 pub enum Rule {
     V01 = 1, V02, V03, V04, V05, V06, V07, V08, V09, V10,
     V11, V12, V13, V14, V15, V16, V17, V18,
-    V20 = 20, V22 = 22, V25 = 25, V26, V28 = 28,
+    V20 = 20, V21, V22, V25 = 25, V26, V28 = 28,
 }
 
 impl fmt::Display for Rule {
@@ -77,8 +77,10 @@ pub fn verify(m: &Module) -> Result<(), VerifyError> {
             f: None,
             env: Env::new(Parts { tys: &m.tys, types: &m.types }, (&consts, &below), None),
             visible: Vec::new(),
+            aliases: crate::alias::Table::default(),
             undo: Vec::new(),
             lets: Vec::new(),
+            named: Vec::new(),
             in_loop: false,
             process: false,
             known: false,
@@ -102,8 +104,10 @@ pub fn verify(m: &Module) -> Result<(), VerifyError> {
             f: Some(f),
             env: Env::new(Parts { tys: &m.tys, types: &m.types }, (&consts, &below), Some(f)),
             visible: vec![false; f.locals.len()],
+            aliases: crate::alias::table(f),
             undo: Vec::new(),
             lets: vec![false; f.locals.len()],
+            named: vec![false; f.locals.len()],
             in_loop: false,
             process,
             known: false,
@@ -112,7 +116,7 @@ pub fn verify(m: &Module) -> Result<(), VerifyError> {
         };
         for p in &f.params {
             v.same(v.local_ty(p.local)?, p.ty, "parameter")?;
-            v.define(p.local)?;
+            v.define(p.local, false)?;
         }
         if f.sret != v.tys_of(f.ret)?.is_aggregate(f.ret) {
             return Err(v.err(Rule::V14, "sret flag does not match the return type"));
@@ -147,9 +151,13 @@ struct V<'a> {
     /// The locals seen where a node is (V-04), and the ones that became so,
     /// in order, to undo when a scope of names closes.
     visible: Vec<bool>,
+    /// The places the aliases name (V-05, V-21).
+    aliases: crate::alias::Table,
     undo: Vec<LocalId>,
     /// The locals a `let` defines.
     lets: Vec<bool>,
+    /// The aliases an `Alias` defines, each by one (V-21).
+    named: Vec<bool>,
     /// Under the body of a loop (V-07).
     in_loop: bool,
     /// The function is the `process` generated for a flow (`FlowFns::process`).

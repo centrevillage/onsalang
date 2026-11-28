@@ -6,8 +6,8 @@
 use std::path::Path;
 
 use onsa_core::{
-    Block, ConstId, Expr, ExprKind, FnId, Lit, LocalId, MsgId, PanicOrigin, Rule, Stmt, StmtKind, TyKind, TypeId,
-    Types, VerifyError,
+    Block, Bounds, ConstId, Expr, ExprKind, FnId, Lit, LocalId, MsgId, PanicOrigin, Place, Rule, Stmt, StmtKind,
+    TyKind, TypeId, Types, VerifyError,
 };
 use onsa_driver::{BuildError, CoreStage, LowerError, VerifyFailure};
 use onsa_tests::case::{Case, CaseKind, Setup};
@@ -531,4 +531,59 @@ fn a_core_at_the_limit_goes_through_every_stage() {
         let c = onsa_backend_c::emit(&m, &opts).unwrap_or_else(|e| panic!("{e:?}"));
         assert!(c.source.matches("t__g(").count() >= onsa_core::CORE_DEPTH_LIMIT as usize - 2);
     })
+}
+
+/// W8-03 U6a: an alias not written through (`LocalKind::Alias { write:
+/// false }`) of an element of a borrowed aggregate parameter, a pointer into
+/// a `const` one in C, is `const T* q = &(*xs)…`, and the C compiles under
+/// `-Werror` with clang and gcc-15 (no qualifier discarded, §13.4). Lowering
+/// makes no such alias yet (W8-04, the borrowed bindings), so the Core is
+/// made here. Fails without `clang` and `gcc-15` on the PATH (Q-07).
+#[test]
+fn an_alias_not_written_through_of_a_borrowed_parameter_compiles_without_a_warning() {
+    const SRC: &str = "fn g(xs: [[F32; 2]; 2]) -> F32 {\n  xs[1][0]\n}\n\n@export\npub fn h(a: F32) -> F32 {\n  g([[a, a], [a, a]])\n}\n";
+    let mut loaded = onsa_driver::Loaded::from_input(onsa_driver::PackageInput::single_file("t.onsa", SRC)).unwrap();
+    let analyzed = onsa_driver::analyze_loaded(&mut loaded).unwrap();
+    let mut m = onsa_driver::lower_core(&analyzed).unwrap_or_else(|e| panic!("{}", e.render(&loaded.sources)));
+    let g = m.fns.iter_mut().find(|f| f.name == "t.g").expect("t.g");
+    let (xs, span) = (g.params[0].local, g.span);
+    let TyKind::Array(row, _) = *m.tys.kind(g.params[0].ty) else { panic!("{:?}", g.params[0]) };
+    let q = LocalId(g.locals.len() as u32);
+    g.locals.push(onsa_core::Local { name: "q".into(), ty: row, kind: onsa_core::LocalKind::Alias { write: false } });
+    let k = |v| Box::new(Expr::new(Types::U32, span, ExprKind::Lit(Lit::Int(v))));
+    let place = Place::Index(Box::new(Place::Local(xs)), k(1), span, Bounds::Checked);
+    let base = Box::new(Expr::new(row, span, ExprKind::Local(q)));
+    let f32t = Types::float(onsa_core::FloatKind::F32);
+    let value = Expr::new(f32t, span, ExprKind::Index { base, index: k(0), bounds: Bounds::Checked });
+    g.body = Some(Block { stmts: vec![Stmt { span, kind: StmtKind::Alias(q, place) }], value: Some(Box::new(value)) });
+    m.moves = onsa_core::lower::moves::collect(&m);
+    onsa_driver::verify_core(&m, CoreStage::Lower).expect("an alias of a borrowed place");
+    let opts = onsa_backend_c::EmitOptions {
+        package: "t".into(),
+        prefix: Some("t_".into()),
+        export_fns: vec!["t.h".into()],
+        ..Default::default()
+    };
+    let unit = onsa_backend_c::emit(&m, &opts).unwrap_or_else(|e| panic!("{e:?}"));
+    assert!(unit.source.contains("const ") && unit.source.contains("* q = &"), "{}", unit.source);
+    let dir = onsa_tests::c::scratch_dir("onsa_test", "alias_const");
+    let mut files = unit.headers.clone();
+    files.extend([
+        ("onsa.h".to_string(), unit.runtime_header.clone()),
+        ("onsa__runtime.h".to_string(), unit.internal_header.clone()),
+        ("t.c".to_string(), unit.source.clone()),
+    ]);
+    onsa_tests::c::write_files(&dir, &files).unwrap();
+    let flags = ["-std=c11".to_string(), "-ffp-contract=off".to_string(), "-fno-fast-math".to_string()];
+    let compiled: Vec<_> = ["c-clang", "c-gcc"]
+        .into_iter()
+        .map(|name| match onsa_tests::c::item(name).map(|i| i.check) {
+            Some(onsa_tests::c::Check::Unit(t)) => onsa_tests::c::compile_object(&t, &flags, &dir, "t.c"),
+            _ => Err(format!("no item `{name}`")),
+        })
+        .collect();
+    let _ = std::fs::remove_dir_all(&dir);
+    for r in compiled {
+        r.unwrap_or_else(|e| panic!("{e}\n{}", unit.source));
+    }
 }

@@ -63,7 +63,7 @@ fn one_fn(ty: CTy, body: Expr, extra_types: Vec<TypeDef>) -> Module {
             ret: ty,
             sret: false,
             rt: true,
-            locals: vec![Local { name: "x".into(), ty }, Local { name: "y".into(), ty }],
+            locals: vec![Local::value("x", ty), Local::value("y", ty)],
             body: Some(Block { stmts: Vec::new(), value: Some(Box::new(body)) }),
             span: sp(),
             fp_relaxed: false,
@@ -206,7 +206,7 @@ fn array_wrappers_are_shared_and_enums_switch() {
         ret: Types::int(IntKind::I32),
         sret: false,
         rt: true,
-        locals: vec![Local { name: "v".into(), ty: tys().1[0] }],
+        locals: vec![Local::value("v", tys().1[0])],
         body: Some(Block {
             stmts: vec![Stmt {
                 span: sp(),
@@ -470,7 +470,7 @@ fn narrow_from_unsigned_compares_the_upper_bound_alone() {
                 ret: Types::int(IntKind::I32),
                 sret: false,
                 rt: true,
-                locals: vec![Local { name: "x".into(), ty: Types::int(from) }, Local { name: "v".into(), ty: parts }],
+                locals: vec![Local::value("x", Types::int(from)), Local::value("v", parts)],
                 body: Some(Block {
                     stmts: vec![Stmt { span: sp(), kind: StmtKind::Let(LocalId(1), narrow) }],
                     value: Some(Box::new(e(
@@ -529,10 +529,10 @@ fn a_hoisted_local_is_declared_at_the_head_and_its_let_assigns_it() {
         sret: true,
         rt: true,
         locals: vec![
-            Local { name: "c".into(), ty: Types::BOOL },
-            Local { name: "y".into(), ty: f32t },
-            Local { name: "r".into(), ty: arr },
-            Local { name: "t".into(), ty: f32t },
+            Local::value("c", Types::BOOL),
+            Local::value("y", f32t),
+            Local::value("r", arr),
+            Local::value("t", f32t),
         ],
         body: Some(Block {
             stmts: vec![
@@ -565,7 +565,7 @@ fn a_hoisted_local_is_declared_at_the_head_and_its_let_assigns_it() {
     f.ret = f32t;
     f.sret = false;
     f.locals.truncate(2);
-    f.locals.push(Local { name: "a".into(), ty: arr });
+    f.locals.push(Local::value("a", arr));
     f.body =
         Some(Block { stmts: vec![st(StmtKind::Let(LocalId(2), e(arr, call)))], value: Some(Box::new(e(f32t, index))) });
     f.hoisted = Vec::new();
@@ -598,7 +598,7 @@ fn a_renamed_local_does_not_take_the_name_of_a_parameter() {
     let mut m = one_fn(f32t, local(0, f32t), Vec::new());
     let f = &mut m.fns[0];
     f.params[1] = Param { local: LocalId(1), mode: Mode::Borrow, ty: Types::BOOL };
-    f.locals = names.iter().zip(&tys).map(|(n, t)| Local { name: n.to_string(), ty: *t }).collect();
+    f.locals = names.iter().zip(&tys).map(|(n, t)| Local::value(*n, *t)).collect();
     f.body.as_mut().unwrap().stmts = vec![st(StmtKind::If(local(1, Types::BOOL), arm(2), arm(3)))];
     f.hoisted = vec![LocalId(2), LocalId(3)];
     let c = emit_fn(&m);

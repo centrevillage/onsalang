@@ -64,8 +64,8 @@ fn read(base: CTy, index: Expr) -> Stmt {
 fn module(base: TyKind, tys: &[CTy], make: impl FnOnce(CTy) -> Vec<Stmt>) -> Module {
     let mut m = Module::default();
     let base = m.tys.intern(base);
-    let ty = |t: &CTy| Local { name: "l".into(), ty: *t };
-    let locals = std::iter::once(Local { name: "xs".into(), ty: base }).chain(tys.iter().map(ty)).collect();
+    let ty = |t: &CTy| Local::value("l", *t);
+    let locals = std::iter::once(Local::value("xs", base)).chain(tys.iter().map(ty)).collect();
     m.fns.push(FnDef {
         name: "g".into(),
         params: vec![Param { local: LocalId(0), mode: Mode::Borrow, ty: base }],
@@ -298,7 +298,7 @@ fn the_forms_a_bound_reads_through() {
         let t = m.tys.intern(TyKind::Tuple([m.fns[0].params[0].ty, Types::U32].into()));
         m.fill_all_facts();
         let f = &mut m.fns[0];
-        f.locals.push(Local { name: "t".into(), ty: t });
+        f.locals.push(Local::value("t", t));
         let field = Place::Field(Box::new(Place::Local(LocalId(2))), 0);
         let write = Place::Index(Box::new(field), Box::new(local(Types::U32, 1)), sp(), Bounds::Checked);
         let zero = stmt(StmtKind::Let(LocalId(2), Expr::new(t, sp(), ExprKind::Zeroed)));
@@ -502,7 +502,7 @@ fn a_struct_literal_and_an_inout_argument_of_the_write_position() {
             ret: Types::UNIT,
             sret: false,
             rt: true,
-            locals: vec![Local { name: "a".into(), ty }],
+            locals: vec![Local::value("a", ty)],
             body: Some(Block::default()),
             span: sp(),
             fp_relaxed: false,
@@ -544,4 +544,37 @@ fn the_variable_of_the_replicas_of_a_par_is_that_of_a_for() {
     assert!(d.contains("const t.T[known (i + (x % 3:U32))]") && d.contains("s.0[known (i -% 2:U32)].1 ="), "{d}");
     // The index of the replicas is of no check.
     assert!(!d.contains("(i - 2:U32)") && !d.contains("[(i -% 2:U32)]"), "{d}");
+}
+
+/// `let k = 1; alias r = k; …; xs[k]` of `xs: [U32; 2]`: a local an alias
+/// written through names is written by a write through it (`r = 5`), so it
+/// has no interval and the index is not proved; through an alias not written
+/// through it keeps that of its value. The index of the place an `Alias`
+/// names is proved there (`alias r = xs[1]`).
+#[test]
+fn a_local_written_through_an_alias_is_written() {
+    let arr = TyKind::Array(Types::U32, 2);
+    let aliased = |write: bool| {
+        let mut m = module(arr.clone(), &[Types::U32, Types::U32], |base| {
+            let mut s = vec![
+                stmt(StmtKind::Let(LocalId(1), u32_(1))),
+                stmt(StmtKind::Alias(LocalId(2), Place::Local(LocalId(1)))),
+            ];
+            if write {
+                s.push(stmt(StmtKind::Assign(Place::Local(LocalId(2)), u32_(5))));
+            }
+            s.push(read(base, local(Types::U32, 1)));
+            s
+        });
+        m.fns[0].locals[2].kind = LocalKind::Alias { write };
+        proved(&m)
+    };
+    assert!(!aliased(true));
+    assert!(aliased(false));
+    let mut m = module(arr, &[Types::U32], |_| {
+        let at = Place::Index(Box::new(Place::Local(LocalId(0))), Box::new(u32_(1)), sp(), Bounds::Checked);
+        vec![stmt(StmtKind::Alias(LocalId(1), at))]
+    });
+    m.fns[0].locals[1].kind = LocalKind::Alias { write: false };
+    assert!(proved(&m));
 }

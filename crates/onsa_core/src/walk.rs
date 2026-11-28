@@ -75,6 +75,9 @@ pub enum Role {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PlaceRole {
     Write,
+    /// Named by an `Alias` statement: its indices are read there, and it is
+    /// used later through the alias.
+    Alias,
 }
 
 /// A part of a block ([`block_children`]).
@@ -108,6 +111,7 @@ macro_rules! lists {
                     f($child::Expr(e, Always, Role::Dest));
                     f($child::Place(p, PlaceRole::Write));
                 }
+                StmtKind::Alias(_, p) => f($child::Place(p, PlaceRole::Alias)),
                 StmtKind::Expr(e) => f(read(e)),
                 StmtKind::If(c, a, b) => {
                     f(read(c));
@@ -214,13 +218,23 @@ lists!(ChildMut, PartMut, iter_mut, stmt_children_mut, place_children_mut, expr_
 /// expression that is a place ([`Expr::as_place`]); whether `e` is of the
 /// forms that write places: a place, a span over a place, a slice of one (a
 /// partial view, R-31), or (planar channels, §5.3) an array literal of those,
-/// and a literal of a generated `Out` of those (§11.6).
+/// and a literal of a generated `Out` of those (§11.6); of a block, its
+/// value (`{ alias r = g[next(inout i)]; [span(r[0]), span(r[1])] }`), of
+/// no root a `Let` of the block declares (a write to it would be lost).
 pub fn written_places<'a>(e: &'a Expr, f: &mut dyn FnMut(&'a Expr)) -> bool {
     match &e.kind {
         ExprKind::SpanOf(inner) => inner.as_place().map(|_| f(inner)).is_some(),
         ExprKind::Prim { prim: Prim::Slice, args } => args.first().is_some_and(|a| written_places(&a.expr, f)),
         ExprKind::Array(items) => items.iter().fold(true, |all, x| written_places(x, f) && all),
         ExprKind::Struct { fields, .. } => fields.iter().fold(true, |all, (_, x)| written_places(x, f) && all),
+        ExprKind::Block(b) => b.value.as_ref().is_some_and(|v| {
+            let mut outside = true;
+            let lets = |l| b.stmts.iter().any(|s| matches!(s.kind, StmtKind::Let(k, _) if k == l));
+            written_places(v, &mut |p| {
+                outside &= !p.place_root().is_some_and(lets);
+                f(p)
+            }) && outside
+        }),
         _ => e.as_place().map(|_| f(e)).is_some(),
     }
 }

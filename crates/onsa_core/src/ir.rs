@@ -257,6 +257,22 @@ pub struct ConstDef {
 pub struct Local {
     pub name: String,
     pub ty: CTy,
+    pub kind: LocalKind,
+}
+
+impl Local {
+    /// A local that holds a value of its own.
+    pub fn value(name: impl Into<String>, ty: CTy) -> Local {
+        Local { name: name.into(), ty, kind: LocalKind::Value }
+    }
+}
+
+/// What a local is: a value of its own, or a name of a place
+/// ([`StmtKind::Alias`]) that the place is written through when `write`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LocalKind {
+    Value,
+    Alias { write: bool },
 }
 
 #[derive(Debug, Clone)]
@@ -395,6 +411,10 @@ pub struct Stmt {
 #[derive(Debug, Clone)]
 pub enum StmtKind {
     Let(LocalId, Expr),
+    /// The local (of `LocalKind::Alias`) names the place: its indices are
+    /// evaluated and checked here, once, and a use of the local is a use of
+    /// that element. It holds no value of its own, so nothing is dropped.
+    Alias(LocalId, Place),
     /// `place = value`. From the source, the statement's span is the target
     /// (`xs[i]`): the position of a panic of the write (§18.1, R-185).
     Assign(Place, Expr),

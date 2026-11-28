@@ -43,7 +43,7 @@ fn folded_in(tys: Types, locals: &[CTy], consts: Vec<ConstDef>, stmts: Vec<Stmt>
             ret: value.ty,
             sret: false,
             rt: true,
-            locals: locals.iter().enumerate().map(|(i, &t)| Local { name: format!("x{i}"), ty: t }).collect(),
+            locals: locals.iter().enumerate().map(|(i, &t)| Local::value(format!("x{i}"), t)).collect(),
             body: Some(Block { stmts, value: Some(Box::new(value)) }),
             span: sp(),
             fp_relaxed: false,

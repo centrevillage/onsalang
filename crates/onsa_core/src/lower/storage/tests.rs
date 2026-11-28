@@ -160,7 +160,7 @@ fn module(locals: &[(&str, CTy)], body: Block) -> Module {
         kind: TypeDefKind::Enum { variants: vec![("A".into(), Vec::new()), ("B".into(), vec![arr()])] },
     };
     let params = [("c", Types::BOOL), ("y", arr()), ("o", tys().1[3])];
-    let all: Vec<Local> = params.iter().chain(locals).map(|&(n, ty)| Local { name: n.to_string(), ty }).collect();
+    let all: Vec<Local> = params.iter().chain(locals).map(|&(n, ty)| Local::value(n, ty)).collect();
     let f = FnDef {
         name: "f".into(),
         params: (0..3).map(|i| Param { local: LocalId(i), mode: Mode::Borrow, ty: all[i as usize].ty }).collect(),
@@ -285,4 +285,26 @@ fn the_verifier_rejects_a_hoisted_local_without_a_let_in_a_scope() {
         assert!(err.message.contains("has no `let` below the top of the body"), "{err}");
         assert_eq!(err.rule, crate::Rule::V18, "{err}");
     }
+}
+
+/// A view of an alias out of an arm hoists the root of the place the alias
+/// names (`let s = if c { let t = [1.0; 4]; alias r = t; span(r) } else { span(y) }`
+/// hoists `t`, not the alias).
+#[test]
+fn a_view_of_an_alias_hoists_the_root_of_its_place() {
+    let arm = x(
+        span_ty(),
+        ExprKind::IfExpr {
+            cond: Box::new(local(0, Types::BOOL)),
+            then: block(
+                vec![st(StmtKind::Let(LocalId(3), ones())), st(StmtKind::Alias(LocalId(5), Place::Local(LocalId(3))))],
+                Some(span_of(5)),
+            ),
+            else_: block(Vec::new(), Some(span_of(1))),
+        },
+    );
+    let locals = [("t", arr()), ("s", span_ty()), ("r", arr())];
+    let mut m = module(&locals, block(vec![st(StmtKind::Let(LocalId(4), arm))], None));
+    m.fns[0].locals[5].kind = LocalKind::Alias { write: false };
+    assert_eq!(hoisted_by_hand(m), ["t"]);
 }

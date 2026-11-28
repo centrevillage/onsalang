@@ -1,0 +1,370 @@
+// onsa.toml
+// [package]
+// name = "planar_inout_index"
+// edition = "2026"
+//
+// [export]
+// prefix = "pii_"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "poison"
+// provides = []
+//
+// [test]
+// mode = "test"
+// spec = ["§3.5", "§5.3", "§11.6", "§9.2", "§13.4"]
+//
+// # W8-03 U6a/t (§3.5, §5.3, §11.6, §9.2, §13.4, S-75, R-433): an array of arrays passed `inout` to a planar argument `[Span[T]; N]`, or a planar field of an `inout` literal of a generated `Out`, with an index that has an
+// # effect, in the C of the target as in the interpreter (values/place_inout_planar_index.onsa and flow/flow_gen_bind_inout_index.onsa have the same forms and more). §3.5: the index is evaluated once, `vs[a][b]` is `a` then
+// # `b`, the arguments are evaluated from the left, the fields of a literal in the order they are written. An index out of range panics, which the boundary reports by the status 1 (§9.2; the result of a panicked call
+// # is not compared). `next(inout n)` returns the old value and adds 1; `mark(inout log, d, v)` appends the digit `d` to the log and returns `v`. The array `ws` is [[[1, 2], [3, 4]], [[5, 6], [7, 8]]] (rows of the sums
+// # 10 and 26, total 36) and `vs` is the 16 values 1 .. 16 (total 136, `vs[0][0]` of the sum 10 and `vs[0][1]` of 26, `vs[1][0]` of 42). The results are worked out by hand from these.
+// #
+// # `direct` and `summed`: `zero(inout ws[next(inout i)])` and `ws[next(inout i) + 0]` from i0: the row i0 is zero, so the total is 26 (i0 = 0) or 10 (i0 = 1), and `i` is i0 + 1 once (the result is i * 100 + total):
+// # 126 and 210, and i0 = 2 is out of range. An index evaluated twice would give i = i0 + 2.
+// [[test.host]]
+// name = "c: an index with an effect in a planar argument"
+// target = "host"
+// fn = "planar_inout_index.direct"
+// steps = [
+//   { call = "fn", args = { i0 = 0 }, status = 0, result = 126 },
+//   { call = "fn", args = { i0 = 1 }, status = 0, result = 210 },
+//   { call = "fn", args = { i0 = 2 }, status = 1 },
+//   { call = "fn", args = { i0 = 7 }, status = 1 },
+// ]
+//
+// [[test.host]]
+// name = "c: an index that is a sum with an effect"
+// target = "host"
+// fn = "planar_inout_index.summed"
+// steps = [
+//   { call = "fn", args = { i0 = 0 }, status = 0, result = 126 },
+//   { call = "fn", args = { i0 = 1 }, status = 0, result = 210 },
+//   { call = "fn", args = { i0 = 2 }, status = 1 },
+// ]
+//
+// # `nested`: `zero(inout vs[0][next(inout i)])`, the result is i * 1000 + total: i0 = 0 zeroes `vs[0][0]` (136 - 10 = 126, i = 1) and i0 = 1 zeroes `vs[0][1]` (136 - 26 = 110, i = 2); 2 is out of range.
+// [[test.host]]
+// name = "c: an index with an effect in a nested index"
+// target = "host"
+// fn = "planar_inout_index.nested"
+// steps = [
+//   { call = "fn", args = { i0 = 0 }, status = 0, result = 1126 },
+//   { call = "fn", args = { i0 = 1 }, status = 0, result = 2110 },
+//   { call = "fn", args = { i0 = 2 }, status = 1 },
+// ]
+//
+// # `both`: `zero(inout vs[next(inout i)][next(inout i)])`: i0 = 0 is `vs[0][1]` (the outer first: 136 - 26 = 110, i = 2, result 2110; the inner first would zero `vs[1][0]` and give 2094). i0 = 1 has the inner index 2 and
+// # i0 = 2 the outer index 2, both out of range.
+// [[test.host]]
+// name = "c: both indexes of a nested index have an effect"
+// target = "host"
+// fn = "planar_inout_index.both"
+// steps = [
+//   { call = "fn", args = { i0 = 0 }, status = 0, result = 2110 },
+//   { call = "fn", args = { i0 = 1 }, status = 1 },
+//   { call = "fn", args = { i0 = 2 }, status = 1 },
+// ]
+//
+// # `order` is `put(inout ws[mark(inout log, 1, v)], mark(inout log, 2, 40))`: `put` fills the first row of its array with 9 and returns its second argument (40), the log is 12 (the first argument first; 21 if not), the total is
+// # 36 - 3 + 18 = 51 (v = 0) or 36 - 11 + 18 = 43 (v = 1); the result is 40 + 12000 + total. `order_after` is `put_after(mark(inout log, 3, 7), inout ws[mark(inout log, 4, v)])`, with the planar argument second: the log is 34,
+// # the result is 7 + 34000 + total. v = 2 is out of range in both.
+// [[test.host]]
+// name = "c: the planar argument first"
+// target = "host"
+// fn = "planar_inout_index.order"
+// steps = [
+//   { call = "fn", args = { v = 0 }, status = 0, result = 12091 },
+//   { call = "fn", args = { v = 1 }, status = 0, result = 12083 },
+//   { call = "fn", args = { v = 2 }, status = 1 },
+// ]
+//
+// [[test.host]]
+// name = "c: the planar argument second"
+// target = "host"
+// fn = "planar_inout_index.order_after"
+// steps = [
+//   { call = "fn", args = { v = 0 }, status = 0, result = 34058 },
+//   { call = "fn", args = { v = 1 }, status = 0, result = 34050 },
+//   { call = "fn", args = { v = 2 }, status = 1 },
+// ]
+//
+// # `out_literal`: `write_bus(inout bus.Out { main: ms[next(inout i)], aux: g[next(inout i)] })` writes `main[0] = 1.0` and `aux[1][0] = 2.0`; the result is i * 100 + (the row of `ms` that is written) * 10 + (the row of `g`):
+// # i0 = 0 is ms[0] and g[1] with i = 2 (201), i0 = 1 is ms[1] and g[2] with i = 3 (312); i0 = 2 has the index 3 of `g` and i0 = 3 the index 3 of `ms`, out of range (`ms` and `g` have 3 rows).
+// # `out_swapped` writes the fields in the other order, `aux: g[next(inout i)], main: ms[next(inout i)]`: i0 = 0 is g[0] and ms[1] (210), i0 = 1 is g[1] and ms[2] (321), i0 = 2 has the index 3 of `ms`.
+// [[test.host]]
+// name = "c: both fields of an Out literal have an index with an effect"
+// target = "host"
+// fn = "planar_inout_index.out_literal"
+// steps = [
+//   { call = "fn", args = { i0 = 0 }, status = 0, result = 201 },
+//   { call = "fn", args = { i0 = 1 }, status = 0, result = 312 },
+//   { call = "fn", args = { i0 = 2 }, status = 1 },
+//   { call = "fn", args = { i0 = 3 }, status = 1 },
+// ]
+//
+// [[test.host]]
+// name = "c: the fields of an Out literal in the other order"
+// target = "host"
+// fn = "planar_inout_index.out_swapped"
+// steps = [
+//   { call = "fn", args = { i0 = 0 }, status = 0, result = 210 },
+//   { call = "fn", args = { i0 = 1 }, status = 0, result = 321 },
+//   { call = "fn", args = { i0 = 2 }, status = 1 },
+// ]
+//
+// # `slice_len`: `zero_span(inout z.slice(0, next(inout j)))` on z = [1, 2, 3, 4]: the first j0 elements are zero, the result is j * 100 + the sum of z: j0 = 1 gives 209, 2 gives 307, 4 gives 500, and 5 is past the length.
+// [[test.host]]
+// name = "c: a view whose length has an effect"
+// target = "host"
+// fn = "planar_inout_index.slice_len"
+// steps = [
+//   { call = "fn", args = { j0 = 1 }, status = 0, result = 209 },
+//   { call = "fn", args = { j0 = 2 }, status = 0, result = 307 },
+//   { call = "fn", args = { j0 = 4 }, status = 0, result = 500 },
+//   { call = "fn", args = { j0 = 5 }, status = 1 },
+// ]
+//
+// # `zero_len`: `count(inout zs[next(inout i)])` of `zs: [[[F32; 3]; 0]; 2]`, a planar argument `[Span[F32]; 0]` of no element (§5.3: `len()` of an array is its length, 0), so the result is i * 100: i0 = 0 gives 100,
+// # 1 gives 200, and 2 is out of range of the two rows.
+// [[test.host]]
+// name = "c: a planar argument of length 0 of an index with an effect"
+// target = "host"
+// fn = "planar_inout_index.zero_len"
+// steps = [
+//   { call = "fn", args = { i0 = 0 }, status = 0, result = 100 },
+//   { call = "fn", args = { i0 = 1 }, status = 0, result = 200 },
+//   { call = "fn", args = { i0 = 2 }, status = 1 },
+// ]
+//
+// # `borrowed_both`: `first(vs[next(inout i)][next(inout i)])`, a borrowed planar argument (`first` gives `a[0][0]`): i0 = 0 is `vs[0][1]`, whose first element is 5 (the outer index first; the inner first would read
+// # `vs[1][0]`, 9), and i = 2: the result is i * 100 + 5 = 205. i0 = 1 has the inner index 2, out of range.
+// [[test.host]]
+// name = "c: both indexes of a borrowed planar argument have an effect"
+// target = "host"
+// fn = "planar_inout_index.borrowed_both"
+// steps = [
+//   { call = "fn", args = { i0 = 0 }, status = 0, result = 205 },
+//   { call = "fn", args = { i0 = 1 }, status = 1 },
+// ]
+
+pub struct Bus {
+  main: F32,
+  aux: [F32; 2],
+}
+
+pub flow bus(m: F32 at sample, n: F32 at sample) -> Bus at sample {
+  Bus { main: m, aux: [n + 1.0, m + 2.0] }
+}
+
+fn next(inout n: U32) -> U32 {
+  n = n + 1
+  n - 1
+}
+
+fn mark(inout log: U32, d: U32, v: U32) -> U32 {
+  log = log * 10 + d
+  v
+}
+
+fn rows() -> [[[U8; 2]; 2]; 2] {
+  [[[1, 2], [3, 4]], [[5, 6], [7, 8]]]
+}
+
+fn cube() -> [[[[U8; 2]; 2]; 2]; 2] {
+  [[[[1, 2], [3, 4]], [[5, 6], [7, 8]]], [[[9, 10], [11, 12]], [[13, 14], [15, 16]]]]
+}
+
+fn zero(inout xs: [Span[U8]; 2]) {
+  xs[0].fill!(0)
+  xs[1].fill!(0)
+}
+
+fn count(inout xs: [Span[F32]; 0]) -> U32 {
+  xs.len()
+}
+
+fn first(a: [Span[U8]; 2]) -> U32 {
+  a[0][0] as U32
+}
+
+fn put(inout xs: [Span[U8]; 2], k: U32) -> U32 {
+  xs[0].fill!(9)
+  k
+}
+
+fn put_after(k: U32, inout xs: [Span[U8]; 2]) -> U32 {
+  xs[0].fill!(9)
+  k
+}
+
+fn zero_span(inout s: Span[U8]) {
+  s.fill!(0)
+}
+
+fn write_bus(inout o: bus.Out) {
+  o.main[0] = 1.0
+  o.aux[1][0] = 2.0
+}
+
+fn total(ws: [[[U8; 2]; 2]; 2]) -> U32 {
+  var t: U32 = 0
+  for a in 0 ..< 2 {
+    for b in 0 ..< 2 {
+      for c in 0 ..< 2 {
+        t = t + (ws[a][b][c] as U32)
+      }
+    }
+  }
+  t
+}
+
+fn total4(vs: [[[[U8; 2]; 2]; 2]; 2]) -> U32 {
+  var t: U32 = 0
+  for a in 0 ..< 2 {
+    t = t + total(vs[a])
+  }
+  t
+}
+
+fn main_row(ms: [[F32; 3]; 3]) -> U32 {
+  var r: U32 = 0
+  for k in 0 ..< 3 {
+    if ms[k][0] == 1.0 {
+      r = k
+    }
+  }
+  r
+}
+
+fn aux_row(g: [[[F32; 3]; 2]; 3]) -> U32 {
+  var r: U32 = 0
+  for k in 0 ..< 3 {
+    if g[k][1][0] == 2.0 {
+      r = k
+    }
+  }
+  r
+}
+
+@export
+pub fn direct(i0: U32) -> U32 {
+  var ws = rows()
+  var i: U32 = i0
+  zero(inout ws[next(inout i)])
+  i * 100 + total(ws)
+}
+
+@export
+pub fn summed(i0: U32) -> U32 {
+  var ws = rows()
+  var i: U32 = i0
+  zero(inout ws[next(inout i) + 0])
+  i * 100 + total(ws)
+}
+
+@export
+pub fn nested(i0: U32) -> U32 {
+  var vs = cube()
+  var i: U32 = i0
+  zero(inout vs[0][next(inout i)])
+  i * 1000 + total4(vs)
+}
+
+@export
+pub fn both(i0: U32) -> U32 {
+  var vs = cube()
+  var i: U32 = i0
+  zero(inout vs[next(inout i)][next(inout i)])
+  i * 1000 + total4(vs)
+}
+
+@export
+pub fn order(v: U32) -> U32 {
+  var ws = rows()
+  var log: U32 = 0
+  let r = put(inout ws[mark(inout log, 1, v)], mark(inout log, 2, 40))
+  r + log * 1000 + total(ws)
+}
+
+@export
+pub fn order_after(v: U32) -> U32 {
+  var ws = rows()
+  var log: U32 = 0
+  let r = put_after(mark(inout log, 3, 7), inout ws[mark(inout log, 4, v)])
+  r + log * 1000 + total(ws)
+}
+
+@export
+pub fn out_literal(i0: U32) -> U32 {
+  var ms: [[F32; 3]; 3] = [[0.0; 3]; 3]
+  var g: [[[F32; 3]; 2]; 3] = [[[0.0; 3]; 2]; 3]
+  var i: U32 = i0
+  write_bus(inout bus.Out { main: ms[next(inout i)], aux: g[next(inout i)] })
+  i * 100 + main_row(ms) * 10 + aux_row(g)
+}
+
+@export
+pub fn out_swapped(i0: U32) -> U32 {
+  var ms: [[F32; 3]; 3] = [[0.0; 3]; 3]
+  var g: [[[F32; 3]; 2]; 3] = [[[0.0; 3]; 2]; 3]
+  var i: U32 = i0
+  write_bus(inout bus.Out { aux: g[next(inout i)], main: ms[next(inout i)] })
+  i * 100 + main_row(ms) * 10 + aux_row(g)
+}
+
+@export
+pub fn slice_len(j0: U32) -> U32 {
+  var z: [U8; 4] = [1, 2, 3, 4]
+  var j: U32 = j0
+  zero_span(inout z.slice(0, next(inout j)))
+  j * 100 + (z[0] as U32) + (z[1] as U32) + (z[2] as U32) + (z[3] as U32)
+}
+
+@export
+pub fn zero_len(i0: U32) -> U32 {
+  var zs: [[[F32; 3]; 0]; 2] = [[], []]
+  var i: U32 = i0
+  let n = count(inout zs[next(inout i)])
+  n + i * 100
+}
+
+@export
+pub fn borrowed_both(i0: U32) -> U32 {
+  let vs = cube()
+  var i: U32 = i0
+  let r = first(vs[next(inout i)][next(inout i)])
+  i * 100 + r
+}
+
+test "the forms that do not panic have the values of the host calls" {
+  assert direct(0) == 126
+  assert direct(1) == 210
+  assert summed(0) == 126
+  assert summed(1) == 210
+  assert nested(0) == 1126
+  assert nested(1) == 2110
+  assert both(0) == 2110
+  assert order(0) == 12091
+  assert order(1) == 12083
+  assert order_after(0) == 34058
+  assert order_after(1) == 34050
+  assert out_literal(0) == 201
+  assert out_literal(1) == 312
+  assert out_swapped(0) == 210
+  assert out_swapped(1) == 321
+  assert slice_len(1) == 209
+  assert slice_len(2) == 307
+  assert slice_len(4) == 500
+  assert zero_len(0) == 100
+  assert zero_len(1) == 200
+  assert borrowed_both(0) == 205
+}
+
+test "an index out of range of a function that is exported panics" {
+  let r = direct(2) //~ PANIC "an index out of range of a function that is exported panics"
+  assert r == 0
+}

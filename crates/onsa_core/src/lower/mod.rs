@@ -826,7 +826,7 @@ impl<'a> Lowerer<'a> {
                     let mut locals = Vec::new();
                     for (p, &ty) in f.params.iter().zip(&tys[1..]) {
                         let local = LocalId(locals.len() as u32);
-                        locals.push(Local { name: p.name.clone(), ty });
+                        locals.push(Local::value(p.name.clone(), ty));
                         params.push(Param { local, mode: core_mode(p.mode), ty });
                     }
                     self.fill_fn(fid, params, tys[0], f.rt, locals, None);

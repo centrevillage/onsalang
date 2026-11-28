@@ -1,0 +1,303 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§3.5", "§5.3", "§5.2", "§9.2"]
+
+// W8-03 U6a/t (§3.5, §5.3, §5.2, §9.2, S-75, S-1275, R-433): an array of arrays (or of `Buf`s) passed `inout` to a planar argument `[Span[T]; N]` whose
+// index has an effect. It replaces negative/lower_planar_inout_index.onsa, which reported the three forms of the first group below as E0200
+// ("this version does not support an `inout` planar span of an element whose index has an effect"): the same forms are programs and have values.
+// §3.5: "添字 `xs[i]` は、`xs` の後に `i` を評価する" (so the index is evaluated once, and `vs[a][b]` is `a` then `b`), "引数を全て評価してから呼び出す"
+// and "左から右に評価する" (an effect of an earlier argument is first, whichever mode the argument has), and "panic しうる式が複数あるときは、この順で最初に
+// panic する式が報告される" (a PANIC marker is on the line where the reported expression starts). §5.2: the places `a[next(inout i)]` and `i` are
+// different variables (or different fields), so the window of the index (S-1275, E0702) is not met. `next(inout n)` returns the old value and adds 1; `mark(inout log, d, v)`
+// appends the digit `d` to `log` and returns `v`, so a log of 12 says that the call of 1 ran before the call of 2.
+// Every value is worked out by hand: `rows()` is [[[1, 2], [3, 4]], [[5, 6], [7, 8]]] and `cube()` is the 16 values 1 .. 16 in that order.
+// The index without an effect is in values/place_index_once.onsa, the generated `Out` literals in flow/flow_gen_bind_inout_index.onsa, the C of the
+// same forms in c_runtime/planar_inout_index.onsa.
+
+use std.array
+
+pub struct Bank {
+  rows: [[[U8; 2]; 2]; 2],
+  cur: U32,
+}
+
+fn next(inout n: U32) -> U32 {
+  n = n + 1
+  n - 1
+}
+
+fn mark(inout log: U32, d: U32, v: U32) -> U32 {
+  log = log * 10 + d
+  v
+}
+
+fn rows() -> [[[U8; 2]; 2]; 2] {
+  [[[1, 2], [3, 4]], [[5, 6], [7, 8]]]
+}
+
+fn cube() -> [[[[U8; 2]; 2]; 2]; 2] {
+  [[[[1, 2], [3, 4]], [[5, 6], [7, 8]]], [[[9, 10], [11, 12]], [[13, 14], [15, 16]]]]
+}
+
+fn zero(inout xs: [Span[U8]; 2]) {
+  xs[0].fill!(0)
+  xs[1].fill!(0)
+}
+
+/// Fills the first row with 9 and returns `k`.
+fn put(inout xs: [Span[U8]; 2], k: U32) -> U32 {
+  xs[0].fill!(9)
+  k
+}
+
+fn put_after(k: U32, inout xs: [Span[U8]; 2]) -> U32 {
+  xs[0].fill!(9)
+  k
+}
+
+fn zero_pair(inout a: [Span[U8]; 2], inout b: [Span[U8]; 2]) {
+  zero(inout a)
+  zero(inout b)
+}
+
+fn zero_n[const N: U32](inout xs: [Span[U8]; N]) {
+  for k in 0 ..< N {
+    xs[k].fill!(0)
+  }
+}
+
+fn fill_rows[T: Copy](inout xs: [Span[T]; 2], v: T) {
+  xs[0].fill!(v)
+  xs[1].fill!(v)
+}
+
+fn zero_span(inout s: Span[U8]) {
+  s.fill!(0)
+}
+
+fn zero_next(inout ws: [[[U8; 2]; 2]; 2], inout i: U32) {
+  zero(inout ws[next(inout i)])
+}
+
+fn zero_if(c: Bool, inout ws: [[[U8; 2]; 2]; 2], inout i: U32) {
+  if c {
+    zero(inout ws[next(inout i)])
+  }
+}
+
+fn total(xs: [Span[U8]; 2]) -> U32 {
+  var t: U32 = 0
+  for a in xs[0] {
+    t = t + (a as U32)
+  }
+  for b in xs[1] {
+    t = t + (b as U32)
+  }
+  t
+}
+
+// ---------------------------------------------------------------------- the three forms that were E0200
+
+test "an index with an effect is evaluated once and names the row that is written" {
+  var ws = rows()
+  var i: U32 = 0
+  zero(inout ws[next(inout i)])
+  assert i == 1
+  assert ws == [[[0, 0], [0, 0]], [[5, 6], [7, 8]]]
+  zero(inout ws[next(inout i)])
+  assert i == 2
+  assert ws == [[[0, 0], [0, 0]], [[0, 0], [0, 0]]]
+}
+
+test "an index that is a sum with an effect on either side" {
+  var ws = rows()
+  var i: U32 = 1
+  zero(inout ws[next(inout i) + 0])
+  assert i == 2
+  assert ws == [[[1, 2], [3, 4]], [[0, 0], [0, 0]]]
+  var k: U32 = 0
+  ws = rows()
+  zero(inout ws[1 - next(inout k)])
+  assert k == 1
+  assert ws == [[[1, 2], [3, 4]], [[0, 0], [0, 0]]]
+}
+
+test "an index of an index" {
+  var vs = cube()
+  var i: U32 = 1
+  zero(inout vs[0][next(inout i)])
+  assert i == 2
+  assert vs == [[[[1, 2], [3, 4]], [[0, 0], [0, 0]]], [[[9, 10], [11, 12]], [[13, 14], [15, 16]]]]
+}
+
+test "both indexes of a nested index have an effect and the outer one is evaluated first" {
+  var vs = cube()
+  var i: U32 = 0
+  zero(inout vs[next(inout i)][next(inout i)])
+  assert i == 2
+  assert vs == [[[[1, 2], [3, 4]], [[0, 0], [0, 0]]], [[[9, 10], [11, 12]], [[13, 14], [15, 16]]]]
+}
+
+// ---------------------------------------------------------------------------------- the order of the arguments
+
+test "the effect of an earlier argument is first, whichever mode the argument has" {
+  var ws = rows()
+  var log: U32 = 0
+  let r = put(inout ws[mark(inout log, 1, 1)], mark(inout log, 2, 40))
+  assert log == 12
+  assert r == 40
+  assert ws == [[[1, 2], [3, 4]], [[9, 9], [7, 8]]]
+  let q = put_after(mark(inout log, 3, 7), inout ws[mark(inout log, 4, 0)])
+  assert log == 1234
+  assert q == 7
+  assert ws == [[[9, 9], [3, 4]], [[9, 9], [7, 8]]]
+}
+
+test "two planar inout arguments of different arrays take an index each, left first" {
+  var a = rows()
+  var b = rows()
+  var i: U32 = 0
+  zero_pair(inout a[next(inout i)], inout b[next(inout i)])
+  assert i == 2
+  assert a == [[[0, 0], [0, 0]], [[5, 6], [7, 8]]]
+  assert b == [[[1, 2], [3, 4]], [[0, 0], [0, 0]]]
+}
+
+// ------------------------------------------------------------------------------ places, branches and loops
+
+test "an inout parameter is the array and another is the counter" {
+  var ws = rows()
+  var i: U32 = 1
+  zero_next(inout ws, inout i)
+  assert i == 2
+  assert ws == [[[1, 2], [3, 4]], [[0, 0], [0, 0]]]
+}
+
+test "a field is the array and another field is the counter" {
+  var b = Bank { rows: rows(), cur: 0 }
+  zero(inout b.rows[next(inout b.cur)])
+  assert b.cur == 1
+  assert b.rows == [[[0, 0], [0, 0]], [[5, 6], [7, 8]]]
+}
+
+test "a loop takes one index for each turn" {
+  var ws = rows()
+  var i: U32 = 0
+  for _ in 0 ..< 2 {
+    zero(inout ws[next(inout i)])
+  }
+  assert i == 2
+  assert ws == [[[0, 0], [0, 0]], [[0, 0], [0, 0]]]
+}
+
+test "a branch that is not taken does not evaluate the index" {
+  var ws = rows()
+  var i: U32 = 0
+  zero_if(false, inout ws, inout i)
+  assert i == 0
+  assert ws == rows()
+  zero_if(true, inout ws, inout i)
+  assert i == 1
+  assert ws == [[[0, 0], [0, 0]], [[5, 6], [7, 8]]]
+}
+
+test "a generic argument and a const generic one" {
+  var ws = rows()
+  var i: U32 = 0
+  fill_rows(inout ws[next(inout i)], 9)
+  assert i == 1
+  assert ws == [[[9, 9], [9, 9]], [[5, 6], [7, 8]]]
+  zero_n(inout ws[next(inout i)])
+  assert i == 2
+  assert ws == [[[9, 9], [9, 9]], [[0, 0], [0, 0]]]
+}
+
+test "an array of Bufs" {
+  var bs: [[Buf[U8]; 2]; 2] = [[Buf.zeroed(2), Buf.zeroed(2)], [Buf.zeroed(2), Buf.zeroed(2)]]
+  var i: U32 = 1
+  fill_rows(inout bs[next(inout i)], 9)
+  assert i == 2
+  assert total(bs[1]) == 36
+  assert total(bs[0]) == 0
+}
+
+test "an anonymous function takes the index of a local" {
+  let ys: [U32; 2] = array.from_fn(fn(k) {
+    var ws = rows()
+    var i: U32 = k
+    zero(inout ws[next(inout i)])
+    (ws[0][0][0] as U32) * 10 + i
+  })
+  assert ys == [1, 12]
+}
+
+// ------------------------------------------------------------------------ the neighbours of the planar argument
+
+test "an array literal of places takes an index with an effect in an element" {
+  var a: [[U8; 2]; 3] = [[1, 2], [3, 4], [5, 6]]
+  var b: [U8; 2] = [7, 8]
+  var i: U32 = 0
+  zero(inout [a[next(inout i)], b])
+  assert i == 1
+  assert a == [[0, 0], [3, 4], [5, 6]]
+  assert b == [0, 0]
+}
+
+test "a view with a length that has an effect" {
+  var z: [U8; 4] = [1, 2, 3, 4]
+  var j: U32 = 2
+  zero_span(inout z.slice(0, next(inout j)))
+  assert j == 3
+  assert z == [0, 0, 3, 4]
+}
+
+// ------------------------------------------------------------------------------------------------- panics
+
+test "an index out of range panics" {
+  var ws = rows()
+  var i: U32 = 2
+  zero(inout ws[next(inout i)]) //~ PANIC "an index out of range panics"
+  assert i == 3
+}
+
+test "the inner index of a nested index out of range panics" {
+  var vs = cube()
+  var i: U32 = 2
+  zero(inout vs[0][next(inout i)]) //~ PANIC "the inner index of a nested index out of range panics"
+  assert i == 3
+}
+
+test "the outer index of a nested index out of range panics" {
+  var vs = cube()
+  var i: U32 = 2
+  zero(inout vs[next(inout i)][0]) //~ PANIC "the outer index of a nested index out of range panics"
+  assert i == 3
+}
+
+test "the index out of range is reported before a later argument that panics" {
+  var ws = rows()
+  var i: U32 = 2
+  let z: U32 = 0
+  let r = put(inout ws[next(inout i)], //~ PANIC "the index out of range is reported before a later argument that panics"
+              1 / z)
+  assert r == 0
+}
+
+test "an earlier argument that panics is reported before the index out of range" {
+  var ws = rows()
+  var i: U32 = 2
+  let z: U32 = 0
+  let r = put_after(1 / z, //~ PANIC "an earlier argument that panics is reported before the index out of range"
+                    inout ws[next(inout i)])
+  assert r == 0
+}
+
+test "an index in range is not reported when a later argument panics" {
+  var ws = rows()
+  var i: U32 = 0
+  let z: U32 = 0
+  let r = put(inout ws[next(inout i)],
+              1 / z) //~ PANIC "an index in range is not reported when a later argument panics"
+  assert r == 0
+}

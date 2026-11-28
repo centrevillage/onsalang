@@ -27,7 +27,7 @@ pub(crate) fn of_type(e: Expr, want: CTy, tys: &Types) -> R<Expr> {
     }
 }
 
-pub(super) fn coerce(lw: &mut Lowerer, cx: &mut FnCx, e: Expr, want: CTy, mode: Mode) -> R<Expr> {
+pub(super) fn coerce(lw: &mut Lowerer, cx: &mut FnCx, mut e: Expr, want: CTy, mode: Mode) -> R<Expr> {
     if e.ty == want {
         return Ok(e);
     }
@@ -40,12 +40,18 @@ pub(super) fn coerce(lw: &mut Lowerer, cx: &mut FnCx, e: Expr, want: CTy, mode: 
             // Planar: an array of arrays / Bufs (a literal is converted by its elements, S-196),
             // a value that is no place bound to a temporary first, and the
             // indices of a place evaluated once (R-433); an `inout` argument
-            // is a place, with no statements before it.
+            // is a place, which an alias names when its indices are not
+            // repeatable (`{ alias r = ws[next(inout i)]; [span(r[0]), …] }`).
             let mut stmts = Vec::new();
-            let base = materialize(cx, e, &mut stmts, "__planar", &lw.m.tys);
-            if mode == Mode::Inout && !stmts.is_empty() {
-                return Err(unsupported(span, Feature::PlanarInoutIndex, &[]));
-            }
+            let base = match mode {
+                Mode::Inout if !stays(&mut e, &lw.m.tys) => {
+                    let Some(p) = e.as_place() else { return Err(internal(span, "inout planar argument of no place")) };
+                    let r = cx.alias("__planar", e.ty, true);
+                    stmts.push(stmt(span, StmtKind::Alias(r, p)));
+                    local_expr(cx, r, span)
+                }
+                _ => materialize(cx, e, &mut stmts, "__planar", &lw.m.tys),
+            };
             let mut out = Vec::new();
             for i in 0..n {
                 let el = index(base.clone(), u32_lit(span, i), &lw.m.tys)?;

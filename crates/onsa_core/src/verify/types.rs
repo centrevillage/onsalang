@@ -7,7 +7,7 @@ use onsa_sema::widens;
 use super::{R, Rule, V};
 use crate::ir::*;
 use crate::prim::scalar;
-use crate::walk::written_places;
+use crate::walk::{PlaceRole, written_places};
 
 impl<'a> V<'a> {
     pub(super) fn same(&self, a: CTy, b: CTy, what: &str) -> R<()> {
@@ -66,6 +66,13 @@ impl<'a> V<'a> {
                 }
                 self.same(e.ty, pt, "assignment")
             }
+            // The place an alias written through names is written (V-05, V-21, V-28).
+            StmtKind::Alias(l, p) => {
+                if self.alias_kind(*l) == Some(true) {
+                    self.writable(p.root())?;
+                }
+                self.same(self.place_ty(p)?, self.local_ty(*l)?, "alias")
+            }
             StmtKind::Expr(_) => Ok(()),
             StmtKind::If(c, ..) => self.same(c.ty, Types::BOOL, "if condition"),
             StmtKind::While(c, _) => self.same(c.ty, Types::BOOL, "while condition"),
@@ -100,15 +107,16 @@ impl<'a> V<'a> {
         self.of(self.parts().place(self.f.map_or(&[], |f| &f.locals), p))
     }
 
-    pub(super) fn place_here(&self, p: &Place) -> R<()> {
-        match p {
+    pub(super) fn place_here(&self, p: &Place, role: PlaceRole) -> R<()> {
+        match (p, role) {
             // The root of a place written: seen (an assignment defines no local) and writable.
-            Place::Local(l) => {
+            (Place::Local(l), PlaceRole::Write) => {
                 self.read_local(*l, "written")?;
                 self.writable(*l)
             }
-            Place::Field(..) => Ok(()),
-            Place::Index(b, i, _, bounds) => {
+            (Place::Local(l), PlaceRole::Alias) => self.read_local(*l, "named by an alias").map(|_| ()),
+            (Place::Field(..), _) => Ok(()),
+            (Place::Index(b, i, _, bounds), _) => {
                 if *bounds == Bounds::Known {
                     self.known(i, self.place_ty(b)?)?;
                 }

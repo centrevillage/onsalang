@@ -290,16 +290,7 @@ impl<'a> Dumper<'a> {
         match &s.kind {
             StmtKind::Let(l, e) => {
                 self.out.push_str("let ");
-                self.local(*l);
-                self.out.push_str(": ");
-                match self.locals.get(l.0 as usize) {
-                    Some(local) => {
-                        self.ty(local.ty);
-                    }
-                    None => {
-                        let _ = write!(self.out, "<bad local {}>", l.0);
-                    }
-                }
+                self.typed(*l);
                 self.out.push_str(" = ");
                 self.expr(e);
             }
@@ -307,6 +298,14 @@ impl<'a> Dumper<'a> {
                 self.place(p);
                 self.out.push_str(" = ");
                 self.expr(e);
+            }
+            // `alias r: T = g[i]`, `alias inout r: T = g[i]` of a write through it.
+            StmtKind::Alias(l, p) => {
+                let write = self.locals.get(l.0 as usize).map(|l| l.kind) == Some(LocalKind::Alias { write: true });
+                self.out.push_str(if write { "alias inout " } else { "alias " });
+                self.typed(*l);
+                self.out.push_str(" = ");
+                self.place(p);
             }
             StmtKind::Expr(e) => self.expr(e),
             StmtKind::If(c, t, e) => {
@@ -343,6 +342,18 @@ impl<'a> Dumper<'a> {
                     self.out.push(' ');
                     self.expr(e);
                 }
+            }
+        }
+    }
+
+    /// `l: T`, the local and its type.
+    fn typed(&mut self, l: LocalId) {
+        self.local(l);
+        self.out.push_str(": ");
+        match self.locals.get(l.0 as usize) {
+            Some(local) => self.ty(local.ty),
+            None => {
+                let _ = write!(self.out, "<bad local {}>", l.0);
             }
         }
     }

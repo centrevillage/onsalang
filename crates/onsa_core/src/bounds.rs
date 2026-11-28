@@ -85,7 +85,8 @@ impl<'m> Env<'m> {
     /// The locals of the body of `f`; of none (a `const`), no local.
     pub fn new(parts: Parts<'m>, (consts, below): (&'m [Option<Iv>], &'m Below), f: Option<&FnDef>) -> Env<'m> {
         let n = f.map_or(0, |f| f.locals.len());
-        let fixed = f.and_then(|f| f.body.as_ref()).map_or_else(Vec::new, |b| fixed(b, n));
+        let fixed =
+            f.and_then(|f| Some((f.body.as_ref()?, &f.locals[..]))).map_or_else(Vec::new, |(b, ls)| fixed(b, ls));
         Env { parts, consts, below, vars: vec![None; n], fixed, looped: vec![false; n] }
     }
 
@@ -269,14 +270,16 @@ pub fn below(m: &Module) -> Below {
     fields.filter_map(|(t, i, f)| Some(((t, i), f.below?))).collect()
 }
 
-/// By `LocalId` of the `n` locals: whether the body `b` defines the local by
-/// one `let`, and no assignment, `inout` argument or `for` writes it.
-fn fixed(b: &Block, n: usize) -> Vec<bool> {
-    struct Scan {
+/// By `LocalId` of `locals`: whether the body `b` defines the local by one
+/// `let`, and no assignment, `inout` argument, `for` or alias written
+/// through (`LocalKind::Alias { write: true }`, of the root of its place) writes it.
+fn fixed(b: &Block, locals: &[Local]) -> Vec<bool> {
+    struct Scan<'l> {
+        locals: &'l [Local],
         lets: Vec<u8>,
         written: Vec<bool>,
     }
-    impl Scan {
+    impl Scan<'_> {
         fn write(&mut self, l: LocalId) {
             if let Some(w) = self.written.get_mut(l.0 as usize) {
                 *w = true;
@@ -291,6 +294,11 @@ fn fixed(b: &Block, n: usize) -> Vec<bool> {
                 }
                 StmtKind::Assign(p, _) => self.write(p.root()),
                 StmtKind::ForRange { local, .. } => self.write(*local),
+                StmtKind::Alias(l, p) => {
+                    if self.locals.get(l.0 as usize).is_some_and(|l| l.kind == LocalKind::Alias { write: true }) {
+                        self.write(p.root());
+                    }
+                }
                 StmtKind::Expr(_)
                 | StmtKind::If(..)
                 | StmtKind::While(..)
@@ -316,7 +324,8 @@ fn fixed(b: &Block, n: usize) -> Vec<bool> {
             }
         }
     }
-    let mut scan = Scan { lets: vec![0; n], written: vec![false; n] };
+    let n = locals.len();
+    let mut scan = Scan { locals, lets: vec![0; n], written: vec![false; n] };
     scan.child(Child::Block(b, Scope::Opens, Eval::Always));
     scan.lets.iter().zip(&scan.written).map(|(&k, &w)| k == 1 && !w).collect()
 }
@@ -382,7 +391,7 @@ impl Mark<'_> {
         match c {
             ChildMut::Expr(x, ..) => self.expr(x),
             ChildMut::Block(b, ..) => self.block(b),
-            ChildMut::Place(p, _) => self.place(p),
+            ChildMut::Place(p, role) => self.place(p, role),
         }
     }
 
@@ -393,9 +402,10 @@ impl Mark<'_> {
         }
     }
 
-    /// The indexes of the place `p`, after its parts (of a Core the verifier rejects, none).
-    fn place(&mut self, p: &mut Place) {
-        place_children_mut(p, PlaceRole::Write, &mut |c| self.child(c));
+    /// The indexes of the place `p` used as `role`, after its parts (of a
+    /// Core the verifier rejects, none).
+    fn place(&mut self, p: &mut Place, role: PlaceRole) {
+        place_children_mut(p, role, &mut |c| self.child(c));
         if let Place::Index(b, i, _, bounds) = p
             && let Ok(t) = self.env.parts.place(self.locals, b)
         {

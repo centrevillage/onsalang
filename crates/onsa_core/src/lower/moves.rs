@@ -165,7 +165,8 @@ impl Cx<'_> {
                 self.inner(hi);
                 self.block(b, false);
             }
-            StmtKind::Break | StmtKind::Continue => {}
+            // An alias is no copy: its place is used where the alias is.
+            StmtKind::Alias(..) | StmtKind::Break | StmtKind::Continue => {}
             StmtKind::Return(Some(e)) => self.stored(e, None),
             StmtKind::Return(None) => {}
         }

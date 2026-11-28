@@ -155,13 +155,13 @@ fn a_field_a_view_or_an_argument_of_another_type_is_rejected() {
     let a = Expr::new(arr, sp(), ExprKind::Local(LocalId(0)));
     let view = Expr::new(view8, sp(), ExprKind::SpanOf(Box::new(a)));
     let let_ = Stmt { span: sp(), kind: StmtKind::Let(LocalId(0), two) };
-    m.fns.push(f("g", vec![], view8, vec![Local { name: "a".into(), ty: arr }], vec![let_], view));
+    m.fns.push(f("g", vec![], view8, vec![Local::value("a", arr)], vec![let_], view));
     rejected(&m, Rule::V01, "span: type mismatch `Span[U32]` vs `Span[U8]`");
     // A `Bool` for the `U32` of `callee`.
     let mut m = base();
     let x = Param { local: LocalId(0), mode: Mode::Borrow, ty: Types::U32 };
     let read = Expr::new(Types::U32, sp(), ExprKind::Local(LocalId(0)));
-    m.fns.push(f("callee", vec![x], Types::U32, vec![Local { name: "x".into(), ty: Types::U32 }], vec![], read));
+    m.fns.push(f("callee", vec![x], Types::U32, vec![Local::value("x", Types::U32)], vec![], read));
     let args = vec![Arg { mode: Mode::Borrow, expr: lit(Types::BOOL, Lit::Bool(true)) }];
     rejected(
         &with_g(m, Expr::new(Types::U32, sp(), ExprKind::Call { fn_: FnId(0), args })),
@@ -191,7 +191,7 @@ fn an_error_has_the_position_of_its_node() {
 #[test]
 fn each_rule_of_a_form_is_rejected_with_its_number() {
     let x = || Param { local: LocalId(0), mode: Mode::Inout, ty: Types::U32 };
-    let xs = || vec![Local { name: "x".into(), ty: Types::U32 }];
+    let xs = || vec![Local::value("x", Types::U32)];
     let unit = || lit(Types::UNIT, Lit::Unit);
     let mut m = base();
     m.fns.push(f("t", vec![x()], Types::UNIT, xs(), vec![], unit()));
@@ -315,7 +315,7 @@ fn the_tables_of_a_module_are_checked_before_its_items() {
     rejected_as_is(&m, Rule::V20, "ty 300 out of range");
     // A function: the type of a local, the local of a parameter, a hoisted local.
     let mut m = with_g(base(), one());
-    m.fns[0].locals.push(Local { name: "x".into(), ty: foreign(300) });
+    m.fns[0].locals.push(Local::value("x", foreign(300)));
     rejected_as_is(&m, Rule::V20, "ty 300 out of range");
     let mut m = with_g(base(), one());
     m.fns[0].params.push(Param { local: LocalId(0), mode: Mode::Borrow, ty: Types::U32 });
@@ -360,7 +360,7 @@ fn a_rule_is_shown_by_its_number() {
 fn an_error_of_a_statement_or_a_const_has_its_position() {
     let let_ = Stmt { span: at(), kind: StmtKind::Let(LocalId(0), lit(Types::BOOL, Lit::Bool(true))) };
     let mut m = base();
-    let a = vec![Local { name: "a".into(), ty: Types::U32 }];
+    let a = vec![Local::value("a", Types::U32)];
     m.fns.push(f("g", vec![], Types::UNIT, a, vec![let_], lit(Types::UNIT, Lit::Unit)));
     assert_eq!(rejected(&m, Rule::V01, "let: type mismatch").span, Some(at()));
     let stmt = Stmt { span: other(), kind: StmtKind::Expr(lit(Types::UNIT, Lit::Unit)) };
@@ -391,7 +391,7 @@ fn each_term_of_the_tables_is_checked() {
     // A function with no body: its result, its parameter.
     let unit = || lit(Types::UNIT, Lit::Unit);
     let x = |ty| Param { local: LocalId(0), mode: Mode::Borrow, ty };
-    let xs = || vec![Local { name: "x".into(), ty: Types::U32 }];
+    let xs = || vec![Local::value("x", Types::U32)];
     for (params, ret) in [(vec![], foreign(300)), (vec![x(foreign(300))], Types::UNIT)] {
         let mut m = base();
         m.fns.push(FnDef { body: None, ..f("g", params, ret, xs(), vec![], unit()) });
@@ -488,7 +488,7 @@ fn yes() -> Expr {
 fn reads(l: u32, stmts: Vec<Stmt>) -> Module {
     let mut m = base();
     m.messages.push("m".into());
-    let ab = vec![Local { name: "a".into(), ty: Types::U32 }, Local { name: "b".into(), ty: Types::U32 }];
+    let ab = vec![Local::value("a", Types::U32), Local::value("b", Types::U32)];
     m.fns.push(f("g", vec![], Types::U32, ab, stmts, Expr::new(Types::U32, at(), ExprKind::Local(LocalId(l)))));
     m
 }
@@ -559,7 +559,7 @@ fn a_borrowed_parameter_is_not_written() {
     let g = |m: &mut Module, mode, ty, stmts| {
         let x = Param { local: LocalId(0), mode, ty };
         let unit = lit(Types::UNIT, Lit::Unit);
-        m.fns.push(f("g", vec![x], Types::UNIT, vec![Local { name: "x".into(), ty }], stmts, unit));
+        m.fns.push(f("g", vec![x], Types::UNIT, vec![Local::value("x", ty)], stmts, unit));
     };
     let mut m = base();
     g(&mut m, Mode::Borrow, Types::U32, vec![st(at(), StmtKind::Assign(Place::Local(LocalId(0)), one()))]);
@@ -573,7 +573,7 @@ fn a_borrowed_parameter_is_not_written() {
     let callee = |m: &mut Module| {
         let y = Param { local: LocalId(0), mode: Mode::Inout, ty: Types::U32 };
         let unit = lit(Types::UNIT, Lit::Unit);
-        m.fns.push(f("callee", vec![y], Types::UNIT, vec![Local { name: "y".into(), ty: Types::U32 }], vec![], unit));
+        m.fns.push(f("callee", vec![y], Types::UNIT, vec![Local::value("y", Types::U32)], vec![], unit));
     };
     let pass = |x: Expr| {
         let call = ExprKind::Call { fn_: FnId(0), args: vec![Arg { mode: Mode::Inout, expr: x }] };
@@ -659,13 +659,13 @@ fn a_field_of_a_borrowed_parameter_is_not_written() {
     let s = m.tys.intern(TyKind::Struct(TypeId(0)));
     let unit = || lit(Types::UNIT, Lit::Unit);
     let y = Param { local: LocalId(0), mode: Mode::Inout, ty: Types::U32 };
-    m.fns.push(f("callee", vec![y], Types::UNIT, vec![Local { name: "y".into(), ty: Types::U32 }], vec![], unit()));
+    m.fns.push(f("callee", vec![y], Types::UNIT, vec![Local::value("y", Types::U32)], vec![], unit()));
     let x = Param { local: LocalId(0), mode: Mode::Borrow, ty: s };
     let base_x = Box::new(Expr::new(s, sp(), ExprKind::Local(LocalId(0))));
     let field = Expr::new(Types::U32, sp(), ExprKind::Field { base: base_x, index: 0 });
     let call = ExprKind::Call { fn_: FnId(0), args: vec![Arg { mode: Mode::Inout, expr: field }] };
     let stmts = vec![st(sp(), StmtKind::Expr(Expr::new(Types::UNIT, at(), call)))];
-    m.fns.push(f("g", vec![x], Types::UNIT, vec![Local { name: "x".into(), ty: s }], stmts, unit()));
+    m.fns.push(f("g", vec![x], Types::UNIT, vec![Local::value("x", s)], stmts, unit()));
     rejected(&m, Rule::V05, "write to the borrowed parameter `x`");
 }
 
@@ -729,7 +729,7 @@ fn calls(prim: &Prim, how: Break, rt: bool) -> Module {
             _ => Mode::Inout,
         };
         params.push(Param { local: LocalId(i as u32), mode: Mode::Inout, ty });
-        locals.push(Local { name: format!("x{i}"), ty });
+        locals.push(Local::value(format!("x{i}"), ty));
         args.push(Arg { mode, expr: Expr::new(ty, sp(), ExprKind::Local(LocalId(i as u32))) });
     }
     if how == Break::Count && args.pop().is_none() {
@@ -789,7 +789,7 @@ fn the_element_of_the_operands_of_a_primitive_is_one() {
     let call = |m: &Module, prim: Prim, tys: [CTy; 2]| {
         let mut m = m.clone();
         let params = (0..2).map(|i| Param { local: LocalId(i), mode: Mode::Inout, ty: tys[i as usize] }).collect();
-        let locals = tys.iter().map(|&ty| Local { name: "x".into(), ty }).collect();
+        let locals = tys.iter().map(|&ty| Local::value("x", ty)).collect();
         let modes = [Mode::Inout, Mode::Borrow];
         let args =
             (0..2).map(|i| Arg { mode: modes[i], expr: Expr::new(tys[i], sp(), ExprKind::Local(LocalId(i as u32))) });

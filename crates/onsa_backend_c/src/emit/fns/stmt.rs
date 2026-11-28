@@ -32,6 +32,25 @@ impl<'a, 'm> FnEmitter<'a, 'm> {
                 let target = self.place(p)?;
                 self.assign_into(&target, ty, e)
             }
+            // `T* r = &g.a[…];` (`const` of an alias not written through, which
+            // may name a borrowed parameter's place), and a use of it is `(*r)`,
+            // as of an `inout` or a borrowed parameter.
+            StmtKind::Alias(l, p) => {
+                let target = self.place(p)?;
+                let qualifier = match self.def.locals[l.0 as usize].kind {
+                    onsa_core::LocalKind::Alias { write: true } => "",
+                    onsa_core::LocalKind::Alias { write: false } => "const ",
+                    onsa_core::LocalKind::Value => return Err(internal("an alias of a local of a value")),
+                };
+                let tn = self.cx.names.name(self.local_ty(*l));
+                let name = self.fresh_local(*l);
+                self.line(&format!("{qualifier}{tn}* {name} = &{target};"));
+                if let Some(void) = self.unread_use(*l, &name) {
+                    self.line(&void);
+                }
+                self.locals.insert(*l, LocalC { lvalue: format!("(*{name})") });
+                Ok(())
+            }
             StmtKind::Expr(e) => self.expr_stmt(e),
             StmtKind::If(c, a, b) => {
                 let cs = self.expr(c)?;

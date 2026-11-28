@@ -887,3 +887,10 @@ target = "tests/host/eval_order_c.onsa::c: an assignment through a field between
 reasons = ["R-93", "S-75"]
 until = "W8-03"
 note = "C は代入の右辺を代入先の添字の後に評価する（§3.5。W8-03 の正規化 U7a で直る見込み）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/c_runtime/planar_inout_index.onsa::c: the planar argument second"
+reasons = ["R-93", "S-75"]
+until = "W8-03"
+note = "C の後端は場所で渡す引数（平面の引数）を値の引数より先に評価する（§3.5 の左から右に反する。前の dev の借用の平面の引数でも同じ順。W8-03 の正規化 U7a で直る見込み）"

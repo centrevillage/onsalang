@@ -42,9 +42,15 @@ impl<'a> V<'a> {
         });
         r?;
         self.stmt_here(s)?;
+        if let StmtKind::Alias(l, _) = &s.kind {
+            self.define(*l, true)?;
+            if std::mem::replace(&mut self.named[l.0 as usize], true) {
+                return Err(self.err(Rule::V21, format!("a second `Alias` of the alias {}", l.0)));
+            }
+        }
         if let StmtKind::Let(l, e) = &s.kind {
             self.unwritten(*l)?;
-            self.define(*l)?;
+            self.define(*l, false)?;
             self.lets[l.0 as usize] = true;
             self.env.define(*l, e);
         }
@@ -74,7 +80,7 @@ impl<'a> V<'a> {
             }
         });
         r?;
-        self.place_here(p)
+        self.place_here(p, role)
     }
 
     /// A child in its context. The names defined in a block a backend opens
@@ -100,7 +106,7 @@ impl<'a> V<'a> {
                 let saved = match var {
                     Some(v) => {
                         self.unwritten(v.local)?;
-                        self.define(v.local)?;
+                        self.define(v.local, false)?;
                         self.known |= self.process;
                         self.env.enter(v)
                     }
@@ -134,10 +140,15 @@ impl<'a> V<'a> {
         Ok(t)
     }
 
-    /// A parameter, a `let` or the variable of a `for`: seen from here to
-    /// the end of its scope; a second `let` of a local seen changes nothing.
-    pub(super) fn define(&mut self, l: LocalId) -> R<()> {
+    /// A parameter, a `let`, the variable of a `for`, or `by_alias` an
+    /// `Alias`: seen from here to the end of its scope; a second definition
+    /// of a local seen changes nothing. An alias is defined by an `Alias`
+    /// alone, and other locals by the others (V-21).
+    pub(super) fn define(&mut self, l: LocalId, by_alias: bool) -> R<()> {
         self.local_ty(l)?;
+        if self.alias_kind(l).is_some() != by_alias {
+            return Err(self.err(Rule::V21, format!("local {} of an alias and its definition differ", l.0)));
+        }
         if !std::mem::replace(&mut self.visible[l.0 as usize], true) {
             self.undo.push(l);
         }
@@ -146,8 +157,14 @@ impl<'a> V<'a> {
 
     /// V-05: the root of a place written is no borrowed parameter. A write
     /// through a view (`let v = xs.slice(…)`, then `v[0] = …`) has the view
-    /// as its root: the verifier leaves it to sema.
+    /// as its root: the verifier leaves it to sema. Through an alias, its
+    /// place is written (`alias::resolve`): an alias written through is one
+    /// of `write` (V-21).
     pub(super) fn writable(&self, root: LocalId) -> R<()> {
+        if self.alias_kind(root) == Some(false) {
+            return Err(self.err(Rule::V21, format!("a write through the alias {} not written through", root.0)));
+        }
+        let root = crate::alias::resolve(&self.aliases, &Place::Local(root)).root();
         self.unwritten(root)?;
         let Some(f) = self.f.filter(|f| f.params.iter().any(|p| p.local == root && p.mode == Mode::Borrow)) else {
             return Ok(());
@@ -190,6 +207,14 @@ impl<'a> V<'a> {
             return Ok(());
         }
         Err(self.err(Rule::V26, format!("a value not proved below {n} written to the field {i} below it")))
+    }
+
+    /// Of an alias, whether it is written through (`LocalKind::Alias`).
+    pub(super) fn alias_kind(&self, l: LocalId) -> Option<bool> {
+        match self.f?.locals.get(l.0 as usize)?.kind {
+            LocalKind::Alias { write } => Some(write),
+            LocalKind::Value => None,
+        }
     }
 
     /// V-28: the variable of a `for` is not written in its body: no

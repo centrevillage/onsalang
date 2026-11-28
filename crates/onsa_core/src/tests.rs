@@ -6,6 +6,7 @@ use onsa_sema::{Module as SModule, Package};
 use crate::ir::*;
 use crate::{dump, lower, verify};
 
+mod alias_tests;
 mod bounds_tests;
 mod chains_tests;
 mod depth_tests;
@@ -431,7 +432,7 @@ fn verifier_rejects_bad_modules() {
         ret: Types::int(IntKind::I32),
         sret: false,
         rt: false,
-        locals: vec![Local { name: "x".into(), ty: Types::int(IntKind::I32) }],
+        locals: vec![Local::value("x", Types::int(IntKind::I32))],
         body: Some(Block {
             stmts: Vec::new(),
             value: Some(Box::new(Expr::new(Types::int(IntKind::I32), span, ExprKind::Local(LocalId(0))))),
@@ -493,7 +494,7 @@ fn the_verifier_rejects_an_index_known_in_range_outside_the_sample_loop() {
         ret: Types::UNIT,
         sret: false,
         rt: true,
-        locals: vec![Local { name: "i".into(), ty: Types::U32 }],
+        locals: vec![Local::value("i", Types::U32)],
         body: Some(Block { stmts: vec![Stmt { span, kind: looped }], value: None }),
         span,
         fp_relaxed: false,
@@ -1187,7 +1188,7 @@ fn has_return_walks_a_deep_nesting_once() {
             ret: int,
             sret: false,
             rt: false,
-            locals: vec![Local { name: "v".into(), ty: int }],
+            locals: vec![Local::value("v", int)],
             body: Some(Block { stmts: Vec::new(), value: Some(Box::new(e)) }),
             span: sp,
             fp_relaxed: false,

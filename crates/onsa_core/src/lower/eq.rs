@@ -29,7 +29,7 @@ pub(crate) fn eq_fn(lw: &mut Lowerer, ty: CTy, span: Span) -> R<FnId> {
         hoisted: Vec::new(),
     });
     lw.eq_fns.insert(ty, id);
-    let mut locals = vec![Local { name: "a".into(), ty }, Local { name: "b".into(), ty }];
+    let mut locals = vec![Local::value("a", ty), Local::value("b", ty)];
     let (a, b) = (LocalId(0), LocalId(1));
     let la = Expr::new(ty, span, ExprKind::Local(a));
     let lb = Expr::new(ty, span, ExprKind::Local(b));
@@ -106,7 +106,7 @@ fn eq_body(lw: &mut Lowerer, locals: &mut Vec<Local>, ty: CTy, a: Expr, b: Expr,
         }
         TyKind::Array(elem, n) => {
             let i = LocalId(locals.len() as u32);
-            locals.push(Local { name: "i".into(), ty: Types::U32 });
+            locals.push(Local::value("i", Types::U32));
             let li = Expr::new(Types::U32, span, ExprKind::Local(i));
             let ea = Expr::new(
                 elem,

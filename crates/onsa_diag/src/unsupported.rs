@@ -176,10 +176,6 @@ features! {
     TakenFields: Language, "taking a field out of a value (the rest is dropped)", None;
     FromFnValue: Language, "`array.from_fn` with a non-literal function value",
         Some("pass an anonymous function, or a function by its name");
-    /// R-433: the index, evaluated once, is bound before the argument,
-    /// which is a place.
-    PlanarInoutIndex: Language, "an `inout` planar span of an element whose index has an effect",
-        Some("bind the index to a name with `let` first");
     ConstBindings: Language, "a `const` initializer with local bindings", None;
     /// `{}`: the function's path (`std.test.gen.f32`). W2-03: `onsa test`
     /// finds them before it runs the tests.

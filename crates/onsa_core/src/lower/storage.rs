@@ -28,6 +28,7 @@ pub(crate) fn hoisted(m: &Module, f: &FnDef) -> Vec<LocalId> {
         depth: 0,
         declared: vec![0; n],
         exits: Vec::new(),
+        aliases: crate::alias::table(f),
     };
     s.block(body, false);
     let mut out = BTreeSet::new();
@@ -50,6 +51,8 @@ struct Storage<'a> {
     declared: Vec<u32>,
     /// A value leaving a scope, and the least depth of a local inside it.
     exits: Vec<(&'a Expr, u32)>,
+    /// An alias has no storage: of its uses, the root of its place is read.
+    aliases: crate::alias::Table,
 }
 
 impl<'a> Storage<'a> {
@@ -76,11 +79,12 @@ impl<'a> Storage<'a> {
                 self.defs[l.0 as usize].push(e);
             }
             StmtKind::Assign(p, e) => {
-                let root = p.root().0 as usize;
+                let root = self.root(p.root()).0 as usize;
                 self.defs[root].push(e);
                 self.exits.push((e, self.declared[root] + 1));
             }
-            StmtKind::Expr(_)
+            StmtKind::Alias(..)
+            | StmtKind::Expr(_)
             | StmtKind::If(..)
             | StmtKind::While(..)
             | StmtKind::ForRange { .. }
@@ -113,12 +117,12 @@ impl<'a> Storage<'a> {
         }
         match &e.kind {
             ExprKind::SpanOf(p) => {
-                if let Some(r) = p.as_place().map(|p| p.root()) {
+                if let Some(r) = p.as_place().map(|p| self.root(p.root())) {
                     out.insert(r);
                     self.local(r, out);
                 }
             }
-            ExprKind::Local(l) => self.local(*l, out),
+            ExprKind::Local(l) => self.local(self.root(*l), out),
             _ => {
                 let values_only = matches!(e.kind, ExprKind::IfExpr { .. } | ExprKind::Switch { .. });
                 expr_children(e, &mut |c| match c {
@@ -148,6 +152,11 @@ impl<'a> Storage<'a> {
         }
         out.extend(set.iter().copied());
         self.memo[i] = Some(set);
+    }
+
+    /// The root of the place `l` names, `l` itself but of an alias.
+    fn root(&self, l: LocalId) -> LocalId {
+        crate::alias::resolve(&self.aliases, &Place::Local(l)).root()
     }
 
     /// Whether a value of `t` holds a view ([`crate::layout::TyFacts::views`]).

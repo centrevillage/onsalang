@@ -438,3 +438,64 @@ fn a_cr_lf_in_a_message_is_one_line_break_and_not_a_lone_cr() {
     assert!(lines[first].ends_with(": a"), "{:?}", lines[first]);
     assert!(lines[first + 1].starts_with(char::is_whitespace) && lines[first + 1].trim() == "b", "{:?}", lines);
 }
+
+/// R-188, R-537: an index out of range of a place written over lines panics at the line where the
+/// element starts (`ws[`), not at the line of its index, in the C of `onsa build` as in `onsa test`:
+/// a planar `inout` argument of an index with an effect (named by an alias) and a target of an
+/// assignment. `onsa_idx` of the C carries that line.
+#[test]
+fn an_index_out_of_range_over_lines_is_at_the_same_line_in_c() {
+    let src = "fn next(inout n: U32) -> U32 {
+  n = n + 1
+  n - 1
+}
+
+fn zero(inout xs: [Span[U8]; 2]) {
+  xs[0].fill!(0)
+  xs[1].fill!(0)
+}
+
+@export
+pub fn planar(v: U32) -> U32 {
+  var ws: [[[U8; 2]; 2]; 2] = [[[1, 2], [3, 4]], [[5, 6], [7, 8]]]
+  var i: U32 = v
+  zero(
+    inout ws[
+      next(inout i)
+    ]
+  )
+  i
+}
+
+@export
+pub fn assigned(v: U32) -> U32 {
+  var ws: [[U8; 2]; 2] = [[1, 2], [3, 4]]
+  ws[
+    v
+  ][0] = 3
+  ws[0][0] as U32
+}
+
+test \"planar\" {
+  assert planar(5) == 0
+}
+
+test \"assigned\" {
+  assert assigned(5) == 0
+}
+";
+    let d = Dir::pkg("index_over_lines");
+    d.write("onsa.toml", "[package]\nname = \"demo\"\nedition = \"2026\"\n\n[export]\nprefix = \"dm_\"\n\n[targets.host]\nkind = \"source\"\nlang = \"c\"\nplatform = \"host\"\nprovides = []\n");
+    d.write("m.onsa", src);
+    let (out, doc) = test_json(d.root(), &[&d.arg()]);
+    assert_eq!(out.code, 1, "{}{}", out.stdout, out.stderr);
+    let out = run(d.root(), &["build", "--target", "host"]);
+    assert_eq!(out.code, 0, "{}{}", out.stdout, out.stderr);
+    let c = std::fs::read_to_string(d.path("target/host/onsa_demo.c")).unwrap();
+    for (name, line) in [("planar", 16), ("assigned", 26)] {
+        let f = failure_of(record(&doc, "m", name));
+        assert_eq!(span_of(&f["span"]).line, line, "{name}: {f}");
+        assert!(c.contains(&format!("\"m.onsa\", {line})")), "{name}: {c}");
+        assert!(!c.contains(&format!("\"m.onsa\", {})", line + 1)), "{name}: {c}");
+    }
+}

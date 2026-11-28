@@ -31,6 +31,7 @@ impl<'m> Interp<'m> {
         match &s.kind {
             StmtKind::Let(l, e) => self.exec_let(f, *l, e),
             StmtKind::Assign(p, e) => self.exec_assign(f, p, e, s.span),
+            StmtKind::Alias(l, p) => self.exec_alias(f, *l, p, s.span),
             StmtKind::Expr(e) => self.exec_expr(f, e),
             StmtKind::If(c, t, e) => self.exec_if(f, c, t, e),
             StmtKind::While(c, body) => self.exec_while(f, c, body),
@@ -77,6 +78,14 @@ impl<'m> Interp<'m> {
         let v = self.eval(f, e)?;
         let r = self.resolve_place(f, p, span)?;
         self.write(&r, v, span)
+    }
+
+    /// The place, its indices evaluated and checked once, which a use of `l` uses.
+    #[inline(never)]
+    fn exec_alias(&self, f: &mut Frame, l: LocalId, p: &Place, span: Span) -> R<()> {
+        let r = self.resolve_place(f, p, span)?;
+        f.locals[l.0 as usize] = Some(Loc::Alias(r));
+        Ok(())
     }
 
     #[inline(never)]

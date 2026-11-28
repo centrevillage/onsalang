@@ -16,8 +16,8 @@ use onsa_syntax::ast::{
 };
 
 use super::build::{
-    after, balanced, bool_lit, field, field_by_name, float_text, index, lit, local_expr, materialize, payload, stmt,
-    tag_of, u32_lit,
+    after, balanced, bool_lit, field, field_by_name, float_text, index, lit, local_expr, materialize, payload, stays,
+    stmt, tag_of, u32_lit,
 };
 use super::{FailKind, GenericArg, Hole, Lowerer, R, at_hole, core_mode, internal, stopped, unsupported};
 use crate::effects::{pure, repeatable};
@@ -139,7 +139,7 @@ impl<'b> FnCx<'b> {
         let n = head.len();
         let mut tys = bind_tys(lw, head.into_iter().chain(named), &args, span)?;
         let locals = tys.split_off(n).into_iter().zip(&info.locals);
-        let locals = locals.map(|(ty, l)| Local { name: l.name.clone(), ty }).collect();
+        let locals = locals.map(|(ty, l)| Local::value(l.name.clone(), ty)).collect();
         let mut head = tys.into_iter();
         let ret = match made {
             Some(t) => t,
@@ -165,7 +165,14 @@ impl<'b> FnCx<'b> {
 
     pub(crate) fn temp(&mut self, name: &str, ty: CTy) -> LocalId {
         let id = LocalId(self.locals.len() as u32);
-        self.locals.push(Local { name: name.to_string(), ty });
+        self.locals.push(Local::value(name, ty));
+        id
+    }
+
+    /// A local that names a place (`StmtKind::Alias`), written through it when `write`.
+    pub(crate) fn alias(&mut self, name: &str, ty: CTy, write: bool) -> LocalId {
+        let id = self.temp(name, ty);
+        self.locals[id.0 as usize].kind = LocalKind::Alias { write };
         id
     }
 

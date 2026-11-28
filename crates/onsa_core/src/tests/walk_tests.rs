@@ -276,7 +276,7 @@ fn has_return_sees_each_part() {
         ret: Types::UNIT,
         sret: false,
         rt: false,
-        locals: vec![Local { name: "v".into(), ty: Types::U32 }],
+        locals: vec![Local::value("v", Types::U32)],
         body: Some(Block { stmts: vec![s], value: None }),
         span: sp(),
         fp_relaxed: false,

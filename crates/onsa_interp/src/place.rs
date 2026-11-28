@@ -19,7 +19,7 @@ pub(super) struct PlaceRef {
 #[derive(Debug, Clone)]
 pub(super) enum Loc {
     Slot(Slot),
-    /// An `inout` parameter: the caller's place.
+    /// An `inout` parameter: the caller's place; an alias (`StmtKind::Alias`): its place.
     Alias(PlaceRef),
 }
 
