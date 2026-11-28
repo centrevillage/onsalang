@@ -17,7 +17,8 @@ pub enum Expr { Lit(Lit, Ty), Local(LocalId), Const(ConstId),
                 Unary(UnOp, Ty, Box<Expr>), Binary(BinOp, NumTy, Overflow, Box<Expr>, Box<Expr>),  // Overflow: Checked|Wrap|Sat
                 Cmp(CmpOp, Ty, ..), Cast(Ty, Ty, ..), Call(FnId, Vec<Arg>), Prim(PrimId, Vec<Expr>),
                 Field(Box<Expr>, u32), Index(Box<Expr>, Box<Expr>, Bounds),  // Bounds: Checked は境界検査付き、Known は process のサンプルループの入出力（S-196。dump は `xs[known i]`）
-                Struct(Ty, Vec<Expr>), Array(Vec<Expr>), Repeat(Box<Expr>, u32), Tuple(Vec<Expr>),
+                Struct(Ty, Vec<(u32, Expr)>), Array(Vec<Expr>),  // Struct: （欄の番号, 式）を書いた順に（§3.5）
+                Repeat(Box<Expr>, u32), Tuple(Vec<Expr>),
                 IfExpr(..), Switch(Box<Expr>, Vec<(Tag, Block)>),  // enum のタグで分岐。束縛は Field で取り出す
                 Panic(MsgId) }
 pub enum Place { Local(LocalId), Field(Box<Place>, u32), Index(Box<Place>, Expr, Bounds) }
